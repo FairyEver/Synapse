@@ -49,4 +49,26 @@ describe("content-index-service git helpers", () => {
     await rejection
     expect(child.kill).toHaveBeenCalledWith("SIGTERM")
   })
+
+  it("commits repository cache writes when the callback succeeds", async () => {
+    const exec = vi.fn()
+    const { _runRepositoryCacheWriteTransactionForTests } = await import("../content-index-service")
+
+    const result = await _runRepositoryCacheWriteTransactionForTests({ exec } as never, () => "ok")
+
+    expect(result).toBe("ok")
+    expect(exec.mock.calls.map(([sql]) => sql)).toEqual(["BEGIN IMMEDIATE", "COMMIT"])
+  })
+
+  it("rolls back repository cache writes when the callback fails", async () => {
+    const exec = vi.fn()
+    const failure = new Error("write failed")
+    const { _runRepositoryCacheWriteTransactionForTests } = await import("../content-index-service")
+
+    await expect(_runRepositoryCacheWriteTransactionForTests({ exec } as never, async () => {
+      throw failure
+    })).rejects.toThrow(failure)
+
+    expect(exec.mock.calls.map(([sql]) => sql)).toEqual(["BEGIN IMMEDIATE", "ROLLBACK"])
+  })
 })

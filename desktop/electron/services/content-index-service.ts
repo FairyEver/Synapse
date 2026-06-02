@@ -1,3 +1,4 @@
+import type { DatabaseSync } from "node:sqlite"
 import { getAllContentTypeIds } from "../../src/config/content-types"
 import { resolveDisplayName } from "../../src/lib/display-name"
 import { getContentDir } from "../../src/lib/config"
@@ -16,6 +17,23 @@ const logger = createMainLogger("service.content-index")
 type ChangedContentKey = {
   contentId: string
   contentType: SynapseContentType
+}
+
+type ContentIndexWriteRow = ReturnType<typeof toDatabaseRow>
+
+async function runRepositoryCacheWriteTransaction<T>(
+  database: DatabaseSync,
+  callback: () => Promise<T> | T,
+): Promise<T> {
+  database.exec("BEGIN IMMEDIATE")
+  try {
+    const result = await callback()
+    database.exec("COMMIT")
+    return result
+  } catch (error) {
+    database.exec("ROLLBACK")
+    throw error
+  }
 }
 
 function toDatabaseRow(
@@ -241,7 +259,7 @@ class ContentIndexService {
     const currentHead = await this.readHeadSha(repository)
     const profileMap = await userProfileService.listRepoProfiles(repository.uuid)
 
-    await withRepositoryCacheDatabase(repository.uuid, (database) => {
+    await withRepositoryCacheDatabase(repository.uuid, (database) => runRepositoryCacheWriteTransaction(database, () => {
       database.exec("DELETE FROM content_index")
       const upsertStatement = database.prepare(`
         INSERT INTO content_index (
@@ -302,7 +320,7 @@ class ContentIndexService {
         VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(LAST_SYNCED_GIT_SHA_KEY, currentHead ?? "")
-    })
+    }))
     logger.info("rebuildIndex: complete.", { totalItems, durationMs: Date.now() - tRebuild, repositoryUuid: repository.uuid })
   }
 
@@ -372,46 +390,20 @@ class ContentIndexService {
       const profileMap = await userProfileService.listRepoProfiles(repository.uuid)
 
       if (changedContentKeys.length === 0) {
-        database.prepare(`
-          INSERT INTO index_meta (key, value)
-          VALUES (?, ?)
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        `).run(LAST_SYNCED_GIT_SHA_KEY, currentHead)
+        await runRepositoryCacheWriteTransaction(database, () => {
+          database.prepare(`
+            INSERT INTO index_meta (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+          `).run(LAST_SYNCED_GIT_SHA_KEY, currentHead)
+        })
         return
       }
 
-      const upsertStatement = database.prepare(`
-        INSERT INTO content_index (
-          id, type, title, name, description, category, icon, icon_bg,
-          icon_type, icon_image,
-          modified_by, modified_by_name, modified_at, created_by, created_by_name,
-          created_at, deleted, latest_history_dirname, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          type = excluded.type,
-          title = excluded.title,
-          name = excluded.name,
-          description = excluded.description,
-          category = excluded.category,
-          icon = excluded.icon,
-          icon_bg = excluded.icon_bg,
-          icon_type = excluded.icon_type,
-          icon_image = excluded.icon_image,
-          modified_by = excluded.modified_by,
-          modified_by_name = excluded.modified_by_name,
-          modified_at = excluded.modified_at,
-          created_by = excluded.created_by,
-          created_by_name = excluded.created_by_name,
-          created_at = excluded.created_at,
-          deleted = excluded.deleted,
-          latest_history_dirname = excluded.latest_history_dirname,
-          attachment_count = excluded.attachment_count
-      `)
-      const deleteStatement = database.prepare(`
-        DELETE FROM content_index
-        WHERE id = ? AND type = ?
-      `)
-
+      const changedRows: Array<{
+        changedContent: ChangedContentKey
+        row: ContentIndexWriteRow | null
+      }> = []
       for (const changedContent of changedContentKeys) {
         const summary = await contentHistoryService.readCurrentSummary(
           repository,
@@ -420,40 +412,81 @@ class ContentIndexService {
         )
 
         if (!summary) {
-          deleteStatement.run(changedContent.contentId, changedContent.contentType)
+          changedRows.push({ changedContent, row: null })
           continue
         }
 
-        const row = toDatabaseRow(summary, profileMap)
-
-        upsertStatement.run(
-          row.id,
-          row.type,
-          row.title,
-          row.name,
-          row.description,
-          row.category,
-          row.icon,
-          row.iconBg,
-          row.iconType,
-          row.iconImage,
-          row.modifiedBy,
-          row.modifiedByDisplayName,
-          row.modifiedAt,
-          row.createdBy,
-          row.createdByDisplayName,
-          row.createdAt,
-          row.deleted,
-          row.latestHistoryDirname,
-          row.attachmentCount,
-        )
+        changedRows.push({ changedContent, row: toDatabaseRow(summary, profileMap) })
       }
 
-      database.prepare(`
-        INSERT INTO index_meta (key, value)
-        VALUES (?, ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `).run(LAST_SYNCED_GIT_SHA_KEY, currentHead)
+      await runRepositoryCacheWriteTransaction(database, () => {
+        const upsertStatement = database.prepare(`
+          INSERT INTO content_index (
+            id, type, title, name, description, category, icon, icon_bg,
+            icon_type, icon_image,
+            modified_by, modified_by_name, modified_at, created_by, created_by_name,
+            created_at, deleted, latest_history_dirname, attachment_count
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            type = excluded.type,
+            title = excluded.title,
+            name = excluded.name,
+            description = excluded.description,
+            category = excluded.category,
+            icon = excluded.icon,
+            icon_bg = excluded.icon_bg,
+            icon_type = excluded.icon_type,
+            icon_image = excluded.icon_image,
+            modified_by = excluded.modified_by,
+            modified_by_name = excluded.modified_by_name,
+            modified_at = excluded.modified_at,
+            created_by = excluded.created_by,
+            created_by_name = excluded.created_by_name,
+            created_at = excluded.created_at,
+            deleted = excluded.deleted,
+            latest_history_dirname = excluded.latest_history_dirname,
+            attachment_count = excluded.attachment_count
+        `)
+        const deleteStatement = database.prepare(`
+          DELETE FROM content_index
+          WHERE id = ? AND type = ?
+        `)
+
+        for (const { changedContent, row } of changedRows) {
+          if (!row) {
+            deleteStatement.run(changedContent.contentId, changedContent.contentType)
+            continue
+          }
+
+          upsertStatement.run(
+            row.id,
+            row.type,
+            row.title,
+            row.name,
+            row.description,
+            row.category,
+            row.icon,
+            row.iconBg,
+            row.iconType,
+            row.iconImage,
+            row.modifiedBy,
+            row.modifiedByDisplayName,
+            row.modifiedAt,
+            row.createdBy,
+            row.createdByDisplayName,
+            row.createdAt,
+            row.deleted,
+            row.latestHistoryDirname,
+            row.attachmentCount,
+          )
+        }
+
+        database.prepare(`
+          INSERT INTO index_meta (key, value)
+          VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).run(LAST_SYNCED_GIT_SHA_KEY, currentHead)
+      })
     })
 
     if (shouldRebuild) {
@@ -478,4 +511,8 @@ class ContentIndexService {
 
 const contentIndexService = new ContentIndexService()
 
-export { contentIndexService, runGitText as _runGitTextForTests }
+export {
+  contentIndexService,
+  runGitText as _runGitTextForTests,
+  runRepositoryCacheWriteTransaction as _runRepositoryCacheWriteTransactionForTests,
+}
