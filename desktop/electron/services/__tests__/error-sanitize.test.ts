@@ -48,6 +48,15 @@ describe("sanitizeError", () => {
     expect(result).toContain("[path]")
   })
 
+  it("redacts URL userinfo from embedded fetch errors", () => {
+    const result = sanitizeError(
+      "Request cannot be constructed from a URL that includes credentials: https://token123:secret@api.example.com/data",
+    )
+    expect(result).not.toContain("token123")
+    expect(result).not.toContain("secret")
+    expect(result).toContain("https://[redacted]@api.example.com/data")
+  })
+
   it("handles mixed sensitive fields in one string", () => {
     const input = 'auth: token=sk-test-key at /Users/test/repo'
     const result = sanitizeError(input)
