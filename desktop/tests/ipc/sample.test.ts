@@ -26,6 +26,7 @@ describe("IPC fixture smoke test (T6.13)", () => {
       payload: {},
       timestamp: new Date().toISOString(),
     })
+    eventBus.flushAllForTests()
     expect(seen).toEqual(["updated"])
   })
 })

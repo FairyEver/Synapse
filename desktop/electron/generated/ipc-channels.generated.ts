@@ -180,6 +180,7 @@ export const IPC_CHANNELS = {
     "listRuns": "synapse:task-scheduler:runs:list",
     "exportTasksToFile": "synapse:task-scheduler:tasks:export-to-file",
     "importTasksFromFile": "synapse:task-scheduler:tasks:import-from-file",
+    "changed": "synapse:events:scheduler",
   },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",

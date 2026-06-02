@@ -67,6 +67,7 @@ describe("Phase 0.4 EventBus integration (T4.8)", () => {
     })
 
     bus.emit(event("repository", "updated", { v: 1 }))
+    bus.flushAllForTests()
     expect(a.sent).toHaveLength(1)
     expect(b.sent).toHaveLength(1)
     expect(a.sent[0]?.channel).toBe(channelForDomain("repository"))
@@ -102,11 +103,13 @@ describe("Phase 0.4 EventBus integration (T4.8)", () => {
     })
 
     bus.emit(event("agent", "session.started", {}, { projectId: "p1" }))
+    bus.flushAllForTests()
     expect(proj1Window.sent).toHaveLength(1)
     expect(proj2Window.sent).toHaveLength(0)
 
     // Non-scoped event reaches both windows.
     bus.emit(event("repository", "updated"))
+    bus.flushAllForTests()
     expect(proj1Window.sent).toHaveLength(2)
     expect(proj2Window.sent).toHaveLength(1)
   })

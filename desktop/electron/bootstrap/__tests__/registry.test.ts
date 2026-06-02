@@ -166,6 +166,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.action-runtime",
+      "core.event-bus",
     ])
     expect(byId.get("core.execution-isolation")?.dependsOn).toEqual([
       "core.data-repository",
@@ -249,6 +250,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.data-repository")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.task-scheduler"))
+    expect(idx("core.event-bus")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.database")).toBeLessThan(idx("repo.pending-pushes"))
     expect(idx("repo.pending-pushes")).toBeLessThan(idx("repo.maintenance"))

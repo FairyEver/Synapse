@@ -76,7 +76,7 @@ describe("DatabaseSidebar", () => {
   })
 
   it("awaits folder creation and only closes the input after success", () => {
-    const source = readFileSync(sidebarSourcePath, "utf8")
+    const source = readFileSync(sidebarSourcePath, "utf8").replace(/\r\n/g, "\n")
 
     expect(source).toContain("async function handleCreateFolderConfirm()")
     expect(source).toContain("await runFolderOperation(\"create\", () => onCreateFolder(trimmed))")
