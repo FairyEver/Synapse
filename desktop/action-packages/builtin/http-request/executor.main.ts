@@ -27,28 +27,55 @@ function buildHeaders(config: HttpRequestActionConfig): Record<string, string> |
   return Object.keys(headers).length > 0 ? headers : undefined
 }
 
+function getPermissionAuthType(config: HttpRequestActionConfig): "bearer" | "basic" | null {
+  if (config.auth?.type === "bearer" && config.auth.bearerToken?.trim()) {
+    return "bearer"
+  }
+
+  if (config.auth?.type === "basic" && config.auth.basicUsername?.trim()) {
+    return "basic"
+  }
+
+  return null
+}
+
+function buildPermissionHeaderKeys(config: HttpRequestActionConfig, authType: "bearer" | "basic" | null): string[] {
+  const headerKeys = new Set(Object.keys(config.headers ?? {}))
+
+  if (authType) {
+    headerKeys.add("Authorization")
+  }
+
+  return [...headerKeys].sort()
+}
+
 export function createHttpRequestAction(deps: {
   readonly sendRequest?: (request: OutboundHttpRequest) => Promise<OutboundHttpResponse>
 } = {}): MainActionDefinition<HttpRequestActionConfig> {
   const sendRequest = deps.sendRequest ?? sendOutboundHttpRequest
   return {
     manifest: httpRequestActionManifest,
-    buildPermissionRequest: ({ config, context }) => ({
-      action: "network.connect",
-      actor: context.actor,
-      resource: sanitizeUrl(config.url),
-      context: {
-        source: "task-scheduler",
-        actionType: httpRequestActionManifest.id,
-        taskId: context.taskId,
-        runId: context.runId,
-        triggeredBy: context.triggeredBy,
-        method: config.method,
-        url: sanitizeUrl(config.url),
-        headerKeys: config.headers ? Object.keys(config.headers).sort() : [],
-        timeoutMins: config.timeoutMins,
-      },
-    }),
+    buildPermissionRequest: ({ config, context }) => {
+      const authType = getPermissionAuthType(config)
+
+      return {
+        action: "network.connect",
+        actor: context.actor,
+        resource: sanitizeUrl(config.url),
+        context: {
+          source: "task-scheduler",
+          actionType: httpRequestActionManifest.id,
+          taskId: context.taskId,
+          runId: context.runId,
+          triggeredBy: context.triggeredBy,
+          method: config.method,
+          url: sanitizeUrl(config.url),
+          headerKeys: buildPermissionHeaderKeys(config, authType),
+          authType: authType ?? undefined,
+          timeoutMins: config.timeoutMins,
+        },
+      }
+    },
     execute: async ({ config, context }) => {
       const startMs = Date.now()
       let url: string

@@ -88,6 +88,53 @@ describe("builtin.http-request executor", () => {
     expect(JSON.stringify(request)).not.toContain("sk-secret")
   })
 
+  it("includes built-in auth in permission context without exposing credentials", () => {
+    const action = createHttpRequestAction({ sendRequest: vi.fn() })
+    const context = {
+      taskId: "task:1",
+      runId: "run:1",
+      triggeredBy: "schedule" as const,
+      cwd: "/tmp",
+      actor: { kind: "user" as const, id: "task-scheduler", display: "Task Scheduler" },
+      abortSignal: new AbortController().signal,
+    }
+
+    const bearerRequest = action.buildPermissionRequest({
+      config: {
+        method: "GET",
+        url: "https://example.com/api",
+        headers: { "X-Trace": "trace-1" },
+        bodyType: "none",
+        auth: { type: "bearer", bearerToken: "sk-live-token" },
+      },
+      context,
+    })
+    const basicRequest = action.buildPermissionRequest({
+      config: {
+        method: "POST",
+        url: "https://example.com/api",
+        bodyType: "none",
+        auth: { type: "basic", basicUsername: "alice", basicPassword: "secret-password" },
+      },
+      context,
+    })
+
+    expect(bearerRequest.context).toEqual(expect.objectContaining({
+      authType: "bearer",
+      headerKeys: ["Authorization", "X-Trace"],
+    }))
+    expect(basicRequest.context).toEqual(expect.objectContaining({
+      authType: "basic",
+      headerKeys: ["Authorization"],
+    }))
+    const serialized = JSON.stringify([bearerRequest, basicRequest])
+    expect(serialized).not.toContain("sk-live-token")
+    expect(serialized).not.toContain("alice")
+    expect(serialized).not.toContain("secret-password")
+    expect(serialized).not.toContain("Basic ")
+    expect(serialized).not.toContain("Bearer ")
+  })
+
   it("fails before sending when selected auth credentials are empty", async () => {
     const sendRequest = vi.fn(async () => ({
       status: 200,
