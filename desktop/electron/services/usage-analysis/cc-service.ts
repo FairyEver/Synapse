@@ -679,7 +679,15 @@ export class CcUsageAnalysisService {
       FROM ${this.prefix}_daily_usage
       WHERE model != ?
     `).get(TOOL_CALLS_AGGREGATE_MODEL) as { total_cost?: number; component_cost?: number } | undefined
-    return toNumber(row?.total_cost) > 0 && toNumber(row?.component_cost) === 0
+    if (toNumber(row?.total_cost) <= 0 || toNumber(row?.component_cost) !== 0) return false
+
+    const sourceRow = this.db.prepare(`
+      SELECT
+        COALESCE(SUM(cost_input + cost_output + cost_cache_read + cost_cache_write + cost_reasoning), 0) AS component_cost
+      FROM ${this.prefix}_usage_events
+      WHERE model != ?
+    `).get(TOOL_CALLS_AGGREGATE_MODEL) as { component_cost?: number } | undefined
+    return toNumber(sourceRow?.component_cost) > 0
   }
 
   private hasStalePricingTokenAggregates(): boolean {

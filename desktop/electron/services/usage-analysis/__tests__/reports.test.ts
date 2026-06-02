@@ -525,6 +525,41 @@ describe("usage analysis reports", () => {
     expect(db.prepare("SELECT SUM(tool_calls) AS toolCalls FROM cc_hourly_usage").get()).toEqual({ toolCalls: 1 })
   }, 15000)
 
+  it("does not rebuild zero-component cost aggregates when source events also have zero components", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [] })
+    db.exec(`
+      INSERT INTO cc_usage_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
+        input_tokens, output_tokens, unpriced_tokens, total_cost, price_known
+      ) VALUES (
+        'usage-1', 'session-1', 1779843600000, '2026-05-27', '2026-05-27 09', '-repo', '/repo',
+        'unpriced-model', 'custom', 10, 5, 15, 1.23, 0
+      );
+      INSERT INTO cc_daily_usage (
+        date, model, provider, workspace_key, input_tokens, output_tokens, unpriced_tokens,
+        total_cost, price_known, requests, conversations
+      ) VALUES (
+        '2026-05-27', 'unpriced-model', 'custom', '-repo', 10, 5, 15, 1.23, 0, 99, 99
+      );
+      INSERT INTO cc_hourly_usage (
+        hour, model, provider, workspace_key, input_tokens, output_tokens,
+        total_cost, price_known, requests, conversations
+      ) VALUES (
+        '2026-05-27 09', 'unpriced-model', 'custom', '-repo', 10, 5, 1.23, 0, 99, 99
+      );
+    `)
+
+    service.getOverview({ preset: "all" })
+
+    expect(db.prepare("SELECT requests, conversations FROM cc_daily_usage WHERE model = 'unpriced-model'").get()).toEqual({
+      conversations: 99,
+      requests: 99,
+    })
+  })
+
   it("serves overview core metrics from aggregate tables", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)
