@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
   CircularDependencyError,
   DuplicateServiceError,
   ServiceNotFoundError,
   ServiceNotRunningError,
+  type ServiceRegistry,
   UnknownDependencyError,
   type ServiceDescriptor,
 } from "../index"
@@ -151,6 +152,74 @@ describe("ServiceRegistryImpl T1.4 stubs (still throw)", () => {
     await expect(registry.stopAll(15000)).resolves.toBeUndefined()
   })
 
+  it("logs stop failures and continues stopping later services", async () => {
+    const logger = makeSpyLogger()
+    const registry = new ServiceRegistryImpl({
+      contextProvider: (r) => makeContext(r, logger),
+    })
+    const stopped: string[] = []
+
+    registry.register(
+      fixtureDescriptor("later", [], {
+        stop: () => {
+          stopped.push("later")
+        },
+      }),
+    )
+    registry.register(
+      fixtureDescriptor("failing", [], {
+        stop: () => {
+          throw new Error("stop failed with token=sk-secret-value")
+        },
+      }),
+    )
+
+    await registry.startAll()
+    await registry.stopAll(15000)
+
+    expect(stopped).toEqual(["later"])
+    expect(registry.inspect()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "failing", status: "failed" }),
+        expect.objectContaining({ id: "later", status: "stopped" }),
+      ]),
+    )
+    expect(logger.error).toHaveBeenCalledWith(
+      "ServiceRegistry stop failed.",
+      expect.objectContaining({
+        serviceId: "failing",
+        errorName: "Error",
+      }),
+    )
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sk-secret-value")
+  })
+
+  it("still invokes later stop handlers after the global deadline is exhausted", async () => {
+    const registry = new ServiceRegistryImpl({
+      contextProvider: (r) => makeContext(r, makeNullLogger()),
+      perServiceStopTimeoutMs: 1,
+    })
+    const stopped: string[] = []
+
+    registry.register(
+      fixtureDescriptor("later", [], {
+        stop: () => {
+          stopped.push("later")
+        },
+      }),
+    )
+    registry.register(
+      fixtureDescriptor("slow", [], {
+        stop: () => new Promise((resolve) => setTimeout(resolve, 20)),
+      }),
+    )
+
+    await registry.startAll()
+    await registry.stopAll(1)
+
+    expect(stopped).toEqual(["later"])
+  })
+
   it("reload throws when descriptor lacks reload()", async () => {
     const registry = createServiceRegistry()
     registry.register(fixtureDescriptor("a"))
@@ -171,4 +240,31 @@ function makeNullLogger() {
     child: () => l,
   }
   return l
+}
+
+function makeSpyLogger() {
+  const logger = {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: () => logger,
+  }
+  return logger
+}
+
+function makeContext(registry: ServiceRegistry, logger: ReturnType<typeof makeNullLogger>) {
+  return {
+    logger,
+    dataRepo: {} as never,
+    eventBus: {} as never,
+    registry,
+    metrics: {} as never,
+    tracer: {} as never,
+    permissionGuard: {} as never,
+    auditSink: {} as never,
+    processRuntime: {} as never,
+  }
 }

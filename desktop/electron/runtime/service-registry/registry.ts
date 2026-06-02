@@ -47,6 +47,7 @@ export interface ServiceRegistryOptions {
 }
 
 const DEFAULT_PER_SERVICE_STOP_TIMEOUT_MS = 5000
+const MIN_STOP_TIMEOUT_AFTER_DEADLINE_MS = 100
 
 export class ServiceRegistryImpl implements ServiceRegistry {
   protected readonly entries = new Map<string, RegistryEntry>()
@@ -206,7 +207,7 @@ export class ServiceRegistryImpl implements ServiceRegistry {
 
     const context = this.getContext()
     const deadline = Date.now() + timeoutMs
-    const perServiceTimeout = this.perServiceStopTimeoutMs
+    const perServiceTimeout = Math.max(1, this.perServiceStopTimeoutMs)
 
     for (const descriptor of order) {
       const entry = this.requireEntry(descriptor.id)
@@ -219,9 +220,10 @@ export class ServiceRegistryImpl implements ServiceRegistry {
       }
 
       const remaining = Math.max(0, deadline - Date.now())
-      // remaining can be 0 when the global deadline elapsed; runWithTimeout
-      // will reject immediately in that case via its own zero-check.
-      const limit = remaining === 0 ? 0 : Math.min(perServiceTimeout, remaining)
+      const limit =
+        remaining === 0
+          ? Math.min(perServiceTimeout, MIN_STOP_TIMEOUT_AFTER_DEADLINE_MS)
+          : Math.min(perServiceTimeout, remaining)
 
       try {
         if (descriptor.stop && entry.instance !== undefined) {
@@ -236,6 +238,10 @@ export class ServiceRegistryImpl implements ServiceRegistry {
         const err = rawErr instanceof Error ? rawErr : new Error(String(rawErr))
         entry.status = "failed"
         entry.lastError = err
+        context.logger.error("ServiceRegistry stop failed.", {
+          serviceId: descriptor.id,
+          ...errorLogMeta(err),
+        })
         // SPEC §4: stop errors are logged but never re-thrown — they must not
         // block other services from shutting down. The caller can inspect()
         // afterwards.
@@ -334,3 +340,18 @@ function createNullLogger(): ServiceContext["logger"] {
 }
 
 export { createNullLogger as _createNullLoggerForTests }
+
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorMessageLength: error.message.length,
+      stackLength: error.stack?.length ?? 0,
+    }
+  }
+  return {
+    errorName: typeof error,
+    errorMessageLength: String(error).length,
+    stackLength: 0,
+  }
+}
