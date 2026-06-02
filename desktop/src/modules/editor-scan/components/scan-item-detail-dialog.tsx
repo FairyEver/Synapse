@@ -315,7 +315,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   }, [disabledReason, item, onOpenChange, publishAsNew])
 
   const handleReinstall = useCallback(async () => {
-    if (!item?.synapseContentId) return
+    if (!item?.synapseContentId || disabledReason) return
     setIsReinstallBusy(true)
     try {
       const [detail, adapters] = await Promise.all([
@@ -355,7 +355,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
     } finally {
       setIsReinstallBusy(false)
     }
-  }, [item, notifyError])
+  }, [disabledReason, item, notifyError])
 
   const handleReinstallOpenChange = useCallback((nextOpen: boolean) => {
     setIsReinstallOpen(nextOpen)
@@ -719,7 +719,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                 </DropdownMenuItem>
                 {canReinstall ? (
                   <DropdownMenuItem
-                    disabled={isReinstallBusy}
+                    disabled={isReinstallBusy || disabledReason !== null}
                     onSelect={() => void handleReinstall()}
                   >
                     重新安装

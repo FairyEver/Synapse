@@ -128,6 +128,17 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain('item.source === "synapse"')
   })
 
+  it("guards reinstall with the same disabled reason as repository actions", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("if (!item?.synapseContentId || disabledReason) return")
+    expect(source).toContain("disabled={isReinstallBusy || disabledReason !== null}")
+    expect(source).toContain("}, [disabledReason, item, notifyError])")
+  })
+
   it("asks user to choose between overwrite and publish-as-new", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
