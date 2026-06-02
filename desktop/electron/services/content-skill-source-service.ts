@@ -170,7 +170,7 @@ async function collectSkillFiles(
       dirPath: currentDir,
       error: getErrorMessage(error),
     })
-    return
+    throwInvalid("files", `无法读取 Skill 附件目录：${formatSkillSourceRelativePath(baseDir, currentDir)}`)
   }
 
   for (const name of children) {
@@ -186,7 +186,7 @@ async function collectSkillFiles(
         filePath: fullPath,
         error: getErrorMessage(error),
       })
-      continue
+      throwInvalid("files", `无法检查 Skill 附件：${formatSkillSourceRelativePath(baseDir, fullPath)}`)
     }
 
     if (fileStat.isSymbolicLink()) continue
@@ -240,6 +240,7 @@ async function collectSkillFile(
       filePath: fullPath,
       error: getErrorMessage(error),
     })
+    throwInvalid("files", `无法读取 Skill 附件：${relativeName}`)
   }
 }
 
@@ -325,6 +326,10 @@ async function assertDirectoryExists(dirPath: string): Promise<void> {
 
 function toPortableRelativePath(relativeName: string): string {
   return relativeName.split(path.sep).join("/")
+}
+
+function formatSkillSourceRelativePath(baseDir: string, targetPath: string): string {
+  return normalizeContentAttachmentPath(toPortableRelativePath(path.relative(baseDir, targetPath))) || "."
 }
 
 function isPathInside(rootPath: string, targetPath: string): boolean {

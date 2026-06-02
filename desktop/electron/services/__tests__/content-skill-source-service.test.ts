@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -70,6 +70,16 @@ describe("content skill source service", () => {
     await writeText(path.join(root, "secrets", "id_rsa"), "secret")
 
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(ContentCapabilityError)
+  })
+
+  it("rejects unreadable attachments instead of returning an incomplete draft", async () => {
+    const root = await createTempRoot()
+    const attachmentPath = path.join(root, "references", "guide.md")
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await writeText(attachmentPath, "guide")
+    await chmod(attachmentPath, 0)
+
+    await expect(readSkillDraftFromDirectory(root)).rejects.toThrow("无法读取 Skill 附件：references/guide.md")
   })
 
   it("rejects a symlinked skill main file", async () => {
