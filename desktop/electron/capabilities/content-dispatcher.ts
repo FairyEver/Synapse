@@ -17,6 +17,8 @@ import type {
 import type { EventBus } from "../runtime/event-bus"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { ContentCapabilityError } from "../services/content-capability-errors"
+import { sanitizeError } from "../services/error-sanitize"
+import { createMainLogger } from "../services/log-store"
 import {
   describeContentTypes,
   normalizeCreateContentParams,
@@ -72,6 +74,7 @@ type SkillSourceMergeResult = {
 
 const CONTENT_ACTION_PATTERN = /^content\.(rule|skill|prompt)\.(list|get|create|update|delete)$/u
 const AUTO_DESCRIPTION_MAX_LENGTH = 120
+const logger = createMainLogger("capability.content-dispatcher")
 
 function createContentCapabilityDispatcher(deps: ContentCapabilityDispatcherDeps) {
   return {
@@ -106,9 +109,19 @@ async function dispatchContentMutation(
   context: DispatchContext,
   task: () => Promise<DispatchResult>,
 ): Promise<DispatchResult> {
+  const logMeta = contentDispatchCorrelation(contentType, operation, action, params, context)
+  logger.info("content capability dispatch", logMeta)
   const security = buildContentMutationSecurity(deps.security, contentType, operation, action, params, context)
   if (security) {
-    await authorizeContentMutation(security)
+    try {
+      await authorizeContentMutation(security)
+    } catch (error) {
+      logger.warn("content capability dispatch failed", {
+        ...logMeta,
+        ...dispatchErrorDiagnostic(error),
+      })
+      throw error
+    }
   }
 
   try {
@@ -119,6 +132,10 @@ async function dispatchContentMutation(
       resource: security.resource,
       outcome: "allowed",
       metadata: security.metadata,
+    })
+    logger.info("content capability dispatch succeeded", {
+      ...logMeta,
+      ...dispatchResultCorrelation(result),
     })
     return result
   } catch (error) {
@@ -133,7 +150,60 @@ async function dispatchContentMutation(
         errorLength: String(error).length,
       },
     })
+    logger.warn("content capability dispatch failed", {
+      ...logMeta,
+      ...dispatchErrorDiagnostic(error),
+    })
     throw error
+  }
+}
+
+function contentDispatchCorrelation(
+  contentType: SynapseContentType,
+  operation: MutatingContentOperation,
+  action: string,
+  params: ContentToolParams,
+  context: DispatchContext,
+): Record<string, unknown> {
+  const contentId = optionalTrimmedString(params.id)
+  const baseHistoryDirname = optionalTrimmedString(params.baseHistoryDirname)
+  const hasIconImageInput = Boolean(optionalTrimmedString(params.iconImagePath) || optionalTrimmedString(params.iconImageBase64))
+  return {
+    action,
+    contentType,
+    operation,
+    source: context.source ?? "api",
+    ...(contentId ? { contentId } : {}),
+    ...(baseHistoryDirname ? { baseHistoryDirname } : {}),
+    hasContent: typeof params.content === "string" && params.content.length > 0,
+    hasFiles: Array.isArray(params.files) && params.files.length > 0,
+    hasIconImageInput,
+    hasSourceDirectoryPath: Boolean(optionalTrimmedString(params.sourceDirectoryPath)),
+  }
+}
+
+function dispatchResultCorrelation(result: DispatchResult): Record<string, unknown> {
+  const data = result.data
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return {}
+  }
+  const record = data as Record<string, unknown>
+  return {
+    ...(typeof record.id === "string" ? { resultContentId: record.id } : {}),
+    ...(typeof record.status === "string" ? { resultStatus: record.status } : {}),
+    ...(typeof record.type === "string" ? { resultContentType: record.type } : {}),
+  }
+}
+
+function dispatchErrorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorMessage: string
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  const sanitized = sanitizeError(message)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorMessage: sanitized.length <= 200 ? sanitized : `${sanitized.slice(0, 200)}...`,
   }
 }
 

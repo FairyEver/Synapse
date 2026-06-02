@@ -1,4 +1,16 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}))
+
+vi.mock("../../services/log-store", () => ({
+  createMainLogger: vi.fn(() => logStoreMock.logger),
+}))
+
 import type {
   SynapseContentDetail,
   SynapseContentMeta,
@@ -123,6 +135,11 @@ function createDeps(options: {
 }
 
 describe("content capability dispatcher", () => {
+  beforeEach(() => {
+    logStoreMock.logger.info.mockClear()
+    logStoreMock.logger.warn.mockClear()
+  })
+
   it("describes content types", async () => {
     const deps = createDeps()
     const dispatcher = createContentCapabilityDispatcher(deps)
@@ -173,6 +190,66 @@ describe("content capability dispatcher", () => {
         files: [expect.objectContaining({ originalName: "references/guide.md" })],
       }),
     }))
+  })
+
+  it("logs content mutation dispatch lifecycle without content body", async () => {
+    const deps = createDeps()
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await dispatcher.dispatch("content.rule.create", {
+      name: "team-rule",
+      title: "Team Rule",
+      description: "Description",
+      category: "coding",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Secret Rule Body",
+    }, { source: "mcp-stdio" })
+
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("content capability dispatch", expect.objectContaining({
+      action: "content.rule.create",
+      contentType: "rule",
+      hasContent: true,
+      operation: "create",
+      source: "mcp-stdio",
+    }))
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("content capability dispatch succeeded", expect.objectContaining({
+      action: "content.rule.create",
+      contentType: "rule",
+      operation: "create",
+      resultContentId: "created",
+      resultStatus: "saved",
+    }))
+    expect(JSON.stringify(logStoreMock.logger.info.mock.calls)).not.toContain("# Secret Rule Body")
+  })
+
+  it("logs content mutation dispatch failures without full params", async () => {
+    const deps = createDeps()
+    deps.contentWriter.createContent.mockRejectedValueOnce(new Error("write failed"))
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch("content.rule.create", {
+      name: "team-rule",
+      title: "Team Rule",
+      description: "Description",
+      category: "coding",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Secret Rule Body",
+    }, { source: "mcp-stdio" })).rejects.toThrow("write failed")
+
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith("content capability dispatch failed", expect.objectContaining({
+      action: "content.rule.create",
+      contentType: "rule",
+      errorMessage: "write failed",
+      errorName: "Error",
+      hasContent: true,
+      operation: "create",
+      source: "mcp-stdio",
+    }))
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("# Secret Rule Body")
   })
 
   it("preserves an existing image icon when updating a skill from sourceDirectoryPath without appearance fields", async () => {
