@@ -36,6 +36,7 @@ import { ContentBulkActions } from "@/modules/content/components/content-bulk-ac
 import {
   contentSearchOptions,
   ContentStateView,
+  countVisibleContentIds,
   getContentState,
   normalizeSearchQuery,
   SORT_OPTIONS,
@@ -276,9 +277,12 @@ function ContentBrowserPage({
   }, [activeCategoryId, filteredItems.length, isDeletedView, deferredSearchQuery, totalCount, itemsInActiveCategory.length])
 
   const recentlyViewedCount = useMemo(() => {
-    const itemIds = new Set(items.map((item) => item.id))
-    return recentlyViewedIds.filter((id) => itemIds.has(id)).length
+    return countVisibleContentIds(recentlyViewedIds, items)
   }, [items, recentlyViewedIds])
+
+  const favoriteCount = useMemo(() => {
+    return countVisibleContentIds(favoriteIds, items)
+  }, [items, favoriteIds])
 
   const state = useMemo(
     () => getContentState({
@@ -458,7 +462,7 @@ function ContentBrowserPage({
             canBrowseContent={canBrowseContent}
             categories={categories}
             deletedCount={deletedContent.count}
-            favoriteCount={favoriteIds.length}
+            favoriteCount={favoriteCount}
             onActiveCategoryChange={setActiveCategoryId}
             onAddClick={() => {
               logger.info("Create entry requested from browser page.", { contentType, repositoryUuid: activeRepository.uuid })

@@ -73,6 +73,14 @@ function sortContentItems(
   }
 }
 
+function countVisibleContentIds(
+  ids: readonly string[],
+  items: readonly Pick<SynapseContentMeta, "id">[],
+): number {
+  const itemIds = new Set(items.map((item) => item.id))
+  return ids.filter((id) => itemIds.has(id)).length
+}
+
 function getContentState(params: {
   activeCategoryId: string
   categoryItems: SynapseCategoryViewItem[]
@@ -194,6 +202,7 @@ function ContentStateView({ description, icon: Icon, onRetry, title }: ContentSt
 export {
   contentSearchOptions,
   ContentStateView,
+  countVisibleContentIds,
   getContentState,
   normalizeSearchQuery,
   SORT_OPTIONS,
