@@ -14,6 +14,12 @@ import {
   updateUsagePriceRule,
 } from "../pricing"
 
+function defaultRule(modelPattern: string) {
+  const rule = DEFAULT_USAGE_PRICE_RULES.find((candidate) => candidate.modelPattern === modelPattern)
+  expect(rule).toBeTruthy()
+  return rule!
+}
+
 describe("usage analysis pricing", () => {
   it("matches prices by model pattern without provider-specific rules", () => {
     const rules = normalizeUsagePriceRules([{
@@ -112,6 +118,122 @@ describe("usage analysis pricing", () => {
       cacheWritePer1M: 27,
       reasoningPer1M: 108,
       currency: "CNY",
+    })
+  })
+
+  it("contains current built-in coding model price defaults", () => {
+    expect(defaultRule("gpt-5.5")).toMatchObject({
+      inputPer1M: 36,
+      outputPer1M: 216,
+      cacheReadPer1M: 3.6,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 216,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("gpt-5.4")).toMatchObject({
+      inputPer1M: 18,
+      outputPer1M: 108,
+      cacheReadPer1M: 1.8,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 108,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("claude-opus-4.7")).toMatchObject({
+      inputPer1M: 36,
+      outputPer1M: 180,
+      cacheReadPer1M: 3.6,
+      cacheWritePer1M: 45,
+      reasoningPer1M: 180,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("claude-opus-4.6")).toMatchObject({
+      inputPer1M: 36,
+      outputPer1M: 180,
+      cacheReadPer1M: 3.6,
+      cacheWritePer1M: 45,
+      reasoningPer1M: 180,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("deepseek-v4-pro")).toMatchObject({
+      inputPer1M: 3.132,
+      outputPer1M: 6.264,
+      cacheReadPer1M: 0.0261,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 6.264,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("deepseek-v4-flash")).toMatchObject({
+      inputPer1M: 1.008,
+      outputPer1M: 2.016,
+      cacheReadPer1M: 0.02016,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 2.016,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("kimi-k2.5")).toMatchObject({
+      inputPer1M: 4.32,
+      outputPer1M: 21.6,
+      cacheReadPer1M: 0.72,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 21.6,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("kimi-k2.6")).toMatchObject({
+      inputPer1M: 6.84,
+      outputPer1M: 28.8,
+      cacheReadPer1M: 1.152,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 28.8,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("glm-5.1")).toMatchObject({
+      inputPer1M: 8,
+      outputPer1M: 28,
+      cacheReadPer1M: 8,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 28,
+      currency: "CNY",
+      source: "builtin",
+    })
+    expect(defaultRule("MiniMax-M2.5")).toMatchObject({
+      inputPer1M: 2.16,
+      outputPer1M: 8.64,
+      cacheReadPer1M: 0.216,
+      cacheWritePer1M: 2.7,
+      reasoningPer1M: 8.64,
+      currency: "CNY",
+      source: "builtin",
+    })
+  })
+
+  it("matches specific Claude 4.6 and 4.7 model rules before broader Claude aliases", () => {
+    expect(findUsagePriceRuleForModel("claude-opus-4.6", DEFAULT_USAGE_PRICE_RULES)).toMatchObject({
+      id: "claude-opus-4-6",
+      modelPattern: "claude-opus-4.6",
+      inputPer1M: 36,
+    })
+    expect(findUsagePriceRuleForModel("claude-opus-4-6", DEFAULT_USAGE_PRICE_RULES)).toMatchObject({
+      id: "claude-opus-4-6-hyphen",
+      modelPattern: "claude-opus-4-6",
+      inputPer1M: 36,
+    })
+    expect(findUsagePriceRuleForModel("claude-opus-4-7", DEFAULT_USAGE_PRICE_RULES)).toMatchObject({
+      id: "claude-opus-4-7-hyphen",
+      modelPattern: "claude-opus-4-7",
+      inputPer1M: 36,
+    })
+    expect(findUsagePriceRuleForModel("claude-opus-4.6-thinking", DEFAULT_USAGE_PRICE_RULES)).toMatchObject({
+      id: "claude-opus-4-6",
+      modelPattern: "claude-opus-4.6",
+      outputPer1M: 180,
     })
   })
 
