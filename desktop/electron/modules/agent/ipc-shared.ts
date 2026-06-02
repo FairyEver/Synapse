@@ -76,9 +76,13 @@ const resultMetadataSchema = z.object({
   workDir: z.string().optional(),
   cancelled: z.boolean().optional(),
   usage: jsonRecordSchema.optional(),
+  turnUsage: jsonRecordSchema.optional(),
   costUsd: z.number().optional(),
   costCny: z.number().optional(),
+  totalCostUsd: z.number().optional(),
+  totalCostCny: z.number().optional(),
   costCurrency: z.literal("CNY").optional(),
+  estimatedCost: z.boolean().optional(),
 })
 
 export const timelineItemSchema = z.discriminatedUnion("kind", [

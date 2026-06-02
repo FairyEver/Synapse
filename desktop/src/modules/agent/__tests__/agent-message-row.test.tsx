@@ -150,11 +150,15 @@ describe("AgentMessageEvent", () => {
       />,
     )
 
-    expect(html).toContain("会话累计")
-    expect(html).toContain("输入 100")
-    expect(html).toContain("输出 20")
-    expect(html).toContain("缓存读 300")
-    expect(html).toContain("缓存写 40")
+    expect(html).toContain('aria-label="用量统计"')
+    expect(html).toContain("输入")
+    expect(html).toContain("100")
+    expect(html).toContain("输出")
+    expect(html).toContain("20")
+    expect(html).toContain("缓存读")
+    expect(html).toContain("300")
+    expect(html).toContain("缓存写")
+    expect(html).toContain("40")
   })
 
   it("wraps local references as markdown links for assistant", () => {

@@ -590,6 +590,7 @@ export class ConversationRouter {
           userMeta: message.userMeta ?? conversation.userMeta,
         })
         resultMetadata = await this.cumulativeUsageMetadata(conversation.id, resultMetadata)
+        resultMetadata = await this.cumulativeCostMetadata(conversation.id, resultMetadata)
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -796,6 +797,7 @@ export class ConversationRouter {
             userMeta: message.userMeta ?? conversation.userMeta,
           })
           resultMetadata = await this.cumulativeUsageMetadata(conversation.id, resultMetadata)
+          resultMetadata = await this.cumulativeCostMetadata(conversation.id, resultMetadata)
           await this.repository.saveUsage({
             conversationId: conversation.id,
             usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -1030,6 +1032,24 @@ export class ConversationRouter {
     return compactMetadata({
       ...(metadata ?? {}),
       usage,
+    })
+  }
+
+  private async cumulativeCostMetadata(
+    conversationId: string,
+    metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
+  ): Promise<ConversationEntryV1["history"][number]["metadata"] | undefined> {
+    const turnCostCny = metadataNumber(metadata, "costCny")
+    const turnCostUsd = metadataNumber(metadata, "costUsd")
+    if (turnCostCny === undefined && turnCostUsd === undefined) return metadata
+    const conversation = await this.repository.get(conversationId)
+    const previousCostCny = conversation ? sumAssistantMetadataNumber(conversation.history, "costCny") : 0
+    const previousCostUsd = conversation ? sumAssistantMetadataNumber(conversation.history, "costUsd") : 0
+    return compactMetadata({
+      ...(metadata ?? {}),
+      ...(turnCostCny === undefined ? {} : { totalCostCny: roundCost(previousCostCny + turnCostCny) }),
+      ...(turnCostUsd === undefined ? {} : { totalCostUsd: roundCost(previousCostUsd + turnCostUsd) }),
+      estimatedCost: true,
     })
   }
 
@@ -1405,9 +1425,11 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
 function resultHistoryMetadata(
   event: Extract<AgentEvent, { type: "result" }>,
 ): ConversationEntryV1["history"][number]["metadata"] | undefined {
+  const turnUsage = resultUsageFromEvent(event)
   const metadata = compactMetadata({
     ...event.metadata,
-    usage: resultUsageFromEvent(event),
+    usage: turnUsage,
+    turnUsage,
     modelUsage: resultModelUsageFromEvent(event),
     sdkResultUuid: resultSdkResultUuidFromEvent(event),
     costUsd: resultCostFromEvent(event),
@@ -1450,6 +1472,25 @@ function compactMetadata(input: Record<string, unknown>): Record<string, unknown
   return Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== undefined),
   )
+}
+
+function metadataNumber(metadata: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = metadata?.[key]
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+function sumAssistantMetadataNumber(
+  history: readonly ConversationEntryV1["history"][number][],
+  key: string,
+): number {
+  return history.reduce((total, entry) => {
+    if (entry.role !== "assistant") return total
+    return total + (metadataNumber(entry.metadata, key) ?? 0)
+  }, 0)
+}
+
+function roundCost(value: number): number {
+  return Number(value.toFixed(6))
 }
 
 function sanitizeEventPayload(event: AgentEvent): Record<string, unknown> {

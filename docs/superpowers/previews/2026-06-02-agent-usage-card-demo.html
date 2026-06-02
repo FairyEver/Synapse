@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Usage Card Demo</title>
+  <style>
+    :root {
+      --background: oklch(1 0 0);
+      --foreground: oklch(0.145 0 0);
+      --card: oklch(1 0 0);
+      --card-foreground: oklch(0.145 0 0);
+      --muted: oklch(0.97 0 0);
+      --muted-foreground: oklch(0.556 0 0);
+      --border: oklch(0.922 0 0);
+      --ring: oklch(0.708 0 0);
+      --chart-1: oklch(0.58 0.13 248);
+      --chart-2: oklch(0.64 0.1 198);
+      --chart-3: oklch(0.66 0.1 154);
+      --chart-4: oklch(0.7 0.11 78);
+      --chart-5: oklch(0.61 0.11 304);
+      --radius: 0.625rem;
+      --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow: hidden;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .agent-page {
+      display: flex;
+      height: 100vh;
+      min-height: 0;
+      flex-direction: column;
+      padding: 10px 8px;
+      background: var(--background);
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 10px;
+    }
+
+    .agent-title {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      height: 24px;
+      flex-shrink: 0;
+      align-items: center;
+      border-radius: calc(var(--radius) - 2px);
+      background: var(--muted);
+      padding: 0 9px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--foreground);
+    }
+
+    .agent-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .agent-model {
+      flex-shrink: 0;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    .timeline {
+      position: relative;
+      min-height: 0;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .timeline-inner {
+      display: flex;
+      width: min(100%, 896px);
+      min-width: 0;
+      height: 100%;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 auto;
+      padding: 16px 16px 136px 0;
+      overflow: hidden;
+    }
+
+    .assistant-message {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .agent-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: calc(var(--radius) - 4px);
+      border: 1px solid var(--border);
+      background: var(--muted);
+    }
+
+    .time {
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    .message-body {
+      width: min(100%, 76ch);
+      min-width: 0;
+      padding: 8px 4px;
+      color: var(--foreground);
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .message-body p {
+      margin: 0 0 10px;
+    }
+
+    .code-row {
+      display: inline-flex;
+      max-width: 100%;
+      border-radius: calc(var(--radius) - 3px);
+      background: var(--muted);
+      padding: 1px 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .usage-card {
+      width: 76ch;
+      min-width: 760px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) + 2px);
+      background: var(--card);
+      color: var(--card-foreground);
+      white-space: nowrap;
+    }
+
+    .usage-header {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+    }
+
+    .usage-heading {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .usage-title {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .usage-model {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    .cost-summary {
+      display: flex;
+      flex-shrink: 0;
+      align-items: baseline;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted-foreground);
+    }
+
+    .cost-summary strong {
+      margin-left: 3px;
+      color: var(--foreground);
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .estimate-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted-foreground);
+    }
+
+    .usage-actions {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted-foreground);
+    }
+
+    .icon-button {
+      display: inline-flex;
+      width: 24px;
+      height: 24px;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: calc(var(--radius) - 3px);
+      background: transparent;
+      color: var(--muted-foreground);
+      padding: 0;
+    }
+
+    .usage-content {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 132px;
+      gap: 0;
+    }
+
+    .usage-main {
+      min-width: 0;
+      border-right: 1px solid var(--border);
+      padding: 9px 10px 8px;
+    }
+
+    .distribution {
+      display: flex;
+      height: 8px;
+      width: 100%;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--muted);
+    }
+
+    .segment {
+      min-width: 2px;
+    }
+
+    .input { background: var(--chart-1); }
+    .output { background: var(--chart-3); }
+    .cache-read { background: var(--chart-5); }
+    .cache-write { background: var(--chart-4); }
+    .reasoning { background: var(--chart-2); }
+
+    .s-input { flex-basis: 17%; }
+    .s-output { flex-basis: 7%; }
+    .s-cache-read { flex-basis: 72%; }
+    .s-cache-write { flex-basis: 2%; }
+    .s-reasoning { flex-basis: 2%; }
+
+    .token-grid {
+      display: grid;
+      grid-template-columns: 92px 86px 116px 88px 78px;
+      margin-top: 9px;
+    }
+
+    .token-item {
+      min-width: 0;
+      border-left: 1px solid var(--border);
+      padding: 0 8px;
+    }
+
+    .token-item:first-child {
+      border-left: 0;
+      padding-left: 0;
+    }
+
+    .token-item:last-child {
+      padding-right: 0;
+    }
+
+    .token-label {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted-foreground);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      flex-shrink: 0;
+      border-radius: 999px;
+    }
+
+    .token-value {
+      margin-top: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .token-meta {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      margin-top: 2px;
+      color: var(--muted-foreground);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .info-icon {
+      display: inline-flex;
+      width: 14px;
+      height: 14px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .usage-chart {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      justify-content: center;
+      padding: 9px 10px 8px;
+    }
+
+    .chart-title {
+      margin-bottom: 7px;
+      color: var(--muted-foreground);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .bars {
+      display: grid;
+      height: 78px;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: end;
+      gap: 7px;
+      border-bottom: 1px solid var(--border);
+      padding: 0 2px;
+    }
+
+    .bar {
+      display: flex;
+      min-width: 10px;
+      overflow: hidden;
+      border-radius: calc(var(--radius) - 5px) calc(var(--radius) - 5px) 0 0;
+      flex-direction: column-reverse;
+      background: var(--muted);
+    }
+
+    .b1 { height: 38px; }
+    .b2 { height: 45px; }
+    .b3 { height: 54px; }
+    .b4 { height: 61px; }
+    .b5 { height: 69px; }
+
+    .bar .input { height: 30%; }
+    .bar .output { height: 15%; }
+    .bar .cache-read { height: 42%; }
+    .bar .cache-write { height: 8%; }
+    .bar .reasoning { height: 5%; }
+
+    .composer {
+      position: absolute;
+      right: 80px;
+      bottom: 20px;
+      left: 80px;
+      z-index: 10;
+      max-width: 672px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--card);
+      padding: 8px;
+    }
+
+    .composer-input {
+      min-height: 48px;
+      padding: 8px;
+      color: var(--muted-foreground);
+      font-size: 14px;
+    }
+
+    .composer-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 2px;
+    }
+
+    .toolbar-chip {
+      border-radius: calc(var(--radius) - 2px);
+      color: var(--muted-foreground);
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .send {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: var(--foreground);
+    }
+
+  </style>
+</head>
+<body>
+  <main class="agent-page">
+    <header class="agent-header">
+      <div class="agent-title">
+        <span class="badge">Claude</span>
+        <span class="agent-name">模型消耗显示优化</span>
+      </div>
+      <span class="agent-model">Claude Sonnet 4.5</span>
+    </header>
+
+    <section class="timeline" aria-label="Agent 对话">
+      <div class="timeline-inner">
+        <article class="assistant-message">
+          <div class="message-header">
+            <span class="agent-icon" aria-hidden="true"></span>
+            <time class="time">14:32</time>
+          </div>
+          <div class="message-body">
+            <p>可以。这里把每轮结束后的消耗从一行摘要改成独立信息卡，保留累计口径，同时突出本轮新增。</p>
+            <p><span class="code-row">usage + cost metadata</span> 会在结果写入后统一归一化，前端只负责展示。</p>
+          </div>
+
+          <section class="usage-card" aria-label="用量统计">
+            <div class="usage-header">
+              <div class="usage-heading">
+                <div class="usage-title">用量统计</div>
+                <div class="cost-summary" aria-label="费用">
+                  <span>本轮<strong>¥0.18</strong></span>
+                  <span>累计<strong>¥1.42</strong></span>
+                  <span class="estimate-chip">估算<span class="info-icon" aria-hidden="true">i</span></span>
+                </div>
+              </div>
+              <div class="usage-actions">
+                <time class="time">14:32</time>
+                <button
+                  class="icon-button"
+                  type="button"
+                  aria-label="复制用量统计"
+                  data-copy-text="用量统计：Claude Sonnet 4.5，本轮费用 ¥0.18，会话累计费用 ¥1.42。Token 累计：输入 10,248（本轮 +2,104，占累计 21%）、输出 3,812（本轮 +846，占累计 22%）、缓存读 42,180（本轮 +9,640，占累计 23%）、缓存写 1,216（本轮 +0，占累计 0%）、思考 680（本轮 +180，占累计 26%）。价格按当前模型估算。"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="usage-content">
+              <div class="usage-main">
+                <div class="distribution" aria-label="Token 分类占比">
+                  <span class="segment input s-input"></span>
+                  <span class="segment output s-output"></span>
+                  <span class="segment cache-read s-cache-read"></span>
+                  <span class="segment cache-write s-cache-write"></span>
+                  <span class="segment reasoning s-reasoning"></span>
+                </div>
+
+                <div class="token-grid">
+                  <div class="token-item">
+                    <div class="token-label"><span class="dot input"></span>输入</div>
+                    <div class="token-value">10,248</div>
+                    <div class="token-meta"><span>+2,104</span><span>21%</span></div>
+                  </div>
+                  <div class="token-item">
+                    <div class="token-label"><span class="dot output"></span>输出</div>
+                    <div class="token-value">3,812</div>
+                    <div class="token-meta"><span>+846</span><span>22%</span></div>
+                  </div>
+                  <div class="token-item">
+                    <div class="token-label"><span class="dot cache-read"></span>缓存读</div>
+                    <div class="token-value">42,180</div>
+                    <div class="token-meta"><span>+9,640</span><span>23%</span></div>
+                  </div>
+                  <div class="token-item">
+                    <div class="token-label"><span class="dot cache-write"></span>缓存写</div>
+                    <div class="token-value">1,216</div>
+                    <div class="token-meta"><span>+0</span><span>0%</span></div>
+                  </div>
+                  <div class="token-item">
+                    <div class="token-label"><span class="dot reasoning"></span>思考</div>
+                    <div class="token-value">680</div>
+                    <div class="token-meta"><span>+180</span><span>26%</span></div>
+                  </div>
+                </div>
+
+              </div>
+
+              <aside class="usage-chart" aria-label="最近 5 轮">
+                <div class="chart-title">最近 5 轮</div>
+                <div class="bars" aria-hidden="true">
+                  <div class="bar b1">
+                    <span class="input"></span><span class="output"></span><span class="cache-read"></span><span class="cache-write"></span><span class="reasoning"></span>
+                  </div>
+                  <div class="bar b2">
+                    <span class="input"></span><span class="output"></span><span class="cache-read"></span><span class="cache-write"></span><span class="reasoning"></span>
+                  </div>
+                  <div class="bar b3">
+                    <span class="input"></span><span class="output"></span><span class="cache-read"></span><span class="cache-write"></span><span class="reasoning"></span>
+                  </div>
+                  <div class="bar b4">
+                    <span class="input"></span><span class="output"></span><span class="cache-read"></span><span class="cache-write"></span><span class="reasoning"></span>
+                  </div>
+                  <div class="bar b5">
+                    <span class="input"></span><span class="output"></span><span class="cache-read"></span><span class="cache-write"></span><span class="reasoning"></span>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </article>
+      </div>
+
+      <form class="composer" aria-label="输入消息">
+        <div class="composer-input">输入消息</div>
+        <div class="composer-toolbar">
+          <span class="toolbar-chip">默认权限</span>
+          <span class="send" aria-hidden="true"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+  <script>
+    document.querySelectorAll("[data-copy-text]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const text = button.getAttribute("data-copy-text")
+        if (!text) return
+        let copied = false
+        try {
+          await navigator.clipboard.writeText(text)
+          copied = true
+        } catch (error) {
+          const textarea = document.createElement("textarea")
+          textarea.value = text
+          textarea.setAttribute("readonly", "")
+          document.body.appendChild(textarea)
+          textarea.select()
+          copied = document.execCommand("copy")
+          document.body.removeChild(textarea)
+        }
+        button.setAttribute("aria-label", copied ? "已复制用量统计" : "复制失败")
+        if (copied) {
+          window.setTimeout(() => {
+            button.setAttribute("aria-label", "复制用量统计")
+          }, 1200)
+        }
+      })
+    })
+  </script>
+</body>
+</html>
