@@ -148,6 +148,47 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps Knowledge Base raw import and export methods to IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.knowledgeBase.uploadRawItems({
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      itemPaths: ["/tmp/folder"],
+    })
+    await bridge.knowledgeBase.selectAndUploadRawDirectory({
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+    })
+    await bridge.knowledgeBase.exportRawEntries({
+      projectId: "kb-1",
+      relativePaths: ["brief.md"],
+    })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:upload-raw-items",
+      {
+        projectId: "kb-1",
+        targetDirectoryPath: "client-a",
+        itemPaths: ["/tmp/folder"],
+      },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:select-and-upload-raw-directory",
+      {
+        projectId: "kb-1",
+        targetDirectoryPath: "client-a",
+      },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:export-raw-entries",
+      {
+        projectId: "kb-1",
+        relativePaths: ["brief.md"],
+      },
+    )
+  })
+
   it("maps Claude Code conversation and record methods to usage analysis IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

@@ -79,6 +79,17 @@ const uploadRawFilesPayloadSchema = z.object({
   filePaths: z.array(z.string().min(1)),
 })
 
+const uploadRawItemsPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  targetDirectoryPath: z.string(),
+  itemPaths: z.array(z.string().min(1)),
+})
+
+const selectAndUploadRawDirectoryPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  targetDirectoryPath: z.string(),
+})
+
 const createRawFolderPayloadSchema = z.object({
   projectId: z.string().min(1),
   parentDirectoryPath: z.string(),
@@ -98,6 +109,11 @@ const moveRawEntriesPayloadSchema = z.object({
 })
 
 const trashRawEntriesPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  relativePaths: z.array(z.string().min(1)),
+})
+
+const exportRawEntriesPayloadSchema = z.object({
   projectId: z.string().min(1),
   relativePaths: z.array(z.string().min(1)),
 })
@@ -133,7 +149,17 @@ const rawMutationResultSchema = z.object({
   entries: z.array(rawEntrySchema),
   skipped: z.array(z.object({
     path: z.string(),
-    reason: z.enum(["not-file", "not-directory", "read-error", "invalid-path", "collision", "trash-error"]),
+    reason: z.enum([
+      "not-file",
+      "not-directory",
+      "read-error",
+      "invalid-path",
+      "collision",
+      "trash-error",
+      "symlink",
+      "system-noise",
+      "export-error",
+    ]),
   })),
 })
 
@@ -307,6 +333,20 @@ export const knowledgeBaseIpcModule: IpcModule = {
         run: () => service(ctx).uploadRawFiles(request),
       }),
     },
+    uploadRawItems: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:upload-raw-items",
+      request: uploadRawItemsPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: (ctx, request: { projectId: string; targetDirectoryPath: string; itemPaths: string[] }) => runGuardedKnowledgeBaseFileUpload({
+        ctx,
+        projectId: request.projectId,
+        filePaths: request.itemPaths,
+        readSource: "knowledgeBase.uploadRawItems.read",
+        writeSource: "knowledgeBase.uploadRawItems",
+        run: () => service(ctx).uploadRawItems(request),
+      }),
+    },
     createRawFolder: {
       kind: "invoke",
       channel: "synapse:knowledge-base:create-raw-folder",
@@ -428,6 +468,65 @@ export const knowledgeBaseIpcModule: IpcModule = {
             projectId: request.projectId,
             targetDirectoryPath: request.targetDirectoryPath,
             filePaths: result.filePaths,
+          }),
+        })
+      },
+    },
+    selectAndUploadRawDirectory: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:select-and-upload-raw-directory",
+      request: selectAndUploadRawDirectoryPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        const result = await dialog.showOpenDialog({
+          properties: ["openDirectory"],
+        })
+        if (result.canceled || result.filePaths.length === 0) {
+          return { projectId: request.projectId, entries: [], skipped: [] }
+        }
+        const itemPaths = result.filePaths.slice(0, 1)
+        return runGuardedKnowledgeBaseFileUpload({
+          ctx,
+          projectId: request.projectId,
+          filePaths: itemPaths,
+          readSource: "knowledgeBase.selectAndUploadRawDirectory.read",
+          writeSource: "knowledgeBase.selectAndUploadRawDirectory",
+          run: () => service(ctx).uploadRawItems({
+            projectId: request.projectId,
+            targetDirectoryPath: request.targetDirectoryPath,
+            itemPaths,
+          }),
+        })
+      },
+    },
+    exportRawEntries: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:export-raw-entries",
+      request: exportRawEntriesPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: async (ctx, request: { projectId: string; relativePaths: string[] }) => {
+        const result = await dialog.showOpenDialog({
+          properties: ["openDirectory", "createDirectory"],
+        })
+        if (result.canceled || result.filePaths.length === 0) {
+          return { projectId: request.projectId, entries: [], skipped: [] }
+        }
+        const targetDirectoryPath = result.filePaths[0]!
+        return runGuardedKnowledgeBaseOperation({
+          ctx,
+          action: "fs.read.outside-userdata",
+          resource: `managed-knowledge-base:${request.projectId}`,
+          source: "knowledgeBase.exportRawEntries.read",
+          run: () => runGuardedKnowledgeBaseOperation({
+            ctx,
+            action: "fs.write",
+            resource: targetDirectoryPath,
+            source: "knowledgeBase.exportRawEntries.write",
+            run: () => service(ctx).exportRawEntries({
+              projectId: request.projectId,
+              relativePaths: request.relativePaths,
+              targetDirectoryPath,
+            }),
           }),
         })
       },

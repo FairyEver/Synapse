@@ -129,6 +129,7 @@ import type {
   SynapseKnowledgeBaseCreateRawFolderPayload,
   SynapseKnowledgeBaseDeleteManagedPayload,
   SynapseKnowledgeBaseDeleteManagedResult,
+  SynapseKnowledgeBaseExportRawEntriesPayload,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseListRawDirectoryPayload,
   SynapseKnowledgeBaseListRawDirectoryResult,
@@ -137,8 +138,10 @@ import type {
   SynapseKnowledgeBaseAddUrlSourcePayload,
   SynapseKnowledgeBaseRawMutationResult,
   SynapseKnowledgeBaseRenameRawEntryPayload,
+  SynapseKnowledgeBaseSelectAndUploadRawDirectoryPayload,
   SynapseKnowledgeBaseTrashRawEntriesPayload,
   SynapseKnowledgeBaseUploadRawFilesPayload,
+  SynapseKnowledgeBaseUploadRawItemsPayload,
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "./knowledge-base"
@@ -692,6 +695,9 @@ export type SynapseBridge = {
     uploadRawFiles: (
       payload: SynapseKnowledgeBaseUploadRawFilesPayload,
     ) => Promise<SynapseKnowledgeBaseRawMutationResult>
+    uploadRawItems: (
+      payload: SynapseKnowledgeBaseUploadRawItemsPayload,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
     createRawFolder: (
       payload: SynapseKnowledgeBaseCreateRawFolderPayload,
     ) => Promise<SynapseKnowledgeBaseRawMutationResult>
@@ -710,6 +716,12 @@ export type SynapseBridge = {
     selectAndUploadSources: (projectId: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     selectAndUploadRawFiles: (
       payload: Omit<SynapseKnowledgeBaseUploadRawFilesPayload, "filePaths">,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
+    selectAndUploadRawDirectory: (
+      payload: SynapseKnowledgeBaseSelectAndUploadRawDirectoryPayload,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
+    exportRawEntries: (
+      payload: Omit<SynapseKnowledgeBaseExportRawEntriesPayload, "targetDirectoryPath">,
     ) => Promise<SynapseKnowledgeBaseRawMutationResult>
     openSourceManager: (payload: SynapseKnowledgeBaseOpenSourceManagerPayload) => Promise<void>
     filePathForDroppedFile: (file: File) => string | null

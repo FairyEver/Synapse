@@ -100,6 +100,7 @@ const IPC_CHANNELS = {
     "listRawDirectory": "synapse:knowledge-base:list-raw-directory",
     "uploadSources": "synapse:knowledge-base:upload-sources",
     "uploadRawFiles": "synapse:knowledge-base:upload-raw-files",
+    "uploadRawItems": "synapse:knowledge-base:upload-raw-items",
     "createRawFolder": "synapse:knowledge-base:create-raw-folder",
     "renameRawEntry": "synapse:knowledge-base:rename-raw-entry",
     "moveRawEntries": "synapse:knowledge-base:move-raw-entries",
@@ -107,6 +108,8 @@ const IPC_CHANNELS = {
     "addUrlSource": "synapse:knowledge-base:add-url-source",
     "selectAndUploadSources": "synapse:knowledge-base:select-and-upload-sources",
     "selectAndUploadRawFiles": "synapse:knowledge-base:select-and-upload-raw-files",
+    "selectAndUploadRawDirectory": "synapse:knowledge-base:select-and-upload-raw-directory",
+    "exportRawEntries": "synapse:knowledge-base:export-raw-entries",
     "openSourceManager": "synapse:knowledge-base:open-source-manager",
   },
   "editor": {
@@ -586,6 +589,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["knowledge-base"].uploadSources)(payload),
     uploadRawFiles: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].uploadRawFiles)(payload),
+    uploadRawItems: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].uploadRawItems)(payload),
     createRawFolder: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].createRawFolder)(payload),
     renameRawEntry: (payload) =>
@@ -600,6 +605,10 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["knowledge-base"].selectAndUploadSources)({ projectId }),
     selectAndUploadRawFiles: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].selectAndUploadRawFiles)(payload),
+    selectAndUploadRawDirectory: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].selectAndUploadRawDirectory)(payload),
+    exportRawEntries: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].exportRawEntries)(payload),
     openSourceManager: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].openSourceManager)(payload),
     filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,

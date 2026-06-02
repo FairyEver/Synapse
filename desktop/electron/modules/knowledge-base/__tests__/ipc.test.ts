@@ -477,6 +477,101 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("uploads raw items through guarded external read and managed write permissions", async () => {
+    const uploadRawItems = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness, permissionGuard } = createHarness({ service: { uploadRawItems } })
+
+    await harness.invoke("synapse:knowledge-base:upload-raw-items", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      itemPaths: ["/tmp/folder"],
+    })
+
+    expect(uploadRawItems).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      itemPaths: ["/tmp/folder"],
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/folder",
+      context: { source: "knowledgeBase.uploadRawItems.read" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.uploadRawItems" },
+    })
+  })
+
+  it("selects one raw directory into the requested folder", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/folder"] })
+    const uploadRawItems = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness } = createHarness({ service: { uploadRawItems } })
+
+    await harness.invoke("synapse:knowledge-base:select-and-upload-raw-directory", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+    })
+
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+      properties: ["openDirectory"],
+    }))
+    expect(uploadRawItems).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      itemPaths: ["/tmp/folder"],
+    })
+  })
+
+  it("exports raw entries to a selected external directory", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ["/tmp/export"] })
+    const exportRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness, permissionGuard } = createHarness({ service: { exportRawEntries } })
+
+    await harness.invoke("synapse:knowledge-base:export-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: ["brief.md", "folder"],
+    })
+
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+      properties: ["openDirectory", "createDirectory"],
+    }))
+    expect(exportRawEntries).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      relativePaths: ["brief.md", "folder"],
+      targetDirectoryPath: "/tmp/export",
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.exportRawEntries.read" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/tmp/export",
+      context: { source: "knowledgeBase.exportRawEntries.write" },
+    })
+  })
+
+  it("returns an empty export result when directory selection is canceled", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] })
+    const exportRawEntries = vi.fn()
+    const { harness } = createHarness({ service: { exportRawEntries } })
+
+    const result = await harness.invoke("synapse:knowledge-base:export-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: ["brief.md"],
+    })
+
+    expect(exportRawEntries).not.toHaveBeenCalled()
+    expect(result).toEqual({ projectId: "kb-1", entries: [], skipped: [] })
+  })
+
   it("mutates raw entries through guarded write permission", async () => {
     const createRawFolder = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const renameRawEntry = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
