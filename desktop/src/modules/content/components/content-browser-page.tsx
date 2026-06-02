@@ -285,14 +285,19 @@ function ContentBrowserPage({
     return countVisibleContentIds(favoriteIds, items)
   }, [items, favoriteIds])
 
+  const stateItems = isDeletedView ? deletedContent.items : items
+  const stateError = isDeletedView ? deletedContent.error : error
+  const stateIsLoading = isDeletedView ? deletedContent.isLoading : isLoading
+  const stateRetry = isDeletedView ? deletedContent.refresh : refresh
+
   const state = useMemo(
     () => getContentState({
-      activeCategoryId, categoryItems: categories, error, filteredItems,
-      isLoading, items, itemsInActiveCategory,
-      normalizedSearchQuery: deferredSearchQuery, onRetry: refresh,
+      activeCategoryId, categoryItems: categories, error: stateError, filteredItems,
+      isLoading: stateIsLoading, items: stateItems, itemsInActiveCategory,
+      normalizedSearchQuery: deferredSearchQuery, onRetry: stateRetry,
       repositoryStatus, contentType,
     }),
-    [activeCategoryId, categories, error, filteredItems, isLoading, items, itemsInActiveCategory, deferredSearchQuery, refresh, repositoryStatus, contentType],
+    [activeCategoryId, categories, stateError, filteredItems, stateIsLoading, stateItems, itemsInActiveCategory, deferredSearchQuery, stateRetry, repositoryStatus, contentType],
   )
 
   // --- PLACEHOLDER_HANDLERS ---

@@ -143,19 +143,19 @@ function getContentState(params: {
     }
   }
 
-  if (items.length === 0) {
-    return {
-      title: `还没有 ${definition.emptyStateNoun}`,
-      description: null,
-      icon: PackageOpen,
-    }
-  }
-
   if (activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID && itemsInActiveCategory.length === 0) {
     return {
       title: "没有已删除的内容",
       description: null,
       icon: Trash2,
+    }
+  }
+
+  if (items.length === 0) {
+    return {
+      title: `还没有 ${definition.emptyStateNoun}`,
+      description: null,
+      icon: PackageOpen,
     }
   }
 
