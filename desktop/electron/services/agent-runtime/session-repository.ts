@@ -17,6 +17,7 @@ export interface AgentSessionRepositoryOptions {
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
   readonly now?: () => Date
   readonly idFactory?: () => string
+  readonly logger?: { warn: (message: string, meta?: unknown) => void }
 }
 
 export interface CreateAgentSessionInput {
@@ -59,6 +60,7 @@ export class AgentSessionRepository {
   private readonly agentUsage: DataNamespace<AgentUsageEntryV1> | undefined
   private readonly now: () => Date
   private readonly idFactory: () => string
+  private readonly logger: { warn: (message: string, meta?: unknown) => void } | undefined
 
   constructor(options: AgentSessionRepositoryOptions) {
     this.projectId = options.projectId
@@ -66,6 +68,7 @@ export class AgentSessionRepository {
     this.agentUsage = options.agentUsage
     this.now = options.now ?? (() => new Date())
     this.idFactory = options.idFactory ?? (() => randomId())
+    this.logger = options.logger
   }
 
   async getOrCreateActive(message: AgentMessage): Promise<ConversationEntryV1> {
@@ -158,10 +161,54 @@ export class AgentSessionRepository {
       createdAt: now,
       updatedAt: now,
     }
+    const previous = await this.conversations.get(conversation.id)
     await this.conversations.upsert({ ...conversation, active: false })
-    await this.deactivateActive(input.sessionKey, input.platform, conversation.id, input.workspaceKey)
-    await this.conversations.upsert(conversation)
+    try {
+      await this.deactivateActive(input.sessionKey, input.platform, conversation.id, input.workspaceKey)
+      await this.activateCreatedSession(conversation)
+    } catch (error) {
+      await this.restoreFailedCreatedSession(conversation, previous)
+      throw error
+    }
     return conversation
+  }
+
+  private async activateCreatedSession(conversation: ConversationEntryV1): Promise<void> {
+    try {
+      await this.conversations.upsert(conversation)
+    } catch (error) {
+      this.logger?.warn("Failed to activate newly created Agent session. Retrying once.", {
+        error,
+        conversationId: conversation.id,
+        projectId: conversation.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: conversation.platform,
+        workspaceKey: conversation.workspaceKey,
+      })
+      await this.conversations.upsert(conversation)
+    }
+  }
+
+  private async restoreFailedCreatedSession(
+    conversation: ConversationEntryV1,
+    previous: ConversationEntryV1 | null,
+  ): Promise<void> {
+    try {
+      if (previous) {
+        await this.conversations.upsert(previous)
+      } else {
+        await this.conversations.remove(conversation.id)
+      }
+    } catch (cleanupError) {
+      this.logger?.warn("Failed to clean up inactive Agent session placeholder after creation failure.", {
+        error: cleanupError,
+        conversationId: conversation.id,
+        projectId: conversation.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: conversation.platform,
+        workspaceKey: conversation.workspaceKey,
+      })
+    }
   }
 
   async createSideSession(input: CreateAgentSessionInput): Promise<ConversationEntryV1> {

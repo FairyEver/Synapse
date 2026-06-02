@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   ConversationEntryV1,
@@ -6,7 +6,7 @@ import type {
   DataChangeListener,
   DataNamespace,
 } from "../../../runtime/data-repo"
-import { AgentSessionRepository } from "../session-repository"
+import { AgentSessionRepository, conversationId } from "../session-repository"
 
 describe("AgentSessionRepository", () => {
   it("creates and restores the active session with user metadata", async () => {
@@ -99,6 +99,56 @@ describe("AgentSessionRepository", () => {
     expect((await repository.get(first.id))?.active).toBe(false)
     expect((await repository.get(second.id))?.active).toBe(true)
     expect((await repository.getActive("s1", "local"))?.id).toBe(second.id)
+  })
+
+  it("retries the final active write when creating a session", async () => {
+    const conversations = new FailingUpsertNamespace<ConversationEntryV1>("conversations", new Set([2]))
+    const logger = { warn: vi.fn() }
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+      idFactory: fixedIdFactory(["one"]),
+      logger,
+    })
+
+    const session = await repository.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "first",
+    })
+
+    expect(session.active).toBe(true)
+    expect((await conversations.get(session.id))?.active).toBe(true)
+    expect(await repository.getActive("s1", "local")).toEqual(expect.objectContaining({
+      id: session.id,
+      active: true,
+    }))
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Failed to activate newly created Agent session. Retrying once.",
+      expect.objectContaining({ conversationId: session.id }),
+    )
+  })
+
+  it("removes the inactive placeholder when creating a session cannot be activated", async () => {
+    const conversations = new FailingUpsertNamespace<ConversationEntryV1>("conversations", new Set([2, 3]))
+    const logger = { warn: vi.fn() }
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+      idFactory: fixedIdFactory(["one"]),
+      logger,
+    })
+
+    await expect(repository.createSession({
+      sessionKey: "s1",
+      platform: "local",
+      name: "first",
+    })).rejects.toThrow("upsert failed on call 3")
+
+    expect(await conversations.get(conversationId("local", "s1", "one"))).toBeNull()
+    expect(await repository.getActive("s1", "local")).toBeNull()
   })
 
   it("stores agentType when provided at creation", async () => {
@@ -301,6 +351,25 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
   private emit(event: DataChangeEvent<T>): void {
     for (const listener of this.listeners) listener(event)
+  }
+}
+
+class FailingUpsertNamespace<T extends { id: string }> extends MemoryNamespace<T> {
+  private upsertCount = 0
+
+  constructor(
+    name: string,
+    private readonly failingCalls: ReadonlySet<number>,
+  ) {
+    super(name)
+  }
+
+  override async upsert(item: T): Promise<void> {
+    this.upsertCount += 1
+    if (this.failingCalls.has(this.upsertCount)) {
+      throw new Error(`upsert failed on call ${this.upsertCount}`)
+    }
+    await super.upsert(item)
   }
 }
 

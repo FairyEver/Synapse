@@ -166,6 +166,7 @@ export class AgentRuntimeService {
       conversations: deps.conversations,
       agentUsage: deps.agentUsage,
       now: deps.now,
+      logger: deps.logger,
     })
     this.sessionManager = new SessionManager({
       projectId: deps.projectId,
