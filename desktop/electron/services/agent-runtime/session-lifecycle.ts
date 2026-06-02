@@ -113,8 +113,8 @@ export class SessionLifecycleManager {
   async deleteSession(conversationIdValue: string): Promise<boolean> {
     const conversation = await this.deps.repository.get(conversationIdValue)
     if (!conversation) return false
-    await this.deps.repository.deleteSession(conversationIdValue)
     await this.deps.sessionManager.closeState(conversationIdValue)
+    await this.deps.repository.deleteSession(conversationIdValue)
     return true
   }
 
