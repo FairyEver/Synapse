@@ -80,6 +80,9 @@ export class KnowledgeBaseService {
 
   async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
     if (this.activeManagedCreates.has(payload.projectId)) {
+      logger.warn("Managed Knowledge Base create rejected because project creation is already active.", {
+        projectId: payload.projectId,
+      })
       throw new Error("知识库正在创建，请稍后重试。")
     }
     this.activeManagedCreates.add(payload.projectId)
@@ -107,6 +110,10 @@ export class KnowledgeBaseService {
     }
     const runtimePath = resolveManagedKnowledgeBasePath(project, this.userDataPath)
     if (await pathExists(runtimePath)) {
+      logger.warn("Managed Knowledge Base runtime already exists.", {
+        projectId: payload.projectId,
+        runtimePath,
+      })
       throw new Error("知识库已存在。")
     }
     try {
@@ -135,6 +142,11 @@ export class KnowledgeBaseService {
           ...knowledgeBaseErrorMeta(cleanupError),
         })
       }
+      logger.warn("Managed Knowledge Base runtime creation failed.", {
+        projectId: payload.projectId,
+        runtimePath,
+        ...knowledgeBaseErrorMeta(error),
+      })
       throw error
     }
   }

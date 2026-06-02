@@ -157,6 +157,23 @@ describe("KnowledgeBaseService", () => {
     expect(rejected?.reason).toEqual(expect.objectContaining({
       message: "知识库正在创建，请稍后重试。",
     }))
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Managed Knowledge Base create rejected because project creation is already active.", {
+      projectId: "kb-1",
+    })
+  })
+
+  it("logs when a managed knowledge base runtime already exists", async () => {
+    const userDataPath = await tempDir()
+    const runtimePath = path.join(userDataPath, "knowledge-bases", "kb-1")
+    await mkdir(runtimePath, { recursive: true })
+    const service = new KnowledgeBaseService({ userDataPath })
+
+    await expect(service.createManaged({ projectId: "kb-1", name: "Knowledge" })).rejects.toThrow("知识库已存在。")
+
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Managed Knowledge Base runtime already exists.", {
+      projectId: "kb-1",
+      runtimePath,
+    })
   })
 
   it("removes a partially created managed runtime when initialization fails", async () => {
@@ -168,6 +185,11 @@ describe("KnowledgeBaseService", () => {
     await expect(service.createManaged({ projectId: "kb-1", name: "Knowledge" })).rejects.toThrow()
 
     await expect(readFile(path.join(runtimePath, "wiki", "example.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Managed Knowledge Base runtime creation failed.", expect.objectContaining({
+      errorName: "Error",
+      projectId: "kb-1",
+      runtimePath,
+    }))
   })
 
   it("trashes managed knowledge base runtime", async () => {
