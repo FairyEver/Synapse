@@ -488,6 +488,7 @@ describe("AgentMessageEvent", () => {
                 reasoning_output_tokens: 180,
               },
               costCny: 0.18,
+              costUsd: 0.05,
               totalCostCny: 1.42,
               estimatedCost: true,
             },
@@ -501,6 +502,7 @@ describe("AgentMessageEvent", () => {
     expect(container.textContent).toContain("用量统计")
     expect(container.textContent).toContain("¥0.18")
     expect(container.textContent).toContain("¥1.42")
+    expect(container.textContent).toContain("费用 $0.05")
     expect(container.textContent).toContain("10,248")
     expect(container.textContent).not.toContain("会话累计 输入")
   })

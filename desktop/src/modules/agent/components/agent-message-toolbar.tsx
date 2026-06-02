@@ -15,6 +15,7 @@ interface AgentMessageToolbarProps {
   readonly messageId?: string
   readonly role?: "assistant" | "user"
   readonly usage?: Record<string, unknown>
+  readonly costUsd?: number
   readonly usagePrefix?: string
   readonly className?: string
   readonly copyButtonClassName?: string
@@ -26,6 +27,7 @@ function AgentMessageToolbar({
   messageId,
   role,
   usage,
+  costUsd,
   usagePrefix,
   className,
   copyButtonClassName,
@@ -77,7 +79,7 @@ function AgentMessageToolbar({
           {formattedTimestamp}
         </time>
       ) : null}
-      <TokenUsageSummary usage={usage} prefix={usagePrefix} />
+      <TokenUsageSummary usage={usage} costUsd={costUsd} prefix={usagePrefix} />
       <button
         type="button"
         className={cn(

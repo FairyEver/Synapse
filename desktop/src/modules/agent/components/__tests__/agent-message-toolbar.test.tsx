@@ -110,6 +110,29 @@ describe("AgentMessageToolbar", () => {
     expect(container.textContent).toContain("缓存写 12")
   })
 
+  it("renders assistant token usage cost", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageToolbar
+          content="agent response"
+          usage={{
+            input_tokens: 1234,
+            output_tokens: 56,
+          }}
+          costUsd={0.0123}
+        />
+      )
+    })
+
+    expect(container.textContent).toContain("输入 1,234")
+    expect(container.textContent).toContain("费用 $0.01")
+  })
+
   it("logs clipboard copy failures without logging message content", async () => {
     const writeText = vi.fn().mockRejectedValue(new Error("clipboard blocked"))
     Object.defineProperty(navigator, "clipboard", {
