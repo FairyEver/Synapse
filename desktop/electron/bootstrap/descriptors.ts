@@ -906,34 +906,48 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
   },
 }
 
+const MCP_HTTP_PROBE_TIMEOUT_MS = 5_000
+
 async function probeMcpHttp(url: string) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
-  })
-  const text = await response.text()
-  let payload: unknown
   try {
-    payload = text ? JSON.parse(text) : null
-  } catch (error) {
-    return {
-      ok: false,
-      method: "ping",
-      status: response.status,
-      error: error instanceof Error ? error.message : "MCP 响应不是 JSON",
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+      signal: AbortSignal.timeout(MCP_HTTP_PROBE_TIMEOUT_MS),
+    })
+    const text = await response.text()
+    let payload: unknown
+    try {
+      payload = text ? JSON.parse(text) : null
+    } catch (error) {
+      return {
+        ok: false,
+        method: "ping",
+        status: response.status,
+        error: error instanceof Error ? error.message : "MCP 响应不是 JSON",
+      }
     }
+
+    const ok = response.ok
+      && typeof payload === "object"
+      && payload !== null
+      && "result" in payload
+      && !("error" in payload)
+
+    return ok
+      ? { ok: true, method: "ping", status: response.status }
+      : { ok: false, method: "ping", status: response.status, error: "MCP ping 响应异常" }
+  } catch (error) {
+    return { ok: false, method: "ping", error: mcpHttpProbeErrorMessage(error) }
   }
+}
 
-  const ok = response.ok
-    && typeof payload === "object"
-    && payload !== null
-    && "result" in payload
-    && !("error" in payload)
-
-  return ok
-    ? { ok: true, method: "ping", status: response.status }
-    : { ok: false, method: "ping", status: response.status, error: "MCP ping 响应异常" }
+function mcpHttpProbeErrorMessage(error: unknown): string {
+  if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+    return "MCP 服务响应超时"
+  }
+  return error instanceof Error ? error.message : String(error)
 }
 
 export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> = {

@@ -500,6 +500,41 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(serialized).not.toContain("user:pass")
   })
 
+  it("diagnostics MCP HTTP probe passes a timeout signal to fetch", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ result: {} }), { status: 200 }))
+    const { restoreFetch, service } = await createDiagnosticsServiceWithFetch(fetchImpl as typeof fetch)
+
+    try {
+      await service.deps.probeMcpHttp("http://127.0.0.1:51234/mcp")
+    } finally {
+      restoreFetch()
+    }
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:51234/mcp",
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }),
+    )
+  })
+
+  it("diagnostics MCP HTTP probe reports timeout errors without throwing", async () => {
+    const timeoutError = Object.assign(new Error("The operation timed out."), { name: "TimeoutError" })
+    const { restoreFetch, service } = await createDiagnosticsServiceWithFetch(vi.fn(async () => {
+      throw timeoutError
+    }) as typeof fetch)
+
+    try {
+      await expect(service.deps.probeMcpHttp("http://127.0.0.1:51234/mcp")).resolves.toEqual({
+        ok: false,
+        method: "ping",
+        error: "MCP 服务响应超时",
+      })
+    } finally {
+      restoreFetch()
+    }
+  })
+
   it("createRunWorkflowHandler catch handler handles engine rejection without leaking raw error text", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {
@@ -871,5 +906,35 @@ function makeFakeContext() {
     permissionGuard: {} as never,
     auditSink: {} as never,
     processRuntime: {} as never,
+  }
+}
+
+async function createDiagnosticsServiceWithFetch(fetchImpl: typeof fetch) {
+  const originalFetch = globalThis.fetch
+  vi.stubGlobal("fetch", fetchImpl)
+  const { coreDiagnosticsDescriptor } = await importBootstrap()
+  const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+  const auditSink = { record: vi.fn() }
+  const registry = {
+    get: vi.fn((id: string) => {
+      if (id === "core.permission-guard") return permissionGuard
+      if (id === "core.audit-sink") return auditSink
+      if (id === "core.data-repository") return {}
+      throw new Error(`unexpected service ${id}`)
+    }),
+  }
+  const service = coreDiagnosticsDescriptor.create({
+    ...makeFakeContext(),
+    registry,
+  } as never) as unknown as {
+    deps: {
+      probeMcpHttp(url: string): Promise<unknown>
+    }
+  }
+  return {
+    service,
+    restoreFetch: () => {
+      globalThis.fetch = originalFetch
+    },
   }
 }
