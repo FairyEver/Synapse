@@ -11,6 +11,7 @@ import type {
 import type { EventBusEmitOptions } from "../../../runtime/event-bus/types"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { ProviderService } from "../../provider"
+import type { UsageModelPriceRule } from "../../usage-analysis"
 import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
 import type { ConversationRouterDeps } from "../conversation-router"
@@ -531,6 +532,125 @@ describe("ConversationRouter", () => {
     })
   })
 
+  it("estimates result cost from the effective model and Synapse price rules", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { conversations, router } = createRouter({
+      agentUsage,
+      env: { ANTHROPIC_MODEL: "glm-5.1" },
+      priceRules: [{
+        id: "glm-5-1",
+        modelPattern: "glm-5.1",
+        inputPer1M: 8,
+        outputPer1M: 28,
+        cacheReadPer1M: 8,
+        cacheWritePer1M: 0,
+        reasoningPer1M: 28,
+        currency: "CNY",
+        enabled: true,
+        source: "builtin",
+        sortIndex: 0,
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "glm usage answer",
+          done: true,
+          sdkResultUuid: "result-glm",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 17_504,
+            output_tokens: 1_501,
+            cache_read_input_tokens: 475_821,
+            cache_creation_input_tokens: 70_889,
+          },
+          costUsd: 0.805556,
+          costCny: 5.8,
+          costCurrency: "CNY",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+    const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+
+    expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      usage: {
+        inputTokens: 17_504,
+        outputTokens: 1_501,
+        cacheReadInputTokens: 475_821,
+        cacheCreationInputTokens: 70_889,
+        totalTokens: 565_715,
+      },
+      costUsd: 0.805556,
+      costCny: 3.988628,
+      costBreakdownCny: {
+        input: 0.140032,
+        output: 0.042028,
+        cacheRead: 3.806568,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+      totalCostBreakdownCny: {
+        input: 0.140032,
+        output: 0.042028,
+        cacheRead: 3.806568,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+      totalCostCny: 3.988628,
+      costCurrency: "CNY",
+      estimatedCost: true,
+    }))
+  })
+
+  it("omits CNY result cost when the effective model has no Synapse price rule", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { conversations, router } = createRouter({
+      agentUsage,
+      env: { ANTHROPIC_MODEL: "unknown-model" },
+      priceRules: [],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "unknown model usage answer",
+          done: true,
+          sdkResultUuid: "result-unknown",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 1_000,
+            output_tokens: 100,
+          },
+          costUsd: 1,
+          costCny: 7.2,
+          costCurrency: "CNY",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+    const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+
+    expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      usage: {
+        inputTokens: 1_000,
+        outputTokens: 100,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 1_100,
+      },
+      costUsd: 1,
+    }))
+    expect(assistantEntry?.metadata).not.toEqual(expect.objectContaining({
+      costCny: expect.any(Number),
+      totalCostCny: expect.any(Number),
+      costCurrency: "CNY",
+      estimatedCost: true,
+    }))
+  })
+
   it("persists cumulative usage snapshots on assistant history entries", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
     const session = new ScriptedSession([
@@ -569,7 +689,25 @@ describe("ConversationRouter", () => {
         costCurrency: "CNY",
       },
     ], "sdk-1")
-    const { conversations, router } = createRouter({ agentUsage, session })
+    const { conversations, router } = createRouter({
+      agentUsage,
+      env: { ANTHROPIC_MODEL: "test-priced-model" },
+      priceRules: [{
+        id: "test-priced-model",
+        modelPattern: "test-priced-model",
+        inputPer1M: 1000,
+        outputPer1M: 1000,
+        cacheReadPer1M: 1000,
+        cacheWritePer1M: 1000,
+        reasoningPer1M: 1000,
+        currency: "CNY",
+        enabled: true,
+        source: "user",
+        sortIndex: 0,
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }],
+      session,
+    })
 
     const first = await router.send(baseMessage("hello"))
     const second = await router.send(baseMessage("again"))
@@ -598,9 +736,9 @@ describe("ConversationRouter", () => {
             reasoning_output_tokens: 1,
           },
           costUsd: 0.01,
-          costCny: 0.072,
+          costCny: 0.047,
           totalCostUsd: 0.01,
-          totalCostCny: 0.072,
+          totalCostCny: 0.047,
           costCurrency: "CNY",
           estimatedCost: true,
         }),
@@ -624,9 +762,9 @@ describe("ConversationRouter", () => {
             reasoning_output_tokens: 2,
           },
           costUsd: 0.02,
-          costCny: 0.144,
+          costCny: 0.086,
           totalCostUsd: 0.03,
-          totalCostCny: 0.216,
+          totalCostCny: 0.133,
           costCurrency: "CNY",
           estimatedCost: true,
         }),
@@ -1450,6 +1588,7 @@ function createRouter(input: {
   readonly commandRouter?: AgentCommandRouter
   readonly eventBus?: ConversationRouterDeps["eventBus"]
   readonly logger?: ConversationRouterDeps["logger"]
+  readonly priceRules?: readonly UsageModelPriceRule[]
   readonly outbox?: ConversationRouterDeps["outbox"]
   readonly replyTargets?: ConversationRouterDeps["replyTargets"]
   readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
@@ -1509,6 +1648,7 @@ function createRouter(input: {
       auditSink: input.auditSink,
       prepareMessage: input.prepareMessage,
       afterTurn: input.afterTurn,
+      getUsagePriceRules: () => input.priceRules ?? [],
     },
     repository,
     sessionManager,

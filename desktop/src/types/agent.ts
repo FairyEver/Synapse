@@ -185,8 +185,10 @@ export interface SynapseAgentResultMetadata {
   readonly sdkResultUuid?: string
   readonly costUsd?: number
   readonly costCny?: number
+  readonly costBreakdownCny?: Record<string, number>
   readonly totalCostUsd?: number
   readonly totalCostCny?: number
+  readonly totalCostBreakdownCny?: Record<string, number>
   readonly costCurrency?: "CNY"
   readonly estimatedCost?: boolean
 }

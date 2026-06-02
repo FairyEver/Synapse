@@ -65,6 +65,28 @@ describe("usage analysis reports", () => {
     ])
   })
 
+  it("returns rounded report costs without floating point tails", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [] })
+    db.exec(`
+      INSERT INTO cc_usage_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
+        input_tokens, output_tokens, cost_input, cost_output, total_cost, price_known
+      ) VALUES
+        ('usage-1', 'session-1', 1779843600000, '2026-05-27', '2026-05-27 09', '-repo', '/repo', 'decimal-model', 'anthropic', 1, 1, 0.1, 0, 0.1, 1),
+        ('usage-2', 'session-1', 1779847200000, '2026-05-27', '2026-05-27 10', '-repo', '/repo', 'decimal-model', 'anthropic', 1, 1, 0.2, 0, 0.2, 1)
+    `)
+
+    const overview = service.getOverview({ preset: "all" })
+    const detailCosts = service.getDetails({ preset: "all", limit: 10 }).map((row) => row.estimatedCost)
+
+    expect(overview.totals.estimatedCost).toBe(0.3)
+    expect(overview.costBreakdown.input).toBe(0.3)
+    expect(detailCosts.every((value) => Number(value.toFixed(6)) === value)).toBe(true)
+  })
+
   it("retries transient database write locks during refresh writes", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

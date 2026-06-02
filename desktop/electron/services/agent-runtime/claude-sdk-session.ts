@@ -88,6 +88,8 @@ export type ClaudeSDKToolPolicy = (
   input: Record<string, unknown>,
 ) => PermissionResult | undefined
 
+export const DEFAULT_CLAUDE_SDK_MAX_TURNS = 80
+
 export class ClaudeSDKSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
 
@@ -107,6 +109,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly pumpPromise: Promise<void>
   private readonly toolNamesByUseId = new Map<string, string>()
   private readonly subagentTypesById = new Map<string, string>()
+  private lastTodoWriteSignature: string | undefined
+  private repeatedTodoWriteCount = 0
   private closed = false
   private queryFinished = false
   get finished(): boolean {
@@ -274,12 +278,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
       queryOptions.pathToClaudeCodeExecutable = packagedClaudeExecutable
     }
     if (options.model) queryOptions.model = options.model
-    if (options.maxTurns !== undefined) queryOptions.maxTurns = options.maxTurns
+    queryOptions.maxTurns = options.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS
     if (options.plugins?.length) queryOptions.plugins = [...options.plugins]
     if (options.agents && Object.keys(options.agents).length > 0) queryOptions.agents = options.agents
-    if (Object.keys(this.subagentToolPolicies).length > 0) {
-      queryOptions.hooks = this.subagentTrackingHooks()
-    }
+    queryOptions.hooks = this.buildHooks()
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
     if (this.abortController) queryOptions.abortController = this.abortController
 
@@ -292,6 +294,57 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
 
     return queryOptions as Record<string, unknown>
+  }
+
+  private buildHooks(): NonNullable<Options["hooks"]> {
+    const hooks: NonNullable<Options["hooks"]> = {
+      PreToolUse: [{
+        matcher: TODO_WRITE_TOOL_NAME,
+        hooks: [async (input: HookInput): Promise<HookJSONOutput> => this.guardRepeatedTodoWrite(input)],
+      }],
+    }
+
+    if (Object.keys(this.subagentToolPolicies).length > 0) {
+      Object.assign(hooks, this.subagentTrackingHooks())
+    }
+
+    return hooks
+  }
+
+  private guardRepeatedTodoWrite(input: HookInput): HookJSONOutput {
+    const record = input as unknown as Record<string, unknown>
+    if (record.hook_event_name !== "PreToolUse" || record.tool_name !== TODO_WRITE_TOOL_NAME) {
+      return {}
+    }
+
+    const signature = stableToolSignature(TODO_WRITE_TOOL_NAME, record.tool_input)
+    if (signature === this.lastTodoWriteSignature) {
+      this.repeatedTodoWriteCount += 1
+    } else {
+      this.lastTodoWriteSignature = signature
+      this.repeatedTodoWriteCount = 1
+    }
+
+    if (this.repeatedTodoWriteCount <= MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_ALLOWS) {
+      return {}
+    }
+
+    if (this.repeatedTodoWriteCount <= MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_ALLOWS
+      + MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_DENIES) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: TODO_WRITE_LOOP_GUIDANCE,
+          additionalContext: TODO_WRITE_LOOP_GUIDANCE,
+        },
+      }
+    }
+
+    return {
+      continue: false,
+      stopReason: TODO_WRITE_LOOP_STOP_REASON,
+    }
   }
 
   private async canUseTool(
@@ -543,6 +596,11 @@ const MAX_TOOL_INPUT_SUMMARY_LENGTH = 240
 const MAX_TOOL_INPUT_STRING_LENGTH = 120
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
 const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
+const TODO_WRITE_TOOL_NAME = "TodoWrite"
+const MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_ALLOWS = 2
+const MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_DENIES = 2
+const TODO_WRITE_LOOP_GUIDANCE = "Repeated identical TodoWrite call was blocked to prevent a tool loop. Do not retry TodoWrite. Answer the user directly using the existing tool results."
+const TODO_WRITE_LOOP_STOP_REASON = "Stopped repeated TodoWrite calls to prevent a tool loop."
 
 function defaultQueryFactory(input: {
   prompt: AsyncIterable<SDKUserMessage>
@@ -804,6 +862,22 @@ function sanitizeToolInput(value: unknown, key = ""): unknown {
 function sanitizeToolInputRecord(input: Record<string, unknown>): Record<string, unknown> {
   const sanitized = sanitizeToolInput(input)
   return asRecord(sanitized) ?? {}
+}
+
+function stableToolSignature(toolName: string, input: unknown): string {
+  return `${toolName}:${JSON.stringify(stableJsonValue(input))}`
+}
+
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => stableJsonValue(item))
+  if (!value || typeof value !== "object") return value
+
+  const record = value as Record<string, unknown>
+  const stable: Record<string, unknown> = {}
+  for (const key of Object.keys(record).sort()) {
+    stable[key] = stableJsonValue(record[key])
+  }
+  return stable
 }
 
 function truncateText(value: string, maxLength: number): string {

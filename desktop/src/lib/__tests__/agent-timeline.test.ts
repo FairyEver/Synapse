@@ -156,7 +156,16 @@ describe("agent timeline conversion", () => {
           cache_read_input_tokens: 30,
           cache_creation_input_tokens: 4,
         },
+        turnUsage: {
+          input_tokens: 3,
+          output_tokens: 1,
+          cache_read_input_tokens: 8,
+          cache_creation_input_tokens: 2,
+        },
         costUsd: 0.01,
+        costCny: 0.07,
+        totalCostCny: 0.21,
+        estimatedCost: true,
       },
     }, 4, "claude")).toEqual(expect.objectContaining({
       id: "session-1:history:4",
@@ -170,7 +179,16 @@ describe("agent timeline conversion", () => {
           cache_read_input_tokens: 30,
           cache_creation_input_tokens: 4,
         },
+        turnUsage: {
+          input_tokens: 3,
+          output_tokens: 1,
+          cache_read_input_tokens: 8,
+          cache_creation_input_tokens: 2,
+        },
         costUsd: 0.01,
+        costCny: 0.07,
+        totalCostCny: 0.21,
+        estimatedCost: true,
       },
     }))
   })
@@ -199,6 +217,48 @@ describe("agent timeline conversion", () => {
     ])
     expect(third).toHaveLength(2)
     expect(third[1]).toEqual(expect.objectContaining({ kind: "toolCall", toolName: "Bash" }))
+  })
+
+  it("uses live result usage as turn usage metadata", () => {
+    const items = appendAgentTimelineEvent([
+      {
+        id: "assistant:1",
+        kind: "message",
+        role: "assistant",
+        content: "done",
+        timestamp: "2026-04-28T00:03:00.000Z",
+      },
+    ], {
+      type: "result",
+      content: "done",
+      done: true,
+      usage: {
+        input_tokens: 3,
+        output_tokens: 1,
+        cache_read_input_tokens: 8,
+        cache_creation_input_tokens: 2,
+      },
+      costCny: 0.07,
+    }, "2026-04-28T00:03:01.000Z", "claude")
+
+    expect(items[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      metadata: expect.objectContaining({
+        usage: {
+          input_tokens: 3,
+          output_tokens: 1,
+          cache_read_input_tokens: 8,
+          cache_creation_input_tokens: 2,
+        },
+        turnUsage: {
+          input_tokens: 3,
+          output_tokens: 1,
+          cache_read_input_tokens: 8,
+          cache_creation_input_tokens: 2,
+        },
+        costCny: 0.07,
+      }),
+    }))
   })
 
   it("keeps thinking deltas separated across tool boundaries", () => {
@@ -327,7 +387,10 @@ describe("agent timeline conversion", () => {
     expect(after[2]).toEqual(expect.objectContaining({
       role: "assistant",
       content: "Final answer.",
-      metadata: { usage: { input_tokens: 1 } },
+      metadata: expect.objectContaining({
+        usage: { input_tokens: 1 },
+        turnUsage: { input_tokens: 1 },
+      }),
     }))
   })
 
@@ -350,7 +413,10 @@ describe("agent timeline conversion", () => {
       role: "assistant",
       content: "Partial final answer.",
       streaming: false,
-      metadata: { usage: { output_tokens: 3 } },
+      metadata: expect.objectContaining({
+        usage: { output_tokens: 3 },
+        turnUsage: { output_tokens: 3 },
+      }),
     }))
   })
 

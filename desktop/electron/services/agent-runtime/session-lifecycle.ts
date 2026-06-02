@@ -16,6 +16,7 @@ export interface RuntimeSessionState {
   pending?: PendingPermissionState
   turnAbortController?: AbortController
   providerId?: string
+  effectiveModel?: string
   modeOverride?: string
   closing?: boolean
   cancelState?: {

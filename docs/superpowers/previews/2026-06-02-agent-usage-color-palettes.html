@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用量统计配色方案</title>
+  <style>
+    :root {
+      --background: #f6f6f6;
+      --foreground: #111111;
+      --muted-foreground: #6b6b6b;
+      --card: #ffffff;
+      --border: #dedede;
+      --hairline: #e5e5e5;
+      --track: #eeeeee;
+      --radius: 14px;
+      --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--foreground);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+    }
+
+    main {
+      width: min(1480px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .source {
+      margin: 6px 0 0;
+      color: var(--muted-foreground);
+      font-size: 13px;
+    }
+
+    .source a {
+      color: inherit;
+      text-underline-offset: 3px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .scheme {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      overflow: hidden;
+    }
+
+    .scheme-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--hairline);
+      padding: 10px 14px;
+    }
+
+    .scheme-title {
+      display: flex;
+      min-width: 0;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .scheme-no {
+      font-size: 18px;
+      font-weight: 750;
+      line-height: 1;
+    }
+
+    .scheme-name {
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: 13px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .swatches {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .swatch {
+      width: 18px;
+      height: 18px;
+      border: 1px solid rgb(0 0 0 / 12%);
+      border-radius: 999px;
+    }
+
+    .usage-card {
+      margin: 12px 14px 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) + 2px);
+      background: var(--card);
+    }
+
+    .usage-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--hairline);
+      padding: 12px 14px;
+    }
+
+    .usage-heading {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .usage-title {
+      color: var(--foreground);
+      font-size: 18px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .costs {
+      display: flex;
+      min-width: 0;
+      align-items: baseline;
+      gap: 12px;
+      color: var(--muted-foreground);
+      font-size: 16px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .costs strong {
+      color: var(--foreground);
+      font-size: 21px;
+      letter-spacing: 0;
+    }
+
+    .info {
+      display: inline-flex;
+      width: 16px;
+      height: 16px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .time {
+      color: var(--muted-foreground);
+      font-size: 18px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .usage-body {
+      padding: 14px;
+    }
+
+    .distribution {
+      display: flex;
+      width: 100%;
+      height: 14px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--track);
+    }
+
+    .segment {
+      min-width: 4px;
+    }
+
+    .segment + .segment {
+      border-left: 2px solid var(--card);
+    }
+
+    .s-input { flex-basis: 15.7%; }
+    .s-output { flex-basis: 4.3%; }
+    .s-cache-read { flex-basis: 78.4%; }
+    .s-cache-write { flex-basis: 1.6%; }
+
+    .token-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0;
+      margin-top: 14px;
+    }
+
+    .token-item {
+      min-width: 0;
+      border-left: 1px solid var(--hairline);
+      padding: 0 14px;
+    }
+
+    .token-item:first-child {
+      border-left: 0;
+      padding-left: 0;
+    }
+
+    .token-item:last-child {
+      padding-right: 0;
+    }
+
+    .token-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted-foreground);
+      font-size: 16px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      flex-shrink: 0;
+      border-radius: 999px;
+    }
+
+    .token-value {
+      margin-top: 5px;
+      font-size: 25px;
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .token-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 4px;
+      color: var(--muted-foreground);
+      font-size: 16px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .input { background: var(--input); }
+    .output { background: var(--output); }
+    .cache-read { background: var(--cache-read); }
+    .cache-write { background: var(--cache-write); }
+
+    .scheme-1 {
+      --input: #2563eb;
+      --output: #dc2626;
+      --cache-read: #16a34a;
+      --cache-write: #d97706;
+    }
+
+    .scheme-2 {
+      --input: #0e7490;
+      --output: #be123c;
+      --cache-read: #7c3aed;
+      --cache-write: #84cc16;
+    }
+
+    .scheme-3 {
+      --input: #1d4ed8;
+      --output: #f97316;
+      --cache-read: #047857;
+      --cache-write: #c026d3;
+    }
+
+    .scheme-4 {
+      --input: #0891b2;
+      --output: #b91c1c;
+      --cache-read: #9333ea;
+      --cache-write: #ca8a04;
+    }
+
+    .scheme-5 {
+      --input: #4f46e5;
+      --output: #e11d48;
+      --cache-read: #0f766e;
+      --cache-write: #facc15;
+    }
+
+    .scheme-6 {
+      --input: #0284c7;
+      --output: #db2777;
+      --cache-read: #65a30d;
+      --cache-write: #7e22ce;
+    }
+
+    .scheme-7 {
+      --input: #1e40af;
+      --output: #ea580c;
+      --cache-read: #15803d;
+      --cache-write: #a21caf;
+    }
+
+    .scheme-8 {
+      --input: #0369a1;
+      --output: #c2410c;
+      --cache-read: #6d28d9;
+      --cache-write: #22c55e;
+    }
+
+    .scheme-9 {
+      --input: #4338ca;
+      --output: #b45309;
+      --cache-read: #059669;
+      --cache-write: #e11d48;
+    }
+
+    .scheme-10 {
+      --input: #0f172a;
+      --output: #dc2626;
+      --cache-read: #2563eb;
+      --cache-write: #eab308;
+    }
+
+    @media (max-width: 1100px) {
+      main {
+        padding: 16px;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      header,
+      .scheme-head,
+      .usage-header,
+      .usage-heading,
+      .costs {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .token-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        row-gap: 16px;
+      }
+
+      .token-item:nth-child(odd) {
+        border-left: 0;
+        padding-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>用量统计配色方案</h1>
+        <p class="source">
+          第二版：更大色相跨度、更高饱和度，并用白色分隔线增强细小区段识别。
+        </p>
+      </div>
+      <span class="time">选择 1-10</span>
+    </header>
+
+    <section class="layout" aria-label="配色方案">
+      <article class="scheme scheme-1">
+        <div class="scheme-head">
+          <div class="scheme-title">
+            <span class="scheme-no">1</span>
+            <span class="scheme-name">Blue Red Green Amber</span>
+          </div>
+          <div class="swatches" aria-hidden="true">
+            <span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span>
+          </div>
+        </div>
+        <section class="usage-card" aria-label="方案 1">
+          <div class="usage-header">
+            <div class="usage-heading">
+              <div class="usage-title">用量统计</div>
+              <div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div>
+            </div>
+            <span class="time">22:20</span>
+          </div>
+          <div class="usage-body">
+            <div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div>
+            <div class="token-grid">
+              <div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div>
+              <div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div>
+              <div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div>
+              <div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div>
+            </div>
+          </div>
+        </section>
+      </article>
+
+      <article class="scheme scheme-2">
+        <div class="scheme-head">
+          <div class="scheme-title">
+            <span class="scheme-no">2</span>
+            <span class="scheme-name">Cyan Rose Violet Lime</span>
+          </div>
+          <div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div>
+        </div>
+        <section class="usage-card" aria-label="方案 2">
+          <div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div>
+          <div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div>
+        </section>
+      </article>
+
+      <article class="scheme scheme-3">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">3</span><span class="scheme-name">Royal Orange Emerald Fuchsia</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 3"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+
+      <article class="scheme scheme-4">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">4</span><span class="scheme-name">Cyan Red Purple Ochre</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 4"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+
+      <article class="scheme scheme-5">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">5</span><span class="scheme-name">Indigo Rose Teal Yellow</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 5"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+
+      <article class="scheme scheme-6">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">6</span><span class="scheme-name">Sky Pink Olive Purple</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 6"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+
+      <article class="scheme scheme-7">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">7</span><span class="scheme-name">Navy Orange Green Magenta</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 7"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+
+      <article class="scheme scheme-8">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">8</span><span class="scheme-name">Blue Rust Violet Green</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 8"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+
+      <article class="scheme scheme-9">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">9</span><span class="scheme-name">Indigo Brown Green Crimson</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 9"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+
+      <article class="scheme scheme-10">
+        <div class="scheme-head"><div class="scheme-title"><span class="scheme-no">10</span><span class="scheme-name">Ink Red Blue Yellow</span></div><div class="swatches" aria-hidden="true"><span class="swatch input"></span><span class="swatch output"></span><span class="swatch cache-read"></span><span class="swatch cache-write"></span></div></div>
+        <section class="usage-card" aria-label="方案 10"><div class="usage-header"><div class="usage-heading"><div class="usage-title">用量统计</div><div class="costs"><span>本轮 <strong>¥0.08</strong></span><span>累计 <strong>¥0.08</strong></span><span>估算 <span class="info">i</span></span></div></div><span class="time">22:20</span></div><div class="usage-body"><div class="distribution"><span class="segment input s-input"></span><span class="segment output s-output"></span><span class="segment cache-read s-cache-read"></span><span class="segment cache-write s-cache-write"></span></div><div class="token-grid"><div class="token-item"><div class="token-label"><span class="dot input"></span>输入</div><div class="token-value">25,611</div><div class="token-meta"><span>+25,611</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot output"></span>输出</div><div class="token-value">616</div><div class="token-meta"><span>+616</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-read"></span>缓存读</div><div class="token-value">163,840</div><div class="token-meta"><span>+163,840</span><span>100%</span></div></div><div class="token-item"><div class="token-label"><span class="dot cache-write"></span>缓存写</div><div class="token-value">0</div><div class="token-meta"><span>+0</span><span>0%</span></div></div></div></div></section>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

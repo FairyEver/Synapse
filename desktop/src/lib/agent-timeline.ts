@@ -470,17 +470,27 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     workDir: stringMetadata(metadata, "workDir"),
     cancelled: booleanMetadata(metadata, "cancelled"),
     usage: recordMetadata(metadata, "usage"),
+    turnUsage: recordMetadata(metadata, "turnUsage"),
+    modelUsage: recordMetadata(metadata, "modelUsage"),
+    sdkResultUuid: stringMetadata(metadata, "sdkResultUuid"),
     costUsd: numberMetadata(metadata, "costUsd"),
     costCny: numberMetadata(metadata, "costCny"),
+    costBreakdownCny: recordMetadata(metadata, "costBreakdownCny") as Record<string, number> | undefined,
+    totalCostUsd: numberMetadata(metadata, "totalCostUsd"),
+    totalCostCny: numberMetadata(metadata, "totalCostCny"),
+    totalCostBreakdownCny: recordMetadata(metadata, "totalCostBreakdownCny") as Record<string, number> | undefined,
     costCurrency: stringMetadata(metadata, "costCurrency") === "CNY" ? "CNY" : undefined,
+    estimatedCost: booleanMetadata(metadata, "estimatedCost"),
   }
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
 function resultMetadata(event: Extract<SynapseAgentEvent, { type: "result" }>): SynapseAgentResultMetadata | undefined {
+  const usage = event.metadata?.usage ?? event.usage
   const metadata: SynapseAgentResultMetadata = {
     ...event.metadata,
-    usage: event.metadata?.usage ?? event.usage,
+    usage,
+    turnUsage: event.metadata?.turnUsage ?? event.usage,
     costUsd: event.metadata?.costUsd ?? event.costUsd,
     costCny: event.metadata?.costCny ?? event.costCny,
     costCurrency: (event.metadata?.costCurrency ?? event.costCurrency) === "CNY" ? "CNY" : undefined,

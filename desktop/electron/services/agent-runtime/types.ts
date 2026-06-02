@@ -116,11 +116,17 @@ export interface AgentResultMetadata {
   readonly workDir?: string
   readonly cancelled?: boolean
   readonly usage?: Record<string, unknown>
+  readonly turnUsage?: Record<string, unknown>
   readonly modelUsage?: Record<string, unknown>
   readonly sdkResultUuid?: string
   readonly costUsd?: number
   readonly costCny?: number
+  readonly costBreakdownCny?: Record<string, number>
+  readonly totalCostUsd?: number
+  readonly totalCostCny?: number
+  readonly totalCostBreakdownCny?: Record<string, number>
   readonly costCurrency?: "CNY"
+  readonly estimatedCost?: boolean
 }
 
 export interface AgentResultEvent extends AgentEventBase {

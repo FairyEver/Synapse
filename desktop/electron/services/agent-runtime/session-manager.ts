@@ -1,7 +1,7 @@
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ProviderService } from "../provider"
-import { ClaudeSDKSession } from "./claude-sdk-session"
+import { ClaudeSDKSession, DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./claude-sdk-session"
 import type {
   AgentSdkAgentDefinitions,
   AgentSdkPluginSpec,
@@ -28,6 +28,7 @@ export interface CreateAgentLiveSessionInput {
   readonly env: Record<string, string>
   readonly model?: string
   readonly mode?: string
+  readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
   readonly allowPluginHooks?: boolean
   readonly agents?: AgentSdkAgentDefinitions
@@ -87,6 +88,7 @@ export class SessionManager {
         env: input.env,
         model: input.model,
         mode: input.mode,
+        maxTurns: input.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS,
         plugins: input.plugins,
         allowPluginHooks: input.allowPluginHooks,
         agents: input.agents,
@@ -202,6 +204,7 @@ export class SessionManager {
       env,
       model: env.ANTHROPIC_MODEL,
       mode: modeOverride,
+      maxTurns: DEFAULT_CLAUDE_SDK_MAX_TURNS,
       plugins: await Promise.resolve(this.deps.sdkPlugins?.(input.message, input.conversation) ?? []),
       allowPluginHooks: await Promise.resolve(
         this.deps.allowPluginHooks?.(input.message, input.conversation) ?? false,
@@ -214,6 +217,7 @@ export class SessionManager {
     })
     input.state.liveSession = liveSession
     input.state.providerId = providerId
+    input.state.effectiveModel = env.ANTHROPIC_MODEL
     input.state.modeOverride = modeOverride
     this.deps.logger?.info("Created agent live session.", {
       boundary: "agent-runtime.live-session.create",

@@ -16,7 +16,7 @@ import {
   type CcStoredScanFile,
 } from "./cc-scan-state"
 import { SYNAPSE_COST_CURRENCY, USD_TO_CNY_RATE } from "../../../action-packages/shared/cost-currency"
-import { listUsagePriceRules, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
+import { listUsagePriceRules, roundUsageCost, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
 import { createUsageRangeFilter } from "./range"
 import { collectJsonlFiles, fingerprintFile } from "./scan"
 import type {
@@ -137,6 +137,10 @@ function isoFromTimestamp(timestampMs: number): string {
 function toNumber(value: unknown): number {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function toCostNumber(value: unknown): number {
+  return roundUsageCost(toNumber(value))
 }
 
 export class CcUsageAnalysisService {
@@ -278,7 +282,7 @@ export class CcUsageAnalysisService {
         tokens: toNumber(row.tokens),
         pricedTokens: toNumber(row.priced_tokens),
         unpricedTokens: toNumber(row.unpriced_tokens),
-        estimatedCost: toNumber(row.estimated_cost),
+        estimatedCost: toCostNumber(row.estimated_cost),
         requests: toNumber(row.requests),
         conversations: toNumber(row.conversations),
       })
@@ -330,7 +334,7 @@ export class CcUsageAnalysisService {
       tokens: toNumber(row.tokens),
       pricedTokens: toNumber(row.priced_tokens),
       unpricedTokens: toNumber(row.unpriced_tokens),
-      estimatedCost: toNumber(row.estimated_cost),
+      estimatedCost: toCostNumber(row.estimated_cost),
       input: toNumber(row.input),
       output: toNumber(row.output),
       cacheRead: toNumber(row.cache_read),
@@ -411,7 +415,7 @@ export class CcUsageAnalysisService {
         tokens: toNumber(row.tokens),
         pricedTokens: toNumber(row.priced_tokens),
         unpricedTokens: toNumber(row.unpriced_tokens),
-        estimatedCost: toNumber(row.estimated_cost),
+        estimatedCost: toCostNumber(row.estimated_cost),
         requests: toNumber(row.requests),
         conversations: toNumber(row.conversations),
         toolCalls: toolCallsByBucket.get(bucket) ?? 0,
@@ -448,7 +452,7 @@ export class CcUsageAnalysisService {
       tokens: toNumber(row.tokens),
       pricedTokens: toNumber(row.priced_tokens),
       unpricedTokens: toNumber(row.unpriced_tokens),
-      estimatedCost: toNumber(row.estimated_cost),
+      estimatedCost: toCostNumber(row.estimated_cost),
       input: toNumber(row.input),
       output: toNumber(row.output),
       cacheRead: toNumber(row.cache_read),
@@ -500,7 +504,7 @@ export class CcUsageAnalysisService {
         tokens: toNumber(row.tokens),
         pricedTokens: toNumber(row.priced_tokens),
         unpricedTokens: toNumber(row.unpriced_tokens),
-        estimatedCost: toNumber(row.estimated_cost),
+        estimatedCost: toCostNumber(row.estimated_cost),
         toolCalls: toolCallsByWorkspace.get(workspaceKey) ?? 0,
         lastUsedAt: lastTimestamp > 0 ? isoFromTimestamp(lastTimestamp) : "",
       }
@@ -543,7 +547,7 @@ export class CcUsageAnalysisService {
         tokens: toNumber(row.tokens),
         pricedTokens: toNumber(row.priced_tokens),
         unpricedTokens: toNumber(row.unpriced_tokens),
-        estimatedCost: toNumber(row.estimated_cost),
+        estimatedCost: toCostNumber(row.estimated_cost),
         toolCalls: toolCallsByWorkspace.get(workspaceKey) ?? 0,
         lastUsedAt: lastTimestamp > 0 ? isoFromTimestamp(lastTimestamp) : "",
       }
@@ -623,7 +627,7 @@ export class CcUsageAnalysisService {
       tokens: tokenTotal(row),
       pricedTokens: row.price_known === 1 ? tokenTotal(row) : 0,
       unpricedTokens: row.price_known === 1 ? 0 : tokenTotal(row),
-      estimatedCost: row.total_cost,
+      estimatedCost: toCostNumber(row.total_cost),
       tokenBreakdown: {
         input: row.input_tokens,
         output: row.output_tokens,
@@ -774,13 +778,13 @@ export class CcUsageAnalysisService {
       tokens: toNumber(row?.tokens),
       pricedTokens: toNumber(row?.priced_tokens),
       unpricedTokens: toNumber(row?.unpriced_tokens),
-      estimatedCost: toNumber(row?.estimated_cost),
+      estimatedCost: toCostNumber(row?.estimated_cost),
       requests: toNumber(row?.requests),
-      costInput: toNumber(row?.cost_input),
-      costOutput: toNumber(row?.cost_output),
-      costCacheRead: toNumber(row?.cost_cache_read),
-      costCacheWrite: toNumber(row?.cost_cache_write),
-      costReasoning: toNumber(row?.cost_reasoning),
+      costInput: toCostNumber(row?.cost_input),
+      costOutput: toCostNumber(row?.cost_output),
+      costCacheRead: toCostNumber(row?.cost_cache_read),
+      costCacheWrite: toCostNumber(row?.cost_cache_write),
+      costReasoning: toCostNumber(row?.cost_reasoning),
       conversations: this.queryConversationTotal(range) ?? toNumber(row?.conversations),
       activeDays: toNumber(row?.active_days),
     }
@@ -827,13 +831,13 @@ export class CcUsageAnalysisService {
       tokens: toNumber(row?.tokens),
       pricedTokens: toNumber(row?.priced_tokens),
       unpricedTokens: toNumber(row?.unpriced_tokens),
-      estimatedCost: toNumber(row?.estimated_cost),
+      estimatedCost: toCostNumber(row?.estimated_cost),
       requests: toNumber(row?.requests),
-      costInput: toNumber(row?.cost_input),
-      costOutput: toNumber(row?.cost_output),
-      costCacheRead: toNumber(row?.cost_cache_read),
-      costCacheWrite: toNumber(row?.cost_cache_write),
-      costReasoning: toNumber(row?.cost_reasoning),
+      costInput: toCostNumber(row?.cost_input),
+      costOutput: toCostNumber(row?.cost_output),
+      costCacheRead: toCostNumber(row?.cost_cache_read),
+      costCacheWrite: toCostNumber(row?.cost_cache_write),
+      costReasoning: toCostNumber(row?.cost_reasoning),
       conversations: toNumber(row?.conversations),
       activeDays: toNumber(row?.active_days),
     }

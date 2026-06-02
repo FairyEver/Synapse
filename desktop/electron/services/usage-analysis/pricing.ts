@@ -73,6 +73,7 @@ interface PriceRuleRow {
 }
 
 const PRICING_SEED_META_KEY = "default_model_prices_seeded"
+const USAGE_COST_FRACTION_DIGITS = 6
 
 const DEFAULT_USAGE_PRICE_RULE_INPUTS: readonly UsageModelPriceRuleInput[] = [
   { id: "gpt-5-5", modelPattern: "gpt-5.5", inputPer1M: 36, outputPer1M: 216, cacheReadPer1M: 3.6, reasoningPer1M: 216, source: "builtin" },
@@ -100,7 +101,12 @@ export const DEFAULT_USAGE_PRICE_RULES = normalizeUsagePriceRules(DEFAULT_USAGE_
 
 function cost(tokens: number, per1M: number): number {
   if (per1M <= 0 || tokens <= 0) return 0
-  return (tokens / 1_000_000) * per1M
+  return roundUsageCost((tokens / 1_000_000) * per1M)
+}
+
+export function roundUsageCost(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Number(value.toFixed(USAGE_COST_FRACTION_DIGITS))
 }
 
 function normalizePrice(value: unknown): number {
@@ -196,7 +202,7 @@ export function estimateUsageCost(
     cacheRead,
     cacheWrite,
     reasoning,
-    total: input + output + cacheRead + cacheWrite + reasoning,
+    total: roundUsageCost(input + output + cacheRead + cacheWrite + reasoning),
     priceKnown: true,
   }
 }

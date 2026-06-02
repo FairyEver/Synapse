@@ -23,6 +23,7 @@ import type { ReplyTarget } from "../reply-target"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import { resolveEffectiveShell, resolveShellCommand } from "../shell-exec"
 import type { ProviderService } from "../provider"
+import type { UsageModelPriceRule } from "../usage-analysis"
 import { AgentCommandRouter } from "./command-router"
 import type {
   RegisteredPromptCommandSource,
@@ -84,6 +85,7 @@ export interface AgentRuntimeServiceDeps {
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
+  readonly getUsagePriceRules?: () => readonly UsageModelPriceRule[]
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
   readonly now?: () => Date
@@ -225,6 +227,7 @@ export class AgentRuntimeService {
         outbox: deps.outbox,
         replyTargets: deps.replyTargets,
         agentEvents: deps.agentEvents,
+        getUsagePriceRules: deps.getUsagePriceRules,
         now: deps.now,
         permissionGuard: deps.permissionGuard,
         auditSink: deps.auditSink,

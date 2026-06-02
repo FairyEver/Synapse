@@ -199,6 +199,40 @@ function changeInput(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
+function createDragDataTransfer(): DataTransfer {
+  const store = new Map<string, string>()
+  const types: string[] = []
+  return {
+    dropEffect: "none",
+    effectAllowed: "uninitialized",
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types,
+    clearData: vi.fn((format?: string) => {
+      if (!format) {
+        store.clear()
+        types.splice(0)
+        return
+      }
+      store.delete(format)
+      const index = types.indexOf(format)
+      if (index >= 0) types.splice(index, 1)
+    }),
+    getData: vi.fn((format: string) => store.get(format) ?? ""),
+    setData: vi.fn((format: string, data: string) => {
+      store.set(format, data)
+      if (!types.includes(format)) types.push(format)
+    }),
+    setDragImage: vi.fn(),
+  }
+}
+
+function dragEvent(type: string, dataTransfer: DataTransfer): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer })
+  return event
+}
+
 describe("KnowledgeBaseSourceManagerWindow", () => {
   it("renders raw files as a lightweight file browser without import statuses", async () => {
     renderWindow()
@@ -243,6 +277,82 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).toContain("已选择 1 项")
     expect(buttonByLabel("移动所选").disabled).toBe(false)
     expect(buttonByLabel("移到废纸篓").disabled).toBe(false)
+  })
+
+  it("selects every visible entry from the batch bar", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+    expect(document.body.textContent).toContain("已选择 1 项")
+
+    await act(async () => {
+      buttonByLabel("全选当前可见项").click()
+    })
+
+    expect(document.body.textContent).toContain("已选择 3 项")
+    await act(async () => {
+      buttonByLabel("导出所选").click()
+      await Promise.resolve()
+    })
+    expect(bridgeMocks.knowledgeBase.exportRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["2026", "客户", "brief.md"],
+    })
+  })
+
+  it("selects only filtered visible entries from the batch bar", async () => {
+    bridgeMocks.knowledgeBase.listRawDirectory.mockResolvedValue({
+      projectId: "project-1",
+      directoryPath: "",
+      entries: [
+        {
+          name: "alpha.md",
+          relativePath: "alpha.md",
+          kind: "file" as const,
+          size: 12,
+          modifiedAt: "2026-05-26T00:00:00.000Z",
+        },
+        {
+          name: "beta.md",
+          relativePath: "beta.md",
+          kind: "file" as const,
+          size: 14,
+          modifiedAt: "2026-05-26T00:00:00.000Z",
+        },
+      ],
+    })
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("alpha.md")
+    })
+
+    const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="搜索当前文件夹"]')
+    expect(searchInput).not.toBeNull()
+    act(() => {
+      changeInput(searchInput!, "alpha")
+    })
+    await act(async () => {
+      buttonByLabel("选择 alpha.md").click()
+    })
+    await act(async () => {
+      buttonByLabel("全选当前可见项").click()
+    })
+    await act(async () => {
+      buttonByLabel("导出所选").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.exportRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["alpha.md"],
+    })
   })
 
   it("opens folders and updates breadcrumbs", async () => {
@@ -308,6 +418,12 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(dropTarget.textContent).not.toContain("拖拽文件到窗口")
 
     const dragOverEvent = new Event("dragover", { bubbles: true, cancelable: true })
+    Object.defineProperty(dragOverEvent, "dataTransfer", {
+      value: {
+        files: [],
+        types: ["Files"],
+      },
+    })
 
     await act(async () => {
       dropTarget.dispatchEvent(dragOverEvent)
@@ -513,6 +629,81 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       relativePaths: ["brief.md"],
       targetDirectoryPath: "客户",
     })
+  })
+
+  it("moves multiple selected entries as a group when dragging one selected item", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+      buttonByLabel("选择 2026").click()
+    })
+    const source = document.querySelector<HTMLElement>('[data-raw-path="brief.md"]')
+    const target = document.querySelector<HTMLElement>('[data-raw-drop-target="客户"]')
+    if (!source || !target) throw new Error("Drag fixtures missing")
+
+    await act(async () => {
+      source.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }))
+      target.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md", "2026"],
+      targetDirectoryPath: "客户",
+    })
+  })
+
+  it("keeps selected drag paths in data transfer for resilient grouped drops", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+      buttonByLabel("选择 2026").click()
+    })
+    const source = document.querySelector<HTMLElement>('[data-raw-path="brief.md"]')
+    const target = document.querySelector<HTMLElement>('[data-raw-drop-target="客户"]')
+    if (!source || !target) throw new Error("Drag fixtures missing")
+    const dataTransfer = createDragDataTransfer()
+
+    await act(async () => {
+      source.dispatchEvent(dragEvent("dragstart", dataTransfer))
+      source.dispatchEvent(dragEvent("dragend", dataTransfer))
+      target.dispatchEvent(dragEvent("drop", dataTransfer))
+      await Promise.resolve()
+    })
+
+    expect(dataTransfer.effectAllowed).toBe("move")
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md", "2026"],
+      targetDirectoryPath: "客户",
+    })
+  })
+
+  it("keeps the upload hint hidden while internally dragging an entry", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    const source = document.querySelector<HTMLElement>('[data-raw-path="brief.md"]')
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽上传资料"]')
+    if (!source || !dropTarget) throw new Error("Drag fixtures missing")
+
+    await act(async () => {
+      source.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }))
+      dropTarget.dispatchEvent(new Event("dragover", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(dropTarget.textContent).not.toContain("松开上传")
+    expect(bridgeMocks.knowledgeBase.uploadRawItems).not.toHaveBeenCalled()
   })
 
   it("does not move a folder into itself", async () => {

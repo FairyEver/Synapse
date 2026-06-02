@@ -43,6 +43,30 @@ describe("usage analysis pricing", () => {
     expect(cost.total).toBe(17.5)
   })
 
+  it("normalizes estimated costs to avoid floating point tails", () => {
+    const rules = normalizeUsagePriceRules([{
+      modelPattern: "decimal-model",
+      inputPer1M: 100_000,
+      outputPer1M: 200_000,
+      cacheReadPer1M: 0,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 0,
+    }])
+
+    const cost = estimateUsageCost("decimal-model", {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      reasoning: 0,
+    }, rules)
+
+    expect(cost.input).toBe(0.1)
+    expect(cost.output).toBe(0.2)
+    expect(cost.total).toBe(0.3)
+    expect(JSON.stringify(cost)).not.toContain("000000000000")
+  })
+
   it("estimates OpenAI-style cached input and reasoning costs", () => {
     const cost = estimateUsageCost("gpt-5.5", {
       input: 1_000_000,
@@ -73,6 +97,20 @@ describe("usage analysis pricing", () => {
     expect(cost.cacheRead).toBeGreaterThan(0)
     expect(cost.cacheWrite).toBeGreaterThan(cost.input)
     expect(cost.total).toBeCloseTo(cost.input + cost.output + cost.cacheRead + cost.cacheWrite, 6)
+  })
+
+  it("keeps DeepSeek totals equal to the priced components without cache write cost", () => {
+    const cost = estimateUsageCost("deepseek-v4-pro", {
+      input: 16_503,
+      output: 1_510,
+      cacheRead: 585_189,
+      cacheWrite: 62_033,
+      reasoning: 0,
+    })
+
+    expect(cost.cacheWrite).toBe(0)
+    expect(cost.total).toBe(Number((cost.input + cost.output + cost.cacheRead + cost.reasoning).toFixed(6)))
+    expect(Number(cost.total.toFixed(6))).toBe(cost.total)
   })
 
   it("marks unknown models as unpriced", () => {

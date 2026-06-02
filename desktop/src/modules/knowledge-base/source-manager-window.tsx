@@ -7,6 +7,7 @@ import {
   Folder,
   FolderPlus,
   FolderUp,
+  ListChecks,
   MoreHorizontal,
   MoveRight,
   Pencil,
@@ -56,6 +57,7 @@ import type {
 } from "@/types/knowledge-base"
 
 const logger = createRendererLogger("knowledge-base.source-manager")
+const INTERNAL_RAW_DRAG_TYPE = "application/x-synapse-raw-entry-paths"
 type DirectoryTree = Record<string, SynapseKnowledgeBaseRawEntry[]>
 type TreeRenderer = (items: SynapseKnowledgeBaseRawEntry[]) => ReactNode
 type PendingRawMove = {
@@ -82,6 +84,7 @@ type SourceManagerToolbarProps = {
 
 type SourceSelectionBarProps = {
   selectedCount: number
+  onSelectAll: () => void
   onMove: () => void
   onExport: () => void
   onTrash: () => void
@@ -99,10 +102,10 @@ type SourceEntryListProps = {
   onExportEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
   onTrashEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
   internalDropTarget: string | null
-  onDragEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
+  onDragEntry: (entry: SynapseKnowledgeBaseRawEntry, event: DragEvent<HTMLElement>) => void
   onDragEnd: () => void
   onInternalDragOverDirectory: (targetDirectoryPath: string | null) => void
-  onDropOnDirectory: (targetDirectoryPath: string) => void
+  onDropOnDirectory: (targetDirectoryPath: string, event: DragEvent<HTMLElement>) => void
 }
 
 function readWindowPayload(): SynapseKnowledgeBaseOpenSourceManagerPayload | null {
@@ -240,6 +243,33 @@ function canMoveRawPathsToTarget(relativePaths: readonly string[], targetDirecto
   ))
 }
 
+function hasExternalDraggedFiles(dataTransfer: DataTransfer | null | undefined): boolean {
+  return Array.from(dataTransfer?.types ?? []).includes("Files") || (dataTransfer?.files.length ?? 0) > 0
+}
+
+function readInternalDraggedRawPaths(dataTransfer: DataTransfer | null | undefined): string[] {
+  const rawValue = dataTransfer?.getData(INTERNAL_RAW_DRAG_TYPE)
+  if (!rawValue) return []
+  try {
+    const parsed = JSON.parse(rawValue) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((value): value is string => typeof value === "string" && value.length > 0)
+  } catch {
+    return []
+  }
+}
+
+function writeInternalDraggedRawPaths(dataTransfer: DataTransfer | null | undefined, paths: readonly string[]): void {
+  if (!dataTransfer) return
+  dataTransfer.effectAllowed = "move"
+  dataTransfer.setData(INTERNAL_RAW_DRAG_TYPE, JSON.stringify(paths))
+}
+
+function markInternalRawDropTarget(dataTransfer: DataTransfer | null | undefined): void {
+  if (!dataTransfer) return
+  dataTransfer.dropEffect = "move"
+}
+
 function needsRawMutationConfirmation(
   entries: SynapseKnowledgeBaseRawEntry[],
   relativePaths: string[],
@@ -326,12 +356,16 @@ function SourceManagerToolbar({
   )
 }
 
-function SourceSelectionBar({ selectedCount, onMove, onExport, onTrash }: SourceSelectionBarProps) {
+function SourceSelectionBar({ selectedCount, onSelectAll, onMove, onExport, onTrash }: SourceSelectionBarProps) {
   if (selectedCount === 0) return null
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
       <div className="text-sm text-muted-foreground">已选择 {selectedCount} 项</div>
       <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onSelectAll} aria-label="全选当前可见项">
+          <ListChecks data-icon="inline-start" />
+          全选
+        </Button>
         <Button type="button" variant="outline" size="sm" onClick={onMove} aria-label="移动所选">
           <MoveRight data-icon="inline-start" />
           移动
@@ -393,20 +427,21 @@ function SourceEntryList({
             draggable
             onDragStart={(event) => {
               event.stopPropagation()
-              onDragEntry(entry)
+              onDragEntry(entry, event)
             }}
             onDragEnd={onDragEnd}
             onDragOver={(event) => {
               if (entry.kind !== "directory") return
               event.preventDefault()
               event.stopPropagation()
+              markInternalRawDropTarget(event.dataTransfer)
               onInternalDragOverDirectory(entry.relativePath)
             }}
             onDrop={(event) => {
               if (entry.kind !== "directory") return
               event.preventDefault()
               event.stopPropagation()
-              onDropOnDirectory(entry.relativePath)
+              onDropOnDirectory(entry.relativePath, event)
             }}
           >
             <Checkbox
@@ -780,10 +815,11 @@ function KnowledgeBaseSourceManagerWindow() {
     )
   }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory])
 
-  const startInternalDrag = useCallback((entry: SynapseKnowledgeBaseRawEntry) => {
+  const startInternalDrag = useCallback((entry: SynapseKnowledgeBaseRawEntry, event: DragEvent<HTMLElement>) => {
     const paths = selectedPaths.has(entry.relativePath) ? selectedList : [entry.relativePath]
     internalDragPathsRef.current = paths
     setInternalDragPaths(paths)
+    writeInternalDraggedRawPaths(event.dataTransfer, paths)
   }, [selectedList, selectedPaths])
 
   const endInternalDrag = useCallback(() => {
@@ -792,8 +828,13 @@ function KnowledgeBaseSourceManagerWindow() {
     setInternalDropTarget(null)
   }, [])
 
-  const dropInternalDrag = useCallback(async (targetDirectoryPath: string) => {
-    const paths = internalDragPathsRef.current
+  const dropInternalDrag = useCallback(async (
+    targetDirectoryPath: string,
+    event?: DragEvent<HTMLElement>,
+  ) => {
+    const paths = internalDragPathsRef.current.length > 0
+      ? internalDragPathsRef.current
+      : readInternalDraggedRawPaths(event?.dataTransfer)
     internalDragPathsRef.current = []
     setInternalDragPaths([])
     setInternalDropTarget(null)
@@ -824,6 +865,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setIsDragging(false)
+    if (internalDragPathsRef.current.length > 0 || !hasExternalDraggedFiles(event.dataTransfer)) return
     if (!bridge) return
     const itemPaths = Array.from(event.dataTransfer.files)
       .map((file) => bridge.knowledgeBase.filePathForDroppedFile(file))
@@ -842,6 +884,10 @@ function KnowledgeBaseSourceManagerWindow() {
       return next
     })
   }, [])
+
+  const selectAllVisibleEntries = useCallback(() => {
+    setSelectedPaths(new Set(visibleEntries.map((entry) => entry.relativePath)))
+  }, [visibleEntries])
 
   const openRenameDialog = useCallback((entry: SynapseKnowledgeBaseRawEntry) => {
     setRenameTarget(entry)
@@ -875,6 +921,7 @@ function KnowledgeBaseSourceManagerWindow() {
                 onDragOver={(event) => {
                   event.preventDefault()
                   event.stopPropagation()
+                  markInternalRawDropTarget(event.dataTransfer)
                   if (internalDragPaths.length > 0) {
                     setInternalDropTarget(entry.relativePath)
                   }
@@ -882,7 +929,7 @@ function KnowledgeBaseSourceManagerWindow() {
                 onDrop={(event) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  void dropInternalDrag(entry.relativePath)
+                  void dropInternalDrag(entry.relativePath, event)
                 }}
                 aria-label={`打开树文件夹 ${entry.name}`}
               >
@@ -955,6 +1002,10 @@ function KnowledgeBaseSourceManagerWindow() {
       aria-label="资料文件"
       className="flex h-screen bg-background text-foreground"
       onDragOver={(event) => {
+        if (internalDragPathsRef.current.length > 0 || !hasExternalDraggedFiles(event.dataTransfer)) {
+          setIsDragging(false)
+          return
+        }
         event.preventDefault()
         setIsDragging(true)
       }}
@@ -989,6 +1040,7 @@ function KnowledgeBaseSourceManagerWindow() {
           <div className="space-y-2 p-4">
             <SourceSelectionBar
               selectedCount={selectedList.length}
+              onSelectAll={selectAllVisibleEntries}
               onMove={() => {
                 setMoveTargetPath("")
                 setMoveOpen(true)
@@ -1019,8 +1071,8 @@ function KnowledgeBaseSourceManagerWindow() {
                   setInternalDropTarget(targetDirectoryPath)
                 }
               }}
-              onDropOnDirectory={(targetDirectoryPath) => {
-                void dropInternalDrag(targetDirectoryPath)
+              onDropOnDirectory={(targetDirectoryPath, event) => {
+                void dropInternalDrag(targetDirectoryPath, event)
               }}
             />
           </div>

@@ -300,6 +300,60 @@ describe("useAgentChat", () => {
     expect(chat?.sendingConversationIds.has(scheduledSession.id)).toBe(false)
   })
 
+  it("keeps the selected conversation stoppable when SDK stream events arrive without a phase update", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          onEvent: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
+    bridge.onEvent.mockImplementation((callback) => {
+      emitAgentEvent = callback
+      return () => {}
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+    expect(chat?.sending).toBe(false)
+
+    await act(async () => {
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "stream",
+        timestamp: "2026-05-13T00:05:00.000Z",
+        scope: { projectId: session.projectId, sessionId: session.id },
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          platform: "local-renderer",
+          event: {
+            type: "toolUse",
+            toolName: "TodoWrite",
+            toolInput: "{\"todos\":[]}",
+            timestamp: "2026-05-13T00:05:00.000Z",
+          },
+        },
+      })
+    })
+
+    expect(chat?.sending).toBe(true)
+    expect(chat?.sendingConversationIds.has(session.id)).toBe(true)
+  })
+
   it("logs archived session refresh failures without exposing the error message", async () => {
     const bridge = (window as unknown as {
       synapse: {

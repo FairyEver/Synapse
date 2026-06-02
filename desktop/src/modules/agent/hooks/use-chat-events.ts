@@ -210,6 +210,17 @@ function useChatEvents(
       })) {
         return
       }
+      const activeConversationId = streamEventConversationId(domainEvent)
+      if (activeConversationId) {
+        if (isTerminalAgentEvent(domainEvent)) {
+          pendingConversationIdsRef.current.delete(activeConversationId)
+          dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: activeConversationId })
+          dispatch({ type: "CANCEL_RESET" })
+        } else {
+          pendingConversationIdsRef.current.add(activeConversationId)
+          dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: activeConversationId })
+        }
+      }
       if (isSdkStreamDeltaEvent(domainEvent)) {
         streamEventsRef.current.push(domainEvent)
         scheduleStreamFlush()
@@ -299,6 +310,12 @@ export type { ChatEventRefs }
 
 function isTerminalPhase(phase: string, status: string): boolean {
   return phase === "cancelled" || phase === "failed" || (phase === "completed" && status === "done")
+}
+
+function isTerminalAgentEvent(domainEvent: SynapseAgentDomainEvent): boolean {
+  if (!("event" in domainEvent.payload)) return false
+  const event = domainEvent.payload.event
+  return event.type === "result" || event.type === "error"
 }
 
 function matchesSelectedEvent(

@@ -79,8 +79,10 @@ const resultMetadataSchema = z.object({
   turnUsage: jsonRecordSchema.optional(),
   costUsd: z.number().optional(),
   costCny: z.number().optional(),
+  costBreakdownCny: jsonRecordSchema.optional(),
   totalCostUsd: z.number().optional(),
   totalCostCny: z.number().optional(),
+  totalCostBreakdownCny: jsonRecordSchema.optional(),
   costCurrency: z.literal("CNY").optional(),
   estimatedCost: z.boolean().optional(),
 })

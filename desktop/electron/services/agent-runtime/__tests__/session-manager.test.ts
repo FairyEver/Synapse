@@ -14,6 +14,7 @@ import type {
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("../claude-sdk-session", () => ({
+  DEFAULT_CLAUDE_SDK_MAX_TURNS: 80,
   ClaudeSDKSession: vi.fn(function MockClaudeSDKSession() {
     return {
       agentType: "claude-sdk",
@@ -231,6 +232,77 @@ describe("SessionManager", () => {
         }),
       },
     }))
+  })
+
+  it("passes the default SDK turn cap into new live sessions", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      maxTurns: 80,
+      providerId: "anthropic",
+      mode: "default",
+      sdkSessionId: "sdk-1",
+    }))
+  })
+
+  it("records the final model after provider env reply target env and model tier resolution", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_MODEL: "provider-default",
+        })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      getReplyTargetEnv: () => ({
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "reply-sonnet",
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: {
+        ...baseConversation(),
+        agentConfig: { modelTier: "sonnet" },
+      },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({
+        ANTHROPIC_MODEL: "reply-sonnet",
+      }),
+      model: "reply-sonnet",
+    }))
+    expect((state as RuntimeSessionState & { effectiveModel?: string }).effectiveModel).toBe("reply-sonnet")
   })
 
   it("passes project SDK agents into the default Claude SDK live session", async () => {

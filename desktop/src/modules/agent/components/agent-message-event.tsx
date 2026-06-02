@@ -93,7 +93,7 @@ function AgentMessageEvent({
   }
 
   return (
-    <article className="flex min-w-0 flex-col items-start">
+    <article className="flex w-full min-w-0 flex-col items-start">
       <AgentMessageHeader
         agentIcon={agentIcon}
         timestamp={item.timestamp}
@@ -181,7 +181,7 @@ function AssistantMessageBody({
   }
 
   return (
-    <div className="group/message min-w-0 max-w-[76ch] px-1 py-2">
+    <div className="group/message w-full min-w-0 max-w-[76ch] px-1 py-2">
       <div
         data-allow-select="true"
         className="min-w-0 max-w-full overflow-hidden"
@@ -206,6 +206,8 @@ function AssistantMessageBody({
           turnUsage={item.metadata?.turnUsage}
           turnCostCny={item.metadata?.costCny}
           totalCostCny={item.metadata?.totalCostCny}
+          turnCostBreakdownCny={item.metadata?.costBreakdownCny}
+          totalCostBreakdownCny={item.metadata?.totalCostBreakdownCny}
           estimatedCost={item.metadata?.estimatedCost}
           timestamp={item.timestamp}
         />

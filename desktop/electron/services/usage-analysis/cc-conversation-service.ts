@@ -14,6 +14,7 @@ import type {
   CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
 import { parseCcConversationFile } from "./cc-conversation-parser"
+import { roundUsageCost } from "./pricing"
 import { createUsageRangeFilter } from "./range"
 
 type ServiceOptions = {
@@ -47,6 +48,10 @@ const MAX_QUERY_LIMIT = 5000
 function toNumber(value: unknown): number {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function toCostNumber(value: unknown): number {
+  return roundUsageCost(toNumber(value))
 }
 
 function normalizeLimit(value: unknown): number {
@@ -373,7 +378,7 @@ export class CcConversationService {
       endedAt: row.ended_at,
       modelSummary: row.model_summary,
       tokens: toNumber(aggregate?.tokens),
-      estimatedCost: toNumber(aggregate?.estimated_cost),
+      estimatedCost: toCostNumber(aggregate?.estimated_cost),
       toolCalls: toNumber(row.tool_call_count),
       eventCount,
       attachmentCount: 0,
@@ -392,7 +397,7 @@ export class CcConversationService {
       endedAt: row.ended_at,
       modelSummary: row.model_summary,
       tokens: toNumber(aggregate?.tokens),
-      estimatedCost: toNumber(aggregate?.estimated_cost),
+      estimatedCost: toCostNumber(aggregate?.estimated_cost),
       toolCalls: toNumber(row.tool_call_count),
       eventCount: 0,
       attachmentCount: 0,
@@ -428,7 +433,7 @@ function toRecordDetailRow(row: Record<string, unknown>): CcRecordDetailRow {
     tokens: usageTokenTotal(row),
     pricedTokens: toNumber(row.priced_tokens),
     unpricedTokens: toNumber(row.unpriced_tokens),
-    estimatedCost: toNumber(row.total_cost),
+    estimatedCost: toCostNumber(row.total_cost),
     tokenBreakdown: {
       input: toNumber(row.input_tokens),
       output: toNumber(row.output_tokens),

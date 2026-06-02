@@ -45,6 +45,24 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("sets a default SDK turn cap to stop runaway tool loops", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory)
+
+    expect(getOptions()).toMatchObject({
+      maxTurns: 80,
+    })
+  })
+
+  it("allows callers to override the default SDK turn cap", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, { maxTurns: 12 })
+
+    expect(getOptions()).toMatchObject({
+      maxTurns: 12,
+    })
+  })
+
   it("loads local Claude Code rules, memory, skills, and project MCP configuration", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory)
@@ -130,6 +148,67 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("denies repeated identical TodoWrite calls twice before stopping the turn", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory)
+    const guard = preToolUseHook(getOptions())
+    const input = {
+      todos: [{
+        content: "展示今日工作计划",
+        status: "completed",
+        activeForm: "展示今日工作计划",
+      }],
+    }
+
+    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({})
+    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({})
+    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: expect.stringContaining("Do not retry TodoWrite"),
+        additionalContext: expect.stringContaining("Answer the user directly"),
+      },
+    })
+    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: expect.stringContaining("Do not retry TodoWrite"),
+        additionalContext: expect.stringContaining("Answer the user directly"),
+      },
+    })
+    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({
+      continue: false,
+      stopReason: expect.stringContaining("Stopped repeated TodoWrite"),
+    })
+  })
+
+  it("resets the TodoWrite repetition guard when the tool input changes", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory)
+    const guard = preToolUseHook(getOptions())
+    const firstInput = {
+      todos: [{
+        content: "展示今日工作计划",
+        status: "completed",
+        activeForm: "展示今日工作计划",
+      }],
+    }
+    const secondInput = {
+      todos: [{
+        content: "展示明日工作计划",
+        status: "completed",
+        activeForm: "展示明日工作计划",
+      }],
+    }
+
+    await expect(guard(todoWriteHookInput(firstInput))).resolves.toEqual({})
+    await expect(guard(todoWriteHookInput(firstInput))).resolves.toEqual({})
+    await expect(guard(todoWriteHookInput(secondInput))).resolves.toEqual({})
+    await expect(guard(todoWriteHookInput(secondInput))).resolves.toEqual({})
+  })
+
   it("denies restricted subagent writes outside allowed paths before prompting", async () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory, {
@@ -141,12 +220,24 @@ describe("ClaudeSDKSession", () => {
       },
     })
     const hooks = getOptions().hooks as {
+      PreToolUse: [{ matcher: string, hooks: [(
+        input: Record<string, unknown>,
+        toolUseID: string | undefined,
+        context: { signal: AbortSignal },
+      ) => Promise<unknown>] }]
       SubagentStart: [{ hooks: [(
         input: Record<string, unknown>,
         toolUseID: string | undefined,
         context: { signal: AbortSignal },
       ) => Promise<unknown>] }]
+      SubagentStop: [{ hooks: [(
+        input: Record<string, unknown>,
+        toolUseID: string | undefined,
+        context: { signal: AbortSignal },
+      ) => Promise<unknown>] }]
     }
+    expect(hooks.PreToolUse[0].matcher).toBe("TodoWrite")
+    expect(hooks.SubagentStop).toHaveLength(1)
     await hooks.SubagentStart[0].hooks[0]({
       hook_event_name: "SubagentStart",
       agent_id: "agent-1",
@@ -974,6 +1065,31 @@ function canUseTool(options: Record<string, unknown>): (
     input: Record<string, unknown>,
     context: { signal: AbortSignal },
   ) => Promise<PermissionResult>
+}
+
+function preToolUseHook(options: Record<string, unknown>): (
+  input: Record<string, unknown>,
+) => Promise<unknown> {
+  const hooks = options.hooks as {
+    PreToolUse: [{ hooks: [(
+      input: Record<string, unknown>,
+      toolUseID: string | undefined,
+      context: { signal: AbortSignal },
+    ) => Promise<unknown>] }]
+  }
+  return (input) => hooks.PreToolUse[0].hooks[0](
+    input,
+    "toolu-todo",
+    { signal: new AbortController().signal },
+  )
+}
+
+function todoWriteHookInput(toolInput: Record<string, unknown>): Record<string, unknown> {
+  return {
+    hook_event_name: "PreToolUse",
+    tool_name: "TodoWrite",
+    tool_input: toolInput,
+  }
 }
 
 function message(content: string): AgentMessage {

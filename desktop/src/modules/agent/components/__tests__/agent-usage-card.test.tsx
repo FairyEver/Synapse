@@ -71,7 +71,151 @@ describe("AgentUsageCard", () => {
     expect(container.textContent).toContain("10,248")
     expect(container.textContent).toContain("+2,104")
     expect(container.textContent).toContain("21%")
-    expect(container.textContent).toContain("最近 5 轮")
+    expect(container.textContent).not.toContain("最近 5 轮")
+  })
+
+  it("renders per-type total and delta CNY costs", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 25611,
+            outputTokens: 616,
+            cacheReadInputTokens: 163840,
+            cacheCreationInputTokens: 0,
+            totalTokens: 190067,
+          }}
+          turnUsage={{
+            input_tokens: 3661,
+            output_tokens: 677,
+            cache_read_input_tokens: 205678,
+            cache_creation_input_tokens: 0,
+          }}
+          turnCostBreakdownCny={{
+            input: 0.03,
+            output: 0.02,
+            cacheRead: 0.01,
+            cacheWrite: 0,
+          }}
+          totalCostBreakdownCny={{
+            input: 0.21,
+            output: 0.08,
+            cacheRead: 0.35,
+            cacheWrite: 0,
+          }}
+        />
+      )
+    })
+
+    expect(container.textContent).toContain("25,611¥0.21")
+    expect(container.textContent).toContain("+3,661（¥0.03）")
+    expect(container.textContent).toContain("616¥0.08")
+    expect(container.textContent).toContain("+677（¥0.02）")
+    expect(container.textContent).toContain("0¥0.00")
+    expect(container.textContent).toContain("+0（¥0.00）")
+    const inputTotal = container.querySelector<HTMLElement>("[aria-label='累计输入 token：25,611']")
+    const inputDelta = container.querySelector<HTMLElement>("[aria-label='本轮新增输入 token：3,661']")
+    const cacheWriteTotal = container.querySelector<HTMLElement>("[aria-label='累计缓存写 token：0']")
+    const cacheWriteDelta = container.querySelector<HTMLElement>("[aria-label='本轮新增缓存写 token：0']")
+    expect(inputTotal).not.toBeNull()
+    expect(inputTotal?.textContent).toBe("25,611")
+    expect(inputDelta).not.toBeNull()
+    expect(inputDelta?.textContent).toBe("+3,661")
+    expect(cacheWriteTotal).not.toBeNull()
+    expect(cacheWriteTotal?.textContent).toBe("0")
+    expect(cacheWriteDelta).not.toBeNull()
+    expect(cacheWriteDelta?.textContent).toBe("+0")
+    expect(container.querySelector("[aria-label*='费用']")).toBeNull()
+  })
+
+  it("uses a quiet filled usage card surface without outer or header borders", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 25611,
+            outputTokens: 616,
+            cacheReadInputTokens: 163840,
+            cacheCreationInputTokens: 0,
+            totalTokens: 190067,
+          }}
+        />
+      )
+    })
+
+    const card = container.querySelector<HTMLElement>("[aria-label='用量统计']")
+    expect(card?.className).toContain("bg-muted/60")
+    expect(card?.className).not.toContain("border border-border")
+    expect(card?.firstElementChild?.className).not.toContain("border-b")
+  })
+
+  it("uses the selected semantic high contrast usage colors", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 25611,
+            outputTokens: 616,
+            cacheReadInputTokens: 163840,
+            cacheCreationInputTokens: 0,
+            totalTokens: 190067,
+          }}
+        />
+      )
+    })
+
+    expect(container.querySelector(".bg-slate-900")).not.toBeNull()
+    expect(container.querySelector(".bg-red-600")).not.toBeNull()
+    expect(container.querySelector(".bg-emerald-600")).not.toBeNull()
+    expect(container.querySelector(".bg-amber-500")).not.toBeNull()
+    expect(container.querySelector(".bg-chart-1")).toBeNull()
+    expect(container.querySelector(".bg-chart-3")).toBeNull()
+    expect(container.querySelector(".bg-chart-5")).toBeNull()
+    expect(container.querySelector(".bg-chart-4")).toBeNull()
+  })
+
+  it("keeps adjacent distribution segments visually separated", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 25611,
+            outputTokens: 616,
+            cacheReadInputTokens: 163840,
+            cacheCreationInputTokens: 1,
+            totalTokens: 190068,
+          }}
+        />
+      )
+    })
+
+    const distribution = container.querySelector<HTMLElement>("[aria-label='Token 分类占比']")
+    expect(distribution?.className).toContain("h-2")
+    const segments = container.querySelectorAll<HTMLElement>("[data-usage-segment]")
+    expect(segments).toHaveLength(4)
+    expect(segments[0]?.className).not.toContain("border-l-2")
+    expect(segments[1]?.className).toContain("border-l-2")
+    expect(segments[1]?.className).toContain("border-card")
   })
 
   it("copies a human readable usage summary", async () => {
@@ -113,5 +257,95 @@ describe("AgentUsageCard", () => {
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Token 累计"))
     expect(writeText.mock.calls[0]?.[0]).not.toContain("undefined")
     expect(writeText.mock.calls[0]?.[0]).not.toContain("NaN")
+  })
+
+  it("renders token rows without cost labels when no CNY cost is available", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 1000,
+            outputTokens: 100,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            totalTokens: 1100,
+          }}
+          estimatedCost
+        />
+      )
+    })
+
+    expect(container.textContent).toContain("用量统计")
+    expect(container.textContent).toContain("输入")
+    expect(container.textContent).toContain("1,000")
+    expect(container.textContent).not.toContain("本轮")
+    expect(container.textContent).not.toContain("累计 ¥")
+    expect(container.textContent).not.toContain("估算")
+  })
+
+  it("does not render a recent rounds chart without real round data", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 3192,
+            outputTokens: 41,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 53289,
+            totalTokens: 56522,
+          }}
+          turnUsage={{
+            input_tokens: 3192,
+            output_tokens: 41,
+            cache_creation_input_tokens: 53289,
+          }}
+          turnCostCny={2.52}
+          estimatedCost
+        />
+      )
+    })
+
+    expect(container.textContent).not.toContain("最近 5 轮")
+  })
+
+  it("does not force a fixed width wider than the message column", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 12997,
+            outputTokens: 776,
+            cacheReadInputTokens: 147943,
+            cacheCreationInputTokens: 53631,
+            totalTokens: 213347,
+          }}
+          turnCostCny={3.553562}
+          estimatedCost
+        />
+      )
+    })
+
+    const card = container.querySelector<HTMLElement>("[aria-label='用量统计']")
+    expect(card?.className).toContain("w-full")
+    expect(card?.className).toContain("max-w-full")
+    expect(card?.className).not.toContain("w-[76ch]")
+    expect(card?.className).not.toContain("min-w-[760px]")
+    expect(container.textContent).toContain("¥3.55")
+    expect(container.textContent).not.toContain("3.553562")
   })
 })
