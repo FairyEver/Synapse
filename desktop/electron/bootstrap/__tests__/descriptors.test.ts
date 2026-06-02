@@ -354,6 +354,21 @@ describe("bootstrap descriptors (T1.5)", () => {
         workflowNodeName: "Prompt",
       },
     }))
+
+    sendScheduled.mockClear()
+
+    await engine.agentDeps.sendToAgent({
+      providerId: "test-provider",
+      modelTier: "sonnet",
+      prompt: "test",
+      projectId: "repo-1",
+      abortSignal: new AbortController().signal,
+    })
+
+    expect(sendScheduled).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: 60 * 60_000,
+      sourcePlatform: "workflow",
+    }))
   })
 
   it("workflow HTTP dependency records denied audits with a sanitized resource", async () => {

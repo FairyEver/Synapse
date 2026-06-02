@@ -251,7 +251,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
         options.nodeRuntimeBinPath ?? process.env.SYNAPSE_NODE_RUNTIME_BIN ?? "",
       ],
     })
-    const sdkEnv = mergeEnvironmentWithPath(hostEnv, options.env)
+    const sdkEnv = mergeEnvironmentWithPath(hostEnv, {
+      ...options.env,
+      BASH_DEFAULT_TIMEOUT_MS: CLAUDE_CODE_LONG_TASK_TIMEOUT_MS,
+      BASH_MAX_TIMEOUT_MS: CLAUDE_CODE_LONG_TASK_TIMEOUT_MS,
+    })
     const queryOptions: Partial<Options> = {
       cwd: options.cwd,
       settingSources: ["user", "project", "local"],
@@ -534,6 +538,7 @@ const permissionModes = new Set<PermissionMode>([
   "dontAsk",
   "auto",
 ])
+const CLAUDE_CODE_LONG_TASK_TIMEOUT_MS = "3600000"
 const MAX_TOOL_INPUT_SUMMARY_LENGTH = 240
 const MAX_TOOL_INPUT_STRING_LENGTH = 120
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240

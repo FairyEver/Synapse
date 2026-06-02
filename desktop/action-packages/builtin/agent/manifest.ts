@@ -14,7 +14,7 @@ export const agentActionManifest = {
     mode: "bypassPermissions",
     prompt: "",
     sessionPolicy: "fresh",
-    timeoutMins: 30,
+    timeoutMins: 60,
   },
   configFields: [
     {
@@ -72,7 +72,7 @@ export const agentActionManifest = {
       kind: "number",
       required: false,
       description: "Timeout in minutes (1-120). Null disables.",
-      defaultValue: 30,
+      defaultValue: 60,
     },
   ],
   configSchema: agentActionConfigSchema,

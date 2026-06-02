@@ -153,7 +153,7 @@ describe("validateWorkflow", () => {
       missingField: "defaultProjectId",
       providerId: "test-provider",
       modelTier: "sonnet",
-      timeoutMs: 30 * 60_000,
+      timeoutMs: 60 * 60_000,
     })
   })
 

@@ -89,6 +89,7 @@ describe("task scheduler utils", () => {
       agentType: "claude-code",
       mode: "dontAsk",
       sessionPolicy: "fresh",
+      timeoutMins: 60,
     })
   })
 

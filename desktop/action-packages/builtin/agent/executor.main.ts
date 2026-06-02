@@ -128,5 +128,5 @@ function persistableAgentError(
 
 function scheduledTimeoutMs(timeoutMins: number | null | undefined): number {
   if (timeoutMins === null) return 0
-  return (timeoutMins ?? 30) * 60_000
+  return (timeoutMins ?? 60) * 60_000
 }

@@ -895,6 +895,54 @@ describe("ConversationRouter", () => {
     })
   })
 
+  it("uses a one-hour default live event timeout for foreground turns", async () => {
+    const session = new TrackingTimeoutSession()
+    const { router } = createRouter({ session })
+
+    const pending = router.send(baseMessage("long task"))
+    await waitFor(() => session.timeoutCalls.length > 0)
+    await pending
+
+    expect(session.timeoutCalls).toEqual([60 * 60 * 1000])
+  })
+
+  it("uses a one-hour default permission wait before auto-denying", async () => {
+    vi.useFakeTimers()
+    try {
+      const session = new ScriptedSession([
+        {
+          type: "permissionRequest",
+          requestId: "permission-1",
+          toolName: "Bash",
+          toolInput: "pwd",
+          toolInputRaw: { command: "pwd" },
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1")
+      const { router } = createRouter({ session })
+
+      const pending = router.send(baseMessage("needs permission"))
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000 - 1)
+
+      expect(session.responses).toEqual([])
+
+      await vi.advanceTimersByTimeAsync(1)
+      await pending
+
+      expect(session.responses).toEqual([
+        {
+          requestId: "permission-1",
+          decision: {
+            behavior: "deny",
+            message: "Permission request timed out waiting for user response.",
+          },
+        },
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("prepares new side live session messages while preserving relay history", async () => {
     const session = new ControlledSession("sdk-side")
     const prepareMessage = vi.fn((message: AgentMessage, context: { readonly isNewLiveSession: boolean }) => ({
@@ -1647,6 +1695,15 @@ class TimeoutSession implements AgentLiveSession {
 
   async close(): Promise<void> {
     this.closed = true
+  }
+}
+
+class TrackingTimeoutSession extends TimeoutSession {
+  readonly timeoutCalls: number[] = []
+
+  override nextEventWithTimeout(timeoutMs: number): Promise<AgentEvent | null> {
+    this.timeoutCalls.push(timeoutMs)
+    return Promise.resolve(null)
   }
 }
 

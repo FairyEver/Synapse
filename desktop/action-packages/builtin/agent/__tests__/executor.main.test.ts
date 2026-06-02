@@ -130,6 +130,44 @@ describe("builtin agent action executor", () => {
     }))
   })
 
+  it("defaults scheduled Agent timeout to one hour", async () => {
+    const runtime = {
+      sendScheduled: vi.fn(async () => ({
+        conversationId: "conversation-1",
+        status: "success" as const,
+        summary: "done",
+        durationMs: 12,
+      })),
+    } as unknown as AgentRuntimeService
+    const action = createAgentAction({
+      getAgentRuntime: async () => runtime,
+    })
+
+    await action.execute({
+      config: {
+        projectId: "project-1",
+        agentType: "claude-code",
+        providerId: "anthropic",
+        modelTier: "sonnet",
+        mode: "default",
+        prompt: "Run scheduled work",
+        sessionPolicy: "fresh",
+      },
+      context: {
+        taskId: "task-1",
+        runId: "run-1",
+        triggeredBy: "schedule",
+        cwd: "/repo",
+        actor: { kind: "user", id: "task-scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(runtime.sendScheduled).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: 60 * 60_000,
+    }))
+  })
+
   it("passes task context for scheduled conversation names", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({

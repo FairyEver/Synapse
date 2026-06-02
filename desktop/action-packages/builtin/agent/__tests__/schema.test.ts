@@ -9,7 +9,7 @@ const baseConfig = {
   modelTier: "sonnet",
   prompt: "Run scheduled work",
   sessionPolicy: "fresh",
-  timeoutMins: 30,
+  timeoutMins: 60,
 } as const
 
 describe("agent action config schema", () => {
@@ -30,7 +30,7 @@ describe("agent action config schema", () => {
       mode: "bypassPermissions",
       prompt: "Run scheduled work",
       sessionPolicy: "fresh",
-      timeoutMins: 30,
+      timeoutMins: 60,
     })
 
     expect(result).toEqual({

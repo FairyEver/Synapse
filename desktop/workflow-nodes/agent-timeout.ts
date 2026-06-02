@@ -1,4 +1,4 @@
-export const DEFAULT_AGENT_TIMEOUT_MINS = 30
+export const DEFAULT_AGENT_TIMEOUT_MINS = 60
 
 export function resolveAgentTimeoutMins(timeoutMins: number | undefined): number {
   return timeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS

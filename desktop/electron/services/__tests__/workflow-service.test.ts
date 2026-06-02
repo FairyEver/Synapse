@@ -97,7 +97,7 @@ describe("WorkflowService", () => {
     const def = await svc.get(id)
     expect(def).not.toBeNull()
     expect(def!.name).toBe("新工作流")
-    expect(def!.defaultNodeTimeoutMins).toBe(30)
+    expect(def!.defaultNodeTimeoutMins).toBe(60)
     expect(def!.nodes).toHaveLength(1)
     expect(def!.nodes[0].type).toBe("end")
   })

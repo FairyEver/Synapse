@@ -217,6 +217,8 @@ describe("ClaudeSDKSession", () => {
       ANTHROPIC_AUTH_TOKEN: "sk-auth",
       ANTHROPIC_API_KEY: "sk-api",
       SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
+      BASH_DEFAULT_TIMEOUT_MS: "3600000",
+      BASH_MAX_TIMEOUT_MS: "3600000",
     }))
     expect(sdkEnv.PATH).toContain((process.env.PATH ?? "").split(":").filter(Boolean)[0] ?? "")
     expect(getOptions().settings).toMatchObject({
