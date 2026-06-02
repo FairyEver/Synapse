@@ -259,6 +259,46 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("HTTP 请求")
   })
 
+  it("shows why saving is disabled when command config is incomplete", () => {
+    const html = renderDialog({
+      task: createTask({
+        action: {
+          type: "builtin.command",
+          config: {
+            command: "",
+            shell: "posix",
+            timeoutMins: 30,
+          },
+        },
+      }),
+    })
+
+    expect(html).toContain("请填写命令")
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>保存修改<\/button>/)
+  })
+
+  it("shows required Agent fields when Agent config is incomplete", () => {
+    const html = renderDialog({
+      task: createTask({
+        action: {
+          type: "builtin.agent",
+          config: {
+            projectId: "",
+            agentType: "claude-code",
+            providerId: "",
+            modelTier: "sonnet",
+            mode: "plan",
+            prompt: "",
+            sessionPolicy: "fresh",
+            timeoutMins: 30,
+          },
+        },
+      }),
+    })
+
+    expect(html).toContain("请选择项目、请选择供应商 + 模型、请填写提示词")
+  })
+
   it("renders action type as a toggle group for registry-backed actions", () => {
     const html = renderDialog()
 

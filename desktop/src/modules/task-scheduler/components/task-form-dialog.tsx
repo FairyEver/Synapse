@@ -88,6 +88,20 @@ const TASK_FORM_SECTIONS = [
   { id: "task-form-section-run-settings", title: "运行设置" },
 ] as const
 
+const ACTION_CONFIG_ERROR_MESSAGES: Record<string, Record<string, string>> = {
+  "builtin.agent": {
+    projectId: "请选择项目",
+    providerId: "请选择供应商 + 模型",
+    prompt: "请填写提示词",
+  },
+  "builtin.command": {
+    command: "请填写命令",
+  },
+  "builtin.script": {
+    script: "请填写脚本",
+  },
+}
+
 type TaskFormSectionId = (typeof TASK_FORM_SECTIONS)[number]["id"]
 
 const logger = createRendererLogger("task-scheduler.form")
@@ -162,9 +176,14 @@ function TaskFormDialog({
 
   const selectedAction = rendererActionRegistry.get(form.actionType)
   const ActionConfigForm = selectedAction.ConfigForm
+  const actionConfigResult = selectedAction.manifest.configSchema.safeParse(form.actionConfig)
+  const actionConfigError = actionConfigResult.success
+    ? null
+    : buildActionConfigErrorMessage(form.actionType, actionConfigResult.error.issues)
+  const visibleError = error ?? (form.name.trim() && form.activeDays.length > 0 ? actionConfigError : null)
   const canSubmit = Boolean(
     form.name.trim()
-    && selectedAction.manifest.configSchema.safeParse(form.actionConfig).success
+    && actionConfigResult.success
     && form.activeDays.length > 0,
   )
 
@@ -232,7 +251,7 @@ function TaskFormDialog({
           contentClassName="h-[calc(100vh-2rem)] sm:max-w-2xl"
           footer={(
             <>
-              <FieldError className="sm:mr-auto">{error}</FieldError>
+              <FieldError className="sm:mr-auto">{visibleError}</FieldError>
               <div className="flex flex-col-reverse gap-2 sm:flex-row">
                 <Button
                   type="button"
@@ -749,6 +768,24 @@ function ToggleField({
       </div>
     </Field>
   )
+}
+
+function buildActionConfigErrorMessage(
+  actionType: string,
+  issues: readonly { path: readonly PropertyKey[] }[],
+): string {
+  const messagesByField = ACTION_CONFIG_ERROR_MESSAGES[actionType] ?? {}
+  const messages: string[] = []
+
+  for (const issue of issues) {
+    const field = issue.path.find((part): part is string => typeof part === "string")
+    const message = field ? messagesByField[field] : undefined
+    if (message && !messages.includes(message)) {
+      messages.push(message)
+    }
+  }
+
+  return messages.length > 0 ? messages.join("、") : "请补全执行内容"
 }
 
 function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
