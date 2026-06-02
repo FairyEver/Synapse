@@ -1,4 +1,4 @@
-import { type DragEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
+import { type DragEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ChevronDown,
   ChevronRight,
@@ -98,6 +98,11 @@ type SourceEntryListProps = {
   onMoveEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
   onExportEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
   onTrashEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
+  internalDropTarget: string | null
+  onDragEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
+  onDragEnd: () => void
+  onInternalDragOverDirectory: (targetDirectoryPath: string | null) => void
+  onDropOnDirectory: (targetDirectoryPath: string) => void
 }
 
 function readWindowPayload(): SynapseKnowledgeBaseOpenSourceManagerPayload | null {
@@ -229,6 +234,12 @@ function isPathOrDescendant(path: string, rootPath: string): boolean {
   return path === rootPath || path.startsWith(`${rootPath}/`)
 }
 
+function canMoveRawPathsToTarget(relativePaths: readonly string[], targetDirectoryPath: string): boolean {
+  return relativePaths.length > 0 && relativePaths.every((relativePath) => (
+    relativePath !== targetDirectoryPath && !targetDirectoryPath.startsWith(`${relativePath}/`)
+  ))
+}
+
 function needsRawMutationConfirmation(
   entries: SynapseKnowledgeBaseRawEntry[],
   relativePaths: string[],
@@ -349,6 +360,11 @@ function SourceEntryList({
   onMoveEntry,
   onExportEntry,
   onTrashEntry,
+  internalDropTarget,
+  onDragEntry,
+  onDragEnd,
+  onInternalDragOverDirectory,
+  onDropOnDirectory,
 }: SourceEntryListProps) {
   if (entries.length === 0) {
     return (
@@ -368,7 +384,30 @@ function SourceEntryList({
           <div
             key={entry.relativePath}
             role="listitem"
-            className="grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-1 py-2"
+            className={cn(
+              "grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-1 py-2",
+              internalDropTarget === entry.relativePath && "bg-accent",
+            )}
+            data-raw-path={entry.relativePath}
+            data-raw-drop-target={entry.kind === "directory" ? entry.relativePath : undefined}
+            draggable
+            onDragStart={(event) => {
+              event.stopPropagation()
+              onDragEntry(entry)
+            }}
+            onDragEnd={onDragEnd}
+            onDragOver={(event) => {
+              if (entry.kind !== "directory") return
+              event.preventDefault()
+              event.stopPropagation()
+              onInternalDragOverDirectory(entry.relativePath)
+            }}
+            onDrop={(event) => {
+              if (entry.kind !== "directory") return
+              event.preventDefault()
+              event.stopPropagation()
+              onDropOnDirectory(entry.relativePath)
+            }}
           >
             <Checkbox
               aria-label={`选择 ${entry.name}`}
@@ -455,6 +494,9 @@ function KnowledgeBaseSourceManagerWindow() {
   const [moveTargetPath, setMoveTargetPath] = useState("")
   const [pendingMove, setPendingMove] = useState<PendingRawMove | null>(null)
   const [trashPaths, setTrashPaths] = useState<string[]>([])
+  const [internalDragPaths, setInternalDragPaths] = useState<string[]>([])
+  const [internalDropTarget, setInternalDropTarget] = useState<string | null>(null)
+  const internalDragPathsRef = useRef<string[]>([])
   const bridge = getSynapseBridge()
 
   const refreshDirectory = useCallback(async () => {
@@ -738,6 +780,27 @@ function KnowledgeBaseSourceManagerWindow() {
     )
   }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory])
 
+  const startInternalDrag = useCallback((entry: SynapseKnowledgeBaseRawEntry) => {
+    const paths = selectedPaths.has(entry.relativePath) ? selectedList : [entry.relativePath]
+    internalDragPathsRef.current = paths
+    setInternalDragPaths(paths)
+  }, [selectedList, selectedPaths])
+
+  const endInternalDrag = useCallback(() => {
+    internalDragPathsRef.current = []
+    setInternalDragPaths([])
+    setInternalDropTarget(null)
+  }, [])
+
+  const dropInternalDrag = useCallback(async (targetDirectoryPath: string) => {
+    const paths = internalDragPathsRef.current
+    internalDragPathsRef.current = []
+    setInternalDragPaths([])
+    setInternalDropTarget(null)
+    if (!canMoveRawPathsToTarget(paths, targetDirectoryPath)) return
+    await runMoveRawEntries(paths, targetDirectoryPath)
+  }, [runMoveRawEntries])
+
   const exportEntries = useCallback(async (relativePaths: string[]) => {
     if (!payload || !bridge || relativePaths.length === 0) return
     await promise(
@@ -807,7 +870,20 @@ function KnowledgeBaseSourceManagerWindow() {
                 variant={currentDirectory === entry.relativePath ? "secondary" : "ghost"}
                 size="sm"
                 className="min-w-0 flex-1 justify-start"
+                data-raw-drop-target={entry.relativePath}
                 onClick={() => openTreeDirectory(entry.relativePath)}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  if (internalDragPaths.length > 0) {
+                    setInternalDropTarget(entry.relativePath)
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void dropInternalDrag(entry.relativePath)
+                }}
                 aria-label={`打开树文件夹 ${entry.name}`}
               >
                 <Folder data-icon="inline-start" />
@@ -819,7 +895,7 @@ function KnowledgeBaseSourceManagerWindow() {
         )
       })}
     </div>
-  ), [currentDirectory, directoryTree, expandedDirectories, openTreeDirectory, toggleTreeDirectory])
+  ), [currentDirectory, directoryTree, dropInternalDrag, expandedDirectories, internalDragPaths.length, openTreeDirectory, toggleTreeDirectory])
 
   const renderMoveTreeItems = useCallback((items: SynapseKnowledgeBaseRawEntry[]) => (
     <div className="ml-4 flex flex-col gap-1">
@@ -935,6 +1011,17 @@ function KnowledgeBaseSourceManagerWindow() {
               }}
               onExportEntry={(entry) => void exportEntries([entry.relativePath])}
               onTrashEntry={(entry) => setTrashPaths([entry.relativePath])}
+              internalDropTarget={internalDropTarget}
+              onDragEntry={startInternalDrag}
+              onDragEnd={endInternalDrag}
+              onInternalDragOverDirectory={(targetDirectoryPath) => {
+                if (internalDragPaths.length > 0) {
+                  setInternalDropTarget(targetDirectoryPath)
+                }
+              }}
+              onDropOnDirectory={(targetDirectoryPath) => {
+                void dropInternalDrag(targetDirectoryPath)
+              }}
             />
           </div>
           {isDragging ? (

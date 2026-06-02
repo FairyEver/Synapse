@@ -467,6 +467,72 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
   })
 
+  it("moves one unselected entry when dragged to a folder row", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+    const source = document.querySelector<HTMLElement>('[data-raw-path="brief.md"]')
+    const target = document.querySelector<HTMLElement>('[data-raw-drop-target="客户"]')
+    if (!source || !target) throw new Error("Drag fixtures missing")
+
+    await act(async () => {
+      source.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }))
+      target.dispatchEvent(new Event("dragover", { bubbles: true, cancelable: true }))
+      target.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
+      targetDirectoryPath: "客户",
+    })
+  })
+
+  it("moves selected entries as a group when dragging a selected item", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+    const source = document.querySelector<HTMLElement>('[data-raw-path="brief.md"]')
+    const target = document.querySelector<HTMLElement>('[data-raw-drop-target="客户"]')
+    if (!source || !target) throw new Error("Drag fixtures missing")
+
+    await act(async () => {
+      source.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }))
+      target.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
+      targetDirectoryPath: "客户",
+    })
+  })
+
+  it("does not move a folder into itself", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("客户")
+    })
+    const source = document.querySelector<HTMLElement>('[data-raw-path="客户"]')
+    const target = document.querySelector<HTMLElement>('[data-raw-drop-target="客户"]')
+    if (!source || !target) throw new Error("Drag fixtures missing")
+
+    await act(async () => {
+      source.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }))
+      target.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).not.toHaveBeenCalled()
+  })
+
   it("creates folders and batch mutates selected entries", async () => {
     renderWindow()
 
