@@ -37,7 +37,10 @@ pnpm --filter @synapse/desktop run bump:commit:push    # 递增 desktop 子包 p
 1. 装依赖（`pnpm install --frozen-lockfile`，需要根目录 `pnpm-lock.yaml` 已提交）。
 2. 依次执行 `pnpm --filter @synapse/desktop run build:renderer`、`pnpm --filter @synapse/desktop run build:electron`、`pnpm --filter @synapse/desktop run build:database`。
 3. 执行 `pnpm --filter @synapse/desktop run package:mac` / `pnpm --filter @synapse/desktop run package:win`。
-4. 把 `desktop/release/` 下的产物上传到 `FairyEver/SynapseAppRelease` 仓库的 GitHub Release。
+4. 把 `desktop/release/` 下的产物整理为腾讯云 CDN 发布目录：安装包和 blockmap 长期归档到 `https://desktop.release.synapse.d2.pub/v<version>/`，`latest.yml` / `latest-mac.yml` 上传到 CDN 根目录供应用内更新检查。
+5. 刷新 CDN 上的 `latest.yml` / `latest-mac.yml`，验证 CDN 可访问后，在 `FairyEver/SynapseAppRelease` 创建只包含下载链接和发版说明的 GitHub Release。
+
+发布前需要在 GitHub Secrets 中配置 `TENCENT_CLOUD_SECRET_ID`、`TENCENT_CLOUD_SECRET_KEY` 和 `RELEASE_REPO_TOKEN`。腾讯云密钥应限制在 `synapse-desktop-release-1252371654` 的发布前缀写入权限，以及 `desktop.release.synapse.d2.pub` 的 CDN URL 刷新权限。
 
 手动本地冒烟：
 
