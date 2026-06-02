@@ -634,7 +634,14 @@ function ContentInstallDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isInstalling}
+              onClick={() => {
+                if (!isInstalling) onOpenChange(false)
+              }}
+            >
               取消
             </Button>
             <Button

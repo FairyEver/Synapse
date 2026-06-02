@@ -155,7 +155,7 @@ function clickButton(text: string, index = 0) {
   matches[index]?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
-async function renderInstallDialog() {
+async function renderInstallDialog(onOpenChange = vi.fn()) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -166,12 +166,14 @@ async function renderInstallDialog() {
       <ContentInstallDialog
         editor={editor}
         item={createSkillItem()}
-        onOpenChange={vi.fn()}
+        onOpenChange={onOpenChange}
         open
         projects={[]}
       />,
     )
   })
+
+  return { onOpenChange }
 }
 
 afterEach(() => {
@@ -245,5 +247,45 @@ describe("ContentInstallDialog", () => {
 
     expect(document.body.textContent).toContain("变量替换")
     expect(mocks.installToEditor).not.toHaveBeenCalled()
+  })
+
+  it("keeps the footer cancel action disabled while installation is running", async () => {
+    mocks.targetStatus = "ready"
+    mocks.readContent.mockResolvedValue({ content: "plain content" })
+    let finishInstall: (() => void) | undefined
+    mocks.installToEditor.mockReturnValue(new Promise((resolve) => {
+      finishInstall = () => resolve({ targetPath: "/tmp/codex/skills/demo" })
+    }))
+    const onOpenChange = vi.fn()
+
+    await renderInstallDialog(onOpenChange)
+
+    await act(async () => {
+      clickButton("选择冲突目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+    expect(document.body.textContent).toContain("确认覆盖目标目录？")
+
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    const cancelButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "取消")
+    expect(cancelButton?.disabled).toBe(true)
+
+    await act(async () => {
+      cancelButton?.click()
+    })
+
+    expect(onOpenChange).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishInstall?.()
+      await Promise.resolve()
+    })
   })
 })
