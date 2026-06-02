@@ -44,6 +44,7 @@ import type { Column, ColumnKind, DatabaseWhereGroup } from "@/types/database"
 import type { DatabaseTableImportInspection } from "@/types/database"
 
 const logger = createRendererLogger("database")
+const ROW_NOT_FOUND_MESSAGE = "该行已不存在，已刷新列表。"
 
 function getStoredDisplayMode(): DisplayMode {
   const stored = localStorage.getItem("synapse:database:displayMode")
@@ -346,7 +347,12 @@ function DatabaseModule() {
     async (id: number, data: Record<string, unknown>) => {
       if (!selectedTable) return
       try {
-        await databaseRowUpdate(selectedTable, id, data)
+        const result = await databaseRowUpdate(selectedTable, id, data)
+        if (result.affected === 0) {
+          await refreshQuery()
+          await refreshTables()
+          throw new Error(ROW_NOT_FOUND_MESSAGE)
+        }
         logger.info("Row updated.", {
           table: selectedTable,
           rowId: id,
@@ -360,14 +366,19 @@ function DatabaseModule() {
         throw error
       }
     },
-    [refreshQuery, selectedTable, showError],
+    [refreshQuery, refreshTables, selectedTable, showError],
   )
 
   const handleDelete = useCallback(
     async (id: number) => {
       if (!selectedTable) return
       try {
-        await databaseRowDelete(selectedTable, id)
+        const result = await databaseRowDelete(selectedTable, id)
+        if (result.affected === 0) {
+          await refreshQuery()
+          await refreshTables()
+          throw new Error(ROW_NOT_FOUND_MESSAGE)
+        }
         logger.info("Row deleted.", {
           table: selectedTable,
           rowId: id,

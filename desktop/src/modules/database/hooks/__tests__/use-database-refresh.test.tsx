@@ -7,7 +7,7 @@ import type { ReactNode } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { useDatabaseFolders } from "../use-database-folders"
-import { useDatabaseTables } from "../use-database"
+import { databaseRowDelete, databaseRowUpdate, useDatabaseTables } from "../use-database"
 import type { DatabaseFolder, DatabaseTableInfo } from "@/types/database"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   bridge: {
     database: {
       databaseFolderList: vi.fn(),
+      databaseRowDelete: vi.fn(),
+      databaseRowUpdate: vi.fn(),
       databaseTableList: vi.fn(),
       onChanged: vi.fn(() => () => {}),
     },
@@ -47,6 +49,16 @@ afterEach(() => {
 })
 
 describe("database refresh hooks", () => {
+  it("returns single-row mutation affected counts", async () => {
+    mocks.bridge.database.databaseRowUpdate.mockResolvedValueOnce({ affected: 0 })
+    mocks.bridge.database.databaseRowDelete.mockResolvedValueOnce({ affected: 0 })
+
+    await expect(databaseRowUpdate("tasks", 10, { title: "Done" }))
+      .resolves.toEqual({ affected: 0 })
+    await expect(databaseRowDelete("tasks", 10))
+      .resolves.toEqual({ affected: 0 })
+  })
+
   it("keeps table list results from the latest refresh", async () => {
     const first = createDeferred<DatabaseTableInfo[]>()
     const second = createDeferred<DatabaseTableInfo[]>()

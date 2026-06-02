@@ -207,7 +207,7 @@ function registerDatabaseHandlers(): void {
     data: Record<string, unknown>
   }) => {
     const result = databaseService.databaseRowUpdate(params.table, params.id, params.data)
-    recordMutatingOperation("database.row.update", params.table, 1)
+    recordMutatingOperation("database.row.update", params.table, result.affected)
     return result
   })
 
@@ -216,7 +216,7 @@ function registerDatabaseHandlers(): void {
     id: number
   }) => {
     const result = databaseService.databaseRowDelete(params.table, params.id)
-    recordMutatingOperation("database.row.delete", params.table, 1)
+    recordMutatingOperation("database.row.delete", params.table, result.affected)
     return result
   })
 

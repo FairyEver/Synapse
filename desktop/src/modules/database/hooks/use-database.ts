@@ -208,12 +208,12 @@ async function databaseRowCreate(table: string, data: Record<string, unknown>): 
   return requireSynapseBridge().database.databaseRowCreate({ table, data })
 }
 
-async function databaseRowUpdate(table: string, id: number, data: Record<string, unknown>): Promise<void> {
-  await requireSynapseBridge().database.databaseRowUpdate({ table, id, data })
+async function databaseRowUpdate(table: string, id: number, data: Record<string, unknown>): Promise<{ affected: number }> {
+  return requireSynapseBridge().database.databaseRowUpdate({ table, id, data })
 }
 
-async function databaseRowDelete(table: string, id: number): Promise<void> {
-  await requireSynapseBridge().database.databaseRowDelete({ table, id })
+async function databaseRowDelete(table: string, id: number): Promise<{ affected: number }> {
+  return requireSynapseBridge().database.databaseRowDelete({ table, id })
 }
 
 async function databaseExport(): Promise<{ success: boolean; path?: string }> {
