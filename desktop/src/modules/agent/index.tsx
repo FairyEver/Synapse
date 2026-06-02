@@ -436,7 +436,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     })
   }
 
-  const sendComposerCommand = (commandText: string) => {
+  const sendComposerCommand = async (commandText: string) => {
     const content = commandText.trim()
     if (!content || !selectedTarget) return
     stick.forcePin()
@@ -444,7 +444,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       queueMessage(content, selectedTarget)
       return
     }
-    void chat.sendMessage(content, selectedTarget)
+    const sent = await chat.sendMessage(content, selectedTarget)
+    if (!sent) {
+      toast.error("发送失败")
+    }
   }
 
   const sidebar = (

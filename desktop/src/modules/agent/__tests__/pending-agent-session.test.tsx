@@ -6,6 +6,7 @@ import type { ReactNode, Ref } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { AgentModule } from "../index"
 
@@ -27,6 +28,7 @@ const mocks = vi.hoisted(() => {
       showJumpToBottom?: boolean
       showIdleJumpToBottom?: boolean
       onJumpToBottom?: () => void
+      onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
     } | null,
     timelineProps: null as {
       onOpenReference?: (reference: string) => void
@@ -38,7 +40,7 @@ const mocks = vi.hoisted(() => {
       onCreateSession?: (projectId: string, selection: { providerId: string; modelTier: string }) => void | Promise<void>
       onSourceFilterChange?: (sourceFilter: string) => void
     } | null,
-    configProjects: [{ id: "project-1", name: "Project One", path: "/repo" }],
+    configProjects: [{ id: "project-1", name: "Project One", path: "/repo" }] as SynapseProjectConfig[],
     activeRepository: { uuid: "project-1", name: "Project One", localPath: "/repo" },
     bridgeAvailable: true,
     bridge: {
@@ -136,6 +138,7 @@ vi.mock("../components/agent-composer", () => ({
     showJumpToBottom?: boolean
     showIdleJumpToBottom?: boolean
     onJumpToBottom?: () => void
+    onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
   }) => {
     mocks.composerProps = props
     return <form />
@@ -624,6 +627,50 @@ describe("AgentModule pending prompt sessions", () => {
     expect(selectSession).toHaveBeenCalledWith(targetSession)
     expect(sendMessage).toHaveBeenCalledWith("Run this prompt")
     expect(onPendingAgentSessionConsumed).not.toHaveBeenCalled()
+  })
+
+  it("shows a failure toast when a knowledge base command send fails", async () => {
+    const sendMessage = vi.fn().mockResolvedValue(false)
+    mocks.configProjects = [{
+      id: "project-1",
+      name: "Project One",
+      path: "/repo",
+      capabilities: {
+        knowledgeBase: {
+          enabled: true,
+          managed: true,
+          runtimeId: "kb-1",
+          schemaVersion: 1,
+          templateVersion: "test",
+        },
+      },
+    }]
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      sendMessage,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      await mocks.composerProps?.onKnowledgeBaseCommand?.("/wiki-lint ")
+    })
+
+    expect(sendMessage).toHaveBeenCalledWith("/wiki-lint", {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })
+    expect(mocks.toast.error).toHaveBeenCalledWith("发送失败")
   })
 
   it("logs transcript copy failures with sanitized conversation context", async () => {
