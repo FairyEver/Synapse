@@ -164,6 +164,36 @@ describe("task scheduler external api", () => {
     expect(JSON.stringify(result)).not.toContain("summarize private repository context")
   })
 
+  it("includes compact validation issues in public task summaries", () => {
+    const summary = toPublicTaskSummary({
+      ...baseTask,
+      action: {
+        type: "builtin.agent",
+        config: {
+          projectId: "",
+          prompt: "private prompt text",
+        },
+      },
+      enabled: false,
+      validation: {
+        status: "needs_update",
+        issues: [
+          { field: "action.config.projectId", message: "请选择项目。" },
+          { field: "action.config.prompt", message: "请输入提示词。" },
+        ],
+      },
+    })
+
+    expect(summary.validation).toEqual({
+      status: "needs_update",
+      issues: [
+        { field: "action.config.projectId", message: "请选择项目。" },
+        { field: "action.config.prompt", message: "请输入提示词。" },
+      ],
+    })
+    expect(JSON.stringify(summary)).not.toContain("private prompt text")
+  })
+
   it("does not expose scheduled agent prompt config from task mutations", async () => {
     const service = serviceMock()
     const action = {

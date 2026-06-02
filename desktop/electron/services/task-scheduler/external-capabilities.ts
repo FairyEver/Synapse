@@ -43,6 +43,13 @@ export type SchedulerTaskSummary = {
   readonly nextRunAt?: string
   readonly lastRunAt?: string
   readonly lastStatus?: string
+  readonly validation?: {
+    readonly status: "needs_update"
+    readonly issues: readonly {
+      readonly field: string
+      readonly message: string
+    }[]
+  }
   readonly runCount: number
 }
 
@@ -235,6 +242,7 @@ function schedulerMutationSecurity(
 }
 
 export function toPublicTaskSummary(task: ScheduledTaskEntry): SchedulerTaskSummary {
+  const validation = toPublicTaskValidation(task.validation)
   return {
     id: task.id,
     name: task.name,
@@ -247,7 +255,21 @@ export function toPublicTaskSummary(task: ScheduledTaskEntry): SchedulerTaskSumm
     nextRunAt: task.nextRunAt,
     lastRunAt: task.lastRunAt,
     lastStatus: task.lastStatus,
+    ...(validation ? { validation } : {}),
     runCount: task.runCount,
+  }
+}
+
+function toPublicTaskValidation(
+  validation: ScheduledTaskEntry["validation"],
+): SchedulerTaskSummary["validation"] | undefined {
+  if (validation?.status !== "needs_update") return undefined
+  return {
+    status: "needs_update",
+    issues: validation.issues.map((issue) => ({
+      field: issue.field,
+      message: issue.message,
+    })),
   }
 }
 
