@@ -69,7 +69,10 @@ import type {
 import type { SkillRegistry } from "./skill-registry"
 import { sanitizeError } from "../error-sanitize"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
-import { isSensitiveKey, redactSensitiveText } from "./redaction"
+import {
+  sanitizePermissionRawInput,
+  sanitizePermissionText,
+} from "./permission-sanitize"
 
 interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
@@ -576,8 +579,8 @@ export class AgentRuntimeService {
       workspacePath: pending.workspacePath,
       conversationId: pending.conversationId,
       toolName: pending.toolName,
-      toolInput: sanitizePendingPermissionText(pending.toolInput),
-      toolInputRaw: sanitizePendingPermissionRawInput(pending.toolInputRaw),
+      toolInput: sanitizePermissionText(pending.toolInput),
+      toolInputRaw: sanitizePermissionRawInput(pending.toolInputRaw),
       questions: pending.questions,
       createdAt: pending.createdAt,
     }))
@@ -1236,35 +1239,6 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
-}
-
-function sanitizePendingPermissionRawInput(
-  value: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
-  if (!value) return undefined
-  return sanitizePendingPermissionValue(value) as Record<string, unknown>
-}
-
-function sanitizePendingPermissionValue(value: unknown, key = ""): unknown {
-  if (isSensitivePendingPermissionKey(key)) return "[redacted]"
-  if (typeof value === "string") return sanitizePendingPermissionText(value)
-  if (Array.isArray(value)) return value.map((item) => sanitizePendingPermissionValue(item, key))
-  if (!value || typeof value !== "object") return value
-
-  const output: Record<string, unknown> = {}
-  for (const [childKey, childValue] of Object.entries(value)) {
-    output[childKey] = sanitizePendingPermissionValue(childValue, childKey)
-  }
-  return output
-}
-
-function sanitizePendingPermissionText(value: string | undefined): string | undefined {
-  if (!value) return value
-  return truncateRunes(redactSensitiveText(value), 240)
-}
-
-function isSensitivePendingPermissionKey(key: string): boolean {
-  return isSensitiveKey(key)
 }
 
 function compressionStateId(projectId: string, agentType: string): string {
