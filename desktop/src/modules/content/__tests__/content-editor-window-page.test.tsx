@@ -224,4 +224,43 @@ describe("ContentEditorWindowPage", () => {
     expect(document.querySelector('[data-testid="description"]')?.textContent).toBe("简介")
     expect(document.querySelector('[data-testid="content"]')?.textContent).toBe("主说明")
   })
+
+  it("shows the fallback submit error when saving fails with an empty message", async () => {
+    function TestForm() {
+      const formState = useContentCreateForm(testFormConfig, {
+        initialValue: {
+          ...emptyTestEditorPayload,
+          title: "Rule",
+        },
+        onOpenChange: () => {},
+        onSubmit: () => {
+          throw new Error("")
+        },
+        open: true,
+      })
+
+      return (
+        <form onSubmit={formState.handleSubmit}>
+          <button type="submit">保存</button>
+          {formState.submitError ? <p role="alert">{formState.submitError}</p> : null}
+        </form>
+      )
+    }
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TestForm />)
+    })
+
+    await act(async () => {
+      document.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe("保存失败。")
+  })
 })
