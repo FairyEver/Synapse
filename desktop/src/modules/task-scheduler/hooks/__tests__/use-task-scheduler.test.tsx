@@ -123,6 +123,56 @@ describe("useTaskSchedulerTasks", () => {
     })
   })
 
+  it("ignores stale refresh results when a newer refresh finishes first", async () => {
+    const initialTask = createTask({ id: "task-1", name: "Initial" })
+    const staleTask = createTask({ id: "task-1", name: "Stale" })
+    const latestTask = createTask({ id: "task-2", name: "Latest" })
+    let resolveStaleRefresh: (tasks: ScheduledTask[]) => void = () => {}
+    let resolveLatestRefresh: (tasks: ScheduledTask[]) => void = () => {}
+    const staleRefresh = new Promise<ScheduledTask[]>((resolve) => {
+      resolveStaleRefresh = resolve
+    })
+    const latestRefresh = new Promise<ScheduledTask[]>((resolve) => {
+      resolveLatestRefresh = resolve
+    })
+    const snapshots: Array<ReturnType<typeof useTaskSchedulerTasks>> = []
+    bridge.taskScheduler.listTasks
+      .mockResolvedValueOnce([initialTask])
+      .mockReturnValueOnce(staleRefresh)
+      .mockReturnValueOnce(latestRefresh)
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<Probe onSnapshot={(state) => snapshots.push(state)} />)
+    })
+    const refresh = snapshots.at(-1)?.refresh
+    expect(snapshots.at(-1)?.tasks).toEqual([initialTask])
+
+    let staleRefreshCall: Promise<void> | undefined
+    let latestRefreshCall: Promise<void> | undefined
+    await act(async () => {
+      staleRefreshCall = refresh?.()
+      latestRefreshCall = refresh?.()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      resolveLatestRefresh([latestTask])
+      await latestRefreshCall
+    })
+    expect(snapshots.at(-1)?.tasks).toEqual([latestTask])
+
+    await act(async () => {
+      resolveStaleRefresh([staleTask])
+      await staleRefreshCall
+    })
+    expect(snapshots.at(-1)?.tasks).toEqual([latestTask])
+  })
+
   it("logs list refresh failures without exposing the backend error message", async () => {
     const rawError = "secret scheduler database failure"
     const snapshots: Array<ReturnType<typeof useTaskSchedulerTasks>> = []

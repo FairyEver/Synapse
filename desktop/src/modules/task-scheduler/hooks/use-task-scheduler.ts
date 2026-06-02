@@ -16,15 +16,22 @@ function useTaskSchedulerTasks() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const hasLoadedRef = useRef(false)
+  const latestRefreshIdRef = useRef(0)
 
   const refresh = useCallback(async () => {
+    const refreshId = latestRefreshIdRef.current + 1
+    latestRefreshIdRef.current = refreshId
+    const isLatestRefresh = () => latestRefreshIdRef.current === refreshId
+
     try {
       if (!hasLoadedRef.current) setLoading(true)
       const nextTasks = await requireSynapseBridge().taskScheduler.listTasks()
+      if (!isLatestRefresh()) return
       hasLoadedRef.current = true
       setTasks(nextTasks)
       setError(null)
     } catch (refreshError) {
+      if (!isLatestRefresh()) return
       logger.warn("Task scheduler list refresh failed.", {
         action: "listTasks",
         boundary: "renderer.task-scheduler.list",
@@ -33,7 +40,9 @@ function useTaskSchedulerTasks() {
       })
       setError("读取任务失败")
     } finally {
-      setLoading(false)
+      if (isLatestRefresh()) {
+        setLoading(false)
+      }
     }
   }, [])
 
