@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { EditorScanResult } from "../../../src/types/editor-scan"
 
 const mocks = vi.hoisted(() => ({
+  getDetail: vi.fn(),
   listContent: vi.fn(),
   scanAll: vi.fn(),
 }))
@@ -13,6 +14,7 @@ vi.mock("../editor-scan-service", () => ({
 
 vi.mock("../content-service", () => ({
   contentService: {
+    getDetail: mocks.getDetail,
     listContent: mocks.listContent,
   },
 }))
@@ -70,6 +72,7 @@ function createScan(): EditorScanResult {
           source: "synapse",
           synapseContentId: "project-rule",
           preview: "",
+          content: "current rule body",
           metadata: {},
           trash: { mode: "rule-section", ruleId: "project-rule" },
         }],
@@ -81,15 +84,29 @@ function createScan(): EditorScanResult {
 describe("installStatusCacheService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.listContent.mockResolvedValue([{
-      id: "global-skill",
-      latestHistoryDirname: "current-version",
-      type: "skill",
-    }, {
-      id: "project-skill",
-      latestHistoryDirname: "project-current",
-      type: "skill",
-    }])
+    mocks.listContent.mockImplementation(async (contentType: string) => {
+      if (contentType === "rule") {
+        return [{
+          id: "project-rule",
+          latestHistoryDirname: "rule-current",
+          type: "rule",
+        }]
+      }
+      return [{
+        id: "global-skill",
+        latestHistoryDirname: "current-version",
+        type: "skill",
+      }, {
+        id: "project-skill",
+        latestHistoryDirname: "project-current",
+        type: "skill",
+      }]
+    })
+    mocks.getDetail.mockResolvedValue({
+      id: "project-rule",
+      content: "current rule body",
+      type: "rule",
+    })
   })
 
   it("builds list status entries from global and project scans", async () => {
@@ -131,6 +148,22 @@ describe("installStatusCacheService", () => {
       editorId: "codex",
       scope: "global",
       status: "installed",
+    }])
+  })
+
+  it("marks installed rules as needing update when scanned content differs from current content", async () => {
+    const scan = createScan()
+    scan.projects[0]!.editors[0]!.rules[0]!.content = "old rule body"
+    mocks.scanAll.mockResolvedValue(scan)
+
+    await installStatusCacheService.buildCache()
+
+    expect(installStatusCacheService.getAll()["project-rule"]).toEqual([{
+      editorId: "codex",
+      projectName: "Project",
+      projectPath: "/project",
+      scope: "project",
+      status: "needs_update",
     }])
   })
 
