@@ -1321,6 +1321,60 @@ describe("agentIpcModule", () => {
       expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("sk-secret")
       expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("prompt text")
     })
+
+    it("emits a failed phase when project agent resolution fails", async () => {
+      vi.mocked(configStore.load).mockResolvedValueOnce({
+        repositories: [],
+        global: {
+          themeMode: "system",
+          projects: [],
+          favorites: { rule: [], skill: [], prompt: [] },
+          recentlyViewed: { rule: [], skill: [], prompt: [] },
+          contentSortOrder: "modified-desc",
+        },
+        agent: {
+          defaultPermissionMode: "default",
+        },
+      } as never)
+      const harness = createHarness({})
+
+      await expect(
+        harness.invoke("synapse:agent:send", {
+          projectId: "missing-project",
+          sessionKey: "local:renderer",
+          conversationId: "conv-missing",
+          content: "hi",
+        }),
+      ).rejects.toThrow("找不到当前项目")
+
+      const phases = harness.eventBusEmits
+        .filter((e) => e.type === "phase.update")
+        .map((e) => {
+          const payload = e.payload as { phase: string; status: string; conversationId?: string; errorMessage?: string }
+          return {
+            phase: payload.phase,
+            status: payload.status,
+            conversationId: payload.conversationId,
+            errorMessage: payload.errorMessage,
+          }
+        })
+
+      expect(phases).toEqual([{
+        phase: "failed",
+        status: "failed",
+        conversationId: "conv-missing",
+        errorMessage: "发送失败",
+      }])
+      expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+        "Agent send IPC failed.",
+        expect.objectContaining({
+          projectId: "missing-project",
+          sessionKey: "local:renderer",
+          conversationId: "conv-missing",
+          boundary: "agent.send.ipc",
+        }),
+      )
+    })
   })
 })
 

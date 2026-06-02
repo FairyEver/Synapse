@@ -162,47 +162,47 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
     request: sendRequestSchema,
     response: sendResultSchema,
     handler: async (ctx, request: SendRequest) => {
-      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
       const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
       const eventBus = ctx.resolve<EventBus>("core.event-bus")
       const runId = randomUUID()
       const t_recv = new Date().toISOString()
       const submittedAt = clampClientSubmittedAt(request.clientSubmittedAt, t_recv)
 
-      eventBus.emit({
-        domain: "agent",
-        type: "phase.update",
-        payload: {
-          runId,
-          projectId: request.projectId,
-          sessionKey,
-          conversationId: request.conversationId,
-          phase: "submitted",
-          status: "done",
-          startedAt: submittedAt,
-          completedAt: t_recv,
-        },
-        scope: { projectId: request.projectId },
-        timestamp: t_recv,
-      }, { backpressure: "block" })
-
-      eventBus.emit({
-        domain: "agent",
-        type: "phase.update",
-        payload: {
-          runId,
-          projectId: request.projectId,
-          sessionKey,
-          conversationId: request.conversationId,
-          phase: "received",
-          status: "in-progress",
-          startedAt: t_recv,
-        },
-        scope: { projectId: request.projectId },
-        timestamp: t_recv,
-      }, { backpressure: "block" })
-
       try {
+        const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        eventBus.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId,
+            projectId: request.projectId,
+            sessionKey,
+            conversationId: request.conversationId,
+            phase: "submitted",
+            status: "done",
+            startedAt: submittedAt,
+            completedAt: t_recv,
+          },
+          scope: { projectId: request.projectId },
+          timestamp: t_recv,
+        }, { backpressure: "block" })
+
+        eventBus.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId,
+            projectId: request.projectId,
+            sessionKey,
+            conversationId: request.conversationId,
+            phase: "received",
+            status: "in-progress",
+            startedAt: t_recv,
+          },
+          scope: { projectId: request.projectId },
+          timestamp: t_recv,
+        }, { backpressure: "block" })
+
         const message = {
           projectId: request.projectId,
           sessionKey,
