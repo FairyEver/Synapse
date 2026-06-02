@@ -122,12 +122,28 @@ jobs:
     needs: build-installers
     env:
       GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+      TENCENT_CLOUD_SECRET_ID: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
+      TENCENT_CLOUD_SECRET_KEY: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
+      TENCENT_CLOUD_COS_BUCKET: synapse-desktop-release-1252371654
+      TENCENT_CLOUD_COS_REGION: ap-beijing
+      TENCENT_CLOUD_CDN_DOMAIN: desktop.release.synapse.d2.pub
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
         with:
-          sparse-checkout: desktop/package.json
-          sparse-checkout-cone-mode: false
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.22.0 --activate
+
+      - name: Install publish dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Read package version
         id: version
@@ -143,18 +159,89 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
-      - name: Publish release artifacts
+      - name: Prepare CDN release artifacts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CDN_BASE_URL: https://${{ env.TENCENT_CLOUD_CDN_DOMAIN }}/
+        run: |
+          cd desktop
+          pnpm exec node scripts/prepare-cdn-release-artifacts.mjs \
+            --artifacts-dir ../release-artifacts \
+            --out-dir ../cdn-release \
+            --version "$VERSION" \
+            --cdn-base-url "$CDN_BASE_URL"
+          find ../cdn-release -maxdepth 2 -type f | sort
+
+      - name: Install COSCLI
+        run: |
+          curl --fail --silent --show-error --location \
+            --output "$RUNNER_TEMP/coscli" \
+            https://cosbrowser.cloud.tencent.com/software/coscli/coscli-linux-amd64
+          chmod 755 "$RUNNER_TEMP/coscli"
+          "$RUNNER_TEMP/coscli" --version
+
+      - name: Upload release artifacts to COS
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          COS_CONFIG="$RUNNER_TEMP/cos.yaml"
+          {
+            printf '%s\n' 'cos:'
+            printf '%s\n' '  base:'
+            printf '    secretid: %s\n' "$TENCENT_CLOUD_SECRET_ID"
+            printf '    secretkey: %s\n' "$TENCENT_CLOUD_SECRET_KEY"
+            printf '%s\n' '    sessiontoken: ""'
+            printf '%s\n' '    protocol: https'
+            printf '%s\n' '  buckets:'
+            printf '    - name: %s\n' "$TENCENT_CLOUD_COS_BUCKET"
+            printf '%s\n' '      alias: release'
+            printf '      region: %s\n' "$TENCENT_CLOUD_COS_REGION"
+            printf '      endpoint: cos.%s.myqcloud.com\n' "$TENCENT_CLOUD_COS_REGION"
+            printf '%s\n' '      ofs: false'
+          } > "$COS_CONFIG"
+
+          "$RUNNER_TEMP/coscli" cp "cdn-release/v$VERSION/" "cos://release/v$VERSION/" -r -c "$COS_CONFIG"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/latest.yml" "cos://release/latest.yml" -c "$COS_CONFIG"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/latest-mac.yml" "cos://release/latest-mac.yml" -c "$COS_CONFIG"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/manifest.json" "cos://release/v$VERSION/manifest.json" -c "$COS_CONFIG"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/release-body.md" "cos://release/v$VERSION/release-body.md" -c "$COS_CONFIG"
+
+      - name: Refresh and verify CDN
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TENCENTCLOUD_SECRET_ID: ${{ secrets.TENCENT_CLOUD_SECRET_ID }}
+          TENCENTCLOUD_SECRET_KEY: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
+          TENCENTCLOUD_REGION: ap-guangzhou
+        run: |
+          set -euo pipefail
+
+          python -m pip install --user tccli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+
+          tccli cdn PurgeUrlsCache \
+            --Urls.0 "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml" \
+            --Urls.1 "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml" \
+            --Area mainland
+
+          curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml"
+          curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml"
+
+          while IFS= read -r url; do
+            curl --fail --silent --show-error --location --head "$url"
+          done < <(node -e "const manifest=require('./cdn-release/manifest.json'); for (const url of manifest.assetUrls.filter((item) => item.endsWith('.exe') || item.endsWith('.dmg'))) console.log(url)")
+
+      - name: Publish release notes
         env:
           RELEASE_NAME: Synapse v${{ steps.version.outputs.version }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          ls -la release-artifacts
-          test -n "$(ls -A release-artifacts)"
-
           if gh release view "$RELEASE_TAG" --repo "$RELEASE_REPO" > /dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" release-artifacts/* --clobber --repo "$RELEASE_REPO"
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_NAME" --notes-file cdn-release/release-body.md --repo "$RELEASE_REPO"
           else
-            gh release create "$RELEASE_TAG" release-artifacts/* --title "$RELEASE_NAME" --generate-notes --repo "$RELEASE_REPO"
+            gh release create "$RELEASE_TAG" --title "$RELEASE_NAME" --notes-file cdn-release/release-body.md --repo "$RELEASE_REPO"
           fi
 
   notify:
