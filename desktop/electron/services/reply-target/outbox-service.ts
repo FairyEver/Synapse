@@ -85,7 +85,7 @@ export class ReplyOutboxService {
       target,
       payload,
       status: failed ? "failed" : "pending",
-      lastError: failed ? event.message : undefined,
+      lastError: failed ? outboxErrorSummary(event.message) : undefined,
     })
   }
 
@@ -102,7 +102,7 @@ export class ReplyOutboxService {
         await this.deps.outbox.upsert({
           ...entry,
           status,
-          lastError,
+          lastError: lastError ? outboxErrorSummary(lastError) : undefined,
           updatedAt: now,
         })
       })
@@ -141,7 +141,7 @@ function payloadFromAgentEvent(event: AgentEvent): OutboxPayloadV1 {
     case "result":
       return eventPayload("text", event.content, event)
     case "error":
-      return eventPayload("event", event.message, event)
+      return eventPayload("event", outboxErrorSummary(event.message), event)
     case "thinking":
       return eventPayload("event", event.content, event)
     case "toolUse":
@@ -194,4 +194,8 @@ function errorDiagnostic(error: unknown): Record<string, unknown> {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function outboxErrorSummary(message: string): string {
+  return `Error (${message.length} chars)`
 }

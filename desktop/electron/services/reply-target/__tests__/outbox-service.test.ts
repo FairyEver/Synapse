@@ -55,13 +55,14 @@ describe("ReplyOutboxService", () => {
     ])
   })
 
-  it("records failed events with lastError", async () => {
+  it("records failed events with bounded error summaries", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const service = new ReplyOutboxService({
       projectId: "project-1",
       outbox,
       idFactory: () => "outbox-2",
     })
+    const rawError = "Authorization: Bearer sk-secret-token failed at /Users/example/private prompt fragment"
 
     await service.recordAgentEvent({
       projectId: "project-1",
@@ -69,19 +70,51 @@ describe("ReplyOutboxService", () => {
       transport: { kind: "local-renderer" },
     }, {
       type: "error",
-      message: "boom",
+      message: rawError,
     })
     await service.flushForTests()
 
     expect((await outbox.list())[0]).toEqual(expect.objectContaining({
       id: "outbox-2",
       status: "failed",
-      lastError: "boom",
+      lastError: `Error (${rawError.length} chars)`,
       payload: expect.objectContaining({
         kind: "event",
-        content: "boom",
+        content: `Error (${rawError.length} chars)`,
       }),
     }))
+    expect(JSON.stringify(await outbox.list())).not.toContain("sk-secret-token")
+    expect(JSON.stringify(await outbox.list())).not.toContain("/Users/example")
+    expect(JSON.stringify(await outbox.list())).not.toContain("private prompt")
+  })
+
+  it("stores bounded dispatch failure summaries in lastError", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox,
+      idFactory: () => "outbox-5",
+    })
+    const rawError = "bridge failed token=sk-dispatch-secret at /Users/example/repo"
+
+    const id = await service.record({
+      target: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        transport: { kind: "local-renderer" },
+      },
+      payload: { kind: "text", content: "done", metadata: {} },
+      status: "pending",
+    })
+    await service.updateRecordStatus(id, "failed", rawError)
+    await service.flushForTests()
+
+    expect((await outbox.list())[0]).toEqual(expect.objectContaining({
+      status: "failed",
+      lastError: `Error (${rawError.length} chars)`,
+    }))
+    expect(JSON.stringify(await outbox.list())).not.toContain("sk-dispatch-secret")
+    expect(JSON.stringify(await outbox.list())).not.toContain("/Users/example")
   })
 
   it("records Agent event correlation metadata for diagnostics", async () => {
