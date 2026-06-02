@@ -1,0 +1,136 @@
+import { formatSynapseCost } from "@/lib/cost-currency"
+import {
+  formatTokenUsageValue,
+  normalizeClaudeSdkUsage,
+  type ClaudeSdkUsageSummary,
+} from "@/lib/token-usage"
+
+export type AgentUsageRowKey = "input" | "output" | "cacheRead" | "cacheWrite" | "reasoning"
+
+export interface AgentUsageCardRow {
+  readonly key: AgentUsageRowKey
+  readonly label: string
+  readonly total: number
+  readonly delta?: number
+  readonly percent?: number
+}
+
+export interface AgentUsageCardData {
+  readonly rows: readonly AgentUsageCardRow[]
+  readonly turnCostLabel?: string
+  readonly totalCostLabel?: string
+  readonly estimatedCost: boolean
+  readonly timestamp?: string
+}
+
+export interface BuildAgentUsageCardInput {
+  readonly totalUsage?: Record<string, unknown> | ClaudeSdkUsageSummary
+  readonly turnUsage?: Record<string, unknown> | ClaudeSdkUsageSummary
+  readonly turnCostCny?: number
+  readonly totalCostCny?: number
+  readonly estimatedCost?: boolean
+  readonly timestamp?: string
+}
+
+const rowDefinitions: readonly {
+  readonly key: AgentUsageRowKey
+  readonly label: string
+  readonly field: keyof ClaudeSdkUsageSummary
+  readonly optional?: boolean
+}[] = [
+  { key: "input", label: "输入", field: "inputTokens" },
+  { key: "output", label: "输出", field: "outputTokens" },
+  { key: "cacheRead", label: "缓存读", field: "cacheReadInputTokens" },
+  { key: "cacheWrite", label: "缓存写", field: "cacheCreationInputTokens" },
+  { key: "reasoning", label: "思考", field: "reasoningOutputTokens", optional: true },
+]
+
+function buildAgentUsageCardData(input: BuildAgentUsageCardInput): AgentUsageCardData | undefined {
+  const total = normalizeUsageSummary(input.totalUsage)
+  if (!total) return undefined
+  const turn = normalizeUsageSummary(input.turnUsage)
+  const rows = rowDefinitions.flatMap((definition) => {
+    const totalValue = tokenValue(total[definition.field])
+    const deltaValue = turn ? tokenValue(turn[definition.field]) : undefined
+    if (definition.optional && !hasOptionalUsageField(input.totalUsage, definition.field) && !hasOptionalUsageField(input.turnUsage, definition.field)) {
+      return []
+    }
+    return [{
+      key: definition.key,
+      label: definition.label,
+      total: totalValue,
+      delta: deltaValue,
+      percent: deltaValue === undefined ? undefined : percentage(deltaValue, totalValue),
+    }]
+  })
+  if (rows.length === 0) return undefined
+  return {
+    rows,
+    turnCostLabel: costLabel(input.turnCostCny),
+    totalCostLabel: costLabel(input.totalCostCny),
+    estimatedCost: input.estimatedCost === true || input.turnCostCny !== undefined || input.totalCostCny !== undefined,
+    timestamp: input.timestamp,
+  }
+}
+
+function formatAgentUsageCopyText(data: AgentUsageCardData | undefined): string {
+  if (!data) return ""
+  const costs = [
+    data.turnCostLabel ? `本轮费用 ${data.turnCostLabel}` : undefined,
+    data.totalCostLabel ? `会话累计费用 ${data.totalCostLabel}` : undefined,
+  ].filter(Boolean).join("，")
+  const rows = data.rows.map((row) => {
+    const details = [
+      row.delta === undefined ? undefined : `本轮 +${formatTokenUsageValue(row.delta)}`,
+      row.percent === undefined ? undefined : `占累计 ${row.percent}%`,
+    ].filter(Boolean).join("，")
+    return `${row.label} ${formatTokenUsageValue(row.total)}${details ? `（${details}）` : ""}`
+  }).join("、")
+  return [
+    `用量统计${costs ? `：${costs}。` : "。"}`,
+    `Token 累计：${rows}。`,
+    data.estimatedCost ? "价格按当前模型估算。" : undefined,
+  ].filter(Boolean).join("\n")
+}
+
+function normalizeUsageSummary(
+  usage: Record<string, unknown> | ClaudeSdkUsageSummary | undefined,
+): ClaudeSdkUsageSummary | undefined {
+  if (!usage) return undefined
+  if (isClaudeSdkUsageSummary(usage)) return usage
+  return normalizeClaudeSdkUsage(usage)
+}
+
+function isClaudeSdkUsageSummary(value: Record<string, unknown> | ClaudeSdkUsageSummary): value is ClaudeSdkUsageSummary {
+  return typeof value.inputTokens === "number"
+    && typeof value.outputTokens === "number"
+    && typeof value.cacheReadInputTokens === "number"
+    && typeof value.cacheCreationInputTokens === "number"
+    && typeof value.totalTokens === "number"
+}
+
+function tokenValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function percentage(delta: number, total: number): number {
+  if (total <= 0) return 0
+  return Math.round((delta / total) * 100)
+}
+
+function costLabel(value: number | undefined): string | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? formatSynapseCost(value) : undefined
+}
+
+function hasOptionalUsageField(
+  usage: Record<string, unknown> | ClaudeSdkUsageSummary | undefined,
+  field: keyof ClaudeSdkUsageSummary,
+): boolean {
+  if (!usage) return false
+  if (field in usage && typeof usage[field] === "number") return true
+  if (field !== "reasoningOutputTokens") return false
+  const raw = usage as Record<string, unknown>
+  return typeof raw.reasoning_output_tokens === "number" || typeof raw.reasoning_tokens === "number"
+}
+
+export { buildAgentUsageCardData, formatAgentUsageCopyText }

@@ -14,6 +14,7 @@ import type {
 import { AgentMessageHeader } from "./agent-message-header"
 import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
+import { AgentUsageCard } from "./agent-usage-card"
 import { errorLogMeta } from "../utils"
 
 import "streamdown/styles.css"
@@ -199,19 +200,22 @@ function AssistantMessageBody({
           {preprocessed}
         </Streamdown>
       </div>
+      {hasUsage ? (
+        <AgentUsageCard
+          totalUsage={item.metadata?.usage}
+          turnUsage={item.metadata?.turnUsage}
+          turnCostCny={item.metadata?.costCny}
+          totalCostCny={item.metadata?.totalCostCny}
+          estimatedCost={item.metadata?.estimatedCost}
+          timestamp={item.timestamp}
+        />
+      ) : null}
       <AgentMessageToolbar
         timestamp={item.timestamp}
         content={item.content}
         messageId={item.id}
         role={item.role === "user" || item.role === "assistant" ? item.role : undefined}
-        usage={item.metadata?.usage}
-        usagePrefix={hasUsage ? "会话累计" : undefined}
-        className={hasUsage
-          ? "mt-2 pt-1"
-          : "mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"}
-        copyButtonClassName={hasUsage
-          ? "opacity-0 transition-opacity group-hover/message:opacity-100 focus:opacity-100"
-          : undefined}
+        className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
       />
     </div>
   )

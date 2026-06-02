@@ -73,11 +73,15 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
         workDir?: string
         cancelled?: boolean
         usage?: Record<string, unknown>
+        turnUsage?: Record<string, unknown>
         modelUsage?: Record<string, unknown>
         sdkResultUuid?: string
         costUsd?: number
         costCny?: number
+        totalCostUsd?: number
+        totalCostCny?: number
         costCurrency?: "CNY"
+        estimatedCost?: boolean
       }
       usage?: Record<string, unknown>
       modelUsage?: Record<string, unknown>
@@ -176,11 +180,15 @@ export interface SynapseAgentResultMetadata {
   readonly workDir?: string
   readonly cancelled?: boolean
   readonly usage?: Record<string, unknown>
+  readonly turnUsage?: Record<string, unknown>
   readonly modelUsage?: Record<string, unknown>
   readonly sdkResultUuid?: string
   readonly costUsd?: number
   readonly costCny?: number
+  readonly totalCostUsd?: number
+  readonly totalCostCny?: number
   readonly costCurrency?: "CNY"
+  readonly estimatedCost?: boolean
 }
 
 export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {

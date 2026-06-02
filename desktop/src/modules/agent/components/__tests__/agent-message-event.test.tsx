@@ -455,4 +455,78 @@ describe("AgentMessageEvent", () => {
     expect(rendererLogger.warn).not.toHaveBeenCalled()
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("do-not-log")
   })
+
+  it("renders an Agent usage card for assistant messages with usage metadata", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-usage-card",
+            kind: "message",
+            role: "assistant",
+            content: "Done",
+            timestamp: "2026-06-02T06:32:00.000Z",
+            metadata: {
+              usage: {
+                inputTokens: 10248,
+                outputTokens: 3812,
+                cacheReadInputTokens: 42180,
+                cacheCreationInputTokens: 1216,
+                reasoningOutputTokens: 680,
+                totalTokens: 58136,
+              },
+              turnUsage: {
+                input_tokens: 2104,
+                output_tokens: 846,
+                cache_read_input_tokens: 9640,
+                cache_creation_input_tokens: 0,
+                reasoning_output_tokens: 180,
+              },
+              costCny: 0.18,
+              totalCostCny: 1.42,
+              estimatedCost: true,
+            },
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("用量统计")
+    expect(container.textContent).toContain("¥0.18")
+    expect(container.textContent).toContain("¥1.42")
+    expect(container.textContent).toContain("10,248")
+    expect(container.textContent).not.toContain("会话累计 输入")
+  })
+
+  it("does not render an Agent usage card without usage metadata", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-no-usage-card",
+            kind: "message",
+            role: "assistant",
+            content: "Done",
+            timestamp: "2026-06-02T06:32:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.textContent).not.toContain("用量统计")
+  })
 })
