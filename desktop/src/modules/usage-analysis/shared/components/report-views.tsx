@@ -103,7 +103,7 @@ function projectPathParts(value: string): string[] {
 function normalizeProjectPath(value: string): string {
   const trimmed = value.trim().replaceAll("\\", "/")
   if (trimmed.startsWith("-Users-")) {
-    return trimmed.replace(/^-Users-/, "/Users/").replaceAll("-", "/")
+    return trimmed.replace(/^-Users-/, "/Users/")
   }
   return trimmed
 }

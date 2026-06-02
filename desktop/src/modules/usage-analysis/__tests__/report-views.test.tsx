@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
-import { DetailsReportView, OverviewReportView } from "../shared/components/report-views"
+import { DetailsReportView, OverviewReportView, ProjectsReportView } from "../shared/components/report-views"
 import type { ReportState, UsageOverviewReport } from "../shared/types"
 
 describe("usage analysis report views", () => {
@@ -51,6 +51,30 @@ describe("usage analysis report views", () => {
 
     expect(html).toContain("¥0.01")
     expect(html).not.toContain("US$")
+  })
+
+  it("keeps hyphenated Claude project labels intact", () => {
+    const report = {
+      ...overviewReport(),
+      topProjects: [{
+        workspaceKey: "-Users-dev-front-end-app-v2",
+        workspaceLabel: "-Users-dev-front-end-app-v2",
+        tokens: 10,
+        pricedTokens: 10,
+        unpricedTokens: 0,
+        estimatedCost: 0.01,
+        requests: 1,
+        sessions: 1,
+        toolCalls: 0,
+        lastUsedAt: "2026-05-20T00:00:00.000Z",
+      }],
+    }
+    const html = renderToStaticMarkup(
+      <ProjectsReportView state={state(report.topProjects, false)} />,
+    )
+
+    expect(html).toContain("dev-front-end-app-v2")
+    expect(html).not.toContain("front/end/app/v2")
   })
 
   it("renders detail rows with an open conversation action", () => {

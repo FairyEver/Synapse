@@ -109,8 +109,12 @@ function workspaceFromClaudePath(filePath: string): { key: string; label: string
   const parts = filePath.split(path.sep)
   const projectIndex = parts.findIndex((part, index) => part === ".claude" && parts[index + 1] === "projects")
   const key = projectIndex >= 0 ? (parts[projectIndex + 2] ?? "") : ""
-  const label = key ? key.replace(/^-Users-/, "/Users/").replaceAll("-", "/") : ""
+  const label = key ? key.replace(/^-Users-/, "/Users/") : ""
   return { key, label }
+}
+
+function workspaceLabelFromCwd(cwd: unknown): string {
+  return typeof cwd === "string" && cwd.trim().length > 0 ? cwd.trim().replaceAll("\\", "/") : ""
 }
 
 function extractReasoningTokens(content: unknown[]): number {
@@ -196,7 +200,7 @@ export async function parseClaudeUsageFile(filePath: string, options: UsageParse
 export async function parseClaudeUsageFileSegment(options: ClaudeUsageSegmentParseOptions): Promise<ParsedUsageSegment> {
   const fallbackTs = fs.statSync(options.filePath).mtimeMs
   const fallbackSessionId = path.basename(options.filePath, ".jsonl")
-  const workspace = workspaceFromClaudePath(options.filePath)
+  let workspace = workspaceFromClaudePath(options.filePath)
   const usageEvents = new Map<string, ParsedUsageEvent>()
   const toolEvents = new Map<string, ParsedToolEvent>()
   const sessionIds = new Set<string>()
@@ -219,6 +223,9 @@ export async function parseClaudeUsageFileSegment(options: ClaudeUsageSegmentPar
     } catch {
       return false
     }
+
+    const cwdLabel = workspaceLabelFromCwd(raw.cwd)
+    if (cwdLabel) workspace = { key: workspace.key || cwdLabel, label: cwdLabel }
 
     const timestampMs = parseTimestamp(raw.timestamp, fallbackTs)
     const iso = new Date(timestampMs).toISOString()

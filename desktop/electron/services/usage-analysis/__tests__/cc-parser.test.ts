@@ -150,6 +150,49 @@ describe("Claude Code usage parser", () => {
     }
   })
 
+  it("uses cwd for workspace labels with hyphenated project names", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-parser-"))
+    try {
+      const projectDir = path.join(dir, ".claude", "projects", "-Users-dev-react-app")
+      fs.mkdirSync(projectDir, { recursive: true })
+      const file = path.join(projectDir, "session.jsonl")
+      fs.writeFileSync(file, [
+        JSON.stringify({
+          type: "user",
+          sessionId: "session",
+          timestamp: "2026-05-19T01:00:00.000Z",
+          cwd: "/Users/dev/react-app",
+          message: { role: "user", content: "hello" },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          sessionId: "session",
+          timestamp: "2026-05-19T01:00:01.000Z",
+          message: {
+            id: "msg-1",
+            role: "assistant",
+            model: "claude-opus-4.6",
+            usage: { input_tokens: 10, output_tokens: 5 },
+          },
+        }),
+      ].join("\n"))
+
+      const parsed = await parseClaudeUsageFile(file)
+
+      expect(parsed.sessions[0]).toMatchObject({
+        workspaceKey: "-Users-dev-react-app",
+        workspaceLabel: "/Users/dev/react-app",
+      })
+      expect(parsed.usageEvents[0]).toMatchObject({
+        workspaceKey: "-Users-dev-react-app",
+        workspaceLabel: "/Users/dev/react-app",
+      })
+      expect(JSON.stringify(parsed)).not.toContain("/Users/dev/react/app")
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("dedupes appended assistant usage by message and request id", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-parser-"))
     try {
