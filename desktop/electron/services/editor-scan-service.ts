@@ -624,6 +624,11 @@ type SkillFileEntry = {
   size: number
 }
 
+const EDITOR_SCAN_SKILL_FILE_LIST_LIMITS = {
+  maxDepth: 8,
+  maxFiles: 200,
+} as const
+
 function toPortableRelativePath(relativeName: string): string {
   return relativeName.split(path.sep).join("/")
 }
@@ -633,7 +638,15 @@ async function collectFiles(
   currentDir: string,
   skip: Set<string>,
   entries: SkillFileEntry[],
+  depth = 0,
 ): Promise<void> {
+  if (
+    depth > EDITOR_SCAN_SKILL_FILE_LIST_LIMITS.maxDepth
+    || entries.length >= EDITOR_SCAN_SKILL_FILE_LIST_LIMITS.maxFiles
+  ) {
+    return
+  }
+
   let children: string[]
   try {
     children = await readdir(currentDir)
@@ -642,6 +655,7 @@ async function collectFiles(
   }
 
   for (const name of children) {
+    if (entries.length >= EDITOR_SCAN_SKILL_FILE_LIST_LIMITS.maxFiles) return
     if (name.startsWith(".")) continue
     const fullPath = path.join(currentDir, name)
     const relativeName = toPortableRelativePath(path.relative(baseDir, fullPath))
@@ -652,7 +666,7 @@ async function collectFiles(
       if (fileStat.isFile()) {
         entries.push({ name: relativeName, size: fileStat.size })
       } else if (fileStat.isDirectory()) {
-        await collectFiles(baseDir, fullPath, skip, entries)
+        await collectFiles(baseDir, fullPath, skip, entries, depth + 1)
       }
     } catch {
       continue
@@ -851,6 +865,7 @@ async function trashScanItem(
 }
 
 export {
+  EDITOR_SCAN_SKILL_FILE_LIST_LIMITS,
   scanAll,
   readItemContent,
   listSkillFiles,

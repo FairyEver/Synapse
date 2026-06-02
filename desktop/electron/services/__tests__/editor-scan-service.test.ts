@@ -27,6 +27,7 @@ import {
 } from "../../../src/modules/editor-scan/lib/quick-publish"
 import { configStore } from "../config-store"
 import {
+  EDITOR_SCAN_SKILL_FILE_LIST_LIMITS,
   listSkillFiles,
   prepareQuickPublishDraft,
   readItemContent,
@@ -230,6 +231,29 @@ describe("editor scan quick publish", () => {
       synapseContentId: "skill-1",
       repositoryVersion: "20260521010101",
     }))
+  })
+
+  it("bounds skill attachment listing by file count and depth", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "large-skill")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Large Skill\n")
+
+    await Promise.all(Array.from({ length: EDITOR_SCAN_SKILL_FILE_LIST_LIMITS.maxFiles + 10 }, async (_, index) => {
+      await writeFile(path.join(skillDir, `attachment-${String(index).padStart(3, "0")}.txt`), "data")
+    }))
+
+    let deepDir = skillDir
+    for (let depth = 0; depth <= EDITOR_SCAN_SKILL_FILE_LIST_LIMITS.maxDepth + 1; depth++) {
+      deepDir = path.join(deepDir, `nested-${depth}`)
+      await mkdir(deepDir)
+    }
+    await writeFile(path.join(deepDir, "too-deep.txt"), "data")
+
+    const files = await listSkillFiles(skillDir)
+
+    expect(files).toHaveLength(EDITOR_SCAN_SKILL_FILE_LIST_LIMITS.maxFiles)
+    expect(files.some((file) => file.name.includes("too-deep.txt"))).toBe(false)
   })
 
   it("creates a skill draft with nested binary attachments from the scan scope", async () => {
