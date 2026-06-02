@@ -19,6 +19,7 @@ import type {
   SynapseAgentPendingPermission,
   SynapseAgentPublishedCommand,
 } from "@/types/agent"
+import type { SynapseProjectConfig } from "@/types/config"
 
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
@@ -119,8 +120,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const selectedProject = selectedProjectId
     ? config.global.projects.find((project) => project.id === selectedProjectId)
     : undefined
-  const canManageKnowledgeSources =
-    selectedProject?.capabilities?.knowledgeBase?.managed === true
+  const canManageKnowledgeSources = canUseManagedKnowledgeBase(selectedProject)
   const selectedTarget: PendingMessageTarget | undefined = selectedSession
     ? {
         projectId: selectedSession.projectId,
@@ -651,6 +651,13 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function canUseManagedKnowledgeBase(project: SynapseProjectConfig | undefined): boolean {
+  const knowledgeBase = project?.capabilities?.knowledgeBase
+  return knowledgeBase?.enabled === true
+    && knowledgeBase.managed === true
+    && typeof knowledgeBase.runtimeId === "string"
 }
 
 function isUserQuestionPending(item: SynapseAgentPendingPermission): boolean {

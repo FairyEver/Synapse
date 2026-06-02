@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
       showJumpToBottom?: boolean
       showIdleJumpToBottom?: boolean
       onJumpToBottom?: () => void
+      knowledgeBaseActions?: readonly unknown[]
       onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
     } | null,
     timelineProps: null as {
@@ -138,6 +139,7 @@ vi.mock("../components/agent-composer", () => ({
     showJumpToBottom?: boolean
     showIdleJumpToBottom?: boolean
     onJumpToBottom?: () => void
+    knowledgeBaseActions?: readonly unknown[]
     onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
   }) => {
     mocks.composerProps = props
@@ -671,6 +673,35 @@ describe("AgentModule pending prompt sessions", () => {
       sessionKey: "local:renderer",
     })
     expect(mocks.toast.error).toHaveBeenCalledWith("发送失败")
+  })
+
+  it("hides knowledge base actions for incomplete managed knowledge base capabilities", async () => {
+    mocks.configProjects = [{
+      id: "project-1",
+      name: "Project One",
+      path: "/repo",
+      capabilities: {
+        knowledgeBase: {
+          managed: true,
+        },
+      },
+    } as SynapseProjectConfig]
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.composerProps?.knowledgeBaseActions).toEqual([])
   })
 
   it("logs transcript copy failures with sanitized conversation context", async () => {
