@@ -67,6 +67,7 @@ describe("KnowledgeBaseRawFileManager", () => {
   })
 
   it("uploads folders recursively while preserving structure and skipping system noise", async () => {
+    const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
     const rawRoot = await tempDir()
     const sourceRoot = await tempDir()
     const folder = path.join(sourceRoot, "会议资料")
@@ -80,6 +81,10 @@ describe("KnowledgeBaseRawFileManager", () => {
     const result = await manager.uploadItems(rawRoot, "项目A", [folder])
 
     expect(result.skipped).toEqual([{ path: path.join(folder, ".DS_Store"), reason: "system-noise" }])
+    expect(warn).toHaveBeenCalledWith("Knowledge Base raw item upload skipped.", {
+      itemName: ".DS_Store",
+      reason: "system-noise",
+    })
     expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual([
       "项目A/会议资料",
       "项目A/会议资料/01.pdf",

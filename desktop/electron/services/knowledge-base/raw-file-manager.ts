@@ -72,6 +72,10 @@ export class KnowledgeBaseRawFileManager {
         const sourcePath = path.resolve(filePath)
         const sourceStat = await lstat(sourcePath)
         if (!sourceStat.isFile()) {
+          knowledgeBaseLogger.warn("Knowledge Base raw file upload skipped.", {
+            fileName: path.basename(filePath),
+            reason: "not-file",
+          })
           skipped.push({ path: filePath, reason: "not-file" })
           continue
         }
@@ -116,10 +120,18 @@ export class KnowledgeBaseRawFileManager {
       const resolvedSource = path.resolve(sourcePath)
       const sourceStat = await lstat(resolvedSource)
       if (isSystemNoiseFile(path.basename(resolvedSource))) {
+        knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
+          itemName: path.basename(sourcePath),
+          reason: "system-noise",
+        })
         skipped.push({ path: sourcePath, reason: "system-noise" })
         return
       }
       if (sourceStat.isSymbolicLink()) {
+        knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
+          itemName: path.basename(sourcePath),
+          reason: "symlink",
+        })
         skipped.push({ path: sourcePath, reason: "symlink" })
         return
       }
@@ -132,6 +144,10 @@ export class KnowledgeBaseRawFileManager {
         await this.copyExternalDirectory(rawRoot, resolvedSource, targetDirectory, entries, skipped)
         return
       }
+      knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
+        itemName: path.basename(sourcePath),
+        reason: "read-error",
+      })
       skipped.push({ path: sourcePath, reason: "read-error" })
     } catch (error) {
       knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
@@ -188,11 +204,21 @@ export class KnowledgeBaseRawFileManager {
         await assertNoSymlinkInRawPath(rawRoot, relativePath)
         const sourceStat = await lstat(source)
         if (sourceStat.isDirectory() && isSameOrDescendant(relativePath, targetDirectoryPath)) {
+          knowledgeBaseLogger.warn("Knowledge Base raw entry move skipped.", {
+            reason: "invalid-path",
+            relativePath,
+            targetDirectoryPath,
+          })
           skipped.push({ path: relativePath, reason: "invalid-path" })
           continue
         }
         const target = path.join(targetDirectory, path.basename(source))
         if (await pathExists(target)) {
+          knowledgeBaseLogger.warn("Knowledge Base raw entry move skipped.", {
+            reason: "collision",
+            relativePath,
+            targetDirectoryPath,
+          })
           skipped.push({ path: relativePath, reason: "collision" })
           continue
         }
@@ -280,10 +306,18 @@ export class KnowledgeBaseRawFileManager {
     const sourceStat = await lstat(sourcePath)
     const relativePath = normalizeRelativePath(path.relative(rawRoot, sourcePath))
     if (isSystemNoiseFile(path.basename(sourcePath))) {
+      knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
+        reason: "system-noise",
+        relativePath,
+      })
       skipped.push({ path: relativePath, reason: "system-noise" })
       return
     }
     if (sourceStat.isSymbolicLink()) {
+      knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
+        reason: "symlink",
+        relativePath,
+      })
       skipped.push({ path: relativePath, reason: "symlink" })
       return
     }
@@ -293,6 +327,10 @@ export class KnowledgeBaseRawFileManager {
       return
     }
     if (!sourceStat.isDirectory()) {
+      knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
+        reason: "export-error",
+        relativePath,
+      })
       skipped.push({ path: relativePath, reason: "export-error" })
       return
     }

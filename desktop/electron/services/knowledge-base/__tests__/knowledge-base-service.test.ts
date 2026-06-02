@@ -109,6 +109,12 @@ describe("KnowledgeBaseService", () => {
     expect(result.projectPath).toBe("synapse-kb://kb-1")
     expect(result.runtimePath).toBe(path.join(userDataPath, "knowledge-bases", "kb-1"))
     expect(result.templateSource?.commit).toBe("75d3b6feb77b96c6bb16599c4550cc9703553d87")
+    expect(mocks.logger.info).toHaveBeenCalledWith("Managed Knowledge Base runtime created.", expect.objectContaining({
+      projectId: "kb-1",
+      runtimePath: result.runtimePath,
+      templateVersion: "2026-05-21",
+      templateSourceCommit: "75d3b6feb77b96c6bb16599c4550cc9703553d87",
+    }))
     await expect(readFile(path.join(result.runtimePath, "wiki", "index.md"), "utf8")).resolves.toBe("# Index\n\nNo entries yet.\n")
     await expect(readFile(path.join(result.runtimePath, "wiki", "log.md"), "utf8")).resolves.toBe("# Log\n\n")
     await expect(readFile(path.join(result.runtimePath, "wiki", "hot.md"), "utf8")).resolves.toBe("# Hot\n\n")
@@ -220,6 +226,7 @@ describe("KnowledgeBaseService", () => {
         },
       },
     })}\n`)
+    mocks.logger.info.mockClear()
 
     const result = await service.listSources(projectId)
 
@@ -231,6 +238,14 @@ describe("KnowledgeBaseService", () => {
       { relativePath: ".raw/deck.pdf", status: "unsupported", supported: false },
       { relativePath: ".raw/note.md", status: "imported", supported: true },
     ])
+    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base sources listed.", {
+      projectId,
+      sourceCount: 2,
+      statusCounts: {
+        imported: 1,
+        unsupported: 1,
+      },
+    })
   })
 
   it("uploads source files into a date folder with collision-safe names", async () => {
@@ -288,6 +303,7 @@ describe("KnowledgeBaseService", () => {
     await mkdir(path.join(projectPath, ".raw", "projects"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", "brief.md"), "alpha\n")
     await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{}}\n")
+    mocks.logger.info.mockClear()
 
     const result = await service.listRawDirectory({
       projectId,
@@ -308,6 +324,13 @@ describe("KnowledgeBaseService", () => {
       { name: "brief.md", relativePath: "brief.md", kind: "file", size: 6 },
     ])
     expect(result.entries.some((entry) => entry.name === ".manifest.json")).toBe(false)
+    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw directory listed.", {
+      projectId,
+      directoryPath: "",
+      entryCount: 2,
+      directoryCount: 1,
+      fileCount: 1,
+    })
   })
 
   it("uploads raw files into the selected raw folder without conversion", async () => {

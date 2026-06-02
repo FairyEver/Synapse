@@ -100,6 +100,12 @@ export class KnowledgeBaseService {
       await copyDirectoryContents(this.managedTemplateRoot, runtimePath)
       await resetNewManagedRuntimeContent(runtimePath)
       const source = await readTemplateSource(this.managedTemplateRoot)
+      logger.info("Managed Knowledge Base runtime created.", {
+        projectId: payload.projectId,
+        runtimePath,
+        templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
+        templateSourceCommit: source?.commit,
+      })
       return {
         projectId: payload.projectId,
         projectPath: knowledgeBaseVirtualPath(payload.projectId),
@@ -161,9 +167,15 @@ export class KnowledgeBaseService {
       })
     }
 
+    const sortedSources = sources.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt) || a.relativePath.localeCompare(b.relativePath))
+    logger.info("Knowledge Base sources listed.", {
+      projectId,
+      sourceCount: sortedSources.length,
+      statusCounts: sourceStatusCounts(sortedSources),
+    })
     return {
       projectId,
-      sources: sources.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt) || a.relativePath.localeCompare(b.relativePath)),
+      sources: sortedSources,
     }
   }
 
@@ -208,6 +220,13 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const entries = await this.rawFileManager.list(rawRoot, payload.directoryPath)
+    logger.info("Knowledge Base raw directory listed.", {
+      projectId: payload.projectId,
+      directoryPath: payload.directoryPath,
+      entryCount: entries.length,
+      directoryCount: entries.filter((entry) => entry.kind === "directory").length,
+      fileCount: entries.filter((entry) => entry.kind === "file").length,
+    })
     return { projectId: payload.projectId, directoryPath: payload.directoryPath, entries }
   }
 
@@ -443,6 +462,15 @@ function skippedReasonCounts(
 ): Record<string, number> {
   return skipped.reduce<Record<string, number>>((counts, item) => {
     counts[item.reason] = (counts[item.reason] ?? 0) + 1
+    return counts
+  }, {})
+}
+
+function sourceStatusCounts(
+  sources: readonly Pick<SynapseKnowledgeBaseSourceEntry, "status">[],
+): Record<string, number> {
+  return sources.reduce<Record<string, number>>((counts, source) => {
+    counts[source.status] = (counts[source.status] ?? 0) + 1
     return counts
   }, {})
 }
