@@ -18,14 +18,11 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!window.synapse) return
 
-    window.synapse.installStatus.getAll().then(setStatusMap).catch((error) => {
-      logger.error("Failed to load install status.", {
-        errorName: error instanceof Error ? error.name : typeof error,
-        errorLength: (error instanceof Error ? error.message : String(error)).length,
-      })
-    })
+    let stale = false
+    const changedContentIds = new Set<string>()
 
     const unsubscribe = window.synapse.installStatus.onChanged((event) => {
+      changedContentIds.add(event.contentId)
       setStatusMap((prev) => {
         const next = { ...prev }
         if (event.entries.length > 0) {
@@ -37,7 +34,21 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
       })
     })
 
-    return unsubscribe
+    window.synapse.installStatus.getAll().then((snapshot) => {
+      if (stale) return
+      setStatusMap((prev) => mergeInstallStatusSnapshot(snapshot, prev, changedContentIds))
+    }).catch((error) => {
+      if (stale) return
+      logger.error("Failed to load install status.", {
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: (error instanceof Error ? error.message : String(error)).length,
+      })
+    })
+
+    return () => {
+      stale = true
+      unsubscribe()
+    }
   }, [])
 
   async function uninstall(contentId: string, editorId: SynapseEditorId): Promise<void> {
@@ -64,4 +75,20 @@ function useUninstallFromEditor(): (contentId: string, editorId: SynapseEditorId
   return ctx.uninstall
 }
 
-export { InstallStatusProvider, useInstallStatus, useUninstallFromEditor }
+function mergeInstallStatusSnapshot(
+  snapshot: InstallStatusMap,
+  current: InstallStatusMap,
+  changedContentIds: ReadonlySet<string>,
+): InstallStatusMap {
+  const next = { ...snapshot }
+  for (const contentId of changedContentIds) {
+    if (current[contentId]?.length) {
+      next[contentId] = current[contentId]
+    } else {
+      delete next[contentId]
+    }
+  }
+  return next
+}
+
+export { InstallStatusProvider, mergeInstallStatusSnapshot, useInstallStatus, useUninstallFromEditor }
