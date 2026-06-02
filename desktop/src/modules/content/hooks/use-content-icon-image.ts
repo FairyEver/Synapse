@@ -3,6 +3,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseContentIconType, SynapseContentType } from "@/types/content"
 
 const ICON_IMAGE_FILE_NAME = "icon.png"
+const CONTENT_ICON_IMAGE_PENDING_VALUE = "__synapse_pending_icon_image__"
 
 type UseContentIconImageOptions = {
   contentType: SynapseContentType
@@ -41,7 +42,7 @@ function useContentIconImage({
   const blobUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!contentId || !iconImage || iconType !== "image") {
+    if (!contentId || !iconImage || iconImage === CONTENT_ICON_IMAGE_PENDING_VALUE || iconType !== "image") {
       return
     }
 
@@ -125,6 +126,8 @@ function useContentIconImage({
         blobUrlRef.current = url
         iconImageBytesRef.current = new Uint8Array(arrayBuffer)
         setIconImagePreview(url)
+        updateField?.("iconType", "image")
+        updateField?.("iconImage", CONTENT_ICON_IMAGE_PENDING_VALUE)
         logger.info("Content icon image updated.", {
           contentId,
           contentType,
@@ -146,7 +149,7 @@ function useContentIconImage({
           mode,
         })
       })
-  }, [contentId, contentType, logger, mode, setErrors])
+  }, [contentId, contentType, logger, mode, setErrors, updateField])
 
   const handleIconImageRemove = useCallback(() => {
     const hadIconImage = Boolean(blobUrlRef.current || iconImagePreview || iconImage || iconImageBytesRef.current)
@@ -184,4 +187,4 @@ function useContentIconImage({
   }
 }
 
-export { useContentIconImage }
+export { CONTENT_ICON_IMAGE_PENDING_VALUE, useContentIconImage }
