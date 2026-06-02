@@ -310,7 +310,7 @@ describe("Content capability domain", () => {
     expect(update?.inputSchema).not.toHaveProperty("oneOf")
     expect(update?.inputSchema).not.toHaveProperty("allOf")
     expect(update?.description).toContain("content_skill_get")
-    expect(update?.description).toContain("complete payload")
+    expect(update?.description).toContain("current icon/image appearance is preserved")
     expect(update?.description).toContain("name/title/description/category/content")
     expect(update?.description).toContain("sourceDirectoryPath")
     expect(update?.description).toContain("files and sourceDirectoryPath are mutually exclusive")

@@ -175,6 +175,41 @@ describe("content capability dispatcher", () => {
     }))
   })
 
+  it("preserves an existing image icon when updating a skill from sourceDirectoryPath without appearance fields", async () => {
+    const deps = createDeps({
+      detail: contentDetail({
+        id: "skill-1",
+        type: "skill",
+        title: "Existing Skill",
+        name: "existing-skill",
+        category: "development",
+        icon: "",
+        iconBg: "",
+        iconType: "image",
+        iconImage: "icon.png",
+      }),
+    })
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await dispatcher.dispatch("content.skill.update", {
+      id: "skill-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      sourceDirectoryPath: "/tmp/demo-skill",
+    }, { source: "mcp-stdio" })
+
+    expect(deps.prepareIconImageBytes).not.toHaveBeenCalled()
+    expect(deps.contentWriter.updateContent).toHaveBeenCalledWith(expect.objectContaining({
+      contentType: "skill",
+      payload: expect.objectContaining({
+        id: "skill-1",
+        icon: "",
+        iconBg: "",
+        iconType: "image",
+        iconImage: "icon.png",
+      }),
+    }))
+  })
+
   it("checks permission and audits allowed content mutations", async () => {
     const auditSink = {
       clearForTests: vi.fn(),

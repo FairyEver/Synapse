@@ -29,6 +29,8 @@ Skill 附件有两种方式：
 
 使用图片时，设置 `iconType` 为 `image`，并提供 `iconImagePath` 或 `iconImageBase64` 中的一个。Synapse 会校验图片输入，将图片居中裁剪并缩放为 256 x 256 PNG，最终保存为 `icon.png`。
 
+使用 `sourceDirectoryPath` 更新 Skill 且不更换图标时，可以省略外观字段；Synapse 会保留当前内置图标或图片图标。
+
 ## 权限与限制
 
 更新和删除只能作用于当前仓库身份创建的资源。若资源由其他用户创建，Content MCP 会拒绝修改。

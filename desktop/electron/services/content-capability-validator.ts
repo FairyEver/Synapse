@@ -174,7 +174,7 @@ function normalizeContentPayload(
     description: requireTrimmedString(params.description, "description"),
     category: normalizeCategory(contentType, params.category),
     content: requireTrimmedString(params.content, "content"),
-    ...normalizeIconFields(params),
+    ...normalizeIconFields(params, isUpdate),
   }
 
   if (contentType === "prompt") {
@@ -196,7 +196,7 @@ function normalizeContentPayload(
   } as SynapseCreateContentPayload | SynapseUpdateContentPayload
 }
 
-function normalizeIconFields(params: ContentToolParams): {
+function normalizeIconFields(params: ContentToolParams, isUpdate: boolean): {
   icon: string
   iconBg: string
   iconImage: string
@@ -218,6 +218,15 @@ function normalizeIconFields(params: ContentToolParams): {
 
   if (iconType === "image") {
     if (!iconImagePath && !iconImageBase64) {
+      const iconImage = optionalTrimmedString(params.iconImage)
+      if (isUpdate && iconImage === "icon.png") {
+        return {
+          iconType,
+          icon: "",
+          iconBg: "",
+          iconImage,
+        }
+      }
       throwInvalid("iconImage", "使用图片背景时必须提供 iconImagePath 或 iconImageBase64。")
     }
     if (iconImageBase64) {

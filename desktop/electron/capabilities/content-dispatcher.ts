@@ -189,9 +189,9 @@ async function updateContent(
   params: ContentToolParams,
 ): Promise<DispatchResult> {
   const id = requireTrimmedString(params.id, "id")
-  await assertOwnedByCurrentUser(deps, contentType, id)
+  const currentDetail = await assertOwnedByCurrentUser(deps, contentType, id)
 
-  const merged = await mergeSkillSourceParams(deps, contentType, params)
+  const merged = await mergeSkillSourceParams(deps, contentType, params, currentDetail)
   const payload = normalizeUpdateContentParams(contentType, merged.params)
 
   if (contentType === "skill" && merged.sourceFiles) {
@@ -269,6 +269,7 @@ async function mergeSkillSourceParams(
   deps: ContentCapabilityDispatcherDeps,
   contentType: SynapseContentType,
   params: ContentToolParams,
+  currentDetail?: SynapseContentDetail,
 ): Promise<SkillSourceMergeResult> {
   if (contentType !== "skill") {
     return { params }
@@ -302,8 +303,43 @@ async function mergeSkillSourceParams(
       ),
       category: pickString(params.category, metadata.category, defaultCategoryFor("skill")),
       content: pickString(params.content, parsed.body),
+      ...mergeExistingAppearanceParams(params, currentDetail),
     },
     sourceFiles: sourceDraft.files,
+  }
+}
+
+function mergeExistingAppearanceParams(
+  params: ContentToolParams,
+  currentDetail: SynapseContentDetail | undefined,
+): ContentToolParams {
+  if (!currentDetail) {
+    return {}
+  }
+
+  const iconType = optionalTrimmedString(params.iconType)
+  const hasImageInput = Boolean(optionalTrimmedString(params.iconImagePath) || optionalTrimmedString(params.iconImageBase64))
+  const hasBuiltInInput = Boolean(optionalTrimmedString(params.icon) || optionalTrimmedString(params.iconBg))
+  if (hasImageInput || hasBuiltInInput || iconType === "icon") {
+    return {}
+  }
+  if (iconType && iconType !== "image") {
+    return {}
+  }
+
+  if (currentDetail.iconType === "image" && currentDetail.iconImage) {
+    return {
+      iconType: "image",
+      icon: "",
+      iconBg: "",
+      iconImage: currentDetail.iconImage,
+    }
+  }
+
+  return {
+    iconType: "icon",
+    icon: currentDetail.icon,
+    iconBg: currentDetail.iconBg,
   }
 }
 
@@ -313,6 +349,9 @@ async function applyIconImageBytes(
   params: ContentToolParams,
 ): Promise<void> {
   if (payload.iconType !== "image") {
+    return
+  }
+  if (!optionalTrimmedString(params.iconImagePath) && !optionalTrimmedString(params.iconImageBase64)) {
     return
   }
 
@@ -330,7 +369,7 @@ async function assertOwnedByCurrentUser(
   deps: ContentCapabilityDispatcherDeps,
   contentType: SynapseContentType,
   contentId: string,
-): Promise<void> {
+): Promise<SynapseContentDetail> {
   const [identity, detail] = await Promise.all([
     deps.resolveCurrentIdentity(),
     deps.contentReader.getDetail(contentType, contentId),
@@ -344,6 +383,8 @@ async function assertOwnedByCurrentUser(
       },
     })
   }
+
+  return detail
 }
 
 function buildContentMutationSecurity(

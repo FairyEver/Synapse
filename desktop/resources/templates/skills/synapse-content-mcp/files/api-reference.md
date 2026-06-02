@@ -113,6 +113,8 @@ Update payloads use the same fields as create, plus:
 
 Updates are rejected unless the current repository profile created the resource.
 
+For `content_skill_update` with `sourceDirectoryPath`, omit appearance fields when you want to preserve the current built-in icon or image icon.
+
 ## Delete
 
 `content_rule_delete`, `content_skill_delete`, `content_prompt_delete`
@@ -147,3 +149,4 @@ or:
 ```
 
 Provide exactly one image input. The server validates the image and writes `icon.png`.
+When updating a Skill from `sourceDirectoryPath` without changing the icon, do not send image input; the existing image icon is preserved.

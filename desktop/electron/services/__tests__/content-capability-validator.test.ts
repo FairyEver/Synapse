@@ -73,6 +73,28 @@ describe("content capability validator", () => {
     })).toThrow(ContentCapabilityError)
   })
 
+  it("allows update payloads to preserve an existing icon image reference", () => {
+    const payload = normalizeUpdateContentParams("skill", {
+      id: "skill-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      name: "test-skill",
+      title: "Test Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "image",
+      iconImage: "icon.png",
+      content: "# Skill",
+      files: [],
+    })
+
+    expect(payload).toMatchObject({
+      icon: "",
+      iconBg: "",
+      iconType: "image",
+      iconImage: "icon.png",
+    })
+  })
+
   it("normalizes skill attachment paths and bytes", () => {
     const payload = normalizeCreateContentParams("skill", {
       name: "test-skill",

@@ -140,7 +140,7 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
     name: `content_${type}_update`,
     description:
       type === "skill"
-        ? `Update a Synapse skill created by the current repo profile. First call content_skill_get, pass latestHistoryDirname as baseHistoryDirname, and use the current detail to submit a complete payload. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive. Force update is not supported.`
+        ? `Update a Synapse skill created by the current repo profile. First call content_skill_get and pass latestHistoryDirname as baseHistoryDirname. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. When sourceDirectoryPath is used and appearance fields are omitted, the current icon/image appearance is preserved. files and sourceDirectoryPath are mutually exclusive. Force update is not supported.`
         : `Update a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force update is not supported.`,
     inputSchema: {
       type: "object",

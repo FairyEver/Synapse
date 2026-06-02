@@ -37,6 +37,7 @@ For image backgrounds:
 - Use `iconType: "image"`.
 - Provide exactly one of `iconImagePath` or `iconImageBase64`.
 - The MCP server validates the input as an image and center-crops/resizes it to a square PNG.
+- When updating a Skill with `sourceDirectoryPath` and not changing the icon, omit appearance fields to preserve the current icon or image.
 
 ## Skill Attachments
 
@@ -69,7 +70,7 @@ Skills require:
 - `description`
 - `category`
 - `content` or `sourceDirectoryPath`
-- appearance fields
+- appearance fields, except Skill updates with `sourceDirectoryPath` may omit them to preserve the current appearance
 - optional attachments
 
 Prompts require:
