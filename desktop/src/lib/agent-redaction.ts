@@ -6,6 +6,7 @@ const JSON_ASSIGNMENT_PATTERN = /(["'])([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)(["']
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
 const AUTHORIZATION_HEADER_PATTERN = /\b(authorization)(\s*:\s*)([^\r\n]+)/gi
 const COOKIE_HEADER_PATTERN = /\b((?:set-)?cookie)(\s*:\s*)([^\r\n]+)/gi
+const SK_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g
 
 function isSensitiveKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, "")
@@ -42,6 +43,7 @@ function redactSensitiveText(value: string): string {
     )
     .replace(/(--cookie(?:-jar)?\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/gi, `$1${REDACTED}`)
     .replace(BEARER_TOKEN_PATTERN, `Bearer ${REDACTED}`)
+    .replace(SK_KEY_PATTERN, "[key]")
 }
 
 function redactAuthorizationHeaderValue(value: string): string {

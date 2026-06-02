@@ -1303,11 +1303,12 @@ describe("ConversationRouter", () => {
     } as unknown as NonNullable<ConversationRouterDeps["logger"]>
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const { eventBus, events } = createEventBusRecorder()
+    const sdkError = "SDK failed sk-ant-test123456 at /Users/liyang/private/repo"
     const { conversations, router } = createRouter({
       agentEvents,
       eventBus,
       logger,
-      session: new ThrowingSendSession("SDK failed token=sk-secret at /Users/liyang/private/repo"),
+      session: new ThrowingSendSession(sdkError),
     })
 
     const result = await router.send(baseMessage("hello"))
@@ -1315,9 +1316,9 @@ describe("ConversationRouter", () => {
     const persisted = await agentEvents.list()
     const saved = await conversations.get(result.conversationId)
 
-    expect(result.error).toContain("token=[redacted]")
+    expect(result.error).toContain("[key]")
     expect(result.error).toContain("/Users/liyang/private/repo")
-    expect(result.error).not.toContain("sk-secret")
+    expect(result.error).not.toContain("sk-ant-test123456")
     expect(errorEvents).toEqual([
       expect.objectContaining({
         payload: expect.objectContaining({
@@ -1353,11 +1354,13 @@ describe("ConversationRouter", () => {
         sessionKey: "s1",
         conversationId: conversationId("local", "s1", "active"),
         errorName: "Error",
-        errorLength: "SDK failed token=sk-secret at /Users/liyang/private/repo".length,
+        errorLength: sdkError.length,
       }),
     )
-    expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-secret")
-    expect(JSON.stringify(persisted)).not.toContain("sk-secret")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(events)).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(persisted)).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(saved?.history)).not.toContain("sk-ant-test123456")
     expect(JSON.stringify(saved?.history)).toContain("/Users/liyang/private/repo")
   })
 
