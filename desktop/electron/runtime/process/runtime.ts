@@ -119,10 +119,18 @@ export class MainProcessRuntime implements ProcessRuntime {
       // Fire-and-forget. If `run` throws, mark crashed.
       Promise.resolve().then(() => descriptor.run?.(descriptor.init, handle)).catch((err) => {
         state.status = "crashed"
-        this.logger?.error("ProcessRuntime run failed.", {
+        const meta = {
           processId: descriptor.id,
           ...errorLogMeta(err),
-        })
+        }
+        if (this.logger) {
+          this.logger.error("ProcessRuntime run failed.", meta)
+        } else {
+          process.emitWarning("ProcessRuntime run failed.", {
+            code: "SYNAPSE_PROCESS_RUNTIME_RUN_FAILED",
+            detail: JSON.stringify(meta),
+          })
+        }
       })
     }
 

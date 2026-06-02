@@ -132,4 +132,37 @@ describe("MainProcessRuntime (T5.5)", () => {
       consoleError.mockRestore()
     }
   })
+
+  it("emits a sanitized process warning when run fails without a logger", async () => {
+    const emitWarning = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined)
+
+    try {
+      const rt = createMainProcessRuntime()
+      const handle = await rt.spawn({
+        id: "runner-process",
+        kind: "main",
+        init: {},
+        run: () => {
+          throw new Error("secret token sk-test at /Users/liyang/private")
+        },
+      })
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(handle.status).toBe("crashed")
+      expect(emitWarning).toHaveBeenCalledWith(
+        "ProcessRuntime run failed.",
+        expect.objectContaining({
+          code: "SYNAPSE_PROCESS_RUNTIME_RUN_FAILED",
+          detail: expect.stringContaining("runner-process"),
+        }),
+      )
+      const serialized = JSON.stringify(emitWarning.mock.calls)
+      expect(serialized).not.toContain("sk-test")
+      expect(serialized).not.toContain("/Users/liyang")
+    } finally {
+      emitWarning.mockRestore()
+    }
+  })
 })
