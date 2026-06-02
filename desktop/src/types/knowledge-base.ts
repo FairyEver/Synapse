@@ -121,12 +121,23 @@ export type SynapseKnowledgeBaseUploadRawFilesPayload = {
   filePaths: string[]
 }
 
+export type SynapseKnowledgeBaseRawSkipReason =
+  | "not-file"
+  | "not-directory"
+  | "read-error"
+  | "invalid-path"
+  | "collision"
+  | "trash-error"
+  | "symlink"
+  | "system-noise"
+  | "export-error"
+
 export type SynapseKnowledgeBaseRawMutationResult = {
   projectId: string
   entries: SynapseKnowledgeBaseRawEntry[]
   skipped: Array<{
     path: string
-    reason: "not-file" | "not-directory" | "read-error" | "invalid-path" | "collision" | "trash-error"
+    reason: SynapseKnowledgeBaseRawSkipReason
   }>
 }
 

@@ -89,6 +89,76 @@ export class KnowledgeBaseRawFileManager {
     return { entries: sortEntries(entries), skipped }
   }
 
+  async uploadItems(
+    rawRoot: string,
+    targetDirectoryPath: string,
+    itemPaths: readonly string[],
+  ): Promise<Omit<SynapseKnowledgeBaseRawMutationResult, "projectId">> {
+    const targetDirectory = resolveRawPath(rawRoot, targetDirectoryPath)
+    await assertNoSymlinkInRawPath(rawRoot, targetDirectoryPath)
+    await mkdir(targetDirectory, { recursive: true })
+    const entries: SynapseKnowledgeBaseRawEntry[] = []
+    const skipped: SynapseKnowledgeBaseRawMutationResult["skipped"] = []
+    for (const itemPath of itemPaths) {
+      await this.copyExternalItem(rawRoot, itemPath, targetDirectory, entries, skipped)
+    }
+    return { entries: sortEntries(entries), skipped }
+  }
+
+  private async copyExternalItem(
+    rawRoot: string,
+    sourcePath: string,
+    targetDirectory: string,
+    entries: SynapseKnowledgeBaseRawEntry[],
+    skipped: SynapseKnowledgeBaseRawMutationResult["skipped"],
+  ): Promise<void> {
+    try {
+      const resolvedSource = path.resolve(sourcePath)
+      const sourceStat = await lstat(resolvedSource)
+      if (isSystemNoiseFile(path.basename(resolvedSource))) {
+        skipped.push({ path: sourcePath, reason: "system-noise" })
+        return
+      }
+      if (sourceStat.isSymbolicLink()) {
+        skipped.push({ path: sourcePath, reason: "symlink" })
+        return
+      }
+      if (sourceStat.isFile()) {
+        const targetPath = await copyFileToAvailablePath(resolvedSource, targetDirectory, path.basename(resolvedSource))
+        entries.push(await entryForPath(rawRoot, targetPath, "file"))
+        return
+      }
+      if (sourceStat.isDirectory()) {
+        await this.copyExternalDirectory(rawRoot, resolvedSource, targetDirectory, entries, skipped)
+        return
+      }
+      skipped.push({ path: sourcePath, reason: "read-error" })
+    } catch (error) {
+      knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
+        itemName: path.basename(sourcePath),
+        reason: "read-error",
+        ...knowledgeBaseErrorMeta(error),
+      })
+      skipped.push({ path: sourcePath, reason: "read-error" })
+    }
+  }
+
+  private async copyExternalDirectory(
+    rawRoot: string,
+    sourceDirectory: string,
+    targetDirectory: string,
+    entries: SynapseKnowledgeBaseRawEntry[],
+    skipped: SynapseKnowledgeBaseRawMutationResult["skipped"],
+  ): Promise<void> {
+    const targetPath = path.join(targetDirectory, path.basename(sourceDirectory))
+    await mkdir(targetPath, { recursive: true })
+    entries.push(await entryForPath(rawRoot, targetPath, "directory"))
+    const children = await readdir(sourceDirectory, { withFileTypes: true })
+    for (const child of children) {
+      await this.copyExternalItem(rawRoot, path.join(sourceDirectory, child.name), targetPath, entries, skipped)
+    }
+  }
+
   async renameEntry(rawRoot: string, relativePath: string, newName: string): Promise<SynapseKnowledgeBaseRawEntry> {
     validateEntryName(newName)
     const source = resolveRawPath(rawRoot, relativePath)
@@ -172,6 +242,68 @@ export class KnowledgeBaseRawFileManager {
     }
     return { entries: sortEntries(entries), skipped }
   }
+
+  async exportEntries(
+    rawRoot: string,
+    relativePaths: readonly string[],
+    targetDirectoryPath: string,
+  ): Promise<Omit<SynapseKnowledgeBaseRawMutationResult, "projectId">> {
+    const targetDirectory = path.resolve(targetDirectoryPath)
+    await mkdir(targetDirectory, { recursive: true })
+    const entries: SynapseKnowledgeBaseRawEntry[] = []
+    const skipped: SynapseKnowledgeBaseRawMutationResult["skipped"] = []
+    for (const relativePath of relativePaths) {
+      try {
+        const source = resolveRawPath(rawRoot, relativePath)
+        await assertNoSymlinkInRawPath(rawRoot, relativePath)
+        await this.copyRawEntryForExport(rawRoot, source, targetDirectory, entries, skipped)
+      } catch (error) {
+        const reason = isInvalidRawPathError(error) ? "invalid-path" : "export-error"
+        knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
+          reason,
+          relativePath,
+          ...knowledgeBaseErrorMeta(error),
+        })
+        skipped.push({ path: relativePath, reason })
+      }
+    }
+    return { entries: sortEntries(entries), skipped }
+  }
+
+  private async copyRawEntryForExport(
+    rawRoot: string,
+    sourcePath: string,
+    targetDirectory: string,
+    entries: SynapseKnowledgeBaseRawEntry[],
+    skipped: SynapseKnowledgeBaseRawMutationResult["skipped"],
+  ): Promise<void> {
+    const sourceStat = await lstat(sourcePath)
+    const relativePath = normalizeRelativePath(path.relative(rawRoot, sourcePath))
+    if (isSystemNoiseFile(path.basename(sourcePath))) {
+      skipped.push({ path: relativePath, reason: "system-noise" })
+      return
+    }
+    if (sourceStat.isSymbolicLink()) {
+      skipped.push({ path: relativePath, reason: "symlink" })
+      return
+    }
+    if (sourceStat.isFile()) {
+      await copyFileToAvailablePath(sourcePath, targetDirectory, path.basename(sourcePath))
+      entries.push(await entryForPath(rawRoot, sourcePath, "file"))
+      return
+    }
+    if (!sourceStat.isDirectory()) {
+      skipped.push({ path: relativePath, reason: "export-error" })
+      return
+    }
+    const targetPath = path.join(targetDirectory, path.basename(sourcePath))
+    await mkdir(targetPath, { recursive: true })
+    entries.push(await entryForPath(rawRoot, sourcePath, "directory"))
+    const children = await readdir(sourcePath, { withFileTypes: true })
+    for (const child of children) {
+      await this.copyRawEntryForExport(rawRoot, path.join(sourcePath, child.name), targetPath, entries, skipped)
+    }
+  }
 }
 
 function resolveRawPath(rawRoot: string, rawRelativePath: string): string {
@@ -192,6 +324,10 @@ function normalizeRawPath(value: string): string {
 function joinRawPath(parent: string, name: string): string {
   const normalizedParent = normalizeRawPath(parent)
   return normalizedParent && normalizedParent !== "." ? `${normalizedParent}/${name}` : name
+}
+
+function isSystemNoiseFile(name: string): boolean {
+  return name === ".DS_Store" || name === "Thumbs.db" || name === "desktop.ini"
 }
 
 function validateEntryName(name: string): void {
