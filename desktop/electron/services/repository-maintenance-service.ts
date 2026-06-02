@@ -177,13 +177,13 @@ function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | 
     return null
   }
 
+  const iconType = rawValue.iconType === "image" ? "image" : "icon"
+
   if (
     rawValue.schemaVersion !== 1
     || !isNonEmptyString(rawValue.title)
     || !isNonEmptyString(rawValue.description)
     || !isNonEmptyString(rawValue.category)
-    || !isNonEmptyString(rawValue.icon)
-    || !isNonEmptyString(rawValue.iconBg)
     || !isNonEmptyString(rawValue.modifiedBy)
     || !isNonEmptyString(rawValue.modifiedAt)
     || typeof rawValue.deleted !== "boolean"
@@ -191,10 +191,16 @@ function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | 
     return null
   }
 
+  if (iconType === "icon" && (!isNonEmptyString(rawValue.icon) || !isNonEmptyString(rawValue.iconBg))) {
+    return null
+  }
+
   const rawName = rawValue.name
   const trimmedName = typeof rawName === "string" ? rawName.trim() : ""
   const rawUsage = rawValue.usage
   const trimmedUsage = typeof rawUsage === "string" ? rawUsage.trim() : ""
+  const rawIconImage = rawValue.iconImage
+  const trimmedIconImage = typeof rawIconImage === "string" ? rawIconImage.trim() : ""
 
   return {
     schemaVersion: 1,
@@ -203,8 +209,10 @@ function parseSnapshotRecord(rawValue: unknown): SynapseContentSnapshotRecord | 
     ...(trimmedUsage.length > 0 ? { usage: trimmedUsage } : {}),
     description: rawValue.description.trim(),
     category: rawValue.category.trim(),
-    icon: rawValue.icon.trim(),
-    iconBg: rawValue.iconBg.trim(),
+    icon: typeof rawValue.icon === "string" ? rawValue.icon.trim() : "",
+    iconBg: typeof rawValue.iconBg === "string" ? rawValue.iconBg.trim() : "",
+    iconType,
+    ...(trimmedIconImage.length > 0 ? { iconImage: trimmedIconImage } : {}),
     modifiedBy: rawValue.modifiedBy.trim(),
     modifiedByDisplayName:
       typeof rawValue.modifiedByDisplayName === "string" ? rawValue.modifiedByDisplayName.trim() : "",
