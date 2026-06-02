@@ -10,6 +10,7 @@ import {
   validateColumnName,
   validateName,
 } from "./validators"
+import { sanitizeDatabaseLogPath } from "./logging"
 import { createMainLogger } from "../services/log-store"
 
 const logger = createMainLogger("database.import-export")
@@ -311,7 +312,7 @@ export class ImportExportManager {
       tempDb = null
 
       this.reopenDatabase(snapshotPath)
-      logger.info("Database imported.", { source: sourcePath })
+      logger.info("Database imported.", { source: sanitizeDatabaseLogPath(sourcePath) })
     } finally {
       tempDb?.close()
       removeImportSnapshot(snapshotPath)
@@ -360,7 +361,7 @@ export class ImportExportManager {
     ].join("\n")
 
     writeFileSync(targetPath, sql, "utf8")
-    logger.info("Table exported.", { table, targetPath })
+    logger.info("Table exported.", { table, targetPath: sanitizeDatabaseLogPath(targetPath) })
   }
 
   inspectTableImport(sourcePath: string): DatabaseTableImportInspection {
@@ -376,7 +377,7 @@ export class ImportExportManager {
   importTable(sourcePath: string): string {
     const payload = this.readTableExportPayload(sourcePath)
     this.replaceTableFromExport(payload)
-    logger.info("Table imported.", { table: payload.table.name, sourcePath })
+    logger.info("Table imported.", { table: payload.table.name, sourcePath: sanitizeDatabaseLogPath(sourcePath) })
     return payload.table.name
   }
 

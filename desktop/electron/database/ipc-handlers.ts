@@ -5,6 +5,7 @@ import { databaseService } from "./service"
 import { getHttpPort } from "./http-server"
 import { getMcpServers, getMcpStatus, openMcpSettings, registerMcp } from "./mcp-installer"
 import { getMcpServerPort, isMcpServerRunning, getMcpServerUrl } from "./mcp-server"
+import { sanitizeDatabaseLogPath } from "./logging"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
 import type { DatabaseMcpTarget } from "../../src/types/database"
@@ -310,7 +311,7 @@ function registerDatabaseHandlers(): void {
     try {
       databaseService.exportDatabase(result.filePath)
       recordAudit(event, "export", result.filePath, "allowed")
-      logger.info("Database exported.", { path: result.filePath })
+      logger.info("Database exported.", { path: sanitizeDatabaseLogPath(result.filePath) })
       return { success: true, path: result.filePath }
     } catch (error) {
       recordAudit(event, "export", result.filePath, "failed", error instanceof Error ? error.message : String(error))
