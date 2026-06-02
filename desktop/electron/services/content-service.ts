@@ -102,8 +102,13 @@ class ContentService {
       return []
     }
 
-    await contentIndexService.syncIndex(context.repository)
-    return contentIndexService.listDeletedContent(context.repository, contentType) as Promise<SynapseContentMeta<T>[]>
+    try {
+      await contentIndexService.syncIndex(context.repository)
+      return contentIndexService.listDeletedContent(context.repository, contentType) as Promise<SynapseContentMeta<T>[]>
+    } catch (error) {
+      logger.warn("Failed to load deleted repository content, returning empty list.", { contentType, error })
+      return []
+    }
   }
 
   async getContent(contentType: SynapseContentType, contentId: string): Promise<SynapseTextContentFile> {
