@@ -93,9 +93,11 @@ function RepoIdRecoveryDialog({ open, onOpenChange }: RepoIdRecoveryDialogProps)
             autoFocus
             aria-invalid={error ? true : undefined}
             onChange={(event) => {
-              setValue(event.target.value)
-              setError(validateUserIdInput(event.target.value))
+              const nextValue = event.target.value
+              setValue(nextValue)
+              if (error) setError(validateUserIdInput(nextValue))
             }}
+            onBlur={() => setError(validateUserIdInput(value))}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !isSubmitting && !formatError && activeRepository) {
                 event.preventDefault()
