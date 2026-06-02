@@ -83,7 +83,7 @@ export class TaskSchedulerService {
 
   async schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
     const tasks = await this.deps.tasks.list()
-    return tasks.map((task) => this.withRuntimeState(task))
+    return Promise.all(tasks.map((task) => this.withRuntimeState(task)))
   }
 
   async schedulerTaskGet(id: string): Promise<ScheduledTaskEntry | null> {
@@ -406,16 +406,36 @@ export class TaskSchedulerService {
     return this.deps.now?.() ?? new Date()
   }
 
-  private withRuntimeState(task: ScheduledTaskEntry): ScheduledTaskEntry {
+  private async withRuntimeState(task: ScheduledTaskEntry): Promise<ScheduledTaskEntry> {
     const validation = this.validateTask(task)
     const baseTask = validation.status === "valid"
       ? task
-      : { ...task, enabled: false, validation }
+      : await this.disableInvalidTask(task, validation)
     if (!this.runningTaskIds.has(task.id)) return baseTask
     const runId = this.deps.execution.getActiveRunIdForTask(task.id)
     return {
       ...baseTask,
       activeRun: { status: "running", id: runId },
+    }
+  }
+
+  private async disableInvalidTask(
+    task: ScheduledTaskEntry,
+    validation: ScheduledTaskValidation,
+  ): Promise<ScheduledTaskEntry> {
+    if (!task.enabled) return { ...task, enabled: false, validation }
+    this.cancel(task.id)
+    try {
+      const disabledTask = await this.deps.tasks.setEnabled(task.id, false)
+      this.emitTaskChanged({ taskId: task.id, reason: "disabled" })
+      return { ...disabledTask, validation }
+    } catch (error) {
+      this.deps.logger?.warn?.("Failed to persist disabled state for invalid scheduled task.", {
+        taskId: task.id,
+        boundary: "task-scheduler-disable-invalid",
+        ...errorMetadata(error),
+      })
+      return { ...task, enabled: false, validation }
     }
   }
 

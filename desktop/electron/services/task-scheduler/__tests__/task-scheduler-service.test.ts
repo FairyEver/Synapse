@@ -229,8 +229,10 @@ describe("TaskSchedulerService", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("background failed")
   })
 
-  it("marks invalid stored tasks as disabled without mutating stored data", async () => {
-    const harness = createHarness()
+  it("persists disabled state when listing invalid stored tasks", async () => {
+    const emit = vi.fn()
+    const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
+    const harness = createHarness({ eventBus })
     await harness.taskItems.upsert(createTask({
       id: "task:1",
       enabled: true,
@@ -248,12 +250,41 @@ describe("TaskSchedulerService", () => {
       },
     }))
     expect(await harness.taskItems.get("task:1")).toEqual(expect.objectContaining({
+      enabled: false,
+      action: { type: "builtin.test", config: {} },
+    }))
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "scheduler",
+        type: "scheduler.taskChanged",
+        payload: { taskId: "task:1", reason: "disabled" },
+      }),
+      { backpressure: "coalesce" },
+    )
+
+    await harness.service.start()
+    expect(harness.service.schedulerRuntimeInspect().timers).not.toContain("task:1")
+  })
+
+  it("persists disabled state when getting an invalid stored task", async () => {
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
       enabled: true,
       action: { type: "builtin.test", config: {} },
     }))
 
-    await harness.service.start()
-    expect(harness.service.schedulerRuntimeInspect().timers).not.toContain("task:1")
+    const task = await harness.service.schedulerTaskGet("task:1")
+
+    expect(task).toEqual(expect.objectContaining({
+      id: "task:1",
+      enabled: false,
+      validation: {
+        status: "needs_update",
+        issues: [{ field: "action.config", message: "检查执行内容" }],
+      },
+    }))
+    expect(await harness.taskItems.get("task:1")).toEqual(expect.objectContaining({ enabled: false }))
   })
 
   it("blocks manual runs for invalid stored tasks", async () => {
