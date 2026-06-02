@@ -7,14 +7,14 @@ description: Use when working in the Synapse repository and the user asks to rel
 
 ## Purpose
 
-Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report download links from the release repository and open the matching GitHub Release page.
+Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report Tencent Cloud COS/CDN download links from the matching GitHub Release body and open the matching GitHub Release page.
 
 Use this skill only for release/publish commands in `/Users/liyang/Documents/code/github/Synapse`.
 
 ## Fixed Configuration
 
 - Source repository: `FairyEver/Synapse`
-- Release repository: `FairyEver/SynapseAppRelease`
+- Release index repository: `FairyEver/SynapseAppRelease`
 - Workflows: `CI` and `Release`
 - Commit command: `pnpm bump:commit:push`
 - Maximum loop count: `10`
@@ -22,10 +22,14 @@ Use this skill only for release/publish commands in `/Users/liyang/Documents/cod
 - Pending notes file: `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md`
 - Release notes archive directory: `/Users/liyang/Documents/code/github/Synapse/docs/releases`
 - Release page URL template: `https://github.com/FairyEver/SynapseAppRelease/releases/tag/$EXPECTED_TAG`
+- CDN base URL: `https://desktop.release.synapse.d2.pub/`
+- COS bucket: `synapse-desktop-release-1252371654`
+
+The current Release workflow no longer stores installer binaries as GitHub Release assets. It builds platform artifacts as short-lived GitHub Actions artifacts, prepares `cdn-release/`, uploads installers, update metadata, `manifest.json`, and `release-body.md` to Tencent Cloud COS, refreshes/verifies CDN, then creates or edits the GitHub Release body in `FairyEver/SynapseAppRelease`. An empty GitHub `assets` array is expected and must not be treated as a release failure.
 
 ## Release Loop
 
-Track the current loop number, latest `EXPECTED_TAG`, `CI_RUN_ID`, `RELEASE_RUN_ID`, and the most recent failure summary.
+Track the current loop number, latest `EXPECTED_TAG`, `CI_RUN_ID`, `RELEASE_RUN_ID`, matching release body, CDN download links, and the most recent failure summary.
 
 ### 1. Collect Pending Release Notes
 
@@ -138,6 +142,13 @@ gh run watch "$RELEASE_RUN_ID" --repo FairyEver/Synapse --exit-status
 gh run view "$RELEASE_RUN_ID" --repo FairyEver/Synapse --json status,conclusion,jobs
 ```
 
+Expect the Release workflow to include these logical stages:
+
+- Build macOS installer.
+- Build Windows installer.
+- Publish release: downloads Actions artifacts, prepares CDN files, installs COSCLI, uploads to COS, refreshes/verifies CDN, and creates/edits the GitHub Release body.
+- Notify package completion.
+
 If Release fails, collect failed job logs with:
 
 ```bash
@@ -146,9 +157,9 @@ gh run view "$RELEASE_RUN_ID" --repo FairyEver/Synapse --log --job="<JOB_ID>" 2>
 
 Analyze, fix, commit, and return to workflow discovery.
 
-### 8. Fetch Download Links
+### 8. Fetch CDN Download Links
 
-After Release succeeds, wait up to 3 minutes for the matching release in `FairyEver/SynapseAppRelease`. Record whether the matching `EXPECTED_TAG` release was found:
+After Release succeeds, wait up to 3 minutes for the matching release index page in `FairyEver/SynapseAppRelease`. Record whether the matching `EXPECTED_TAG` release was found:
 
 ```bash
 for i in $(seq 1 18); do
@@ -168,27 +179,41 @@ RELEASE_JSON=$(gh release list --repo FairyEver/SynapseAppRelease \
   --limit 1 --json tagName,assets,body | jq '.[0]')
 ```
 
-Extract links from `assets`:
+Extract links from `.body`, not `.assets`. The normal body is generated from `desktop/scripts/prepare-cdn-release-artifacts.mjs` and contains CDN URLs like:
+
+- `https://desktop.release.synapse.d2.pub/vX.Y.Z/Synapse-X.Y.Z-mac-arm64.dmg`
+- `https://desktop.release.synapse.d2.pub/vX.Y.Z/Synapse-X.Y.Z-mac-arm64.zip`
+- `https://desktop.release.synapse.d2.pub/vX.Y.Z/Synapse-X.Y.Z-win-x64.exe`
+- `https://desktop.release.synapse.d2.pub/latest.yml`
+- `https://desktop.release.synapse.d2.pub/latest-mac.yml`
+
+Classify body links this way:
 
 - Windows: `.exe`, excluding `blockmap`
-- macOS Apple Silicon: filename contains `arm64` and ends with `.dmg`
-- macOS Intel / Universal: filename ends with `.dmg` and does not contain `arm64`
+- macOS Apple Silicon DMG: filename contains `mac-arm64` and ends with `.dmg`
+- macOS Apple Silicon ZIP: filename contains `mac-arm64` and ends with `.zip`
+- Update metadata: `latest.yml` and `latest-mac.yml`
 
-Final report must include the release version and every found download link. If a platform asset is missing, say which one was not found.
+When editing release notes later, preserve the exact CDN URLs from the current body. Prefer extracting URLs from `RELEASE_JSON.body` and reusing them verbatim instead of reconstructing them from version strings.
 
-### 9. Publish And Consume Pending Release Notes
+Do not report empty GitHub assets as missing platform assets. Final report must include the release version, every found CDN download link, and any expected CDN link missing from the body.
+
+### 9. Publish Product Notes And Consume Pending Release Notes
 
 Only run this section after:
 
 - CI succeeded.
 - Release succeeded.
 - The matching GitHub Release for `EXPECTED_TAG` was found in `FairyEver/SynapseAppRelease`.
+- CDN links were extracted from the matching release body.
 
 Do not publish, archive, reset, or clear pending notes when the download-link lookup fell back to the latest release because the matching `EXPECTED_TAG` release was unavailable. In that case, report that pending notes were left untouched for retry.
 
-If pending release notes contain meaningful bullets, generate a product-facing Markdown release body using this structure. Omit empty sections:
+If pending release notes contain meaningful bullets, generate a product-facing Markdown release body that preserves the existing CDN download section. Put product notes before the CDN links using this structure and omit empty sections:
 
 ```markdown
+# Synapse vX.Y.Z
+
 ## 新增功能
 
 - ...
@@ -204,9 +229,26 @@ If pending release notes contain meaningful bullets, generate a product-facing M
 ## 技术调整
 
 - ...
+
+## 下载链接
+
+macOS Apple Silicon DMG:
+<existing CDN dmg link>
+
+macOS Apple Silicon ZIP:
+<existing CDN zip link>
+
+Windows x64:
+<existing CDN exe link>
+
+更新元数据：
+<existing latest.yml link>
+<existing latest-mac.yml link>
 ```
 
 Use concise user-facing wording. Do not include source paths, commit hashes, branch names, raw command output, or implementation details unless they are needed to explain compatibility or release risk.
+
+Important: `gh release edit --notes-file` replaces the whole Release body. Never update the body with only pending notes; always include the CDN download links extracted in step 8. If you cannot confidently preserve the download links, do not edit the release body and do not clear pending notes.
 
 Write the generated notes to a temporary file, then update the release body:
 
@@ -247,7 +289,7 @@ After `gh release edit` succeeds:
 
 This consume commit must happen after the package release succeeds. It must not be folded into the version bump commit that triggers the release. If archive, reset, commit, or push fails, report the exact state and do not claim the pending notes were consumed.
 
-If pending release notes were empty at release start, skip archive/reset and say that no pending release notes were consumed.
+If pending release notes were empty at release start, do not edit the Release body; keep the workflow-generated CDN body and say that no pending release notes were consumed.
 
 ### 10. Open The GitHub Release Page
 
@@ -256,7 +298,8 @@ Only run this section after:
 - CI succeeded.
 - Release succeeded.
 - The matching GitHub Release for `EXPECTED_TAG` was found in `FairyEver/SynapseAppRelease`.
-- Pending release notes were either published and consumed successfully, or were empty at release start.
+- CDN links were found in the matching release body.
+- Pending release notes were either published while preserving CDN links and consumed successfully, or were empty at release start.
 
 Open the matching release page in the user's system default browser. Do not use the Codex in-app browser, Browser plugin, browser MCP, or `node_repl` browser session for this step; on the user's Mac, `open "$RELEASE_URL"` should normally launch Google Chrome because it is the default browser.
 
@@ -277,7 +320,8 @@ If opening the browser fails or no opener command exists, keep the release succe
 
 ## Exit Conditions
 
-- Success: CI and Release both pass, release assets are found or explicitly missing, pending release notes are either published and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, and the final response includes version and download links.
+- Success: CI and Release both pass, the matching GitHub Release is found, Tencent Cloud COS/CDN download links are extracted from the Release body, pending release notes are either published while preserving CDN links and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, and the final response includes version and download links.
 - Loop limit: after 10 loops, stop and report unresolved status plus the latest failure summary.
 - Commit failure: if `pnpm bump:commit:push` fails, report the command output and stop.
+- Download-link failure: if the matching Release exists but expected CDN links are missing from the body, report the body state and do not consume pending notes.
 - Release notes failure: if GitHub Release body update, archive, reset, commit, or push fails after the package release succeeds, report the failure and do not clear pending notes unless the successful state can be proven.
