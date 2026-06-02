@@ -196,6 +196,37 @@ describe("DatabaseService table descriptions", () => {
     })
   })
 
+  it("rejects timestamp writes with invalid calendar dates", () => {
+    service.databaseTableCreate("events", [
+      { name: "occurred_at", kind: "timestamp" },
+    ])
+
+    expect(() => service.databaseRowCreate("events", { occurred_at: "2026-02-30T00:00:00Z" })).toThrow("Invalid timestamp")
+    expect(() => service.databaseRowsUpdate(
+      "events",
+      { field: "id", op: "=", value: 1 },
+      { occurred_at: "2026-04-31T00:00:00Z" },
+      { dryRun: true },
+    )).toThrow("Invalid timestamp")
+
+    service.databaseRowCreate("events", { occurred_at: "2026-02-28T00:00:00Z" })
+    expect(service.databaseRowList({ table: "events" }).rows[0]).toMatchObject({
+      occurred_at: "2026-02-28T00:00:00Z",
+    })
+  })
+
+  it("rejects timestamp column defaults with invalid calendar dates", () => {
+    service.databaseTableCreate("milestones", [
+      { name: "title", kind: "text" },
+    ])
+
+    expect(() => service.databaseColumnCreate("milestones", {
+      name: "due_at",
+      kind: "timestamp",
+      default: "2026-02-30T00:00:00Z",
+    })).toThrow("Invalid timestamp")
+  })
+
   it("allows system-table-looking tokens inside SQL string literals", () => {
     const result = service.databaseSqlExecute("SELECT 'contains _not_a_table in text' AS note")
 

@@ -87,6 +87,12 @@ function validateTimestampString(v: unknown): string {
   if (!TIMESTAMP_PATTERN.test(s) || Number.isNaN(Date.parse(s))) {
     throw new Error(`Invalid timestamp format: "${s}". Expected ISO 8601`)
   }
+  const [datePart] = s.split("T")
+  const [y, m, d] = datePart.split("-").map(Number)
+  const date = new Date(y, m - 1, d)
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
+    throw new Error(`Invalid timestamp: "${s}"`)
+  }
   return s
 }
 
