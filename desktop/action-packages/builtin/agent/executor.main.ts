@@ -126,7 +126,7 @@ function persistableAgentError(
   return `Agent runtime error: ${truncated}`
 }
 
-function scheduledTimeoutMs(timeoutMins: number | null | undefined): number {
-  if (timeoutMins === null) return 0
+function scheduledTimeoutMs(timeoutMins: number | null | undefined): number | undefined {
+  if (timeoutMins === null) return undefined
   return (timeoutMins ?? 60) * 60_000
 }

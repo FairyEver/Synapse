@@ -126,7 +126,7 @@ describe("builtin agent action executor", () => {
     })
 
     expect(runtime.sendScheduled).toHaveBeenCalledWith(expect.objectContaining({
-      timeoutMs: 0,
+      timeoutMs: undefined,
     }))
   })
 

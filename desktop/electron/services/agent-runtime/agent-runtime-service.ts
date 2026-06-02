@@ -306,8 +306,9 @@ export class AgentRuntimeService {
     const onExternalAbort = () => ac.abort()
     externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
 
-    const timeout = input.timeoutMs > 0
-      ? setTimeout(() => ac.abort(), input.timeoutMs)
+    const timeoutMs = input.timeoutMs
+    const timeout = timeoutMs !== undefined && timeoutMs > 0
+      ? setTimeout(() => ac.abort(), timeoutMs)
       : undefined
 
     try {
@@ -375,14 +376,14 @@ export class AgentRuntimeService {
         const name = formatScheduledSessionName(input, this.deps.now?.() ?? new Date())
         result = await this.conversationRouter.sendNewSession(message, name, {
           abortSignal: ac.signal,
-          liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
+          liveEventTimeoutMs: scheduledLiveEventTimeoutMs(timeoutMs),
           onConversationCreated: captureConversationTarget,
         })
       } else {
         try {
           result = await this.conversationRouter.sendToConversation(message, input.lastConversationId, {
             abortSignal: ac.signal,
-            liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
+            liveEventTimeoutMs: scheduledLiveEventTimeoutMs(timeoutMs),
           })
         } catch (resumeError) {
           const isNotFound = resumeError instanceof Error
@@ -392,7 +393,7 @@ export class AgentRuntimeService {
           const name = formatScheduledSessionName(input, this.deps.now?.() ?? new Date())
           result = await this.conversationRouter.sendNewSession(message, name, {
             abortSignal: ac.signal,
-            liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
+            liveEventTimeoutMs: scheduledLiveEventTimeoutMs(timeoutMs),
             onConversationCreated: captureConversationTarget,
           })
         }
@@ -407,7 +408,7 @@ export class AgentRuntimeService {
           conversationId: result.conversationId,
           sessionKey: resultSessionKey,
           status: "timeout",
-          error: `Execution exceeded ${input.timeoutMs}ms timeout`,
+          error: `Execution exceeded ${timeoutMs ?? 0}ms timeout`,
           durationMs: Date.now() - startMs,
           usage: result.usage,
           costUsd: result.costUsd,
@@ -445,7 +446,7 @@ export class AgentRuntimeService {
         sessionKey,
         status: isTimeout ? "timeout" : "error",
         error: isTimeout
-          ? `Execution exceeded ${input.timeoutMs}ms timeout`
+          ? `Execution exceeded ${timeoutMs ?? 0}ms timeout`
           : sanitizeError(errorMessageText),
         durationMs: Date.now() - startMs,
       }
@@ -1293,8 +1294,8 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function scheduledLiveEventTimeoutMs(timeoutMs: number): number | undefined {
-  return timeoutMs > 0 ? undefined : 0
+function scheduledLiveEventTimeoutMs(timeoutMs: number | undefined): number | undefined {
+  return timeoutMs !== undefined && timeoutMs > 0 ? undefined : 0
 }
 
 function scheduledConversationTarget(

@@ -286,7 +286,7 @@ export type ScheduledAgentSendInput = {
   readonly mode: string
   readonly prompt: string
   readonly sessionPolicy: "fresh" | "resume"
-  readonly timeoutMs: number
+  readonly timeoutMs?: number
   readonly lastConversationId?: string
   readonly abortSignal?: AbortSignal
   readonly providerId?: string
