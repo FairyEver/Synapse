@@ -1701,7 +1701,7 @@ class TimeoutSession implements AgentLiveSession {
 class TrackingTimeoutSession extends TimeoutSession {
   readonly timeoutCalls: number[] = []
 
-  override nextEventWithTimeout(timeoutMs: number): Promise<AgentEvent | null> {
+  nextEventWithTimeout(timeoutMs: number): Promise<AgentEvent | null> {
     this.timeoutCalls.push(timeoutMs)
     return Promise.resolve(null)
   }
