@@ -126,6 +126,7 @@ jobs:
       TENCENT_CLOUD_SECRET_KEY: ${{ secrets.TENCENT_CLOUD_SECRET_KEY }}
       TENCENT_CLOUD_COS_BUCKET: synapse-desktop-release-1252371654
       TENCENT_CLOUD_COS_REGION: ap-beijing
+      TENCENT_CLOUD_COS_ENDPOINT: cos.accelerate.myqcloud.com
       TENCENT_CLOUD_CDN_DOMAIN: desktop.release.synapse.d2.pub
     steps:
       - name: Checkout repository
@@ -198,15 +199,17 @@ jobs:
             printf '    - name: %s\n' "$TENCENT_CLOUD_COS_BUCKET"
             printf '%s\n' '      alias: release'
             printf '      region: %s\n' "$TENCENT_CLOUD_COS_REGION"
-            printf '      endpoint: cos.%s.myqcloud.com\n' "$TENCENT_CLOUD_COS_REGION"
+            printf '      endpoint: %s\n' "$TENCENT_CLOUD_COS_ENDPOINT"
             printf '%s\n' '      ofs: false'
           } > "$COS_CONFIG"
 
-          "$RUNNER_TEMP/coscli" cp "cdn-release/v$VERSION/" "cos://release/v$VERSION/" -r -c "$COS_CONFIG"
-          "$RUNNER_TEMP/coscli" cp "cdn-release/latest.yml" "cos://release/latest.yml" -c "$COS_CONFIG"
-          "$RUNNER_TEMP/coscli" cp "cdn-release/latest-mac.yml" "cos://release/latest-mac.yml" -c "$COS_CONFIG"
-          "$RUNNER_TEMP/coscli" cp "cdn-release/manifest.json" "cos://release/v$VERSION/manifest.json" -c "$COS_CONFIG"
-          "$RUNNER_TEMP/coscli" cp "cdn-release/release-body.md" "cos://release/v$VERSION/release-body.md" -c "$COS_CONFIG"
+          COSCLI_UPLOAD_FLAGS=(--part-size 16 --thread-num 16 --routines 4 --err-retry-num 3 --err-retry-interval 3)
+
+          "$RUNNER_TEMP/coscli" cp "cdn-release/v$VERSION/" "cos://release/v$VERSION/" -r -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/latest.yml" "cos://release/latest.yml" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/latest-mac.yml" "cos://release/latest-mac.yml" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/manifest.json" "cos://release/v$VERSION/manifest.json" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/release-body.md" "cos://release/v$VERSION/release-body.md" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
 
       - name: Refresh and verify CDN
         env:
