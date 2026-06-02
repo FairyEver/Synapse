@@ -173,6 +173,51 @@ describe("TaskSchedulerService", () => {
     })
   })
 
+  it("logs task CRUD operations with structured service context", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ logger })
+
+    const created = await harness.service.schedulerTaskCreate({
+      name: "Build",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+      action: { type: "builtin.test", config: { message: "ok" } },
+    })
+    await harness.service.schedulerTaskUpdate(created.id, { enabled: false })
+    await harness.service.schedulerTaskEnable(created.id)
+    await harness.service.schedulerTaskDisable(created.id)
+    await harness.service.deleteTask(created.id)
+
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task created.", expect.objectContaining({
+      boundary: "task-scheduler.task-create",
+      taskId: created.id,
+      actionType: "builtin.test",
+      triggerType: "builtin.interval",
+      enabled: true,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task updated.", expect.objectContaining({
+      boundary: "task-scheduler.task-update",
+      taskId: created.id,
+      patchKeys: ["enabled"],
+      enabled: false,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task enabled state changed.", expect.objectContaining({
+      boundary: "task-scheduler.task-set-enabled",
+      taskId: created.id,
+      enabled: true,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task enabled state changed.", expect.objectContaining({
+      boundary: "task-scheduler.task-set-enabled",
+      taskId: created.id,
+      enabled: false,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task deleted.", expect.objectContaining({
+      boundary: "task-scheduler.task-delete",
+      taskId: created.id,
+      deleted: true,
+    }))
+  })
+
   it("stops active runs when the scheduler service stops", async () => {
     const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))

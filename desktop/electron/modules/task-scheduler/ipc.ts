@@ -245,49 +245,82 @@ export const taskSchedulerIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.array(taskSchema),
-      handler: async (ctx) => ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskList(),
+      handler: async (ctx) => loggedSchedulerIpc(
+        "synapse:task-scheduler:tasks:list",
+        "task-scheduler.ipc.list-tasks",
+        {},
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskList(),
+      ),
     },
     getTask: {
       channel: "synapse:task-scheduler:tasks:get",
       kind: "invoke",
       request: taskIdRequestSchema,
       response: taskSchema.nullable(),
-      handler: async (ctx, request: TaskIdRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskGet(request.taskId),
+      handler: async (ctx, request: TaskIdRequest) => loggedSchedulerIpc(
+        "synapse:task-scheduler:tasks:get",
+        "task-scheduler.ipc.get-task",
+        { taskId: request.taskId },
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskGet(request.taskId),
+      ),
     },
     createTask: {
       channel: "synapse:task-scheduler:tasks:create",
       kind: "invoke",
       request: createTaskInputSchema,
       response: taskSchema,
-      handler: async (ctx, request: CreateTaskInput) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskCreate(request),
+      handler: async (ctx, request: CreateTaskInput) => loggedSchedulerIpc(
+        "synapse:task-scheduler:tasks:create",
+        "task-scheduler.ipc.create-task",
+        {
+          actionType: request.action.type,
+          triggerType: request.trigger.type,
+          enabled: request.enabled,
+          taskNameLength: request.name.length,
+        },
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskCreate(request),
+      ),
     },
     updateTask: {
       channel: "synapse:task-scheduler:tasks:update",
       kind: "invoke",
       request: updateTaskRequestSchema,
       response: taskSchema,
-      handler: async (ctx, request: UpdateTaskRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskUpdate(request.id, request.patch),
+      handler: async (ctx, request: UpdateTaskRequest) => loggedSchedulerIpc(
+        "synapse:task-scheduler:tasks:update",
+        "task-scheduler.ipc.update-task",
+        {
+          taskId: request.id,
+          patchKeys: Object.keys(request.patch),
+        },
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskUpdate(request.id, request.patch),
+      ),
     },
     deleteTask: {
       channel: "synapse:task-scheduler:tasks:delete",
       kind: "invoke",
       request: taskIdRequestSchema,
       response: z.object({ deleted: z.boolean() }),
-      handler: async (ctx, request: TaskIdRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").deleteTask(request.taskId),
+      handler: async (ctx, request: TaskIdRequest) => loggedSchedulerIpc(
+        "synapse:task-scheduler:tasks:delete",
+        "task-scheduler.ipc.delete-task",
+        { taskId: request.taskId },
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").deleteTask(request.taskId),
+      ),
     },
     setTaskEnabled: {
       channel: "synapse:task-scheduler:tasks:set-enabled",
       kind: "invoke",
       request: taskIdRequestSchema.extend({ enabled: z.boolean() }),
       response: taskSchema,
-      handler: async (ctx, request: SetTaskEnabledRequest) =>
-        request.enabled
+      handler: async (ctx, request: SetTaskEnabledRequest) => loggedSchedulerIpc(
+        "synapse:task-scheduler:tasks:set-enabled",
+        "task-scheduler.ipc.set-task-enabled",
+        { taskId: request.taskId, enabled: request.enabled },
+        () => request.enabled
           ? ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskEnable(request.taskId)
           : ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerTaskDisable(request.taskId),
+      ),
     },
     runTask: {
       channel: "synapse:task-scheduler:tasks:run",
@@ -315,8 +348,12 @@ export const taskSchedulerIpcModule: IpcModule = {
       kind: "invoke",
       request: z.object({ runId: z.string().min(1) }),
       response: z.object({ stopped: z.boolean() }),
-      handler: async (ctx, request: StopRunRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").stopRun(request.runId),
+      handler: async (ctx, request: StopRunRequest) => loggedSchedulerIpc(
+        "synapse:task-scheduler:runs:stop",
+        "task-scheduler.ipc.stop-run",
+        { runId: request.runId },
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").stopRun(request.runId),
+      ),
     },
     listRuns: {
       channel: "synapse:task-scheduler:runs:list",
@@ -325,8 +362,12 @@ export const taskSchedulerIpcModule: IpcModule = {
         limit: z.number().int().positive().max(100).optional(),
       }),
       response: z.array(runSchema),
-      handler: async (ctx, request: ListRunsRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerRunList(request.taskId, { limit: request.limit }),
+      handler: async (ctx, request: ListRunsRequest) => loggedSchedulerIpc(
+        "synapse:task-scheduler:runs:list",
+        "task-scheduler.ipc.list-runs",
+        { taskId: request.taskId, limit: request.limit },
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").schedulerRunList(request.taskId, { limit: request.limit }),
+      ),
     },
     exportTasksToFile: {
       channel: "synapse:task-scheduler:tasks:export-to-file",
@@ -421,5 +462,38 @@ function errorDiagnostic(rawError: unknown): Record<string, unknown> {
     errorName: rawError instanceof Error ? rawError.name : typeof rawError,
     errorLength: message.length,
     ...(code ? { errorCode: code } : {}),
+  }
+}
+
+async function loggedSchedulerIpc<T>(
+  channel: string,
+  boundary: string,
+  metadata: Record<string, unknown>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now()
+  logger.info("Task scheduler IPC request.", {
+    boundary,
+    channel,
+    ...metadata,
+  })
+  try {
+    const result = await run()
+    logger.info("Task scheduler IPC completed.", {
+      boundary,
+      channel,
+      durationMs: Date.now() - startedAt,
+      ...metadata,
+    })
+    return result
+  } catch (rawError) {
+    logger.warn("Task scheduler IPC failed.", {
+      boundary,
+      channel,
+      durationMs: Date.now() - startedAt,
+      ...metadata,
+      ...errorDiagnostic(rawError),
+    })
+    throw rawError
   }
 }

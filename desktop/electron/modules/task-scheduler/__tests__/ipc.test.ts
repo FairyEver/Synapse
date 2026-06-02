@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 const logStoreMock = vi.hoisted(() => ({
   logger: {
+    info: vi.fn(),
     warn: vi.fn(),
   },
 }))
@@ -320,5 +321,49 @@ describe("taskSchedulerIpcModule", () => {
     )
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("prompt text")
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("sk-test")
+  })
+
+  it("logs task create IPC failures with sanitized context", async () => {
+    const service = {
+      schedulerTaskCreate: vi.fn(async () => {
+        throw new Error("create failed command=secret")
+      }),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.task-scheduler") return service as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(taskSchedulerIpcModule, { moduleId: "task-scheduler", resolve })
+
+    await expect(harness.invoke("synapse:task-scheduler:tasks:create", {
+      name: "Build secret",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+      action: { type: "builtin.command", config: { command: "echo secret", shell: "posix", timeoutMins: 30 } },
+    })).rejects.toThrow("create failed command=secret")
+
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith(
+      "Task scheduler IPC request.",
+      expect.objectContaining({
+        boundary: "task-scheduler.ipc.create-task",
+        channel: "synapse:task-scheduler:tasks:create",
+        actionType: "builtin.command",
+        triggerType: "builtin.interval",
+        taskNameLength: "Build secret".length,
+      }),
+    )
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+      "Task scheduler IPC failed.",
+      expect.objectContaining({
+        boundary: "task-scheduler.ipc.create-task",
+        channel: "synapse:task-scheduler:tasks:create",
+        errorName: "Error",
+        errorLength: "create failed command=secret".length,
+      }),
+    )
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("create failed command=secret")
+    expect(JSON.stringify(logStoreMock.logger.info.mock.calls)).not.toContain("Build secret")
+    expect(JSON.stringify(logStoreMock.logger.info.mock.calls)).not.toContain("echo secret")
   })
 })

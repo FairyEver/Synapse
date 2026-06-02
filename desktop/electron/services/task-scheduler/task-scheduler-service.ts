@@ -83,22 +83,55 @@ export class TaskSchedulerService {
 
   async schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
     const tasks = await this.deps.tasks.list()
-    return Promise.all(tasks.map((task) => this.withRuntimeState(task)))
+    const result = await Promise.all(tasks.map((task) => this.withRuntimeState(task)))
+    this.deps.logger?.info("Scheduled tasks listed.", {
+      boundary: "task-scheduler.task-list",
+      taskCount: result.length,
+    })
+    return result
   }
 
   async schedulerTaskGet(id: string): Promise<ScheduledTaskEntry | null> {
     const task = await this.deps.tasks.get(id)
-    return task ? this.withRuntimeState(task) : null
+    const result = task ? await this.withRuntimeState(task) : null
+    this.deps.logger?.info("Scheduled task loaded.", {
+      boundary: "task-scheduler.task-get",
+      taskId: id,
+      found: Boolean(result),
+    })
+    return result
   }
 
   async schedulerTaskCreate(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
-    const task = await this.deps.tasks.create(this.normalizeCreateInput(input))
-    if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
-    this.emitTaskChanged({ taskId: task.id, reason: "created" })
-    return this.withRuntimeState(task)
+    const startedAt = Date.now()
+    try {
+      const task = await this.deps.tasks.create(this.normalizeCreateInput(input))
+      if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
+      this.emitTaskChanged({ taskId: task.id, reason: "created" })
+      this.deps.logger?.info("Scheduled task created.", {
+        boundary: "task-scheduler.task-create",
+        taskId: task.id,
+        actionType: task.action.type,
+        triggerType: task.trigger.type,
+        enabled: task.enabled,
+        durationMs: Date.now() - startedAt,
+      })
+      return this.withRuntimeState(task)
+    } catch (error) {
+      this.deps.logger?.warn("Scheduled task create failed.", {
+        boundary: "task-scheduler.task-create",
+        actionType: input.action.type,
+        triggerType: input.trigger.type,
+        enabled: input.enabled,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
   }
 
   async schedulerTaskUpdate(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
+    const startedAt = Date.now()
     const normalizedPatch = this.normalizeUpdateInput(patch)
     const oldTask = await this.deps.tasks.get(id)
     this.cancel(id)
@@ -106,16 +139,31 @@ export class TaskSchedulerService {
       const task = await this.deps.tasks.update(id, normalizedPatch)
       if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
       this.emitTaskChanged({ taskId: task.id, reason: "updated" })
+      this.deps.logger?.info("Scheduled task updated.", {
+        boundary: "task-scheduler.task-update",
+        taskId: task.id,
+        patchKeys: Object.keys(patch),
+        enabled: task.enabled,
+        durationMs: Date.now() - startedAt,
+      })
       return this.withRuntimeState(task)
     } catch (err) {
       if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
         await this.schedule(oldTask.id, oldTask.nextRunAt)
       }
+      this.deps.logger?.warn("Scheduled task update failed.", {
+        boundary: "task-scheduler.task-update",
+        taskId: id,
+        patchKeys: Object.keys(patch),
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(err),
+      })
       throw err
     }
   }
 
   async deleteTask(id: string): Promise<{ readonly deleted: boolean }> {
+    const startedAt = Date.now()
     if (this.runningTaskIds.has(id) || this.deps.execution.getActiveRunIdForTask(id)) {
       throw new Error("Task is currently running. Stop it before deleting.")
     }
@@ -124,11 +172,23 @@ export class TaskSchedulerService {
     try {
       const deleted = await this.deps.tasks.delete(id)
       if (deleted) this.emitTaskChanged({ taskId: id, reason: "deleted" })
+      this.deps.logger?.info("Scheduled task deleted.", {
+        boundary: "task-scheduler.task-delete",
+        taskId: id,
+        deleted,
+        durationMs: Date.now() - startedAt,
+      })
       return { deleted }
     } catch (err) {
       if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
         await this.schedule(oldTask.id, oldTask.nextRunAt)
       }
+      this.deps.logger?.warn("Scheduled task delete failed.", {
+        boundary: "task-scheduler.task-delete",
+        taskId: id,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(err),
+      })
       throw err
     }
   }
@@ -142,6 +202,7 @@ export class TaskSchedulerService {
   }
 
   private async setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
+    const startedAt = Date.now()
     const oldTask = await this.deps.tasks.get(id)
     if (enabled && oldTask && !this.isTaskValid(oldTask)) {
       throw new Error(NEEDS_UPDATE_MESSAGE)
@@ -151,22 +212,62 @@ export class TaskSchedulerService {
       const task = await this.deps.tasks.setEnabled(id, enabled)
       if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
       this.emitTaskChanged({ taskId: task.id, reason: enabled ? "enabled" : "disabled" })
+      this.deps.logger?.info("Scheduled task enabled state changed.", {
+        boundary: "task-scheduler.task-set-enabled",
+        taskId: task.id,
+        enabled: task.enabled,
+        durationMs: Date.now() - startedAt,
+      })
       return this.withRuntimeState(task)
     } catch (err) {
       if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
         await this.schedule(oldTask.id, oldTask.nextRunAt)
       }
+      this.deps.logger?.warn("Scheduled task enabled state change failed.", {
+        boundary: "task-scheduler.task-set-enabled",
+        taskId: id,
+        enabled,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(err),
+      })
       throw err
     }
   }
 
   async runNow(id: string): Promise<ScheduledTaskRunEntry | null> {
+    const startedAt = Date.now()
     const task = await this.deps.tasks.get(id)
-    if (!task) return null
+    if (!task) {
+      this.deps.logger?.info("Scheduled task manual run skipped because task was not found.", {
+        boundary: "task-scheduler.task-run-now",
+        taskId: id,
+        found: false,
+        durationMs: Date.now() - startedAt,
+      })
+      return null
+    }
     if (!this.isTaskValid(task)) {
       throw new Error(NEEDS_UPDATE_MESSAGE)
     }
-    return this.executeOrSkip(task, "manual")
+    try {
+      const run = await this.executeOrSkip(task, "manual")
+      this.deps.logger?.info("Scheduled task manual run requested.", {
+        boundary: "task-scheduler.task-run-now",
+        taskId: id,
+        runId: run?.id,
+        status: run?.status,
+        durationMs: Date.now() - startedAt,
+      })
+      return run
+    } catch (error) {
+      this.deps.logger?.warn("Scheduled task manual run failed.", {
+        boundary: "task-scheduler.task-run-now",
+        taskId: id,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
   }
 
   runTaskNow(id: string): Promise<ScheduledTaskRunEntry | null> {
@@ -204,11 +305,28 @@ export class TaskSchedulerService {
     await Promise.all([...runIds].map((runId) => this.stopRun(runId)))
   }
 
-  schedulerRunList(
+  async schedulerRunList(
     taskId: string,
     options?: { readonly limit?: number },
   ): Promise<ScheduledTaskRunEntry[]> {
-    return this.deps.runs.listByTask(taskId, options)
+    try {
+      const runs = await this.deps.runs.listByTask(taskId, options)
+      this.deps.logger?.info("Scheduled task runs listed.", {
+        boundary: "task-scheduler.run-list",
+        taskId,
+        runCount: runs.length,
+        limit: options?.limit,
+      })
+      return runs
+    } catch (error) {
+      this.deps.logger?.warn("Scheduled task runs list failed.", {
+        boundary: "task-scheduler.run-list",
+        taskId,
+        limit: options?.limit,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
   }
 
   async triggerForTest(
