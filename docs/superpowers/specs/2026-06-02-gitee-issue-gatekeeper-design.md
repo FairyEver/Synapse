@@ -4,7 +4,7 @@
 
 Create a new skill named `gitee-issue-gatekeeper` by copying the existing `smarterlayer-issue-gatekeeper` skill and preserving its behavior.
 
-The only functional architecture change is Gitee access: all Gitee reads and writes must go through the existing `gitee-openapi` skill. The new skill must not manage Gitee tokens, build token-bearing URLs, or implement its own Gitee API client.
+The only functional architecture change is Gitee access: all Gitee reads and writes must go through the existing `gitee-openapi` skill. The new skill must not resolve Gitee credentials, build token-bearing URLs, or implement its own Gitee API client.
 
 ## Scope
 
@@ -90,13 +90,15 @@ form METHOD PATH key=value ...
 
 If the `gitee-openapi` helper changes later, update `scripts/gitee_issue_openapi.sh` first. Business scripts should not call the `gitee-openapi` helper directly.
 
+Credential lookup is also part of the `gitee-openapi` contract. `gitee-issue-gatekeeper` should not assume whether the credential comes from a skill variable, agent-side dynamic lookup, or a future helper implementation. It only invokes `gitee-openapi` and handles the JSON result or error.
+
 ## Script Responsibilities
 
 The gatekeeper scripts remain useful because they are orchestration and business logic, not Gitee client code.
 
 `gitee-openapi` owns:
 
-- Token loading.
+- Credential resolution.
 - Base host handling.
 - HTTP method execution.
 - Form and JSON request mechanics.
@@ -145,7 +147,7 @@ Update `SKILL.md` to describe the new skill name and the Gitee dependency:
 
 - Trigger on Gitee issue triage, Gitee bug readiness review, open bug tables, and bug reports.
 - State that Gitee operations are delegated to `gitee-openapi`.
-- State that the skill does not configure or expose Gitee tokens.
+- State that the skill does not configure, resolve, or expose Gitee credentials.
 - Keep the existing readiness criteria and output expectations.
 
 Update `references/usage.md`:
@@ -186,7 +188,7 @@ rg -n "GITEE_ACCESS_TOKEN|GITEE_API_BASE|access_token=|10\\.1\\.1\\.156|fetch\\(
 
 Expected result:
 
-- No direct token or base URL usage in `gitee-issue-gatekeeper`.
+- No direct credential or base URL usage in `gitee-issue-gatekeeper`.
 - No direct Gitee HTTP client code in gatekeeper scripts.
 - References to `gitee-openapi` are allowed.
 
@@ -202,6 +204,6 @@ ISSUE_REVIEW_DRY_RUN=1 zsh scripts/audit_pending_issues.sh --dry-run
 
 - Do not modify `gitee-openapi` unless its existing helper cannot support the required operations.
 - Do not move gatekeeper business rules into `gitee-openapi`.
-- Do not create a second Gitee token source.
+- Do not create a second Gitee credential source.
 - Do not introduce a second internal Gitee client inside `gitee-issue-gatekeeper`.
 - Do not change WeCom notification semantics.
