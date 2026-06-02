@@ -7,6 +7,7 @@ import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
 } from "../../synapse-capabilities/shared/registry"
+import { sanitizeError } from "../../src/lib/error-sanitize"
 
 type JsonRpcId = number | string | null
 
@@ -100,6 +101,14 @@ function normalizeToolResult(action: string, result: unknown): unknown {
   }
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function sanitizeMcpErrorMessage(error: unknown): string {
+  return sanitizeError(errorMessage(error)) || "unknown error"
+}
+
 async function processMcpRequest(
   req: JsonRpcRequest,
   identity: McpServerIdentity,
@@ -162,11 +171,12 @@ async function processMcpRequest(
         result: { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] },
       }
     } catch (error) {
+      const message = sanitizeMcpErrorMessage(error)
       return {
         kind: "result",
         id,
         result: {
-          content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+          content: [{ type: "text", text: `Error: ${message}` }],
           isError: true,
         },
       }
@@ -184,5 +194,5 @@ function serializeJsonRpcPayload(response: McpRpcResponse): string | null {
   return JSON.stringify({ jsonrpc: "2.0", id: response.id, error: { code: response.code, message: response.message } })
 }
 
-export { processMcpRequest, serializeJsonRpcPayload, PROTOCOL_VERSION }
+export { processMcpRequest, sanitizeMcpErrorMessage, serializeJsonRpcPayload, PROTOCOL_VERSION }
 export type { JsonRpcId, JsonRpcRequest, McpRpcResponse, McpServerIdentity, ToolExecutor }

@@ -11,6 +11,7 @@ import { apiCall, isAppRunning, readServerInfo, type ServerInfo } from "../share
 import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
 import {
   processMcpRequest,
+  sanitizeMcpErrorMessage,
   serializeJsonRpcPayload,
   type JsonRpcRequest,
   type McpRpcResponse,
@@ -77,6 +78,6 @@ rl.on("line", (line) => {
     return
   }
   handleRequest(request).catch((error) => {
-    writeResponse({ kind: "error", id: request.id ?? null, code: -32603, message: `Internal error: ${(error as Error).message}` })
+    writeResponse({ kind: "error", id: request.id ?? null, code: -32603, message: `Internal error: ${sanitizeMcpErrorMessage(error)}` })
   })
 })

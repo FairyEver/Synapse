@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { processMcpRequest } from "../../database/shared/mcp-rpc"
+import { processMcpRequest, sanitizeMcpErrorMessage } from "../../database/shared/mcp-rpc"
 
 const identity = { name: "test-database", version: "0.0.0" }
 
@@ -75,6 +75,46 @@ describe("Workflow MCP RPC", () => {
 })
 
 describe("Database MCP RPC", () => {
+  it("sanitizes tool execution errors before returning them to MCP clients", async () => {
+    const response = await processMcpRequest(
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "database_table_list",
+          arguments: {},
+        },
+      },
+      identity,
+      async () => {
+        throw new Error("open /Users/liyang/private/db.sqlite sk-ant-test123456")
+      },
+    )
+
+    expect(response.kind).toBe("result")
+    if (response.kind !== "result") throw new Error("Expected result response")
+
+    const result = response.result as { content: Array<{ type: string; text: string }>; isError: boolean }
+    const text = result.content[0]?.text ?? ""
+
+    expect(result.isError).toBe(true)
+    expect(text).toContain("Error:")
+    expect(text).not.toContain("/Users/liyang/private/db.sqlite")
+    expect(text).not.toContain("sk-ant-test123456")
+    expect(text).toContain("[path]")
+    expect(text).toContain("[key]")
+  })
+
+  it("sanitizes top-level MCP bridge errors with the same helper", () => {
+    const message = sanitizeMcpErrorMessage(new Error("connect failed at /Users/liyang/private/data.db Bearer sk-secret"))
+
+    expect(message).not.toContain("/Users/liyang/private/data.db")
+    expect(message).not.toContain("Bearer sk-secret")
+    expect(message).toContain("[path]")
+    expect(message).toContain("Bearer [redacted]")
+  })
+
   it("returns list results without the internal dispatcher envelope", async () => {
     const payload = await callTool("database_table_list", {
       ok: true,
