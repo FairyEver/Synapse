@@ -18,6 +18,8 @@ The new skill keeps the current gatekeeper capabilities:
 - Keep pending issue audit, optional feedback comments, optional label updates, and group notifications.
 - Keep enterprise WeCom notification support, including `qwsend` and mention mapping.
 
+User-visible behavior must not be reduced compared with `smarterlayer-issue-gatekeeper`. Removing a Gitee-accessing shell script from the copied skill does not remove that capability; it moves the Gitee read/write part of that capability into the agent workflow that uses `gitee-openapi`.
+
 The new skill changes only the Gitee access boundary:
 
 - Remove direct reliance on `GITEE_ACCESS_TOKEN`.
@@ -57,6 +59,25 @@ scripts/send_open_bug_table.sh
 ```
 
 `scripts/send_issue_group_message.sh` is optional. Keep it only if it remains purely responsible for WeCom notification delivery and does not access Gitee.
+
+## Compatibility With Original Skill
+
+The new skill must preserve these original capabilities:
+
+| Original capability | Original implementation | New implementation |
+|---|---|---|
+| Single issue readiness audit | `SKILL.md` workflow plus issue data | `gitee-issue-gatekeeper` instructs the agent to use `gitee-openapi` for issue data, then applies the same readiness criteria. |
+| Qualified issue moves to `修复中 / progressing` | Direct Gitee update or MCP/API fallback | `gitee-issue-gatekeeper` decides the issue is qualified, then instructs the agent to use `gitee-openapi` for the state update. |
+| Unqualified issue feedback | Missing-item template, optional issue comment, group message | Same missing-item template and notification behavior; issue comments are posted through `gitee-openapi` when enabled. |
+| Open bug table | `scripts/send_open_bug_table.sh` fetched Gitee issues and formatted a table | Agent uses `gitee-openapi` to fetch the same issue set; `gitee-issue-gatekeeper` applies the same filters and table format. |
+| Bug daily report | `scripts/send_bug_period_report.sh --day` | Agent uses `gitee-openapi` to fetch the same period issue data; `gitee-issue-gatekeeper` computes and formats the same report. |
+| Bug weekly report | `scripts/send_bug_period_report.sh --week` | Same as daily report, with week period rules preserved. |
+| Pending issue audit | `scripts/audit_pending_issues.sh` fetched pending issues, inferred labels, optionally commented/updated labels | Agent uses `gitee-openapi` to fetch pending issues/comments and perform enabled comments or label updates; gatekeeper keeps the same audit criteria and label inference. |
+| WeCom group notification | `scripts/send_issue_group_message.sh` | Keep notification behavior unchanged, with optional script support if it remains Gitee-free. |
+| Dry-run mode | `ISSUE_REVIEW_DRY_RUN=1` prevented writes/sends | Preserve dry-run semantics: reads are allowed, writes and group sends are blocked. |
+
+If implementation cannot preserve one of these capabilities without a shell script, stop and revise the design instead of silently dropping the capability.
+
 
 ## Gitee OpenAPI Dependency
 
