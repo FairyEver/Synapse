@@ -785,6 +785,14 @@ class DatabaseService {
     }
   }
 
+  private assertFolderExists(id: number): void {
+    const db = this.getDb()
+    const row = db.prepare(`SELECT COUNT(*) as count FROM "_table_folders" WHERE id = ?`).get(id) as { count: number }
+    if (row.count === 0) {
+      throw new Error(`Folder not found: ${id}`)
+    }
+  }
+
   private getSchemaManager(): SchemaManager {
     if (!this.schemaManager) {
       throw new Error("Database is not open")
@@ -1404,6 +1412,10 @@ class DatabaseService {
 
   folderMoveTable(tableName: string, folderId: number | null): void {
     const db = this.getDb()
+    this.assertTableExists(tableName)
+    if (folderId !== null) {
+      this.assertFolderExists(folderId)
+    }
     db.prepare(`DELETE FROM "_table_folder_members" WHERE table_name = ?`).run(tableName)
     if (folderId !== null) {
       const maxOrder = db.prepare(

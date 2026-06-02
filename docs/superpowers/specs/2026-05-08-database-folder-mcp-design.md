@@ -101,7 +101,7 @@ Folder 工具参数：
 - **功能**: 将表移入文件夹或移到 root
 - **输入**: `{ tableName: string, folderId?: number }`
 - **返回**: 无
-- **边界**: table 不存在时静默（清理孤儿记录逻辑）；folder 不存在报错
+- **边界**: table 不存在时报错；folder 不存在报错；失败时不得先删除已有 folder membership
 
 ## 与现有代码映射
 
@@ -119,7 +119,8 @@ Folder 工具参数：
 所有工具复用现有 service 层的错误处理：
 - folder 不存在 → `Error('Folder not found: ${id}')`
 - 空名称 → `Error('Folder name cannot be empty')`
-- table/folder 不存在时的操作 → service 层已处理
+- table 不存在 → `Error('Table "${name}" not found')`
+- table/folder 不存在时的操作 → service 层在写入 folder membership 前阻断
 
 ## 实现范围
 

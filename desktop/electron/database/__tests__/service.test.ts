@@ -250,6 +250,33 @@ describe("DatabaseService table descriptions", () => {
     }).rows).toEqual([])
   })
 
+  it("rejects table moves before mutating folder membership when targets are missing", () => {
+    service.databaseTableCreate("tasks", [
+      { name: "title", kind: "text" },
+    ])
+    const { id: sourceFolderId } = service.folderCreate("Source")
+    const { id: targetFolderId } = service.folderCreate("Target")
+    service.folderMoveTable("tasks", sourceFolderId)
+
+    expect(() => service.folderMoveTable("missing_table", targetFolderId)).toThrow('Table "missing_table" not found')
+    expect(() => service.folderMoveTable("tasks", 9999)).toThrow("Folder not found: 9999")
+
+    expect(service.folderList()).toEqual([
+      {
+        id: sourceFolderId,
+        name: "Source",
+        sortOrder: 0,
+        members: [{ tableName: "tasks", sortOrder: 0 }],
+      },
+      {
+        id: targetFolderId,
+        name: "Target",
+        sortOrder: 1,
+        members: [],
+      },
+    ])
+  })
+
   it("rejects bulk updates with empty grouped where conditions", () => {
     service.databaseTableCreate("tasks", [
       { name: "title", kind: "text" },
