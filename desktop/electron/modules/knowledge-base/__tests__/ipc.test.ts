@@ -258,6 +258,43 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("does not audit network failure when URL source write is denied", async () => {
+    const addUrlSource = vi.fn()
+    const { auditSink, harness } = createHarness({
+      service: { addUrlSource },
+      permissions: [
+        { allowed: true },
+        { allowed: false, reason: "Write denied", policyId: "kb-write" },
+      ],
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:add-url-source", {
+      projectId: "kb-1",
+      url: "https://example.com/article",
+    })).rejects.toThrow("Write denied")
+
+    expect(addUrlSource).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "https://example.com/article",
+      metadata: { source: "knowledgeBase.addUrlSource.fetch" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "denied",
+      resource: "managed-knowledge-base:kb-1",
+      metadata: {
+        source: "knowledgeBase.addUrlSource",
+        reason: "Write denied",
+        policyId: "kb-write",
+      },
+    }))
+    expect(vi.mocked(auditSink.record).mock.calls.some(([event]) => (
+      event.action === "network.connect" && event.outcome === "failed"
+    ))).toBe(false)
+  })
+
   it("adds a URL source through IPC into the real knowledge base service", async () => {
     const userDataPath = await tempDir()
     const projectPath = path.join(userDataPath, "knowledge-bases", "kb-1")

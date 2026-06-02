@@ -224,6 +224,40 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
   }
 }
 
+async function checkKnowledgeBasePermission(options: {
+  ctx: IpcHandlerContext
+  action: PermissionAction
+  resource: string
+  source: string
+}): Promise<void> {
+  const actor = { kind: "user" } as const
+  const permissionGuard = options.ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const permission = await permissionGuard.check({
+    action: options.action,
+    actor,
+    resource: options.resource,
+    context: { source: options.source },
+  })
+  if (!permission.allowed) {
+    auditSink.record({
+      action: options.action,
+      actor,
+      resource: options.resource,
+      outcome: "denied",
+      metadata: { source: options.source, reason: permission.reason, policyId: permission.policyId },
+    })
+    throw new Error(permission.reason)
+  }
+  auditSink.record({
+    action: options.action,
+    actor,
+    resource: options.resource,
+    outcome: "allowed",
+    metadata: { source: options.source },
+  })
+}
+
 async function runGuardedKnowledgeBaseFileUpload<T>(options: {
   ctx: IpcHandlerContext
   projectId: string
@@ -404,19 +438,21 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:add-url-source",
       request: addUrlSourcePayloadSchema,
       response: uploadSourcesResultSchema,
-      handler: (ctx, request: { projectId: string; url: string }) => runGuardedKnowledgeBaseOperation({
-        ctx,
-        action: "network.connect",
-        resource: sanitizeUrl(request.url),
-        source: "knowledgeBase.addUrlSource.fetch",
-        run: () => runGuardedKnowledgeBaseOperation({
+      handler: async (ctx, request: { projectId: string; url: string }) => {
+        await checkKnowledgeBasePermission({
+          ctx,
+          action: "network.connect",
+          resource: sanitizeUrl(request.url),
+          source: "knowledgeBase.addUrlSource.fetch",
+        })
+        return runGuardedKnowledgeBaseOperation({
           ctx,
           action: "fs.write",
           resource: `managed-knowledge-base:${request.projectId}`,
           source: "knowledgeBase.addUrlSource",
           run: () => service(ctx).addUrlSource(request),
-        }),
-      }),
+        })
+      },
     },
     selectAndUploadSources: {
       kind: "invoke",
