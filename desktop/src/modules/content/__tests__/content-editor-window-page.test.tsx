@@ -148,6 +148,14 @@ describe("ContentEditorWindowPage", () => {
     expect(source).toContain("initPayload.prefill")
   })
 
+  it("checks existing Prompt titles before creating a prompt", async () => {
+    const source = await readFile(editorWindowPageSourcePath, "utf8")
+
+    expect(source).toContain('const existingPrompts = await listContent("prompt")')
+    expect(source).toContain("hasDuplicateContentTitle(existingPrompts, payload.title)")
+    expect(source).toContain("已存在同名提示词。")
+  })
+
   it("keeps the category select controlled while edit details load", async () => {
     const fieldsSource = await readFile(join(__dirname, "../components/content-editor-fields.tsx"), "utf8")
     const source = await readFile(editorWindowPageSourcePath, "utf8")

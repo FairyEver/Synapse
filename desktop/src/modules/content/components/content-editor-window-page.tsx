@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, LoaderCircle } from "lucide-react"
 import {
   createContent,
+  listContent,
   openContentDetailWindow,
   readAttachmentFile,
   readContentEditorInitPayload,
@@ -40,6 +41,7 @@ import {
   normalizeContentPayload,
   validateContentPayload,
 } from "@/modules/content/lib/content-payload"
+import { hasDuplicateContentTitle } from "@/modules/content/lib/content-title-duplicates"
 import {
   createEmptyRulePayload,
   normalizeCreateRulePayload,
@@ -520,6 +522,11 @@ function PromptEditorWindow({ request }: ContentEditorWindowPageProps) {
     },
     onSubmit: async (payload) => {
       if (request.kind === "create") {
+        const existingPrompts = await listContent("prompt")
+        if (hasDuplicateContentTitle(existingPrompts, payload.title)) {
+          throw new Error("已存在同名提示词。")
+        }
+
         const result = await createContent("prompt", payload)
         if (result.status === "conflict") throw new Error("内容已更新，请刷新后再编辑。")
         window.close()
