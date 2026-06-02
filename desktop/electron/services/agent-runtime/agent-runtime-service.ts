@@ -737,7 +737,7 @@ export class AgentRuntimeService {
     try {
       await pending.liveSession.respondPermission(request.requestId, {
         behavior: request.behavior,
-        updatedInput: request.updatedInput ?? pending.toolInputRaw,
+        updatedInput: request.updatedInput,
         message: request.message,
       })
       this.recordPermissionAudit(
@@ -768,7 +768,7 @@ export class AgentRuntimeService {
     try {
       await pending.liveSession.respondPermission(request.requestId, {
         behavior: "deny",
-        updatedInput: request.updatedInput ?? pending.toolInputRaw,
+        updatedInput: request.updatedInput,
         message,
       })
       this.sessionManager.settlePendingPermission(pending)

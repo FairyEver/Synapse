@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { QuickInputsPanel } from "../quick-inputs-panel"
+import { quickInputPreview } from "../../quick-inputs"
 import type { SynapseQuickInput } from "@/types/config"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -31,6 +32,20 @@ describe("QuickInputsPanel", () => {
     const container = await renderPanel([])
 
     expect(container.textContent).toContain("还没有片段")
+  })
+
+  it("bounds long quick input rows to the panel width", async () => {
+    const longContent = "总结当前仓库今天我在所有分支上的所有提交，归纳总结分类，记录为今天的工作日志，只记录和工作相关的功能"
+    const container = await renderPanel([{ id: "quick-1", content: longContent, directSend: true }])
+    const preview = getQuickInputPreviewElement(container, longContent)
+    const row = preview.parentElement
+    const list = row?.parentElement
+
+    expect(preview.className).toContain("truncate")
+    expect(row?.className).toContain("w-full")
+    expect(row?.className).toContain("max-w-full")
+    expect(row?.className).toContain("overflow-hidden")
+    expect(list?.className).toContain("overflow-hidden")
   })
 
   it("adds a multi-line quick input", async () => {
@@ -212,6 +227,14 @@ async function clickButton(container: HTMLElement, label: string) {
     button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     await Promise.resolve()
   })
+}
+
+function getQuickInputPreviewElement(container: HTMLElement, content: string) {
+  const previewText = quickInputPreview(content)
+  const preview = Array.from(container.querySelectorAll("p"))
+    .find((item) => item.textContent === previewText)
+  expect(preview).toBeTruthy()
+  return preview!
 }
 
 async function clickDialogButton(label: string) {

@@ -509,6 +509,45 @@ describe("AgentRuntimeService", () => {
     expect(second.responses).toEqual([{ requestId: "conversation-b-permission-1", behavior: "deny" }])
   })
 
+  it("does not echo sanitized pending tool input when allowing a write permission", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new PermissionSession("conversation-a-permission-1", "write allowed", {
+      toolName: "Write",
+      toolInput: JSON.stringify({
+        file_path: "/repo/output.md",
+        content: "# Title\n\nLong body...[truncated]",
+      }),
+      toolInputRaw: {
+        file_path: "/repo/output.md",
+        content: "# Title\n\nLong body...[truncated]",
+      },
+    })
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs write"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })
+
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+    }])
+    expect(JSON.stringify(session.responses)).not.toContain("[truncated]")
+    await expect(turn).resolves.toMatchObject({ resultText: "write allowed" })
+  })
+
   it("settles a pending permission when the permission guard denies allow", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new PermissionSession("conversation-a-permission-1", "guard denied")
@@ -1584,7 +1623,11 @@ class ModeSwitchSession extends HangingSession {
 
 class PermissionSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
-  readonly responses: Array<{ readonly requestId: string; readonly behavior: string }> = []
+  readonly responses: Array<{
+    readonly requestId: string
+    readonly behavior: string
+    readonly updatedInput?: Record<string, unknown>
+  }> = []
   closed = false
   private waiter: ((event: AgentEvent | null) => void) | undefined
   private readonly events: AgentEvent[] = []
@@ -1593,6 +1636,15 @@ class PermissionSession implements AgentLiveSession {
   constructor(
     private readonly requestId: string,
     private readonly resultText: string,
+    private readonly permissionRequest: {
+      readonly toolName: string
+      readonly toolInput?: string
+      readonly toolInputRaw?: Record<string, unknown>
+    } = {
+      toolName: "Bash",
+      toolInput: "pwd",
+      toolInputRaw: { command: "pwd" },
+    },
   ) {}
 
   async send(): Promise<boolean> {
@@ -1604,7 +1656,11 @@ class PermissionSession implements AgentLiveSession {
     requestId: string,
     decision: AgentPermissionDecision,
   ): Promise<void> {
-    this.responses.push({ requestId, behavior: decision.behavior })
+    this.responses.push({
+      requestId,
+      behavior: decision.behavior,
+      ...(decision.updatedInput ? { updatedInput: decision.updatedInput } : {}),
+    })
     this.push({
       type: "result",
       content: this.resultText,
@@ -1622,9 +1678,7 @@ class PermissionSession implements AgentLiveSession {
       return Promise.resolve({
         type: "permissionRequest",
         requestId: this.requestId,
-        toolName: "Bash",
-        toolInput: "pwd",
-        toolInputRaw: { command: "pwd" },
+        ...this.permissionRequest,
       })
     }
     return new Promise((resolve) => {

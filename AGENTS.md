@@ -123,6 +123,7 @@
 - MCP 诊断必须区分两件事：Synapse MCP HTTP server 是否运行，以及 Claude Code 配置 `~/.claude.json` 中是否注册了 `synapse-mcp`。不要用 `~/.claude/settings.json` 或旧权限 allowlist 推断 server 是否存在。
 - 诊断 Knowledge Base slash 是 native plugin、`commands/*.md` command 还是 agent 模拟时，只做只读文件证据检查：可检查当前 backing directory、`.claude-plugin/plugin.json`、`skills/<name>/SKILL.md`、`commands/<name>.md` 是否存在和 commands 第一层文件名；不得执行目标 slash，不得读取用户 Claude 配置、进程列表、token、secret、Authorization、cookie 或 password。
 - Agent 权限卡片、工具事件、错误日志和导出文本必须脱敏 token/API key/Authorization/Bearer/env JSON/data-server token。普通路径和 `file_path` 仍应保留，方便排查。
+- Agent 权限事件里的 `toolInput` / `toolInputRaw` 是展示、权限判断和审计摘要，可能已经脱敏、截断或追加 `[truncated]`；除非用户显式编辑并提交新的 `updatedInput`，否则不得把它们回传给 Claude SDK 或其它 agent runtime 当作真实工具入参，尤其不能让 `Write` / `Edit` 的正文内容从权限卡片摘要回流到实际写文件操作。
 - Agent/Knowledge Base 相关脱敏规则必须保持 Electron 与 renderer 一致，优先复用共享 helper，不要在主进程、renderer、导出、Usage Analysis 中各写一套正则。规则至少覆盖敏感 key、JSON 字段、shell/env 赋值、Authorization/Bearer、Cookie、`data-server.json` token、`ps aux`/`--env KEY=value` 输出，同时保留普通文件路径。
 - Agent 展示、复制、导出和日志链路必须同时脱敏 tool input 与 tool result content；不能只处理工具入参、权限摘要或错误摘要。文件读取类输出可以保留 `file_path`，但不得泄露 token、Authorization、Bearer、Cookie 或 env secret。
 - Usage Analysis 读取 Claude Code conversation/raw event 时，只能对 Synapse 内部展示、详情 JSON、事件流预览和搜索 snippet 使用脱敏投影；不得为了脱敏改写用户机器上的外部原始 JSONL/日志文件，也不得让 rawText 搜索返回真实 secret。
