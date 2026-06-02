@@ -9,6 +9,7 @@ import {
 
 class WorkerMock extends EventEmitter {
   readonly once = vi.fn(super.once.bind(this))
+  readonly terminate = vi.fn(async () => 1)
 }
 
 describe("convertFilesInWorker", () => {
@@ -36,6 +37,26 @@ describe("convertFilesInWorker", () => {
       filePaths: ["/tmp/report.docx"],
       outputDirectory: "/tmp/out",
     })
+  })
+
+  it("terminates the worker when conversion times out", async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = new WorkerMock()
+      const workerFactory = vi.fn(() => worker as never)
+      const promise = convertFilesInWorker({
+        filePaths: ["/tmp/hung.pdf"],
+        outputDirectory: "/tmp/out",
+      }, { workerFactory, timeoutMs: 5 })
+      const rejection = expect(promise).rejects.toThrow("File conversion timed out after 5ms")
+
+      await vi.advanceTimersByTimeAsync(5)
+
+      await rejection
+      expect(worker.terminate).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("maps app.asar paths to app.asar.unpacked worker paths", () => {

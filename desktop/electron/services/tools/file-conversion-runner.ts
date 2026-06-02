@@ -8,21 +8,31 @@ import type {
 } from "./file-conversion-types"
 
 type WorkerFactory = (workerPath: string, workerData: ToolsFileConversionPayload) => Worker
+const DEFAULT_TIMEOUT_MS = 300_000
 
 export function convertFilesInWorker(
   payload: ToolsFileConversionPayload,
-  options: { readonly workerFactory?: WorkerFactory } = {},
+  options: { readonly workerFactory?: WorkerFactory; readonly timeoutMs?: number } = {},
 ): Promise<ToolsFileConversionResult> {
   return new Promise((resolve, reject) => {
     const workerFactory = options.workerFactory ?? ((workerPath, workerData) => new Worker(workerPath, { workerData }))
+    const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const worker = workerFactory(resolveFileConversionWorkerPath(__dirname), {
       filePaths: [...payload.filePaths],
       outputDirectory: payload.outputDirectory,
     })
     let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      void worker.terminate().catch(() => undefined)
+      reject(new Error(`File conversion timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
 
     worker.once("message", (message: ToolsFileConversionWorkerMessage) => {
+      if (settled) return
       settled = true
+      clearTimeout(timer)
       if (message.type === "success") {
         resolve(message.result)
         return
@@ -33,12 +43,14 @@ export function convertFilesInWorker(
     worker.once("error", (error) => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
       reject(error)
     })
 
     worker.once("exit", (code) => {
       if (settled || code === 0) return
       settled = true
+      clearTimeout(timer)
       reject(new Error(`File conversion worker exited with code ${code}`))
     })
   })
