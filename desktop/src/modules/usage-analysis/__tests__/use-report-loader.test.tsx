@@ -60,6 +60,39 @@ describe("useReportLoader", () => {
       error: expect.any(Error),
     })
   })
+
+  it("ignores stale load results after dependencies change", async () => {
+    const first = createDeferred<string>()
+    const second = createDeferred<string>()
+    const firstLoader = vi.fn(() => first.promise)
+    const secondLoader = vi.fn(() => second.promise)
+    const states: Array<ReportState<string>> = []
+    const host = document.createElement("div")
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ReportLoaderProbe loader={firstLoader} onState={(state) => states.push(state)} />)
+    })
+
+    await act(async () => {
+      root.render(<ReportLoaderProbe loader={secondLoader} onState={(state) => states.push(state)} />)
+    })
+
+    await act(async () => {
+      second.resolve("new")
+      await second.promise
+    })
+
+    expect(states.at(-1)?.data).toBe("new")
+
+    await act(async () => {
+      first.resolve("old")
+      await first.promise
+    })
+
+    expect(states.at(-1)?.data).toBe("new")
+  })
 })
 
 function ReportLoaderProbe({
@@ -76,4 +109,14 @@ function ReportLoaderProbe({
   }, [onState, state])
 
   return null
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, reject, resolve }
 }
