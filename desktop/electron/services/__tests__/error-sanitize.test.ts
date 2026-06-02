@@ -36,6 +36,29 @@ describe("sanitizeError", () => {
     expect(result).toContain("api_key=[redacted]")
   })
 
+  it("redacts prefixed environment variable secret names", () => {
+    const result = sanitizeError(
+      "ANTHROPIC_API_KEY=sk-ant-test123456 OPENAI_API_KEY=sk-openai-test123456 GITHUB_TOKEN=ghp_named_secret MY_SECRET_TOKEN=plain-secret",
+    )
+
+    expect(result).not.toContain("sk-ant-test123456")
+    expect(result).not.toContain("sk-openai-test123456")
+    expect(result).not.toContain("ghp_named_secret")
+    expect(result).not.toContain("plain-secret")
+    expect(result).toContain("ANTHROPIC_API_KEY=[redacted]")
+    expect(result).toContain("GITHUB_TOKEN=[redacted]")
+    expect(result).toContain("MY_SECRET_TOKEN=[redacted]")
+  })
+
+  it("redacts standalone platform tokens", () => {
+    const result = sanitizeError("tokens: github_pat_1234567890abcdef ghp_abcdef123456 glpat-abcdef123456")
+
+    expect(result).not.toContain("github_pat_1234567890abcdef")
+    expect(result).not.toContain("ghp_abcdef123456")
+    expect(result).not.toContain("glpat-abcdef123456")
+    expect(result).toContain("[key]")
+  })
+
   it("redacts POSIX paths preceded by whitespace", () => {
     const result = sanitizeError("file not found at /Users/example/repo/config.json")
     expect(result).not.toContain("/Users/example/repo/config.json")
