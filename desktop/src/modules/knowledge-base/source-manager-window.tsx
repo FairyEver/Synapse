@@ -93,6 +93,7 @@ type SourceSelectionBarProps = {
 type SourceEntryListProps = {
   entries: SynapseKnowledgeBaseRawEntry[]
   isLoading: boolean
+  loadError: boolean
   query: string
   selectedPaths: Set<string>
   onToggleSelected: (relativePath: string, checked: boolean) => void
@@ -388,6 +389,7 @@ function SourceSelectionBar({ selectedCount, onSelectAll, onMove, onExport, onTr
 function SourceEntryList({
   entries,
   isLoading,
+  loadError,
   query,
   selectedPaths,
   onToggleSelected,
@@ -406,7 +408,7 @@ function SourceEntryList({
     return (
       <Empty className="border-0 py-16">
         <EmptyHeader>
-          <EmptyTitle>{isLoading ? "读取中" : query ? "没有匹配项" : "没有文件"}</EmptyTitle>
+          <EmptyTitle>{loadError ? "读取失败" : isLoading ? "读取中" : query ? "没有匹配项" : "没有文件"}</EmptyTitle>
         </EmptyHeader>
       </Empty>
     )
@@ -523,6 +525,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const [query, setQuery] = useState("")
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set())
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
@@ -552,6 +555,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const refreshDirectory = useCallback(async () => {
     if (!payload || !bridge) return
     setIsLoading(true)
+    setLoadError(false)
     try {
       const result = await bridge.knowledgeBase.listRawDirectory({
         projectId: payload.projectId,
@@ -564,6 +568,8 @@ function KnowledgeBaseSourceManagerWindow() {
       }))
     } catch (error) {
       logger.error("Failed to load knowledge base raw directory.", { error })
+      setEntries([])
+      setLoadError(true)
       showError("读取资料失败")
     } finally {
       setIsLoading(false)
@@ -1098,6 +1104,7 @@ function KnowledgeBaseSourceManagerWindow() {
             <SourceEntryList
               entries={visibleEntries}
               isLoading={isLoading}
+              loadError={loadError}
               query={query}
               selectedPaths={selectedPaths}
               onToggleSelected={toggleSelected}

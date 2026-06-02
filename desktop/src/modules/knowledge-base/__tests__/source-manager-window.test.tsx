@@ -393,6 +393,49 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
   })
 
+  it("clears stale entries when opening a folder fails", async () => {
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") throw new Error("read failed")
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [
+          {
+            relativePath: "客户",
+            name: "客户",
+            kind: "directory" as const,
+            size: null,
+            modifiedAt: "2026-05-22T11:03:00.000Z",
+          },
+          {
+            relativePath: "brief.md",
+            name: "brief.md",
+            kind: "file" as const,
+            size: 43008,
+            modifiedAt: "2026-05-23T14:20:00.000Z",
+          },
+        ],
+      }
+    })
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开文件夹 客户").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(notifications.error).toHaveBeenCalledWith("读取资料失败")
+    })
+    expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
+    expect(document.body.textContent).toContain("读取失败")
+    expect(document.body.textContent).not.toContain("brief.md")
+  })
+
   it("opens folders from the left file tree", async () => {
     renderWindow()
 
