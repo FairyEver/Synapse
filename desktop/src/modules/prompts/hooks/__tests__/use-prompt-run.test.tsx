@@ -163,6 +163,47 @@ describe("usePromptRun", () => {
     }))
   })
 
+  it("ignores concurrent run requests before the loading state rerenders", async () => {
+    const readDeferred = createDeferred<{ content: string }>()
+    const resultsDeferred = createDeferred<boolean[]>()
+    mocks.readContent.mockReturnValue(readDeferred.promise)
+    const createSession = vi.fn().mockResolvedValue({
+      id: "conversation-1",
+      sessionKey: "local:renderer",
+    })
+    const send = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+      resultText: "",
+      events: [],
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          createSession,
+          send,
+        },
+      },
+    })
+
+    await renderConcurrentRunProbe((results) => resultsDeferred.resolve(results))
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mocks.readContent).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      readDeferred.resolve({ content: "Prompt body" })
+      await Promise.resolve()
+    })
+    await expect(resultsDeferred.promise).resolves.toEqual([true, false])
+    expect(createSession).toHaveBeenCalledTimes(1)
+    expect(send).toHaveBeenCalledTimes(1)
+  })
+
   it("logs background send failures with conversation context", async () => {
     mocks.readContent.mockResolvedValue({ content: "Secret prompt body" })
     const send = vi.fn().mockRejectedValue(new Error("secret backend detail"))
@@ -214,6 +255,17 @@ async function renderRunProbe({ navigate }: { navigate: boolean }) {
   })
 }
 
+async function renderConcurrentRunProbe(onComplete: (results: boolean[]) => void) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+
+  await act(async () => {
+    root.render(<ConcurrentRunProbe onComplete={onComplete} />)
+  })
+}
+
 function RunProbe({ navigate }: { navigate: boolean }) {
   const { run } = usePromptRun()
 
@@ -226,6 +278,31 @@ function RunProbe({ navigate }: { navigate: boolean }) {
       navigate,
     })
   }, [navigate, run])
+
+  return null
+}
+
+function ConcurrentRunProbe({ onComplete }: { onComplete: (results: boolean[]) => void }) {
+  const { run } = usePromptRun()
+
+  useEffect(() => {
+    void Promise.all([
+      run({
+        item: promptItem,
+        projectId: "project-1",
+        agentType: "claude-code",
+        providerId: "provider-1",
+        navigate: false,
+      }),
+      run({
+        item: promptItem,
+        projectId: "project-1",
+        agentType: "claude-code",
+        providerId: "provider-1",
+        navigate: true,
+      }),
+    ]).then(onComplete)
+  }, [onComplete, run])
 
   return null
 }
@@ -249,9 +326,9 @@ const promptItem: SynapseContentMeta<"prompt"> = {
   type: "prompt",
 }
 
-function createDeferred() {
-  let resolve!: (value: unknown) => void
-  const promise = new Promise((promiseResolve) => {
+function createDeferred<T = unknown>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
     resolve = promiseResolve
   })
   return { promise, resolve }

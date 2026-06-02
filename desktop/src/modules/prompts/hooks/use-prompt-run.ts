@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { toast } from "sonner"
 import { readContent } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -18,8 +18,13 @@ type PromptRunArgs = {
 
 function usePromptRun() {
   const [isRunning, setIsRunning] = useState(false)
+  const runningRef = useRef(false)
 
   const run = useCallback(async (args: PromptRunArgs): Promise<boolean> => {
+    if (runningRef.current) {
+      return false
+    }
+    runningRef.current = true
     const { item, projectId, agentType, providerId, navigate } = args
     setIsRunning(true)
 
@@ -119,6 +124,7 @@ function usePromptRun() {
 
       return true
     } finally {
+      runningRef.current = false
       setIsRunning(false)
     }
   }, [])
