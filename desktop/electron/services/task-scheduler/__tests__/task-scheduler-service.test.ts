@@ -313,6 +313,44 @@ describe("TaskSchedulerService", () => {
     }))
   })
 
+  it("logs skipped run markRunResult failures without hiding the skipped run", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ logger })
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      action: { type: "builtin.test", config: {} },
+    }))
+    harness.tasks.markRunResult = vi.fn(async () => {
+      throw new Error("task status write failed secret=hidden")
+    })
+
+    const result = await harness.service.triggerForTest("task:1", "schedule")
+
+    expect(result).toEqual(expect.objectContaining({
+      status: "skipped",
+      error: "任务配置需要更新",
+    }))
+    expect(logger.warn).toHaveBeenCalledWith("markRunResult failed after skipped task run.", {
+      source: "task-scheduler",
+      taskId: "task:1",
+      runId: result?.id,
+      triggeredBy: "schedule",
+      status: "skipped",
+      boundary: "task-scheduler-mark-run-result",
+      errorName: "Error",
+      errorLength: "task status write failed secret=hidden".length,
+    })
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task run skipped.", {
+      taskId: "task:1",
+      runId: result?.id,
+      triggeredBy: "schedule",
+      status: "skipped",
+      boundary: "task-scheduler-skip-run",
+      reason: "任务配置需要更新",
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret=hidden")
+  })
+
   it("rejects enabling invalid stored tasks", async () => {
     const harness = createHarness()
     await harness.taskItems.upsert(createTask({

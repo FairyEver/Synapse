@@ -360,7 +360,19 @@ export class TaskSchedulerService {
       status: "skipped",
       error,
     })
-    await this.deps.tasks.markRunResult(taskId, { status: "skipped" })
+    try {
+      await this.deps.tasks.markRunResult(taskId, { status: "skipped" })
+    } catch (markError) {
+      this.deps.logger?.warn("markRunResult failed after skipped task run.", {
+        source: "task-scheduler",
+        taskId,
+        runId: run.id,
+        triggeredBy,
+        status: "skipped",
+        boundary: "task-scheduler-mark-run-result",
+        ...errorMetadata(markError),
+      })
+    }
     this.deps.logger?.info("Scheduled task run skipped.", {
       taskId,
       runId: run.id,
