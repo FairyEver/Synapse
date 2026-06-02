@@ -1,15 +1,16 @@
-import { spawn } from "node:child_process"
 import { getAllContentTypeIds } from "../../src/config/content-types"
 import { resolveDisplayName } from "../../src/lib/display-name"
 import { getContentDir } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "../../src/types/content"
 import { contentHistoryService } from "./content-history-service"
+import { runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
 import { userProfileService } from "./user-profile-service"
 
 const LAST_SYNCED_GIT_SHA_KEY = "last_synced_git_sha"
+const CONTENT_INDEX_GIT_TIMEOUT_MS = 30_000
 const logger = createMainLogger("service.content-index")
 
 type ChangedContentKey = {
@@ -101,40 +102,18 @@ function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | nul
   } as SynapseContentMeta
 }
 
-function runGitText(cwd: string, args: string[]): Promise<string | null> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn("git", args, {
-      cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        LANG: "C",
-        LC_ALL: "C",
-      },
-    })
-
-    let stdout = ""
-    let stderr = ""
-
-    childProcess.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8")
-    })
-
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8")
-    })
-
-    childProcess.on("error", reject)
-
-    childProcess.on("close", (code) => {
-      if (code === 0) {
-        resolve(stdout.trim() || null)
-        return
-      }
-
-      reject(new Error(stderr.trim() || stdout.trim() || "Git 命令执行失败。"))
-    })
-  })
+function runGitText(
+  cwd: string,
+  args: string[],
+  timeoutMs = CONTENT_INDEX_GIT_TIMEOUT_MS,
+): Promise<string | null> {
+  return runGitCommand({
+    args,
+    cwd,
+    fallbackMessage: "Git 命令执行失败。",
+    timeoutMessage: "内容索引 Git 命令超时。",
+    timeoutMs,
+  }).then((result) => result.stdout.trim() || null)
 }
 
 function collectChangedContentKeys(
@@ -499,4 +478,4 @@ class ContentIndexService {
 
 const contentIndexService = new ContentIndexService()
 
-export { contentIndexService }
+export { contentIndexService, runGitText as _runGitTextForTests }
