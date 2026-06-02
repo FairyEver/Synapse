@@ -3,6 +3,13 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}))
+
 import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { KnowledgeBaseService } from "../../../services/knowledge-base/knowledge-base-service"
@@ -34,6 +41,10 @@ vi.mock("electron", () => ({
 
 vi.mock("../../../services/knowledge-base/source-manager-window-service", () => ({
   knowledgeBaseSourceManagerWindowService: sourceManagerWindowServiceMock,
+}))
+
+vi.mock("../../../services/log-store", () => ({
+  createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
 
 const roots: string[] = []
@@ -82,6 +93,42 @@ describe("knowledgeBaseIpcModule", () => {
       resource: "managed-knowledge-base:kb-1",
       context: { source: "knowledgeBase.createManaged" },
     })
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Knowledge Base IPC request.", expect.objectContaining({
+      action: "fs.write",
+      boundary: "knowledge-base.ipc.operation",
+      projectId: "kb-1",
+      resourceKind: "managed-knowledge-base",
+      source: "knowledgeBase.createManaged",
+    }))
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Knowledge Base IPC completed.", expect.objectContaining({
+      action: "fs.write",
+      boundary: "knowledge-base.ipc.operation",
+      durationMs: expect.any(Number),
+      projectId: "kb-1",
+      source: "knowledgeBase.createManaged",
+    }))
+  })
+
+  it("logs guarded IPC failures without leaking error text", async () => {
+    const createManaged = vi.fn().mockRejectedValue(new Error("failed with secret-token at /Users/liyang/private"))
+    const { harness } = createHarness({ service: { createManaged } })
+
+    await expect(harness.invoke("synapse:knowledge-base:create-managed", {
+      projectId: "kb-1",
+      name: "Knowledge",
+    })).rejects.toThrow("failed with secret-token at /Users/liyang/private")
+
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith("Knowledge Base IPC failed.", expect.objectContaining({
+      action: "fs.write",
+      boundary: "knowledge-base.ipc.operation",
+      errorLength: "Error: failed with secret-token at /Users/liyang/private".length,
+      errorName: "Error",
+      projectId: "kb-1",
+      source: "knowledgeBase.createManaged",
+    }))
+    const loggedFailure = JSON.stringify(logStoreMock.logger.warn.mock.calls)
+    expect(loggedFailure).not.toContain("secret-token")
+    expect(loggedFailure).not.toContain("/Users/liyang/private")
   })
 
   it("deletes a managed knowledge base through guarded write permission", async () => {

@@ -2,9 +2,13 @@ import { dialog } from "electron"
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
+import { createMainLogger } from "../../services/log-store"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
+
+const logger = createMainLogger("knowledge-base.ipc")
+const KNOWLEDGE_BASE_RESOURCE_PREFIX = "managed-knowledge-base:"
 
 const createManagedPayloadSchema = z.object({
   projectId: z.string().min(1),
@@ -172,6 +176,31 @@ function service(ctx: IpcHandlerContext): KnowledgeBaseService {
   return ctx.resolve<KnowledgeBaseService>("knowledge-base.service")
 }
 
+function ipcErrorMeta(error: unknown): Record<string, unknown> {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: String(error).length,
+  }
+}
+
+function permissionLogMeta(options: {
+  action: PermissionAction
+  resource: string
+  source: string
+}): Record<string, unknown> {
+  const projectId = options.resource.startsWith(KNOWLEDGE_BASE_RESOURCE_PREFIX)
+    ? options.resource.slice(KNOWLEDGE_BASE_RESOURCE_PREFIX.length)
+    : null
+  return {
+    boundary: "knowledge-base.ipc.operation",
+    action: options.action,
+    source: options.source,
+    resourceKind: projectId ? "managed-knowledge-base" : "external-resource",
+    resourceLength: options.resource.length,
+    ...(projectId ? { projectId } : {}),
+  }
+}
+
 async function runGuardedKnowledgeBaseOperation<T>(options: {
   ctx: IpcHandlerContext
   action: PermissionAction
@@ -179,6 +208,9 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
   source: string
   run(): Promise<T>
 }): Promise<T> {
+  const startedAt = Date.now()
+  const logMeta = permissionLogMeta(options)
+  logger.info("Knowledge Base IPC request.", logMeta)
   const actor = { kind: "user" } as const
   const permissionGuard = options.ctx.resolve<PermissionGuard>("core.permission-guard")
   const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
@@ -196,6 +228,12 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
       outcome: "denied",
       metadata: { source: options.source, reason: permission.reason, policyId: permission.policyId },
     })
+    logger.warn("Knowledge Base IPC permission denied.", {
+      ...logMeta,
+      durationMs: Date.now() - startedAt,
+      reasonLength: permission.reason.length,
+      policyId: permission.policyId,
+    })
     throw new Error(permission.reason)
   }
   try {
@@ -206,6 +244,10 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
       resource: options.resource,
       outcome: "allowed",
       metadata: { source: options.source },
+    })
+    logger.info("Knowledge Base IPC completed.", {
+      ...logMeta,
+      durationMs: Date.now() - startedAt,
     })
     return result
   } catch (error) {
@@ -220,6 +262,11 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
         errorLength: String(error).length,
       },
     })
+    logger.warn("Knowledge Base IPC failed.", {
+      ...logMeta,
+      durationMs: Date.now() - startedAt,
+      ...ipcErrorMeta(error),
+    })
     throw error
   }
 }
@@ -230,6 +277,9 @@ async function checkKnowledgeBasePermission(options: {
   resource: string
   source: string
 }): Promise<void> {
+  const startedAt = Date.now()
+  const logMeta = permissionLogMeta(options)
+  logger.info("Knowledge Base IPC permission request.", logMeta)
   const actor = { kind: "user" } as const
   const permissionGuard = options.ctx.resolve<PermissionGuard>("core.permission-guard")
   const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
@@ -247,6 +297,12 @@ async function checkKnowledgeBasePermission(options: {
       outcome: "denied",
       metadata: { source: options.source, reason: permission.reason, policyId: permission.policyId },
     })
+    logger.warn("Knowledge Base IPC permission denied.", {
+      ...logMeta,
+      durationMs: Date.now() - startedAt,
+      reasonLength: permission.reason.length,
+      policyId: permission.policyId,
+    })
     throw new Error(permission.reason)
   }
   auditSink.record({
@@ -255,6 +311,10 @@ async function checkKnowledgeBasePermission(options: {
     resource: options.resource,
     outcome: "allowed",
     metadata: { source: options.source },
+  })
+  logger.info("Knowledge Base IPC permission completed.", {
+    ...logMeta,
+    durationMs: Date.now() - startedAt,
   })
 }
 
