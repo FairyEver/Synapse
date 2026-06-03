@@ -1665,7 +1665,15 @@ function metadataUsageCostBreakdown(
   const cacheRead = finiteCostPart(value.cacheRead)
   const cacheWrite = finiteCostPart(value.cacheWrite)
   const reasoning = finiteCostPart(value.reasoning)
-  if ([input, output, cacheRead, cacheWrite, reasoning].some((part) => part === undefined)) return undefined
+  if (
+    input === undefined
+    || output === undefined
+    || cacheRead === undefined
+    || cacheWrite === undefined
+    || reasoning === undefined
+  ) {
+    return undefined
+  }
   return { input, output, cacheRead, cacheWrite, reasoning }
 }
 
