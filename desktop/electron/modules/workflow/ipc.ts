@@ -23,6 +23,8 @@ import { sanitizeNodeResultsForSnapshot } from "../../services/workflow/run-snap
 
 const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
+const ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE = "旧运行仍在后台执行，请等待取消完成后再重新运行"
+const DELETE_ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE = "旧运行仍在后台执行，请等待取消完成后再删除工作流"
 const runCompletions = new Map<string, Promise<unknown>>()
 const deletedWorkflows = new Set<string>()
 const WORKFLOW_FILE_CONVERSION_INPUT_EXTENSIONS = ["doc", "docx", "xlsx", "pdf", "ppt", "pptx", "png", "jpg", "jpeg", "webp"]
@@ -478,13 +480,44 @@ function findActiveRun(runStatuses: Map<string, WorkflowRunStatus>, workflowId: 
   return undefined
 }
 
-async function waitForRunCompletion(runId: string): Promise<void> {
+type RunCompletionWaitResult = "completed" | "timeout"
+
+async function waitForRunCompletion(runId: string): Promise<RunCompletionWaitResult> {
   const completion = runCompletions.get(runId)
-  if (!completion) return
-  await Promise.race([
-    completion.then(() => undefined),
-    new Promise<void>((resolve) => setTimeout(resolve, DELETE_ABORT_WAIT_MS)),
+  if (!completion) return "completed"
+  let timeout: NodeJS.Timeout | undefined
+  const result = await Promise.race([
+    completion.then(() => "completed" as const, () => "completed" as const),
+    new Promise<"timeout">((resolve) => {
+      timeout = setTimeout(() => resolve("timeout"), DELETE_ABORT_WAIT_MS)
+    }),
   ])
+  if (timeout) clearTimeout(timeout)
+  return result
+}
+
+async function abortActiveRunsForWorkflow(options: {
+  readonly workflowId: string
+  readonly runStatuses: Map<string, WorkflowRunStatus>
+  readonly abortMap: Map<string, AbortController>
+  readonly source: string
+}): Promise<{ abortedRunIds: string[]; timedOutRunId?: string }> {
+  const abortedRunIds: string[] = []
+  for (const [existingRunId, status] of options.runStatuses) {
+    if (status.workflowId === options.workflowId && status.status === "running") {
+      logger.info(`${options.source} — cancelling active run`, { workflowId: options.workflowId, activeRunId: existingRunId })
+      options.abortMap.get(existingRunId)?.abort()
+      abortedRunIds.push(existingRunId)
+    }
+  }
+  for (const runId of abortedRunIds) {
+    const result = await waitForRunCompletion(runId)
+    if (result === "timeout") {
+      logger.warn(`${options.source} — active run did not stop before timeout`, { workflowId: options.workflowId, activeRunId: runId, waitMs: DELETE_ABORT_WAIT_MS })
+      return { abortedRunIds, timedOutRunId: runId }
+    }
+  }
+  return { abortedRunIds }
 }
 
 export const workflowIpcModule: IpcModule = {
@@ -713,55 +746,61 @@ export const workflowIpcModule: IpcModule = {
         // late-finishing engine runs from re-creating snapshot files
         // (saveRunSnapshot checks this tombstone and skips writes).
         deletedWorkflows.add(id)
-        // Abort any running runs for this workflow before deleting to prevent
-        // orphaned engine processes (which would otherwise continue running,
-        // leak abort controllers / run statuses in memory, and write ghost
-        // snapshot files to the deleted workflow directory on completion).
-        const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
-        const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
-        const runningRunIds: string[] = []
-        let abortedCount = 0
-        let prunedCount = 0
-        for (const [runId, status] of runStatuses) {
-          if (status.workflowId !== id) continue
-          if (status.status === "running") {
-            abortMap.get(runId)?.abort()
-            runningRunIds.push(runId)
-            abortedCount++
-          } else {
-            prunedCount++
+        try {
+          // Abort any running runs for this workflow before deleting to prevent
+          // orphaned engine processes (which would otherwise continue running,
+          // leak abort controllers / run statuses in memory, and write ghost
+          // snapshot files to the deleted workflow directory on completion).
+          const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+          const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
+          const prunedRunIds: string[] = []
+          for (const [runId, status] of runStatuses) {
+            if (status.workflowId === id && status.status !== "running") {
+              prunedRunIds.push(runId)
+            }
+          }
+          const abortResult = await abortActiveRunsForWorkflow({
+            workflowId: id,
+            runStatuses,
+            abortMap,
+            source: "workflow:delete",
+          })
+          if (abortResult.timedOutRunId) {
+            throw new Error(DELETE_ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE)
+          }
+          for (const runId of abortResult.abortedRunIds) {
+            abortMap.delete(runId)
             runStatuses.delete(runId)
           }
+          for (const runId of prunedRunIds) {
+            runStatuses.delete(runId)
+          }
+          if (abortResult.abortedRunIds.length > 0 || prunedRunIds.length > 0) {
+            logger.info("workflow:delete cleaned up run statuses", { workflowId: id, abortedCount: abortResult.abortedRunIds.length, prunedCount: prunedRunIds.length })
+          }
+          const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
+          const windowManager = ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager")
+          const eventBus = ctx.resolve<EventBus>("core.event-bus")
+          await ctx.resolve<WorkflowService>("core.workflow").delete(id)
+          try {
+            await snapshots.deleteWorkflow(id)
+          } catch {
+            logger.error("workflow:delete — snapshot cleanup failed", { id })
+            // Snapshot cleanup failure is non-fatal: the workflow definition has
+            // already been deleted, so proceeding with window close and event
+            // emission ensures the UI stays in a consistent state.
+          }
+          windowManager.forceCloseAll(id)
+          eventBus.emit({
+            domain: "workflow",
+            type: "workflow:definition-updated",
+            payload: { workflowId: id, source: "workflow-delete" },
+            timestamp: new Date().toISOString(),
+          })
+          logger.info("workflow:delete done", { id })
+        } finally {
+          deletedWorkflows.delete(id)
         }
-        if (abortedCount > 0 || prunedCount > 0) {
-          logger.info("workflow:delete cleaned up run statuses", { workflowId: id, abortedCount, prunedCount })
-        }
-        await Promise.all(runningRunIds.map(waitForRunCompletion))
-        for (const runId of runningRunIds) {
-          abortMap.delete(runId)
-          runStatuses.delete(runId)
-        }
-        const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
-        const windowManager = ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager")
-        const eventBus = ctx.resolve<EventBus>("core.event-bus")
-        await ctx.resolve<WorkflowService>("core.workflow").delete(id)
-        try {
-          await snapshots.deleteWorkflow(id)
-        } catch {
-          logger.error("workflow:delete — snapshot cleanup failed", { id })
-          // Snapshot cleanup failure is non-fatal: the workflow definition has
-          // already been deleted, so proceeding with window close and event
-          // emission ensures the UI stays in a consistent state.
-        }
-        windowManager.forceCloseAll(id)
-        eventBus.emit({
-          domain: "workflow",
-          type: "workflow:definition-updated",
-          payload: { workflowId: id, source: "workflow-delete" },
-          timestamp: new Date().toISOString(),
-        })
-        logger.info("workflow:delete done", { id })
-        deletedWorkflows.delete(id)
       },
     },
     validate: {
@@ -871,15 +910,15 @@ export const workflowIpcModule: IpcModule = {
             return { conflict: true as const, activeRunId }
           }
         } else {
-          const abortedRunIds: string[] = []
-          for (const [existingRunId, status] of runStatuses) {
-            if (status.workflowId === def.id && status.status === "running") {
-              logger.info("workflow:runDefinition force — cancelling active run", { activeRunId: existingRunId })
-              abortMap.get(existingRunId)?.abort()
-              abortedRunIds.push(existingRunId)
-            }
+          const abortResult = await abortActiveRunsForWorkflow({
+            workflowId: def.id,
+            runStatuses,
+            abortMap,
+            source: "workflow:runDefinition force",
+          })
+          if (abortResult.timedOutRunId) {
+            return { errors: [{ type: "invalid_config", message: ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE }] }
           }
-          await Promise.all(abortedRunIds.map(waitForRunCompletion))
         }
 
         const projectId = await resolveWorkflowProjectId(def)
@@ -966,14 +1005,15 @@ export const workflowIpcModule: IpcModule = {
           }
         }
 
-        const abortedRunIds: string[] = []
-        for (const [existingRunId, status] of runStatuses) {
-          if (status.workflowId === workflowId && status.status === "running") {
-            abortMap.get(existingRunId)?.abort()
-            abortedRunIds.push(existingRunId)
-          }
+        const abortResult = await abortActiveRunsForWorkflow({
+          workflowId,
+          runStatuses,
+          abortMap,
+          source: "workflow:rerun force",
+        })
+        if (abortResult.timedOutRunId) {
+          return { errors: [{ type: "invalid_config", message: ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE }] }
         }
-        await Promise.all(abortedRunIds.map(waitForRunCompletion))
 
         const projectId = await resolveWorkflowProjectId(def)
         const runId = startRunWithLifecycle({

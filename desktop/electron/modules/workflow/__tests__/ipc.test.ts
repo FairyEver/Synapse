@@ -250,6 +250,149 @@ describe("workflowIpcModule", () => {
     )
   })
 
+  it("blocks force runDefinition when the active run does not finish after abort timeout", async () => {
+    vi.useFakeTimers()
+    let finishActiveRun: (() => void) | undefined
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const abortMap = new Map<string, AbortController>()
+    const eventBus = { emit: vi.fn() }
+    const snapshots = { save: vi.fn(async () => undefined) }
+    const workflow = { get: vi.fn(async () => workflowDefinition()) }
+    const engine = {
+      run: vi.fn(() => new Promise<void>((resolve) => {
+        finishActiveRun = resolve
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return abortMap as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      const firstRun = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+      const forceRun = harness.invoke("synapse:workflow:run-definition", {
+        definition: workflowDefinition(),
+        params: {},
+        force: true,
+      })
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      expect(firstRun).toEqual({ runId: expect.any(String) })
+      await expect(forceRun).resolves.toEqual({
+        errors: [{ type: "invalid_config", message: "旧运行仍在后台执行，请等待取消完成后再重新运行" }],
+      })
+      expect(engine.run).toHaveBeenCalledTimes(1)
+    } finally {
+      finishActiveRun?.()
+      await Promise.resolve()
+      vi.useRealTimers()
+    }
+  })
+
+  it("blocks force rerun when the active run does not finish after abort timeout", async () => {
+    vi.useFakeTimers()
+    let finishActiveRun: (() => void) | undefined
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const abortMap = new Map<string, AbortController>()
+    const eventBus = { emit: vi.fn() }
+    const snapshots = { save: vi.fn(async () => undefined), findByRunId: vi.fn(async () => null) }
+    const workflow = { get: vi.fn(async () => workflowDefinition()) }
+    const engine = {
+      run: vi.fn(() => new Promise<void>((resolve) => {
+        finishActiveRun = resolve
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return abortMap as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      const firstRun = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+      const previousRunId = (firstRun as { runId: string }).runId
+      const forceRerun = harness.invoke("synapse:workflow:rerun", {
+        previousRunId,
+        params: {},
+        force: true,
+      })
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await expect(forceRerun).resolves.toEqual({
+        errors: [{ type: "invalid_config", message: "旧运行仍在后台执行，请等待取消完成后再重新运行" }],
+      })
+      expect(engine.run).toHaveBeenCalledTimes(1)
+    } finally {
+      finishActiveRun?.()
+      await Promise.resolve()
+      vi.useRealTimers()
+    }
+  })
+
+  it("blocks workflow delete when the active run does not finish after abort timeout", async () => {
+    vi.useFakeTimers()
+    let finishActiveRun: (() => void) | undefined
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const abortMap = new Map<string, AbortController>()
+    const eventBus = { emit: vi.fn() }
+    const snapshots = { save: vi.fn(async () => undefined), deleteWorkflow: vi.fn(async () => undefined) }
+    const windowManager = { forceCloseAll: vi.fn() }
+    const workflow = {
+      get: vi.fn(async () => workflowDefinition()),
+      delete: vi.fn(async () => undefined),
+    }
+    const engine = {
+      run: vi.fn(() => new Promise<void>((resolve) => {
+        finishActiveRun = resolve
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.workflow.window-manager") return windowManager as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return abortMap as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+      const deleteRequest = harness.invoke("synapse:workflow:delete", { id: "workflow-1" })
+      const deleteExpectation = expect(deleteRequest).rejects.toThrow("旧运行仍在后台执行，请等待取消完成后再删除工作流")
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await deleteExpectation
+      expect(workflow.delete).not.toHaveBeenCalled()
+      expect(snapshots.deleteWorkflow).not.toHaveBeenCalled()
+      expect(windowManager.forceCloseAll).not.toHaveBeenCalled()
+      expect(engine.run).toHaveBeenCalledTimes(1)
+    } finally {
+      finishActiveRun?.()
+      await Promise.resolve()
+      vi.useRealTimers()
+    }
+  })
+
   it("does not infer a run project from configured projects when workflow has no default project", async () => {
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
