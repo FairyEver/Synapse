@@ -1,0 +1,301 @@
+import { z } from "zod"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => ({ warn: vi.fn() }),
+}))
+
+import {
+  MainActionRegistry,
+  type MainActionDefinition,
+} from "../../../action-runtime/action-registry"
+import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
+import type { EventBus } from "../../../runtime/event-bus"
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
+import type { StructuredLogger } from "../../../runtime/service-registry"
+import { AutomationService } from "../automation-service"
+import { createBuiltinAutomationTriggerRegistry } from "../builtin-triggers"
+import { AutomationExecutionService } from "../execution-service"
+import { AutomationItemRepository } from "../item-repository"
+import { AutomationRunRepository } from "../run-repository"
+import type { AutomationItem, AutomationRun } from "../types"
+
+const testActionSchema = z.object({ message: z.string().min(1) })
+type TestActionConfig = z.infer<typeof testActionSchema>
+
+describe("AutomationService", () => {
+  it("schedules enabled automations on start", async () => {
+    const harness = createHarness()
+    await harness.items.create(createAutomationInput())
+
+    await harness.service.start()
+
+    expect(harness.service.automationRuntimeInspect().timers).toContain("automation:1")
+    await harness.service.stop()
+  })
+
+  it("runs an automation manually", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate(createAutomationInput())
+
+    const run = await harness.service.runNow(item.id)
+
+    expect(run?.status).toBe("success")
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([
+      expect.objectContaining({
+        automationId: item.id,
+        status: "success",
+        triggeredBy: "manual",
+      }),
+    ])
+  })
+
+  it("skips overlapping scheduled runs", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ action: longRunningAction(), logger })
+    const item = await harness.service.automationCreate(createAutomationInput())
+
+    const runPromise = harness.service.runNow(item.id)
+    await waitFor(async () => harness.service.automationRuntimeInspect().runningItemIds.includes(item.id))
+    const skipped = await harness.service.triggerForTest(item.id, "trigger")
+
+    expect(skipped?.status).toBe("skipped")
+    expect(skipped?.error).toBe("automation is already running")
+    expect(logger.info).toHaveBeenCalledWith("Automation run skipped.", {
+      automationId: item.id,
+      runId: skipped?.id,
+      triggeredBy: "trigger",
+      status: "skipped",
+      boundary: "automation-skip-run",
+      reason: "automation is already running",
+    })
+    const running = (await harness.runs.listByAutomation(item.id)).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+    await harness.service.stopRun(running!.id)
+    await runPromise
+  })
+
+  it("marks listed automations that are currently running", async () => {
+    const harness = createHarness({ action: longRunningAction() })
+    const item = await harness.service.automationCreate(createAutomationInput())
+
+    const runPromise = harness.service.runNow(item.id)
+    await waitFor(async () => harness.service.automationRuntimeInspect().runningItemIds.includes(item.id))
+
+    expect(await harness.service.automationList()).toEqual([
+      expect.objectContaining({
+        id: item.id,
+        activeRun: expect.objectContaining({ status: "running" }),
+      }),
+    ])
+
+    const running = (await harness.runs.listByAutomation(item.id)).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+    await harness.service.stopRun(running!.id)
+    await runPromise
+  })
+
+  it("emits automation change events when a run finishes", async () => {
+    const emit = vi.fn()
+    const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
+    const harness = createHarness({ eventBus })
+    const item = await harness.service.automationCreate(createAutomationInput())
+
+    const run = await harness.service.triggerForTest(item.id, "trigger")
+
+    expect(run?.status).toBe("success")
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "automation",
+        type: "automation.itemChanged",
+        payload: expect.objectContaining({
+          automationId: item.id,
+          runId: run?.id,
+          reason: "run-finished",
+        }),
+      }),
+      { backpressure: "coalesce" },
+    )
+  })
+
+  it("rejects deleting an automation while it has an active run", async () => {
+    const harness = createHarness({ action: longRunningAction() })
+    const item = await harness.service.automationCreate(createAutomationInput())
+
+    const runPromise = harness.service.runNow(item.id)
+    await waitFor(async () => harness.service.automationRuntimeInspect().runningItemIds.includes(item.id))
+
+    await expect(harness.service.automationDelete(item.id)).rejects.toThrow(/running/i)
+
+    const running = (await harness.runs.listByAutomation(item.id)).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+    await harness.service.stopRun(running!.id)
+    await runPromise
+  })
+})
+
+function createHarness(options: {
+  readonly action?: MainActionDefinition<TestActionConfig>
+  readonly logger?: StructuredLogger
+  readonly eventBus?: Pick<EventBus, "emit">
+} = {}) {
+  const triggers = createBuiltinAutomationTriggerRegistry()
+  const items = new AutomationItemRepository({
+    items: new MemoryNamespace<AutomationItem>("automation.items"),
+    triggers,
+    now: () => new Date("2026-06-03T00:00:00.000Z"),
+    idFactory: () => "automation:1",
+  })
+  const runs = new AutomationRunRepository({
+    runs: new MemoryNamespace<AutomationRun>("automation.runs"),
+    now: () => new Date("2026-06-03T00:01:00.000Z"),
+    idFactory: (_automationId, index) => `automation-run:${index}`,
+  })
+  const actions = new MainActionRegistry()
+  actions.register(options.action ?? testAction)
+  const execution = new AutomationExecutionService({
+    items,
+    runs,
+    actions,
+    permissionGuard: permissionGuard({ allowed: true }),
+    auditSink: {
+      record: () => {},
+      list: () => [],
+      clearForTests: () => {},
+    },
+    defaultCwd: "/tmp",
+    logger: { warn: () => {} },
+  })
+  const service = new AutomationService({
+    items,
+    runs,
+    triggers,
+    actions,
+    execution,
+    defaultCwd: "/tmp",
+    eventBus: options.eventBus,
+    logger: options.logger,
+    now: () => new Date("2026-06-03T00:00:00.000Z"),
+  })
+  return { service, items, runs, execution }
+}
+
+function createAutomationInput() {
+  return {
+    name: "Daily report",
+    scope: { type: "global" as const },
+    trigger: {
+      type: "builtin.interval",
+      config: {
+        everyMinutes: 10,
+        anchor: "created_at",
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+      },
+    },
+    executor: { type: "builtin.test", config: { message: "ok" } },
+  }
+}
+
+const testAction: MainActionDefinition<TestActionConfig> = {
+  manifest: {
+    id: "builtin.test",
+    title: "Test",
+    permissions: ["shell.exec"],
+    defaultConfig: { message: "ok" },
+    configFields: [
+      { name: "message", kind: "string", required: true, defaultValue: "ok" },
+    ],
+    configSchema: testActionSchema,
+  },
+  buildPermissionRequest: ({ config, context }) => ({
+    action: "shell.exec",
+    actor: context.actor,
+    resource: config.message,
+    context: { taskId: context.taskId, runId: context.runId },
+  }),
+  execute: async () => ({
+    status: "success",
+    summary: "ok",
+    outputs: { stdout: "ok" },
+  }),
+}
+
+function longRunningAction(): MainActionDefinition<TestActionConfig> {
+  return {
+    ...testAction,
+    execute: async ({ context }) => new Promise((resolve) => {
+      context.abortSignal.addEventListener("abort", () => {
+        resolve({ status: "cancelled", summary: "已停止" })
+      }, { once: true })
+    }),
+  }
+}
+
+function permissionGuard(result: Awaited<ReturnType<PermissionGuard["check"]>>): PermissionGuard {
+  return {
+    registerPolicy: () => () => {},
+    check: async () => result,
+  }
+}
+
+function structuredLogger(): StructuredLogger {
+  const logger: StructuredLogger = {
+    trace: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(() => logger),
+  }
+  return logger
+}
+
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
+  const startedAt = Date.now()
+  while (!(await predicate())) {
+    if (Date.now() - startedAt > 1_000) {
+      throw new Error("Timed out waiting for condition")
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
+class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
+  readonly schemaVersion = 1
+  readonly backend = "json" as const
+  private readonly items = new Map<string, T>()
+
+  constructor(readonly name: string) {}
+
+  async getSingleton(): Promise<T | null> {
+    return this.items.values().next().value ?? null
+  }
+
+  async setSingleton(value: T): Promise<void> {
+    this.items.set(value.id, value)
+  }
+
+  async list(filter?: Partial<T>): Promise<T[]> {
+    const values = [...this.items.values()]
+    if (!filter) return values
+    return values.filter((item) =>
+      Object.entries(filter).every(([key, value]) => item[key as keyof T] === value))
+  }
+
+  async get(id: string): Promise<T | null> {
+    return this.items.get(id) ?? null
+  }
+
+  async upsert(item: T): Promise<void> {
+    this.items.set(item.id, item)
+  }
+
+  async remove(id: string): Promise<void> {
+    this.items.delete(id)
+  }
+
+  onChange(_listener: DataChangeListener<T>): () => void {
+    return () => {}
+  }
+}

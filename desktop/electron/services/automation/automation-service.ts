@@ -1,0 +1,638 @@
+import type { MainActionRegistry } from "../../action-runtime/action-registry"
+import type { EventBus } from "../../runtime/event-bus"
+import type { StructuredLogger } from "../../runtime/service-registry"
+import type { AutomationExecutionService } from "./execution-service"
+import type { AutomationItemRepository } from "./item-repository"
+import type { AutomationRunRepository } from "./run-repository"
+import type { AutomationTriggerDefinition, AutomationTriggerRegistry } from "./trigger-registry"
+import type {
+  AutomationCreateInput,
+  AutomationItem,
+  AutomationRun,
+  AutomationRunTrigger,
+  AutomationUpdateInput,
+  AutomationValidation,
+} from "./types"
+
+const TIMER_MAX_DELAY_MS = 2_147_483_647
+const STOP_SETTLE_WAIT_MS = 3_000
+const NEEDS_UPDATE_MESSAGE = "自动化配置需要更新"
+
+export interface AutomationServiceDeps {
+  readonly items: AutomationItemRepository
+  readonly runs: AutomationRunRepository
+  readonly triggers: AutomationTriggerRegistry
+  readonly actions: MainActionRegistry
+  readonly execution: AutomationExecutionService
+  readonly defaultCwd: string
+  readonly eventBus?: Pick<EventBus, "emit">
+  readonly logger?: StructuredLogger
+  readonly now?: () => Date
+}
+
+type AutomationChangeReason =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "enabled"
+  | "disabled"
+  | "scheduled"
+  | "run-started"
+  | "run-finished"
+  | "run-skipped"
+  | "run-stopped"
+
+type AutomationChangedPayload = {
+  readonly automationId?: string
+  readonly runId?: string
+  readonly reason: AutomationChangeReason
+}
+
+export class AutomationService {
+  private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly runningItemIds = new Set<string>()
+  private started = false
+
+  constructor(private readonly deps: AutomationServiceDeps) {}
+
+  async start(): Promise<void> {
+    if (this.started) return
+    const items = await this.deps.items.list()
+    for (const item of items) {
+      try {
+        await this.scheduleOnStartup(item)
+      } catch (error) {
+        this.deps.logger?.warn?.("Automation startup failed, skipping.", {
+          automationId: item.id,
+          name: item.name,
+          boundary: "automation-startup",
+          ...errorMetadata(error),
+        })
+      }
+    }
+    this.started = true
+  }
+
+  async stop(): Promise<void> {
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer)
+    }
+    this.timers.clear()
+    await this.stopActiveRuns()
+    this.started = false
+  }
+
+  async automationList(): Promise<AutomationItem[]> {
+    const items = await this.deps.items.list()
+    const result = await Promise.all(items.map((item) => this.withRuntimeState(item)))
+    this.deps.logger?.info("Automations listed.", {
+      boundary: "automation.item-list",
+      itemCount: result.length,
+    })
+    return result
+  }
+
+  async automationGet(id: string): Promise<AutomationItem | null> {
+    const item = await this.deps.items.get(id)
+    const result = item ? await this.withRuntimeState(item) : null
+    this.deps.logger?.info("Automation loaded.", {
+      boundary: "automation.item-get",
+      automationId: id,
+      found: Boolean(result),
+    })
+    return result
+  }
+
+  async automationCreate(input: AutomationCreateInput): Promise<AutomationItem> {
+    const startedAt = Date.now()
+    try {
+      const item = await this.deps.items.create(this.normalizeCreateInput(input))
+      if (this.started && item.enabled && this.isItemValid(item)) await this.schedule(item.id, item.nextRunAt)
+      this.emitAutomationChanged({ automationId: item.id, reason: "created" })
+      this.deps.logger?.info("Automation created.", {
+        boundary: "automation.item-create",
+        automationId: item.id,
+        triggerType: item.trigger.type,
+        executorType: item.executor.type,
+        enabled: item.enabled,
+        durationMs: Date.now() - startedAt,
+      })
+      return this.withRuntimeState(item)
+    } catch (error) {
+      this.deps.logger?.warn("Automation create failed.", {
+        boundary: "automation.item-create",
+        triggerType: input.trigger.type,
+        executorType: input.executor.type,
+        enabled: input.enabled,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
+  }
+
+  async automationUpdate(id: string, patch: AutomationUpdateInput): Promise<AutomationItem> {
+    const startedAt = Date.now()
+    const normalizedPatch = this.normalizeUpdateInput(patch)
+    const oldItem = await this.deps.items.get(id)
+    this.cancel(id)
+    try {
+      const item = await this.deps.items.update(id, normalizedPatch)
+      if (this.started && item.enabled && this.isItemValid(item)) await this.schedule(item.id, item.nextRunAt)
+      this.emitAutomationChanged({ automationId: item.id, reason: "updated" })
+      this.deps.logger?.info("Automation updated.", {
+        boundary: "automation.item-update",
+        automationId: item.id,
+        patchKeys: Object.keys(patch),
+        enabled: item.enabled,
+        durationMs: Date.now() - startedAt,
+      })
+      return this.withRuntimeState(item)
+    } catch (error) {
+      if (this.started && oldItem?.enabled && oldItem.nextRunAt && this.isItemValid(oldItem)) {
+        await this.schedule(oldItem.id, oldItem.nextRunAt)
+      }
+      this.deps.logger?.warn("Automation update failed.", {
+        boundary: "automation.item-update",
+        automationId: id,
+        patchKeys: Object.keys(patch),
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
+  }
+
+  async automationDelete(id: string): Promise<{ readonly deleted: boolean }> {
+    const startedAt = Date.now()
+    if (this.runningItemIds.has(id) || this.deps.execution.getActiveRunIdForItem(id)) {
+      throw new Error("Automation is currently running. Stop it before deleting.")
+    }
+    const oldItem = await this.deps.items.get(id)
+    this.cancel(id)
+    try {
+      const deleted = await this.deps.items.delete(id)
+      if (deleted) this.emitAutomationChanged({ automationId: id, reason: "deleted" })
+      this.deps.logger?.info("Automation deleted.", {
+        boundary: "automation.item-delete",
+        automationId: id,
+        deleted,
+        durationMs: Date.now() - startedAt,
+      })
+      return { deleted }
+    } catch (error) {
+      if (this.started && oldItem?.enabled && oldItem.nextRunAt && this.isItemValid(oldItem)) {
+        await this.schedule(oldItem.id, oldItem.nextRunAt)
+      }
+      this.deps.logger?.warn("Automation delete failed.", {
+        boundary: "automation.item-delete",
+        automationId: id,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
+  }
+
+  async automationEnable(id: string): Promise<AutomationItem> {
+    return this.setAutomationEnabled(id, true)
+  }
+
+  async automationDisable(id: string): Promise<AutomationItem> {
+    return this.setAutomationEnabled(id, false)
+  }
+
+  async runNow(id: string): Promise<AutomationRun | null> {
+    const startedAt = Date.now()
+    const item = await this.deps.items.get(id)
+    if (!item) {
+      this.deps.logger?.info("Automation manual run skipped because item was not found.", {
+        boundary: "automation.run-now",
+        automationId: id,
+        found: false,
+        durationMs: Date.now() - startedAt,
+      })
+      return null
+    }
+    if (!this.isItemValid(item)) {
+      throw new Error(NEEDS_UPDATE_MESSAGE)
+    }
+    try {
+      const run = await this.executeOrSkip(item, "manual")
+      this.deps.logger?.info("Automation manual run requested.", {
+        boundary: "automation.run-now",
+        automationId: id,
+        runId: run?.id,
+        status: run?.status,
+        durationMs: Date.now() - startedAt,
+      })
+      return run
+    } catch (error) {
+      this.deps.logger?.warn("Automation manual run failed.", {
+        boundary: "automation.run-now",
+        automationId: id,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
+  }
+
+  runAutomationNow(id: string): Promise<AutomationRun | null> {
+    return this.runNow(id)
+  }
+
+  async stopRun(runId: string): Promise<{ readonly stopped: boolean }> {
+    const run = await this.deps.runs.get(runId)
+    const stopped = this.deps.execution.stopRun(runId)
+    if (stopped) {
+      await Promise.race([
+        this.deps.execution.waitForRunToSettle(runId),
+        delay(STOP_SETTLE_WAIT_MS),
+      ])
+    }
+    this.deps.logger?.info("Automation stop requested.", {
+      ...(run ? { automationId: run.automationId } : {}),
+      runId,
+      stopped,
+      runFound: Boolean(run),
+      boundary: "automation-stop-run",
+    })
+    if (stopped || run) {
+      this.emitAutomationChanged({ automationId: run?.automationId, runId, reason: "run-stopped" })
+    }
+    return { stopped }
+  }
+
+  async automationRunList(
+    automationId: string,
+    options?: { readonly limit?: number },
+  ): Promise<AutomationRun[]> {
+    try {
+      const runs = await this.deps.runs.listByAutomation(automationId, options)
+      this.deps.logger?.info("Automation runs listed.", {
+        boundary: "automation.run-list",
+        automationId,
+        runCount: runs.length,
+        limit: options?.limit,
+      })
+      return runs
+    } catch (error) {
+      this.deps.logger?.warn("Automation runs list failed.", {
+        boundary: "automation.run-list",
+        automationId,
+        limit: options?.limit,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
+  }
+
+  async triggerForTest(
+    id: string,
+    triggeredBy: AutomationRunTrigger,
+  ): Promise<AutomationRun | null> {
+    return this.runScheduled(id, triggeredBy)
+  }
+
+  automationRuntimeInspect(): {
+    readonly timers: readonly string[]
+    readonly runningItemIds: readonly string[]
+  } {
+    return {
+      timers: [...this.timers.keys()],
+      runningItemIds: [...this.runningItemIds],
+    }
+  }
+
+  private async setAutomationEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
+    const startedAt = Date.now()
+    const oldItem = await this.deps.items.get(id)
+    if (enabled && oldItem && !this.isItemValid(oldItem)) {
+      throw new Error(NEEDS_UPDATE_MESSAGE)
+    }
+    this.cancel(id)
+    try {
+      const item = await this.deps.items.setEnabled(id, enabled)
+      if (this.started && item.enabled && this.isItemValid(item)) await this.schedule(item.id, item.nextRunAt)
+      this.emitAutomationChanged({ automationId: item.id, reason: enabled ? "enabled" : "disabled" })
+      this.deps.logger?.info("Automation enabled state changed.", {
+        boundary: "automation.item-set-enabled",
+        automationId: item.id,
+        enabled: item.enabled,
+        durationMs: Date.now() - startedAt,
+      })
+      return this.withRuntimeState(item)
+    } catch (error) {
+      if (this.started && oldItem?.enabled && oldItem.nextRunAt && this.isItemValid(oldItem)) {
+        await this.schedule(oldItem.id, oldItem.nextRunAt)
+      }
+      this.deps.logger?.warn("Automation enabled state change failed.", {
+        boundary: "automation.item-set-enabled",
+        automationId: id,
+        enabled,
+        durationMs: Date.now() - startedAt,
+        ...errorMetadata(error),
+      })
+      throw error
+    }
+  }
+
+  private async stopActiveRuns(): Promise<void> {
+    const runIds = new Set(this.deps.execution.getActiveRunIds())
+    for (const itemId of this.runningItemIds) {
+      const runId = this.deps.execution.getActiveRunIdForItem(itemId)
+      if (runId) runIds.add(runId)
+    }
+    await Promise.all([...runIds].map((runId) => this.stopRun(runId)))
+  }
+
+  private async scheduleOnStartup(item: AutomationItem): Promise<void> {
+    if (!this.isItemValid(item)) return
+    if (!item.enabled) return
+    const nextRunAt = item.nextRunAt ? new Date(item.nextRunAt) : null
+    if (!nextRunAt || Number.isNaN(nextRunAt.getTime()) || nextRunAt.getTime() > this.now().getTime()) {
+      await this.schedule(item.id, item.nextRunAt)
+      return
+    }
+    if (item.policy.missedRunPolicy === "run_once") {
+      this.runScheduledInBackground(item.id, "missed_run")
+      return
+    }
+    await this.schedule(item.id)
+  }
+
+  private async schedule(id: string, preferredNextRunAt?: string): Promise<void> {
+    this.cancel(id)
+    const item = await this.deps.items.get(id)
+    if (!item?.enabled) return
+    if (!this.isItemValid(item)) return
+    const nextRunAt = this.resolveNextRunAt(item, preferredNextRunAt)
+    try {
+      await this.deps.items.markScheduled(id, nextRunAt.toISOString())
+    } catch (error) {
+      this.deps.logger?.warn?.("Automation markScheduled failed, scheduling in memory only.", {
+        automationId: id,
+        boundary: "automation-schedule-fallback",
+        ...errorMetadata(error),
+      })
+    }
+    const delayMs = Math.min(
+      TIMER_MAX_DELAY_MS,
+      Math.max(0, nextRunAt.getTime() - this.now().getTime()),
+    )
+    const timer = setTimeout(() => {
+      this.runScheduledInBackground(id, "trigger")
+    }, delayMs)
+    this.timers.set(id, timer)
+    this.emitAutomationChanged({ automationId: id, reason: "scheduled" })
+    this.deps.logger?.info?.("Automation timer set.", {
+      automationId: id,
+      nextRunAt: nextRunAt.toISOString(),
+      delayMs,
+      boundary: "automation-schedule-timer",
+    })
+  }
+
+  private runScheduledInBackground(id: string, triggeredBy: AutomationRunTrigger): void {
+    void this.runScheduled(id, triggeredBy).catch((error) => {
+      this.deps.logger?.warn("Automation background run failed.", {
+        automationId: id,
+        triggeredBy,
+        boundary: "automation-background-run",
+        ...errorMetadata(error),
+      })
+    })
+  }
+
+  private async runScheduled(
+    id: string,
+    triggeredBy: AutomationRunTrigger,
+  ): Promise<AutomationRun | null> {
+    this.timers.delete(id)
+    const item = await this.deps.items.get(id)
+    if (!item) return null
+    if (!item.enabled) {
+      return this.recordSkipped(item, triggeredBy, "automation is disabled")
+    }
+    if (!this.isItemValid(item)) {
+      return this.recordSkipped(item, triggeredBy, NEEDS_UPDATE_MESSAGE)
+    }
+    if (!isActiveToday(item, this.now())) {
+      await this.schedule(id)
+      return this.recordSkipped(item, triggeredBy, "day not in activeDays")
+    }
+    const deferSchedule =
+      item.trigger.type === "builtin.interval" &&
+      item.trigger.config.anchor === "last_completed_at"
+    if (triggeredBy === "trigger" && !deferSchedule) await this.schedule(id)
+    try {
+      return await this.executeOrSkip(item, triggeredBy)
+    } finally {
+      if (
+        (triggeredBy === "trigger" && deferSchedule) ||
+        triggeredBy === "missed_run"
+      ) {
+        await this.schedule(id)
+      }
+    }
+  }
+
+  private async executeOrSkip(
+    item: AutomationItem,
+    triggeredBy: AutomationRunTrigger,
+  ): Promise<AutomationRun> {
+    if (this.runningItemIds.has(item.id)) {
+      return this.recordSkipped(item, triggeredBy, "automation is already running")
+    }
+    this.runningItemIds.add(item.id)
+    this.emitAutomationChanged({ automationId: item.id, reason: "run-started" })
+    try {
+      const run = await this.deps.execution.runItem(item, triggeredBy)
+      this.emitAutomationChanged({ automationId: item.id, runId: run.id, reason: "run-finished" })
+      return run
+    } finally {
+      this.runningItemIds.delete(item.id)
+    }
+  }
+
+  private async recordSkipped(
+    item: AutomationItem,
+    triggeredBy: AutomationRunTrigger,
+    error: string,
+  ): Promise<AutomationRun> {
+    const run = await this.deps.runs.start(item.id, triggeredBy, {
+      triggerType: item.trigger.type,
+      executorType: item.executor.type,
+    })
+    const finished = await this.deps.runs.finish(run.id, {
+      status: "skipped",
+      error,
+    })
+    try {
+      await this.deps.items.markRunResult(item.id, { status: "skipped" })
+    } catch (markError) {
+      this.deps.logger?.warn("markRunResult failed after skipped automation run.", {
+        source: "automation",
+        automationId: item.id,
+        runId: run.id,
+        triggeredBy,
+        status: "skipped",
+        boundary: "automation-mark-run-result",
+        ...errorMetadata(markError),
+      })
+    }
+    this.deps.logger?.info("Automation run skipped.", {
+      automationId: item.id,
+      runId: run.id,
+      triggeredBy,
+      status: "skipped",
+      boundary: "automation-skip-run",
+      reason: error,
+    })
+    this.emitAutomationChanged({ automationId: item.id, runId: finished.id, reason: "run-skipped" })
+    return finished
+  }
+
+  private emitAutomationChanged(payload: AutomationChangedPayload): void {
+    this.deps.eventBus?.emit({
+      domain: "automation",
+      type: "automation.itemChanged",
+      payload,
+      timestamp: this.now().toISOString(),
+    }, { backpressure: "coalesce" })
+  }
+
+  private resolveNextRunAt(item: AutomationItem, preferredNextRunAt?: string): Date {
+    if (preferredNextRunAt) {
+      const preferred = new Date(preferredNextRunAt)
+      if (preferred.getTime() > this.now().getTime()) return preferred
+    }
+    const trigger = this.deps.triggers.get(item.trigger.type) as AutomationTriggerDefinition<Record<string, unknown>>
+    if (!trigger.computeNextRunAt) {
+      throw new Error(`Automation trigger "${item.trigger.type}" does not support scheduling`)
+    }
+    return trigger.computeNextRunAt({
+      config: item.trigger.config,
+      from: this.now(),
+      createdAt: item.createdAt,
+      lastRunAt: item.lastRunAt,
+    })
+  }
+
+  private cancel(id: string): void {
+    const timer = this.timers.get(id)
+    if (!timer) return
+    clearTimeout(timer)
+    this.timers.delete(id)
+  }
+
+  private now(): Date {
+    return this.deps.now?.() ?? new Date()
+  }
+
+  private async withRuntimeState(item: AutomationItem): Promise<AutomationItem> {
+    const validation = this.validateItem(item)
+    const baseItem = validation.status === "valid"
+      ? item
+      : await this.disableInvalidItem(item, validation)
+    if (!this.runningItemIds.has(item.id)) return baseItem
+    const runId = this.deps.execution.getActiveRunIdForItem(item.id)
+    return {
+      ...baseItem,
+      activeRun: { status: "running", id: runId },
+    }
+  }
+
+  private async disableInvalidItem(
+    item: AutomationItem,
+    validation: AutomationValidation,
+  ): Promise<AutomationItem> {
+    if (!item.enabled) return { ...item, enabled: false, validation }
+    this.cancel(item.id)
+    try {
+      const disabledItem = await this.deps.items.setEnabled(item.id, false)
+      this.emitAutomationChanged({ automationId: item.id, reason: "disabled" })
+      return { ...disabledItem, validation }
+    } catch (error) {
+      this.deps.logger?.warn?.("Failed to persist disabled state for invalid automation.", {
+        automationId: item.id,
+        boundary: "automation-disable-invalid",
+        ...errorMetadata(error),
+      })
+      return { ...item, enabled: false, validation }
+    }
+  }
+
+  private isItemValid(item: AutomationItem): boolean {
+    return this.validateItem(item).status === "valid"
+  }
+
+  private validateItem(item: AutomationItem): AutomationValidation {
+    const triggerValidation = this.deps.triggers.validateStoredConfig(item.trigger.type, item.trigger.config)
+    const executorValidation = this.deps.actions.validateStoredConfig(item.executor.type, item.executor.config)
+    if (triggerValidation.status === "valid" && executorValidation.status === "valid") {
+      return { status: "valid", issues: [] }
+    }
+    return {
+      status: "needs_update",
+      issues: [
+        ...(triggerValidation.status === "needs_update" ? triggerValidation.issues : []),
+        ...(executorValidation.status === "needs_update" ? executorValidation.issues : []),
+      ],
+    }
+  }
+
+  private normalizeCreateInput(input: AutomationCreateInput): AutomationCreateInput {
+    return {
+      ...input,
+      trigger: this.deps.triggers.normalize(input.trigger),
+      executor: this.normalizeExecutor(input.executor),
+    }
+  }
+
+  private normalizeUpdateInput(patch: AutomationUpdateInput): AutomationUpdateInput {
+    return {
+      ...patch,
+      ...(patch.trigger ? { trigger: this.deps.triggers.normalize(patch.trigger) } : {}),
+      ...(patch.executor ? { executor: this.normalizeExecutor(patch.executor) } : {}),
+    }
+  }
+
+  private normalizeExecutor(executor: AutomationCreateInput["executor"]): AutomationCreateInput["executor"] {
+    return {
+      type: executor.type,
+      config: this.deps.actions.parseConfig(executor.type, executor.config),
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function errorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
+function isActiveToday(item: AutomationItem, date: Date): boolean {
+  const activeDays = item.trigger.config.activeDays
+  if (!Array.isArray(activeDays) || activeDays.length >= 7) return true
+  const timezone = item.trigger.type === "builtin.cron" && typeof item.trigger.config.timezone === "string"
+    ? item.trigger.config.timezone
+    : undefined
+  const currentDay = getWeekdayForDate(date, timezone)
+  return activeDays.includes(currentDay)
+}
+
+function getWeekdayForDate(date: Date, timezone?: string): number {
+  if (!timezone) return date.getDay()
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).formatToParts(date)
+  const weekdayStr = parts.find((part) => part.type === "weekday")?.value ?? ""
+  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  return map[weekdayStr] ?? date.getDay()
+}

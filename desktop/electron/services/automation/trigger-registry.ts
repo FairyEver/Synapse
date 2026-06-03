@@ -29,12 +29,12 @@ export type AutomationTriggerDefinition<TConfig extends Record<string, unknown> 
 export class AutomationTriggerRegistry {
   private readonly triggers = new Map<string, AutomationTriggerDefinition>()
 
-  register(trigger: AutomationTriggerDefinition): void {
+  register<TConfig extends Record<string, unknown>>(trigger: AutomationTriggerDefinition<TConfig>): void {
     const id = trigger.manifest.id
     if (this.triggers.has(id)) {
       throw new Error(`Automation trigger "${id}" is already registered`)
     }
-    this.triggers.set(id, trigger)
+    this.triggers.set(id, trigger as AutomationTriggerDefinition)
   }
 
   get(id: string): AutomationTriggerDefinition {

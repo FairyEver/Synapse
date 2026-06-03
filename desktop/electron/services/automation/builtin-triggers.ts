@@ -5,13 +5,25 @@ import { AutomationTriggerRegistry } from "./trigger-registry"
 
 const activeDaysSchema = z.array(z.number().int().min(0).max(6)).min(1).max(7)
 
-export const cronTriggerSchema = z.object({
+type CronTriggerConfig = {
+  readonly expr: string
+  readonly timezone?: string
+  readonly activeDays: readonly number[]
+}
+
+type IntervalTriggerConfig = {
+  readonly everyMinutes: number
+  readonly anchor: "created_at" | "last_completed_at"
+  readonly activeDays: readonly number[]
+}
+
+export const cronTriggerSchema: z.ZodType<CronTriggerConfig> = z.object({
   expr: z.string().min(1),
   timezone: z.string().min(1).optional(),
   activeDays: activeDaysSchema,
 })
 
-export const intervalTriggerSchema = z.object({
+export const intervalTriggerSchema: z.ZodType<IntervalTriggerConfig> = z.object({
   everyMinutes: z.number().int().positive(),
   anchor: z.enum(["created_at", "last_completed_at"]).default("created_at"),
   activeDays: activeDaysSchema,
