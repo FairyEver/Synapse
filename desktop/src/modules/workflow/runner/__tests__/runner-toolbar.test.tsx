@@ -48,27 +48,37 @@ describe("RunnerToolbar", () => {
 
     const timelineButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("时间线"))
+    const tokenButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Token"))
     const stopButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("停止"))
     const copyButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("复制"))
     expect(timelineButton).toBeInstanceOf(HTMLButtonElement)
+    expect(tokenButton).toBeInstanceOf(HTMLButtonElement)
     expect(stopButton).toBeInstanceOf(HTMLButtonElement)
     expect(copyButton).toBeInstanceOf(HTMLButtonElement)
 
     await act(async () => {
       timelineButton?.click()
+      tokenButton?.click()
       stopButton?.click()
       copyButton?.click()
       await Promise.resolve()
     })
 
     expect(onViewModeChange).toHaveBeenCalledWith("timeline")
+    expect(onViewModeChange).toHaveBeenCalledWith("token")
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onCopyRunReport).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "button",
       name: "workflow-runner-view-timeline",
+      action: "click",
+    })
+    expect(track).toHaveBeenCalledWith({
+      component: "button",
+      name: "workflow-runner-view-token",
       action: "click",
     })
     expect(track).toHaveBeenCalledWith({

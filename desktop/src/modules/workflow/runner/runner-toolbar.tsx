@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Square, RotateCcw, PenLine, LayoutDashboard, List, Loader2, Copy } from "lucide-react"
+import { Square, RotateCcw, PenLine, LayoutDashboard, List, Loader2, Copy, Coins } from "lucide-react"
 import type { WorkflowDefinition, WorkflowRunStatus } from "@/types/workflow"
 import { RUN_STATE_BADGE } from "../lib/status-display"
 
-type ViewMode = "dag" | "timeline"
+type ViewMode = "dag" | "timeline" | "token"
 
 interface RunnerToolbarProps {
   definition: WorkflowDefinition
@@ -47,11 +47,20 @@ export function RunnerToolbar({ definition, runState, runError, viewMode, rerunn
           <Button
             size="sm"
             variant={viewMode === "timeline" ? "secondary" : "ghost"}
-            className="rounded-l-none h-7"
+            className="rounded-none h-7"
             data-track="workflow-runner-view-timeline"
             onClick={() => onViewModeChange("timeline")}
           >
             <List className="h-3.5 w-3.5 mr-1" />时间线
+          </Button>
+          <Button
+            size="sm"
+            variant={viewMode === "token" ? "secondary" : "ghost"}
+            className="rounded-l-none h-7"
+            data-track="workflow-runner-view-token"
+            onClick={() => onViewModeChange("token")}
+          >
+            <Coins className="h-3.5 w-3.5 mr-1" />Token
           </Button>
         </div>
         <Button size="sm" variant="outline" data-track="workflow-runner-copy-run-report" onClick={() => void onCopyRunReport()}>

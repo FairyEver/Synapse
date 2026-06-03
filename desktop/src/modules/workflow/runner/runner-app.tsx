@@ -8,6 +8,7 @@ import { errorDiagnostic, truncateWithEllipsis } from "../lib/error-utils"
 import { RunnerToolbar } from "./runner-toolbar"
 import { DagView } from "./dag-view"
 import { TimelineView } from "./timeline-view"
+import { TokenUsageView } from "./token-usage-view"
 import { NodeResultPanel } from "./node-result-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -31,7 +32,7 @@ import { openAgentConversationTarget } from "@/lib/agent-conversation-target"
 
 const logger = createRendererLogger("workflow.runner")
 
-type ViewMode = "dag" | "timeline"
+type ViewMode = "dag" | "timeline" | "token"
 
 export function WorkflowRunnerApp() {
   const searchParams = new URLSearchParams(window.location.search)
@@ -455,13 +456,18 @@ export function WorkflowRunnerApp() {
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
             />
-          ) : (
+          ) : viewMode === "timeline" ? (
             <TimelineView
               definition={definition}
               nodeResults={nodeResults}
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
               onOpenAgentConversation={handleOpenAgentConversation}
+            />
+          ) : (
+            <TokenUsageView
+              definition={definition}
+              nodeResults={nodeResults}
             />
           )}
         </ResizablePanel>
