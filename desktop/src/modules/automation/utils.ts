@@ -1,9 +1,10 @@
 import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
+import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
 import type { AutomationCreateInput, AutomationItem, AutomationRun, AutomationRunStatus, AutomationUpdateInput } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ActionConfig } from "../../../action-packages/types"
-import type { AutomationFormState } from "./types"
+import type { AutomationEditorDraft, AutomationFormState } from "./types"
 
 const DEFAULT_EXECUTOR_TYPE = "builtin.command"
 const DEFAULT_ACTIVE_DAYS = [0, 1, 2, 3, 4, 5, 6]
@@ -63,12 +64,89 @@ function createDefaultExecutorConfig(executorType: string): ActionConfig {
   return { ...rendererActionRegistry.getDefaultConfig(executorType) }
 }
 
+function createDefaultAutomationDraft(): AutomationEditorDraft {
+  return {
+    name: "",
+    description: "",
+    cwd: "",
+    enabled: false,
+    triggerType: null,
+    triggerConfig: {},
+    executorType: null,
+    executorConfig: {},
+    missedRunPolicy: "skip",
+  }
+}
+
+function createAutomationDraftFromItem(item: AutomationItem): AutomationEditorDraft {
+  return {
+    name: item.name,
+    description: item.description ?? "",
+    cwd: item.cwd ?? "",
+    enabled: item.enabled,
+    triggerType: item.trigger.type,
+    triggerConfig: item.trigger.config,
+    executorType: item.executor.type,
+    executorConfig: item.executor.config,
+    missedRunPolicy: item.policy.missedRunPolicy,
+  }
+}
+
 function buildAutomationCreateInput(form: AutomationFormState): AutomationCreateInput {
   return buildAutomationPayload(form)
 }
 
 function buildAutomationUpdateInput(form: AutomationFormState): AutomationUpdateInput {
   return buildAutomationPayload(form)
+}
+
+function buildAutomationCreateInputFromDraft(
+  draft: AutomationEditorDraft,
+  enabled: boolean,
+): AutomationCreateInput {
+  return buildAutomationPayloadFromDraft(draft, enabled)
+}
+
+function buildAutomationUpdateInputFromDraft(
+  draft: AutomationEditorDraft,
+  enabled: boolean,
+): AutomationUpdateInput {
+  return buildAutomationPayloadFromDraft(draft, enabled)
+}
+
+function buildAutomationPayloadFromDraft(
+  draft: AutomationEditorDraft,
+  enabled: boolean,
+): AutomationCreateInput {
+  const name = requireTrimmed(draft.name, "名称")
+  if (!draft.triggerType) throw new Error("请选择触发器")
+  if (!draft.executorType) throw new Error("请选择执行器")
+  const triggerConfig = rendererAutomationTriggerRegistry.parseConfig(draft.triggerType, draft.triggerConfig)
+  const executorConfig = rendererActionRegistry.parseConfig(draft.executorType, draft.executorConfig)
+  const projectId = (executorConfig as Record<string, unknown>).projectId
+  const scope = typeof projectId === "string" && projectId.trim()
+    ? { type: "project" as const, projectId: projectId.trim() }
+    : { type: "global" as const }
+
+  return {
+    name,
+    description: optionalTrimmed(draft.description),
+    enabled,
+    scope,
+    cwd: optionalTrimmed(draft.cwd),
+    trigger: {
+      type: draft.triggerType,
+      config: triggerConfig,
+    },
+    executor: {
+      type: draft.executorType,
+      config: executorConfig,
+    },
+    policy: {
+      missedRunPolicy: draft.missedRunPolicy,
+      overlapPolicy: "skip",
+    },
+  }
 }
 
 function buildAutomationPayload(form: AutomationFormState): AutomationCreateInput {
@@ -128,16 +206,18 @@ function formatAutomationScope(item: AutomationItem, projects: readonly SynapseP
 }
 
 function formatAutomationTrigger(item: Pick<AutomationItem, "trigger">): string {
-  if (item.trigger.type === "builtin.cron") {
-    const expr = typeof item.trigger.config.expr === "string" ? item.trigger.config.expr : ""
-    return `Cron · ${expr}`
+  try {
+    return rendererAutomationTriggerRegistry.summarize(item.trigger.type, item.trigger.config)
+  } catch (error) {
+    logger.warn("Automation trigger summary render failed.", {
+      boundary: "automation.trigger-summary",
+      triggerType: item.trigger.type,
+      configKeys: Object.keys(item.trigger.config).sort(),
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: error instanceof Error ? error.message.length : String(error).length,
+    })
+    return item.trigger.type
   }
-  const everyMinutes = typeof item.trigger.config.everyMinutes === "number"
-    ? item.trigger.config.everyMinutes
-    : 0
-  return item.trigger.config.anchor === "last_completed_at"
-    ? `每 ${everyMinutes} 分钟 · 完成后`
-    : `每 ${everyMinutes} 分钟`
 }
 
 function formatAutomationNextRun(item: Pick<AutomationItem, "activeRun" | "enabled" | "nextRunAt" | "trigger">, now = new Date()): string {
@@ -224,8 +304,12 @@ function readPositiveInteger(value: string, label: string): number {
 export {
   DEFAULT_ACTIVE_DAYS,
   DEFAULT_AUTOMATION_FORM_STATE,
+  buildAutomationCreateInputFromDraft,
   buildAutomationCreateInput,
+  buildAutomationUpdateInputFromDraft,
   buildAutomationUpdateInput,
+  createAutomationDraftFromItem,
+  createDefaultAutomationDraft,
   createAutomationFormState,
   createDefaultExecutorConfig,
   formatAutomationDate,

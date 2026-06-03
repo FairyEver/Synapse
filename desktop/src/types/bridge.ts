@@ -870,6 +870,8 @@ export type SynapseBridge = {
     onChanged: (listener: (event: ScheduledTaskChangedEvent) => void) => () => void
   }
   automation: {
+    openCreateEditorWindow: () => Promise<void>
+    openEditorWindow: (id: string) => Promise<void>
     listItems: () => Promise<AutomationItem[]>
     getItem: (id: string) => Promise<AutomationItem | null>
     createItem: (input: AutomationCreateInput) => Promise<AutomationItem>

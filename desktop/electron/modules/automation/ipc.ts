@@ -3,6 +3,7 @@ import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import { createMainLogger } from "../../services/log-store"
 import type { AutomationService } from "../../services/automation"
+import { automationWindowService } from "../../services/automation-window-service"
 
 const logger = createMainLogger("automation.ipc")
 
@@ -190,6 +191,24 @@ type ListRunsRequest = AutomationIdRequest & { readonly limit?: number }
 export const automationIpcModule: IpcModule = {
   id: "automation",
   methods: {
+    openCreateEditorWindow: {
+      channel: "synapse:automation:editor:open-create",
+      kind: "invoke",
+      request: z.void().optional(),
+      response: z.void(),
+      handler: async () => {
+        await automationWindowService.openCreate()
+      },
+    },
+    openEditorWindow: {
+      channel: "synapse:automation:editor:open-edit",
+      kind: "invoke",
+      request: automationIdRequestSchema,
+      response: z.void(),
+      handler: async (_ctx, request: AutomationIdRequest) => {
+        await automationWindowService.openEdit(request.automationId)
+      },
+    },
     listItems: {
       channel: "synapse:automation:items:list",
       kind: "invoke",

@@ -15,6 +15,15 @@ vi.mock("../../../services/log-store", () => ({
 }))
 
 describe("automationIpcModule", () => {
+  it("declares automation editor window methods", () => {
+    expect(automationIpcModule.methods.openCreateEditorWindow.channel).toBe("synapse:automation:editor:open-create")
+    expect(automationIpcModule.methods.openCreateEditorWindow.request?.safeParse(undefined).success).toBe(true)
+    expect(automationIpcModule.methods.openEditorWindow.channel).toBe("synapse:automation:editor:open-edit")
+    expect(automationIpcModule.methods.openEditorWindow.request?.parse({ automationId: "automation:1" })).toEqual({
+      automationId: "automation:1",
+    })
+  })
+
   it("declares an automation changed event", () => {
     expect(automationIpcModule.events.changed.channel).toBe("synapse:events:automation")
     expect(automationIpcModule.events.changed.payload.parse({

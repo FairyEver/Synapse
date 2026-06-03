@@ -23,7 +23,31 @@ type AutomationFormDialogState =
   | { mode: "create"; item?: undefined }
   | { mode: "edit"; item: AutomationItem }
 
+type AutomationEditorMode =
+  | { mode: "create" }
+  | { mode: "edit"; automationId: string }
+
+type AutomationEditorDraft = {
+  name: string
+  description: string
+  cwd: string
+  enabled: boolean
+  triggerType: string | null
+  triggerConfig: Record<string, unknown>
+  executorType: string | null
+  executorConfig: ActionConfig
+  missedRunPolicy: "skip" | "run_once"
+}
+
+type AutomationEditorLoadState =
+  | { status: "loading" }
+  | { status: "ready"; draft: AutomationEditorDraft; item?: AutomationItem }
+  | { status: "error"; message: string }
+
 export type {
+  AutomationEditorDraft,
+  AutomationEditorLoadState,
+  AutomationEditorMode,
   AutomationFormDialogState,
   AutomationFormState,
   AutomationFormTriggerType,

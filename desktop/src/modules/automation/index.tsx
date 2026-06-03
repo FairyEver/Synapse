@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { LoaderCircle, Plus, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -17,18 +18,15 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import type { AutomationCreateInput, AutomationItem, AutomationRun, AutomationUpdateInput } from "@/types/automation"
-import { AutomationCardGrid } from "./components/automation-card-grid"
-import { AutomationFormDialog } from "./components/automation-form-dialog"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
+import type { AutomationItem, AutomationRun } from "@/types/automation"
+import { AutomationList } from "./components/automation-list"
 import { AutomationRunsDialog } from "./components/automation-runs-dialog"
-import type { AutomationFormDialogState } from "./types"
 import {
-  createAutomation,
   deleteAutomation,
   runAutomation,
   setAutomationEnabled,
   stopAutomationRun,
-  updateAutomation,
   useAutomationItems,
 } from "./hooks/use-automation"
 
@@ -47,11 +45,10 @@ function AutomationModule() {
   const projects = config.global.projects
   const { items, loading, error, refresh } = useAutomationItems()
   const { promise } = useAppNotifications()
-  const [formState, setFormState] = useState<AutomationFormDialogState>({ mode: "create" })
-  const [isFormOpen, setIsFormOpen] = useState(false)
   const [historyItem, setHistoryItem] = useState<AutomationItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AutomationItem | null>(null)
   const [busy, setBusy] = useState(false)
+  const [openingEditor, setOpeningEditor] = useState(false)
   const [runningItemIds, setRunningItemIds] = useState<Set<string>>(() => new Set())
 
   async function runMutation<T>(
@@ -76,30 +73,6 @@ function AutomationModule() {
     } finally {
       setBusy(false)
     }
-  }
-
-  async function handleCreate(input: AutomationCreateInput) {
-    const result = await runMutation(
-      async () => {
-        const item = await createAutomation(input)
-        logger.info("Automation created.", { automationId: item.id, automationNameLength: item.name.length })
-        return item
-      },
-      { loading: "正在保存自动化...", success: "自动化已保存。", error: "保存自动化失败。" },
-    )
-    if (!result) throw new Error("保存自动化失败。")
-  }
-
-  async function handleUpdate(id: string, patch: AutomationUpdateInput) {
-    const result = await runMutation(
-      async () => {
-        const item = await updateAutomation(id, patch)
-        logger.info("Automation updated.", { automationId: item.id, automationNameLength: item.name.length })
-        return item
-      },
-      { loading: "正在保存自动化...", success: "自动化已保存。", error: "保存自动化失败。" },
-    )
-    if (!result) throw new Error("保存自动化失败。")
   }
 
   async function handleDelete() {
@@ -163,6 +136,35 @@ function AutomationModule() {
     return result
   }
 
+  async function handleCreateEditorOpen() {
+    if (openingEditor) return
+    setOpeningEditor(true)
+    try {
+      await requireBridgeDomain("automation").openCreateEditorWindow()
+    } catch (openError) {
+      logger.warn("Automation create editor open failed.", {
+        boundary: "renderer.automation.open-create-editor",
+        ...errorLogMeta(openError),
+      })
+      toast.error("打开自动化失败，请重试")
+    } finally {
+      setOpeningEditor(false)
+    }
+  }
+
+  async function handleEditorOpen(item: AutomationItem) {
+    try {
+      await requireBridgeDomain("automation").openEditorWindow(item.id)
+    } catch (openError) {
+      logger.warn("Automation editor open failed.", {
+        boundary: "renderer.automation.open-editor",
+        automationId: item.id,
+        ...errorLogMeta(openError),
+      })
+      toast.error("打开自动化失败，请重试")
+    }
+  }
+
   const content = (() => {
     if (loading) {
       return (
@@ -184,34 +186,28 @@ function AutomationModule() {
       )
     }
     return (
-      <AutomationCardGrid
+      <AutomationList
         items={items}
         projects={projects}
         busy={busy}
         runningItemIds={runningItemIds}
+        onOpen={(item) => { void handleEditorOpen(item) }}
         onRun={(item) => { void handleRun(item) }}
         onStop={(item) => { void handleStop(item) }}
         onToggleEnabled={(item, enabled) => { void handleToggleEnabled(item, enabled) }}
-        onEdit={(item) => {
-          setFormState({ mode: "edit", item })
-          setIsFormOpen(true)
-        }}
         onHistory={setHistoryItem}
         onDelete={setDeleteTarget}
-        onCreateNew={() => {
-          setFormState({ mode: "create" })
-          setIsFormOpen(true)
-        }}
+        onCreateNew={() => { void handleCreateEditorOpen() }}
       />
     )
   })()
 
   return (
     <TooltipProvider>
-      <div className="flex h-full flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <h1 className="text-base font-semibold">自动化</h1>
-          <div className="flex items-center gap-1">
+      <div className="flex h-full min-h-0 flex-col bg-surface">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
+          <h2 className="text-sm font-semibold">自动化</h2>
+          <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon-sm" disabled={loading} onClick={() => { void refresh() }}>
@@ -223,30 +219,19 @@ function AutomationModule() {
             </Tooltip>
             <Button
               size="sm"
-              disabled={busy}
-              onClick={() => {
-                setFormState({ mode: "create" })
-                setIsFormOpen(true)
-              }}
+              variant="outline"
+              disabled={busy || openingEditor}
+              onClick={() => { void handleCreateEditorOpen() }}
             >
               <Plus />
-              新建自动化
+              新建
             </Button>
           </div>
         </div>
 
-        <ScrollArea className="min-h-0 flex-1 overscroll-contain">
-          <div className="p-4">{content}</div>
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="min-h-full px-2 pb-2 pt-0">{content}</div>
         </ScrollArea>
-
-        <AutomationFormDialog
-          open={isFormOpen}
-          state={formState}
-          busy={busy}
-          onOpenChange={setIsFormOpen}
-          onCreate={handleCreate}
-          onUpdate={handleUpdate}
-        />
 
         <AutomationRunsDialog
           open={Boolean(historyItem)}

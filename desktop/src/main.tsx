@@ -64,6 +64,19 @@ void (async () => {
         </AppErrorBoundary>
       </StrictMode>,
     )
+  } else if (windowType === "automation-editor") {
+    const { AutomationEditorApp } = await import("@/modules/automation/editor/editor-app")
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <AppConfigProvider>
+            <AppNotificationsProvider>
+              <AutomationEditorApp />
+            </AppNotificationsProvider>
+          </AppConfigProvider>
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
   } else if (windowType === "tool") {
     const toolId = new URLSearchParams(window.location.search).get("toolId")
     if (toolId === "file-conversion") {

@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { pathToFileURL } from "node:url"
-import { app, BrowserWindow, dialog, type OpenDialogOptions } from "electron"
+import { BrowserWindow, dialog, type OpenDialogOptions } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
@@ -20,6 +19,7 @@ import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 import { sanitizeNodeResultsForSnapshot } from "../../services/workflow/run-snapshot-sanitize"
+import { rendererBaseUrl } from "../shared/renderer-base-url"
 
 const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
@@ -126,11 +126,6 @@ function compareRunListItems(a: WorkflowRunListItem, b: WorkflowRunListItem): nu
   if (a.status === "running" && b.status !== "running") return -1
   if (a.status !== "running" && b.status === "running") return 1
   return b.startedAt - a.startedAt
-}
-
-function rendererBaseUrl(): string {
-  return process.env.VITE_DEV_SERVER_URL
-    ?? pathToFileURL(path.join(app.getAppPath(), "dist/index.html")).toString()
 }
 
 function focusedWindow(): Electron.BrowserWindow | undefined {
