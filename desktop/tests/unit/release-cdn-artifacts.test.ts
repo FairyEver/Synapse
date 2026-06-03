@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest"
 const execFileAsync = promisify(execFile)
 const desktopRoot = path.resolve(__dirname, "../..")
 const scriptPath = path.join(desktopRoot, "scripts/prepare-cdn-release-artifacts.mjs")
+const packageJsonPath = path.join(desktopRoot, "package.json")
 
 async function writeFixtureArtifacts(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true })
@@ -42,6 +43,14 @@ async function writeFixtureArtifacts(dir: string): Promise<void> {
 }
 
 describe("prepare-cdn-release-artifacts", () => {
+  it("disables generic provider multi-range requests for Tencent CDN differential updates", async () => {
+    const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"))
+    const [publishConfig] = packageJson.build.publish
+
+    expect(publishConfig.provider).toBe("generic")
+    expect(publishConfig.useMultipleRangeRequest).toBe(false)
+  })
+
   it("copies immutable assets and rewrites updater metadata to versioned paths", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-cdn-"))
     const artifactsDir = path.join(root, "release-artifacts")
