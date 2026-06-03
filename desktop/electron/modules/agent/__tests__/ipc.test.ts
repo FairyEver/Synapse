@@ -672,6 +672,68 @@ describe("agentIpcModule", () => {
     expect(JSON.stringify(result)).not.toContain("sk-")
   })
 
+  it("previews, imports, and exports provider packages through IPC without returning secrets", async () => {
+    const previewProviderPackageImport = vi.fn().mockResolvedValue({
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      packageVersion: 1,
+      sourceProviderId: "deepseek",
+      targetProviderId: "deepseek-2",
+      name: "DeepSeek",
+      category: "cn_official",
+      baseUrl: "https://api.deepseek.com/anthropic",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      model: "deepseek-chat",
+    })
+    const importProviderPackage = vi.fn().mockResolvedValue({
+      provider: {
+        id: "deepseek-2",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+        env: {},
+        createdAt: "2026-06-03T00:00:00.000Z",
+        updatedAt: "2026-06-03T00:00:00.000Z",
+      },
+    })
+    const exportProviderPackage = vi.fn().mockResolvedValue({
+      filePath: "/Users/test/deepseek.synapse-provider.json",
+    })
+    const harness = createHarness({
+      providerService: {
+        previewProviderPackageImport,
+        importProviderPackage,
+        exportProviderPackage,
+      },
+    })
+
+    const preview = await harness.invoke("synapse:agent:preview-provider-package-import", {
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+    })
+    const imported = await harness.invoke("synapse:agent:import-provider-package", {
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+    })
+    const exported = await harness.invoke("synapse:agent:export-provider-package", {
+      providerId: "deepseek",
+      targetPath: "/Users/test/deepseek.synapse-provider.json",
+    })
+
+    expect(previewProviderPackageImport).toHaveBeenCalledWith("/Users/test/deepseek.synapse-provider.json", {
+      actor: { kind: "user", id: "renderer" },
+    })
+    expect(importProviderPackage).toHaveBeenCalledWith("/Users/test/deepseek.synapse-provider.json", {
+      actor: { kind: "user", id: "renderer" },
+    })
+    expect(exportProviderPackage).toHaveBeenCalledWith("deepseek", "/Users/test/deepseek.synapse-provider.json", {
+      actor: { kind: "user", id: "renderer" },
+    })
+    expect(preview).toEqual(expect.objectContaining({ targetProviderId: "deepseek-2" }))
+    expect(imported).toEqual({ provider: expect.objectContaining({ id: "deepseek-2" }) })
+    expect(exported).toEqual({ filePath: "/Users/test/deepseek.synapse-provider.json" })
+    expect(JSON.stringify({ preview, imported, exported })).not.toContain("sk-")
+  })
+
   it("returns Agent runtime readiness without exposing secrets", async () => {
     const harness = createHarness({
       providerService: {

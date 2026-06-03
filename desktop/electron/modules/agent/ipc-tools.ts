@@ -19,6 +19,8 @@ import type {
   ImportCcSwitchClaudeProvidersInput,
   ProviderApiKeyField,
   ProviderCategory,
+  ProviderPackageExportResult,
+  ProviderPackageImportPreview,
   ProviderService,
   UpdateProviderInput,
 } from "../../services/provider"
@@ -142,6 +144,15 @@ const importCcSwitchClaudeProvidersRequestSchema = z.object({
   providerIds: z.array(z.string().min(1)),
 }) satisfies z.ZodType<ImportCcSwitchClaudeProvidersInput>
 
+const providerPackagePathRequestSchema = z.object({
+  sourcePath: z.string().min(1),
+})
+
+const exportProviderPackageRequestSchema = z.object({
+  providerId: z.string().min(1),
+  targetPath: z.string().min(1),
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const publishedCommandUiSchema = z.object({
@@ -258,6 +269,37 @@ const ccSwitchImportResultSchema = z.object({
   skipped: z.array(ccSwitchImportPreviewItemSchema),
 })
 
+const providerPackageImportPreviewSchema = z.object({
+  sourcePath: z.string(),
+  packageVersion: z.literal(1),
+  sourceProviderId: z.string(),
+  targetProviderId: z.string(),
+  name: z.string(),
+  category: providerCategorySchema,
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+}) satisfies z.ZodType<ProviderPackageImportPreview>
+
+const providerPackageImportResultSchema = z.object({
+  provider: publicProviderSchema,
+})
+
+const providerPackageExportResultSchema = z.object({
+  filePath: z.string(),
+}) satisfies z.ZodType<ProviderPackageExportResult>
+
+const chooseProviderPackageImportSourceResultSchema = z.object({
+  sourcePath: z.string().optional(),
+})
+
+const chooseProviderPackageExportTargetResultSchema = z.object({
+  targetPath: z.string().optional(),
+})
+
 const chooseCcSwitchImportSourceResultSchema = z.object({
   source: ccSwitchImportSourceSchema.optional(),
 })
@@ -299,6 +341,8 @@ type ProviderIdRequest = z.infer<typeof providerIdRequestSchema>
 type CreateProviderFromPresetRequest = z.infer<typeof createProviderFromPresetRequestSchema>
 type PreviewCcSwitchClaudeProvidersRequest = z.infer<typeof previewCcSwitchClaudeProvidersRequestSchema>
 type ImportCcSwitchClaudeProvidersRequest = z.infer<typeof importCcSwitchClaudeProvidersRequestSchema>
+type ProviderPackagePathRequest = z.infer<typeof providerPackagePathRequestSchema>
+type ExportProviderPackageRequest = z.infer<typeof exportProviderPackageRequestSchema>
 
 function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSchema> {
   return {
@@ -473,6 +517,85 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       const filePath = result.filePaths[0]
       if (result.canceled || !filePath) return {}
       return { source: ccSwitchSourceFromPath(filePath) }
+    },
+  },
+  chooseProviderPackageImportSource: {
+    kind: "invoke",
+    channel: "synapse:agent:choose-provider-package-import-source",
+    request: z.object({}),
+    response: chooseProviderPackageImportSourceResultSchema,
+    handler: async () => {
+      const options: OpenDialogOptions = {
+        title: "导入供应商",
+        properties: ["openFile"],
+        filters: [
+          { name: "Synapse Provider", extensions: ["json"] },
+        ],
+      }
+      const focusedWindow = BrowserWindow.getFocusedWindow()
+      const result = focusedWindow
+        ? await dialog.showOpenDialog(focusedWindow, options)
+        : await dialog.showOpenDialog(options)
+      const sourcePath = result.filePaths[0]
+      if (result.canceled || !sourcePath) return {}
+      return { sourcePath }
+    },
+  },
+  chooseProviderPackageExportTarget: {
+    kind: "invoke",
+    channel: "synapse:agent:choose-provider-package-export-target",
+    request: z.object({ providerName: z.string().min(1) }),
+    response: chooseProviderPackageExportTargetResultSchema,
+    handler: async (_ctx, request: { providerName: string }) => {
+      const safeName = request.providerName.replace(/[\\/:*?"<>|]/g, "-").trim() || "provider"
+      const options = {
+        title: "导出供应商",
+        defaultPath: `${safeName}.synapse-provider.json`,
+        filters: [{ name: "Synapse Provider", extensions: ["json"] }],
+      }
+      const focusedWindow = BrowserWindow.getFocusedWindow()
+      const result = focusedWindow
+        ? await dialog.showSaveDialog(focusedWindow, options)
+        : await dialog.showSaveDialog(options)
+      if (result.canceled || !result.filePath) return {}
+      return { targetPath: result.filePath }
+    },
+  },
+  previewProviderPackageImport: {
+    kind: "invoke",
+    channel: "synapse:agent:preview-provider-package-import",
+    request: providerPackagePathRequestSchema,
+    response: providerPackageImportPreviewSchema,
+    handler: async (ctx, request: ProviderPackagePathRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return providerService.previewProviderPackageImport(request.sourcePath, {
+        actor: { kind: "user", id: "renderer" },
+      })
+    },
+  },
+  importProviderPackage: {
+    kind: "invoke",
+    channel: "synapse:agent:import-provider-package",
+    request: providerPackagePathRequestSchema,
+    response: providerPackageImportResultSchema,
+    handler: async (ctx, request: ProviderPackagePathRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      const result = await providerService.importProviderPackage(request.sourcePath, {
+        actor: { kind: "user", id: "renderer" },
+      })
+      return { provider: publicProvider(result.provider) }
+    },
+  },
+  exportProviderPackage: {
+    kind: "invoke",
+    channel: "synapse:agent:export-provider-package",
+    request: exportProviderPackageRequestSchema,
+    response: providerPackageExportResultSchema,
+    handler: async (ctx, request: ExportProviderPackageRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return providerService.exportProviderPackage(request.providerId, request.targetPath, {
+        actor: { kind: "user", id: "renderer" },
+      })
     },
   },
   updateProvider: {

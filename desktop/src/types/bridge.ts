@@ -384,6 +384,29 @@ export type SynapseImportCcSwitchClaudeProvidersResult = {
   readonly skipped: readonly SynapseCcSwitchClaudeProviderPreviewItem[]
 }
 
+export type SynapseProviderPackageImportPreview = {
+  readonly sourcePath: string
+  readonly packageVersion: 1
+  readonly sourceProviderId: string
+  readonly targetProviderId: string
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+}
+
+export type SynapseProviderPackageImportResult = {
+  readonly provider: SynapseAgentProvider
+}
+
+export type SynapseProviderPackageExportResult = {
+  readonly filePath: string
+}
+
 export type UsageAnalysisRangePreset = "today" | "7d" | "30d" | "90d" | "all"
 export type UsageAnalysisTimeBucketGranularity = "day" | "hour"
 
@@ -920,6 +943,19 @@ export type SynapseBridge = {
       args: { source: SynapseCcSwitchImportSource; providerIds: readonly string[] },
     ) => Promise<SynapseImportCcSwitchClaudeProvidersResult>
     chooseCcSwitchClaudeImportSource: () => Promise<{ source?: SynapseCcSwitchImportSource }>
+    chooseProviderPackageImportSource: () => Promise<{ sourcePath?: string }>
+    chooseProviderPackageExportTarget: (
+      args: { providerName: string },
+    ) => Promise<{ targetPath?: string }>
+    previewProviderPackageImport: (
+      args: { sourcePath: string },
+    ) => Promise<SynapseProviderPackageImportPreview>
+    importProviderPackage: (
+      args: { sourcePath: string },
+    ) => Promise<SynapseProviderPackageImportResult>
+    exportProviderPackage: (
+      args: { providerId: string; targetPath: string },
+    ) => Promise<SynapseProviderPackageExportResult>
     updateProvider: (
       args: { providerId: string; patch: SynapseUpdateAgentProviderInput },
     ) => Promise<SynapseAgentProvider>
