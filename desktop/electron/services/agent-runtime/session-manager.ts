@@ -146,20 +146,6 @@ export class SessionManager {
     const modeOverride = input.message.modeOverride ?? input.conversation.agentConfig?.mode
     const providerMatches = input.state.providerId === providerId
     const modeMatches = input.state.modeOverride === modeOverride
-    if (
-      input.state.liveSession
-      && input.state.liveSession.alive()
-      && !input.state.liveSession.finished
-      && providerMatches
-      && modeMatches
-    ) {
-      return { liveSession: input.state.liveSession, created: false }
-    }
-
-    const cwd = input.message.workspacePath ?? this.deps.workDir
-    if (!cwd) {
-      throw new Error("Project workspace path is required")
-    }
     const providerEnv = await this.deps.providerService.buildEnv(providerId, {
       actor: { kind: "user", id: input.message.userId },
       projectId: this.deps.projectId,
@@ -176,17 +162,36 @@ export class SessionManager {
         env.ANTHROPIC_MODEL = tierModel
       }
     }
+    const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL
+    if (
+      input.state.liveSession
+      && input.state.liveSession.alive()
+      && !input.state.liveSession.finished
+      && providerMatches
+      && modeMatches
+      && modelMatches
+    ) {
+      return { liveSession: input.state.liveSession, created: false }
+    }
+
+    const cwd = input.message.workspacePath ?? this.deps.workDir
+    if (!cwd) {
+      throw new Error("Project workspace path is required")
+    }
 
     if (input.state.liveSession) {
-      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches)) {
+      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches || !modelMatches)) {
         this.deps.logger?.info("Recreating agent live session.", {
           conversationId: input.conversation.id,
           providerChanged: !providerMatches,
           modeChanged: !modeMatches,
+          modelChanged: !modelMatches,
           previousProviderId: input.state.providerId,
           nextProviderId: providerId,
           previousMode: input.state.modeOverride,
           nextMode: modeOverride,
+          previousModel: input.state.effectiveModel,
+          nextModel: env.ANTHROPIC_MODEL,
         })
       }
       await this.closeLiveSession(input.state, input.conversation.id)

@@ -319,10 +319,13 @@ describe("ClaudeSDKSession", () => {
     expect(getOptions().settings).toMatchObject({
       enableAllProjectMcpServers: true,
       disableAllHooks: true,
+      env: {
+        ANTHROPIC_BASE_URL: "https://api.example.test/anthropic",
+        ANTHROPIC_AUTH_TOKEN: "sk-auth",
+        ANTHROPIC_API_KEY: "sk-api",
+        ANTHROPIC_MODEL: "provider-model",
+      },
     })
-    expect(getOptions().settings).not.toHaveProperty("env")
-    expect(JSON.stringify(getOptions().settings)).not.toContain("sk-auth")
-    expect(JSON.stringify(getOptions().settings)).not.toContain("sk-api")
     expect(JSON.stringify(getOptions().settings)).not.toContain("side-token")
   })
 

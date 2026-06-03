@@ -516,6 +516,33 @@ describe("ProviderService", () => {
     })
   })
 
+  it("keeps structured provider Anthropic env ahead of extra env", async () => {
+    const { service } = makeProviderService()
+
+    await service.createProvider({
+      id: "deepseek",
+      name: "DeepSeek",
+      category: "cn_official",
+      baseUrl: "https://api.deepseek.com/anthropic",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      apiKey: "token",
+      model: "deepseek-chat",
+      env: {
+        ANTHROPIC_BASE_URL: "https://stale.example.test/anthropic",
+        ANTHROPIC_MODEL: "stale-model",
+        ENABLE_TOOL_SEARCH: "false",
+      },
+    })
+
+    await expect(service.buildEnv("deepseek")).resolves.toMatchObject({
+      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "token",
+      ANTHROPIC_API_KEY: "",
+      ANTHROPIC_MODEL: "deepseek-chat",
+      ENABLE_TOOL_SEARCH: "false",
+    })
+  })
+
   it("builds default model env vars from provider model fields", async () => {
     const { service } = makeProviderService()
 

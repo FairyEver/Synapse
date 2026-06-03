@@ -9,6 +9,7 @@ import { CcUsageAnalysisService, runWithUsageDatabaseLockRetry } from "../cc-ser
 import { CodexUsageAnalysisService } from "../codex-service"
 
 const tempDirs: string[] = []
+const WINDOWS_CI_TEST_TIMEOUT = 15_000
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -18,7 +19,7 @@ afterEach(() => {
 })
 
 describe("usage analysis reports", () => {
-  it("includes stable focus fields in CC details rows", async () => {
+  it("includes stable focus fields in CC details rows", { timeout: WINDOWS_CI_TEST_TIMEOUT }, async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)
     const db = getUsageAnalysisDb(dir)

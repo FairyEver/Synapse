@@ -72,6 +72,15 @@ export interface BuildProviderEnvContext {
 }
 
 const PROVIDER_KIND = "cc-provider"
+const MAPPED_PROVIDER_ENV_KEYS = new Set([
+  "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_MODEL",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL",
+])
 
 interface ProviderSecretRollbackSnapshot {
   readonly apiKey?: {
@@ -528,8 +537,8 @@ export class ProviderService {
 
     return compactEnv({
       ...env,
-      ...provider.env,
-      ...secretEnv,
+      ...extraProviderEnv(provider.env),
+      ...extraProviderEnv(secretEnv),
     })
   }
 
@@ -1085,6 +1094,12 @@ function compactEnv(env: Record<string, string | undefined>): Record<string, str
   return Object.fromEntries(
     Object.entries(env).filter(([, value]) => value !== undefined),
   ) as Record<string, string>
+}
+
+function extraProviderEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) => !MAPPED_PROVIDER_ENV_KEYS.has(key)),
+  )
 }
 
 async function storeSecretEnv(

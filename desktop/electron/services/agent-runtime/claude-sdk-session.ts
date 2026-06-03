@@ -267,6 +267,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       settings: {
         enableAllProjectMcpServers: true,
         disableAllHooks: options.allowPluginHooks === true ? false : true,
+        env: providerSettingsEnv(options.env),
       },
       env: sdkEnv,
       includePartialMessages: true,
@@ -669,6 +670,12 @@ class LazyQuery implements QueryLike {
 function parsePermissionMode(mode: string | undefined): PermissionMode | undefined {
   if (!mode) return undefined
   return permissionModes.has(mode as PermissionMode) ? mode as PermissionMode : undefined
+}
+
+function providerSettingsEnv(env: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) => key.startsWith("ANTHROPIC_")),
+  )
 }
 
 function createForwardedAbortController(signal: AbortSignal | undefined): ForwardedAbortController | undefined {

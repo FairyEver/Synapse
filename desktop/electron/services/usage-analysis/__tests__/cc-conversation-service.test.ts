@@ -13,6 +13,7 @@ type Fixture = {
 }
 
 const fixtures: Fixture[] = []
+const WINDOWS_CI_TEST_TIMEOUT = 15_000
 
 function setupFixture(): Fixture {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-conversation-service-"))
@@ -295,7 +296,7 @@ describe("CcConversationService", () => {
     expect(detail.parseErrors).toEqual([])
   })
 
-  it("searches raw text only when requested", async () => {
+  it("searches raw text only when requested", { timeout: WINDOWS_CI_TEST_TIMEOUT }, async () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
 
@@ -309,7 +310,7 @@ describe("CcConversationService", () => {
     }))
   })
 
-  it("redacts raw conversation secrets in details and search snippets", async () => {
+  it("redacts raw conversation secrets in details and search snippets", { timeout: WINDOWS_CI_TEST_TIMEOUT }, async () => {
     const { db, filePath } = setupFixture()
     fs.appendFileSync(filePath, `\n${JSON.stringify({
       type: "user",
