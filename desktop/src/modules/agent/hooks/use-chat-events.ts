@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
-import type { SynapseAgentDomainEvent, SynapseAgentStreamDomainEvent } from "@/types/agent"
+import type { SynapseAgentDomainEvent, SynapseAgentEvent, SynapseAgentStreamDomainEvent } from "@/types/agent"
 import { reducePhaseEvent } from "../utils/phase-reducer"
 import {
   clearConversationUnread,
@@ -43,6 +43,7 @@ function useChatEvents(
   agentTypeRef.current = state.status?.agentType
   const streamEventsRef = useRef<SynapseAgentStreamDomainEvent[]>([])
   const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const terminalConversationTimestampsRef = useRef(new Map<string, number>())
 
   useEffect(() => {
     if (projectIdsRef.current.length === 0) return undefined
@@ -100,9 +101,18 @@ function useChatEvents(
       if (domainEvent.type === "phase.update") {
         const payload = domainEvent.payload
         if (isTerminalPhase(payload.phase, payload.status) && payload.conversationId) {
+          markConversationTerminal(terminalConversationTimestampsRef.current, payload.conversationId, domainEvent.timestamp)
           pendingConversationIdsRef.current.delete(payload.conversationId)
           dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
-        } else if (payload.status === "in-progress" && payload.conversationId) {
+        } else if (
+          payload.status === "in-progress"
+          && payload.conversationId
+          && isAfterLastTerminal(
+            terminalConversationTimestampsRef.current,
+            payload.conversationId,
+            domainEvent.timestamp,
+          )
+        ) {
           dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: payload.conversationId })
         }
         const selectedProject = selectedProjectIdRef.current
@@ -213,10 +223,15 @@ function useChatEvents(
       const activeConversationId = streamEventConversationId(domainEvent)
       if (activeConversationId) {
         if (isTerminalAgentEvent(domainEvent)) {
+          markConversationTerminal(terminalConversationTimestampsRef.current, activeConversationId, domainEvent.timestamp)
           pendingConversationIdsRef.current.delete(activeConversationId)
           dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: activeConversationId })
           dispatch({ type: "CANCEL_RESET" })
-        } else {
+        } else if (isAfterLastTerminal(
+          terminalConversationTimestampsRef.current,
+          activeConversationId,
+          domainEvent.timestamp,
+        )) {
           pendingConversationIdsRef.current.add(activeConversationId)
           dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: activeConversationId })
         }
@@ -266,6 +281,8 @@ function useChatEvents(
             })
           },
         })
+      }
+      if (shouldRefreshPendingPermissionsAfterEvent(event)) {
         void refreshPendingPermissions().catch((rawError: unknown) => {
           logger.error("Agent pending permissions refresh failed.", {
             projectId: domainEvent.payload.projectId,
@@ -318,6 +335,13 @@ function isTerminalAgentEvent(domainEvent: SynapseAgentDomainEvent): boolean {
   return event.type === "result" || event.type === "error"
 }
 
+function shouldRefreshPendingPermissionsAfterEvent(event: SynapseAgentEvent): boolean {
+  return event.type === "permissionRequest"
+    || event.type === "toolResult"
+    || event.type === "result"
+    || event.type === "error"
+}
+
 function matchesSelectedEvent(
   domainEvent: SynapseAgentDomainEvent,
   selected: {
@@ -344,4 +368,29 @@ function streamEventConversationId(domainEvent: SynapseAgentDomainEvent): string
   return typeof conversationId === "string" && conversationId.length > 0
     ? conversationId
     : undefined
+}
+
+function markConversationTerminal(
+  terminalTimestamps: Map<string, number>,
+  conversationId: string,
+  timestamp: string,
+): void {
+  const parsed = Date.parse(timestamp)
+  if (!Number.isFinite(parsed)) return
+  const current = terminalTimestamps.get(conversationId)
+  if (current === undefined || parsed > current) {
+    terminalTimestamps.set(conversationId, parsed)
+  }
+}
+
+function isAfterLastTerminal(
+  terminalTimestamps: ReadonlyMap<string, number>,
+  conversationId: string,
+  timestamp: string,
+): boolean {
+  const terminalAt = terminalTimestamps.get(conversationId)
+  if (terminalAt === undefined) return true
+  const parsed = Date.parse(timestamp)
+  if (!Number.isFinite(parsed)) return true
+  return parsed > terminalAt
 }

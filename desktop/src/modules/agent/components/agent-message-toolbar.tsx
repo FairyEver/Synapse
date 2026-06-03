@@ -27,7 +27,6 @@ function AgentMessageToolbar({
   messageId,
   role,
   usage,
-  costUsd,
   usagePrefix,
   className,
   copyButtonClassName,
@@ -79,7 +78,7 @@ function AgentMessageToolbar({
           {formattedTimestamp}
         </time>
       ) : null}
-      <TokenUsageSummary usage={usage} costUsd={costUsd} prefix={usagePrefix} />
+      <TokenUsageSummary usage={usage} prefix={usagePrefix} />
       <button
         type="button"
         className={cn(

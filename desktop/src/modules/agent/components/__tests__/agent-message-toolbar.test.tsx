@@ -110,7 +110,7 @@ describe("AgentMessageToolbar", () => {
     expect(container.textContent).toContain("缓存写 12")
   })
 
-  it("renders assistant token usage cost", async () => {
+  it("does not render assistant token usage cost in the toolbar", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -130,7 +130,8 @@ describe("AgentMessageToolbar", () => {
     })
 
     expect(container.textContent).toContain("输入 1,234")
-    expect(container.textContent).toContain("费用 $0.01")
+    expect(container.textContent).not.toContain("费用 $0.01")
+    expect(container.textContent).not.toContain("费用")
   })
 
   it("logs clipboard copy failures without logging message content", async () => {

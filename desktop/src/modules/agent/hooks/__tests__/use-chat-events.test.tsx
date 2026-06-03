@@ -182,6 +182,48 @@ describe("useChatEvents", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret permission refresh detail")
   })
 
+  it("refreshes pending permissions after tool result events", async () => {
+    const refreshPendingPermissions = vi.fn(async () => {})
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          dispatch={dispatch}
+          refreshPendingPermissions={refreshPendingPermissions}
+        />,
+      )
+    })
+
+    const event: SynapseAgentDomainEvent = {
+      domain: "agent",
+      type: "stream",
+      timestamp: "2026-05-14T00:00:01.000Z",
+      scope: { sessionId: "conversation-1" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        event: {
+          type: "toolResult",
+          toolName: "ExitPlanMode",
+          content: "Permission request timed out waiting for user response.",
+          status: "error",
+          success: false,
+        },
+      },
+    }
+
+    await act(async () => {
+      bridgeState.listener?.(event)
+      await Promise.resolve()
+    })
+
+    expect(refreshPendingPermissions).toHaveBeenCalled()
+  })
+
   it("applies stream events matched by SDK envelope conversation id", async () => {
     const refreshPendingPermissions = vi.fn(async () => {})
     const dispatch: React.Dispatch<ChatAction> = vi.fn()
@@ -223,6 +265,113 @@ describe("useChatEvents", () => {
     })
 
     expect(refreshPendingPermissions).toHaveBeenCalled()
+  })
+
+  it("does not mark a conversation as sending from stale events after terminal phase", async () => {
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} />)
+    })
+
+    const terminal: SynapseAgentDomainEvent = {
+      domain: "agent",
+      type: "phase.update",
+      timestamp: "2026-05-14T00:00:10.000Z",
+      scope: { sessionId: "conversation-1" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conversation-1",
+        runId: "run-1",
+        phase: "completed",
+        status: "done",
+        startedAt: "2026-05-14T00:00:00.000Z",
+        completedAt: "2026-05-14T00:00:10.000Z",
+      },
+    }
+    const staleToolEvent: SynapseAgentDomainEvent = {
+      domain: "agent",
+      type: "toolUse",
+      timestamp: "2026-05-14T00:00:09.000Z",
+      scope: { sessionId: "conversation-1" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        event: {
+          type: "toolUse",
+          toolName: "TodoWrite",
+          toolInput: "{}",
+        },
+      },
+    }
+
+    await act(async () => {
+      bridgeState.listener?.(terminal)
+      bridgeState.listener?.(staleToolEvent)
+    })
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "REMOVE_SENDING_CONVERSATION",
+      conversationId: "conversation-1",
+    })
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "ADD_SENDING_CONVERSATION",
+      conversationId: "conversation-1",
+    })
+  })
+
+  it("marks a later event as sending after an earlier terminal phase", async () => {
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} />)
+    })
+
+    await act(async () => {
+      bridgeState.listener?.({
+        domain: "agent",
+        type: "phase.update",
+        timestamp: "2026-05-14T00:00:10.000Z",
+        scope: { sessionId: "conversation-1" },
+        payload: {
+          projectId: "project-1",
+          sessionKey: "local:renderer",
+          conversationId: "conversation-1",
+          runId: "run-1",
+          phase: "completed",
+          status: "done",
+          startedAt: "2026-05-14T00:00:00.000Z",
+          completedAt: "2026-05-14T00:00:10.000Z",
+        },
+      })
+      bridgeState.listener?.({
+        domain: "agent",
+        type: "toolUse",
+        timestamp: "2026-05-14T00:00:11.000Z",
+        scope: { sessionId: "conversation-1" },
+        payload: {
+          projectId: "project-1",
+          sessionKey: "local:renderer",
+          platform: "renderer",
+          event: {
+            type: "toolUse",
+            toolName: "TodoWrite",
+            toolInput: "{}",
+          },
+        },
+      } satisfies SynapseAgentDomainEvent)
+    })
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ADD_SENDING_CONVERSATION",
+      conversationId: "conversation-1",
+    })
   })
 
   it("batches rapid SDK stream deltas before updating the timeline", async () => {

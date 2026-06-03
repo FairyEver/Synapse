@@ -448,7 +448,10 @@ function useChatConnection(
         ...item,
         active: item.projectId === session.projectId && item.id === session.id,
       })) })
-      await refreshProjectMeta(session.projectId)
+      await Promise.all([
+        refreshProjectMeta(session.projectId),
+        refreshPendingPermissionsForPageLoad(session.projectId),
+      ])
       await loadTimeline({
         projectId: session.projectId,
         sessionKey: session.sessionKey,
@@ -473,6 +476,7 @@ function useChatConnection(
         const next = remaining[0]
         if (next) {
           setSelectedSession(next)
+          await refreshPendingPermissionsForPageLoad(next.projectId)
           await loadTimeline({
             projectId: next.projectId,
             sessionKey: next.sessionKey,
@@ -487,7 +491,16 @@ function useChatConnection(
       clearTimeline()
       dispatch({ type: "SET_ERROR", error: "切换失败" })
     }
-  }, [clearTimeline, dispatch, loadTimeline, refreshProjectMeta, selectRequestIdRef, setSelectedSession, state.sessions])
+  }, [
+    clearTimeline,
+    dispatch,
+    loadTimeline,
+    refreshPendingPermissionsForPageLoad,
+    refreshProjectMeta,
+    selectRequestIdRef,
+    setSelectedSession,
+    state.sessions,
+  ])
 
   const sendMessage = useCallback(async (content: string, target?: SendMessageTarget) => {
     const trimmed = content.trim()
@@ -755,7 +768,30 @@ function useChatConnection(
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
-      dispatch({ type: "SET_ERROR", error: "处理失败" })
+      const stalePermission = isPermissionNotPendingError(rawError)
+      if (stalePermission) {
+        dispatch({
+          type: "UPDATE_PENDING_PERMISSIONS",
+          updater: (current) => current.filter((permission) => permission.requestId !== requestId),
+        })
+      }
+      try {
+        await refreshPendingPermissions()
+      } catch (refreshError) {
+        logger.warn("Permission list refresh failed after permission response error.", {
+          projectId,
+          requestId,
+          behavior,
+          stalePermission,
+          errorName: refreshError instanceof Error ? refreshError.name : typeof refreshError,
+          errorLength: errorMessage(refreshError).length,
+        })
+      }
+      dispatch({
+        type: "SET_ERROR",
+        error: stalePermission ? "权限请求已失效，请重新发送或继续当前对话" : "处理失败",
+      })
+      throw rawError
     } finally {
       respondingPermissionIdsRef.current.delete(requestId)
     }
@@ -900,6 +936,11 @@ function sessionSnapshotForLog(
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return typeof error === "string" ? error : "Unknown error"
+}
+
+function isPermissionNotPendingError(error: unknown): boolean {
+  const message = errorMessage(error)
+  return message.includes("Permission request") && message.includes("is not pending")
 }
 
 function formatSessionNameTime(date: Date): string {

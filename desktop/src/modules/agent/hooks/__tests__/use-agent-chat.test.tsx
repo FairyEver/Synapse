@@ -712,10 +712,16 @@ describe("useAgentChat", () => {
     })
     await waitFor(() => chat?.pendingPermissions.length === 1)
 
+    let responseError: unknown
     await act(async () => {
-      await chat?.respondPermission("permission-1", "allow")
+      try {
+        await chat?.respondPermission("permission-1", "allow")
+      } catch (error) {
+        responseError = error
+      }
     })
 
+    expect(responseError).toBeInstanceOf(Error)
     expect(rendererLogger.error).toHaveBeenCalledWith("Agent permission response failed.", expect.objectContaining({
       projectId: session.projectId,
       requestId: "permission-1",
@@ -727,6 +733,105 @@ describe("useAgentChat", () => {
     expect(chat?.error).toBe("处理失败")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("permission secret token")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
+  })
+
+  it("clears stale pending permissions when a permission response is no longer pending", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          listPendingPermissions: ReturnType<typeof vi.fn>
+          respondPermission: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listPendingPermissions
+      .mockResolvedValueOnce([{
+        requestId: "permission-1",
+        projectId: session.projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        toolName: "ExitPlanMode",
+        createdAt: "2026-05-13T00:02:00.000Z",
+      }])
+      .mockResolvedValueOnce([])
+    bridge.respondPermission.mockRejectedValue(new Error('Permission request "permission-1" is not pending'))
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.pendingPermissions.length === 1)
+
+    let responseError: unknown
+    await act(async () => {
+      try {
+        await chat?.respondPermission("permission-1", "allow")
+      } catch (error) {
+        responseError = error
+      }
+    })
+
+    expect(responseError).toBeInstanceOf(Error)
+    expect(chat?.pendingPermissions).toEqual([])
+    expect(chat?.error).toBe("权限请求已失效，请重新发送或继续当前对话")
+  })
+
+  it("refreshes pending permissions when selecting a session", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          listPendingPermissions: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+          switchSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listSessions.mockResolvedValue([session, nextSession])
+    bridge.listPendingPermissions
+      .mockResolvedValueOnce([{
+        requestId: "stale-permission",
+        projectId: session.projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        toolName: "ExitPlanMode",
+        createdAt: "2026-05-13T00:02:00.000Z",
+      }])
+      .mockResolvedValueOnce([])
+    bridge.switchSession.mockResolvedValue({ ...nextSession, active: true })
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.pendingPermissions.length === 1)
+
+    await act(async () => {
+      await chat?.selectSession(nextSession)
+    })
+
+    expect(bridge.listPendingPermissions).toHaveBeenCalledTimes(2)
+    expect(chat?.selectedConversationId).toBe(nextSession.id)
+    expect(chat?.pendingPermissions).toEqual([])
   })
 
   it("updates selected session mode after a permission mode switch", async () => {

@@ -217,8 +217,6 @@ function AssistantMessageBody({
         content={item.content}
         messageId={item.id}
         role={item.role === "user" || item.role === "assistant" ? item.role : undefined}
-        usage={item.metadata?.usage}
-        costUsd={item.metadata?.costUsd}
         className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
       />
     </div>
