@@ -9,8 +9,8 @@ import type { ScopedEventBus } from "../../runtime/project-container"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService, ReplyTarget } from "../reply-target"
-import { estimateUsageCost, type UsageModelPriceRule } from "../usage-analysis/pricing"
-import type { UsageTokenBreakdown } from "../usage-analysis/types"
+import type { UsageModelPriceRule } from "../usage-analysis/pricing"
+import { estimateSynapseUsageCostSnapshot } from "../usage-analysis/usage-cost-snapshot"
 import type { AgentCommandRouter, AgentCommandRouterResult } from "./command-router"
 import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
@@ -1134,23 +1134,22 @@ export class ConversationRouter {
     state: RuntimeSessionState,
     usage: Record<string, unknown> | undefined,
   ): { total: number; breakdown: Record<string, number> } | undefined {
-    const model = state.effectiveModel?.trim()
-    if (!model || !usage) return undefined
-    const rules = this.deps.getUsagePriceRules?.() ?? []
-    if (rules.length === 0) return undefined
-    const cost = estimateUsageCost(model, usageTokenBreakdown(usage), rules)
-    return cost.priceKnown
-      ? {
-          total: roundCost(cost.total),
-          breakdown: {
-            input: roundCost(cost.input),
-            output: roundCost(cost.output),
-            cacheRead: roundCost(cost.cacheRead),
-            cacheWrite: roundCost(cost.cacheWrite),
-            reasoning: roundCost(cost.reasoning),
-          },
-        }
-      : undefined
+    const snapshot = estimateSynapseUsageCostSnapshot({
+      modelName: state.effectiveModel,
+      usage,
+      priceRules: this.deps.getUsagePriceRules?.() ?? [],
+    })
+    if (!snapshot?.priceKnown || snapshot.costCny === undefined || !snapshot.costBreakdownCny) return undefined
+    return {
+      total: roundCost(snapshot.costCny),
+      breakdown: {
+        input: roundCost(snapshot.costBreakdownCny.input),
+        output: roundCost(snapshot.costBreakdownCny.output),
+        cacheRead: roundCost(snapshot.costBreakdownCny.cacheRead),
+        cacheWrite: roundCost(snapshot.costBreakdownCny.cacheWrite),
+        reasoning: roundCost(snapshot.costBreakdownCny.reasoning),
+      },
+    }
   }
 
   private async saveEventHistory(
@@ -1647,24 +1646,6 @@ function addCostBreakdowns(
 
 function roundCost(value: number): number {
   return Number(value.toFixed(6))
-}
-
-function usageTokenBreakdown(usage: Record<string, unknown>): UsageTokenBreakdown {
-  return {
-    input: usageTokenNumber(usage, ["input_tokens", "inputTokens"]),
-    output: usageTokenNumber(usage, ["output_tokens", "outputTokens"]),
-    cacheRead: usageTokenNumber(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cacheRead"]),
-    cacheWrite: usageTokenNumber(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWrite"]),
-    reasoning: usageTokenNumber(usage, ["reasoning_output_tokens", "reasoningOutputTokens", "reasoning_tokens", "reasoningTokens"]),
-  }
-}
-
-function usageTokenNumber(usage: Record<string, unknown>, keys: readonly string[]): number {
-  for (const key of keys) {
-    const value = usage[key]
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value
-  }
-  return 0
 }
 
 function sanitizeEventPayload(event: AgentEvent): Record<string, unknown> {
