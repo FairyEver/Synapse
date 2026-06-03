@@ -83,6 +83,13 @@ import {
   TaskSchedulerService,
   dispatchSchedulerAction,
 } from "../services/task-scheduler"
+import {
+  AutomationExecutionService,
+  AutomationItemRepository,
+  AutomationRunRepository,
+  AutomationService,
+  createBuiltinAutomationTriggerRegistry,
+} from "../services/automation"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
@@ -1241,6 +1248,57 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
   },
   stop(service) {
     service.stop()
+  },
+}
+
+export const coreAutomationDescriptor: ServiceDescriptor<AutomationService> = {
+  id: "core.automation",
+  criticality: "degraded",
+  dependsOn: [
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+    "core.action-runtime",
+    "core.event-bus",
+  ],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
+    const defaultCwd = app.getPath("userData")
+    const triggers = createBuiltinAutomationTriggerRegistry()
+    const items = new AutomationItemRepository({
+      items: dataRepository.namespace("automation.items"),
+      triggers,
+    })
+    const runs = new AutomationRunRepository({
+      runs: dataRepository.namespace("automation.runs"),
+    })
+    const actions = ctx.registry.get<MainActionRegistry>("core.action-runtime")
+    const execution = new AutomationExecutionService({
+      items,
+      runs,
+      actions,
+      permissionGuard,
+      auditSink,
+      defaultCwd,
+    })
+    return new AutomationService({
+      items,
+      runs,
+      triggers,
+      actions,
+      execution,
+      defaultCwd,
+      eventBus,
+    })
+  },
+  start(service) {
+    return service.start()
+  },
+  stop(service) {
+    return service.stop()
   },
 }
 

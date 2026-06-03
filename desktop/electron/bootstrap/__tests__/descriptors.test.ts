@@ -139,6 +139,22 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreActionRuntimeDescriptor.create).toBeTypeOf("function")
   })
 
+  it("coreAutomationDescriptor is degraded and depends on automation runtime infrastructure", async () => {
+    const { coreAutomationDescriptor } = await importBootstrap()
+    expect(coreAutomationDescriptor.id).toBe("core.automation")
+    expect(coreAutomationDescriptor.criticality).toBe("degraded")
+    expect(coreAutomationDescriptor.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+      "core.action-runtime",
+      "core.event-bus",
+    ])
+    expect(coreAutomationDescriptor.create).toBeTypeOf("function")
+    expect(coreAutomationDescriptor.start).toBeTypeOf("function")
+    expect(coreAutomationDescriptor.stop).toBeTypeOf("function")
+  })
+
   it("coreWorkflowEngineDescriptor redacts infrastructure errors from Agent dependency logs and result", async () => {
     const logger = {
       error: vi.fn(),

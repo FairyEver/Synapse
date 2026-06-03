@@ -74,6 +74,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.action-runtime",
         "core.audit-sink",
         "core.app-icon",
+        "core.automation",
         "core.automation-ingress",
         "core.bridge-adapter",
         "core.cheat-code-state",
@@ -168,6 +169,13 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.action-runtime",
       "core.event-bus",
     ])
+    expect(byId.get("core.automation")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+      "core.action-runtime",
+      "core.event-bus",
+    ])
     expect(byId.get("core.execution-isolation")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
@@ -251,6 +259,11 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.event-bus")).toBeLessThan(idx("core.task-scheduler"))
+    expect(idx("core.data-repository")).toBeLessThan(idx("core.automation"))
+    expect(idx("core.permission-guard")).toBeLessThan(idx("core.automation"))
+    expect(idx("core.audit-sink")).toBeLessThan(idx("core.automation"))
+    expect(idx("core.action-runtime")).toBeLessThan(idx("core.automation"))
+    expect(idx("core.event-bus")).toBeLessThan(idx("core.automation"))
     expect(idx("repo.watch")).toBeLessThan(idx("repo.maintenance"))
     expect(idx("core.database")).toBeLessThan(idx("repo.pending-pushes"))
     expect(idx("repo.pending-pushes")).toBeLessThan(idx("repo.maintenance"))
