@@ -256,7 +256,7 @@ describe("editor scan quick publish", () => {
     expect(files.some((file) => file.name.includes("too-deep.txt"))).toBe(false)
   })
 
-  it("reports unreadable skill roots instead of returning an empty scan", async () => {
+  it.skipIf(process.platform === "win32")("reports unreadable skill roots instead of returning an empty scan", async () => {
     const root = await createTempDir()
     const skillsPath = path.join(root, "skills")
     await mkdir(skillsPath, { recursive: true })

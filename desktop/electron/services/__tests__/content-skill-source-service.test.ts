@@ -72,7 +72,7 @@ describe("content skill source service", () => {
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(ContentCapabilityError)
   })
 
-  it("rejects unreadable attachments instead of returning an incomplete draft", async () => {
+  it.skipIf(process.platform === "win32")("rejects unreadable attachments instead of returning an incomplete draft", async () => {
     const root = await createTempRoot()
     const attachmentPath = path.join(root, "references", "guide.md")
     await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
