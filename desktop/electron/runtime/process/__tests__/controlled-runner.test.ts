@@ -204,6 +204,62 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
     }
   })
 
+  it.skipIf(process.platform === "win32")("terminates the process group on abort", async () => {
+    const guard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const stdout = new PassThrough()
+    const stderr = new PassThrough()
+    const child = new EventEmitter() as ChildProcessWithoutNullStreams
+    const kill = vi.fn()
+    Object.assign(child, {
+      pid: 12345,
+      stdout,
+      stderr,
+      stdin: new PassThrough(),
+      kill,
+    })
+    const spawnImpl = vi.fn(() => child)
+    const processKill = vi.spyOn(process, "kill").mockImplementation(((pid: number, signal?: NodeJS.Signals | number) => {
+      if (pid === -12345 && signal === "SIGTERM") {
+        queueMicrotask(() => {
+          stdout.end()
+          stderr.end()
+          child.emit("close", null, "SIGTERM")
+        })
+      }
+      return true
+    }) as typeof process.kill)
+
+    try {
+      const runner = createControlledProcessRunner({ permissionGuard: guard, auditSink, spawnImpl })
+      const abortController = new AbortController()
+      const resultPromise = runner.run({
+        actor: { kind: "user" },
+        action: "shell.exec",
+        command: process.execPath,
+        abortSignal: abortController.signal,
+      })
+
+      await Promise.resolve()
+      abortController.abort()
+
+      await expect(resultPromise).resolves.toMatchObject({
+        signal: "SIGTERM",
+      })
+      expect(processKill).toHaveBeenCalledWith(-12345, "SIGTERM")
+      expect(kill).not.toHaveBeenCalled()
+      expect(spawnImpl).toHaveBeenCalledWith(
+        process.execPath,
+        [],
+        expect.objectContaining({
+          detached: true,
+        }),
+      )
+    } finally {
+      processKill.mockRestore()
+    }
+  })
+
   it("passes only allowlisted env keys to the spawned process", async () => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()

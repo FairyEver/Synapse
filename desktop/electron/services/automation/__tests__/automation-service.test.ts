@@ -118,6 +118,22 @@ describe("AutomationService", () => {
     )
   })
 
+  it("keeps the successful run status after scheduling the next cron trigger", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate(createCronAutomationInput())
+
+    const run = await harness.service.triggerForTest(item.id, "trigger")
+    const stored = await harness.items.get(item.id)
+
+    expect(run?.status).toBe("success")
+    expect(stored).toEqual(expect.objectContaining({
+      lastStatus: "success",
+      runCount: 1,
+      nextRunAt: "2026-06-03T00:01:00.000Z",
+    }))
+    await harness.service.stop()
+  })
+
   it("rejects deleting an automation while it has an active run", async () => {
     const harness = createHarness({ action: longRunningAction() })
     const item = await harness.service.automationCreate(createAutomationInput())
@@ -189,6 +205,21 @@ function createAutomationInput() {
       config: {
         everyMinutes: 10,
         anchor: "created_at",
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+      },
+    },
+    executor: { type: "builtin.test", config: { message: "ok" } },
+  }
+}
+
+function createCronAutomationInput() {
+  return {
+    name: "Every minute",
+    scope: { type: "global" as const },
+    trigger: {
+      type: "builtin.cron",
+      config: {
+        expr: "* * * * *",
         activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },

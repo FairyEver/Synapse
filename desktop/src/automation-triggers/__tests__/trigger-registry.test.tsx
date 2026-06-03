@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { renderToStaticMarkup } from "react-dom/server"
 
 import { rendererAutomationTriggerRegistry } from "../builtin-triggers"
 
@@ -23,6 +24,24 @@ describe("rendererAutomationTriggerRegistry", () => {
       activeDays: [1, 2, 3, 4, 5],
     })
     expect(rendererAutomationTriggerRegistry.summarize("builtin.cron", parsed)).toBe("Cron · 0 9 * * *")
+  })
+
+  it("renders cron trigger config with the advanced cron input", () => {
+    const trigger = rendererAutomationTriggerRegistry.get("builtin.cron")
+    const ConfigForm = trigger.ConfigForm
+
+    const html = ConfigForm
+      ? renderToStaticMarkup(
+        <ConfigForm
+          value={{ expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] }}
+          onChange={() => undefined}
+        />,
+      )
+      : ""
+
+    expect(html).toContain('data-slot="input-group"')
+    expect(html).toContain('id="automation-trigger-cron-expr"')
+    expect(html).toContain(">编辑</button>")
   })
 
   it("parses and summarizes interval config", () => {

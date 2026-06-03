@@ -8,6 +8,8 @@ import type { AutomationEditorDraft, AutomationFormState } from "./types"
 
 const DEFAULT_EXECUTOR_TYPE = "builtin.command"
 const DEFAULT_ACTIVE_DAYS = [0, 1, 2, 3, 4, 5, 6]
+const AUTOMATION_DRAFT_NAME_PREFIX = "自动化"
+const AUTOMATION_DRAFT_SUFFIX_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const logger = createRendererLogger("automation.utils")
 
 const DEFAULT_AUTOMATION_FORM_STATE: AutomationFormState = {
@@ -64,9 +66,9 @@ function createDefaultExecutorConfig(executorType: string): ActionConfig {
   return { ...rendererActionRegistry.getDefaultConfig(executorType) }
 }
 
-function createDefaultAutomationDraft(): AutomationEditorDraft {
+function createDefaultAutomationDraft(name = ""): AutomationEditorDraft {
   return {
-    name: "",
+    name,
     description: "",
     cwd: "",
     enabled: false,
@@ -76,6 +78,32 @@ function createDefaultAutomationDraft(): AutomationEditorDraft {
     executorConfig: {},
     missedRunPolicy: "skip",
   }
+}
+
+function generateAutomationDraftName(
+  existingNames: Iterable<string>,
+  rng: () => number = Math.random,
+): string {
+  const names = new Set(Array.from(existingNames, (name) => name.trim()).filter(Boolean))
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const suffix = Array.from({ length: 4 }, () => {
+      const index = Math.min(
+        AUTOMATION_DRAFT_SUFFIX_CHARS.length - 1,
+        Math.max(0, Math.floor(rng() * AUTOMATION_DRAFT_SUFFIX_CHARS.length)),
+      )
+      return AUTOMATION_DRAFT_SUFFIX_CHARS[index]
+    }).join("")
+    const candidate = `${AUTOMATION_DRAFT_NAME_PREFIX} #${suffix}`
+    if (!names.has(candidate)) return candidate
+  }
+
+  for (let index = 1; index < 36 ** 4; index += 1) {
+    const suffix = index.toString(36).toUpperCase().padStart(4, "0").slice(-4)
+    const candidate = `${AUTOMATION_DRAFT_NAME_PREFIX} #${suffix}`
+    if (!names.has(candidate)) return candidate
+  }
+
+  return `${AUTOMATION_DRAFT_NAME_PREFIX} #${Date.now().toString(36).toUpperCase().slice(-4)}`
 }
 
 function createAutomationDraftFromItem(item: AutomationItem): AutomationEditorDraft {
@@ -312,6 +340,7 @@ export {
   createDefaultAutomationDraft,
   createAutomationFormState,
   createDefaultExecutorConfig,
+  generateAutomationDraftName,
   formatAutomationDate,
   formatAutomationExecutor,
   formatAutomationNextRun,

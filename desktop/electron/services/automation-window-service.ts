@@ -1,22 +1,28 @@
 import { BrowserWindow } from "electron"
+import path from "node:path"
 
 import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
 
 type AutomationWindowServiceDeps = {
   readonly createWindow: (options: Electron.BrowserWindowConstructorOptions) => BrowserWindow
   readonly baseUrl: () => string
+  readonly getPreloadPath?: () => string
 }
 
 const AUTOMATION_EDITOR_WINDOW_BOUNDS = {
-  width: 1180,
-  height: 820,
-  minWidth: 960,
-  minHeight: 640,
+  width: 950,
+  height: 720,
+  minWidth: 860,
+  minHeight: 560,
 }
 
 function focusWindow(window: BrowserWindow): void {
   if (window.isMinimized()) window.restore()
   window.focus()
+}
+
+function resolveAutomationWindowPreloadPath(baseDir: string): string {
+  return path.join(baseDir, "../preload.js")
 }
 
 export function createAutomationWindowService(deps: AutomationWindowServiceDeps) {
@@ -34,7 +40,7 @@ export function createAutomationWindowService(deps: AutomationWindowServiceDeps)
       ...AUTOMATION_EDITOR_WINDOW_BOUNDS,
       title: "Automation Editor",
       webPreferences: {
-        preload: require.resolve("../preload.ts"),
+        preload: deps.getPreloadPath?.() ?? resolveAutomationWindowPreloadPath(__dirname),
         contextIsolation: true,
         sandbox: false,
       },
@@ -84,4 +90,5 @@ export function createAutomationWindowService(deps: AutomationWindowServiceDeps)
 export const automationWindowService = createAutomationWindowService({
   createWindow: (options) => new BrowserWindow(options),
   baseUrl: rendererBaseUrl,
+  getPreloadPath: () => resolveAutomationWindowPreloadPath(__dirname),
 })

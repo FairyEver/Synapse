@@ -1,14 +1,18 @@
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
+import type { SynapseProjectConfig } from "@/types/config"
 
 type TriggerExecutorBuilderProps = {
   triggerType: string | null
   triggerConfig: AutomationTriggerConfig
   executorType: string | null
   executorConfig: ActionConfig
+  projects?: readonly SynapseProjectConfig[]
   onTriggerChange: (type: string | null, config: AutomationTriggerConfig) => void
   onExecutorChange: (type: string | null, config: ActionConfig) => void
 }
@@ -29,11 +33,22 @@ function safeExecutorSummary(type: string, config: ActionConfig): string {
   }
 }
 
-function BuilderHeader({ title, detail }: { readonly title: string; readonly detail: string }) {
+function BuilderHeader({
+  title,
+  label,
+  detail,
+}: {
+  readonly title: string
+  readonly label: string
+  readonly detail: string
+}) {
   return (
-    <div className="mb-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    <div className="mb-5 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <h2 className="mt-1 text-base font-semibold">{title}</h2>
+      </div>
+      <Badge variant="outline">{detail}</Badge>
     </div>
   )
 }
@@ -96,10 +111,11 @@ function parseTriggerValue(type: string, config: AutomationTriggerConfig): Autom
 }
 
 function parseExecutorValue(type: string, config: ActionConfig): ActionConfig {
+  const mergedConfig = { ...rendererActionRegistry.getDefaultConfig(type), ...config }
   try {
-    return rendererActionRegistry.parseConfig(type, config)
+    return rendererActionRegistry.parseConfig(type, mergedConfig)
   } catch {
-    return { ...rendererActionRegistry.getDefaultConfig(type) }
+    return mergedConfig
   }
 }
 
@@ -108,6 +124,7 @@ export function TriggerExecutorBuilder({
   triggerConfig,
   executorType,
   executorConfig,
+  projects = [],
   onTriggerChange,
   onExecutorChange,
 }: TriggerExecutorBuilderProps) {
@@ -117,9 +134,16 @@ export function TriggerExecutorBuilder({
   const ExecutorConfigForm = selectedExecutor?.ConfigForm
 
   return (
-    <div className="grid min-h-[500px] grid-cols-1 gap-8 py-7 md:grid-cols-2">
-      <section className="min-w-0">
-        <BuilderHeader title="当以下情况发生时" detail={selectedTrigger ? "配置触发器" : "选择触发器"} />
+    <div
+      data-layout="automation-editor-builder"
+      className="grid min-h-full grid-cols-[400px_1px_minmax(0,1fr)] gap-5"
+    >
+      <section className="min-w-0 py-5">
+        <BuilderHeader
+          label="触发器"
+          title="当以下情况发生时"
+          detail={selectedTrigger ? "配置" : "选择"}
+        />
         {selectedTrigger ? (
           <div className="grid gap-5">
             <SelectedHeader
@@ -146,8 +170,14 @@ export function TriggerExecutorBuilder({
         )}
       </section>
 
-      <section className="min-w-0 border-t border-border pt-7 md:border-l md:border-t-0 md:pl-8 md:pt-0">
-        <BuilderHeader title="就执行以下操作" detail={selectedExecutor ? "配置执行器" : "选择执行器"} />
+      <Separator data-layout="automation-editor-divider" orientation="vertical" />
+
+      <section className="min-w-0 py-5">
+        <BuilderHeader
+          label="执行器"
+          title="就执行以下操作"
+          detail={selectedExecutor ? "配置" : "选择"}
+        />
         {selectedExecutor ? (
           <div className="grid gap-5">
             <SelectedHeader
@@ -158,6 +188,7 @@ export function TriggerExecutorBuilder({
             {ExecutorConfigForm ? (
               <ExecutorConfigForm
                 value={parseExecutorValue(selectedExecutor.manifest.id, executorConfig)}
+                projects={projects}
                 onChange={(config) => onExecutorChange(selectedExecutor.manifest.id, config)}
               />
             ) : null}

@@ -9,12 +9,21 @@ import {
   FieldLabel,
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../src/components/ui/select"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { ProviderModelSelectDialog } from "../../../src/components/provider-model-select-dialog"
 import { AgentPermissionModeMenu } from "../../../src/modules/agent/components/permission-mode-menu"
 import { permissionModeLabels } from "../../../src/modules/agent/permission-mode-options"
 import type { SynapseAgentPermissionMode } from "../../../src/types/agent"
+import type { SynapseProjectConfig } from "../../../src/types/config"
 import type { ModelTier } from "../../../src/types/provider-model"
 import type { AgentActionConfig } from "./schema"
 
@@ -28,15 +37,44 @@ const TIER_LABELS: Record<ModelTier, string> = {
 export function AgentConfigForm({
   value,
   onChange,
+  projects = [],
 }: {
   readonly value: AgentActionConfig
   readonly onChange: (value: AgentActionConfig) => void
+  readonly projects?: readonly SynapseProjectConfig[]
 }) {
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
 
   return (
     <FieldGroup>
       <div className="grid gap-2 md:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="task-action-agent-project">项目</FieldLabel>
+          <FieldContent>
+            <Select
+              value={value.projectId}
+              onValueChange={(projectId) => onChange({ ...value, agentType: "claude-code", projectId })}
+            >
+              <SelectTrigger
+                id="task-action-agent-project"
+                data-testid="automation-agent-project-select"
+                className="w-full"
+              >
+                <SelectValue placeholder="选择项目" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </FieldContent>
+        </Field>
+
         <Field>
           <FieldLabel htmlFor="task-action-agent-provider">供应商 + 模型</FieldLabel>
           <FieldContent>

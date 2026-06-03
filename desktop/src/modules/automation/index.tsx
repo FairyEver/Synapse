@@ -36,8 +36,22 @@ type AcceptedManualRun = AutomationRun & {
   status: Extract<AutomationRun["status"], "running" | "success">
 }
 
+class AutomationRunCancelledError extends Error {
+  readonly run: AutomationRun
+
+  constructor(run: AutomationRun) {
+    super("Automation run was cancelled")
+    this.name = "AutomationRunCancelledError"
+    this.run = run
+  }
+}
+
 function isAcceptedManualRun(run: AutomationRun | null): run is AcceptedManualRun {
   return run !== null && (run.status === "running" || run.status === "success")
+}
+
+function isAutomationRunCancelledError(error: unknown): error is AutomationRunCancelledError {
+  return error instanceof AutomationRunCancelledError
 }
 
 function AutomationModule() {
@@ -106,28 +120,65 @@ function AutomationModule() {
 
   async function handleRun(item: AutomationItem) {
     setRunningItemIds((current) => new Set([...current, item.id]))
-    const result = await runMutation(
-      async () => {
-        const run = await runAutomation(item.id)
-        logger.info("Automation manual run requested.", { automationId: item.id, runId: run?.id })
-        if (!isAcceptedManualRun(run)) throw new Error(run?.error ?? "运行未开始")
-        return run
-      },
-      { loading: "正在运行自动化...", success: "自动化已运行。", error: "运行自动化失败。" },
-    )
-    setRunningItemIds((current) => {
-      const next = new Set(current)
-      next.delete(item.id)
-      return next
-    })
-    return result
+    try {
+      setBusy(true)
+      const result = await promise(
+        async () => {
+          const run = await runAutomation(item.id)
+          logger.info("Automation manual run requested.", { automationId: item.id, runId: run?.id })
+          if (run?.status === "cancelled") throw new AutomationRunCancelledError(run)
+          if (!isAcceptedManualRun(run)) throw new Error(run?.error ?? "运行未开始")
+          return run
+        },
+        {
+          loading: "正在运行自动化...",
+          success: "自动化已运行。",
+          error: (runError) => isAutomationRunCancelledError(runError)
+            ? { message: null }
+            : "运行自动化失败。",
+        },
+      )
+      await refresh()
+      return result
+    } catch (runError) {
+      if (isAutomationRunCancelledError(runError)) {
+        logger.info("Automation manual run stopped.", { automationId: item.id, runId: runError.run.id })
+      } else {
+        logger.error("Automation mutation failed.", {
+          boundary: "renderer.automation.mutation",
+          ...errorLogMeta(runError),
+        })
+      }
+      await refresh()
+      return null
+    } finally {
+      setBusy(false)
+      setRunningItemIds((current) => {
+        const next = new Set(current)
+        next.delete(item.id)
+        return next
+      })
+    }
   }
 
   async function handleStop(item: AutomationItem) {
     const runId = item.activeRun?.id
     if (!runId) return
-    await stopRunOrThrow(runId)
-    await refresh()
+    try {
+      await promise(
+        () => stopRunOrThrow(runId),
+        { loading: "正在停止自动化...", success: "自动化已停止。", error: "停止自动化失败。" },
+      )
+      logger.info("Automation stop requested.", { automationId: item.id, runId })
+      await refresh()
+    } catch (stopError) {
+      logger.warn("Automation stop failed.", {
+        boundary: "renderer.automation.stop",
+        automationId: item.id,
+        runId,
+        ...errorLogMeta(stopError),
+      })
+    }
   }
 
   async function stopRunOrThrow(runId: string): Promise<{ readonly stopped: boolean }> {

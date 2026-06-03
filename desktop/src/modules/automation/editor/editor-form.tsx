@@ -1,8 +1,33 @@
-import { useEffect, useMemo, useState } from "react"
-import { LoaderCircle, RefreshCw } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { LoaderCircle, Pencil, RefreshCw } from "lucide-react"
 
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Field,
+  FieldContent,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { sanitizeError } from "@/lib/error-sanitize"
@@ -12,6 +37,7 @@ import {
   buildAutomationUpdateInputFromDraft,
   createAutomationDraftFromItem,
   createDefaultAutomationDraft,
+  generateAutomationDraftName,
 } from "../utils"
 import { TriggerExecutorBuilder } from "./trigger-executor-builder"
 
@@ -22,27 +48,91 @@ type AutomationEditorFormProps = {
 }
 
 function visibleError(error: unknown): string {
+  const validationMessage = readableValidationError(error)
+  if (validationMessage) return validationMessage
   const message = error instanceof Error ? error.message : String(error)
   return sanitizeError(message) || "保存失败"
 }
 
+function readableValidationError(error: unknown): string | null {
+  const issues = extractValidationIssues(error)
+  if (issues.length === 0) return null
+  const messages = issues.map((issue) => validationIssueMessage(issue)).filter(Boolean)
+  return [...new Set(messages)].join("、") || "请检查配置"
+}
+
+function extractValidationIssues(error: unknown): Array<{ readonly path?: readonly unknown[]; readonly message?: string }> {
+  const directIssues = (error as { readonly issues?: unknown } | null)?.issues
+  if (Array.isArray(directIssues)) return directIssues as Array<{ readonly path?: readonly unknown[]; readonly message?: string }>
+  const message = error instanceof Error ? error.message : String(error)
+  try {
+    const parsed = JSON.parse(message)
+    return Array.isArray(parsed) ? parsed as Array<{ readonly path?: readonly unknown[]; readonly message?: string }> : []
+  } catch {
+    return []
+  }
+}
+
+function validationIssueMessage(issue: { readonly path?: readonly unknown[]; readonly message?: string }): string {
+  const field = issue.path?.map(String).at(-1) ?? ""
+  const labels: Record<string, string> = {
+    projectId: "请选择项目",
+    providerId: "请选择供应商 + 模型",
+    modelTier: "请选择模型",
+    prompt: "请填写提示词",
+    command: "请填写命令",
+    script: "请填写脚本",
+    url: "请填写 URL",
+    expr: "请填写 Cron 表达式",
+  }
+  return labels[field] ?? issue.message ?? ""
+}
+
 export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
+  const { config } = useAppConfig()
+  const projects = config.global.projects
   const [loadState, setLoadState] = useState<AutomationEditorLoadState>(() => (
     mode.mode === "create"
-      ? { status: "ready", draft: createDefaultAutomationDraft() }
+      ? { status: "ready", draft: createDefaultAutomationDraft(generateAutomationDraftName([])) }
       : { status: "loading" }
   ))
-  const [dirty, setDirty] = useState(false)
+  const dirtyRef = useRef(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showCloseDialog, setShowCloseDialog] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameName, setRenameName] = useState("")
   const automationBridge = useMemo(() => requireBridgeDomain("automation"), [])
+
+  function setDirty(nextDirty: boolean) {
+    dirtyRef.current = nextDirty
+  }
 
   useEffect(() => {
     if (mode.mode === "create") {
-      setLoadState({ status: "ready", draft: createDefaultAutomationDraft() })
+      setLoadState({ status: "ready", draft: createDefaultAutomationDraft(generateAutomationDraftName([])) })
       setDirty(false)
-      return
+      setShowCloseDialog(false)
+      let cancelled = false
+      void automationBridge.listItems()
+        .then((items) => {
+          if (cancelled || dirtyRef.current) return
+          setLoadState({ status: "ready", draft: createDefaultAutomationDraft(
+            generateAutomationDraftName(items.map((item) => item.name)),
+          ) })
+          setDirty(false)
+        })
+        .catch((loadError) => {
+          logger.warn("Automation editor create name generation failed.", {
+            boundary: "renderer.automation.editor.create-name",
+            errorName: loadError instanceof Error ? loadError.name : typeof loadError,
+            errorLength: loadError instanceof Error ? loadError.message.length : String(loadError).length,
+          })
+        })
+      return () => {
+        cancelled = true
+      }
     }
 
     let cancelled = false
@@ -56,6 +146,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
         }
         setLoadState({ status: "ready", item, draft: createAutomationDraftFromItem(item) })
         setDirty(false)
+        setShowCloseDialog(false)
       })
       .catch((loadError) => {
         if (cancelled) return
@@ -74,14 +165,15 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
   }, [automationBridge, mode, reloadKey])
 
   useEffect(() => {
-    if (!dirty) return undefined
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return
       event.preventDefault()
       event.returnValue = ""
+      setShowCloseDialog(true)
     }
     window.addEventListener("beforeunload", handleBeforeUnload)
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
-  }, [dirty])
+  }, [])
 
   function updateDraft(updater: (draft: AutomationEditorDraft) => AutomationEditorDraft) {
     setLoadState((current) => {
@@ -90,6 +182,19 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
     })
     setDirty(true)
     setError(null)
+  }
+
+  function openRenameDialog() {
+    if (loadState.status !== "ready") return
+    setRenameName(loadState.draft.name)
+    setRenameOpen(true)
+  }
+
+  function confirmRename() {
+    const nextName = renameName.trim()
+    if (!nextName) return
+    updateDraft((current) => ({ ...current, name: nextName }))
+    setRenameOpen(false)
   }
 
   async function handleSave(enableAfterSave: boolean) {
@@ -125,6 +230,12 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
     }
   }
 
+  function handleDiscardAndClose() {
+    setDirty(false)
+    setShowCloseDialog(false)
+    window.close()
+  }
+
   if (loadState.status === "loading") {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">
@@ -152,20 +263,26 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      <div className="border-b border-border px-8 py-6">
-        <Input
-          className="h-11 max-w-md text-lg font-semibold"
-          aria-label="自动化标题"
-          value={draft.name}
-          onChange={(event) => updateDraft((current) => ({ ...current, name: event.target.value }))}
-        />
+      <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-5">
+        <Button
+          type="button"
+          variant="ghost"
+          className="-ml-2 min-w-0 justify-start px-2 font-semibold"
+          onClick={openRenameDialog}
+        >
+          <span className="truncate">{draft.name}</span>
+          <Pencil />
+          <span className="sr-only">重命名</span>
+        </Button>
+        <Badge variant="outline">{mode.mode === "edit" ? "编辑" : "新建"}</Badge>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-8">
+      <div className="min-h-0 flex-1 overflow-auto px-5">
         <TriggerExecutorBuilder
           triggerType={draft.triggerType}
           triggerConfig={draft.triggerConfig}
           executorType={draft.executorType}
           executorConfig={draft.executorConfig}
+          projects={projects}
           onTriggerChange={(triggerType, triggerConfig) =>
             updateDraft((current) => ({ ...current, triggerType, triggerConfig }))}
           onExecutorChange={(executorType, executorConfig) =>
@@ -181,6 +298,52 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
           保存并启用
         </Button>
       </div>
+      <Dialog data-track="automation-editor-rename-dialog" open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>重命名自动化</DialogTitle>
+          </DialogHeader>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="automation-editor-rename-name">名称</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="automation-editor-rename-name"
+                  autoFocus
+                  value={renameName}
+                  onChange={(event) => setRenameName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault()
+                      confirmRename()
+                    }
+                  }}
+                />
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+          <DialogFooter className="mt-2">
+            <Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>
+              取消
+            </Button>
+            <Button type="button" disabled={!renameName.trim()} onClick={confirmRename}>
+              确认
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>未保存的更改</AlertDialogTitle>
+            <AlertDialogDescription>关闭后，未保存的修改会丢失。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>继续编辑</AlertDialogCancel>
+            <AlertDialogAction variant="ghost" onClick={handleDiscardAndClose}>放弃</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

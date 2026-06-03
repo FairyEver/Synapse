@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AutomationModule } from "../index"
+import { AutomationListRow } from "../components/automation-list-row"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import type { AutomationItem } from "@/types/automation"
 
 const mocks = vi.hoisted(() => ({
@@ -19,9 +21,11 @@ const mocks = vi.hoisted(() => ({
   useAutomationItems: vi.fn(),
   openCreateEditorWindow: vi.fn(),
   openEditorWindow: vi.fn(),
+  runAutomation: vi.fn(),
+  stopAutomationRun: vi.fn(),
 }))
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => mocks.rendererLogger,
@@ -66,11 +70,13 @@ vi.mock("../hooks/use-automation", async () => {
   const actual = await vi.importActual<typeof import("../hooks/use-automation")>(
     "../hooks/use-automation",
   )
-  return {
-    ...actual,
-    useAutomationItems: mocks.useAutomationItems,
-  }
-})
+    return {
+      ...actual,
+      useAutomationItems: mocks.useAutomationItems,
+      runAutomation: mocks.runAutomation,
+      stopAutomationRun: mocks.stopAutomationRun,
+    }
+  })
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -162,6 +168,101 @@ describe("AutomationModule", () => {
     })
 
     expect(mocks.openEditorWindow).toHaveBeenCalledWith("automation:1")
+  })
+
+  it("allows stopping a running automation without opening the editor", async () => {
+    const refresh = vi.fn()
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem({ activeRun: { status: "running", id: "run-1" } })],
+      loading: false,
+      error: null,
+      refresh,
+    })
+    mocks.stopAutomationRun.mockResolvedValue({ stopped: true })
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+    const stopButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.getAttribute("aria-label") === "停止运行")
+    expect(stopButton).not.toBeNull()
+    expect(stopButton?.disabled).toBe(false)
+
+    await act(async () => {
+      stopButton?.click()
+    })
+
+    expect(mocks.stopAutomationRun).toHaveBeenCalledWith("run-1")
+    expect(refresh).toHaveBeenCalled()
+    expect(mocks.openEditorWindow).not.toHaveBeenCalled()
+  })
+
+  it("keeps the stop action enabled for a running row while other mutations are busy", async () => {
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <AutomationListRow
+            item={createItem({ activeRun: { status: "running", id: "run-1" } })}
+            projects={[]}
+            busy={true}
+            onOpen={vi.fn()}
+            onRun={vi.fn()}
+            onStop={vi.fn()}
+            onToggleEnabled={vi.fn()}
+            onHistory={vi.fn()}
+            onDelete={vi.fn()}
+          />
+        </TooltipProvider>,
+      )
+    })
+
+    const stopButton = document.querySelector<HTMLButtonElement>('button[aria-label="停止运行"]')
+    expect(stopButton).not.toBeNull()
+    expect(stopButton?.disabled).toBe(false)
+  })
+
+  it("treats a cancelled manual run as stopped instead of a mutation failure", async () => {
+    const refresh = vi.fn()
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem()],
+      loading: false,
+      error: null,
+      refresh,
+    })
+    mocks.runAutomation.mockResolvedValue({
+      id: "run-1",
+      automationId: "automation:1",
+      status: "cancelled",
+      triggeredBy: "manual",
+      startedAt: "2026-06-03T00:00:00.000Z",
+      finishedAt: "2026-06-03T00:00:01.000Z",
+      result: { status: "cancelled", summary: "已停止" },
+      error: "已停止",
+    })
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((button) => button.getAttribute("aria-label") === "运行自动化")
+        ?.click()
+    })
+
+    expect(mocks.runAutomation).toHaveBeenCalledWith("automation:1")
+    expect(refresh).toHaveBeenCalled()
+    expect(mocks.rendererLogger.error).not.toHaveBeenCalled()
   })
 })
 

@@ -5,6 +5,7 @@ import {
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
+import { CronInput } from "../../../src/modules/task-scheduler/components/cron-input"
 import type { CronTriggerConfig } from "./schema"
 
 const WEEKDAYS = [
@@ -29,10 +30,10 @@ export function CronTriggerConfigForm({
       <Field>
         <FieldLabel htmlFor="automation-trigger-cron-expr">Cron 表达式</FieldLabel>
         <FieldContent>
-          <Input
+          <CronInput
             id="automation-trigger-cron-expr"
             value={value.expr}
-            onChange={(event) => onChange({ ...value, expr: event.target.value })}
+            onChange={(expr) => onChange({ ...value, expr })}
           />
         </FieldContent>
       </Field>

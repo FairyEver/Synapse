@@ -158,17 +158,33 @@ export class ControlledProcessOutputError extends Error {
   }
 }
 
-function createProcessTerminator(child: Pick<ChildProcessWithoutNullStreams, "kill">): ProcessTerminator {
+function createProcessTerminator(
+  child: Pick<ChildProcessWithoutNullStreams, "kill" | "pid">,
+  options: { readonly processGroup: boolean },
+): ProcessTerminator {
   let forceKillTimeout: ReturnType<typeof setTimeout> | null = null
+
+  const killProcess = (signal: NodeJS.Signals) => {
+    if (options.processGroup && typeof child.pid === "number") {
+      try {
+        process.kill(-child.pid, signal)
+        return
+      } catch {
+        child.kill(signal)
+        return
+      }
+    }
+    child.kill(signal)
+  }
 
   return {
     terminate(signal: NodeJS.Signals = "SIGTERM") {
-      child.kill(signal)
+      killProcess(signal)
       if (signal !== "SIGTERM" || forceKillTimeout !== null) return
 
       forceKillTimeout = setTimeout(() => {
         forceKillTimeout = null
-        child.kill("SIGKILL")
+        killProcess("SIGKILL")
       }, TERMINATION_GRACE_MS)
     },
     clear() {
@@ -230,6 +246,7 @@ export class ControlledProcessRunner {
         env: launch.env,
         windowsHide: true,
         shell: false,
+        detached: launch.processGroup,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -244,6 +261,7 @@ export class ControlledProcessRunner {
       startedAt,
       output,
       maxBufferBytes,
+      launch,
     })
   }
 
@@ -296,6 +314,7 @@ export class ControlledProcessRunner {
         env: launch.env,
         windowsHide: true,
         shell: false,
+        detached: launch.processGroup,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -305,7 +324,7 @@ export class ControlledProcessRunner {
 
     const stdoutCollector = new OutputCollector(output.stdout ?? "buffer", maxBufferBytes)
     const stderrCollector = new OutputCollector(output.stderr ?? "buffer", maxBufferBytes)
-    const terminator = createProcessTerminator(child)
+    const terminator = createProcessTerminator(child, { processGroup: launch.processGroup })
     let timedOut = false
     let outputError: Error | null = null
     let spawnError: Error | null = null
@@ -457,6 +476,7 @@ interface ControlledProcessSessionImplDeps {
   readonly startedAt: number
   readonly output: ControlledProcessOutputOptions
   readonly maxBufferBytes: number
+  readonly launch: ControlledProcessLaunch
 }
 
 class ControlledProcessSessionImpl implements ControlledProcessSession {
@@ -490,7 +510,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       deps.output.stderr ?? "buffer",
       deps.maxBufferBytes,
     )
-    this.terminator = createProcessTerminator(this.child)
+    this.terminator = createProcessTerminator(this.child, { processGroup: deps.launch.processGroup })
     this.stdoutLines = new LineEmitter(deps.request.onStdoutLine, (error) => {
       this.outputError = error
       this.terminator.terminate()
@@ -864,6 +884,7 @@ interface ControlledProcessLaunch {
   readonly command: string
   readonly args: readonly string[]
   readonly env: NodeJS.ProcessEnv
+  readonly processGroup: boolean
   readonly isolationMetadata?: Record<string, unknown>
 }
 
@@ -875,6 +896,7 @@ function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLau
     return {
       ...wrapWindowsBatchCommand(request.command, args, env),
       env,
+      processGroup: process.platform !== "win32",
     }
   }
   if (isolation.kind !== "run_as_user") {
@@ -905,6 +927,7 @@ function buildLaunch(request: ControlledProcessRunRequest): ControlledProcessLau
       ...args,
     ],
     env: isolatedEnv,
+    processGroup: true,
     isolationMetadata: {
       kind: "run_as_user",
       user,

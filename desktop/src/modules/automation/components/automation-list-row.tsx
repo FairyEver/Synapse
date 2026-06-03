@@ -61,6 +61,7 @@ function AutomationListRow({
   const badge = getStatusBadge(item)
   const triggerSummary = formatAutomationTrigger(item)
   const executorSummary = formatAutomationExecutor(item)
+  const stopDisabled = activeRunning && !item.activeRun?.id
 
   return (
     <Item
@@ -113,7 +114,7 @@ function AutomationListRow({
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                disabled={busy}
+                disabled={stopDisabled}
                 aria-label="停止运行"
                 onClick={(event) => {
                   event.stopPropagation()

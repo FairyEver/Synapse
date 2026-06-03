@@ -49,4 +49,31 @@ describe("createAutomationWindowService", () => {
 
     expect(createWindow).toHaveBeenCalledTimes(2)
   })
+
+  it("uses the built preload script for editor windows", async () => {
+    const createWindow = vi.fn(() => createWindowMock() as never)
+    const service = createAutomationWindowService({ createWindow, baseUrl: () => "app://-" })
+
+    await service.openCreate()
+
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      webPreferences: expect.objectContaining({
+        preload: expect.stringMatching(/preload\.js$/),
+      }),
+    }))
+  })
+
+  it("opens editor windows with the compact automation editor bounds", async () => {
+    const createWindow = vi.fn(() => createWindowMock() as never)
+    const service = createAutomationWindowService({ createWindow, baseUrl: () => "app://-" })
+
+    await service.openCreate()
+
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      width: 950,
+      minWidth: 860,
+      height: 720,
+      minHeight: 560,
+    }))
+  })
 })

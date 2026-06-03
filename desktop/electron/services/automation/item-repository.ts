@@ -28,6 +28,7 @@ export class AutomationItemRepository {
   private readonly triggers: AutomationTriggerRegistry
   private readonly now: () => Date
   private readonly idFactory: () => string
+  private readonly itemQueues = new Map<string, Promise<void>>()
 
   constructor(deps: AutomationItemRepositoryDeps) {
     this.items = deps.items
@@ -66,31 +67,32 @@ export class AutomationItemRepository {
   }
 
   async update(id: string, patch: AutomationUpdateInput): Promise<AutomationItem> {
-    const existing = await this.require(id)
-    const trigger = patch.trigger ? this.normalizeTrigger(patch.trigger) : existing.trigger
-    const candidate: AutomationItem = {
-      ...existing,
-      ...definedPatch({
-        name: patch.name,
-        description: patch.description,
-        enabled: patch.enabled,
-        scope: patch.scope,
-        cwd: patch.cwd,
-      }),
-      trigger,
-      executor: patch.executor ?? existing.executor,
-      policy: normalizePolicy({ ...existing.policy, ...patch.policy }),
-      updatedAt: this.isoNow(),
-      configVersion: existing.configVersion + 1,
-    }
-    validateItem(candidate)
-    const next: AutomationItem = {
-      ...candidate,
-      nextRunAt: candidate.enabled
-        ? this.computeNextRunAt(candidate, this.now()).toISOString()
-        : undefined,
-    }
-    await this.items.upsert(next)
+    const next = await this.mutateItem(id, (existing) => {
+      const trigger = patch.trigger ? this.normalizeTrigger(patch.trigger) : existing.trigger
+      const candidate: AutomationItem = {
+        ...existing,
+        ...definedPatch({
+          name: patch.name,
+          description: patch.description,
+          enabled: patch.enabled,
+          scope: patch.scope,
+          cwd: patch.cwd,
+        }),
+        trigger,
+        executor: patch.executor ?? existing.executor,
+        policy: normalizePolicy({ ...existing.policy, ...patch.policy }),
+        updatedAt: this.isoNow(),
+        configVersion: existing.configVersion + 1,
+      }
+      validateItem(candidate)
+      return {
+        ...candidate,
+        nextRunAt: candidate.enabled
+          ? this.computeNextRunAt(candidate, this.now()).toISOString()
+          : undefined,
+      }
+    })
+    if (!next) throw new Error(`Automation "${id}" was not found`)
     return next
   }
 
@@ -110,59 +112,81 @@ export class AutomationItemRepository {
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
-    const existing = await this.require(id)
-    const next: AutomationItem = {
-      ...existing,
-      enabled,
-      updatedAt: this.isoNow(),
-      nextRunAt: enabled
-        ? this.computeNextRunAt(existing, this.now()).toISOString()
-        : undefined,
-    }
-    await this.items.upsert(next)
+    const next = await this.mutateItem(id, (existing) => {
+      const candidate: AutomationItem = {
+        ...existing,
+        enabled,
+        updatedAt: this.isoNow(),
+      }
+      return {
+        ...candidate,
+        nextRunAt: enabled
+          ? this.computeNextRunAt(candidate, this.now()).toISOString()
+          : undefined,
+      }
+    })
+    if (!next) throw new Error(`Automation "${id}" was not found`)
     return next
   }
 
   async markScheduled(id: string, nextRunAt: string | undefined): Promise<AutomationItem | null> {
-    const existing = await this.items.get(id)
-    if (!existing) return null
-    const next: AutomationItem = {
+    return this.mutateItem(id, (existing) => ({
       ...existing,
       nextRunAt,
       updatedAt: this.isoNow(),
-    }
-    await this.items.upsert(next)
-    return next
+    }))
   }
 
   async markRunResult(
     id: string,
     result: { readonly status: AutomationRunStatus },
   ): Promise<AutomationItem | null> {
-    const existing = await this.items.get(id)
-    if (!existing) return null
-    const now = this.isoNow()
-    const recalcNextRunAt = existing.enabled &&
-      existing.trigger.type === "builtin.interval" &&
-      existing.trigger.config.anchor === "last_completed_at"
-    const next: AutomationItem = {
-      ...existing,
-      lastRunAt: now,
-      lastStatus: result.status,
-      runCount: existing.runCount + 1,
-      updatedAt: now,
-      ...(recalcNextRunAt
-        ? { nextRunAt: this.computeNextRunAt(existing, this.now()).toISOString() }
-        : {}),
-    }
-    await this.items.upsert(next)
-    return next
+    return this.mutateItem(id, (existing) => {
+      const now = this.isoNow()
+      const recalcNextRunAt = existing.enabled &&
+        existing.trigger.type === "builtin.interval" &&
+        existing.trigger.config.anchor === "last_completed_at"
+      const next: AutomationItem = {
+        ...existing,
+        lastRunAt: now,
+        lastStatus: result.status,
+        runCount: existing.runCount + 1,
+        updatedAt: now,
+      }
+      return {
+        ...next,
+        ...(recalcNextRunAt
+          ? { nextRunAt: this.computeNextRunAt(next, this.now()).toISOString() }
+          : {}),
+      }
+    })
   }
 
-  private async require(id: string): Promise<AutomationItem> {
-    const item = await this.items.get(id)
-    if (!item) throw new Error(`Automation "${id}" was not found`)
-    return item
+  private async mutateItem(
+    id: string,
+    updater: (existing: AutomationItem) => AutomationItem,
+  ): Promise<AutomationItem | null> {
+    const previous = this.itemQueues.get(id) ?? Promise.resolve()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const queued = previous.catch(() => undefined).then(() => gate)
+    this.itemQueues.set(id, queued)
+
+    await previous.catch(() => undefined)
+    try {
+      const existing = await this.items.get(id)
+      if (!existing) return null
+      const next = updater(existing)
+      await this.items.upsert(next)
+      return next
+    } finally {
+      release()
+      if (this.itemQueues.get(id) === queued) {
+        this.itemQueues.delete(id)
+      }
+    }
   }
 
   private normalizeTrigger(trigger: AutomationTriggerRef): AutomationTriggerRef {

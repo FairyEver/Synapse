@@ -5,10 +5,12 @@ import type {
   ActionManifest,
   ActionRunResult,
 } from "../../action-packages/types"
+import type { SynapseProjectConfig } from "@/types/config"
 
 export type ActionConfigFormComponent<TConfig extends ActionConfig = ActionConfig> = (props: {
   readonly value: TConfig
   readonly onChange: (value: TConfig) => void
+  readonly projects?: readonly SynapseProjectConfig[]
 }) => ReactElement
 
 export type ActionResultViewComponent = (props: {

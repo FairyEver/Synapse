@@ -64,6 +64,61 @@ describe("AutomationItemRepository", () => {
     expect(result?.lastStatus).toBe("success")
     expect(result?.runCount).toBe(1)
   })
+
+  it("does not let delayed scheduling overwrite a newer run result", async () => {
+    const namespace = new ControlledMemoryNamespace<AutomationItem>("automation.items")
+    const repo = new AutomationItemRepository({
+      items: namespace,
+      triggers: createBuiltinAutomationTriggerRegistry(),
+      now: () => new Date("2026-06-03T00:00:00.000Z"),
+      idFactory: () => "automation:1",
+    })
+    const item = await repo.create(validCreateInput())
+    await repo.markRunResult(item.id, { status: "failed" })
+
+    const deferred = namespace.deferNextUpsert()
+    const scheduledPromise = repo.markScheduled(item.id, "2026-06-03T01:00:00.000Z")
+    await deferred.started
+
+    const resultPromise = repo.markRunResult(item.id, { status: "success" })
+    await Promise.resolve()
+    deferred.release()
+    await Promise.all([scheduledPromise, resultPromise])
+
+    await expect(namespace.get(item.id)).resolves.toEqual(expect.objectContaining({
+      lastStatus: "success",
+      nextRunAt: "2026-06-03T01:00:00.000Z",
+      runCount: 2,
+    }))
+  })
+
+  it("does not let delayed disable overwrite a newer run result", async () => {
+    const namespace = new ControlledMemoryNamespace<AutomationItem>("automation.items")
+    const repo = new AutomationItemRepository({
+      items: namespace,
+      triggers: createBuiltinAutomationTriggerRegistry(),
+      now: () => new Date("2026-06-03T00:00:00.000Z"),
+      idFactory: () => "automation:1",
+    })
+    const item = await repo.create(validCreateInput())
+    await repo.markRunResult(item.id, { status: "failed" })
+
+    const deferred = namespace.deferNextUpsert()
+    const disablePromise = repo.setEnabled(item.id, false)
+    await deferred.started
+
+    const resultPromise = repo.markRunResult(item.id, { status: "success" })
+    await Promise.resolve()
+    deferred.release()
+    await Promise.all([disablePromise, resultPromise])
+
+    await expect(namespace.get(item.id)).resolves.toEqual(expect.objectContaining({
+      enabled: false,
+      lastStatus: "success",
+      nextRunAt: undefined,
+      runCount: 2,
+    }))
+  })
 })
 
 function newRepo(): AutomationItemRepository {
@@ -123,5 +178,48 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
   onChange(_listener: DataChangeListener<T>): () => void {
     return () => {}
+  }
+}
+
+class ControlledMemoryNamespace<T extends { id: string }> extends MemoryNamespace<T> {
+  private deferredUpsert: Deferred<void> | null = null
+  private deferredStarted: (() => void) | null = null
+
+  deferNextUpsert(): { readonly started: Promise<void>; readonly release: () => void } {
+    const deferred = new Deferred<void>()
+    const started = new Promise<void>((resolve) => {
+      this.deferredStarted = resolve
+    })
+    this.deferredUpsert = deferred
+    return {
+      started,
+      release: () => deferred.resolve(),
+    }
+  }
+
+  override async upsert(item: T): Promise<void> {
+    const deferred = this.deferredUpsert
+    if (deferred) {
+      this.deferredUpsert = null
+      this.deferredStarted?.()
+      this.deferredStarted = null
+      await deferred.promise
+    }
+    await super.upsert(item)
+  }
+}
+
+class Deferred<T> {
+  readonly promise: Promise<T>
+  private resolvePromise: ((value: T) => void) | null = null
+
+  constructor() {
+    this.promise = new Promise<T>((resolve) => {
+      this.resolvePromise = resolve
+    })
+  }
+
+  resolve(value: T): void {
+    this.resolvePromise?.(value)
   }
 }
