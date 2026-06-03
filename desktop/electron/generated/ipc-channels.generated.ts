@@ -234,6 +234,7 @@ export const IPC_CHANNELS = {
     "rerun": "synapse:workflow:rerun",
     "openRunner": "synapse:workflow:open-runner",
     "cancel": "synapse:workflow:cancel",
+    "activeRuns": "synapse:workflow:active-runs",
     "runHistory": "synapse:workflow:run-history",
     "runStatus": "synapse:workflow:run-status",
     "openEditor": "synapse:workflow:open-editor",

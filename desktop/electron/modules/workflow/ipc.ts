@@ -14,7 +14,7 @@ import type { WorkflowWindowManager } from "../../services/workflow/window-manag
 import type { EventBus } from "../../runtime/event-bus"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../../services/workflow/workflow-validator"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
-import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackageV1, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
@@ -82,6 +82,50 @@ function visibleEngineRejectionError(error: unknown): string {
   const sanitized = sanitizeError(rawMessage)
   const brief = truncateWithEllipsis(sanitized, 120)
   return `引擎异常（${errorName}）：${brief}`
+}
+
+function runStatusToListItem(status: WorkflowRunStatus): WorkflowRunListItem {
+  return {
+    runId: status.runId,
+    workflowId: status.workflowId,
+    status: status.status,
+    nodeResults: status.nodeResults,
+    startedAt: status.startedAt,
+    endedAt: status.endedAt,
+    durationMs: status.durationMs,
+    error: status.error,
+    params: status.params,
+    definition: status.definition,
+  }
+}
+
+function snapshotToListItem(snapshot: WorkflowRunSnapshot): WorkflowRunListItem {
+  return {
+    runId: snapshot.runId,
+    workflowId: snapshot.workflowId,
+    status: snapshot.status,
+    nodeResults: snapshot.nodeResults,
+    startedAt: snapshot.startedAt,
+    endedAt: snapshot.endedAt,
+    durationMs: snapshot.endedAt ? snapshot.endedAt - snapshot.startedAt : undefined,
+    error: snapshot.error,
+    params: snapshot.params,
+    definition: snapshot.definition,
+  }
+}
+
+function listActiveRunItems(runStatuses: Map<string, WorkflowRunStatus>, workflowId?: string): WorkflowRunListItem[] {
+  return [...runStatuses.values()]
+    .filter((status) => status.status === "running")
+    .filter((status) => workflowId === undefined || status.workflowId === workflowId)
+    .map(runStatusToListItem)
+    .sort(compareRunListItems)
+}
+
+function compareRunListItems(a: WorkflowRunListItem, b: WorkflowRunListItem): number {
+  if (a.status === "running" && b.status !== "running") return -1
+  if (a.status !== "running" && b.status === "running") return 1
+  return b.startedAt - a.startedAt
 }
 
 function rendererBaseUrl(): string {
@@ -270,6 +314,19 @@ const nodeRunResultSchema: z.ZodType<NodeRunResult> = z.object({
 })
 
 const workflowRunStatusSchema: z.ZodType<WorkflowRunStatus> = z.object({
+  runId: z.string(),
+  workflowId: z.string(),
+  status: z.enum(["running", "completed", "failed", "cancelled"]),
+  nodeResults: z.record(z.string(), nodeRunResultSchema),
+  startedAt: z.number(),
+  endedAt: z.number().optional(),
+  durationMs: z.number().optional(),
+  error: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  definition: workflowDefinitionSchema.optional() as z.ZodType<WorkflowDefinition | undefined>,
+})
+
+const workflowRunListItemSchema: z.ZodType<WorkflowRunListItem> = z.object({
   runId: z.string(),
   workflowId: z.string(),
   status: z.enum(["running", "completed", "failed", "cancelled"]),
@@ -1065,9 +1122,23 @@ export const workflowIpcModule: IpcModule = {
         }
       },
     },
+    activeRuns: {
+      channel: "synapse:workflow:active-runs", kind: "invoke", request: z.void(), response: z.array(workflowRunListItemSchema),
+      handler: (ctx) => {
+        const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+        return listActiveRunItems(runStatuses)
+      },
+    },
     runHistory: {
-      channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: z.string() }), response: z.array(workflowRunSnapshotSchema),
-      handler: async (ctx, { workflowId }: { workflowId: string }) => ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId),
+      channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: z.string() }), response: z.array(workflowRunListItemSchema),
+      handler: async (ctx, { workflowId }: { workflowId: string }) => {
+        const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+        const snapshots = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId)
+        return [
+          ...listActiveRunItems(runStatuses, workflowId),
+          ...snapshots.map(snapshotToListItem),
+        ].sort(compareRunListItems)
+      },
     },
     runStatus: {
       channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: z.string() }), response: workflowRunStatusSchema.nullable(),

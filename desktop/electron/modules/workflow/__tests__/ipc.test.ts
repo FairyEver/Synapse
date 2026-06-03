@@ -754,6 +754,114 @@ describe("workflowIpcModule", () => {
     expect(runStatuses.get(runId)?.nodeResults["node-1"]?.progressLabel).toBe("Working")
   })
 
+  it("returns active workflow runs before terminal history snapshots", async () => {
+    const activeDefinition = workflowDefinition()
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    runStatuses.set("active-run", {
+      runId: "active-run",
+      workflowId: "workflow-1",
+      status: "running",
+      nodeResults: {
+        "node-1": {
+          nodeId: "node-1",
+          status: "running",
+          input: { variables: {} },
+          startedAt: 30,
+        },
+      },
+      startedAt: 30,
+      params: { query: "hello" },
+      definition: activeDefinition,
+    })
+    runStatuses.set("other-active-run", {
+      runId: "other-active-run",
+      workflowId: "workflow-2",
+      status: "running",
+      nodeResults: {},
+      startedAt: 40,
+      definition: { ...workflowDefinition(), id: "workflow-2" },
+    })
+    const snapshots = {
+      list: vi.fn(async () => [{
+        runId: "terminal-run",
+        workflowId: "workflow-1",
+        version: "v1",
+        status: "completed",
+        startedAt: 10,
+        endedAt: 20,
+        params: {},
+        nodeResults: {},
+        definition: activeDefinition,
+      }]),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const history = await harness.invoke("synapse:workflow:run-history", { workflowId: "workflow-1" })
+
+    expect(history).toEqual([
+      expect.objectContaining({
+        runId: "active-run",
+        workflowId: "workflow-1",
+        status: "running",
+        startedAt: 30,
+        params: { query: "hello" },
+        definition: activeDefinition,
+      }),
+      expect.objectContaining({
+        runId: "terminal-run",
+        workflowId: "workflow-1",
+        status: "completed",
+        startedAt: 10,
+        endedAt: 20,
+      }),
+    ])
+    expect(JSON.stringify(history)).not.toContain("other-active-run")
+  })
+
+  it("lists all active workflow runs and excludes terminal in-memory statuses", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    runStatuses.set("active-run", {
+      runId: "active-run",
+      workflowId: "workflow-1",
+      status: "running",
+      nodeResults: {},
+      startedAt: 30,
+      definition: workflowDefinition(),
+    })
+    runStatuses.set("completed-run", {
+      runId: "completed-run",
+      workflowId: "workflow-1",
+      status: "completed",
+      nodeResults: {},
+      startedAt: 10,
+      endedAt: 20,
+      definition: workflowDefinition(),
+    })
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const activeRuns = await harness.invoke("synapse:workflow:active-runs", undefined)
+
+    expect(activeRuns).toEqual([
+      expect.objectContaining({
+        runId: "active-run",
+        workflowId: "workflow-1",
+        status: "running",
+      }),
+    ])
+    expect(JSON.stringify(activeRuns)).not.toContain("completed-run")
+  })
+
   it("emits a workflow-delete source after deleting a definition", async () => {
     const eventBus = { emit: vi.fn() }
     const workflow = { delete: vi.fn(async () => undefined) }

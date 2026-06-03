@@ -185,7 +185,15 @@ import type {
   SynapseToolDefinition,
   SynapseToolId,
 } from "./tools"
-import type { WorkflowDefinition, WorkflowMeta, ValidationError, ValidationResult, WorkflowRunSnapshot, WorkflowEvent, WorkflowRunStatus } from "./workflow"
+import type {
+  WorkflowDefinition,
+  WorkflowMeta,
+  ValidationError,
+  ValidationResult,
+  WorkflowEvent,
+  WorkflowRunListItem,
+  WorkflowRunStatus,
+} from "./workflow"
 
 export type SynapseOpsDiagnostics = {
   appVersion: string
@@ -1087,7 +1095,8 @@ export type SynapseBridge = {
     rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean) => Promise<{ runId: string } | { errors: ValidationError[] } | { conflict: true; activeRunId: string }>
     openRunner: (workflowId: string, runId: string) => Promise<void>
     cancel: (runId: string) => Promise<void>
-    runHistory: (workflowId: string) => Promise<WorkflowRunSnapshot[]>
+    activeRuns: () => Promise<WorkflowRunListItem[]>
+    runHistory: (workflowId: string) => Promise<WorkflowRunListItem[]>
     runStatus: (runId: string) => Promise<WorkflowRunStatus | null>
     openEditor: (id: string, runId?: string) => Promise<void>
     editorState: () => Promise<{ openEditors: string[] }>

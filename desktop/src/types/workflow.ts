@@ -90,6 +90,18 @@ export interface WorkflowRunStatus {
   params?: Record<string, unknown>
   definition?: WorkflowDefinition
 }
+export interface WorkflowRunListItem {
+  runId: string
+  workflowId: string
+  status: WorkflowRunStatus["status"]
+  nodeResults: Record<string, NodeRunResult>
+  startedAt: number
+  endedAt?: number
+  durationMs?: number
+  error?: string
+  params?: Record<string, unknown>
+  definition?: WorkflowDefinition
+}
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string; workflowId: string }
   | { type: "node:started"; runId: string; nodeId: string; startedAt?: number; result?: NodeRunResult }
