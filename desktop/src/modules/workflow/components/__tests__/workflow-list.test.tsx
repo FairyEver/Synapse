@@ -5,7 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { WorkflowDefinition } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowEvent } from "@/types/workflow"
 import { WorkflowList } from "../workflow-list"
 
 const {
@@ -29,7 +29,7 @@ const {
   workflowExportPackage: vi.fn(),
   workflowRunDefinition: vi.fn(),
   workflowOpenRunner: vi.fn(),
-  workflowOnEvent: vi.fn(() => vi.fn()),
+  workflowOnEvent: vi.fn((_callback: (event: WorkflowEvent) => void) => vi.fn()),
 }))
 
 vi.mock("sonner", () => ({
@@ -290,7 +290,7 @@ describe("WorkflowList", () => {
   })
 
   it("records active run ids from workflow events and clears them on terminal events", async () => {
-    let listener: ((event: { type: string; workflowId?: string; runId: string }) => void) | undefined
+    let listener: ((event: WorkflowEvent) => void) | undefined
     workflowOnEvent.mockImplementation((callback) => {
       listener = callback
       return vi.fn()
@@ -311,7 +311,12 @@ describe("WorkflowList", () => {
     expect(container.querySelector('[data-testid="open-active-workflow-param"]')).toBeTruthy()
 
     await act(async () => {
-      listener?.({ type: "workflow:completed", workflowId: "workflow-param", runId: "event-run" })
+      listener?.({
+        type: "workflow:completed",
+        workflowId: "workflow-param",
+        runId: "event-run",
+        result: { status: "completed", nodeResults: {}, durationMs: 1 },
+      })
     })
 
     expect(container.querySelector('[data-testid="open-active-workflow-param"]')).toBeNull()
