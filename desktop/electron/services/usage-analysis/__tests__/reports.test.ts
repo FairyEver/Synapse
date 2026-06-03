@@ -18,8 +18,8 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
 })
 
-describe("usage analysis reports", () => {
-  it("includes stable focus fields in CC details rows", { timeout: WINDOWS_CI_TEST_TIMEOUT }, async () => {
+describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
+  it("includes stable focus fields in CC details rows", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)
     const db = getUsageAnalysisDb(dir)

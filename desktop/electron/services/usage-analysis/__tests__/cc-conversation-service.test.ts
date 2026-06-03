@@ -135,7 +135,7 @@ afterEach(() => {
   }
 })
 
-describe("CcConversationService", () => {
+describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
   it("lists conversations from the usage index", { timeout: 15_000 }, () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
@@ -296,7 +296,7 @@ describe("CcConversationService", () => {
     expect(detail.parseErrors).toEqual([])
   })
 
-  it("searches raw text only when requested", { timeout: WINDOWS_CI_TEST_TIMEOUT }, async () => {
+  it("searches raw text only when requested", async () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
 
@@ -310,7 +310,7 @@ describe("CcConversationService", () => {
     }))
   })
 
-  it("redacts raw conversation secrets in details and search snippets", { timeout: WINDOWS_CI_TEST_TIMEOUT }, async () => {
+  it("redacts raw conversation secrets in details and search snippets", async () => {
     const { db, filePath } = setupFixture()
     fs.appendFileSync(filePath, `\n${JSON.stringify({
       type: "user",
