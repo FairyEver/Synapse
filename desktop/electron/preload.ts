@@ -203,6 +203,8 @@ const IPC_CHANNELS = {
     "changed": "synapse:events:scheduler",
   },
   "automation": {
+    "openCreateEditorWindow": "synapse:automation:editor:open-create",
+    "openEditorWindow": "synapse:automation:editor:open-edit",
     "listItems": "synapse:automation:items:list",
     "getItem": "synapse:automation:items:get",
     "createItem": "synapse:automation:items:create",
@@ -784,6 +786,8 @@ const synapseBridge: SynapseBridge = {
     ),
   },
   automation: {
+    openCreateEditorWindow: () => invoke(IPC_CHANNELS.automation.openCreateEditorWindow)(),
+    openEditorWindow: (id) => invoke(IPC_CHANNELS.automation.openEditorWindow)({ automationId: id }),
     listItems: invoke(IPC_CHANNELS.automation.listItems),
     getItem: (id) => invoke(IPC_CHANNELS.automation.getItem)({ automationId: id }),
     createItem: (input) => invoke(IPC_CHANNELS.automation.createItem)(input),

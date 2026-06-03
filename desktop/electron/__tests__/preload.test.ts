@@ -154,6 +154,8 @@ describe("preload bridge", () => {
   it("maps automation bridge methods to automation IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
+    await bridge.automation.openCreateEditorWindow()
+    await bridge.automation.openEditorWindow("automation:1")
     await bridge.automation.listItems()
     await bridge.automation.getItem("automation:1")
     await bridge.automation.createItem({
@@ -171,6 +173,14 @@ describe("preload bridge", () => {
     await bridge.automation.stopRun("automation-run:1")
     await bridge.automation.listRuns("automation:1", { limit: 20 })
 
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:editor:open-create",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:editor:open-edit",
+      { automationId: "automation:1" },
+    )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:automation:items:list",
       undefined,

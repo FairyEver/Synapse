@@ -188,6 +188,8 @@ export const IPC_CHANNELS = {
     "changed": "synapse:events:scheduler",
   },
   "automation": {
+    "openCreateEditorWindow": "synapse:automation:editor:open-create",
+    "openEditorWindow": "synapse:automation:editor:open-edit",
     "listItems": "synapse:automation:items:list",
     "getItem": "synapse:automation:items:get",
     "createItem": "synapse:automation:items:create",
