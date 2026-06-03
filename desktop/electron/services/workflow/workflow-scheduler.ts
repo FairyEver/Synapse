@@ -228,13 +228,14 @@ export class ReactiveScheduler {
         const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), this.cancelGraceMs))
         const settled = await Promise.race([Promise.allSettled([...running.values()]), timeout])
         if (settled === "timeout") {
-          acceptingResults = false
           running.clear()
           waitQueue.length = 0
           logger.warn("scheduler: abort grace timeout elapsed", {
             cancelGraceMs: this.cancelGraceMs,
             ...(this.runId ? { runId: this.runId } : {}),
           })
+          await new Promise<void>((resolve) => setTimeout(resolve, 0))
+          acceptingResults = false
         }
         break
       }

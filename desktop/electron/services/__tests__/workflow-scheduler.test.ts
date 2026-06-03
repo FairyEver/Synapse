@@ -321,6 +321,58 @@ describe("ReactiveScheduler", () => {
     expect(Date.now() - startedAt).toBeLessThan(40)
   })
 
+  it("preserves a completed node result that resolves at the abort grace boundary", async () => {
+    vi.useFakeTimers()
+    const ctrl = new AbortController()
+    const cb = makeCallbacks([])
+    let finishTask: ((outcome: NodeExecOutcome) => void) | undefined
+    const promise = new ReactiveScheduler({ cancelGraceMs: 1 }).execute(
+      ["a"], [],
+      (id) => ({
+        nodeId: id,
+        execute: () => new Promise<NodeExecOutcome>((resolve) => {
+          finishTask = resolve
+        }),
+      }),
+      cb, ctrl.signal,
+    )
+
+    try {
+      await Promise.resolve()
+      ctrl.abort()
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(schedLogger.info).toHaveBeenCalledWith(
+        "scheduler: abort detected, waiting for in-flight nodes",
+        expect.objectContaining({ runningNodeIds: ["a"] }),
+      )
+      setTimeout(() => {
+        finishTask?.({
+          nodeId: "a",
+          status: "success",
+          output: "finished at boundary",
+          usage: { input_tokens: 10 },
+          costUsd: 0.01,
+        })
+      }, 1)
+
+      await vi.advanceTimersToNextTimerAsync()
+      await vi.advanceTimersToNextTimerAsync()
+      await vi.advanceTimersToNextTimerAsync()
+
+      const results = await promise
+      expect(results.get("a")).toEqual({
+        nodeId: "a",
+        status: "success",
+        output: "finished at boundary",
+        usage: { input_tokens: 10 },
+        costUsd: 0.01,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("handles empty node list", async () => {
     const s = new ReactiveScheduler()
     const cb = makeCallbacks([])
