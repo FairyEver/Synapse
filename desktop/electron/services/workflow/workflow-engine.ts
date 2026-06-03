@@ -1,6 +1,6 @@
-import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult, WorkflowNodeUsageCostSnapshot } from "../../../src/types/workflow"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
-import type { AgentSendDeps, NodeRuntimeDeps } from "../../../workflow-nodes/types"
+import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps } from "../../../workflow-nodes/types"
 import type { ActorIdentity } from "../../runtime/security"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { DEFAULT_AGENT_TIMEOUT_MINS } from "../../../workflow-nodes/agent-timeout"
@@ -52,6 +52,29 @@ function mergeAgentConversationOutput(
   return {
     ...(outputs ?? {}),
     agentConversation,
+  }
+}
+
+function buildWorkflowUsageCostSnapshot(result: NodeExecutionResult): WorkflowNodeUsageCostSnapshot | undefined {
+  if (!result.usage || !result.modelName) return undefined
+  if (
+    result.costCurrency === "CNY"
+    && typeof result.costCny === "number"
+    && result.costBreakdownCny
+  ) {
+    return {
+      modelName: result.modelName,
+      costCny: result.costCny,
+      costBreakdownCny: result.costBreakdownCny,
+      costCurrency: "CNY",
+      priceKnown: true,
+      estimatedCost: true,
+    }
+  }
+  return {
+    modelName: result.modelName,
+    priceKnown: false,
+    estimatedCost: false,
   }
 }
 
@@ -241,13 +264,20 @@ export class WorkflowEngine {
           if (effectiveAbortSignal.aborted) {
             return { nodeId, status: "cancelled", error: "运行被取消", durationMs: execResult.durationMs }
           }
+          const usageCost = buildWorkflowUsageCostSnapshot(execResult)
 
           return {
             nodeId, status: execResult.status, output: execResult.output,
             outputs: mergeAgentConversationOutput(execResult.outputs, execResult.agentConversation),
             activeBranch: execResult.activeBranch,
             error: execResult.error, durationMs: execResult.durationMs,
-            usage: execResult.usage, costUsd: execResult.costUsd, costCny: execResult.costCny, costCurrency: execResult.costCurrency,
+            usage: execResult.usage,
+            modelName: execResult.modelName,
+            costUsd: execResult.costUsd,
+            costCny: execResult.costCny,
+            costBreakdownCny: execResult.costBreakdownCny,
+            costCurrency: execResult.costCurrency,
+            usageCost,
             agentConversation: execResult.agentConversation,
           }
         } catch (err) {
@@ -300,6 +330,7 @@ export class WorkflowEngine {
         nr.costUsd = outcome.costUsd
         nr.costCny = outcome.costCny
         nr.costCurrency = outcome.costCurrency
+        nr.usageCost = outcome.usageCost
         nr.endedAt = Date.now()
         nr.durationMs = outcome.durationMs
 
@@ -312,6 +343,7 @@ export class WorkflowEngine {
             ...(nr.usage !== undefined ? { usage: nr.usage } : {}),
             ...(nr.costUsd !== undefined ? { costUsd: nr.costUsd } : {}),
             ...(nr.costCny !== undefined ? { costCny: nr.costCny, costCurrency: nr.costCurrency } : {}),
+            ...(nr.usageCost !== undefined ? { usageCost: nr.usageCost } : {}),
           })
           if (outcome.output !== undefined) nodeOutputs[outcome.nodeId] = outcome.output
           emit({ type: "node:completed", runId, nodeId: outcome.nodeId, output: outcome.output, result: { ...nr } })
@@ -330,6 +362,7 @@ export class WorkflowEngine {
             ...(nr.usage !== undefined ? { usage: nr.usage } : {}),
             ...(nr.costUsd !== undefined ? { costUsd: nr.costUsd } : {}),
             ...(nr.costCny !== undefined ? { costCny: nr.costCny, costCurrency: nr.costCurrency } : {}),
+            ...(nr.usageCost !== undefined ? { usageCost: nr.usageCost } : {}),
           })
           emit({ type: "node:failed", runId, nodeId: outcome.nodeId, error: outcome.error ?? "Unknown error", result: { ...nr } })
         }

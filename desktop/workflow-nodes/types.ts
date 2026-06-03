@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import type { ZodType } from "zod"
 import type { ActorIdentity } from "../electron/runtime/security"
 import type { SynapseAgentConversationTarget } from "../src/types/agent-navigation"
+import type { WorkflowNodeUsageCostSnapshot } from "../src/types/workflow"
 
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
@@ -108,9 +109,12 @@ export interface NodeExecutionResult {
   error?: string
   durationMs: number
   usage?: Record<string, unknown>
+  modelName?: string
   costUsd?: number
   costCny?: number
+  costBreakdownCny?: WorkflowNodeUsageCostSnapshot["costBreakdownCny"]
   costCurrency?: "CNY"
+  usageCost?: WorkflowNodeUsageCostSnapshot
   agentConversation?: SynapseAgentConversationTarget
 }
 
