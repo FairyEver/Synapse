@@ -64,6 +64,37 @@ function readPackedFile(buffer, dataOffset, node) {
   return buffer.subarray(start, end)
 }
 
+function verifyPackedNode(header, relativePath, failures, message) {
+  const node = findNode(header, relativePath)
+  if (!node) {
+    failures.push(`${message}: ${relativePath}`)
+    return
+  }
+  if (node.unpacked) {
+    failures.push(`${relativePath} must stay packed`)
+    return
+  }
+  if (node.offset === undefined || node.size === undefined) {
+    failures.push(`${relativePath} is missing packed file data`)
+  }
+}
+
+function verifyUnpackedNode(header, unpackedPath, relativePath, failures, message) {
+  const node = findNode(header, relativePath)
+  if (!node) {
+    failures.push(`${message}: ${relativePath}`)
+    return
+  }
+  if (!node.unpacked) {
+    failures.push(`${relativePath} must be unpacked`)
+    return
+  }
+  const filePath = path.join(unpackedPath, relativePath)
+  if (!existsSync(filePath)) {
+    failures.push(`missing unpacked file: ${relativePath}`)
+  }
+}
+
 function verifyResources(resourcesPath, label) {
   const asarPath = path.join(resourcesPath, "app.asar")
   const unpackedPath = path.join(resourcesPath, "app.asar.unpacked")
@@ -119,6 +150,39 @@ function verifyResources(resourcesPath, label) {
       failures.push(`package.json is not readable JSON: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
+
+  verifyPackedNode(
+    header,
+    "dist-electron/electron/workers/file-conversion-worker.js",
+    failures,
+    "file conversion worker is missing from packed app.asar",
+  )
+  verifyPackedNode(
+    header,
+    "dist-electron/electron/workers/file-conversion-worker.js.map",
+    failures,
+    "file conversion worker sourcemap is missing from packed app.asar",
+  )
+  verifyPackedNode(
+    header,
+    "dist-electron/electron/services/file-conversion/index.js",
+    failures,
+    "file conversion service is missing from packed app.asar",
+  )
+  verifyUnpackedNode(
+    header,
+    unpackedPath,
+    "dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.js",
+    failures,
+    "file conversion worker bootstrap is missing from app.asar.unpacked",
+  )
+  verifyUnpackedNode(
+    header,
+    unpackedPath,
+    "dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.js.map",
+    failures,
+    "file conversion worker bootstrap sourcemap is missing from app.asar.unpacked",
+  )
 
   if (failures.length > 0) {
     throw new Error([

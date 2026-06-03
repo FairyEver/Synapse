@@ -57,8 +57,11 @@ export function convertFilesInWorker(
 }
 
 export function resolveFileConversionWorkerPath(baseDir: string): string {
-  const workerBaseDir = baseDir.replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked")
-  return path.join(workerBaseDir, "../../workers/file-conversion-worker.js")
+  if (baseDir.includes("app.asar")) {
+    const workerBaseDir = baseDir.replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked")
+    return path.join(workerBaseDir, "../../worker-bootstraps/file-conversion-worker-bootstrap.js")
+  }
+  return path.join(baseDir, "../../workers/file-conversion-worker.js")
 }
 
 function toFileConversionWorkerError(error: { readonly name?: string; readonly message?: string; readonly stack?: string }): Error {

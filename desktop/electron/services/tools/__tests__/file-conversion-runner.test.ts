@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events"
+import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
@@ -60,10 +61,27 @@ describe("convertFilesInWorker", () => {
   })
 
   it("maps app.asar paths to app.asar.unpacked worker paths", () => {
-    const baseDir = path.join("/Applications/Synapse.app/Contents/Resources/app.asar/electron/services/tools")
+    const baseDir = path.join("/Applications/Synapse.app/Contents/Resources/app.asar/dist-electron/electron/services/tools")
     const workerPath = resolveFileConversionWorkerPath(baseDir).replace(/\\/g, "/")
 
     expect(workerPath).toContain("app.asar.unpacked")
-    expect(workerPath).toContain("workers/file-conversion-worker.js")
+    expect(workerPath).toContain("dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.js")
+  })
+
+  it("uses the compiled worker directly in development", () => {
+    const baseDir = path.join("/repo/desktop/dist-electron/electron/services/tools")
+
+    expect(resolveFileConversionWorkerPath(baseDir)).toBe(
+      path.join("/repo/desktop/dist-electron/electron/workers/file-conversion-worker.js"),
+    )
+  })
+
+  it("keeps only the packaged bootstrap worker unpacked", () => {
+    const packageJson = JSON.parse(readFileSync(path.join(__dirname, "../../../../package.json"), "utf8")) as {
+      build?: { asarUnpack?: string[] }
+    }
+
+    expect(packageJson.build?.asarUnpack).toContain("dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.*")
+    expect(packageJson.build?.asarUnpack).not.toContain("dist-electron/electron/workers/file-conversion-worker.js")
   })
 })

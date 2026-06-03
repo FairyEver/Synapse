@@ -132,7 +132,6 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "!dist-electron/**/*.map",
       "build/icon.ico",
       "source/icon.png",
       "source/tray/**",
@@ -144,7 +143,7 @@
       "dist-electron/action-packages/shared/**",
       "dist-electron/electron/services/usage-analysis/**",
       "dist-electron/src/**",
-      "dist-electron/electron/workers/file-conversion-worker.js"
+      "dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.*"
     ],
     "extraMetadata": {
       "main": "dist-electron/electron/main.js"
