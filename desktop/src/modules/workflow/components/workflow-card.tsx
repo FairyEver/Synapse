@@ -11,12 +11,15 @@ import { Download, GitBranch, Play, Trash2, History, Loader2 } from "lucide-reac
 import { RUN_STATE_BADGE } from "../lib/status-display"
 import { CopyIdButton } from "./copy-id-button"
 
-export type WorkflowCardRunState = WorkflowRunStatus["status"]
+export type WorkflowCardRunState = {
+  status: WorkflowRunStatus["status"]
+  runId?: string
+}
 
-interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onHistory: () => void; onExport: () => void; onDelete: () => void }
+interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onOpenActiveRun: (runId: string) => void; onHistory: () => void; onExport: () => void; onDelete: () => void }
 
-export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory, onExport, onDelete }: WorkflowCardProps) {
-  const badge = runState ? RUN_STATE_BADGE[runState] : null
+export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenActiveRun, onHistory, onExport, onDelete }: WorkflowCardProps) {
+  const badge = runState ? RUN_STATE_BADGE[runState.status] : null
   const suppressClickRef = useRef(false)
 
   return (
@@ -38,7 +41,19 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
       </ItemContent>
       <span className="justify-self-end whitespace-nowrap text-right text-sm text-muted-foreground">{meta.nodeCount} 个节点</span>
       <CopyIdButton id={meta.id} kind="workflow" className="justify-self-start" />
-      <ItemActions className="w-32 justify-end gap-1">
+      <ItemActions className="w-40 justify-end gap-1">
+        {runState?.status === "running" && runState.runId ? (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label="查看进度"
+            data-track="workflow-card-open-active-run"
+            onClick={(e) => { e.stopPropagation(); onOpenActiveRun(runState.runId!) }}
+          >
+            <Loader2 className="animate-spin" />
+          </Button>
+        ) : null}
         <Button
           type="button"
           size="icon-sm"

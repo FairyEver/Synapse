@@ -14,6 +14,7 @@ const {
   toastSuccess,
   track,
   workflowGet,
+  workflowActiveRuns,
   workflowExportPackage,
   workflowRunDefinition,
   workflowOpenRunner,
@@ -24,6 +25,7 @@ const {
   toastSuccess: vi.fn(),
   track: vi.fn(),
   workflowGet: vi.fn(),
+  workflowActiveRuns: vi.fn(),
   workflowExportPackage: vi.fn(),
   workflowRunDefinition: vi.fn(),
   workflowOpenRunner: vi.fn(),
@@ -53,15 +55,22 @@ vi.mock("@/lib/ui-tracking", () => ({
 vi.mock("../workflow-card", () => ({
   WorkflowCard: ({
     meta,
+    runState,
     onExport,
     onRun,
+    onOpenActiveRun,
   }: {
     meta: { id: string }
+    runState?: { status: string; runId?: string }
     onExport: () => void
     onRun: () => void
+    onOpenActiveRun: (runId: string) => void
   }) => (
     <>
       <button type="button" data-testid={`run-${meta.id}`} onClick={onRun}>run</button>
+      {runState?.runId ? (
+        <button type="button" data-testid={`open-active-${meta.id}`} onClick={() => onOpenActiveRun(runState.runId!)}>open active</button>
+      ) : null}
       <button type="button" data-track="workflow-card-export" onClick={onExport}>export</button>
     </>
   ),
@@ -128,12 +137,15 @@ const parameterizedWorkflow: WorkflowDefinition = {
 
 beforeEach(() => {
   workflowGet.mockResolvedValue(parameterizedWorkflow)
+  workflowActiveRuns.mockResolvedValue([])
   workflowRunDefinition.mockResolvedValue({ runId: "run-1" })
+  workflowOpenRunner.mockResolvedValue(undefined)
   Object.defineProperty(window, "synapse", {
     configurable: true,
     value: {
       workflow: {
         get: workflowGet,
+        activeRuns: workflowActiveRuns,
         exportPackage: workflowExportPackage,
         runDefinition: workflowRunDefinition,
         openRunner: workflowOpenRunner,
@@ -246,5 +258,62 @@ describe("WorkflowList", () => {
 
     expect(workflowExportPackage).toHaveBeenCalledWith("workflow-param", "Parameterized")
     expect(toastSuccess).toHaveBeenCalledWith("工作流已导出")
+  })
+
+  it("loads active runs and reopens the runner from the workflow card", async () => {
+    workflowActiveRuns.mockResolvedValue([{
+      runId: "active-run",
+      workflowId: "workflow-param",
+      status: "running",
+      nodeResults: {},
+      startedAt: 123,
+    }])
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="open-active-workflow-param"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowActiveRuns).toHaveBeenCalled()
+    expect(workflowOpenRunner).toHaveBeenCalledWith("workflow-param", "active-run")
+  })
+
+  it("records active run ids from workflow events and clears them on terminal events", async () => {
+    let listener: ((event: { type: string; workflowId?: string; runId: string }) => void) | undefined
+    workflowOnEvent.mockImplementation((callback) => {
+      listener = callback
+      return vi.fn()
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+
+    await act(async () => {
+      listener?.({ type: "workflow:started", workflowId: "workflow-param", runId: "event-run" })
+    })
+
+    expect(container.querySelector('[data-testid="open-active-workflow-param"]')).toBeTruthy()
+
+    await act(async () => {
+      listener?.({ type: "workflow:completed", workflowId: "workflow-param", runId: "event-run" })
+    })
+
+    expect(container.querySelector('[data-testid="open-active-workflow-param"]')).toBeNull()
   })
 })

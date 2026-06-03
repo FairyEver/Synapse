@@ -61,6 +61,7 @@ describe("WorkflowCard", () => {
           meta={workflowMeta}
           onOpen={onOpen}
           onRun={vi.fn()}
+          onOpenActiveRun={vi.fn()}
           onHistory={vi.fn()}
           onExport={vi.fn()}
           onDelete={vi.fn()}
@@ -96,6 +97,7 @@ describe("WorkflowCard", () => {
           meta={workflowMeta}
           onOpen={vi.fn()}
           onRun={onRun}
+          onOpenActiveRun={vi.fn()}
           onHistory={onHistory}
           onExport={onExport}
           onDelete={onDelete}
@@ -143,6 +145,39 @@ describe("WorkflowCard", () => {
       name: "workflow-card-delete-open",
       action: "click",
     })
+  })
+
+  it("opens the active run from the progress action", async () => {
+    const onOpenActiveRun = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <WorkflowCard
+          meta={workflowMeta}
+          runState={{ status: "running", runId: "active-run" }}
+          running={false}
+          onOpen={vi.fn()}
+          onRun={vi.fn()}
+          onOpenActiveRun={onOpenActiveRun}
+          onHistory={vi.fn()}
+          onExport={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+      )
+    })
+
+    const progressButton = container.querySelector<HTMLButtonElement>('[aria-label="查看进度"]')
+    expect(progressButton).toBeTruthy()
+
+    await act(async () => {
+      progressButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onOpenActiveRun).toHaveBeenCalledWith("active-run")
   })
 })
 
