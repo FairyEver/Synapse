@@ -118,7 +118,8 @@ The extracted helper must return undefined when:
 
 - usage is missing
 - model name is missing
-- no price rule matches
+
+When no price rule matches, the helper must return a snapshot with `modelName`, `priceKnown: false`, and no CNY cost fields. This gives the Token tab enough information to show the model and `未定价`.
 
 It must not fall back to SDK `costUsd` conversion.
 
