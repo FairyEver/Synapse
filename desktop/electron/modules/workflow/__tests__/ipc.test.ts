@@ -513,6 +513,44 @@ describe("workflowIpcModule", () => {
     expect(workflow.create).toHaveBeenCalledWith(undefined, { providerId: "provider-1", modelTier: "sonnet" })
   })
 
+  it("preserves full validation error fields through workflow IPC responses", async () => {
+    const workflow = {
+      create: vi.fn(async () => ({
+        errors: [{
+          type: "invalid_config",
+          nodeId: "node-1",
+          nodeName: "Prompt node",
+          edgeId: "edge-1",
+          field: "config.prompt",
+          message: "Prompt is required",
+          retryable: true,
+          details: { minimumLength: 1 },
+        }],
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:create", undefined)
+
+    expect(result).toEqual({
+      errors: [{
+        type: "invalid_config",
+        nodeId: "node-1",
+        nodeName: "Prompt node",
+        edgeId: "edge-1",
+        field: "config.prompt",
+        message: "Prompt is required",
+        retryable: true,
+        details: { minimumLength: 1 },
+      }],
+    })
+  })
+
   it("logs cancel signal only when an active AbortController exists, warns otherwise", async () => {
     const abortMap = new Map<string, AbortController>()
     const harness = createInMemoryHarness()

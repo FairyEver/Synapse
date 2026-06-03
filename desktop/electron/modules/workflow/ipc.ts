@@ -295,9 +295,20 @@ const workflowRunSnapshotSchema: z.ZodType<WorkflowRunSnapshot> = z.object({
   definition: workflowDefinitionSchema.optional() as z.ZodType<WorkflowDefinition | undefined>,
 })
 
+const validationErrorSchema = z.object({
+  type: z.string(),
+  nodeId: z.string().optional(),
+  nodeName: z.string().optional(),
+  edgeId: z.string().optional(),
+  field: z.string().optional(),
+  message: z.string(),
+  retryable: z.boolean().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+})
+
 const validationResultSchema = z.object({
   valid: z.boolean(),
-  errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })),
+  errors: z.array(validationErrorSchema),
   warnings: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), message: z.string() })),
 })
 
@@ -610,7 +621,7 @@ export const workflowIpcModule: IpcModule = {
       request: z.object({ packagePath: z.string(), mappings: z.array(workflowModelMappingSchema) }),
       response: z.union([
         z.object({ workflowId: z.string(), versionHash: z.string() }),
-        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+        z.object({ errors: z.array(validationErrorSchema) }),
       ]),
       handler: async (ctx, { packagePath, mappings }: { packagePath: string; mappings: WorkflowModelMapping[] }) => {
         const action: PermissionAction = "fs.read.outside-userdata"
@@ -701,7 +712,7 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:create", kind: "invoke", request: z.void().optional(),
       response: z.union([
         z.object({ id: z.string(), versionHash: z.string() }),
-        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+        z.object({ errors: z.array(validationErrorSchema) }),
       ]),
       handler: async (ctx) => {
         logger.info("workflow:create requested")
@@ -717,7 +728,7 @@ export const workflowIpcModule: IpcModule = {
     },
     save: {
       channel: "synapse:workflow:save", kind: "invoke", request: workflowDefinitionSchema,
-      response: z.union([z.object({ versionHash: z.string() }), z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) })]),
+      response: z.union([z.object({ versionHash: z.string() }), z.object({ errors: z.array(validationErrorSchema) })]),
       handler: async (ctx, def) => {
         const d = def as { id: string; name: string; nodes: unknown[] }
         logger.info("workflow:save requested", { id: d.id, name: d.name, nodeCount: d.nodes.length })
@@ -819,7 +830,7 @@ export const workflowIpcModule: IpcModule = {
       request: z.object({ id: z.string(), params: z.record(z.string(), z.unknown()) }),
       response: z.union([
         z.object({ runId: z.string() }),
-        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+        z.object({ errors: z.array(validationErrorSchema) }),
       ]),
       handler: async (ctx, { id, params }: { id: string; params: Record<string, unknown> }) => {
         logger.info("workflow:run requested", { workflowId: id, paramKeys: Object.keys(params) })
@@ -879,7 +890,7 @@ export const workflowIpcModule: IpcModule = {
       request: z.object({ definition: workflowDefinitionSchema, params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
       response: z.union([
         z.object({ runId: z.string() }),
-        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+        z.object({ errors: z.array(validationErrorSchema) }),
         z.object({ conflict: z.literal(true), activeRunId: z.string() }),
       ]),
       handler: async (ctx, { definition: rawDef, params, force }: { definition: unknown; params: Record<string, unknown>; force?: boolean }) => {
@@ -944,7 +955,7 @@ export const workflowIpcModule: IpcModule = {
       request: z.object({ previousRunId: z.string(), params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
       response: z.union([
         z.object({ runId: z.string() }),
-        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+        z.object({ errors: z.array(validationErrorSchema) }),
         z.object({ conflict: z.literal(true), activeRunId: z.string() }),
       ]),
       handler: async (ctx, { previousRunId, params, force }: { previousRunId: string; params: Record<string, unknown>; force?: boolean }) => {
