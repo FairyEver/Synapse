@@ -41,13 +41,14 @@ import { DatabaseModule } from "@/modules/database"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
+import { AutomationModule } from "@/modules/automation"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import { ToolsModule } from "@/modules/tools"
 import type { SynapseContentType } from "@/types/content"
 
-type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "tools" | "settings"
+type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "automation" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "tools" | "settings"
 type AppTabChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 type DialogKind = "install"
 type ContentDialogState = Record<DialogKind, boolean>
@@ -185,6 +186,7 @@ function MainApp() {
       { id: "agent" as const, label: "对话" },
       { id: "database" as const, label: "数据" },
       { id: "task-scheduler" as const, label: "定时" },
+      { id: "automation" as const, label: "自动化" },
       { id: "tools" as const, label: "工具" },
       { id: "editor-scan" as const, label: "本机" },
       { id: "usage-cc" as const, label: "CC" },
@@ -378,6 +380,11 @@ function MainApp() {
           {activeTab === "task-scheduler" ? (
             <ErrorBoundary fallbackTitle="定时任务模块出现问题">
               <TaskSchedulerModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "automation" ? (
+            <ErrorBoundary fallbackTitle="自动化模块出现问题">
+              <AutomationModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "tools" ? (

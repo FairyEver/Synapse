@@ -137,6 +137,7 @@ vi.mock("@/modules/database", () => ({ DatabaseModule: () => <div>数据模块</
 vi.mock("@/modules/editor-scan", () => ({ EditorScanModule: () => <div>本机模块</div> }))
 vi.mock("@/modules/agent", () => ({ AgentModule: () => <div>对话模块</div> }))
 vi.mock("@/modules/task-scheduler", () => ({ TaskSchedulerModule: () => <div>定时模块</div> }))
+vi.mock("@/modules/automation", () => ({ AutomationModule: () => <div>自动化模块</div> }))
 vi.mock("@/modules/usage-analysis", () => ({
   CcUsageAnalysisModule: () => <div>CC 模块</div>,
   CodexUsageAnalysisModule: () => <div>Codex 模块</div>,
@@ -173,6 +174,17 @@ afterEach(() => {
 })
 
 describe("App workflow entry visibility", () => {
+  it("shows automation immediately after scheduler in the top navigation", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    const text = document.body.textContent ?? ""
+    expect(text).toContain("定时")
+    expect(text).toContain("自动化")
+    expect(text.indexOf("定时")).toBeLessThan(text.indexOf("自动化"))
+  })
+
   it("hides the workflow entry when the initial cheat code state read fails after a visibility event", async () => {
     const getStates = createDeferred<Record<string, boolean>>()
     mocks.getStates.mockReturnValue(getStates.promise)
