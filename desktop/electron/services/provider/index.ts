@@ -52,6 +52,8 @@ export {
   type ImportCcSwitchClaudeProvidersResult,
   type ProviderApiKeyField,
   type ProviderCategory,
+  type ProviderPackageExportResult,
+  type ProviderPackageImportPreview,
   type ProviderPresetTemplateValue,
   type UpdateProviderInput,
 } from "./types"

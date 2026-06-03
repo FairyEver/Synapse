@@ -42,7 +42,7 @@ function buildProviderPackage(input: {
   readonly secretEnv?: Record<string, string>
 }): SynapseProviderPackageV1 {
   const provider = input.provider
-  return removeUndefined({
+  return {
     kind: PACKAGE_KIND,
     version: PACKAGE_VERSION,
     exportedAt: input.exportedAt,
@@ -65,7 +65,7 @@ function buildProviderPackage(input: {
       apiKey: input.apiKey,
       env: input.secretEnv ?? {},
     },
-  })
+  }
 }
 
 function parseProviderPackage(value: unknown): SynapseProviderPackageV1 {

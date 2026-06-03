@@ -15,6 +15,7 @@ export type PermissionAction =
   | "database.mutate"
   | "fs.write"
   | "fs.read.outside-userdata"
+  | "fs.write.outside-userdata"
   | "shell.exec"
   | "network.connect"
   | "network.listen"
