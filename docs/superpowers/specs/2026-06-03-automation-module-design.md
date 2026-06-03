@@ -4,37 +4,38 @@ Date: 2026-06-03
 
 ## Context
 
-Synapse already has a Task Scheduler module. Its current model is effectively a scheduled automation: a trigger starts one registered action executor and writes run history. That module must remain available as `定时`, and existing scheduled tasks must keep running.
+Synapse already has a `定时` module backed by Task Scheduler. Its current shape is effectively an automation: a time trigger starts one registered action executor and writes run history. The old module must keep running and remain visible.
 
-This design introduces a new `自动化` module beside the existing `定时` entry. The first version intentionally does not migrate, rename, or replace the old Task Scheduler. It creates a clean Automation product surface that models the current capability as:
+This design adds a new `自动化` module beside `定时`. The new module does not migrate, rename, or replace old scheduled tasks. It creates a clean product and code model for:
 
 ```text
 Automation = one Trigger + one Executor
 ```
 
-The first version is a structural and product-model reset, not a feature expansion.
+The first version is a structural reset of existing scheduled-task capability, not a feature expansion.
 
 ## Goals
 
 - Add a new `自动化` navigation entry immediately to the right of `定时`.
-- Keep the old Task Scheduler UI, data, IPC, service, MCP tools, and runtime behavior available.
-- Create a new Automation module with independent data, IPC, service, runs, and UI.
-- Reuse the existing Action Runtime executors for command, script, HTTP request, and Agent.
+- Keep old Task Scheduler UI, data, IPC, MCP tools, service, timers, and runtime behavior available.
+- Create an independent Automation module with its own data, IPC, service, events, runs, and UI.
+- Reuse existing Action Runtime executors for command, script, HTTP request, and Agent.
 - Introduce a first-class Trigger Registry for cron and interval triggers.
 - Keep each automation limited to one trigger and one executor.
-- Move trigger-specific settings, including active days, into each trigger config.
-- Put Automation configuration in a dedicated Electron window opened from the list page.
-- Keep first-version behavior equivalent to current scheduled tasks where supported.
+- Move trigger-specific settings, including active days, into trigger config.
+- Keep the first-version user-facing capability equivalent to current time-based scheduled tasks.
+- Allow small old-scheduler helper refactors only when tests prove old behavior is unchanged.
 
 ## Non-Goals
 
 - No migration from `task-scheduler.tasks` or `task-scheduler.runs`.
-- No deletion, hiding, or behavioral change of the old `定时` module.
+- No deletion, hiding, renaming, or behavioral change of the old `定时` module.
 - No Webhook, file-change, user-action, database-change, or event trigger in this phase.
 - No multi-trigger automation.
 - No multi-executor automation.
 - No Workflow executor in this phase.
-- No MCP or external API rename from `scheduler_*` to `automation_*` in this phase.
+- No `automation_*` MCP tools or external API replacement in this phase.
+- No dedicated editor window in this phase.
 - No custom visual system, custom colors, gradients, decorative styling, or marketing copy.
 
 ## Product Model
@@ -45,7 +46,7 @@ An Automation is a user-managed rule:
 When this trigger fires, run this executor.
 ```
 
-One automation has exactly one trigger and exactly one executor. If the same executor should run under three different conditions, users create three automations. If multiple operations need to run in sequence or in parallel, that belongs to a future Workflow executor, not the Automation module itself.
+One automation has exactly one trigger and exactly one executor. If the same executor should run under three conditions, users create three automations. If several operations need to run in sequence, in parallel, or with branching, that belongs to a future Workflow executor. Automation itself must stay focused on listening for one trigger and starting one executor.
 
 ## First-Version Capabilities
 
@@ -61,15 +62,13 @@ Executors:
 - `builtin.http-request`
 - `builtin.agent`
 
-Runtime policy:
+Runtime behavior:
 
-- Missed scheduled runs are skipped by default.
-- Overlapping runs for the same automation are skipped.
 - Manual run is supported.
 - Running automation runs can be stopped.
+- Missed scheduled runs default to skip, with `run_once` available as a policy.
+- Overlapping runs for the same automation are skipped.
 - Run history is retained per automation.
-
-The missed-run and overlap policies are system behavior in this version, not visible form controls.
 
 ## Data Model
 
@@ -96,7 +95,7 @@ type AutomationItem = {
   trigger: AutomationTriggerRef
   executor: AutomationExecutorRef
   policy: {
-    missedRunPolicy: "skip"
+    missedRunPolicy: "skip" | "run_once"
     overlapPolicy: "skip"
   }
   createdAt: string
@@ -139,9 +138,9 @@ type AutomationRun = {
   startedAt: string
   finishedAt?: string
   status: "running" | "success" | "failed" | "timeout" | "cancelled" | "skipped"
-  triggeredBy: "trigger" | "manual"
-  triggerType?: string
-  executorType?: string
+  triggeredBy: "trigger" | "manual" | "missed_run"
+  triggerType: string
+  executorType: string
   result?: ActionRunResult
   error?: string
 }
@@ -149,15 +148,15 @@ type AutomationRun = {
 
 ## Trigger Registry
 
-Add a standalone trigger registry for Automation. It should mirror the shape and discipline of Action Runtime without importing renderer code into Electron or Electron code into renderer.
+Add an Automation-specific trigger registry. It should mirror the discipline of Action Runtime while keeping Electron, renderer, and shared code separated.
 
 Main trigger responsibilities:
 
 - Register trigger definitions.
 - Validate stored trigger config.
 - Normalize default config.
-- Compute the next run time when the trigger is schedule-based.
-- Start and stop trigger runtime if the trigger requires listeners in the future.
+- Compute next run time for schedule-based triggers.
+- Provide a runtime guard such as active-day checks before execution.
 - Produce concise summaries for logs and run records.
 
 Renderer trigger responsibilities:
@@ -186,7 +185,7 @@ desktop/trigger-packages/builtin/interval/
   index.shared.ts
 ```
 
-The first implementation may keep shared schedule calculation helpers near the automation service if that is simpler, but trigger-specific schema and renderer form logic should live in trigger packages.
+The first implementation may keep pure schedule calculation helpers near `desktop/electron/services/automation/` if that keeps the change smaller. Trigger-specific schema, defaults, and renderer form logic should still live behind trigger definitions.
 
 ## Trigger Configs
 
@@ -210,7 +209,7 @@ type IntervalTriggerConfig = {
 }
 ```
 
-`activeDays` belongs to cron and interval because it is meaningful only for time-based triggers. It must not live on Automation top level in the new model.
+`activeDays` belongs to cron and interval because it is meaningful only for time-based triggers. It must not live on the Automation top level.
 
 Defaults:
 
@@ -223,40 +222,86 @@ Defaults:
 
 Automation reuses the existing Action Runtime as its executor registry. Do not copy command, script, HTTP request, or Agent executor implementation.
 
-The Automation execution context can adapt to the existing `ActionRuntimeContext` shape. Any shared context naming changes should be additive or local to Automation and must not break Task Scheduler.
+New Automation UI and types should use the product word `executor`. The underlying implementation can adapt to existing `MainActionRegistry` and `rendererActionRegistry`.
 
-The old Task Scheduler continues to use the same Action Runtime.
+The Automation execution context can adapt to the existing `ActionRuntimeContext` shape. Any shared context naming changes must be additive or local to Automation and must not break Task Scheduler.
 
-## Automation Service
+## Main-Process Services
 
-Add a new main-process service:
+Add a new service module:
 
 ```text
 desktop/electron/services/automation/
+  types.ts
   automation-service.ts
-  automation-execution-service.ts
-  automation-repository.ts
-  automation-run-repository.ts
+  execution-service.ts
+  item-repository.ts
+  run-repository.ts
   trigger-registry.ts
   builtin-triggers.ts
   schedule-calculator.ts
-  types.ts
+  index.ts
 ```
 
-Suggested service responsibilities:
+`AutomationService` owns lifecycle and scheduling:
 
-- Load enabled automation items on startup.
-- Schedule cron and interval timers.
-- Skip invalid automation items without mutating unrelated state.
-- Skip overlapping runs for the same automation.
-- Execute the selected executor through Action Runtime.
-- Persist run records and latest status.
-- Emit automation change events through EventBus.
-- Stop active runs on app shutdown.
+- `start` / `stop`
+- `listItems` / `getItem`
+- `createItem` / `updateItem` / `deleteItem`
+- `setItemEnabled`
+- `runNow`
+- `stopRun`
+- `listRuns`
+- `runtimeInspect`
+
+`AutomationExecutionService` owns one run:
+
+- Start a run record.
+- Resolve and validate executor config through Action Runtime.
+- Build and check executor permissions.
+- Record audit events with automation metadata.
+- Execute the selected executor.
+- Persist run result.
+- Update latest automation status.
+- Handle cancellation, failure, timeout, and skipped runs.
+
+`AutomationItemRepository` only reads and writes `automation.items`.
+
+`AutomationRunRepository` only reads and writes `automation.runs`, retaining the latest 100 runs per automation.
 
 The Automation service must not route through `TaskSchedulerService` or mutate task-scheduler namespaces.
 
-## Window And IPC
+## Scheduling Behavior
+
+On app startup:
+
+1. Load `automation.items`.
+2. Ignore disabled items.
+3. Ignore invalid items for timer scheduling.
+4. If `nextRunAt` is missing or stale, resolve startup behavior from `policy.missedRunPolicy`.
+5. Set timers for valid enabled items.
+
+When a timer fires:
+
+1. Remove the in-memory timer.
+2. Reload the automation item.
+3. Check enabled state.
+4. Validate trigger and executor config.
+5. Check trigger runtime guard, including active days.
+6. Check overlap policy.
+7. Compute and persist next run before execution unless interval anchor is `last_completed_at`.
+8. Execute the executor.
+9. Persist run result and emit change events.
+10. For `last_completed_at`, compute next run after execution settles.
+
+Skipped runs are recorded for:
+
+- disabled item
+- invalid trigger or executor config
+- active day mismatch
+- existing run still active
+
+## IPC And Preload
 
 Add a dedicated Automation IPC module:
 
@@ -268,101 +313,110 @@ Bridge shape:
 
 ```ts
 window.synapse.automation = {
-  listAutomations(): Promise<AutomationItem[]>
-  getAutomation(id: string): Promise<AutomationItem | null>
-  createAutomation(input: AutomationCreateInput): Promise<AutomationItem>
-  updateAutomation(id: string, patch: AutomationUpdateInput): Promise<AutomationItem>
-  deleteAutomation(id: string): Promise<{ deleted: boolean }>
-  setAutomationEnabled(id: string, enabled: boolean): Promise<AutomationItem>
-  runAutomation(id: string): Promise<AutomationRun | null>
+  listItems(): Promise<AutomationItem[]>
+  getItem(id: string): Promise<AutomationItem | null>
+  createItem(input: AutomationCreateInput): Promise<AutomationItem>
+  updateItem(payload: { id: string; patch: AutomationUpdateInput }): Promise<AutomationItem>
+  deleteItem(id: string): Promise<{ deleted: boolean }>
+  setItemEnabled(payload: { id: string; enabled: boolean }): Promise<AutomationItem>
+  runNow(id: string): Promise<AutomationRun | null>
   stopRun(runId: string): Promise<{ stopped: boolean }>
   listRuns(id: string, options?: { limit?: number }): Promise<AutomationRun[]>
-  openEditorWindow(input: { id?: string }): Promise<void>
   onChanged(listener: (event: AutomationChangedEvent) => void): () => void
 }
 ```
 
-The editor opens in a dedicated BrowserWindow, following the existing content and workflow window patterns. The renderer should not create windows directly.
+Change event:
 
-Suggested window query:
-
-```text
-?synapseWindow=automation&windowKind=editor&id=<automationId>
-?synapseWindow=automation&windowKind=editor
+```ts
+type AutomationChangedEvent = {
+  itemId?: string
+  runId?: string
+  reason:
+    | "created"
+    | "updated"
+    | "deleted"
+    | "enabled"
+    | "disabled"
+    | "scheduled"
+    | "run-started"
+    | "run-finished"
+    | "run-skipped"
+    | "run-stopped"
+}
 ```
 
-New unsaved automations are created in the editor window only when the user saves.
+EventBus payload:
 
-## Navigation And List Page
+```text
+domain: "automation"
+type: "automation.changed"
+```
+
+## Navigation And UI
 
 The main app navigation keeps `定时` and adds `自动化` immediately to its right.
 
-The Automation tab page is only a list surface:
-
-- Shows configured automations.
-- Provides `新建`.
-- Opens the dedicated editor window when a list item is clicked.
-- Shows concise columns or cards: name, trigger summary, executor summary, enabled state, next run, last status.
-- Provides list-level actions such as enable, disable, run, history, and delete where appropriate.
-
-The list page must not embed the full automation editor.
-
-## Editor Window UI
-
-The Automation editor window has three structural areas:
+Renderer module:
 
 ```text
-Header
-  Name
-  Edit name/description action
-  Edit / Run Log tabs when applicable
-
-Main
-  Left: Trigger
-  Right: Executor
-
-Footer
-  Summary sentence
-  Only Save
-  Save And Enable
+desktop/src/modules/automation/
+  index.tsx
+  types.ts
+  utils.ts
+  hooks/
+    use-automation.ts
+  components/
+    automation-card-grid.tsx
+    automation-card.tsx
+    automation-form-dialog.tsx
+    automation-runs-dialog.tsx
+    trigger-config-form.tsx
 ```
 
-Header:
+The page is a usable management surface, not a marketing page:
 
-- The name defaults to a generated value such as `自动化 1`.
-- The name is visible as the title.
-- Description is edited through a compact edit affordance and does not need to be constantly visible.
-- Do not place an enabled switch in the header.
+- List configured automations.
+- Show loading, empty, and error states.
+- Provide `新建`.
+- Provide enable, disable, run, history, edit, and delete actions.
+- Show concise card fields: name, trigger summary, executor summary, enabled state, next run, last status.
 
-Main:
+The new/edit form uses three sections:
 
-- Left side starts with trigger selection.
-- Right side starts with executor selection.
-- Once selected, each side shows that type's config form and a `更换` action.
-- First phase only shows cron and interval triggers.
-- First phase only shows command, script, HTTP request, and Agent executors.
-- Use existing shadcn components and token classes.
-- Avoid card nesting and decorative visual treatment.
+```text
+基础信息
+触发器
+执行器
+```
 
-Footer:
+基础信息:
 
-- Shows a concise summary, for example `当 每天 09:00 时，就执行 Agent`.
-- If incomplete, show a short actionable state such as `选择触发器和执行器后可启用`.
-- `仅保存` saves with `enabled: false`.
-- `保存并启用` saves with `enabled: true`.
-- Buttons are disabled until required trigger and executor config is valid.
+- 名称
+- 描述
+- 启用
+- 错过执行
+- 重叠运行: 第一版固定为跳过重叠运行，可展示为不可编辑策略或仅保留在保存数据中
+- 运行目录: 复用旧定时任务语义，作为执行上下文字段保留
 
-Run Log:
+触发器:
 
-- Existing persisted automations can show an `运行日志` tab.
-- New unsaved editor windows do not need run history.
-- Run history remains read-only except for stopping active runs.
+- 触发器类型: Cron / 固定间隔
+- Cron: 表达式, 时区, 活跃日
+- 固定间隔: 间隔分钟, 起算方式, 活跃日
+
+执行器:
+
+- 执行器类型: 命令 / 脚本 / HTTP 请求 / Agent
+- 执行器配置: 复用现有 renderer Action Runtime config forms
+
+UI must use existing shadcn/Radix primitives and theme tokens. Do not add custom colors, gradients, card nesting, feature-introduction paragraphs, or decorative copy.
 
 ## Validation And Error Handling
 
 Validation is layered:
 
-- Trigger registry validates trigger config.
+- Trigger Registry validates trigger config.
 - Action Runtime validates executor config.
 - Automation service validates the complete item before save, enable, manual run, and scheduled execution.
 
@@ -372,7 +426,7 @@ Manual run and enable should fail before execution if trigger or executor config
 
 Scheduled execution of invalid items should skip and record a concise skipped run.
 
-Errors shown in UI should be short and user-actionable. Logs must avoid leaking prompt content, Authorization values, tokens, cookies, or environment secrets.
+UI errors should be short and actionable. Logs must not leak prompt content, Authorization values, tokens, cookies, or environment secrets.
 
 ## Permissions And Audit
 
@@ -415,46 +469,49 @@ Do not route old Scheduler through new Automation service in this phase.
 
 Main-process tests:
 
-- Automation repository creates, updates, lists, and deletes independent items.
+- Trigger registry registers cron and interval.
+- Trigger registry rejects duplicate trigger ids.
+- Unknown trigger returns `needs_update`.
 - Cron trigger computes next run with active days in trigger config.
 - Interval trigger computes next run with active days in trigger config.
-- Automation service starts enabled automation timers.
+- Automation repository creates, updates, lists, enables, disables, and deletes independent items.
+- Automation service starts enabled valid timers.
 - Manual run executes the selected Action Runtime executor.
-- Overlap skips a second run for the same automation.
+- Scheduled run computes the next run and executes the selected executor.
+- Overlap records a skipped run.
 - Invalid trigger config blocks enable and manual run.
+- Automation runs write only `automation.runs`.
 - Existing Task Scheduler service tests continue to pass.
 
 Renderer tests:
 
 - Navigation shows `定时` and `自动化` in the correct order.
-- Automation list renders configured items and opens editor window on item click.
-- Editor window renders trigger side and executor side.
-- `仅保存` saves disabled automation.
-- `保存并启用` saves enabled automation.
-- Footer summary updates from trigger and executor selections.
-- Missing trigger or executor disables save-and-enable.
-
-Window tests:
-
-- `openEditorWindow` reuses an existing editor window for the same automation id.
-- New automation editor opens without creating data until save.
-- Query parsing rejects unsupported automation window kinds.
+- Automation module renders loading, empty, error, and populated states.
+- Automation form renders `基础信息`, `触发器`, and `执行器`.
+- Cron active days are saved inside trigger config.
+- Interval active days are saved inside trigger config.
+- Executor config forms reuse existing Action Runtime renderer definitions.
+- Missing name, empty active days, invalid trigger config, or invalid executor config blocks save.
+- Manual run and stop actions call the automation bridge.
 
 Regression tests:
 
 - Old `taskScheduler` preload bridge remains present.
 - Old scheduler data namespaces remain unchanged.
 - Old scheduler MCP tools remain listed.
+- Old task-scheduler renderer tests continue to pass.
 
 ## Implementation Order
 
-1. Add Automation types, repositories, and schemas.
-2. Add Trigger Registry with cron and interval trigger packages.
-3. Add Automation execution service that reuses Action Runtime.
-4. Add Automation service startup, timers, run history, and events.
-5. Add Automation IPC and preload bridge.
-6. Add Automation editor window service and query parsing.
-7. Add Automation list module and navigation entry.
-8. Add Automation editor window UI.
-9. Add tests and confirm old Task Scheduler tests still pass.
-
+1. Add Automation types, repository schemas, and run schemas.
+2. Add Trigger Registry with cron and interval trigger definitions.
+3. Add Automation repositories.
+4. Add Automation execution service that reuses Action Runtime.
+5. Add Automation service startup, timers, run history, and events.
+6. Add `core.automation` descriptor after Action Runtime.
+7. Add Automation IPC module.
+8. Add preload and bridge types for `window.synapse.automation`.
+9. Add renderer Automation module and hooks.
+10. Add Automation form, card grid, run history dialog, and navigation entry.
+11. Add focused tests and run old Task Scheduler regression tests.
+12. Update `RELEASE_NOTES_PENDING.md` during implementation because this is user-visible.
