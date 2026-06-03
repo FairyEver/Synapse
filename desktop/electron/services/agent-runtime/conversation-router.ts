@@ -562,39 +562,30 @@ export class ConversationRouter {
         }
         break
       }
-      events.push(event)
-      this.emitEvent(message, conversation.id, event)
-      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-      await this.saveEventSdkSession(conversation.id, event, liveSession)
-      await this.saveEventHistory(conversation.id, event)
-
       const assistantText = assistantEventText(event)
       if (assistantText) latestAssistantText = assistantText
       else streamedText = appendStreamedText(streamedText, event)
 
-      if (event.type === "permissionRequest") {
-        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
-        continue
-      }
       if (event.type === "result") {
         resultText = latestAssistantText || event.content || streamedText
-        resultMetadata = resultHistoryMetadata(event)
-        resultUsage = resultUsageFromEvent(event)
-        resultCostUsd = resultCostFromEvent(event)
-        resultMetadata = this.withLocalCostMetadata(state, resultUsage, resultMetadata)
-        resultCostCny = metadataNumber(resultMetadata, "costCny")
-        resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
-        await this.repository.recordSdkResultUsage({
-          conversationId: conversation.id,
+        const finalized = await this.finalizeResultUsageMetadata({
+          state,
+          conversation,
+          event,
           turnId,
-          sdkResultUuid: resultSdkResultUuidFromEvent(event),
           sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
-          usage: resultUsage,
-          modelUsage: resultModelUsageFromEvent(event),
           userMeta: message.userMeta ?? conversation.userMeta,
         })
-        resultMetadata = await this.cumulativeUsageMetadata(conversation.id, resultMetadata)
-        resultMetadata = await this.cumulativeCostMetadata(conversation.id, resultMetadata)
+        resultMetadata = finalized.metadata
+        resultUsage = finalized.usage
+        resultCostUsd = finalized.costUsd
+        resultCostCny = finalized.costCny
+        resultCostCurrency = finalized.costCurrency
+        events.push(finalized.event)
+        this.emitEvent(message, conversation.id, finalized.event)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, finalized.event)
+        await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
+        await this.saveEventHistory(conversation.id, finalized.event)
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -603,6 +594,17 @@ export class ConversationRouter {
           costCurrency: resultCostCurrency,
         })
         break
+      }
+
+      events.push(event)
+      this.emitEvent(message, conversation.id, event)
+      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+      await this.saveEventSdkSession(conversation.id, event, liveSession)
+      await this.saveEventHistory(conversation.id, event)
+
+      if (event.type === "permissionRequest") {
+        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
+        continue
       }
       if (event.type === "error") {
         const sdkResultUsage = sdkResultUsageFromError(event)
@@ -766,43 +768,29 @@ export class ConversationRouter {
             timedOut: true,
           }
         }
-        events.push(event)
-        partialText = appendRelayText(partialText, event)
-        this.emitEvent(message, conversation.id, event)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-        await this.saveEventSdkSession(conversation.id, event, liveSession)
-        await this.saveEventHistory(conversation.id, event)
         const assistantText = assistantEventText(event)
         if (assistantText) latestAssistantText = assistantText
-        if (event.type === "permissionRequest") {
-          await liveSession.respondPermission(event.requestId, {
-            behavior: "deny",
-            message: permissionRelayDenyMessage(event),
-          })
-          error = permissionRelayErrorMessage(event)
-          await this.sessionManager.closeCurrentTurn(conversation.id)
-          break
-        }
         if (event.type === "result") {
           resultText = latestAssistantText || event.content || partialText
           partialText = resultText || partialText
-          resultMetadata = resultHistoryMetadata(event)
-          resultUsage = resultUsageFromEvent(event)
-          resultCostUsd = resultCostFromEvent(event)
-          resultMetadata = this.withLocalCostMetadata(state, resultUsage, resultMetadata)
-          resultCostCny = metadataNumber(resultMetadata, "costCny")
-          resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
-          await this.repository.recordSdkResultUsage({
-            conversationId: conversation.id,
+          const finalized = await this.finalizeResultUsageMetadata({
+            state,
+            conversation,
+            event,
             turnId,
-            sdkResultUuid: resultSdkResultUuidFromEvent(event),
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
-            usage: resultUsage,
-            modelUsage: resultModelUsageFromEvent(event),
             userMeta: message.userMeta ?? conversation.userMeta,
           })
-          resultMetadata = await this.cumulativeUsageMetadata(conversation.id, resultMetadata)
-          resultMetadata = await this.cumulativeCostMetadata(conversation.id, resultMetadata)
+          resultMetadata = finalized.metadata
+          resultUsage = finalized.usage
+          resultCostUsd = finalized.costUsd
+          resultCostCny = finalized.costCny
+          resultCostCurrency = finalized.costCurrency
+          events.push(finalized.event)
+          this.emitEvent(message, conversation.id, finalized.event)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, finalized.event)
+          await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
+          await this.saveEventHistory(conversation.id, finalized.event)
           await this.repository.saveUsage({
             conversationId: conversation.id,
             usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -810,6 +798,21 @@ export class ConversationRouter {
             costCny: resultCostCny,
             costCurrency: resultCostCurrency,
           })
+          break
+        }
+        events.push(event)
+        partialText = appendRelayText(partialText, event)
+        this.emitEvent(message, conversation.id, event)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+        await this.saveEventSdkSession(conversation.id, event, liveSession)
+        await this.saveEventHistory(conversation.id, event)
+        if (event.type === "permissionRequest") {
+          await liveSession.respondPermission(event.requestId, {
+            behavior: "deny",
+            message: permissionRelayDenyMessage(event),
+          })
+          error = permissionRelayErrorMessage(event)
+          await this.sessionManager.closeCurrentTurn(conversation.id)
           break
         }
         if (event.type === "error") {
@@ -1038,6 +1041,54 @@ export class ConversationRouter {
       ...(metadata ?? {}),
       usage,
     })
+  }
+
+  private async finalizeResultUsageMetadata(input: {
+    readonly state: RuntimeSessionState
+    readonly conversation: ConversationEntryV1
+    readonly event: Extract<AgentEvent, { type: "result" }>
+    readonly turnId: string
+    readonly sdkSessionId?: string
+    readonly userMeta?: ConversationEntryV1["userMeta"]
+  }): Promise<{
+    readonly event: Extract<AgentEvent, { type: "result" }>
+    readonly metadata: ConversationEntryV1["history"][number]["metadata"] | undefined
+    readonly usage: Record<string, unknown> | undefined
+    readonly costUsd: number | undefined
+    readonly costCny: number | undefined
+    readonly costCurrency: "CNY" | undefined
+  }> {
+    const usage = resultUsageFromEvent(input.event)
+    const costUsd = resultCostFromEvent(input.event)
+    let metadata = resultHistoryMetadata(input.event)
+    metadata = this.withLocalCostMetadata(input.state, usage, metadata)
+    const costCny = metadataNumber(metadata, "costCny")
+    const costCurrency = costCny === undefined ? undefined : "CNY"
+    await this.repository.recordSdkResultUsage({
+      conversationId: input.conversation.id,
+      turnId: input.turnId,
+      sdkResultUuid: resultSdkResultUuidFromEvent(input.event),
+      sdkSessionId: input.sdkSessionId,
+      usage,
+      modelUsage: resultModelUsageFromEvent(input.event),
+      userMeta: input.userMeta ?? input.conversation.userMeta,
+    })
+    metadata = await this.cumulativeUsageMetadata(input.conversation.id, metadata)
+    metadata = await this.cumulativeCostMetadata(input.conversation.id, metadata)
+    return {
+      event: {
+        ...input.event,
+        metadata,
+        costUsd,
+        costCny,
+        costCurrency,
+      },
+      metadata,
+      usage,
+      costUsd,
+      costCny,
+      costCurrency,
+    }
   }
 
   private async cumulativeCostMetadata(

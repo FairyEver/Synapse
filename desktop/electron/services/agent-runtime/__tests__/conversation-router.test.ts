@@ -37,6 +37,8 @@ type RecordedAgentEmit = {
   readonly options?: EventBusEmitOptions
 }
 
+type AgentResultEvent = Extract<AgentEvent, { type: "result" }>
+
 describe("ConversationRouter", () => {
   it("binds new conversations to the active provider and passes ProviderService env to the SDK session", async () => {
     const { conversations, router, providerService, factoryCalls } = createRouter({
@@ -573,8 +575,10 @@ describe("ConversationRouter", () => {
 
   it("estimates result cost from the effective model and Synapse price rules", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { eventBus, events } = createEventBusRecorder()
     const { conversations, router } = createRouter({
       agentUsage,
+      eventBus,
       env: { ANTHROPIC_MODEL: "glm-5.1" },
       priceRules: [{
         id: "glm-5-1",
@@ -613,6 +617,7 @@ describe("ConversationRouter", () => {
     const result = await router.send(baseMessage("hello"))
     const savedConversation = await conversations.get(result.conversationId)
     const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+    const resultEvent = events.find((event) => event.type === "result")?.payload?.event as AgentResultEvent | undefined
 
     expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
       usage: {
@@ -642,12 +647,31 @@ describe("ConversationRouter", () => {
       costCurrency: "CNY",
       estimatedCost: true,
     }))
+    expect(resultEvent).toEqual(expect.objectContaining({
+      type: "result",
+      metadata: expect.objectContaining({
+        usage: assistantEntry?.metadata?.usage,
+        turnUsage: assistantEntry?.metadata?.turnUsage,
+        costUsd: 0.805556,
+        costCny: 3.988628,
+        costBreakdownCny: assistantEntry?.metadata?.costBreakdownCny,
+        totalCostCny: 3.988628,
+        totalCostBreakdownCny: assistantEntry?.metadata?.totalCostBreakdownCny,
+        costCurrency: "CNY",
+        estimatedCost: true,
+      }),
+      costUsd: 0.805556,
+      costCny: 3.988628,
+      costCurrency: "CNY",
+    }))
   })
 
   it("omits CNY result cost when the effective model has no Synapse price rule", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { eventBus, events } = createEventBusRecorder()
     const { conversations, router } = createRouter({
       agentUsage,
+      eventBus,
       env: { ANTHROPIC_MODEL: "unknown-model" },
       priceRules: [],
       session: new ScriptedSession([
@@ -671,6 +695,7 @@ describe("ConversationRouter", () => {
     const result = await router.send(baseMessage("hello"))
     const savedConversation = await conversations.get(result.conversationId)
     const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+    const resultEvent = events.find((event) => event.type === "result")?.payload?.event as AgentResultEvent | undefined
 
     expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
       usage: {
@@ -688,10 +713,30 @@ describe("ConversationRouter", () => {
       costCurrency: "CNY",
       estimatedCost: true,
     }))
+    expect(resultEvent).toEqual(expect.objectContaining({
+      type: "result",
+      metadata: expect.objectContaining({
+        usage: assistantEntry?.metadata?.usage,
+        turnUsage: assistantEntry?.metadata?.turnUsage,
+        costUsd: 1,
+      }),
+      costUsd: 1,
+    }))
+    expect(resultEvent?.metadata).not.toEqual(expect.objectContaining({
+      costCny: expect.any(Number),
+      totalCostCny: expect.any(Number),
+      costCurrency: "CNY",
+      estimatedCost: true,
+    }))
+    expect(resultEvent).not.toEqual(expect.objectContaining({
+      costCny: expect.any(Number),
+      costCurrency: "CNY",
+    }))
   })
 
   it("persists cumulative usage snapshots on assistant history entries", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { eventBus, events } = createEventBusRecorder()
     const session = new ScriptedSession([
       {
         type: "result",
@@ -730,6 +775,7 @@ describe("ConversationRouter", () => {
     ], "sdk-1")
     const { conversations, router } = createRouter({
       agentUsage,
+      eventBus,
       env: { ANTHROPIC_MODEL: "test-priced-model" },
       priceRules: [{
         id: "test-priced-model",
@@ -753,6 +799,9 @@ describe("ConversationRouter", () => {
     const savedConversation = await conversations.get(second.conversationId)
     const assistantEntries = savedConversation?.history.filter((entry) => entry.role === "assistant")
     const usageRows = await agentUsage.list()
+    const resultEvents = events
+      .filter((event) => event.type === "result")
+      .map((event) => event.payload?.event as AgentResultEvent)
 
     expect(first.conversationId).toBe(second.conversationId)
     expect(assistantEntries).toEqual([
@@ -849,6 +898,19 @@ describe("ConversationRouter", () => {
         },
       }),
     ])
+    expect(resultEvents).toHaveLength(2)
+    expect(resultEvents[0]?.metadata).toEqual(expect.objectContaining({
+      usage: assistantEntries?.[0]?.metadata?.usage,
+      turnUsage: assistantEntries?.[0]?.metadata?.turnUsage,
+      costCny: 0.047,
+      totalCostCny: 0.047,
+    }))
+    expect(resultEvents[1]?.metadata).toEqual(expect.objectContaining({
+      usage: assistantEntries?.[1]?.metadata?.usage,
+      turnUsage: assistantEntries?.[1]?.metadata?.turnUsage,
+      costCny: 0.086,
+      totalCostCny: 0.133,
+    }))
   })
 
   it("deduplicates SDK result usage by result uuid when aggregating a conversation", async () => {
@@ -1175,6 +1237,89 @@ describe("ConversationRouter", () => {
     expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([
       expect.objectContaining({ content: "relay" }),
     ])
+  })
+
+  it("emits side session result metadata with the same usage and cost snapshot as history", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentUsage,
+      eventBus,
+      env: { ANTHROPIC_MODEL: "glm-5.1" },
+      priceRules: [{
+        id: "glm-5-1",
+        modelPattern: "glm-5.1",
+        inputPer1M: 8,
+        outputPer1M: 28,
+        cacheReadPer1M: 8,
+        cacheWritePer1M: 0,
+        reasoningPer1M: 28,
+        currency: "CNY",
+        enabled: true,
+        source: "builtin",
+        sortIndex: 0,
+        updatedAt: "2026-06-02T00:00:00.000Z",
+      }],
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "side usage answer",
+          done: true,
+          sdkResultUuid: "result-side-glm",
+          sdkSessionId: "sdk-side",
+          usage: {
+            input_tokens: 17_504,
+            output_tokens: 1_501,
+            cache_read_input_tokens: 475_821,
+            cache_creation_input_tokens: 70_889,
+          },
+          costUsd: 0.805556,
+          costCny: 5.8,
+          costCurrency: "CNY",
+        },
+      ], "sdk-side"),
+    })
+
+    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+    const savedConversation = await conversations.get(result.conversationId)
+    const assistantEntry = savedConversation?.history.find((entry) => entry.role === "assistant")
+    const resultEvent = events.find((event) => event.type === "result")?.payload?.event as AgentResultEvent | undefined
+
+    expect(assistantEntry?.metadata).toEqual(expect.objectContaining({
+      usage: {
+        inputTokens: 17_504,
+        outputTokens: 1_501,
+        cacheReadInputTokens: 475_821,
+        cacheCreationInputTokens: 70_889,
+        totalTokens: 565_715,
+      },
+      turnUsage: {
+        input_tokens: 17_504,
+        output_tokens: 1_501,
+        cache_read_input_tokens: 475_821,
+        cache_creation_input_tokens: 70_889,
+      },
+      costUsd: 0.805556,
+      costCny: 3.988628,
+      totalCostCny: 3.988628,
+      costCurrency: "CNY",
+      estimatedCost: true,
+    }))
+    expect(resultEvent).toEqual(expect.objectContaining({
+      type: "result",
+      metadata: expect.objectContaining({
+        usage: assistantEntry?.metadata?.usage,
+        turnUsage: assistantEntry?.metadata?.turnUsage,
+        costUsd: 0.805556,
+        costCny: 3.988628,
+        totalCostCny: 3.988628,
+        costCurrency: "CNY",
+        estimatedCost: true,
+      }),
+      costUsd: 0.805556,
+      costCny: 3.988628,
+      costCurrency: "CNY",
+    }))
   })
 
   it("persists a terminal error when a side session relay times out", async () => {
