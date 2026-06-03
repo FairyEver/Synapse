@@ -70,6 +70,10 @@ vi.mock("../timeline-view", () => ({
   TimelineView: () => <div data-testid="timeline-view" />,
 }))
 
+vi.mock("../token-usage-view", () => ({
+  TokenUsageView: () => <div data-testid="token-usage-view" />,
+}))
+
 vi.mock("../node-result-panel", () => ({
   NodeResultPanel: ({ onCopyNodeReport }: { readonly onCopyNodeReport: () => Promise<void> }) => (
     <button type="button" data-testid="node-result-panel-copy" onClick={() => void onCopyNodeReport()}>
@@ -251,6 +255,35 @@ describe("WorkflowRunnerApp", () => {
     expect(resultPanel?.getAttribute("data-default-size")).toBe("460")
     expect(resultPanel?.getAttribute("data-max-size")).toBe("900")
     expect(resultPanel?.getAttribute("data-min-size")).toBe("320")
+  })
+
+  it("switches to the Token usage view from the toolbar", async () => {
+    installWorkflowBridge({
+      runStatus: vi.fn(async () => ({
+        definition: workflowDefinition(),
+        params: {},
+      })),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+
+    const tokenButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Token"))
+    expect(tokenButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      tokenButton?.click()
+    })
+
+    expect(container.querySelector("[data-testid='token-usage-view']")).toBeInstanceOf(HTMLDivElement)
   })
 
   it("keeps an opened historical run when the same workflow starts another run", async () => {

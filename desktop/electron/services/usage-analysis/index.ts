@@ -12,5 +12,7 @@ export {
   searchCcRecordsTextInWorker,
 } from "./conversation-runner"
 export { refreshUsageInWorker } from "./refresh-runner"
+export { estimateSynapseUsageCostSnapshot, usageTokenBreakdownFromRecord } from "./usage-cost-snapshot"
+export type { SynapseUsageCostSnapshot } from "./usage-cost-snapshot"
 export type { UsageModelPriceRule, UsageModelPriceRuleInput } from "./pricing"
 export type { UsageDetailInput, UsageRangeInput, UsageRefreshResult } from "./types"

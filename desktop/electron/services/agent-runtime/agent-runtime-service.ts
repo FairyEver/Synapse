@@ -411,8 +411,10 @@ export class AgentRuntimeService {
           error: `Execution exceeded ${timeoutMs ?? 0}ms timeout`,
           durationMs: Date.now() - startMs,
           usage: result.usage,
+          modelName: result.modelName,
           costUsd: result.costUsd,
           costCny: result.costCny,
+          costBreakdownCny: result.costBreakdownCny,
           costCurrency: result.costCurrency,
         }
         this.logScheduledAgentFailure(input, message, scheduledResult, undefined, result.agentSessionId)
@@ -427,8 +429,10 @@ export class AgentRuntimeService {
         error: result.error ? sanitizeError(result.error) : undefined,
         durationMs: Date.now() - startMs,
         usage: result.usage,
+        modelName: result.modelName,
         costUsd: result.costUsd,
         costCny: result.costCny,
+        costBreakdownCny: result.costBreakdownCny,
         costCurrency: result.costCurrency,
       }
       if (scheduledResult.status !== "success") {

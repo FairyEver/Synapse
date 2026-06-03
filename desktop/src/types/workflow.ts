@@ -56,6 +56,21 @@ export interface WorkflowMeta {
   id: string; name: string; description?: string; version: string
   nodeCount: number; createdAt: number; updatedAt: number
 }
+export interface WorkflowUsageCostBreakdownCny {
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly reasoning: number
+}
+export interface WorkflowNodeUsageCostSnapshot {
+  readonly modelName?: string
+  readonly costCny?: number
+  readonly costBreakdownCny?: WorkflowUsageCostBreakdownCny
+  readonly costCurrency?: "CNY"
+  readonly priceKnown?: boolean
+  readonly estimatedCost?: boolean
+}
 export interface NodeRunResult {
   nodeId: string
   status: "pending" | "running" | "success" | "failed" | "cancelled" | "skipped"
@@ -71,6 +86,7 @@ export interface NodeRunResult {
   costUsd?: number
   costCny?: number
   costCurrency?: "CNY"
+  usageCost?: WorkflowNodeUsageCostSnapshot
 }
 export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled"

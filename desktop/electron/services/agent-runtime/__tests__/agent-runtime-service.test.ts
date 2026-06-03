@@ -1168,6 +1168,65 @@ describe("AgentRuntimeService", () => {
     })
   })
 
+  it("returns scheduled agent effective model and local CNY breakdown", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", { ANTHROPIC_MODEL: "glm-5.1" }) as unknown as ProviderService,
+      getUsagePriceRules: () => [{
+        id: "glm-5.1",
+        modelPattern: "glm-5.1",
+        inputPer1M: 1000,
+        outputPer1M: 2000,
+        cacheReadPer1M: 10,
+        cacheWritePer1M: 100,
+        reasoningPer1M: 3000,
+        currency: "CNY",
+        enabled: true,
+        source: "user",
+        sortIndex: 0,
+        updatedAt: "2026-06-03T00:00:00.000Z",
+      }],
+      createSession: () => new ScriptedSession([
+        {
+          type: "result",
+          content: "done",
+          done: true,
+          sdkSessionId: "sdk-1",
+          metadata: { model: "glm-5.1" },
+          usage: { input_tokens: 10, output_tokens: 2 },
+          costCny: 99,
+        },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "scheduled prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+    })
+
+    expect(result).toMatchObject({
+      status: "success",
+      modelName: "glm-5.1",
+      costCny: 0.014,
+      costBreakdownCny: {
+        input: 0.01,
+        output: 0.004,
+        cacheRead: 0,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+      costCurrency: "CNY",
+    })
+  })
+
   it("persists scheduled fresh-session permission mode for renderer summaries", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({

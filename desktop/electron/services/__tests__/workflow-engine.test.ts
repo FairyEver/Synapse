@@ -95,7 +95,7 @@ describe("WorkflowEngine", () => {
     expect(result.output).toBe("result: done")
   })
 
-  it("preserves prompt node usage and cost in node results and completed events", async () => {
+  it("stores workflow usage cost snapshots from Agent Runtime local cost metadata", async () => {
     const def: WorkflowDefinition = {
       id: "wf-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
       nodes: [nodeA, nodeEnd],
@@ -114,22 +114,118 @@ describe("WorkflowEngine", () => {
         response: "hello",
         durationMs: 5,
         usage,
+        modelName: "test-model-v1",
         costUsd: 0.01,
+        costCny: 0.0147,
+        costBreakdownCny: {
+          input: 0.01,
+          output: 0.004,
+          cacheRead: 0.0003,
+          cacheWrite: 0.0004,
+          reasoning: 0,
+        },
+        costCurrency: "CNY" as const,
       }),
     })
 
     const result = await engine.run(def, {}, "run-usage", (event) => events.push(event))
     const completedNode = events.find((event) => event.type === "node:completed" && event.nodeId === "a")
 
-    expect(result.nodeResults.a).toMatchObject({ usage, costUsd: 0.01 })
+    expect(result.nodeResults.a).toMatchObject({
+      usage,
+      costUsd: 0.01,
+      costCny: 0.0147,
+      usageCost: {
+        modelName: "test-model-v1",
+        costCny: 0.0147,
+        costBreakdownCny: {
+          input: 0.01,
+          output: 0.004,
+          cacheRead: 0.0003,
+          cacheWrite: 0.0004,
+          reasoning: 0,
+        },
+        costCurrency: "CNY",
+        priceKnown: true,
+        estimatedCost: true,
+      },
+    })
     expect(completedNode).toMatchObject({
       type: "node:completed",
-      result: expect.objectContaining({ usage, costUsd: 0.01 }),
+      result: expect.objectContaining({
+        usage,
+        costCny: 0.0147,
+        usageCost: expect.objectContaining({ costCny: 0.0147 }),
+      }),
     })
     expect(logger.info).toHaveBeenCalledWith("node succeeded", expect.objectContaining({
       usage,
       costUsd: 0.01,
+      costCny: 0.0147,
+      usageCost: expect.objectContaining({ costCny: 0.0147 }),
     }))
+  })
+
+  it("does not treat bare SDK cost fields as Synapse workflow cost snapshots", async () => {
+    const def: WorkflowDefinition = {
+      id: "wf-sdk-cost", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }],
+    }
+    const usage = { input_tokens: 10, output_tokens: 2 }
+    const engine = new WorkflowEngine({
+      sendToAgent: vi.fn().mockResolvedValue({
+        status: "success" as const,
+        response: "hello",
+        durationMs: 5,
+        usage,
+        modelName: "unknown-model",
+        costCny: 99,
+      }),
+    })
+
+    const result = await engine.run(def, {}, "run-sdk-cost", () => {})
+
+    expect(result.nodeResults.a).toMatchObject({
+      usage,
+      costCny: 99,
+      usageCost: {
+        modelName: "unknown-model",
+        priceKnown: false,
+        estimatedCost: false,
+      },
+    })
+    expect(result.nodeResults.a.usageCost).not.toHaveProperty("costCny")
+  })
+
+  it("stores unpriced workflow usage snapshots without CNY cost", async () => {
+    const def: WorkflowDefinition = {
+      id: "wf-unpriced", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }],
+    }
+    const usage = { input_tokens: 10, output_tokens: 2 }
+    const engine = new WorkflowEngine({
+      sendToAgent: vi.fn().mockResolvedValue({
+        status: "success" as const,
+        response: "hello",
+        durationMs: 5,
+        usage,
+        modelName: "unknown-model",
+      }),
+    })
+
+    const result = await engine.run(def, {}, "run-unpriced", () => {})
+
+    expect(result.nodeResults.a).toMatchObject({
+      usage,
+      usageCost: {
+        modelName: "unknown-model",
+        priceKnown: false,
+        estimatedCost: false,
+      },
+    })
+    expect(result.nodeResults.a.usageCost).not.toHaveProperty("costCny")
   })
 
   it("emits and stores Agent conversation targets for AI nodes", async () => {

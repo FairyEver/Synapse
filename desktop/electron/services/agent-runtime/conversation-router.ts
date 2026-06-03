@@ -9,8 +9,8 @@ import type { ScopedEventBus } from "../../runtime/project-container"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService, ReplyTarget } from "../reply-target"
-import { estimateUsageCost, type UsageModelPriceRule } from "../usage-analysis/pricing"
-import type { UsageTokenBreakdown } from "../usage-analysis/types"
+import type { UsageModelPriceRule } from "../usage-analysis/pricing"
+import { estimateSynapseUsageCostSnapshot } from "../usage-analysis/usage-cost-snapshot"
 import type { AgentCommandRouter, AgentCommandRouterResult } from "./command-router"
 import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
@@ -21,6 +21,7 @@ import type {
   RuntimeSessionState,
 } from "./session-lifecycle"
 import type {
+  AgentUsageCostBreakdownCny,
   AgentEvent,
   AgentLiveSession,
   AgentMessage,
@@ -535,8 +536,10 @@ export class ConversationRouter {
     let streamedText = ""
     let resultMetadata: ConversationEntryV1["history"][number]["metadata"] | undefined
     let resultUsage: Record<string, unknown> | undefined
+    let resultModelName: string | undefined
     let resultCostUsd: number | undefined
     let resultCostCny: number | undefined
+    let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
     let error: string | undefined
 
@@ -578,8 +581,10 @@ export class ConversationRouter {
         })
         resultMetadata = finalized.metadata
         resultUsage = finalized.usage
+        resultModelName = metadataString(resultMetadata, "model") ?? state.effectiveModel
         resultCostUsd = finalized.costUsd
         resultCostCny = finalized.costCny
+        resultCostBreakdownCny = metadataUsageCostBreakdown(resultMetadata, "costBreakdownCny")
         resultCostCurrency = finalized.costCurrency
         events.push(finalized.event)
         this.emitEvent(message, conversation.id, finalized.event)
@@ -655,8 +660,10 @@ export class ConversationRouter {
       threadId: saved.sdkSessionId,
       error,
       usage: resultUsage,
+      modelName: resultModelName,
       costUsd: resultCostUsd,
       costCny: resultCostCny,
+      costBreakdownCny: resultCostBreakdownCny,
       costCurrency: resultCostCurrency,
     }
   }
@@ -717,8 +724,10 @@ export class ConversationRouter {
     let latestAssistantText = ""
     let resultMetadata: ConversationEntryV1["history"][number]["metadata"] | undefined
     let resultUsage: Record<string, unknown> | undefined
+    let resultModelName: string | undefined
     let resultCostUsd: number | undefined
     let resultCostCny: number | undefined
+    let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
     let error: string | undefined
     try {
@@ -783,8 +792,10 @@ export class ConversationRouter {
           })
           resultMetadata = finalized.metadata
           resultUsage = finalized.usage
+          resultModelName = metadataString(resultMetadata, "model") ?? state.effectiveModel
           resultCostUsd = finalized.costUsd
           resultCostCny = finalized.costCny
+          resultCostBreakdownCny = metadataUsageCostBreakdown(resultMetadata, "costBreakdownCny")
           resultCostCurrency = finalized.costCurrency
           events.push(finalized.event)
           this.emitEvent(message, conversation.id, finalized.event)
@@ -883,8 +894,10 @@ export class ConversationRouter {
         error,
         timedOut: false,
         usage: resultUsage,
+        modelName: resultModelName,
         costUsd: resultCostUsd,
         costCny: resultCostCny,
+        costBreakdownCny: resultCostBreakdownCny,
         costCurrency: resultCostCurrency,
       }
       await this.appendAfterTurnEvents(message, result, saved.id, turnId, sessionHandle.created)
@@ -1134,23 +1147,22 @@ export class ConversationRouter {
     state: RuntimeSessionState,
     usage: Record<string, unknown> | undefined,
   ): { total: number; breakdown: Record<string, number> } | undefined {
-    const model = state.effectiveModel?.trim()
-    if (!model || !usage) return undefined
-    const rules = this.deps.getUsagePriceRules?.() ?? []
-    if (rules.length === 0) return undefined
-    const cost = estimateUsageCost(model, usageTokenBreakdown(usage), rules)
-    return cost.priceKnown
-      ? {
-          total: roundCost(cost.total),
-          breakdown: {
-            input: roundCost(cost.input),
-            output: roundCost(cost.output),
-            cacheRead: roundCost(cost.cacheRead),
-            cacheWrite: roundCost(cost.cacheWrite),
-            reasoning: roundCost(cost.reasoning),
-          },
-        }
-      : undefined
+    const snapshot = estimateSynapseUsageCostSnapshot({
+      modelName: state.effectiveModel,
+      usage,
+      priceRules: this.deps.getUsagePriceRules?.() ?? [],
+    })
+    if (!snapshot?.priceKnown || snapshot.costCny === undefined || !snapshot.costBreakdownCny) return undefined
+    return {
+      total: roundCost(snapshot.costCny),
+      breakdown: {
+        input: roundCost(snapshot.costBreakdownCny.input),
+        output: roundCost(snapshot.costBreakdownCny.output),
+        cacheRead: roundCost(snapshot.costBreakdownCny.cacheRead),
+        cacheWrite: roundCost(snapshot.costBreakdownCny.cacheWrite),
+        reasoning: roundCost(snapshot.costBreakdownCny.reasoning),
+      },
+    }
   }
 
   private async saveEventHistory(
@@ -1605,6 +1617,11 @@ function metadataNumber(metadata: Record<string, unknown> | undefined, key: stri
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
 }
 
+function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = metadata?.[key]
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined
+}
+
 function sumAssistantMetadataNumber(
   history: readonly ConversationEntryV1["history"][number][],
   key: string,
@@ -1637,6 +1654,33 @@ function metadataCostBreakdown(metadata: Record<string, unknown> | undefined, ke
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
+function metadataUsageCostBreakdown(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): AgentUsageCostBreakdownCny | undefined {
+  const value = metadata?.[key]
+  if (!isRecord(value)) return undefined
+  const input = finiteCostPart(value.input)
+  const output = finiteCostPart(value.output)
+  const cacheRead = finiteCostPart(value.cacheRead)
+  const cacheWrite = finiteCostPart(value.cacheWrite)
+  const reasoning = finiteCostPart(value.reasoning)
+  if (
+    input === undefined
+    || output === undefined
+    || cacheRead === undefined
+    || cacheWrite === undefined
+    || reasoning === undefined
+  ) {
+    return undefined
+  }
+  return { input, output, cacheRead, cacheWrite, reasoning }
+}
+
+function finiteCostPart(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
 function addCostBreakdowns(
   a: Record<string, number> | undefined,
   b: Record<string, number>,
@@ -1647,24 +1691,6 @@ function addCostBreakdowns(
 
 function roundCost(value: number): number {
   return Number(value.toFixed(6))
-}
-
-function usageTokenBreakdown(usage: Record<string, unknown>): UsageTokenBreakdown {
-  return {
-    input: usageTokenNumber(usage, ["input_tokens", "inputTokens"]),
-    output: usageTokenNumber(usage, ["output_tokens", "outputTokens"]),
-    cacheRead: usageTokenNumber(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cacheRead"]),
-    cacheWrite: usageTokenNumber(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWrite"]),
-    reasoning: usageTokenNumber(usage, ["reasoning_output_tokens", "reasoningOutputTokens", "reasoning_tokens", "reasoningTokens"]),
-  }
-}
-
-function usageTokenNumber(usage: Record<string, unknown>, keys: readonly string[]): number {
-  for (const key of keys) {
-    const value = usage[key]
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value
-  }
-  return 0
 }
 
 function sanitizeEventPayload(event: AgentEvent): Record<string, unknown> {

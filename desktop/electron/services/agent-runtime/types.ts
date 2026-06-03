@@ -260,6 +260,14 @@ export interface AgentLiveSession {
   setPermissionMode?(mode: string): Promise<void>
 }
 
+export interface AgentUsageCostBreakdownCny {
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly reasoning: number
+}
+
 export interface AgentRuntimeTurnResult {
   readonly conversationId: string
   readonly events: readonly AgentEvent[]
@@ -268,8 +276,10 @@ export interface AgentRuntimeTurnResult {
   readonly threadId?: string
   readonly error?: string
   readonly usage?: Record<string, unknown>
+  readonly modelName?: string
   readonly costUsd?: number
   readonly costCny?: number
+  readonly costBreakdownCny?: AgentUsageCostBreakdownCny
   readonly costCurrency?: "CNY"
 }
 
@@ -308,7 +318,9 @@ export type ScheduledAgentSendResult = {
   readonly error?: string
   readonly durationMs: number
   readonly usage?: Record<string, unknown>
+  readonly modelName?: string
   readonly costUsd?: number
   readonly costCny?: number
+  readonly costBreakdownCny?: AgentUsageCostBreakdownCny
   readonly costCurrency?: "CNY"
 }
