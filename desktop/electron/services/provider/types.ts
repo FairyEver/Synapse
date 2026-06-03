@@ -164,3 +164,26 @@ export interface ImportCcSwitchClaudeProvidersResult {
   readonly imported: readonly CCProvider[]
   readonly skipped: readonly CcSwitchClaudeProviderPreviewItem[]
 }
+
+export interface ProviderPackageImportPreview {
+  readonly sourcePath: string
+  readonly packageVersion: 1
+  readonly sourceProviderId: string
+  readonly targetProviderId: string
+  readonly name: string
+  readonly category: ProviderCategory
+  readonly baseUrl?: string
+  readonly apiKeyField: ProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+}
+
+export interface ProviderPackageImportResult {
+  readonly provider: CCProvider
+}
+
+export interface ProviderPackageExportResult {
+  readonly filePath: string
+}

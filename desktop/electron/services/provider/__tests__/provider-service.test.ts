@@ -17,12 +17,93 @@ import type {
 } from "../../../runtime/security"
 import { ProviderService } from "../provider-service"
 import {
+  buildProviderPackage,
+  parseProviderPackage,
+  resolveProviderPackageTargetId,
+} from "../provider-package"
+import {
   LOCAL_CLAUDE_CODE_PROVIDER_ID,
   type CcSwitchClaudeProviderImportCandidate,
   type CcSwitchImportSource,
 } from "../types"
 
 describe("ProviderService", () => {
+  it("builds provider packages without local machine state", () => {
+    const pkg = buildProviderPackage({
+      exportedAt: "2026-06-03T00:00:00.000Z",
+      provider: {
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        source: "user",
+        readonly: false,
+        configured: true,
+        configPath: "/Users/test/config.json",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        active: true,
+        model: "deepseek-chat",
+        env: { CLAUDE_CODE_USE_VERTEX: "1" },
+        settingsConfig: { env: { ANTHROPIC_MODEL: "deepseek-chat" } },
+        archived: true,
+        sortIndex: 7,
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-02T00:00:00.000Z",
+      },
+      apiKey: "sk-deepseek",
+      secretEnv: { AWS_SECRET_ACCESS_KEY: "secret-access-key" },
+    })
+
+    expect(pkg).toEqual({
+      kind: "synapse.provider.package",
+      version: 1,
+      exportedAt: "2026-06-03T00:00:00.000Z",
+      provider: {
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+        env: { CLAUDE_CODE_USE_VERTEX: "1" },
+        settingsConfig: { env: { ANTHROPIC_MODEL: "deepseek-chat" } },
+      },
+      secrets: {
+        apiKey: "sk-deepseek",
+        env: { AWS_SECRET_ACCESS_KEY: "secret-access-key" },
+      },
+    })
+    expect(JSON.stringify(pkg)).not.toContain("configPath")
+    expect(JSON.stringify(pkg)).not.toContain("sortIndex")
+    expect(JSON.stringify(pkg)).not.toContain("active")
+  })
+
+  it("parses provider package v1 and rejects unsupported shapes", () => {
+    const valid = {
+      kind: "synapse.provider.package",
+      version: 1,
+      exportedAt: "2026-06-03T00:00:00.000Z",
+      provider: {
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      },
+      secrets: { apiKey: "sk-deepseek", env: {} },
+    }
+
+    expect(parseProviderPackage(valid)).toEqual(valid)
+    expect(() => parseProviderPackage({ ...valid, version: 2 })).toThrow("不支持的配置版本")
+    expect(() => parseProviderPackage({ ...valid, kind: "other" })).toThrow("无法识别该文件")
+    expect(() => parseProviderPackage({ ...valid, secrets: {} })).toThrow("配置不完整")
+    expect(() => parseProviderPackage({ ...valid, provider: { ...valid.provider, source: "local" } })).toThrow("不支持导入内置供应商")
+  })
+
+  it("derives the next provider package target id", () => {
+    expect(resolveProviderPackageTargetId("deepseek", new Set(["deepseek", "deepseek-2"]))).toBe("deepseek-3")
+    expect(resolveProviderPackageTargetId("packy", new Set(["deepseek"]))).toBe("packy")
+  })
+
   it("exposes local Claude Code as the default read-only provider", async () => {
     const { service } = makeProviderService({
       localClaudeSettingsPath: "/Users/test/.claude/settings.json",
