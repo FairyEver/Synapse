@@ -55,6 +55,7 @@ import { redactSensitiveValue } from "@/lib/agent-redaction"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { CcSwitchImportDialog } from "./cc-switch-import-dialog"
 import { ProviderDeleteDialog } from "./provider-delete-dialog"
+import { ProviderPackageImportDialog } from "./provider-package-import-dialog"
 import { ProviderPresetPickerDialog, type ProviderPresetOption } from "./provider-preset-picker-dialog"
 import type { ModelTier } from "@/types/provider-model"
 import type {
@@ -63,6 +64,7 @@ import type {
   SynapseAgentProviderPreset,
   SynapseAgentProviderCategory,
   SynapseCreateAgentProviderInput,
+  SynapseProviderPackageImportPreview,
   SynapseUpdateAgentProviderInput,
 } from "@/types/bridge"
 
@@ -131,7 +133,9 @@ type ProviderPanelViewProps = {
   readonly error: string | null
   readonly onAdd: () => void
   readonly onImport: () => void
+  readonly onImportFile: () => void
   readonly onView: (provider: SynapseAgentProvider) => void
+  readonly onExport: (provider: SynapseAgentProvider) => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onDelete: (provider: SynapseAgentProvider) => void
@@ -162,6 +166,8 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [providerPresets, setProviderPresets] = useState<SynapseAgentProviderPreset[]>([])
   const [providerPresetsLoading, setProviderPresetsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [packagePreview, setPackagePreview] = useState<SynapseProviderPackageImportPreview | null>(null)
+  const [importingPackage, setImportingPackage] = useState(false)
   const [deletingProvider, setDeletingProvider] = useState<SynapseAgentProvider | null>(null)
   const [archiveConfirm, setArchiveConfirm] = useState<{ provider: SynapseAgentProvider; taskCount: number; workflowNodeCount: number } | null>(null)
   const [formValues, setFormValues] = useState<ProviderFormValues>(() => emptyProviderForm())
@@ -259,6 +265,68 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     setCcSwitchImportOpen(true)
   }, [])
 
+  const handleImportFile = useCallback(async () => {
+    try {
+      const choice = await requireSynapseBridge().agent.chooseProviderPackageImportSource()
+      if (!choice.sourcePath) return
+      const preview = await requireSynapseBridge().agent.previewProviderPackageImport({
+        sourcePath: choice.sourcePath,
+      })
+      setPackagePreview(preview)
+    } catch (rawError) {
+      logger.error("Provider package import preview failed.", {
+        boundary: "settings.providers.package.import.preview",
+        action: "previewProviderPackageImport",
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast(errorToastMessage(rawError, "无法识别该文件"))
+    }
+  }, [])
+
+  const handleConfirmPackageImport = useCallback(async () => {
+    if (!packagePreview) return
+    setImportingPackage(true)
+    try {
+      await requireSynapseBridge().agent.importProviderPackage({
+        sourcePath: packagePreview.sourcePath,
+      })
+      setPackagePreview(null)
+      await refresh({ showLoading: false })
+      toast("已导入供应商配置")
+    } catch (rawError) {
+      logger.error("Provider package import failed.", {
+        boundary: "settings.providers.package.import",
+        action: "importProviderPackage",
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast(errorToastMessage(rawError, "导入失败"))
+    } finally {
+      setImportingPackage(false)
+    }
+  }, [packagePreview, refresh])
+
+  const handleExportPackage = useCallback(async (provider: SynapseAgentProvider) => {
+    try {
+      const choice = await requireSynapseBridge().agent.chooseProviderPackageExportTarget({
+        providerName: provider.name,
+      })
+      if (!choice.targetPath) return
+      await requireSynapseBridge().agent.exportProviderPackage({
+        providerId: provider.id,
+        targetPath: choice.targetPath,
+      })
+      toast("已导出供应商配置")
+    } catch (rawError) {
+      logger.error("Provider package export failed.", {
+        boundary: "settings.providers.package.export",
+        action: "exportProviderPackage",
+        providerId: provider.id,
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast(errorToastMessage(rawError, "导出失败"))
+    }
+  }, [])
+
   const openEditDialog = useCallback((provider: SynapseAgentProvider) => {
     setEditingProvider(provider)
     setFormValues(formFromProvider(provider))
@@ -349,7 +417,9 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         error={error}
         onAdd={openAddDialog}
         onImport={openCcSwitchImportDialog}
+        onImportFile={handleImportFile}
         onView={setDetailProvider}
+        onExport={handleExportPackage}
         onEdit={openEditDialog}
         onArchive={handleArchive}
         onDelete={setDeletingProvider}
@@ -372,6 +442,14 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         open={ccSwitchImportOpen}
         onOpenChange={setCcSwitchImportOpen}
         onImported={() => void refresh()}
+      />
+      <ProviderPackageImportDialog
+        preview={packagePreview}
+        importing={importingPackage}
+        onOpenChange={(open) => {
+          if (!open) setPackagePreview(null)
+        }}
+        onImport={() => void handleConfirmPackageImport()}
       />
       <ProviderDetailDialog
         provider={detailProvider}
@@ -408,7 +486,9 @@ function ProviderPanelView({
   error,
   onAdd,
   onImport,
+  onImportFile,
   onView,
+  onExport,
   onEdit,
   onArchive,
   onDelete,
@@ -426,6 +506,10 @@ function ProviderPanelView({
           <CardTitle className="text-base">Claude 供应商</CardTitle>
         </div>
         <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onImportFile}>
+            <DownloadIcon data-icon="inline-start" />
+            导入文件
+          </Button>
           <Button type="button" variant="outline" size="sm" onClick={onImport}>
             <DownloadIcon data-icon="inline-start" />
             从 CCS 导入
@@ -485,6 +569,7 @@ function ProviderPanelView({
                   <TableCell className="w-64 whitespace-nowrap text-right">
                     <ProviderRowActions
                       provider={provider}
+                      onExport={onExport}
                       onEdit={onEdit}
                       onArchive={onArchive}
                       onDelete={onDelete}
@@ -635,11 +720,13 @@ function CopyProviderModelIdButton({
 
 function ProviderRowActions({
   provider,
+  onExport,
   onEdit,
   onArchive,
   onDelete,
 }: {
   readonly provider: SynapseAgentProvider
+  readonly onExport: (provider: SynapseAgentProvider) => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onDelete: (provider: SynapseAgentProvider) => void
@@ -648,6 +735,7 @@ function ProviderRowActions({
 
   return (
     <div className="flex justify-end gap-2">
+      <ProviderTextAction onClick={() => onExport(provider)}>导出</ProviderTextAction>
       <ProviderTextAction onClick={() => onEdit(provider)}>编辑</ProviderTextAction>
       <ProviderTextAction onClick={() => onArchive(provider)}>归档</ProviderTextAction>
       <ProviderTextAction onClick={() => onDelete(provider)}>删除</ProviderTextAction>
@@ -1459,6 +1547,13 @@ function providerErrorDiagnostic(error: unknown): { readonly errorName: string; 
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function errorToastMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  return fallback
 }
 
 export { ProviderPanel, ProviderPanelView }

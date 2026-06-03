@@ -764,6 +764,125 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("DeepSeek")
   })
 
+  it("exports a user provider package from the row action", async () => {
+    const chooseProviderPackageExportTarget = vi.fn().mockResolvedValue({
+      targetPath: "/Users/test/Custom Provider.synapse-provider.json",
+    })
+    const exportProviderPackage = vi.fn().mockResolvedValue({
+      filePath: "/Users/test/Custom Provider.synapse-provider.json",
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          chooseProviderPackageExportTarget,
+          exportProviderPackage,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "导出").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(chooseProviderPackageExportTarget).toHaveBeenCalledWith({ providerName: "Custom Provider" })
+    expect(exportProviderPackage).toHaveBeenCalledWith({
+      providerId: "custom-provider",
+      targetPath: "/Users/test/Custom Provider.synapse-provider.json",
+    })
+    expect(toast).toHaveBeenCalledWith("已导出供应商配置")
+  })
+
+  it("does not show package export for the built-in provider", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([readonlyProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    expect(document.body.textContent).not.toContain("导出")
+  })
+
+  it("previews and imports a provider package", async () => {
+    const listProviders = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([customProvider({ id: "deepseek-2", name: "DeepSeek" })])
+    const chooseProviderPackageImportSource = vi.fn().mockResolvedValue({
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+    })
+    const previewProviderPackageImport = vi.fn().mockResolvedValue({
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      packageVersion: 1,
+      sourceProviderId: "deepseek",
+      targetProviderId: "deepseek-2",
+      name: "DeepSeek",
+      category: "cn_official",
+      baseUrl: "https://api.deepseek.com/anthropic",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      model: "deepseek-chat",
+    })
+    const importProviderPackage = vi.fn().mockResolvedValue({
+      provider: customProvider({ id: "deepseek-2", name: "DeepSeek" }),
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          chooseProviderPackageImportSource,
+          previewProviderPackageImport,
+          importProviderPackage,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "导入文件").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(previewProviderPackageImport).toHaveBeenCalledWith({
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+    })
+    expect(document.body.textContent).toContain("导入供应商")
+    expect(document.body.textContent).toContain("DeepSeek")
+    expect(document.body.textContent).toContain("https://api.deepseek.com/anthropic")
+    expect(document.body.textContent).toContain("deepseek-chat")
+    expect(document.body.textContent).toContain("ANTHROPIC_AUTH_TOKEN")
+    expect(document.body.textContent).toContain("deepseek -> deepseek-2")
+
+    await act(async () => {
+      buttonByText(document.body, "导入").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(importProviderPackage).toHaveBeenCalledWith({
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+    })
+    expect(toast).toHaveBeenCalledWith("已导入供应商配置")
+    expect(listProviders).toHaveBeenCalledTimes(2)
+  })
+
   it("disables direct provider deletion when task or workflow references exist", async () => {
     const deleteProvider = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(window, "synapse", {
