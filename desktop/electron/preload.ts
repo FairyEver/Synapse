@@ -245,6 +245,7 @@ const IPC_CHANNELS = {
     "rerun": "synapse:workflow:rerun",
     "openRunner": "synapse:workflow:open-runner",
     "cancel": "synapse:workflow:cancel",
+    "activeRuns": "synapse:workflow:active-runs",
     "runHistory": "synapse:workflow:run-history",
     "runStatus": "synapse:workflow:run-status",
     "openEditor": "synapse:workflow:open-editor",
@@ -909,6 +910,7 @@ const synapseBridge: SynapseBridge = {
     openRunner: (workflowId: string, runId: string) =>
       invoke(IPC_CHANNELS.workflow.openRunner)({ workflowId, runId }),
     cancel: (runId: string) => invoke(IPC_CHANNELS.workflow.cancel)({ runId }),
+    activeRuns: () => invoke(IPC_CHANNELS.workflow.activeRuns)(),
     runHistory: (workflowId: string) => invoke(IPC_CHANNELS.workflow.runHistory)({ workflowId }),
     runStatus: (runId: string) => invoke(IPC_CHANNELS.workflow.runStatus)({ runId }),
     openEditor: (id: string, runId?: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id, runId }),

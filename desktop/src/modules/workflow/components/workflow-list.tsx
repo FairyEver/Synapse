@@ -48,16 +48,16 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       const unsub = requireBridgeDomain("workflow").onEvent((event) => {
         if (event.type === "workflow:started") {
           runIdToWfId.current[event.runId] = event.workflowId
-          setRunStates((s) => ({ ...s, [event.workflowId]: "running" }))
+          setRunStates((s) => ({ ...s, [event.workflowId]: { status: "running", runId: event.runId } }))
         } else if (event.type === "workflow:completed") {
           const wfId = event.workflowId ?? runIdToWfId.current[event.runId]
-          if (wfId) setRunStates((s) => ({ ...s, [wfId]: "completed" }))
+          if (wfId) setRunStates((s) => ({ ...s, [wfId]: { status: "completed" } }))
         } else if (event.type === "workflow:failed") {
           const wfId = event.workflowId ?? runIdToWfId.current[event.runId]
-          if (wfId) setRunStates((s) => ({ ...s, [wfId]: "failed" }))
+          if (wfId) setRunStates((s) => ({ ...s, [wfId]: { status: "failed" } }))
         } else if (event.type === "workflow:cancelled") {
           const wfId = event.workflowId ?? runIdToWfId.current[event.runId]
-          if (wfId) setRunStates((s) => ({ ...s, [wfId]: "cancelled" }))
+          if (wfId) setRunStates((s) => ({ ...s, [wfId]: { status: "cancelled" } }))
         }
       })
       return () => { unsub() }
@@ -68,6 +68,30 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       })
       return undefined
     }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const activeRuns = await requireBridgeDomain("workflow").activeRuns()
+        if (cancelled) return
+        setRunStates((state) => {
+          const next = { ...state }
+          for (const run of activeRuns) {
+            next[run.workflowId] = { status: "running", runId: run.runId }
+            runIdToWfId.current[run.runId] = run.workflowId
+          }
+          return next
+        })
+      } catch (err) {
+        logger.warn("Workflow active runs load failed.", {
+          boundary: "renderer.workflow.list.active-runs",
+          ...errorDiagnostic(err),
+        })
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   const handleRun = async (id: string) => {
@@ -133,6 +157,10 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       })
       toast.error("导出失败，请重试")
     }
+  }
+
+  const handleOpenActiveRun = (workflowId: string, runId: string) => {
+    openRunner(requireBridgeDomain("workflow"), workflowId, runId)
   }
 
   const handleConfirmRun = async (params: Record<string, unknown>) => {
@@ -243,6 +271,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
               })
             }}
             onRun={() => void handleRun(meta.id)}
+            onOpenActiveRun={(runId) => handleOpenActiveRun(meta.id, runId)}
             onHistory={() => setHistoryWorkflowId(meta.id)}
             onExport={() => void handleExport(meta.id, meta.name)}
             onDelete={() => void handleDelete(meta.id)} />

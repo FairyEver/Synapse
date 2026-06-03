@@ -9,20 +9,27 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { errorDiagnostic } from "../lib/error-utils"
-import type { WorkflowRunSnapshot } from "@/types/workflow"
+import type { WorkflowEvent, WorkflowRunListItem } from "@/types/workflow"
 
 const logger = createRendererLogger("workflow.run-history")
-const STATUS_LABEL: Record<string, string> = { completed: "已完成", failed: "失败", cancelled: "已取消" }
+const STATUS_LABEL: Record<string, string> = { running: "执行中", completed: "已完成", failed: "失败", cancelled: "已取消" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  completed: "secondary", failed: "destructive", cancelled: "outline",
+  running: "default", completed: "secondary", failed: "destructive", cancelled: "outline",
 }
 
-function getFirstError(snapshot: WorkflowRunSnapshot): string | null {
+function getFirstError(snapshot: WorkflowRunListItem): string | null {
   if (snapshot.status !== "failed") return null
   const nodeError = Object.values(snapshot.nodeResults)
     .filter((r) => r.error)
     .sort((a, b) => (a.startedAt ?? Number.MAX_SAFE_INTEGER) - (b.startedAt ?? Number.MAX_SAFE_INTEGER))[0]?.error ?? null
   return nodeError ?? snapshot.error ?? null
+}
+
+function isWorkflowTerminalEvent(event: WorkflowEvent, workflowId: string): boolean {
+  return (
+    (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") &&
+    event.workflowId === workflowId
+  )
 }
 
 interface RunHistoryDialogProps {
@@ -32,7 +39,7 @@ interface RunHistoryDialogProps {
 }
 
 export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialogProps) {
-  const [snapshots, setSnapshots] = useState<WorkflowRunSnapshot[]>([])
+  const [snapshots, setSnapshots] = useState<WorkflowRunListItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,6 +77,14 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     if (!open || !workflowId) return
     load()
     return () => { loadGenRef.current++ }
+  }, [open, workflowId, load])
+
+  useEffect(() => {
+    if (!open || !workflowId) return
+    const unsubscribe = window.synapse?.workflow.onEvent?.((event) => {
+      if (isWorkflowTerminalEvent(event, workflowId)) load()
+    })
+    return () => { unsubscribe?.() }
   }, [open, workflowId, load])
 
   const formatTime = (ts: number) => {

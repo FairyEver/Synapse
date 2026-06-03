@@ -320,6 +320,17 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps workflow active runs to the workflow IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.workflow.activeRuns()
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:workflow:active-runs",
+      undefined,
+    )
+  })
+
   it("writes a renderer IPC failure log when bridge invoke rejects", async () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("main failed")
