@@ -174,7 +174,7 @@ describe("UsageTodayHourlyChart", () => {
     expect(mocks.resize).toHaveBeenCalled()
   })
 
-  it("shows every hour segment label from 01 to 24", () => {
+  it("shows every hour boundary label from 00 to 24", () => {
     renderToStaticMarkup(<UsageTodayHourlyChart title="今日时段" rows={Array.from({ length: 24 }, (_, hour) => ({
       bucket: `2026-05-20 ${String(hour).padStart(2, "0")}`,
       tokens: 0,
@@ -186,12 +186,16 @@ describe("UsageTodayHourlyChart", () => {
 
     const option = mocks.chartOptions.at(-1) as {
       readonly xAxis?: {
-        readonly data?: string[]
-        readonly axisLabel?: { readonly interval?: number }
+        readonly min?: number
+        readonly max?: number
+        readonly interval?: number
+        readonly axisLabel?: { readonly formatter?: (value: number) => string }
       }
     }
 
-    expect(option.xAxis?.data).toEqual([
+    expect(option.xAxis).toMatchObject({ min: 0, max: 24, interval: 1 })
+    expect(Array.from({ length: 25 }, (_, hour) => option.xAxis?.axisLabel?.formatter?.(hour))).toEqual([
+      "00",
       "01",
       "02",
       "03",
@@ -217,7 +221,42 @@ describe("UsageTodayHourlyChart", () => {
       "23",
       "24",
     ])
-    expect(option.xAxis?.axisLabel?.interval).toBe(0)
+  })
+
+  it("places hourly buckets between boundary ticks", () => {
+    renderToStaticMarkup(<UsageTodayHourlyChart title="今日时段" rows={Array.from({ length: 24 }, (_, hour) => todayRow(`2026-05-20 ${String(hour).padStart(2, "0")}`, hour === 6 ? 100 : 0))} />)
+
+    const option = mocks.chartOptions.at(-1) as {
+      readonly tooltip?: { readonly formatter?: (params: unknown) => string }
+      readonly xAxis?: {
+        readonly type?: string
+        readonly min?: number
+        readonly max?: number
+        readonly interval?: number
+        readonly axisLabel?: { readonly formatter?: (value: number) => string }
+      }
+      readonly series?: Array<{
+        readonly name?: string
+        readonly type?: string
+        readonly data?: unknown[]
+      }>
+    }
+    const inputSeries = option.series?.find((series) => series.name === "输入")
+    const requestSeries = option.series?.find((series) => series.name === "请求")
+
+    expect(option.xAxis).toMatchObject({ type: "value", min: 0, max: 24, interval: 1 })
+    expect(option.xAxis?.axisLabel?.formatter?.(0)).toBe("00")
+    expect(option.xAxis?.axisLabel?.formatter?.(24)).toBe("24")
+    expect(inputSeries?.data?.[6]).toEqual([6.5, 60])
+    expect(requestSeries?.data?.[6]).toEqual([6.5, 1])
+    expect(option.tooltip?.formatter?.([{
+      axisValue: 6.5,
+      axisValueLabel: "6.5",
+      componentSubType: "bar",
+      marker: "",
+      seriesName: "输入",
+      value: [6.5, 60],
+    }])).toContain("06:00-07:00")
   })
 })
 
