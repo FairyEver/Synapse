@@ -143,6 +143,7 @@
       "node_modules/@anthropic-ai/claude-agent-sdk-*/claude.exe",
       "dist-electron/action-packages/shared/**",
       "dist-electron/electron/services/usage-analysis/**",
+      "dist-electron/src/**",
       "dist-electron/electron/workers/file-conversion-worker.js"
     ],
     "extraMetadata": {

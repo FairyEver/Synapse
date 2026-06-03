@@ -64,8 +64,7 @@ function readPackedFile(buffer, dataOffset, node) {
   return buffer.subarray(start, end)
 }
 
-function verifyApp(appPath) {
-  const resourcesPath = path.join(appPath, "Contents", "Resources")
+function verifyResources(resourcesPath, label) {
   const asarPath = path.join(resourcesPath, "app.asar")
   const unpackedPath = path.join(resourcesPath, "app.asar.unpacked")
 
@@ -123,39 +122,46 @@ function verifyApp(appPath) {
 
   if (failures.length > 0) {
     throw new Error([
-      `Invalid packaged asar: ${appPath}`,
+      `Invalid packaged asar: ${resourcesPath}`,
       ...failures.slice(0, 20).map((failure) => `- ${failure}`),
       failures.length > 20 ? `- ... ${failures.length - 20} more` : "",
     ].filter(Boolean).join("\n"))
   }
 
-  console.log(`Verified ${path.basename(appPath)}: ${packedCount} packed files, ${unpackedCount} unpacked files`)
+  console.log(`Verified ${label}: ${packedCount} packed files, ${unpackedCount} unpacked files`)
 }
 
-function findApps(targetPath) {
+function findResourceTargets(targetPath, targets = new Map()) {
   if (!existsSync(targetPath)) {
-    return []
+    return targets
   }
 
   const stats = statSync(targetPath)
   if (stats.isDirectory() && targetPath.endsWith(".app")) {
-    return [targetPath]
+    const resourcesPath = path.join(targetPath, "Contents", "Resources")
+    targets.set(resourcesPath, path.basename(targetPath))
+    return targets
   }
   if (!stats.isDirectory()) {
-    return []
+    return targets
   }
 
-  const apps = []
+  if (existsSync(path.join(targetPath, "app.asar"))) {
+    targets.set(targetPath, path.basename(targetPath))
+    return targets
+  }
+
   for (const entry of readdirSync(targetPath)) {
+    if (entry === "app.asar.unpacked") {
+      continue
+    }
     const childPath = path.join(targetPath, entry)
     const childStats = statSync(childPath)
-    if (childStats.isDirectory() && childPath.endsWith(".app")) {
-      apps.push(childPath)
-    } else if (childStats.isDirectory()) {
-      apps.push(...findApps(childPath))
+    if (childStats.isDirectory()) {
+      findResourceTargets(childPath, targets)
     }
   }
-  return apps
+  return targets
 }
 
 const input = process.argv[2]
@@ -165,13 +171,13 @@ if (!input) {
 }
 
 const targetPath = path.resolve(process.cwd(), input)
-const appPaths = findApps(targetPath)
+const resourceTargets = findResourceTargets(targetPath)
 
-if (appPaths.length === 0) {
-  console.error(`No .app bundle found under ${targetPath}`)
+if (resourceTargets.size === 0) {
+  console.error(`No packaged app.asar found under ${targetPath}`)
   process.exit(1)
 }
 
-for (const appPath of appPaths) {
-  verifyApp(appPath)
+for (const [resourcesPath, label] of resourceTargets) {
+  verifyResources(resourcesPath, label)
 }
