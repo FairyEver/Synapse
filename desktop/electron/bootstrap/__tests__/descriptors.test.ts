@@ -303,6 +303,16 @@ describe("bootstrap descriptors (T1.5)", () => {
       status: "success",
       summary: "ok",
       durationMs: 5,
+      modelName: "glm-5.1",
+      costCny: 0.014,
+      costBreakdownCny: {
+        input: 0.01,
+        output: 0.004,
+        cacheRead: 0,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
+      costCurrency: "CNY",
     })
     const containers = {
       open: vi.fn(async () => ({
@@ -340,11 +350,13 @@ describe("bootstrap descriptors (T1.5)", () => {
           response: string
           error?: string
           durationMs: number
+          modelName?: string
+          costBreakdownCny?: Record<string, number>
         }>
       }
     }
 
-    await engine.agentDeps.sendToAgent({
+    const result = await engine.agentDeps.sendToAgent({
       providerId: "test-provider",
       modelTier: "sonnet",
       prompt: "test",
@@ -356,6 +368,18 @@ describe("bootstrap descriptors (T1.5)", () => {
       workflowRunId: "run-1",
       workflowNodeId: "node-1",
       workflowNodeName: "Prompt",
+    })
+
+    expect(result).toMatchObject({
+      status: "success",
+      modelName: "glm-5.1",
+      costBreakdownCny: {
+        input: 0.01,
+        output: 0.004,
+        cacheRead: 0,
+        cacheWrite: 0,
+        reasoning: 0,
+      },
     })
 
     expect(sendScheduled).toHaveBeenCalledWith(expect.objectContaining({

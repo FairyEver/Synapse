@@ -55,8 +55,16 @@ export interface AgentSendDeps {
     error?: string
     durationMs: number
     usage?: Record<string, unknown>
+    modelName?: string
     costUsd?: number
     costCny?: number
+    costBreakdownCny?: {
+      readonly input: number
+      readonly output: number
+      readonly cacheRead: number
+      readonly cacheWrite: number
+      readonly reasoning: number
+    }
     costCurrency?: "CNY"
     agentConversation?: SynapseAgentConversationTarget
   }>

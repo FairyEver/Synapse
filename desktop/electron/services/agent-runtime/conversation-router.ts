@@ -21,6 +21,7 @@ import type {
   RuntimeSessionState,
 } from "./session-lifecycle"
 import type {
+  AgentUsageCostBreakdownCny,
   AgentEvent,
   AgentLiveSession,
   AgentMessage,
@@ -535,8 +536,10 @@ export class ConversationRouter {
     let streamedText = ""
     let resultMetadata: ConversationEntryV1["history"][number]["metadata"] | undefined
     let resultUsage: Record<string, unknown> | undefined
+    let resultModelName: string | undefined
     let resultCostUsd: number | undefined
     let resultCostCny: number | undefined
+    let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
     let error: string | undefined
 
@@ -578,8 +581,10 @@ export class ConversationRouter {
         })
         resultMetadata = finalized.metadata
         resultUsage = finalized.usage
+        resultModelName = metadataString(resultMetadata, "model") ?? state.effectiveModel
         resultCostUsd = finalized.costUsd
         resultCostCny = finalized.costCny
+        resultCostBreakdownCny = metadataUsageCostBreakdown(resultMetadata, "costBreakdownCny")
         resultCostCurrency = finalized.costCurrency
         events.push(finalized.event)
         this.emitEvent(message, conversation.id, finalized.event)
@@ -655,8 +660,10 @@ export class ConversationRouter {
       threadId: saved.sdkSessionId,
       error,
       usage: resultUsage,
+      modelName: resultModelName,
       costUsd: resultCostUsd,
       costCny: resultCostCny,
+      costBreakdownCny: resultCostBreakdownCny,
       costCurrency: resultCostCurrency,
     }
   }
@@ -717,8 +724,10 @@ export class ConversationRouter {
     let latestAssistantText = ""
     let resultMetadata: ConversationEntryV1["history"][number]["metadata"] | undefined
     let resultUsage: Record<string, unknown> | undefined
+    let resultModelName: string | undefined
     let resultCostUsd: number | undefined
     let resultCostCny: number | undefined
+    let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
     let error: string | undefined
     try {
@@ -783,8 +792,10 @@ export class ConversationRouter {
           })
           resultMetadata = finalized.metadata
           resultUsage = finalized.usage
+          resultModelName = metadataString(resultMetadata, "model") ?? state.effectiveModel
           resultCostUsd = finalized.costUsd
           resultCostCny = finalized.costCny
+          resultCostBreakdownCny = metadataUsageCostBreakdown(resultMetadata, "costBreakdownCny")
           resultCostCurrency = finalized.costCurrency
           events.push(finalized.event)
           this.emitEvent(message, conversation.id, finalized.event)
@@ -883,8 +894,10 @@ export class ConversationRouter {
         error,
         timedOut: false,
         usage: resultUsage,
+        modelName: resultModelName,
         costUsd: resultCostUsd,
         costCny: resultCostCny,
+        costBreakdownCny: resultCostBreakdownCny,
         costCurrency: resultCostCurrency,
       }
       await this.appendAfterTurnEvents(message, result, saved.id, turnId, sessionHandle.created)
@@ -1604,6 +1617,11 @@ function metadataNumber(metadata: Record<string, unknown> | undefined, key: stri
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
 }
 
+function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = metadata?.[key]
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined
+}
+
 function sumAssistantMetadataNumber(
   history: readonly ConversationEntryV1["history"][number][],
   key: string,
@@ -1634,6 +1652,25 @@ function metadataCostBreakdown(metadata: Record<string, unknown> | undefined, ke
     return [[entryKey, entryValue] as const]
   })
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function metadataUsageCostBreakdown(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): AgentUsageCostBreakdownCny | undefined {
+  const value = metadata?.[key]
+  if (!isRecord(value)) return undefined
+  const input = finiteCostPart(value.input)
+  const output = finiteCostPart(value.output)
+  const cacheRead = finiteCostPart(value.cacheRead)
+  const cacheWrite = finiteCostPart(value.cacheWrite)
+  const reasoning = finiteCostPart(value.reasoning)
+  if ([input, output, cacheRead, cacheWrite, reasoning].some((part) => part === undefined)) return undefined
+  return { input, output, cacheRead, cacheWrite, reasoning }
+}
+
+function finiteCostPart(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined
 }
 
 function addCostBreakdowns(
