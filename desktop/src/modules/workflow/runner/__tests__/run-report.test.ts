@@ -7,7 +7,7 @@ describe("workflow run reports", () => {
     const report = formatWorkflowRunReport({
       definition: workflowDefinition(),
       runId: "run-1",
-      runState: "running",
+      runState: "completed",
       runParams: { topic: "debug-token=secret-value" },
       nodeResults: {
         "node-2": nodeResult("node-2", {
@@ -37,7 +37,7 @@ describe("workflow run reports", () => {
     expect(report).toContain("# 工作流运行报告：Debug workflow")
     expect(report).toContain("- 工作流 ID：workflow-1")
     expect(report).toContain("- 运行 ID：run-1")
-    expect(report).toContain("- 状态：running")
+    expect(report).toContain("- 状态：completed")
     expect(report).toContain("- 快照：是")
     expect(report).not.toContain("总费用")
     expect(report).not.toContain("¥0.072")
@@ -54,6 +54,20 @@ describe("workflow run reports", () => {
     expect(report).toContain("HTTP output token=[redacted]")
     expect(report).not.toContain("secret-value")
     expect(report).toContain("## 设置")
+  })
+
+  it("marks running workflow reports as not snapshotted yet", () => {
+    const report = formatWorkflowRunReport({
+      definition: workflowDefinition(),
+      runId: "run-1",
+      runState: "running",
+      runParams: {},
+      nodeResults: {},
+      runError: null,
+    })
+
+    expect(report).toContain("- 状态：running")
+    expect(report).toContain("- 快照：否")
   })
 
   it("formats a single node report with config, inputs, outputs, errors, and branch label", () => {

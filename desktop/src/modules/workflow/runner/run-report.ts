@@ -41,7 +41,7 @@ export function formatWorkflowRunReport(input: WorkflowRunReportInput): string {
       `- 工作流 ID：${input.definition.id}`,
       `- 运行 ID：${input.runId || "未记录"}`,
       `- 状态：${input.runState}`,
-      `- 快照：${input.runState === "running" ? "是" : "否"}`,
+      `- 快照：${input.runState !== "running" ? "是" : "否"}`,
       `- 开始时间：${formatTimestamp(startedTimes.length > 0 ? Math.min(...startedTimes) : undefined)}`,
       `- 结束时间：${formatTimestamp(endedTimes.length > 0 ? Math.max(...endedTimes) : undefined)}`,
       `- 总耗时：${formatDuration(resolveTotalDuration(input.nodeResults))}`,
