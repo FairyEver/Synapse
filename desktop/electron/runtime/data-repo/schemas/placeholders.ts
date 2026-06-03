@@ -527,6 +527,9 @@ export type ScheduledTaskActionV1 = {
 export type ScheduledTaskStatusV1 = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type ScheduledTaskRunStatusV1 = "running" | ScheduledTaskStatusV1
 export type ScheduledTaskRunTriggerV1 = "schedule" | "manual" | "missed_run"
+export type AutomationRunStatusV1 = "success" | "failed" | "timeout" | "cancelled" | "skipped"
+export type AutomationActiveRunStatusV1 = "running" | AutomationRunStatusV1
+export type AutomationRunTriggerV1 = "trigger" | "manual" | "missed_run"
 
 export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
   id: string
@@ -556,6 +559,43 @@ export interface ScheduledTaskRunEntryV1 extends Record<string, unknown> {
   finishedAt?: string
   status: ScheduledTaskRunStatusV1
   triggeredBy: ScheduledTaskRunTriggerV1
+  result?: Record<string, unknown>
+  error?: string
+}
+
+export interface AutomationItemEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  name: string
+  description?: string
+  enabled: boolean
+  scope: ScheduledTaskScopeV1
+  cwd?: string
+  trigger: ScheduledTaskActionV1
+  executor: ScheduledTaskActionV1
+  policy: {
+    missedRunPolicy: "skip" | "run_once"
+    overlapPolicy: "skip"
+  }
+  createdAt: string
+  updatedAt: string
+  nextRunAt?: string
+  lastRunAt?: string
+  lastStatus?: AutomationRunStatusV1
+  runCount: number
+  configVersion: number
+}
+
+export interface AutomationRunEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  automationId: string
+  startedAt: string
+  finishedAt?: string
+  status: AutomationActiveRunStatusV1
+  triggeredBy: AutomationRunTriggerV1
+  triggerType: string
+  executorType: string
   result?: Record<string, unknown>
   error?: string
 }
@@ -602,6 +642,55 @@ export const taskSchedulerRunsSchema: NamespaceSchema<ScheduledTaskRunEntryV1> =
     && isTaskRunTrigger((v as ScheduledTaskRunEntryV1).triggeredBy)
     && ((v as ScheduledTaskRunEntryV1).result === undefined || isAnyRecord((v as ScheduledTaskRunEntryV1).result))
     && isOptionalString((v as ScheduledTaskRunEntryV1).error),
+}
+
+export const automationItemsSchema: NamespaceSchema<AutomationItemEntryV1> = {
+  name: "automation.items",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AutomationItemEntryV1 =>
+    isAnyRecord<AutomationItemEntryV1>(v)
+    && (v as AutomationItemEntryV1).schemaVersion === 1
+    && typeof (v as AutomationItemEntryV1).id === "string"
+    && typeof (v as AutomationItemEntryV1).name === "string"
+    && isOptionalString((v as AutomationItemEntryV1).description)
+    && typeof (v as AutomationItemEntryV1).enabled === "boolean"
+    && isTaskScope((v as AutomationItemEntryV1).scope)
+    && isOptionalString((v as AutomationItemEntryV1).cwd)
+    && isTaskAction((v as AutomationItemEntryV1).trigger)
+    && isTaskAction((v as AutomationItemEntryV1).executor)
+    && isAutomationPolicy((v as AutomationItemEntryV1).policy)
+    && typeof (v as AutomationItemEntryV1).createdAt === "string"
+    && typeof (v as AutomationItemEntryV1).updatedAt === "string"
+    && isOptionalString((v as AutomationItemEntryV1).nextRunAt)
+    && isOptionalString((v as AutomationItemEntryV1).lastRunAt)
+    && (
+      (v as AutomationItemEntryV1).lastStatus === undefined
+      || isAutomationRunStatus((v as AutomationItemEntryV1).lastStatus)
+    )
+    && typeof (v as AutomationItemEntryV1).runCount === "number"
+    && typeof (v as AutomationItemEntryV1).configVersion === "number",
+}
+
+export const automationRunsSchema: NamespaceSchema<AutomationRunEntryV1> = {
+  name: "automation.runs",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AutomationRunEntryV1 =>
+    isAnyRecord<AutomationRunEntryV1>(v)
+    && (v as AutomationRunEntryV1).schemaVersion === 1
+    && typeof (v as AutomationRunEntryV1).id === "string"
+    && typeof (v as AutomationRunEntryV1).automationId === "string"
+    && typeof (v as AutomationRunEntryV1).startedAt === "string"
+    && isOptionalString((v as AutomationRunEntryV1).finishedAt)
+    && isAutomationActiveRunStatus((v as AutomationRunEntryV1).status)
+    && isAutomationRunTrigger((v as AutomationRunEntryV1).triggeredBy)
+    && typeof (v as AutomationRunEntryV1).triggerType === "string"
+    && typeof (v as AutomationRunEntryV1).executorType === "string"
+    && ((v as AutomationRunEntryV1).result === undefined || isAnyRecord((v as AutomationRunEntryV1).result))
+    && isOptionalString((v as AutomationRunEntryV1).error),
 }
 
 export type RunAsCheckStatusV1 = "pass" | "fail" | "unsupported"
@@ -1191,4 +1280,22 @@ function isTaskRunStatus(value: unknown): value is ScheduledTaskRunStatusV1 {
 
 function isTaskRunTrigger(value: unknown): value is ScheduledTaskRunTriggerV1 {
   return ["schedule", "manual", "missed_run"].includes(String(value))
+}
+
+function isAutomationRunStatus(value: unknown): value is AutomationRunStatusV1 {
+  return ["success", "failed", "timeout", "cancelled", "skipped"].includes(String(value))
+}
+
+function isAutomationActiveRunStatus(value: unknown): value is AutomationActiveRunStatusV1 {
+  return value === "running" || isAutomationRunStatus(value)
+}
+
+function isAutomationRunTrigger(value: unknown): value is AutomationRunTriggerV1 {
+  return ["trigger", "manual", "missed_run"].includes(String(value))
+}
+
+function isAutomationPolicy(value: unknown): value is AutomationItemEntryV1["policy"] {
+  return isAnyRecord<AutomationItemEntryV1["policy"]>(value)
+    && value.overlapPolicy === "skip"
+    && (value.missedRunPolicy === "skip" || value.missedRunPolicy === "run_once")
 }

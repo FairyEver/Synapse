@@ -7,6 +7,8 @@ import {
   agentCommandsSchema,
   agentEventsSchema,
   agentUsageSchema,
+  automationItemsSchema,
+  automationRunsSchema,
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
@@ -38,6 +40,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.compress_state",
         "agent.events",
         "agent.usage",
+        "automation.items",
+        "automation.runs",
         "cheat-code.states",
         "conversations",
         "core.config",
@@ -85,6 +89,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(repoRepositoriesSchema.backend).toBe("json")
     expect(taskSchedulerTasksSchema.backend).toBe("json")
     expect(taskSchedulerRunsSchema.backend).toBe("json")
+    expect(automationItemsSchema.backend).toBe("json")
+    expect(automationRunsSchema.backend).toBe("json")
     expect(runAsConfigSchema.backend).toBe("json")
     expect(runAsPreflightSchema.backend).toBe("jsonl")
     expect(webhookConfigSchema.backend).toBe("encrypted-json")
@@ -288,6 +294,40 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
           metrics: { exitCode: 0 },
         },
         triggeredBy: "manual",
+      }),
+    ).toBe(true)
+    expect(
+      automationItemsSchema.validate({
+        id: "automation:1",
+        schemaVersion: 1,
+        name: "Daily report",
+        enabled: true,
+        scope: { type: "global" },
+        trigger: {
+          type: "builtin.cron",
+          config: { expr: "0 9 * * *", activeDays: [1, 2, 3, 4, 5] },
+        },
+        executor: {
+          type: "builtin.command",
+          config: { command: "echo ok", shell: "posix" },
+        },
+        policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
+        createdAt: "2026-06-03T00:00:00.000Z",
+        updatedAt: "2026-06-03T00:00:00.000Z",
+        runCount: 0,
+        configVersion: 0,
+      }),
+    ).toBe(true)
+    expect(
+      automationRunsSchema.validate({
+        id: "automation-run:1",
+        schemaVersion: 1,
+        automationId: "automation:1",
+        startedAt: "2026-06-03T00:00:00.000Z",
+        status: "running",
+        triggeredBy: "manual",
+        triggerType: "builtin.cron",
+        executorType: "builtin.command",
       }),
     ).toBe(true)
     expect(
