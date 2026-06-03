@@ -347,7 +347,7 @@ describe("SessionManager", () => {
     const states = new Map<string, RuntimeSessionState>()
     const logger = structuredLogger()
     const sessions: FakeLiveSession[] = []
-    const createSession = vi.fn(() => {
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => {
       const session = new FakeLiveSession()
       sessions.push(session)
       return session
@@ -466,7 +466,9 @@ describe("SessionManager", () => {
   it("recreates an alive SDK session when the resolved model changes", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const sessions: FakeLiveSession[] = []
-    const createSession = vi.fn(() => {
+    const createSessionInputs: CreateAgentLiveSessionInput[] = []
+    const createSession = vi.fn((input: CreateAgentLiveSessionInput) => {
+      createSessionInputs.push(input)
       const session = new FakeLiveSession()
       sessions.push(session)
       return session
@@ -503,7 +505,7 @@ describe("SessionManager", () => {
     expect(first.created).toBe(true)
     expect(second.created).toBe(true)
     expect(second.liveSession).not.toBe(first.liveSession)
-    expect(createSession.mock.calls.map(([input]) => input.model)).toEqual([
+    expect(createSessionInputs.map((input) => input.model)).toEqual([
       "provider-sonnet",
       "provider-opus",
     ])
