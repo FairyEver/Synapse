@@ -22,6 +22,14 @@ vi.mock("../../provider", () => ({
   })),
 }))
 
+vi.mock("../../usage-analysis", () => ({
+  getUsageAnalysisDb: vi.fn(() => ({})),
+}))
+
+vi.mock("../../usage-analysis/pricing", () => ({
+  listUsagePriceRules: vi.fn(() => []),
+}))
+
 vi.mock("../claude-sdk-session", () => ({
   DEFAULT_CLAUDE_SDK_MAX_TURNS: 80,
   ClaudeSDKSession: class FakeClaudeSdkSession {
