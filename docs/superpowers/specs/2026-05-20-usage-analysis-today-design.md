@@ -109,7 +109,7 @@ Purpose: show when today's usage happened and how each hour was composed.
 
 Chart behavior:
 
-- X axis: local hours, formatted as `00:00`, `01:00`, ..., current hour.
+- X axis: local hour boundaries from `00` through `24`. Hourly buckets are intervals: the `06:00-07:00` bar is centered between boundary ticks `06` and `07`, not on the `07` tick.
 - Primary visual: stacked bars for token components:
   - `输入`
   - `输出`
@@ -117,7 +117,7 @@ Chart behavior:
   - `缓存写`
   - `推理`
 - Secondary line: request count.
-- Tooltip: hour, total token, token components, requests, estimated cost.
+- Tooltip: hour interval, total token, token components, requests, estimated cost.
 
 This chart replaces the historical trend chart on today. It should not include model legend pagination as the primary visual; the focus is hour-by-hour rhythm and token composition.
 
@@ -209,4 +209,3 @@ Add focused tests for:
 ## Open Decisions
 
 No unresolved product decisions remain for the first implementation.
-

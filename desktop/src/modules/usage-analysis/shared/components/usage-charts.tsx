@@ -240,11 +240,13 @@ export function UsageTodayHourlyChart({ title, rows }: UsageTodayHourlyChartProp
       formatter: (params: unknown) => formatTodayHourlyTooltip(params, data),
     },
     xAxis: {
-      type: "category",
-      data: data.map((row) => formatTodayHourSegment(row.bucket)),
+      type: "value",
+      min: 0,
+      max: 24,
+      interval: 1,
       axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: theme.mutedForeground, interval: 0 },
+      axisTick: { show: true, lineStyle: { color: theme.border } },
+      axisLabel: { color: theme.mutedForeground, formatter: formatTodayHourBoundary },
     },
     yAxis: [
       {
@@ -267,7 +269,7 @@ export function UsageTodayHourlyChart({ title, rows }: UsageTodayHourlyChartProp
         name: component.label,
         type: "bar" as const,
         stack: "tokens",
-        data: data.map((row) => valueForTokenComponent(row, component.key)),
+        data: data.map((row, rowIndex) => [todayHourCenter(row.bucket, rowIndex), valueForTokenComponent(row, component.key)]),
         barMaxWidth: 36,
         itemStyle: {
           color: theme.chart[index % theme.chart.length],
@@ -285,7 +287,7 @@ export function UsageTodayHourlyChart({ title, rows }: UsageTodayHourlyChartProp
         lineStyle: { width: 1, color: theme.chart[5 % theme.chart.length] },
         itemStyle: { color: theme.chart[5 % theme.chart.length], borderColor: theme.chart[5 % theme.chart.length], borderWidth: 0 },
         emphasis: { disabled: true },
-        data: data.map((row) => row.requests),
+        data: data.map((row, rowIndex) => [todayHourCenter(row.bucket, rowIndex), row.requests]),
       },
     ],
   }), [data, theme])
@@ -448,10 +450,26 @@ function formatHourBucket(bucket: string): string {
   return bucket.length >= 13 ? `${bucket.slice(11, 13)}:00` : formatBucket(bucket)
 }
 
-function formatTodayHourSegment(bucket: string): string {
-  if (bucket.length < 13) return formatBucket(bucket)
+function formatTodayHourBoundary(value: number): string {
+  if (!Number.isFinite(value)) return ""
+  return String(Math.trunc(value)).padStart(2, "0")
+}
+
+function todayHourCenter(bucket: string, fallbackIndex: number): number {
+  const hour = todayHour(bucket)
+  return (hour ?? fallbackIndex) + 0.5
+}
+
+function todayHour(bucket: string): number | null {
+  if (bucket.length < 13) return null
   const hour = Number(bucket.slice(11, 13))
-  return Number.isFinite(hour) ? String(hour + 1).padStart(2, "0") : formatHourBucket(bucket)
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null
+}
+
+function formatTodayHourRange(bucket: string): string {
+  const hour = todayHour(bucket)
+  if (hour === null) return formatHourBucket(bucket)
+  return `${formatTodayHourBoundary(hour)}:00-${formatTodayHourBoundary(hour + 1)}:00`
 }
 
 function positionTooltipAwayFromPointer(
@@ -509,8 +527,11 @@ function formatTrendTooltip(params: unknown, rows: readonly TrendPoint[]): strin
 
 function formatTodayHourlyTooltip(params: unknown, rows: readonly TrendPoint[]): string {
   const items = (Array.isArray(params) ? params : [params]).filter(isTooltipObject)
-  const title = String(items[0]?.axisValue ?? items[0]?.axisValueLabel ?? "")
-  const row = rows.find((item) => formatTodayHourSegment(item.bucket) === title)
+  const xValue = readTooltipXValue(items[0])
+  const row = typeof xValue === "number"
+    ? rows.find((item, index) => todayHourCenter(item.bucket, index) === xValue)
+    : undefined
+  const title = row ? formatTodayHourRange(row.bucket) : String(items[0]?.axisValueLabel ?? items[0]?.axisValue ?? "")
   const bars = items
     .filter((item) => item.componentSubType === "bar")
     .map((item) => ({ marker: item.marker ?? "", name: item.seriesName ?? "", value: readTooltipValue(item) }))
@@ -565,7 +586,19 @@ function isDataObject(value: unknown): value is { extra?: number; extraLabel?: s
 function readTooltipValue(value: unknown): number {
   if (!isTooltipObject(value)) return 0
   if (typeof value.value === "number") return value.value
-  if (Array.isArray(value.value) && typeof value.value[0] === "number") return value.value[0]
+  if (Array.isArray(value.value)) {
+    if (typeof value.value[1] === "number") return value.value[1]
+    if (typeof value.value[0] === "number") return value.value[0]
+  }
   const numericValue = Number(value.value)
   return Number.isFinite(numericValue) ? numericValue : 0
+}
+
+function readTooltipXValue(value: unknown): number | null {
+  if (!isTooltipObject(value)) return null
+  if (Array.isArray(value.value) && typeof value.value[0] === "number") return value.value[0]
+  if (typeof value.axisValue === "number") return value.axisValue
+  if (typeof value.value === "number") return value.value
+  const numericValue = Number(value.axisValue ?? value.axisValueLabel)
+  return Number.isFinite(numericValue) ? numericValue : null
 }
