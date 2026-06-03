@@ -20,6 +20,7 @@ import type {
 } from "../src/types/repository"
 import type { SynapseAppUpdateState } from "../src/types/update"
 import type { ScheduledTaskChangedEvent } from "../src/types/task-scheduler"
+import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
@@ -200,6 +201,18 @@ const IPC_CHANNELS = {
     "exportTasksToFile": "synapse:task-scheduler:tasks:export-to-file",
     "importTasksFromFile": "synapse:task-scheduler:tasks:import-from-file",
     "changed": "synapse:events:scheduler",
+  },
+  "automation": {
+    "listItems": "synapse:automation:items:list",
+    "getItem": "synapse:automation:items:get",
+    "createItem": "synapse:automation:items:create",
+    "updateItem": "synapse:automation:items:update",
+    "deleteItem": "synapse:automation:items:delete",
+    "setItemEnabled": "synapse:automation:items:set-enabled",
+    "runItem": "synapse:automation:items:run",
+    "stopRun": "synapse:automation:runs:stop",
+    "listRuns": "synapse:automation:runs:list",
+    "changed": "synapse:events:automation",
   },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",
@@ -767,6 +780,27 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       "scheduler",
       "scheduler.taskChanged",
+    ),
+  },
+  automation: {
+    listItems: invoke(IPC_CHANNELS.automation.listItems),
+    getItem: (id) => invoke(IPC_CHANNELS.automation.getItem)({ automationId: id }),
+    createItem: (input) => invoke(IPC_CHANNELS.automation.createItem)(input),
+    updateItem: (payload) => invoke(IPC_CHANNELS.automation.updateItem)(payload),
+    deleteItem: (id) => invoke(IPC_CHANNELS.automation.deleteItem)({ automationId: id }),
+    setItemEnabled: (payload) =>
+      invoke(IPC_CHANNELS.automation.setItemEnabled)({
+        automationId: payload.id,
+        enabled: payload.enabled,
+      }),
+    runItem: (id) => invoke(IPC_CHANNELS.automation.runItem)({ automationId: id }),
+    stopRun: (runId) => invoke(IPC_CHANNELS.automation.stopRun)({ runId }),
+    listRuns: (automationId, options) =>
+      invoke(IPC_CHANNELS.automation.listRuns)({ automationId, limit: options?.limit }),
+    onChanged: createDomainEventPayloadSubscription<AutomationChangedEvent>(
+      subscribe,
+      "automation",
+      "automation.itemChanged",
     ),
   },
   tools: {

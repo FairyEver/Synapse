@@ -131,6 +131,76 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ taskId: "task-1", reason: "run-finished" })
   })
 
+  it("subscribes automation change listeners to the EventBus domain channel", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+
+    bridge.automation.onChanged(listener)
+
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:automation")
+
+    const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
+    wrapped?.({}, {
+      domain: "automation",
+      type: "automation.itemChanged",
+      payload: { automationId: "automation-1", reason: "run-finished" },
+      timestamp: "2026-06-03T00:00:00.000Z",
+    })
+
+    expect(listener).toHaveBeenCalledWith({ automationId: "automation-1", reason: "run-finished" })
+  })
+
+  it("maps automation bridge methods to automation IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.automation.listItems()
+    await bridge.automation.getItem("automation:1")
+    await bridge.automation.createItem({
+      name: "Daily report",
+      scope: { type: "global" },
+      trigger: {
+        type: "builtin.interval",
+        config: { everyMinutes: 10, activeDays: [0, 1, 2, 3, 4, 5, 6] },
+      },
+      executor: { type: "builtin.command", config: { command: "echo ok" } },
+    })
+    await bridge.automation.updateItem({ id: "automation:1", patch: { enabled: false } })
+    await bridge.automation.setItemEnabled({ id: "automation:1", enabled: true })
+    await bridge.automation.runItem("automation:1")
+    await bridge.automation.stopRun("automation-run:1")
+    await bridge.automation.listRuns("automation:1", { limit: 20 })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:items:list",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:items:get",
+      { automationId: "automation:1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:items:update",
+      { id: "automation:1", patch: { enabled: false } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:items:set-enabled",
+      { automationId: "automation:1", enabled: true },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:items:run",
+      { automationId: "automation:1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:runs:stop",
+      { runId: "automation-run:1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:automation:runs:list",
+      { automationId: "automation:1", limit: 20 },
+    )
+  })
+
   it("subscribes content change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

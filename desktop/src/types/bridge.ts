@@ -170,6 +170,13 @@ import type {
   ScheduledTaskUpdateInput,
 } from "./task-scheduler"
 import type {
+  AutomationChangedEvent,
+  AutomationCreateInput,
+  AutomationItem,
+  AutomationRun,
+  AutomationUpdateInput,
+} from "./automation"
+import type {
   SynapseFileConversionDefaultOutputDirectoryResult,
   SynapseFileConversionInputSelectionResult,
   SynapseFileConversionOutputDirectoryResult,
@@ -853,6 +860,18 @@ export type SynapseBridge = {
     exportTasksToFile: (json: string) => Promise<{ success: boolean; path?: string }>
     importTasksFromFile: () => Promise<{ success: boolean; content?: string }>
     onChanged: (listener: (event: ScheduledTaskChangedEvent) => void) => () => void
+  }
+  automation: {
+    listItems: () => Promise<AutomationItem[]>
+    getItem: (id: string) => Promise<AutomationItem | null>
+    createItem: (input: AutomationCreateInput) => Promise<AutomationItem>
+    updateItem: (payload: { id: string; patch: AutomationUpdateInput }) => Promise<AutomationItem>
+    deleteItem: (id: string) => Promise<{ deleted: boolean }>
+    setItemEnabled: (payload: { id: string; enabled: boolean }) => Promise<AutomationItem>
+    runItem: (id: string) => Promise<AutomationRun | null>
+    stopRun: (runId: string) => Promise<{ stopped: boolean }>
+    listRuns: (automationId: string, options?: { limit?: number }) => Promise<AutomationRun[]>
+    onChanged: (listener: (event: AutomationChangedEvent) => void) => () => void
   }
   tools: {
     listTools: () => Promise<{ tools: readonly SynapseToolDefinition[] }>

@@ -187,6 +187,18 @@ export const IPC_CHANNELS = {
     "importTasksFromFile": "synapse:task-scheduler:tasks:import-from-file",
     "changed": "synapse:events:scheduler",
   },
+  "automation": {
+    "listItems": "synapse:automation:items:list",
+    "getItem": "synapse:automation:items:get",
+    "createItem": "synapse:automation:items:create",
+    "updateItem": "synapse:automation:items:update",
+    "deleteItem": "synapse:automation:items:delete",
+    "setItemEnabled": "synapse:automation:items:set-enabled",
+    "runItem": "synapse:automation:items:run",
+    "stopRun": "synapse:automation:runs:stop",
+    "listRuns": "synapse:automation:runs:list",
+    "changed": "synapse:events:automation",
+  },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",
     "openLogDirectory": "synapse:ops:open-log-directory",

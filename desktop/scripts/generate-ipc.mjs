@@ -57,6 +57,7 @@ const MODULE_SOURCES = [
   { id: "cheat-code", importPath: "../electron/modules/cheat-code/ipc.ts" },
   { id: "agent", importPath: "../electron/modules/agent/ipc.ts" },
   { id: "task-scheduler", importPath: "../electron/modules/task-scheduler/ipc.ts" },
+  { id: "automation", importPath: "../electron/modules/automation/ipc.ts" },
   { id: "ops", importPath: "../electron/modules/ops/ipc.ts" },
   { id: "workflow", importPath: "../electron/modules/workflow/ipc.ts" },
   { id: "tools", importPath: "../electron/modules/tools/ipc.ts" },

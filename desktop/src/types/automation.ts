@@ -92,7 +92,7 @@ export type AutomationRun = {
 }
 
 export type AutomationChangedEvent = {
-  itemId?: string
+  automationId?: string
   runId?: string
   reason:
     | "created"
