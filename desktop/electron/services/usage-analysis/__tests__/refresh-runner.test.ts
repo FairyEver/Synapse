@@ -1,5 +1,5 @@
 import path from "node:path"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { afterEach, describe, expect, it } from "vitest"
 import {
   resetUsageRefreshSingleFlightForTests,
@@ -36,8 +36,41 @@ describe("usage analysis refresh runner", () => {
     }
 
     expect(packageJson.build?.asarUnpack).toContain("dist-electron/electron/services/usage-analysis/**")
+    expect(packageJson.build?.asarUnpack).toContain("dist-electron/src/**")
     expect(packageJson.build?.asarUnpack).toContain("dist-electron/action-packages/shared/**")
     expect(packageJson.build?.asarUnpack).not.toContain("dist-electron/electron/services/usage-analysis/refresh-worker.js")
+  })
+
+  it("keeps compiled usage analysis src dependencies in the unpacked closure", () => {
+    const packageJson = JSON.parse(readFileSync(path.join(__dirname, "../../../../package.json"), "utf8")) as {
+      build?: { asarUnpack?: string[] }
+    }
+    const desktopRoot = path.join(__dirname, "../../../..")
+    const usageAnalysisOutDir = path.join(desktopRoot, "dist-electron/electron/services/usage-analysis")
+
+    if (!existsSync(usageAnalysisOutDir)) {
+      expect(packageJson.build?.asarUnpack).toContain("dist-electron/src/**")
+      return
+    }
+
+    const sourceRequires = readdirSync(usageAnalysisOutDir)
+      .filter((entry) => entry.endsWith(".js"))
+      .flatMap((entry) => {
+        const filePath = path.join(usageAnalysisOutDir, entry)
+        const source = readFileSync(filePath, "utf8")
+        return [...source.matchAll(/require\(["'](\.\.\/\.\.\/\.\.\/src\/[^"']+)["']\)/g)]
+          .map((match) => ({
+            importer: entry,
+            request: match[1],
+            target: path.join(usageAnalysisOutDir, match[1] ?? ""),
+          }))
+      })
+
+    expect(sourceRequires).not.toEqual([])
+    expect(packageJson.build?.asarUnpack).toContain("dist-electron/src/**")
+    for (const dependency of sourceRequires) {
+      expect(existsSync(`${dependency.target}.js`), `${dependency.importer} requires ${dependency.request}`).toBe(true)
+    }
   })
 
   it("coalesces concurrent refreshes for the same database namespace", async () => {
