@@ -269,6 +269,7 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexDetails, async (_event, range?: UsageDetailInput) => codex.getDetails(normalizeDetailsRange(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesGet, async () => cc.getPricingRules())
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesSave, async (_event, rules?: readonly UsageModelPriceRuleInput[]) => cc.savePricingRules(Array.isArray(rules) ? rules : []))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesReset, async () => cc.resetPricingRules())
 
   registered = true
 }

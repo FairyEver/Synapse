@@ -261,6 +261,7 @@ export const IPC_CHANNELS = {
     "codexDetails": "synapse:usage-analysis:codex:details",
     "pricingRulesGet": "synapse:usage-analysis:pricing-rules:get",
     "pricingRulesSave": "synapse:usage-analysis:pricing-rules:save",
+    "pricingRulesReset": "synapse:usage-analysis:pricing-rules:reset",
   },
 } as const
 

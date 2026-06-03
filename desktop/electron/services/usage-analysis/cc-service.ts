@@ -16,7 +16,7 @@ import {
   type CcStoredScanFile,
 } from "./cc-scan-state"
 import { SYNAPSE_COST_CURRENCY, USD_TO_CNY_RATE } from "../../../action-packages/shared/cost-currency"
-import { listUsagePriceRules, roundUsageCost, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
+import { listUsagePriceRules, resetUsagePriceRulesToDefaults, roundUsageCost, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
 import { createUsageRangeFilter } from "./range"
 import { collectJsonlFiles, fingerprintFile } from "./scan"
 import type {
@@ -204,6 +204,10 @@ export class CcUsageAnalysisService {
 
   savePricingRules(rules: readonly UsageModelPriceRuleInput[]): UsageModelPriceRule[] {
     return saveUsagePriceRules(this.db, rules)
+  }
+
+  resetPricingRules(): UsageModelPriceRule[] {
+    return resetUsagePriceRulesToDefaults(this.db)
   }
 
   getTime(range: UsageRangeInput): UsageTimeBucket[] {

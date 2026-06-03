@@ -57,6 +57,10 @@ export interface UsageModelPriceRuleDeleteResult {
   readonly ruleId: string
 }
 
+export interface UsageDefaultPriceMigrationResult {
+  readonly addedRuleIds: string[]
+}
+
 interface PriceRuleRow {
   readonly id: string
   readonly model_pattern: string
@@ -73,6 +77,7 @@ interface PriceRuleRow {
 }
 
 const PRICING_SEED_META_KEY = "default_model_prices_seeded"
+const PRICING_DEFAULTS_MIGRATION_META_KEY = "default_model_prices_merged_v2"
 const USAGE_COST_FRACTION_DIGITS = 6
 
 const DEFAULT_USAGE_PRICE_RULE_INPUTS: readonly UsageModelPriceRuleInput[] = [
@@ -220,6 +225,45 @@ export function seedDefaultUsagePriceRules(database: DatabaseSync): void {
   `).run(PRICING_SEED_META_KEY, "1", new Date().toISOString())
 }
 
+export function migrateDefaultUsagePriceRules(database: DatabaseSync): UsageDefaultPriceMigrationResult {
+  const meta = database.prepare("SELECT value FROM usage_pricing_meta WHERE key = ?").get(PRICING_DEFAULTS_MIGRATION_META_KEY) as { value?: string } | undefined
+  if (meta?.value) return { addedRuleIds: [] }
+
+  const existing = listUsagePriceRules(database)
+  const existingIds = new Set(existing.map((rule) => rule.id))
+  const existingPatterns = new Set(existing.map((rule) => normalizePatternKey(rule.modelPattern)))
+  const missingDefaults = DEFAULT_USAGE_PRICE_RULES.filter((rule) => (
+    !existingIds.has(rule.id) && !existingPatterns.has(normalizePatternKey(rule.modelPattern))
+  ))
+  const addedRuleIds = missingDefaults.map((rule) => rule.id)
+
+  if (missingDefaults.length > 0) {
+    replaceUsagePriceRules(database, normalizeUsagePriceRules([
+      ...existing,
+      ...missingDefaults.map((rule, index) => ({
+        ...rule,
+        sortIndex: existing.length + index,
+      })),
+    ]))
+  }
+
+  database.prepare(`
+    INSERT OR REPLACE INTO usage_pricing_meta (key, value, updated_at)
+    VALUES (?, ?, ?)
+  `).run(PRICING_DEFAULTS_MIGRATION_META_KEY, "1", new Date().toISOString())
+
+  return { addedRuleIds }
+}
+
+export function resetUsagePriceRulesToDefaults(database: DatabaseSync): UsageModelPriceRule[] {
+  replaceUsagePriceRules(database, DEFAULT_USAGE_PRICE_RULES)
+  database.prepare(`
+    INSERT OR REPLACE INTO usage_pricing_meta (key, value, updated_at)
+    VALUES (?, ?, ?)
+  `).run(PRICING_DEFAULTS_MIGRATION_META_KEY, "1", new Date().toISOString())
+  return listUsagePriceRules(database)
+}
+
 export function listUsagePriceRules(database: DatabaseSync): UsageModelPriceRule[] {
   const rows = database.prepare(`
     SELECT
@@ -283,6 +327,10 @@ function replaceUsagePriceRules(database: DatabaseSync, rules: readonly UsageMod
     if (transactionStarted) database.exec("ROLLBACK")
     throw error
   }
+}
+
+function normalizePatternKey(value: string): string {
+  return value.trim().toLowerCase()
 }
 
 export function findUsagePriceRuleForModel(

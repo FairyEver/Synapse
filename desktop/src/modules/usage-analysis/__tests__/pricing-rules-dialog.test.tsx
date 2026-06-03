@@ -1,0 +1,144 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { PricingRulesDialog } from "../shared/components/pricing-rules-dialog"
+import type { UsageModelPriceRule } from "../shared/types"
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const notifications = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+}))
+
+const usageAnalysisBridge = vi.hoisted(() => ({
+  getPricingRules: vi.fn(),
+  savePricingRules: vi.fn(),
+  resetPricingRules: vi.fn(),
+}))
+
+vi.mock("@/app-shell/notifications", () => ({
+  useAppNotifications: () => notifications,
+}))
+
+vi.mock("@/lib/electron-bridge", () => ({
+  requireSynapseBridge: () => ({
+    usageAnalysis: usageAnalysisBridge,
+  }),
+}))
+
+vi.mock("@/lib/ui-tracking", () => ({
+  track: vi.fn(),
+  extractLabel: () => "button",
+  mergeRefs: (...refs: unknown[]) => (value: unknown) => {
+    for (const ref of refs) {
+      if (typeof ref === "function") ref(value)
+      if (typeof ref === "object" && ref !== null && "current" in ref) {
+        ;(ref as { current: unknown }).current = value
+      }
+    }
+  },
+}))
+
+let roots: Root[] = []
+
+beforeEach(() => {
+  notifications.error.mockClear()
+  notifications.success.mockClear()
+  notifications.warning.mockClear()
+  usageAnalysisBridge.getPricingRules.mockReset()
+  usageAnalysisBridge.savePricingRules.mockReset()
+  usageAnalysisBridge.resetPricingRules.mockReset()
+})
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+})
+
+describe("PricingRulesDialog", () => {
+  it("confirms and resets rules to built-in defaults", async () => {
+    usageAnalysisBridge.getPricingRules.mockResolvedValueOnce([priceRule({ id: "local", modelPattern: "local-model", inputPer1M: 99 })])
+    usageAnalysisBridge.resetPricingRules.mockResolvedValueOnce([priceRule({ id: "gpt-5-5", modelPattern: "gpt-5.5", inputPer1M: 36 })])
+    const onSaved = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<PricingRulesDialog open onOpenChange={() => undefined} onSaved={onSaved} />)
+      await flushPromises()
+    })
+
+    await waitForInputValue("local-model")
+    expect(inputValues()).toContain("local-model")
+
+    await act(async () => {
+      clickButton("重置")
+      await flushPromises()
+    })
+    expect(document.body.textContent).toContain("恢复内置默认价格")
+
+    await act(async () => {
+      clickButton("确认重置")
+      await flushPromises()
+    })
+
+    expect(usageAnalysisBridge.resetPricingRules).toHaveBeenCalledTimes(1)
+    expect(inputValues()).toContain("gpt-5.5")
+    expect(inputValues()).not.toContain("local-model")
+    expect(onSaved).toHaveBeenCalledTimes(1)
+    expect(notifications.success).toHaveBeenCalledWith("已重置")
+  })
+})
+
+function clickButton(label: string): void {
+  const button = [...document.querySelectorAll("button")]
+    .find((candidate) => candidate.textContent?.includes(label))
+  if (!button) throw new Error(`Button not found: ${label}`)
+  button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+async function waitForInputValue(value: string): Promise<void> {
+  for (let index = 0; index < 10; index += 1) {
+    if (inputValues().includes(value)) return
+    await act(async () => {
+      await flushPromises()
+    })
+  }
+}
+
+function inputValues(): string[] {
+  return [...document.querySelectorAll("input")].map((input) => input.value)
+}
+
+function priceRule(input: Partial<UsageModelPriceRule>): UsageModelPriceRule {
+  return {
+    id: input.id ?? "rule",
+    modelPattern: input.modelPattern ?? "model",
+    inputPer1M: input.inputPer1M ?? 1,
+    outputPer1M: input.outputPer1M ?? 2,
+    cacheReadPer1M: input.cacheReadPer1M ?? 0,
+    cacheWritePer1M: input.cacheWritePer1M ?? 0,
+    reasoningPer1M: input.reasoningPer1M ?? 2,
+    currency: "CNY",
+    enabled: input.enabled ?? true,
+    source: input.source ?? "user",
+    sortIndex: input.sortIndex ?? 0,
+    updatedAt: input.updatedAt ?? "2026-06-03T00:00:00.000Z",
+  }
+}

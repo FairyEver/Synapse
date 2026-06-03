@@ -9,7 +9,9 @@ import {
   findUsagePriceRuleForModel,
   getUsagePriceRule,
   listUsagePriceRules,
+  migrateDefaultUsagePriceRules,
   normalizeUsagePriceRules,
+  resetUsagePriceRulesToDefaults,
   setUsagePriceRuleEnabled,
   updateUsagePriceRule,
 } from "../pricing"
@@ -145,6 +147,55 @@ describe("usage analysis pricing", () => {
       currency: "CNY",
     })
     expect(db.prepare("SELECT value FROM usage_pricing_meta WHERE key = ?").get("cost_currency_migrated_to_cny_v1")).toBeTruthy()
+    db.close()
+  })
+
+  it("appends missing built-in defaults without overwriting existing user rules", () => {
+    const db = new DatabaseSync(":memory:")
+    initUsageAnalysisSchema(db)
+    const customized = updateUsagePriceRule(db, "gpt-5-5", { inputPer1M: 123 })
+    deleteUsagePriceRule(db, "deepseek-v4-pro")
+    deleteUsagePriceRule(db, "kimi-k2-6")
+    createUsagePriceRule(db, {
+      id: "custom-kimi",
+      modelPattern: "kimi-k2.6",
+      inputPer1M: 99,
+      outputPer1M: 99,
+    })
+    db.prepare("DELETE FROM usage_pricing_meta WHERE key = ?").run("default_model_prices_merged_v2")
+
+    const migrated = migrateDefaultUsagePriceRules(db)
+    const rules = listUsagePriceRules(db)
+
+    expect(migrated.addedRuleIds).toContain("deepseek-v4-pro")
+    expect(rules.find((rule) => rule.id === customized.id)).toMatchObject({
+      inputPer1M: 123,
+      source: "builtin",
+    })
+    expect(rules.filter((rule) => rule.modelPattern === "kimi-k2.6")).toHaveLength(1)
+    expect(rules.find((rule) => rule.modelPattern === "kimi-k2.6")).toMatchObject({
+      id: "custom-kimi",
+      inputPer1M: 99,
+      source: "user",
+    })
+    db.close()
+  })
+
+  it("resets price rules to the current built-in defaults", () => {
+    const db = new DatabaseSync(":memory:")
+    initUsageAnalysisSchema(db)
+    createUsagePriceRule(db, {
+      modelPattern: "local-model",
+      inputPer1M: 14.4,
+      outputPer1M: 57.6,
+    })
+
+    const reset = resetUsagePriceRulesToDefaults(db)
+
+    expect(reset).toHaveLength(DEFAULT_USAGE_PRICE_RULES.length)
+    expect(reset).toEqual(DEFAULT_USAGE_PRICE_RULES)
+    expect(listUsagePriceRules(db).map((rule) => rule.id)).toEqual(DEFAULT_USAGE_PRICE_RULES.map((rule) => rule.id))
+    expect(findUsagePriceRuleForModel("local-model", listUsagePriceRules(db))).toBeNull()
     db.close()
   })
 
