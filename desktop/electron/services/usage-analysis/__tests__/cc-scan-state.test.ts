@@ -24,6 +24,22 @@ describe("CC scan state", () => {
     }).kind).toBe("unchanged")
   })
 
+  it("classifies unchanged files as replace when pricing rules changed", () => {
+    expect(classifyCcScanFile({
+      existing: {
+        size: 10,
+        mtime_ms: 20,
+        line_count: 1,
+        parse_status: "parsed",
+        parsed_offset: 10,
+        parser_version: CC_SCAN_STATE_VERSION,
+        pricing_rules_hash: "old-price",
+      },
+      fingerprint: { filePath: "/tmp/a.jsonl", size: 10, mtimeMs: 20 },
+      pricingRulesHash: "new-price",
+    })).toEqual({ kind: "replace" })
+  })
+
   it("upgrades legacy parsed rows without reparsing unchanged files", () => {
     expect(classifyCcScanFile({
       existing: {

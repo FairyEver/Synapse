@@ -275,6 +275,7 @@ const IPC_CHANNELS = {
     "codexDetails": "synapse:usage-analysis:codex:details",
     "pricingRulesGet": "synapse:usage-analysis:pricing-rules:get",
     "pricingRulesSave": "synapse:usage-analysis:pricing-rules:save",
+    "pricingRulesReset": "synapse:usage-analysis:pricing-rules:reset",
   },
   "account": {
     "getState": "synapse:account:get-state",
@@ -935,6 +936,7 @@ const synapseBridge: SynapseBridge = {
     },
     getPricingRules: invoke(IPC_CHANNELS["usage-analysis"].pricingRulesGet),
     savePricingRules: (rules) => invoke(IPC_CHANNELS["usage-analysis"].pricingRulesSave)(rules),
+    resetPricingRules: invoke(IPC_CHANNELS["usage-analysis"].pricingRulesReset),
   },
   http: {
     testRequest: invoke(HTTP_CHANNELS.testRequest),

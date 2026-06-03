@@ -290,6 +290,43 @@ describe("usage analysis reports", () => {
     expect(after.totals.unpricedTokens).toBe(1_500_000)
   })
 
+  it("reprices unchanged CC files on refresh when pricing rules change", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "session.jsonl")
+    fs.writeFileSync(file, `${JSON.stringify({
+      type: "assistant",
+      sessionId: "session",
+      timestamp: "2026-05-19T01:00:01.000Z",
+      message: {
+        id: "msg-1",
+        role: "assistant",
+        model: "local-model",
+        usage: { input_tokens: 1_000_000, output_tokens: 500_000 },
+      },
+    })}\n`)
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+    await service.refresh()
+    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
+
+    const refresh = await service.refresh()
+
+    expect(refresh).toMatchObject({ parsedFiles: 1, usageEvents: 1 })
+    expect(db.prepare("SELECT total_cost, price_known FROM cc_usage_events").get()).toEqual({
+      total_cost: 43.2,
+      price_known: 1,
+    })
+    expect(service.getOverview({ preset: "all" }).totals).toMatchObject({
+      estimatedCost: 43.2,
+      pricedTokens: 1_500_000,
+      unpricedTokens: 0,
+    })
+  })
+
   it("prices newly appended events with current CNY rules without repricing old events", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

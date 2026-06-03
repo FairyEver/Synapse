@@ -34,7 +34,7 @@ export interface CcFileParserState {
 export function classifyCcScanFile({
   existing,
   fingerprint,
-  pricingRulesHash: _pricingRulesHash,
+  pricingRulesHash,
 }: {
   readonly existing: CcStoredScanFile | undefined
   readonly fingerprint: CcFileFingerprint
@@ -46,12 +46,16 @@ export function classifyCcScanFile({
   const parsedOffset = Number(existing.parsed_offset ?? 0)
   const parserVersion = Number(existing.parser_version ?? 0)
   const sameFingerprint = existing.size === fingerprint.size && existing.mtime_ms === fingerprint.mtimeMs
+  const samePricingRules = existing.pricing_rules_hash === pricingRulesHash
 
-  if (sameFingerprint && parsedOffset === fingerprint.size && parserVersion === CC_SCAN_STATE_VERSION) {
+  if (sameFingerprint && parsedOffset === fingerprint.size && parserVersion === CC_SCAN_STATE_VERSION && samePricingRules) {
     return { kind: "unchanged" }
   }
   if (sameFingerprint && (parsedOffset <= 0 || parserVersion !== CC_SCAN_STATE_VERSION)) {
     return { kind: "legacy-upgrade", parsedOffset: fingerprint.size }
+  }
+  if (sameFingerprint && parsedOffset === fingerprint.size && parserVersion === CC_SCAN_STATE_VERSION && !samePricingRules) {
+    return { kind: "replace" }
   }
   if (fingerprint.size > existing.size) {
     const startOffset = parsedOffset > 0 && parsedOffset <= fingerprint.size ? parsedOffset : existing.size

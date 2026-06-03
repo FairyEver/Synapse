@@ -1087,6 +1087,7 @@ export type SynapseBridge = {
     codex: UsageAnalysisBridgeDomain
     getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
     savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>
+    resetPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
   }
   http: {
     testRequest: (config: Record<string, unknown>) => Promise<{

@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, RotateCcw, Trash2 } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -58,6 +69,7 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
   const [rows, setRows] = useState<EditablePriceRule[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -111,6 +123,20 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
       showError("保存失败")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const reset = async () => {
+    setResetting(true)
+    try {
+      const resetRows = await requireSynapseBridge().usageAnalysis.resetPricingRules()
+      setRows(resetRows.map(toEditableRule))
+      onSaved?.()
+      showSuccess("已重置")
+    } catch {
+      showError("重置失败")
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -173,14 +199,38 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
             </Table>
           </ScrollArea>
         </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={addRow} disabled={loading || saving}>
-            <Plus data-icon="inline-start" />
-            添加
-          </Button>
-          <Button type="button" onClick={save} disabled={loading || saving}>
-            {saving ? "保存中" : "保存"}
-          </Button>
+        <DialogFooter className="sm:justify-between">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button type="button" variant="outline" disabled={loading || saving || resetting}>
+                <RotateCcw data-icon="inline-start" />
+                重置
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>恢复内置默认价格</AlertDialogTitle>
+                <AlertDialogDescription>
+                  当前规则会被内置规则替换。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction onClick={() => void reset()} disabled={resetting}>
+                  {resetting ? "重置中" : "确认重置"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" onClick={addRow} disabled={loading || saving || resetting}>
+              <Plus data-icon="inline-start" />
+              添加
+            </Button>
+            <Button type="button" onClick={save} disabled={loading || saving || resetting}>
+              {saving ? "保存中" : "保存"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
