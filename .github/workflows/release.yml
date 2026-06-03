@@ -257,13 +257,15 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Send notification
+        continue-on-error: true
+        timeout-minutes: 1
         env:
           BARK_PUSH_URL: https://api.day.app/B3H8T6rF2p5Mj6z6oha82K
         run: |
           PRODUCT_NAME="$(node -p "require('./desktop/package.json').productName || require('./desktop/package.json').name")"
           TIMESTAMP="$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S %Z')"
 
-          curl --fail --silent --show-error \
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
             -X POST "$BARK_PUSH_URL" \
             --data-urlencode "title=$PRODUCT_NAME" \
             --data-urlencode "subtitle=$TIMESTAMP" \
