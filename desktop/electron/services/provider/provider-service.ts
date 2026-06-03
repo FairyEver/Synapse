@@ -25,6 +25,9 @@ import type {
   ImportCcSwitchClaudeProvidersResult,
   ProviderApiKeyField,
   ProviderCategory,
+  ProviderPackageExportResult,
+  ProviderPackageImportPreview,
+  ProviderPackageImportResult,
   UpdateProviderInput,
 } from "./types"
 import {
@@ -42,6 +45,12 @@ import {
   resolveCcSwitchCandidateSources,
   type ReadCcSwitchSourceResult,
 } from "./cc-switch-importer"
+import {
+  buildProviderPackage,
+  createProviderInputFromPackage,
+  parseProviderPackage,
+  providerPackagePreview,
+} from "./provider-package"
 
 export interface ProviderServiceDeps {
   readonly providers: DataNamespace<ProviderEntryV1>
@@ -51,6 +60,7 @@ export interface ProviderServiceDeps {
   readonly now?: () => Date
   readonly localClaudeSettingsPath?: string
   readonly readTextFile?: (filePath: string) => Promise<string>
+  readonly writeTextFile?: (filePath: string, contents: string) => Promise<void>
   readonly ccSwitchImportSources?: () => readonly CcSwitchImportSource[]
   readonly readCcSwitchClaudeProviders?: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
   readonly scanReferences?: (providerId: string) => Promise<ProviderReferenceScanResult>
@@ -78,6 +88,7 @@ export class ProviderService {
   private readonly now?: () => Date
   private readonly localClaudeSettingsPath: string
   private readonly readTextFile: (filePath: string) => Promise<string>
+  private readonly writeTextFile: (filePath: string, contents: string) => Promise<void>
   private readonly ccSwitchImportSources: () => readonly CcSwitchImportSource[]
   private readonly readCcSwitchClaudeProviders: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
   private readonly scanReferences?: (providerId: string) => Promise<ProviderReferenceScanResult>
@@ -90,6 +101,7 @@ export class ProviderService {
     this.now = deps.now
     this.localClaudeSettingsPath = deps.localClaudeSettingsPath ?? path.join(os.homedir(), ".claude", "settings.json")
     this.readTextFile = deps.readTextFile ?? ((filePath) => fs.readFile(filePath, "utf8"))
+    this.writeTextFile = deps.writeTextFile ?? ((filePath, contents) => fs.writeFile(filePath, contents, "utf8"))
     this.ccSwitchImportSources = deps.ccSwitchImportSources ?? resolveCcSwitchCandidateSources
     this.readCcSwitchClaudeProviders = deps.readCcSwitchClaudeProviders ?? readCcSwitchClaudeProvidersFromSourceAsync
     this.scanReferences = deps.scanReferences
@@ -196,6 +208,64 @@ export class ProviderService {
     }
 
     return { imported, skipped }
+  }
+
+  async exportProviderPackage(
+    providerId: string,
+    targetPath: string,
+    context: BuildProviderEnvContext = {},
+  ): Promise<ProviderPackageExportResult> {
+    if (providerId === LOCAL_PROVIDER_ID) {
+      throw new Error("不支持导出内置供应商")
+    }
+    await this.assertCanWriteProviderPackage(targetPath, providerId, context)
+    const provider = await this.getProvider(providerId)
+    const apiKey = provider.secretRef
+      ? await this.readSecretValue(provider, context)
+      : undefined
+    if (!apiKey) {
+      throw new Error("供应商密钥读取失败")
+    }
+    const secretEnv = await this.readSecretEnvValues(provider, context)
+    const pkg = buildProviderPackage({
+      exportedAt: this.isoNow(),
+      provider,
+      apiKey,
+      secretEnv,
+    })
+
+    try {
+      await this.writeTextFile(targetPath, `${JSON.stringify(pkg, null, 2)}\n`)
+      this.recordProviderPackageFileAudit("fs.write.outside-userdata", targetPath, providerId, "allowed", context)
+      return { filePath: targetPath }
+    } catch (error) {
+      this.recordProviderPackageFileAudit("fs.write.outside-userdata", targetPath, providerId, "failed", context, error)
+      throw error
+    }
+  }
+
+  async previewProviderPackageImport(
+    sourcePath: string,
+    context: BuildProviderEnvContext = {},
+  ): Promise<ProviderPackageImportPreview> {
+    await this.assertCanReadProviderPackage(sourcePath, context)
+    const pkg = await this.readProviderPackage(sourcePath, context)
+    const existingIds = new Set((await this.listProviders()).map((provider) => provider.id))
+    return providerPackagePreview(pkg, sourcePath, existingIds)
+  }
+
+  async importProviderPackage(
+    sourcePath: string,
+    context: BuildProviderEnvContext = {},
+  ): Promise<ProviderPackageImportResult> {
+    await this.assertCanReadProviderPackage(sourcePath, context)
+    const pkg = await this.readProviderPackage(sourcePath, context)
+    const providers = await this.listProviders()
+    const existingIds = new Set(providers.map((provider) => provider.id))
+    const preview = providerPackagePreview(pkg, sourcePath, existingIds)
+    const sortIndex = this.nextUserProviderSortIndex(providers)
+    const provider = await this.createProvider(createProviderInputFromPackage(pkg, preview.targetProviderId, sortIndex))
+    return { provider }
   }
 
   async createProvider(input: CreateProviderInput): Promise<CCProvider> {
@@ -726,6 +796,111 @@ export class ProviderService {
         sourceKind: source.kind,
         errorName: error instanceof Error ? error.name : typeof error,
         errorLength: String(error).length,
+      }),
+    })
+  }
+
+  private async readProviderPackage(sourcePath: string, context: BuildProviderEnvContext) {
+    try {
+      const text = await this.readTextFile(sourcePath)
+      return parseProviderPackage(JSON.parse(text))
+    } catch (error) {
+      this.recordProviderPackageFileAudit("fs.read.outside-userdata", sourcePath, undefined, "failed", context, error)
+      if (error instanceof SyntaxError) {
+        throw new Error("无法识别该文件")
+      }
+      throw error
+    }
+  }
+
+  private async assertCanReadProviderPackage(sourcePath: string, context: BuildProviderEnvContext): Promise<void> {
+    const actor = context.actor ?? { kind: "user" }
+    const metadata = removeUndefined({
+      projectId: context.projectId,
+      packageKind: "synapse.provider.package",
+    })
+
+    if (this.permissionGuard) {
+      const permission = await this.permissionGuard.check({
+        action: "fs.read.outside-userdata",
+        actor,
+        resource: sourcePath,
+        context: metadata,
+      })
+      if (!permission.allowed) {
+        this.auditSink?.record({
+          action: "fs.read.outside-userdata",
+          actor,
+          resource: sourcePath,
+          outcome: "denied",
+          metadata: {
+            ...metadata,
+            reason: permission.reason,
+            policyId: permission.policyId,
+          },
+        })
+        throw new Error(permission.reason)
+      }
+    }
+
+    this.recordProviderPackageFileAudit("fs.read.outside-userdata", sourcePath, undefined, "allowed", context)
+  }
+
+  private async assertCanWriteProviderPackage(
+    targetPath: string,
+    providerId: string,
+    context: BuildProviderEnvContext,
+  ): Promise<void> {
+    const actor = context.actor ?? { kind: "user" }
+    const metadata = removeUndefined({
+      projectId: context.projectId,
+      providerId,
+      packageKind: "synapse.provider.package",
+    })
+
+    if (this.permissionGuard) {
+      const permission = await this.permissionGuard.check({
+        action: "fs.write.outside-userdata",
+        actor,
+        resource: targetPath,
+        context: metadata,
+      })
+      if (!permission.allowed) {
+        this.auditSink?.record({
+          action: "fs.write.outside-userdata",
+          actor,
+          resource: targetPath,
+          outcome: "denied",
+          metadata: {
+            ...metadata,
+            reason: permission.reason,
+            policyId: permission.policyId,
+          },
+        })
+        throw new Error(permission.reason)
+      }
+    }
+  }
+
+  private recordProviderPackageFileAudit(
+    action: "fs.read.outside-userdata" | "fs.write.outside-userdata",
+    resource: string,
+    providerId: string | undefined,
+    outcome: "allowed" | "failed",
+    context: BuildProviderEnvContext,
+    error?: unknown,
+  ): void {
+    this.auditSink?.record({
+      action,
+      actor: context.actor ?? { kind: "user" },
+      resource,
+      outcome,
+      metadata: removeUndefined({
+        projectId: context.projectId,
+        providerId,
+        packageKind: "synapse.provider.package",
+        version: 1,
+        ...(error ? errorAuditMetadata(error) : {}),
       }),
     })
   }

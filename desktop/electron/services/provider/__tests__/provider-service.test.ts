@@ -850,6 +850,137 @@ describe("ProviderService", () => {
       }),
     ])
   })
+
+  it("exports a user provider package with api key and secret env", async () => {
+    const writes: Record<string, string> = {}
+    const { service } = makeProviderService({
+      writeTextFile: async (filePath, contents) => {
+        writes[filePath] = contents
+      },
+    })
+    await service.createProvider({
+      id: "bedrock",
+      name: "AWS Bedrock",
+      category: "cloud_provider",
+      baseUrl: "https://bedrock-runtime.us-west-2.amazonaws.com",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-bedrock",
+      env: { AWS_REGION: "us-west-2" },
+      secretEnv: { AWS_SECRET_ACCESS_KEY: "secret-access-key" },
+    })
+
+    const result = await service.exportProviderPackage("bedrock", "/Users/test/bedrock.synapse-provider.json")
+
+    expect(result).toEqual({ filePath: "/Users/test/bedrock.synapse-provider.json" })
+    const pkg = JSON.parse(writes["/Users/test/bedrock.synapse-provider.json"])
+    expect(pkg).toMatchObject({
+      kind: "synapse.provider.package",
+      version: 1,
+      provider: {
+        id: "bedrock",
+        name: "AWS Bedrock",
+        env: { AWS_REGION: "us-west-2" },
+      },
+      secrets: {
+        apiKey: "sk-bedrock",
+        env: { AWS_SECRET_ACCESS_KEY: "secret-access-key" },
+      },
+    })
+  })
+
+  it("rejects exporting the built-in provider", async () => {
+    const { service } = makeProviderService()
+
+    await expect(service.exportProviderPackage(
+      LOCAL_CLAUDE_CODE_PROVIDER_ID,
+      "/Users/test/local.synapse-provider.json",
+    )).rejects.toThrow("不支持导出内置供应商")
+  })
+
+  it("previews provider package import without writing data", async () => {
+    const packageText = JSON.stringify({
+      kind: "synapse.provider.package",
+      version: 1,
+      exportedAt: "2026-06-03T00:00:00.000Z",
+      provider: {
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+      },
+      secrets: { apiKey: "sk-deepseek", env: {} },
+    })
+    const { service, providers, secrets } = makeProviderService({
+      readTextFile: async () => packageText,
+    })
+    await service.createProvider({
+      id: "deepseek",
+      name: "Existing DeepSeek",
+      category: "cn_official",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      env: {},
+    })
+
+    await expect(service.previewProviderPackageImport("/Users/test/deepseek.synapse-provider.json")).resolves.toEqual({
+      sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      packageVersion: 1,
+      sourceProviderId: "deepseek",
+      targetProviderId: "deepseek-2",
+      name: "DeepSeek",
+      category: "cn_official",
+      baseUrl: "https://api.deepseek.com/anthropic",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      model: "deepseek-chat",
+    })
+    await expect(providers.get("deepseek-2")).resolves.toBeNull()
+    await expect(secrets.get("provider:deepseek-2:api-key")).resolves.toBeNull()
+  })
+
+  it("imports provider package as inactive provider with a derived id", async () => {
+    const packageText = JSON.stringify({
+      kind: "synapse.provider.package",
+      version: 1,
+      exportedAt: "2026-06-03T00:00:00.000Z",
+      provider: {
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+        env: { EXTRA_FLAG: "1" },
+      },
+      secrets: {
+        apiKey: "sk-deepseek",
+        env: { AWS_SECRET_ACCESS_KEY: "secret-access-key" },
+      },
+    })
+    const { service, secrets } = makeProviderService({
+      readTextFile: async () => packageText,
+    })
+    await service.createProvider({
+      id: "deepseek",
+      name: "Existing DeepSeek",
+      category: "cn_official",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      active: true,
+      env: {},
+    })
+
+    const result = await service.importProviderPackage("/Users/test/deepseek.synapse-provider.json")
+
+    expect(result.provider).toEqual(expect.objectContaining({
+      id: "deepseek-2",
+      name: "DeepSeek",
+      active: false,
+      env: { EXTRA_FLAG: "1" },
+    }))
+    await expect(secrets.get("provider:deepseek-2:api-key")).resolves.toMatchObject({ value: "sk-deepseek" })
+    await expect(secrets.get("provider:deepseek-2:env:AWS_SECRET_ACCESS_KEY")).resolves.toMatchObject({ value: "secret-access-key" })
+    await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "deepseek" })
+  })
 })
 
 function makeProviderService(deps: {
@@ -857,6 +988,7 @@ function makeProviderService(deps: {
   readonly auditSink?: AuditSink
   readonly localClaudeSettingsPath?: string
   readonly readTextFile?: (filePath: string) => Promise<string>
+  readonly writeTextFile?: (filePath: string, contents: string) => Promise<void>
   readonly ccSwitchImportSources?: () => readonly CcSwitchImportSource[]
   readonly readCcSwitchClaudeProviders?: (source: CcSwitchImportSource) => Promise<{
     readonly kind: CcSwitchImportSource["kind"]
@@ -872,6 +1004,7 @@ function makeProviderService(deps: {
     auditSink: deps.auditSink,
     localClaudeSettingsPath: deps.localClaudeSettingsPath,
     readTextFile: deps.readTextFile,
+    writeTextFile: deps.writeTextFile,
     ccSwitchImportSources: deps.ccSwitchImportSources,
     readCcSwitchClaudeProviders: deps.readCcSwitchClaudeProviders,
     now: fixedNow,
