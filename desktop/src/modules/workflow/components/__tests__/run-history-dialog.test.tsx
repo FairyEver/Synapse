@@ -5,7 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import type { WorkflowRunSnapshot } from "@/types/workflow"
+import type { WorkflowEvent, WorkflowRunListItem } from "@/types/workflow"
 import { RunHistoryDialog } from "../run-history-dialog"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -52,7 +52,7 @@ describe("RunHistoryDialog", () => {
     window.synapse = {
       workflow: {
         runHistory: vi.fn().mockResolvedValue([
-          createSnapshot({
+          createRunItem({
             nodeResults: {
               late: {
                 nodeId: "late",
@@ -95,7 +95,7 @@ describe("RunHistoryDialog", () => {
     window.synapse = {
       workflow: {
         runHistory: vi.fn().mockResolvedValue([
-          createSnapshot({
+          createRunItem({
             error: "工作流准备失败",
             nodeResults: {},
           }),
@@ -122,7 +122,7 @@ describe("RunHistoryDialog", () => {
     window.synapse = {
       workflow: {
         runHistory: vi.fn().mockResolvedValue([
-          createSnapshot({
+          createRunItem({
             endedAt: Date.parse("2026-05-15T00:13:31.900Z"),
             nodeResults: Object.fromEntries(
               Array.from({ length: 15 }, (_, index) => [
@@ -163,7 +163,7 @@ describe("RunHistoryDialog", () => {
     window.synapse = {
       workflow: {
         runHistory: vi.fn().mockResolvedValue([
-          createSnapshot({
+          createRunItem({
             nodeResults: {
               nodeSecret: {
                 nodeId: "nodeSecret",
@@ -244,13 +244,105 @@ describe("RunHistoryDialog", () => {
       errorMessage: "history failed with token=[redacted] and prompt body at [path]",
     })
   })
+
+  it("shows running records and opens the active runner", async () => {
+    const openRunner = vi.fn()
+    window.synapse = {
+      workflow: {
+        runHistory: vi.fn().mockResolvedValue([
+          createRunItem({
+            runId: "active-run",
+            status: "running",
+            endedAt: undefined,
+            nodeResults: {
+              nodeA: {
+                nodeId: "nodeA",
+                status: "running",
+                input: { variables: {} },
+              },
+            },
+          }),
+        ]),
+        openRunner,
+      },
+    } as unknown as Window["synapse"]
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("执行中")
+    expect(document.body.textContent).toContain("1 个节点")
+    expect(document.body.textContent).not.toContain("NaN")
+
+    await act(async () => {
+      document.body.querySelector('[role="button"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(openRunner).toHaveBeenCalledWith("workflow-1", "active-run")
+  })
+
+  it("reloads open history when the active run reaches a terminal event", async () => {
+    let eventListener: ((event: WorkflowEvent) => void) | undefined
+    const runHistory = vi.fn()
+      .mockResolvedValueOnce([
+        createRunItem({ runId: "active-run", status: "running", endedAt: undefined }),
+      ])
+      .mockResolvedValueOnce([
+        createRunItem({ runId: "active-run", status: "completed", endedAt: Date.parse("2026-05-15T00:00:02.000Z") }),
+      ])
+    window.synapse = {
+      workflow: {
+        runHistory,
+        openRunner: vi.fn(),
+        onEvent: vi.fn((listener) => {
+          eventListener = listener
+          return vi.fn()
+        }),
+      },
+    } as unknown as Window["synapse"]
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("执行中")
+
+    await act(async () => {
+      eventListener?.({
+        type: "workflow:completed",
+        runId: "active-run",
+        workflowId: "workflow-1",
+        result: { status: "completed", nodeResults: {}, durationMs: 2000 },
+      })
+      await Promise.resolve()
+    })
+
+    expect(runHistory).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain("已完成")
+  })
 })
 
-function createSnapshot(patch: Partial<WorkflowRunSnapshot> = {}): WorkflowRunSnapshot {
+function createRunItem(patch: Partial<WorkflowRunListItem> = {}): WorkflowRunListItem {
   return {
     runId: "run-1",
     workflowId: "workflow-1",
-    version: "1",
     startedAt: Date.parse("2026-05-15T00:00:00.000Z"),
     endedAt: Date.parse("2026-05-15T00:00:01.000Z"),
     status: "failed",
