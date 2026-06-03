@@ -297,16 +297,20 @@ describe("ClaudeSDKSession", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
       env: {
+        ANTHROPIC_BASE_URL: "https://api.example.test/anthropic",
         ANTHROPIC_AUTH_TOKEN: "sk-auth",
         ANTHROPIC_API_KEY: "sk-api",
+        ANTHROPIC_MODEL: "provider-model",
         SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
       },
     })
 
     const sdkEnv = getOptions().env as NodeJS.ProcessEnv
     expect(sdkEnv).toEqual(expect.objectContaining({
+      ANTHROPIC_BASE_URL: "https://api.example.test/anthropic",
       ANTHROPIC_AUTH_TOKEN: "sk-auth",
       ANTHROPIC_API_KEY: "sk-api",
+      ANTHROPIC_MODEL: "provider-model",
       SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
       BASH_DEFAULT_TIMEOUT_MS: "3600000",
       BASH_MAX_TIMEOUT_MS: "3600000",
