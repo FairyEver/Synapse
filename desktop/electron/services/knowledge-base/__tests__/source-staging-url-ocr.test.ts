@@ -93,7 +93,11 @@ describe("knowledge base source staging for URL and OCR sources", () => {
       now: fixedNow,
       converter: {
         convert: async (input): Promise<FileConversionResult> => {
-          expect(input).toEqual({ filePath: sourcePath, ocr: { enabled: true } })
+          expect(input).toEqual({
+            filePath: sourcePath,
+            ocr: { enabled: true },
+            imageHandling: { mode: "omit" },
+          })
           return {
             sourcePath,
             format: "pdf",
