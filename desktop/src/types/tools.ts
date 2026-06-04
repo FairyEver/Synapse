@@ -83,32 +83,3 @@ export interface SynapseToolDirectorySelectionPayload {
 export interface SynapseToolDirectorySelectionResult {
   readonly directoryPath: string | null
 }
-
-export type SynapseFileConversionFailureReason =
-  | "unsupported-format"
-  | "read-failed"
-  | "conversion-failed"
-  | "write-failed"
-  | "invalid-output-path"
-
-export type SynapseFileConversionPayload = {
-  readonly filePaths: readonly string[]
-  readonly outputDirectory: string
-}
-
-export type SynapseFileConversionSuccess = {
-  readonly sourcePath: string
-  readonly outputPath: string
-  readonly warningCount: number
-}
-
-export type SynapseFileConversionFailure = {
-  readonly sourcePath: string
-  readonly reason: SynapseFileConversionFailureReason
-  readonly message: string
-}
-
-export type SynapseFileConversionResult = {
-  readonly successes: readonly SynapseFileConversionSuccess[]
-  readonly failures: readonly SynapseFileConversionFailure[]
-}

@@ -41,7 +41,6 @@ import {
   coreSideChannelDescriptor,
   coreTaskSchedulerDescriptor,
   coreBuiltinToolRunnerDescriptor,
-  coreToolsFileConversionRunnerDescriptor,
   coreToolsWindowDescriptor,
   coreUsageAnalysisDescriptor,
   coreHttpTestDescriptor,
@@ -104,7 +103,6 @@ export function buildServiceRegistry(
   registry.register(coreKnowledgeBaseDescriptor)
   registry.register(coreToolsWindowDescriptor)
   registry.register(coreBuiltinToolRunnerDescriptor)
-  registry.register(coreToolsFileConversionRunnerDescriptor)
   registry.register(coreWorkflowServiceDescriptor)
   registry.register(coreWorkflowPackageDescriptor)
   registry.register(coreWorkflowSnapshotsDescriptor)

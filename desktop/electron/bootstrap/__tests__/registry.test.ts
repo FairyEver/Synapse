@@ -111,7 +111,6 @@ describe("buildServiceRegistry (T1.8)", () => {
         "repo.sync-coordinator",
         "repo.watch",
         "tools.builtin-tool-runner",
-        "tools.file-conversion-runner",
         "tools.window-service",
         "ui.tray",
       ].sort(),
@@ -229,7 +228,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "repo.pending-pushes",
     ])
     expect(byId.get("tools.builtin-tool-runner")?.dependsOn).toEqual([])
-    expect(byId.get("tools.file-conversion-runner")?.dependsOn).toEqual([])
     expect(byId.get("tools.window-service")?.dependsOn).toEqual([])
     expect(byId.get("ui.tray")?.dependsOn).toEqual(["core.app-icon"])
 

@@ -43,7 +43,6 @@ import { updateService } from "../services/update-service"
 import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
 import { runBuiltinTool } from "../services/builtin-tools/runner"
-import { convertFilesInWorker } from "../services/tools/file-conversion-runner"
 import { toolWindowService, type ToolWindowService } from "../services/tools/tool-window-service"
 import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
@@ -241,14 +240,6 @@ export const coreToolsWindowDescriptor: ServiceDescriptor<ToolWindowService> = {
   criticality: "degraded",
   create() {
     return toolWindowService
-  },
-}
-
-export const coreToolsFileConversionRunnerDescriptor: ServiceDescriptor<typeof convertFilesInWorker> = {
-  id: "tools.file-conversion-runner",
-  criticality: "degraded",
-  create() {
-    return convertFilesInWorker
   },
 }
 

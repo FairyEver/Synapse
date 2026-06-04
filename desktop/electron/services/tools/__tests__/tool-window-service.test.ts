@@ -38,7 +38,7 @@ describe("createToolWindowService", () => {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     })
 
-    await service.open("file-conversion")
+    await service.open("docx-to-markdown")
 
     expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
       width: 760,
@@ -46,7 +46,7 @@ describe("createToolWindowService", () => {
       minWidth: 560,
       minHeight: 420,
       resizable: true,
-      title: "文件转换",
+      title: "DOCX 转 Markdown",
       webPreferences: expect.objectContaining({
         preload: "/preload.js",
         contextIsolation: true,
@@ -56,7 +56,7 @@ describe("createToolWindowService", () => {
     }))
     expect(health.attach).toHaveBeenCalledWith(window.webContents)
     expect(loadWindow).toHaveBeenCalledWith(window, expect.objectContaining({
-      id: "file-conversion",
+      id: "docx-to-markdown",
     }))
   })
 
@@ -73,8 +73,8 @@ describe("createToolWindowService", () => {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     })
 
-    await service.open("file-conversion")
-    await service.open("file-conversion")
+    await service.open("docx-to-markdown")
+    await service.open("docx-to-markdown")
 
     expect(createWindow).toHaveBeenCalledTimes(1)
     expect(loadWindow).toHaveBeenCalledTimes(1)
