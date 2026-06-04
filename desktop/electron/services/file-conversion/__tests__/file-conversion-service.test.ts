@@ -89,7 +89,8 @@ describe("modern file extractors", () => {
     const service = new FileConversionService({
       extractors: [new DocxExtractor({
         convertToHtml: async (_input, options?: MockMammothOptions) => {
-          const nodes = await options?.convertImage?.(mockDocxImage("image/png", "cover")) ?? []
+          const convertImage = readMockConvertImage(options)
+          const nodes = await convertImage?.(mockDocxImage("image/png", "cover")) ?? []
           return {
             value: `<h1>Quarterly Report</h1><p>Revenue grew 12%.</p>${renderMockImageNodes(nodes)}`,
             messages: [],
@@ -118,8 +119,9 @@ describe("modern file extractors", () => {
     const service = new FileConversionService({
       extractors: [new DocxExtractor({
         convertToHtml: async (_input, options?: MockMammothOptions) => {
-          const first = await options?.convertImage?.(mockDocxImage("image/jpeg", "first")) ?? []
-          const second = await options?.convertImage?.(mockDocxImage("image/png", "second")) ?? []
+          const convertImage = readMockConvertImage(options)
+          const first = await convertImage?.(mockDocxImage("image/jpeg", "first")) ?? []
+          const second = await convertImage?.(mockDocxImage("image/png", "second")) ?? []
           return {
             value: `<h1>Quarterly Report</h1>${renderMockImageNodes([...first, ...second])}<p>Body</p>`,
             messages: [],
@@ -336,8 +338,10 @@ describe("FileConversionService", () => {
 })
 
 type MockMammothOptions = {
-  readonly convertImage?: (image: MockDocxImage) => Promise<readonly MockImageNode[]>
+  readonly convertImage?: unknown
 }
+
+type MockConvertImage = (image: MockDocxImage) => Promise<readonly MockImageNode[]>
 
 type MockDocxImage = {
   readonly contentType: string
@@ -350,6 +354,12 @@ type MockImageNode = {
       readonly src?: string
     }
   }
+}
+
+function readMockConvertImage(options: MockMammothOptions | undefined): MockConvertImage | undefined {
+  return typeof options?.convertImage === "function"
+    ? options.convertImage as MockConvertImage
+    : undefined
 }
 
 function mockDocxImage(contentType: string, content: string): MockDocxImage {
