@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { SynapseConfig } from "../../../src/types/config"
 import type { SynapseDiagnosticsCheck } from "../../../src/types/diagnostics"
+import type { PackagedClaudeRuntimeStatus } from "../agent-runtime/claude-runtime-binary"
 import {
   DiagnosticsService,
   summarizeDiagnosticsChecks,
@@ -246,7 +247,7 @@ describe("DiagnosticsService.collect", () => {
         isPackaged: true,
         getPath: (name) => `/app/${name}`,
       },
-      inspectClaudeRuntime: vi.fn(() => ({
+      inspectClaudeRuntime: vi.fn((): PackagedClaudeRuntimeStatus => ({
         status: "present",
         resourcesPath: "/Applications/Synapse.app/Contents/Resources",
         platform: "darwin",
@@ -289,7 +290,7 @@ describe("DiagnosticsService.collect", () => {
         isPackaged: true,
         getPath: (name) => `/app/${name}`,
       },
-      inspectClaudeRuntime: vi.fn(() => ({
+      inspectClaudeRuntime: vi.fn((): PackagedClaudeRuntimeStatus => ({
         status: "missing",
         resourcesPath: "/Applications/Synapse.app/Contents/Resources",
         platform: "darwin",
