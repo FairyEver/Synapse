@@ -20,6 +20,7 @@ import { errorLogMeta } from "../utils"
 import "streamdown/styles.css"
 
 const LOCAL_REFERENCE_PATTERN = /(?:\[[^\]]+\]\((?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^)]+\)|(?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^\s`),]+(?::\d+(?::\d+)?)?)/g
+const OBSIDIAN_WIKILINK_PATTERN = /!?\[\[([^\]\r\n]+)\]\]/g
 const SHORT_UPPERCASE_PATH_PATTERN = /^[A-Z0-9]{2,6}(?:\/[A-Z0-9]{2,6})+$/
 const TRAILING_REFERENCE_PUNCTUATION_PATTERN = /[.,;:!?，。；：！？]+$/
 const STREAMDOWN_CONTROLS = {
@@ -54,6 +55,12 @@ const STREAMDOWN_COMPONENTS = {
     )
   },
   code: AgentMessageCode,
+  table: AgentMessageTable,
+  thead: AgentMessageTableHeader,
+  tbody: AgentMessageTableBody,
+  tr: AgentMessageTableRow,
+  th: AgentMessageTableHead,
+  td: AgentMessageTableCell,
 } satisfies Components
 const logger = createRendererLogger("agent")
 
@@ -115,7 +122,7 @@ function AssistantMessageBody({
   readonly onOpenReference: (reference: string) => void
 }) {
   const streaming = item.streaming === true
-  const preprocessed = wrapLocalReferences(item.content)
+  const preprocessed = wrapLocalReferences(renderObsidianWikilinksAsBoldText(item.content))
   const hasUsage = Boolean(item.metadata?.usage)
 
   const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
@@ -266,6 +273,113 @@ function AgentMessageCode({
   )
 }
 
+function AgentMessageTable({
+  node: _node,
+  className,
+  children,
+  ...props
+}: ComponentProps<"table"> & { readonly node?: unknown }) {
+  return (
+    <div
+      data-streamdown="table-container"
+      className="my-4 max-w-full overflow-x-auto rounded-md border border-border bg-background"
+    >
+      <table
+        {...props}
+        data-streamdown="table"
+        className={cn("w-full table-fixed border-collapse text-sm", className)}
+      >
+        {children}
+      </table>
+    </div>
+  )
+}
+
+function AgentMessageTableHeader({
+  node: _node,
+  className,
+  children,
+  ...props
+}: ComponentProps<"thead"> & { readonly node?: unknown }) {
+  return (
+    <thead
+      {...props}
+      data-streamdown="table-header"
+      className={cn("bg-muted/40", className)}
+    >
+      {children}
+    </thead>
+  )
+}
+
+function AgentMessageTableBody({
+  node: _node,
+  className,
+  children,
+  ...props
+}: ComponentProps<"tbody"> & { readonly node?: unknown }) {
+  return (
+    <tbody
+      {...props}
+      data-streamdown="table-body"
+      className={className}
+    >
+      {children}
+    </tbody>
+  )
+}
+
+function AgentMessageTableRow({
+  node: _node,
+  className,
+  children,
+  ...props
+}: ComponentProps<"tr"> & { readonly node?: unknown }) {
+  return (
+    <tr
+      {...props}
+      data-streamdown="table-row"
+      className={className}
+    >
+      {children}
+    </tr>
+  )
+}
+
+function AgentMessageTableHead({
+  node: _node,
+  className,
+  children,
+  ...props
+}: ComponentProps<"th"> & { readonly node?: unknown }) {
+  return (
+    <th
+      {...props}
+      data-streamdown="table-header-cell"
+      className={cn("font-medium", className)}
+    >
+      {children}
+    </th>
+  )
+}
+
+function AgentMessageTableCell({
+  node: _node,
+  className,
+  children,
+  ...props
+}: ComponentProps<"td"> & { readonly node?: unknown }) {
+  return (
+    <td
+      {...props}
+      data-streamdown="table-cell"
+      className={className}
+    >
+      {children}
+    </td>
+  )
+}
+
 function languageFromCodeClassName(className: string | undefined): string {
   return className?.match(/(?:^|\s)language-([^\s]+)/)?.[1] ?? "text"
 }
@@ -278,6 +392,14 @@ function textFromReactNode(value: ReactNode): string {
 }
 
 function wrapLocalReferences(content: string): string {
+  return transformMarkdownPlainText(content, wrapLocalReferencesInText)
+}
+
+function renderObsidianWikilinksAsBoldText(content: string): string {
+  return transformMarkdownPlainText(content, renderObsidianWikilinksInText)
+}
+
+function transformMarkdownPlainText(content: string, transform: (value: string) => string): string {
   const parts = content.split(/(\r\n|\n|\r)/)
   let fence: MarkdownFence | undefined
 
@@ -297,7 +419,7 @@ function wrapLocalReferences(content: string): string {
       return part
     }
 
-    return wrapLocalReferencesInText(part)
+    return transform(part)
   }).join("")
 }
 
@@ -317,8 +439,16 @@ function markdownFence(line: string): MarkdownFence | undefined {
 }
 
 function wrapLocalReferencesInText(content: string): string {
+  return transformInlinePlainText(content, wrapLocalReferencesInPlainText)
+}
+
+function renderObsidianWikilinksInText(content: string): string {
+  return transformInlinePlainText(content, renderObsidianWikilinksInPlainText)
+}
+
+function transformInlinePlainText(content: string, transform: (value: string) => string): string {
   const marker = /`+/.exec(content)
-  if (!marker) return wrapLocalReferencesInPlainText(content)
+  if (!marker) return transform(content)
 
   let result = ""
   let cursor = 0
@@ -332,11 +462,11 @@ function wrapLocalReferencesInText(content: string): string {
     const ticks = opening[0]
     const end = content.indexOf(ticks, start + ticks.length)
     if (end === -1) {
-      result += wrapLocalReferencesInPlainText(content.slice(cursor, start))
+      result += transform(content.slice(cursor, start))
       result += content.slice(start)
       break
     }
-    result += wrapLocalReferencesInPlainText(content.slice(cursor, start))
+    result += transform(content.slice(cursor, start))
     result += content.slice(start, end + ticks.length)
     cursor = end + ticks.length
   }
@@ -350,6 +480,38 @@ function wrapLocalReferencesInPlainText(content: string): string {
     const { reference, suffix } = splitTrailingReferencePunctuation(match)
     return `[${reference}](${markdownLinkHref(reference)})${suffix}`
   })
+}
+
+function renderObsidianWikilinksInPlainText(content: string): string {
+  return content.replace(OBSIDIAN_WIKILINK_PATTERN, (_match, body: string) => {
+    const wikilink = parseObsidianWikilink(body)
+    if (!wikilink.displayText) return _match
+    return `**${escapeMarkdownStrongText(wikilink.displayText)}**`
+  })
+}
+
+type ParsedObsidianWikilink = {
+  readonly target: string
+  readonly alias?: string
+  readonly displayText: string
+}
+
+function parseObsidianWikilink(body: string): ParsedObsidianWikilink {
+  const pipeIndex = body.indexOf("|")
+  const target = (pipeIndex === -1 ? body : body.slice(0, pipeIndex)).trim()
+  const alias = pipeIndex === -1 ? undefined : body.slice(pipeIndex + 1).trim()
+  const displayText = alias || displayTextFromWikilinkTarget(target)
+  return { target, alias, displayText }
+}
+
+function displayTextFromWikilinkTarget(target: string): string {
+  const pageTarget = target.split("#")[0]?.trim()
+  if (pageTarget) return pageTarget.split("/").at(-1) ?? pageTarget
+  return target.replace(/^#\^?/, "").trim()
+}
+
+function escapeMarkdownStrongText(value: string): string {
+  return value.replace(/[\\*_`[\]]/g, "\\$&")
 }
 
 function markdownLinkHref(reference: string): string {
@@ -420,5 +582,5 @@ function reactNodeText(node: ReactNode): string {
   return ""
 }
 
-export { AgentMessageEvent, wrapLocalReferences }
+export { AgentMessageEvent, renderObsidianWikilinksAsBoldText, wrapLocalReferences }
 export type { AgentMessageEventProps }

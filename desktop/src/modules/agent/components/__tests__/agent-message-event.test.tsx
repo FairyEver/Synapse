@@ -6,7 +6,11 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
-import { AgentMessageEvent, wrapLocalReferences } from "../agent-message-event"
+import {
+  AgentMessageEvent,
+  renderObsidianWikilinksAsBoldText,
+  wrapLocalReferences,
+} from "../agent-message-event"
 
 const { rendererLogger, shellBridge, track } = vi.hoisted(() => ({
   shellBridge: {
@@ -79,6 +83,88 @@ afterEach(() => {
 })
 
 describe("AgentMessageEvent", () => {
+  it("renders Obsidian wikilinks as bold plain text", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-wikilinks",
+            kind: "message",
+            role: "assistant",
+            content: "Pages: [[Synapse Platform]], [[Workflow Loop Mechanism|工作流循环]], ![[diagram.png]]",
+            timestamp: "2026-04-27T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const boldItems = Array.from(container.querySelectorAll("[data-streamdown='strong']"))
+      .map((item) => item.textContent)
+
+    expect(boldItems).toEqual(["Synapse Platform", "工作流循环", "diagram.png"])
+    expect(container.textContent).not.toContain("[[")
+    expect(container.textContent).not.toContain("]]")
+    expect(container.textContent).not.toContain("!diagram.png")
+    expect(container.querySelectorAll("a")).toHaveLength(0)
+  })
+
+  it("keeps Obsidian wikilinks inside code unchanged", () => {
+    const rendered = renderObsidianWikilinksAsBoldText(
+      "Keep `[[Internal Page]]` literal.\n```md\n[[Code Page]]\n```\nShow [[Visible Page]]",
+    )
+
+    expect(rendered).toBe(
+      "Keep `[[Internal Page]]` literal.\n```md\n[[Code Page]]\n```\nShow **Visible Page**",
+    )
+  })
+
+  it("renders markdown tables with a single Agent table border", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-table",
+            kind: "message",
+            role: "assistant",
+            content: [
+              "| 页面 | 类型 |",
+              "|------|------|",
+              "| [[智慧人生管理思想]] | 概念 — 管理体系 |",
+            ].join("\n"),
+            timestamp: "2026-04-27T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const streamdownWrapper = container.querySelector("[data-streamdown='table-wrapper']")
+    const table = container.querySelector<HTMLTableElement>("[data-streamdown='table']")
+    const tableContainer = table?.parentElement
+
+    expect(streamdownWrapper).toBeNull()
+    expect(table).not.toBeNull()
+    expect(tableContainer?.getAttribute("data-streamdown")).toBe("table-container")
+    expect(tableContainer?.className).toContain("border-border")
+    expect(table?.className).not.toContain("border-border")
+    expect(container.querySelector("th")?.textContent).toBe("页面")
+    expect(container.textContent).toContain("智慧人生管理思想")
+    expect(container.textContent).not.toContain("[[智慧人生管理思想]]")
+  })
+
   it("keeps external protocol URLs intact when wrapping local references", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
