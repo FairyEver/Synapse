@@ -99,6 +99,13 @@ function findButton(label: string): HTMLButtonElement {
 }
 
 describe("EmptyRepositoryState", () => {
+  it("keeps repository setup actions available through the reusable panel wrapper", () => {
+    renderEmptyState()
+
+    expect(document.body.textContent).toContain("选择已有目录")
+    expect(document.body.textContent).toContain("新建仓库")
+  })
+
   it("blocks initialization preview danger flags before opening confirm dialog", async () => {
     mocks.chooseDirectory.mockResolvedValue("/Users/me/Desktop")
     mocks.validateDirectory.mockResolvedValue({
