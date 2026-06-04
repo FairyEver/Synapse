@@ -1,7 +1,6 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
-import { EmptyRepositoryState } from "@/app-shell/components/empty-repository-state"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
@@ -94,7 +93,7 @@ function MainApp() {
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
   const manager = useRepositoryManager()
-  const [activeTab, setActiveTabRaw] = useState<AppTabId>(DEFAULT_APP_TAB)
+  const [activeTab, setActiveTabRaw] = useState<AppTabId>(() => hasRepositories ? DEFAULT_APP_TAB : "agent")
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
   )
@@ -136,6 +135,12 @@ function MainApp() {
     },
     [],
   )
+
+  useEffect(() => {
+    if (!hasRepositories && activeTabRef.current === DEFAULT_APP_TAB) {
+      setActiveTab("agent", "navigation")
+    }
+  }, [hasRepositories, setActiveTab])
 
   useEffect(() => {
     const bridge = getSynapseBridge()
@@ -318,15 +323,6 @@ function MainApp() {
       requestOpenSettingsAbout()
     })
   }, [setActiveTab])
-
-  // 如果没有仓库或当前仓库缺失，显示空状态页面
-  if (hasNoRepositories) {
-    return <EmptyRepositoryState reason="no-repositories" />
-  }
-
-  if (isActiveRepositoryMissing) {
-    return <EmptyRepositoryState reason="active-repository-missing" />
-  }
 
   const accountUiVisible = isAccountUiVisible()
 
