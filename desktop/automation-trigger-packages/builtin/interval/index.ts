@@ -1,3 +1,4 @@
+export { intervalRendererTriggerDefinition } from "./index.renderer"
 export { IntervalTriggerConfigForm } from "./config.renderer"
 export { intervalTriggerManifest } from "./manifest"
 export {

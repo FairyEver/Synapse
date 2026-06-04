@@ -1,4 +1,4 @@
-import type { AutomationTriggerManifest } from "../../../src/automation-triggers/action-registry"
+import type { AutomationTriggerManifest } from "../../types.shared"
 import {
   cronTriggerConfigSchema,
   type CronTriggerConfig,

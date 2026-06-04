@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 
+import { cronTriggerDefinition } from "../../../../automation-trigger-packages/builtin/cron/index.main"
+import { intervalTriggerDefinition } from "../../../../automation-trigger-packages/builtin/interval/index.main"
 import { AutomationTriggerRegistry } from "../trigger-registry"
 
 const testTrigger = {
@@ -70,5 +72,19 @@ describe("AutomationTriggerRegistry", () => {
       status: "needs_update",
       issues: [{ field: "trigger.type", message: "选择触发器" }],
     })
+  })
+
+  it("exports built-in main trigger definitions from trigger packages", () => {
+    expect(cronTriggerDefinition.manifest.id).toBe("builtin.cron")
+    expect(cronTriggerDefinition.manifest.kind).toBe("schedule")
+    expect(cronTriggerDefinition.runtime.computeNextRunAt).toBeTypeOf("function")
+
+    expect(intervalTriggerDefinition.manifest.id).toBe("builtin.interval")
+    expect(intervalTriggerDefinition.manifest.kind).toBe("schedule")
+    expect(intervalTriggerDefinition.runtime.getReschedulePolicy?.({
+      everyMinutes: 60,
+      anchor: "last_completed_at",
+      activeDays: [0, 1, 2, 3, 4, 5, 6],
+    })).toEqual({ mode: "after_completion" })
   })
 })

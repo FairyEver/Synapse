@@ -1,71 +1,14 @@
-import { z } from "zod"
-
-import { computeNextRunAt } from "./schedule-calculator"
+import { cronTriggerConfigSchema } from "../../../automation-trigger-packages/builtin/cron"
+import { cronTriggerDefinition } from "../../../automation-trigger-packages/builtin/cron/index.main"
+import { intervalTriggerConfigSchema } from "../../../automation-trigger-packages/builtin/interval"
+import { intervalTriggerDefinition } from "../../../automation-trigger-packages/builtin/interval/index.main"
 import { AutomationTriggerRegistry } from "./trigger-registry"
 
-const activeDaysSchema = z.array(z.number().int().min(0).max(6)).min(1).max(7)
-
-type CronTriggerConfig = {
-  readonly expr: string
-  readonly timezone?: string
-  readonly activeDays: readonly number[]
-}
-
-type IntervalTriggerConfig = {
-  readonly everyMinutes: number
-  readonly anchor: "created_at" | "last_completed_at"
-  readonly activeDays: readonly number[]
-}
-
-export const cronTriggerSchema: z.ZodType<CronTriggerConfig> = z.object({
-  expr: z.string().min(1),
-  timezone: z.string().min(1).optional(),
-  activeDays: activeDaysSchema,
-})
-
-export const intervalTriggerSchema: z.ZodType<IntervalTriggerConfig> = z.object({
-  everyMinutes: z.number().int().positive(),
-  anchor: z.enum(["created_at", "last_completed_at"]).default("created_at"),
-  activeDays: activeDaysSchema,
-})
+export { cronTriggerConfigSchema, intervalTriggerConfigSchema }
 
 export function createBuiltinAutomationTriggerRegistry(): AutomationTriggerRegistry {
   const registry = new AutomationTriggerRegistry()
-  registry.register({
-    manifest: {
-      id: "builtin.cron",
-      title: "Cron",
-      kind: "schedule",
-      defaultConfig: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] },
-      configSchema: cronTriggerSchema,
-    },
-    summarize: (config) => `Cron · ${config.expr}`,
-    runtime: {
-      computeNextRunAt: (input) => computeNextRunAt({
-        trigger: { type: "builtin.cron", config: input.config },
-        from: input.from,
-        createdAt: input.createdAt,
-      }),
-    },
-  })
-  registry.register({
-    manifest: {
-      id: "builtin.interval",
-      title: "固定间隔",
-      kind: "schedule",
-      defaultConfig: { everyMinutes: 60, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
-      configSchema: intervalTriggerSchema,
-    },
-    summarize: (config) => config.anchor === "last_completed_at"
-      ? `每 ${config.everyMinutes} 分钟 · 完成后`
-      : `每 ${config.everyMinutes} 分钟`,
-    runtime: {
-      computeNextRunAt: (input) => computeNextRunAt({
-        trigger: { type: "builtin.interval", config: input.config },
-        from: input.from,
-        createdAt: input.createdAt,
-      }),
-    },
-  })
+  registry.register(cronTriggerDefinition)
+  registry.register(intervalTriggerDefinition)
   return registry
 }
