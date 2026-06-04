@@ -648,7 +648,6 @@ function AgentActionFields({
         <TaskField label="权限模式" htmlFor="task-action-agent-mode">
           <AgentPermissionModeMenu
             selectedMode={config.mode}
-            contentClassName="w-56"
             onSelect={(mode: SynapseAgentPermissionMode) => {
               onConfigChange({ ...config, agentType: "claude-code", mode })
             }}
