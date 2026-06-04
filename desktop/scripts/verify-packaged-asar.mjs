@@ -212,15 +212,15 @@ function verifyResources(resourcesPath, label) {
 
   verifyPackedNode(
     header,
-    "dist-electron/electron/workers/file-conversion-worker.js",
+    "dist-electron/electron/workers/builtin-tool-worker.js",
     failures,
-    "file conversion worker is missing from packed app.asar",
+    "builtin tool worker is missing from packed app.asar",
   )
   verifyPackedNode(
     header,
-    "dist-electron/electron/workers/file-conversion-worker.js.map",
+    "dist-electron/electron/workers/builtin-tool-worker.js.map",
     failures,
-    "file conversion worker sourcemap is missing from packed app.asar",
+    "builtin tool worker sourcemap is missing from packed app.asar",
   )
   verifyPackedNode(
     header,
@@ -231,16 +231,16 @@ function verifyResources(resourcesPath, label) {
   verifyUnpackedNode(
     header,
     unpackedPath,
-    "dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.js",
+    "dist-electron/electron/worker-bootstraps/builtin-tool-worker-bootstrap.js",
     failures,
-    "file conversion worker bootstrap is missing from app.asar.unpacked",
+    "builtin tool worker bootstrap is missing from app.asar.unpacked",
   )
   verifyUnpackedNode(
     header,
     unpackedPath,
-    "dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.js.map",
+    "dist-electron/electron/worker-bootstraps/builtin-tool-worker-bootstrap.js.map",
     failures,
-    "file conversion worker bootstrap sourcemap is missing from app.asar.unpacked",
+    "builtin tool worker bootstrap sourcemap is missing from app.asar.unpacked",
   )
   verifyPackedTextIncludes(
     buffer,

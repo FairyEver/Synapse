@@ -2,7 +2,7 @@
   "name": "@synapse/desktop",
   "productName": "Synapse",
   "private": true,
-  "version": "0.2.241",
+  "version": "0.2.242",
   "description": "Synapse desktop scaffold built with Electron, Vite, React, Tailwind CSS, and shadcn/ui.",
   "author": "FairyEver",
   "homepage": "https://github.com/FairyEver/Synapse",
@@ -146,7 +146,7 @@
       "dist-electron/action-packages/shared/**",
       "dist-electron/electron/services/usage-analysis/**",
       "dist-electron/src/**",
-      "dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.*"
+      "dist-electron/electron/worker-bootstraps/builtin-tool-worker-bootstrap.*"
     ],
     "extraMetadata": {
       "main": "dist-electron/electron/main.js"
