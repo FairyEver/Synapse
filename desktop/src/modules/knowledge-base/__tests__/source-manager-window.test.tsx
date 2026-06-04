@@ -271,20 +271,23 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).not.toContain("更新时间")
     expect(document.body.textContent).not.toContain("拖拽文件到这里上传")
     expect(document.body.textContent).not.toContain("拖拽文件到窗口")
-    expect(document.body.textContent).not.toContain("已选择")
+    expect(document.body.textContent).toContain("已选择 0 项")
     expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
     expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
   })
 
-  it("shows batch actions only after selecting entries", async () => {
+  it("keeps batch actions visible and disabled until entries are selected", async () => {
     renderWindow()
 
     await waitForExpectation(() => {
       expect(document.body.textContent).toContain("brief.md")
     })
 
-    expect(document.body.textContent).not.toContain("已选择")
-    expect(document.querySelector('button[aria-label="移动所选"]')).toBeNull()
+    expect(document.body.textContent).toContain("已选择 0 项")
+    expect(buttonByLabel("全选当前可见项").disabled).toBe(false)
+    expect(buttonByLabel("移动所选").disabled).toBe(true)
+    expect(buttonByLabel("导出所选").disabled).toBe(true)
+    expect(buttonByLabel("移到废纸篓").disabled).toBe(true)
 
     await act(async () => {
       buttonByLabel("选择 brief.md").click()
@@ -292,10 +295,11 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
 
     expect(document.body.textContent).toContain("已选择 1 项")
     expect(buttonByLabel("移动所选").disabled).toBe(false)
+    expect(buttonByLabel("导出所选").disabled).toBe(false)
     expect(buttonByLabel("移到废纸篓").disabled).toBe(false)
   })
 
-  it("selects every visible entry from the batch bar", async () => {
+  it("selects every visible entry from the selection checkbox", async () => {
     renderWindow()
 
     await waitForExpectation(() => {
@@ -303,15 +307,11 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await act(async () => {
-      buttonByLabel("选择 brief.md").click()
-    })
-    expect(document.body.textContent).toContain("已选择 1 项")
-
-    await act(async () => {
       buttonByLabel("全选当前可见项").click()
     })
 
     expect(document.body.textContent).toContain("已选择 3 项")
+    expect(buttonByLabel("全选当前可见项").getAttribute("aria-checked")).toBe("true")
     await act(async () => {
       buttonByLabel("导出所选").click()
       await Promise.resolve()
@@ -320,6 +320,20 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       projectId: "project-1",
       relativePaths: ["2026", "客户", "brief.md"],
     })
+  })
+
+  it("marks the selection checkbox indeterminate when some visible entries are selected", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+
+    expect(buttonByLabel("全选当前可见项").getAttribute("aria-checked")).toBe("mixed")
   })
 
   it("selects only filtered visible entries from the batch bar", async () => {
@@ -353,9 +367,6 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(searchInput).not.toBeNull()
     act(() => {
       changeInput(searchInput!, "alpha")
-    })
-    await act(async () => {
-      buttonByLabel("选择 alpha.md").click()
     })
     await act(async () => {
       buttonByLabel("全选当前可见项").click()

@@ -7,7 +7,6 @@ import {
   Folder,
   FolderPlus,
   FolderUp,
-  ListChecks,
   MoreHorizontal,
   MoveRight,
   Pencil,
@@ -84,7 +83,9 @@ type SourceManagerToolbarProps = {
 
 type SourceSelectionBarProps = {
   selectedCount: number
-  onSelectAll: () => void
+  visibleCount: number
+  checked: boolean | "indeterminate"
+  onCheckedChange: (checked: boolean) => void
   onMove: () => void
   onExport: () => void
   onTrash: () => void
@@ -359,25 +360,37 @@ function SourceManagerToolbar({
   )
 }
 
-function SourceSelectionBar({ selectedCount, onSelectAll, onMove, onExport, onTrash }: SourceSelectionBarProps) {
-  if (selectedCount === 0) return null
+function SourceSelectionBar({
+  selectedCount,
+  visibleCount,
+  checked,
+  onCheckedChange,
+  onMove,
+  onExport,
+  onTrash,
+}: SourceSelectionBarProps) {
+  const hasSelection = selectedCount > 0
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-      <div className="text-sm text-muted-foreground">已选择 {selectedCount} 项</div>
+    <div className="flex min-h-9 items-center justify-between gap-3 px-1 py-1">
+      <div className="flex items-center gap-3">
+        <Checkbox
+          aria-label="全选当前可见项"
+          checked={checked}
+          disabled={visibleCount === 0}
+          onCheckedChange={(nextChecked) => onCheckedChange(nextChecked === true)}
+        />
+        <div className="text-sm text-muted-foreground">已选择 {selectedCount} 项</div>
+      </div>
       <div className="flex items-center gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={onSelectAll} aria-label="全选当前可见项">
-          <ListChecks data-icon="inline-start" />
-          全选
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onMove} aria-label="移动所选">
+        <Button type="button" variant="outline" size="sm" disabled={!hasSelection} onClick={onMove} aria-label="移动所选">
           <MoveRight data-icon="inline-start" />
           移动
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onExport} aria-label="导出所选">
+        <Button type="button" variant="outline" size="sm" disabled={!hasSelection} onClick={onExport} aria-label="导出所选">
           <Download data-icon="inline-start" />
           导出
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onTrash} aria-label="移到废纸篓">
+        <Button type="button" variant="outline" size="sm" disabled={!hasSelection} onClick={onTrash} aria-label="移到废纸篓">
           <Trash2 data-icon="inline-start" />
           删除
         </Button>
@@ -675,6 +688,15 @@ function KnowledgeBaseSourceManagerWindow() {
   )
 
   const selectedList = useMemo(() => Array.from(selectedPaths), [selectedPaths])
+  const selectedVisibleCount = useMemo(
+    () => visibleEntries.filter((entry) => selectedPaths.has(entry.relativePath)).length,
+    [selectedPaths, visibleEntries],
+  )
+  const selectionBarChecked = visibleEntries.length > 0 && selectedVisibleCount === visibleEntries.length
+    ? true
+    : selectedVisibleCount > 0
+      ? "indeterminate"
+      : false
 
   const uploadItems = useCallback(async (itemPaths: string[]) => {
     if (!payload || !bridge || itemPaths.length === 0) return
@@ -930,7 +952,11 @@ function KnowledgeBaseSourceManagerWindow() {
     })
   }, [])
 
-  const selectAllVisibleEntries = useCallback(() => {
+  const toggleAllVisibleEntries = useCallback((checked: boolean) => {
+    if (!checked) {
+      setSelectedPaths(new Set())
+      return
+    }
     setSelectedPaths(new Set(visibleEntries.map((entry) => entry.relativePath)))
   }, [visibleEntries])
 
@@ -1093,7 +1119,9 @@ function KnowledgeBaseSourceManagerWindow() {
           <div className="space-y-2 p-4">
             <SourceSelectionBar
               selectedCount={selectedList.length}
-              onSelectAll={selectAllVisibleEntries}
+              visibleCount={visibleEntries.length}
+              checked={selectionBarChecked}
+              onCheckedChange={toggleAllVisibleEntries}
               onMove={() => {
                 setMoveTargetPath("")
                 setMoveOpen(true)
