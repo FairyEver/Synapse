@@ -4,7 +4,21 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { parse, stringify } from "yaml"
 
-const METADATA_FILES = ["latest.yml", "latest-mac.yml"]
+const PLATFORM_CONFIGS = {
+  all: {
+    assetFilter: isReleaseAsset,
+    metadata: [
+      { source: "latest.yml", targets: ["latest.yml", "latest-windows.yml"] },
+      { source: "latest-mac.yml", targets: ["latest-mac.yml"] },
+    ],
+  },
+  mac: {
+    assetFilter: isMacReleaseAsset,
+    metadata: [
+      { source: "latest-mac.yml", targets: ["latest-mac.yml"] },
+    ],
+  },
+}
 
 function readArg(name) {
   const index = process.argv.indexOf(name)
@@ -28,12 +42,23 @@ function ensureVersion(value) {
   return value
 }
 
-function isMetadataFile(fileName) {
-  return METADATA_FILES.includes(fileName)
+function ensurePlatform(value = "all") {
+  if (!Object.hasOwn(PLATFORM_CONFIGS, value)) {
+    throw new Error("--platform must be all or mac")
+  }
+  return value
+}
+
+function metadataFilesForConfig(config) {
+  return new Set(config.metadata.flatMap((metadata) => [metadata.source, ...metadata.targets]))
 }
 
 function isReleaseAsset(fileName) {
   return /\.(dmg|zip|exe|blockmap)$/.test(fileName)
+}
+
+function isMacReleaseAsset(fileName) {
+  return /-mac-[^.]+\.(dmg|zip)$/.test(fileName) || /-mac-[^.]+\.(dmg|zip)\.blockmap$/.test(fileName)
 }
 
 function basenameFromMetadataPath(value) {
@@ -90,7 +115,7 @@ async function copyReleaseAssets(artifactsDir, versionDir, artifactFiles) {
   }
 }
 
-function releaseBody(version, cdnBaseUrl, artifactFiles) {
+function releaseBody(version, cdnBaseUrl, artifactFiles, metadataTargets) {
   const versionPrefix = `v${version}`
   const dmg = artifactFiles.find((fileName) => fileName.endsWith("-mac-arm64.dmg"))
   const zip = artifactFiles.find((fileName) => fileName.endsWith("-mac-arm64.zip"))
@@ -107,26 +132,32 @@ function releaseBody(version, cdnBaseUrl, artifactFiles) {
     lines.push("Windows x64:", `${cdnBaseUrl}${versionPrefix}/${exe}`, "")
   }
 
-  lines.push("更新元数据：", `${cdnBaseUrl}latest.yml`, `${cdnBaseUrl}latest-mac.yml`, "")
+  lines.push("更新元数据：", ...metadataTargets.map((fileName) => `${cdnBaseUrl}${fileName}`), "")
   return `${lines.join("\n")}\n`
 }
 
-export async function prepareReleaseArtifacts({ artifactsDir, outDir, version, cdnBaseUrl }) {
+export async function prepareReleaseArtifacts({ artifactsDir, outDir, version, cdnBaseUrl, platform = "all" }) {
   const normalizedVersion = ensureVersion(version)
   const normalizedCdnBaseUrl = normalizeCdnBaseUrl(cdnBaseUrl)
+  const normalizedPlatform = ensurePlatform(platform)
+  const platformConfig = PLATFORM_CONFIGS[normalizedPlatform]
   const versionPrefix = `v${normalizedVersion}`
   const files = await listFiles(artifactsDir)
-  const artifactFiles = files.filter((fileName) => !isMetadataFile(fileName) && isReleaseAsset(fileName))
+  const metadataFiles = metadataFilesForConfig(platformConfig)
+  const artifactFiles = files.filter((fileName) => !metadataFiles.has(fileName) && platformConfig.assetFilter(fileName))
   const artifactNames = new Set(artifactFiles)
   const rewrittenMetadata = []
 
-  for (const metadataFile of METADATA_FILES) {
-    const raw = await readFile(path.join(artifactsDir, metadataFile), "utf8")
+  for (const metadataFile of platformConfig.metadata) {
+    const raw = await readFile(path.join(artifactsDir, metadataFile.source), "utf8")
     const metadata = parse(raw)
-    rewrittenMetadata.push({
-      fileName: metadataFile,
-      content: rewriteMetadata(metadata, versionPrefix, artifactNames),
-    })
+    const content = rewriteMetadata(metadata, versionPrefix, artifactNames)
+    for (const target of metadataFile.targets) {
+      rewrittenMetadata.push({
+        fileName: target,
+        content,
+      })
+    }
   }
 
   if (artifactFiles.length === 0) {
@@ -142,16 +173,18 @@ export async function prepareReleaseArtifacts({ artifactsDir, outDir, version, c
   }
 
   const assetUrls = artifactFiles.map((fileName) => `${normalizedCdnBaseUrl}${versionPrefix}/${fileName}`)
-  const metadataUrls = METADATA_FILES.map((fileName) => `${normalizedCdnBaseUrl}${fileName}`)
+  const metadataTargets = rewrittenMetadata.map((metadata) => metadata.fileName)
+  const metadataUrls = metadataTargets.map((fileName) => `${normalizedCdnBaseUrl}${fileName}`)
   await writeFile(path.join(outDir, "manifest.json"), `${JSON.stringify({
     version: normalizedVersion,
     versionPrefix,
+    platform: normalizedPlatform,
     cdnBaseUrl: normalizedCdnBaseUrl,
     artifactFiles,
     assetUrls,
     metadataUrls,
   }, null, 2)}\n`, "utf8")
-  await writeFile(path.join(outDir, "release-body.md"), releaseBody(normalizedVersion, normalizedCdnBaseUrl, artifactFiles), "utf8")
+  await writeFile(path.join(outDir, "release-body.md"), releaseBody(normalizedVersion, normalizedCdnBaseUrl, artifactFiles, metadataTargets), "utf8")
 }
 
 async function main() {
@@ -160,6 +193,7 @@ async function main() {
     outDir: path.resolve(readArg("--out-dir")),
     version: readArg("--version"),
     cdnBaseUrl: readArg("--cdn-base-url"),
+    platform: process.argv.includes("--platform") ? readArg("--platform") : "all",
   })
 }
 

@@ -25,3 +25,4 @@
 ## 技术调整
 
 - 本地打 macOS / Windows 安装包时会先重新构建应用，并在打包校验中拦截主进程代码过旧但版本号已更新的安装包，避免覆盖安装后仍带旧 Agent runtime。
+- 发布流程新增本机 macOS 快速发版入口，可只更新 macOS 应用内更新元数据；GitHub Action 全量发版会同时覆盖 macOS 与 Windows 的更新元数据，并额外保留 `latest-windows.yml` 作为 Windows 显式别名。

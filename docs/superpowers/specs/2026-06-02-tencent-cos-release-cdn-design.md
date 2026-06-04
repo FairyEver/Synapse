@@ -60,6 +60,7 @@ Fixed updater metadata paths:
 
 ```text
 https://desktop.release.synapse.d2.pub/latest.yml
+https://desktop.release.synapse.d2.pub/latest-windows.yml
 https://desktop.release.synapse.d2.pub/latest-mac.yml
 ```
 
@@ -76,6 +77,8 @@ https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-mac-arm64.zip.bl
 
 The same layout applies to each later version. Versioned files are immutable once published. Only the fixed `latest*.yml` files are overwritten by newer releases.
 
+Local macOS-only releases are allowed for fast iteration. They use the same `desktop/package.json` version source and only overwrite `latest-mac.yml`; they do not touch `latest.yml` or `latest-windows.yml`. Full GitHub Actions releases remain authoritative and overwrite all three metadata files.
+
 ## Release Flow
 
 The existing GitHub Actions release workflow still builds macOS and Windows installers.
@@ -85,8 +88,8 @@ After collecting release artifacts, the publish job should:
 1. Read the desktop package version, for example `0.2.214`.
 2. Upload installer and blockmap files to `cos://synapse-desktop-release-1252371654/v0.2.214/`.
 3. Rewrite generated `latest.yml` and `latest-mac.yml` so each file `path` points to the version archive, for example `v0.2.214/Synapse-0.2.214-win-x64.exe`.
-4. Upload the rewritten metadata files to the COS bucket root as `latest.yml` and `latest-mac.yml`.
-5. Refresh CDN URLs for `latest.yml` and `latest-mac.yml`.
+4. Upload the rewritten Windows metadata to the COS bucket root as both `latest.yml` and `latest-windows.yml`; upload the rewritten macOS metadata as `latest-mac.yml`.
+5. Refresh CDN URLs for `latest.yml`, `latest-windows.yml`, and `latest-mac.yml`.
 6. Create or update the GitHub Release without large assets.
 7. Write GitHub Release notes that include CDN download links for the versioned installers.
 
@@ -112,6 +115,8 @@ electron-builder generates update metadata near the installer artifacts:
 
 - `latest.yml` for Windows;
 - `latest-mac.yml` for macOS.
+
+Synapse also publishes `latest-windows.yml` as an explicit Windows alias with the same content as `latest.yml`. Windows clients continue using `latest.yml` for compatibility.
 
 Because the desired archive layout stores installers inside `v<version>/`, the workflow must rewrite metadata before uploading fixed latest files.
 
@@ -140,6 +145,7 @@ Tencent Cloud currently shows `CDN缓存自动刷新` as not configured for the 
 Recommended cache behavior:
 
 - `latest.yml`: short cache, or actively refreshed on every release;
+- `latest-windows.yml`: short cache, or actively refreshed on every release;
 - `latest-mac.yml`: short cache, or actively refreshed on every release;
 - `v*/*`: long cache because versioned assets are immutable;
 - `*.blockmap`: long cache because blockmaps are versioned assets.
@@ -148,6 +154,7 @@ The release workflow should call Tencent Cloud CDN refresh for:
 
 ```text
 https://desktop.release.synapse.d2.pub/latest.yml
+https://desktop.release.synapse.d2.pub/latest-windows.yml
 https://desktop.release.synapse.d2.pub/latest-mac.yml
 ```
 
@@ -203,9 +210,9 @@ The release workflow should verify:
 
 - expected artifact files exist before upload;
 - all expected files are uploaded to the version prefix;
-- `latest.yml` and `latest-mac.yml` parse as YAML after rewrite;
+- `latest.yml`, `latest-windows.yml`, and `latest-mac.yml` parse as YAML after rewrite;
 - rewritten metadata paths start with `v<version>/`;
-- CDN `HEAD` or `GET` succeeds for both fixed metadata URLs after refresh;
+- CDN `HEAD` or `GET` succeeds for all fixed metadata URLs after refresh;
 - CDN `HEAD` or ranged `GET` succeeds for macOS and Windows installer URLs;
 - GitHub Release exists and contains CDN links but no large uploaded assets.
 
@@ -213,6 +220,7 @@ Manual first-release smoke checks:
 
 ```bash
 curl -I https://desktop.release.synapse.d2.pub/latest.yml
+curl -I https://desktop.release.synapse.d2.pub/latest-windows.yml
 curl -I https://desktop.release.synapse.d2.pub/latest-mac.yml
 curl -I https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-win-x64.exe
 curl -I https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-mac-arm64.dmg

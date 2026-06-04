@@ -28,6 +28,7 @@
     "package:mac:compiled": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",
     "package:win": "pnpm build && pnpm package:win:compiled",
     "package:win:compiled": "pnpm exec electron-builder --win nsis --x64 --publish never",
+    "release:mac": "pnpm bump:commit:push && pnpm package:mac && node scripts/publish-mac-release.mjs",
     "bump:commit:push": "node scripts/bump-version-commit-push.mjs",
     "typecheck": "pnpm generate:definitions-registry && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",

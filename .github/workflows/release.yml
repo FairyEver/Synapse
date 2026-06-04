@@ -210,6 +210,7 @@ jobs:
 
           "$RUNNER_TEMP/coscli" cp "cdn-release/v$VERSION/" "cos://release/v$VERSION/" -r -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
           "$RUNNER_TEMP/coscli" cp "cdn-release/latest.yml" "cos://release/latest.yml" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
+          "$RUNNER_TEMP/coscli" cp "cdn-release/latest-windows.yml" "cos://release/latest-windows.yml" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
           "$RUNNER_TEMP/coscli" cp "cdn-release/latest-mac.yml" "cos://release/latest-mac.yml" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
           "$RUNNER_TEMP/coscli" cp "cdn-release/manifest.json" "cos://release/v$VERSION/manifest.json" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
           "$RUNNER_TEMP/coscli" cp "cdn-release/release-body.md" "cos://release/v$VERSION/release-body.md" -c "$COS_CONFIG" "${COSCLI_UPLOAD_FLAGS[@]}"
@@ -227,10 +228,11 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.local/bin:$PATH"
 
-          CDN_REFRESH_URLS=$(node -e "console.log(JSON.stringify(['https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml']))")
+          CDN_REFRESH_URLS=$(node -e "console.log(JSON.stringify(['https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-windows.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml']))")
           tccli cdn PurgeUrlsCache --Urls "$CDN_REFRESH_URLS" --Area mainland
 
           curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml"
+          curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-windows.yml"
           curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml"
 
           while IFS= read -r url; do

@@ -15,6 +15,7 @@
     "quit:processes": "node scripts/quit-processes.mjs",
     "kb:sync-template": "node scripts/sync-claude-obsidian-template.mjs",
     "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
+    "desktop:release:mac": "pnpm --filter @synapse/desktop run release:mac",
     "auto": "pnpm --filter @synapse/auto run start",
     "dev:shadcn-admin": "pnpm --filter @synapse/shadcn-admin run dev"
   }

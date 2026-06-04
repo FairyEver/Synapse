@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises"
+import { access, mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
@@ -76,6 +76,9 @@ describe("prepare-cdn-release-artifacts", () => {
     expect(latest.path).toBe("v0.2.214/Synapse-0.2.214-win-x64.exe")
     expect(latest.files[0].url).toBe("v0.2.214/Synapse-0.2.214-win-x64.exe")
 
+    const latestWindows = parse(await readFile(path.join(outDir, "latest-windows.yml"), "utf8"))
+    expect(latestWindows).toEqual(latest)
+
     const latestMac = parse(await readFile(path.join(outDir, "latest-mac.yml"), "utf8"))
     expect(latestMac.path).toBe("v0.2.214/Synapse-0.2.214-mac-arm64.zip")
     expect(latestMac.files.map((file: { url: string }) => file.url)).toEqual([
@@ -88,6 +91,7 @@ describe("prepare-cdn-release-artifacts", () => {
     expect(manifest.versionPrefix).toBe("v0.2.214")
     expect(manifest.metadataUrls).toEqual([
       "https://desktop.release.synapse.d2.pub/latest.yml",
+      "https://desktop.release.synapse.d2.pub/latest-windows.yml",
       "https://desktop.release.synapse.d2.pub/latest-mac.yml",
     ])
     expect(manifest.assetUrls).toContain("https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-win-x64.exe")
@@ -96,6 +100,51 @@ describe("prepare-cdn-release-artifacts", () => {
     expect(releaseBody).toContain("Synapse v0.2.214")
     expect(releaseBody).toContain("https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-mac-arm64.dmg")
     expect(releaseBody).toContain("https://desktop.release.synapse.d2.pub/v0.2.214/Synapse-0.2.214-win-x64.exe")
+  })
+
+  it("prepares mac-only artifacts without writing Windows metadata", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-cdn-mac-"))
+    const artifactsDir = path.join(root, "release-artifacts")
+    const outDir = path.join(root, "cdn-release")
+    await writeFixtureArtifacts(artifactsDir)
+
+    await execFileAsync(process.execPath, [
+      scriptPath,
+      "--artifacts-dir",
+      artifactsDir,
+      "--out-dir",
+      outDir,
+      "--version",
+      "0.2.214",
+      "--cdn-base-url",
+      "https://desktop.release.synapse.d2.pub/",
+      "--platform",
+      "mac",
+    ], { cwd: desktopRoot })
+
+    await expect(stat(path.join(outDir, "v0.2.214/Synapse-0.2.214-mac-arm64.dmg"))).resolves.toBeTruthy()
+    await expect(access(path.join(outDir, "v0.2.214/Synapse-0.2.214-win-x64.exe"))).rejects.toThrow()
+    await expect(access(path.join(outDir, "latest.yml"))).rejects.toThrow()
+    await expect(access(path.join(outDir, "latest-windows.yml"))).rejects.toThrow()
+
+    const latestMac = parse(await readFile(path.join(outDir, "latest-mac.yml"), "utf8"))
+    expect(latestMac.path).toBe("v0.2.214/Synapse-0.2.214-mac-arm64.zip")
+    expect(latestMac.files.map((file: { url: string }) => file.url)).toEqual([
+      "v0.2.214/Synapse-0.2.214-mac-arm64.zip",
+      "v0.2.214/Synapse-0.2.214-mac-arm64.dmg",
+    ])
+
+    const manifest = JSON.parse(await readFile(path.join(outDir, "manifest.json"), "utf8"))
+    expect(manifest.platform).toBe("mac")
+    expect(manifest.artifactFiles).toEqual([
+      "Synapse-0.2.214-mac-arm64.dmg",
+      "Synapse-0.2.214-mac-arm64.dmg.blockmap",
+      "Synapse-0.2.214-mac-arm64.zip",
+      "Synapse-0.2.214-mac-arm64.zip.blockmap",
+    ])
+    expect(manifest.metadataUrls).toEqual([
+      "https://desktop.release.synapse.d2.pub/latest-mac.yml",
+    ])
   })
 
   it("fails when metadata references a missing artifact", async () => {
