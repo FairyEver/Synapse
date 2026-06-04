@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
+import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "@/lib/default-agent-workspace"
 import { AgentModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -208,6 +209,7 @@ describe("AgentModule pending prompt sessions", () => {
     })
 
     expect(mocks.sidebarProps?.projects).toEqual([
+      DEFAULT_AGENT_WORKSPACE_PROJECT,
       { id: "project-1", name: "Project One", path: "/repo" },
     ])
   })
