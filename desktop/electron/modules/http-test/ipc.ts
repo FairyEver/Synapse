@@ -3,10 +3,15 @@ import { sendOutboundHttpRequest, type OutboundHttpResponse } from "../../runtim
 import { sanitizeError } from "../../services/error-sanitize"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { HttpRequestActionConfig } from "../../../action-packages/builtin/http-request/schema"
+import {
+  buildHttpRequestUrl,
+  buildOutboundHttpRequest,
+  parseHttpRequestConfig,
+  redactHttpResponseBody,
+} from "../../../action-packages/builtin/http-request/request-builders.main"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 export const HTTP_TEST_CHANNEL = "synapse:http:test-request"
-const MAX_RESPONSE_BODY_BYTES = 5 * 1024 * 1024
 
 export interface HttpTestResponse {
   readonly status: number
@@ -14,34 +19,6 @@ export interface HttpTestResponse {
   readonly headers: Record<string, string>
   readonly body: string
   readonly durationMs: number
-}
-
-function buildUrl(config: HttpRequestActionConfig): string {
-  const url = new URL(config.url)
-  if (config.query) {
-    for (const [key, value] of Object.entries(config.query)) {
-      url.searchParams.set(key, value)
-    }
-  }
-  return url.toString()
-}
-
-function buildBody(config: HttpRequestActionConfig): string | undefined {
-  if (config.bodyType === "none") return undefined
-  return config.body
-}
-
-function buildHeaders(config: HttpRequestActionConfig): Record<string, string> | undefined {
-  const headers = config.headers ? { ...config.headers } : {} as Record<string, string>
-
-  if (config.auth?.type === "bearer" && config.auth.bearerToken) {
-    headers["Authorization"] = `Bearer ${config.auth.bearerToken}`
-  } else if (config.auth?.type === "basic" && config.auth.basicUsername) {
-    const encoded = Buffer.from(`${config.auth.basicUsername}:${config.auth.basicPassword ?? ""}`).toString("base64")
-    headers["Authorization"] = `Basic ${encoded}`
-  }
-
-  return Object.keys(headers).length > 0 ? headers : undefined
 }
 
 let handlersRegistered = false
@@ -57,7 +34,8 @@ export async function sendHttpTestRequest(
   deps: HttpTestRequestDeps,
 ): Promise<HttpTestResponse> {
   const startedAt = performance.now()
-  const url = buildUrl(config)
+  const parsedConfig = parseHttpRequestConfig(config)
+  const url = buildHttpRequestUrl(parsedConfig)
   const resource = sanitizeUrl(url)
   const permission = await deps.permissionGuard.check({
     action: "network.connect",
@@ -81,14 +59,9 @@ export async function sendHttpTestRequest(
   }
 
   try {
-    const response = await (deps.sendRequest ?? sendOutboundHttpRequest)({
-      method: config.method,
+    const response = await (deps.sendRequest ?? sendOutboundHttpRequest)(buildOutboundHttpRequest(parsedConfig, {
       url,
-      headers: buildHeaders(config),
-      body: buildBody(config),
-      timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
-      maxResponseBodyBytes: MAX_RESPONSE_BODY_BYTES,
-    })
+    }))
     deps.auditSink.record({
       action: "network.connect",
       actor: { kind: "user" },
@@ -128,7 +101,7 @@ function toHttpTestResponse(response: OutboundHttpResponse, startedAt: number): 
     status: response.status,
     statusText: response.statusText,
     headers: response.headers ?? {},
-    body: response.body ?? "",
+    body: redactHttpResponseBody(response.body),
     durationMs: Math.round(performance.now() - startedAt),
   }
 }

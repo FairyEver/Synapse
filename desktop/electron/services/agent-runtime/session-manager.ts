@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises"
+
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ProviderService } from "../provider"
@@ -55,6 +57,7 @@ export interface SessionManagerDeps {
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly createSession?: AgentLiveSessionFactory
+  readonly validateWorkspacePath?: (cwd: string) => void | Promise<void>
   readonly getReplyTargetEnv?: (
     projectId: string,
     sessionKey: string,
@@ -143,6 +146,12 @@ export class SessionManager {
     if (!providerId) {
       throw new Error("Provider is required")
     }
+    const cwd = input.message.workspacePath ?? this.deps.workDir
+    if (!cwd) {
+      throw new Error("Project workspace path is required")
+    }
+    await this.deps.validateWorkspacePath?.(cwd)
+
     const modeOverride = input.message.modeOverride ?? input.conversation.agentConfig?.mode
     const providerMatches = input.state.providerId === providerId
     const modeMatches = input.state.modeOverride === modeOverride
@@ -172,11 +181,6 @@ export class SessionManager {
       && modelMatches
     ) {
       return { liveSession: input.state.liveSession, created: false }
-    }
-
-    const cwd = input.message.workspacePath ?? this.deps.workDir
-    if (!cwd) {
-      throw new Error("Project workspace path is required")
     }
 
     if (input.state.liveSession) {
@@ -378,6 +382,25 @@ function cancelledTurnResult(conversationId: string): AgentRuntimeTurnResult {
     events: [event],
     resultText: "",
     error: "cancelled",
+  }
+}
+
+export async function validateWorkspaceDirectory(cwd: string): Promise<void> {
+  let info: Awaited<ReturnType<typeof stat>>
+  try {
+    info = await stat(cwd)
+  } catch {
+    throw new WorkspacePathUnavailableError(`项目路径不存在或不可访问：${cwd}。请在设置中修改项目路径后重试。`)
+  }
+  if (!info.isDirectory()) {
+    throw new WorkspacePathUnavailableError(`项目路径不是目录：${cwd}。请在设置中修改项目路径后重试。`)
+  }
+}
+
+export class WorkspacePathUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "WorkspacePathUnavailableError"
   }
 }
 

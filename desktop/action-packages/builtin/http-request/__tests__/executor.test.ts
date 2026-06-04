@@ -52,6 +52,83 @@ describe("builtin.http-request executor", () => {
     })
   })
 
+  it("adds JSON content-type and redacts sensitive response body content", async () => {
+    const sendRequest = vi.fn(async () => ({
+      status: 200,
+      statusText: "OK",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        headers: {
+          authorization: "Bearer e2e-bearer-secret",
+          cookie: "sid=e2e-cookie-secret",
+        },
+        token: "sk-response-secret",
+        file_path: "/Users/liyang/Documents/code/github/Synapse/plain.txt",
+      }),
+    }))
+    const action = createHttpRequestAction({ sendRequest })
+
+    const result = await action.execute({
+      config: {
+        method: "POST",
+        url: "https://example.com/api",
+        bodyType: "json",
+        body: "{\"ok\":true}",
+        auth: { type: "basic", basicUsername: "alice", basicPassword: "secret-password" },
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "manual",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(sendRequest).toHaveBeenCalledWith(expect.objectContaining({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Basic YWxpY2U6c2VjcmV0LXBhc3N3b3Jk",
+      },
+      body: "{\"ok\":true}",
+    }))
+    expect(JSON.stringify(result)).not.toContain("e2e-bearer-secret")
+    expect(JSON.stringify(result)).not.toContain("e2e-cookie-secret")
+    expect(JSON.stringify(result)).not.toContain("sk-response-secret")
+    expect(JSON.stringify(result)).not.toContain("YWxpY2U6c2VjcmV0LXBhc3N3b3Jk")
+    expect(JSON.stringify(result)).toContain("/Users/liyang/Documents/code/github/Synapse/plain.txt")
+  })
+
+  it("fails before sending stale GET requests that still contain a body", async () => {
+    const sendRequest = vi.fn()
+    const action = createHttpRequestAction({ sendRequest })
+
+    const result = await action.execute({
+      config: {
+        method: "GET",
+        url: "https://example.com/api",
+        bodyType: "text",
+        body: "not allowed",
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "manual",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      status: "failed",
+      error: "请求失败：GET 请求不支持 Body",
+    }))
+    expect(sendRequest).not.toHaveBeenCalled()
+  })
+
   it("builds network.connect permission context", () => {
     const action = createHttpRequestAction({ sendRequest: vi.fn() })
     const request = action.buildPermissionRequest({
@@ -80,7 +157,7 @@ describe("builtin.http-request executor", () => {
         actionType: "builtin.http-request",
         method: "POST",
         url: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
-        headerKeys: ["Authorization"],
+        headerKeys: ["Authorization", "Content-Type"],
         timeoutMins: 2,
       }),
     }))

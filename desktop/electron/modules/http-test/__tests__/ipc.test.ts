@@ -127,6 +127,66 @@ describe("sendHttpTestRequest", () => {
     }))
   })
 
+  it("adds JSON content-type and redacts sensitive response bodies", async () => {
+    const guard = permissionGuard(true)
+    const audit = auditSink()
+    const sendRequest = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      body: JSON.stringify({
+        headers: {
+          Authorization: "Bearer http-test-bearer-secret",
+          Cookie: "sid=http-test-cookie-secret",
+        },
+        token: "sk-http-test-secret",
+        file_path: "/Users/liyang/Documents/code/github/Synapse/plain.txt",
+      }),
+    })
+
+    const result = await sendHttpTestRequest(config({
+      method: "POST",
+      bodyType: "json",
+      body: "{\"ok\":true}",
+      auth: { type: "bearer", bearerToken: "http-test-auth-secret" },
+    }), {
+      permissionGuard: guard,
+      auditSink: audit,
+      sendRequest,
+    })
+
+    expect(sendRequest).toHaveBeenCalledWith(expect.objectContaining({
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer http-test-auth-secret",
+      },
+      body: "{\"ok\":true}",
+    }))
+    expect(result.body).not.toContain("http-test-bearer-secret")
+    expect(result.body).not.toContain("http-test-cookie-secret")
+    expect(result.body).not.toContain("sk-http-test-secret")
+    expect(result.body).toContain("/Users/liyang/Documents/code/github/Synapse/plain.txt")
+  })
+
+  it("rejects stale GET requests with a body before sending", async () => {
+    const guard = permissionGuard(true)
+    const audit = auditSink()
+    const sendRequest = vi.fn()
+
+    await expect(sendHttpTestRequest(config({
+      method: "GET",
+      bodyType: "text",
+      body: "not allowed",
+    }), {
+      permissionGuard: guard,
+      auditSink: audit,
+      sendRequest,
+    })).rejects.toThrow("GET 请求不支持 Body")
+
+    expect(sendRequest).not.toHaveBeenCalled()
+  })
+
   it("redacts URL userinfo from permission and audit resources", async () => {
     const guard = permissionGuard(true)
     const audit = auditSink()

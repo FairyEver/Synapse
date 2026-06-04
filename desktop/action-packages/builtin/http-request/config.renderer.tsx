@@ -31,6 +31,8 @@ export function HttpRequestConfigForm({
   readonly onChange: (value: HttpRequestActionConfig) => void
   readonly idPrefix?: string
 }) {
+  const bodyDisabled = value.method === "GET"
+
   return (
     <div className="flex flex-col gap-2">
       {/* Method + URL */}
@@ -43,7 +45,11 @@ export function HttpRequestConfigForm({
             value={value.method}
             variant="outline"
             onValueChange={(method) => {
-              if (method) onChange({ ...value, method: method as HttpRequestActionConfig["method"] })
+              if (!method) return
+              const nextMethod = method as HttpRequestActionConfig["method"]
+              onChange(nextMethod === "GET"
+                ? { ...value, method: nextMethod, bodyType: "none", body: undefined }
+                : { ...value, method: nextMethod })
             }}
           >
             {HTTP_METHOD_OPTIONS.map((opt) => (
@@ -119,10 +125,12 @@ export function HttpRequestConfigForm({
             aria-label="Body"
             className="ml-auto"
             type="single"
-            value={value.bodyType}
+            value={bodyDisabled ? "none" : value.bodyType}
             variant="outline"
             onValueChange={(bodyType) => {
-              if (bodyType) onChange({ ...value, bodyType: bodyType as HttpRequestActionConfig["bodyType"] })
+              if (bodyType && !bodyDisabled) {
+                onChange({ ...value, bodyType: bodyType as HttpRequestActionConfig["bodyType"] })
+              }
             }}
           >
             {BODY_TYPE_OPTIONS.map((opt) => (
@@ -131,18 +139,19 @@ export function HttpRequestConfigForm({
                 id={`${idPrefix}-body-type-${opt.value}`}
                 className="px-2 py-1 text-xs h-7"
                 value={opt.value}
+                disabled={bodyDisabled && opt.value !== "none"}
               >
                 {opt.label}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
         </div>
-        {value.bodyType === "json" ? (
+        {!bodyDisabled && value.bodyType === "json" ? (
           <CodeJsonEditor
             value={value.body ?? ""}
             onChange={(body) => onChange({ ...value, body })}
           />
-        ) : value.bodyType === "text" ? (
+        ) : !bodyDisabled && value.bodyType === "text" ? (
           <Textarea
             id={`${idPrefix}-body`}
             rows={4}

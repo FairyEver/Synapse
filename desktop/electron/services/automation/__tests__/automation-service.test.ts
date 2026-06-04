@@ -197,6 +197,65 @@ describe("AutomationService", () => {
     expect(stored?.nextRunAt).toBe("2026-06-03T00:05:00.000Z")
   })
 
+  it("manual runs cancel stale completion-anchored timers and reschedule from completion time", async () => {
+    vi.useFakeTimers()
+    try {
+      const clock = { now: new Date("2026-06-03T00:00:00.000Z") }
+      const harness = createHarness({ now: () => clock.now })
+      const item = await harness.service.automationCreate(createCompletionAnchoredIntervalInput())
+      await harness.service.start()
+
+      expect((await harness.items.get(item.id))?.nextRunAt).toBe("2026-06-03T00:10:00.000Z")
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      clock.now = new Date("2026-06-03T00:05:00.000Z")
+      const run = await harness.service.runNow(item.id)
+
+      expect(run?.status).toBe("success")
+      expect((await harness.items.get(item.id))?.nextRunAt).toBe("2026-06-03T00:15:00.000Z")
+
+      clock.now = new Date("2026-06-03T00:10:00.000Z")
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([
+        expect.objectContaining({ triggeredBy: "manual", status: "success" }),
+      ])
+
+      clock.now = new Date("2026-06-03T00:15:00.000Z")
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([
+        expect.objectContaining({ triggeredBy: "manual", status: "success" }),
+        expect.objectContaining({ triggeredBy: "trigger", status: "success" }),
+      ])
+      await harness.service.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("does not run disabled automations after cancelling a scheduled timer", async () => {
+    vi.useFakeTimers()
+    try {
+      const clock = { now: new Date("2026-06-03T00:00:00.000Z") }
+      const harness = createHarness({ now: () => clock.now })
+      const item = await harness.service.automationCreate(createCompletionAnchoredIntervalInput())
+      await harness.service.start()
+
+      expect(harness.service.automationRuntimeInspect().timers).toContain(item.id)
+
+      await harness.service.automationDisable(item.id)
+      clock.now = new Date("2026-06-03T00:10:00.000Z")
+      await vi.advanceTimersByTimeAsync(10 * 60_000)
+
+      expect(harness.service.automationRuntimeInspect().timers).not.toContain(item.id)
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+      await harness.service.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("accepts events through trigger runtime matching", async () => {
     const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
     const item = await harness.service.automationCreate({
@@ -246,12 +305,13 @@ function createHarness(options: {
   readonly logger?: StructuredLogger
   readonly eventBus?: Pick<EventBus, "emit">
   readonly triggers?: AutomationTriggerRegistry
+  readonly now?: () => Date
 } = {}) {
   const triggers = options.triggers ?? createBuiltinAutomationTriggerRegistry()
   const items = new AutomationItemRepository({
     items: new MemoryNamespace<AutomationItem>("automation.items"),
     triggers,
-    now: () => new Date("2026-06-03T00:00:00.000Z"),
+    now: options.now ?? (() => new Date("2026-06-03T00:00:00.000Z")),
     idFactory: () => "automation:1",
   })
   const runs = new AutomationRunRepository({
@@ -283,7 +343,7 @@ function createHarness(options: {
     defaultCwd: "/tmp",
     eventBus: options.eventBus,
     logger: options.logger,
-    now: () => new Date("2026-06-03T00:00:00.000Z"),
+    now: options.now ?? (() => new Date("2026-06-03T00:00:00.000Z")),
   })
   return { service, items, runs, execution }
 }
@@ -350,6 +410,22 @@ function createCronAutomationInput() {
       type: "builtin.cron",
       config: {
         expr: "* * * * *",
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+      },
+    },
+    executor: { type: "builtin.test", config: { message: "ok" } },
+  }
+}
+
+function createCompletionAnchoredIntervalInput() {
+  return {
+    name: "After completion interval",
+    scope: { type: "global" as const },
+    trigger: {
+      type: "builtin.interval",
+      config: {
+        everyMinutes: 10,
+        anchor: "last_completed_at",
         activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },

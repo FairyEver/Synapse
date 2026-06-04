@@ -3,7 +3,7 @@ import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { ProviderService } from "../../provider"
 import { ClaudeSDKSession } from "../claude-sdk-session"
 import type { AgentSessionRepository } from "../session-repository"
-import { SessionManager, type CreateAgentLiveSessionInput } from "../session-manager"
+import { SessionManager, validateWorkspaceDirectory, type CreateAgentLiveSessionInput } from "../session-manager"
 import type { RuntimeSessionState } from "../session-lifecycle"
 import type {
   AgentEvent,
@@ -29,6 +29,42 @@ vi.mock("../claude-sdk-session", () => ({
 }))
 
 describe("SessionManager", () => {
+  it("rejects unavailable workspace paths before creating live sessions", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const validateWorkspacePath = vi.fn(async () => {
+      throw new Error("项目路径不存在或不可访问：/missing-workspace。请在设置中修改项目路径后重试。")
+    })
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/missing-workspace",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      validateWorkspacePath,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await expect(manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })).rejects.toThrow("项目路径不存在或不可访问")
+
+    expect(validateWorkspacePath).toHaveBeenCalledWith("/missing-workspace")
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
+  it("reports missing filesystem workspaces with a user-actionable error", async () => {
+    await expect(validateWorkspaceDirectory("/tmp/synapse-missing-workspace-for-test"))
+      .rejects.toThrow("请在设置中修改项目路径后重试")
+  })
+
   it("recreates an alive SDK session when the requested mode changes", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const sessions: FakeLiveSession[] = []

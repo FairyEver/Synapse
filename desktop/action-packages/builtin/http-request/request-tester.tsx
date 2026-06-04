@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Button } from "../../../src/components/ui/button"
 import { Loader2, Play } from "lucide-react"
-import type { HttpRequestActionConfig } from "./schema"
+import { httpRequestActionConfigSchema, type HttpRequestActionConfig } from "./schema"
 
 interface HttpTestResponse {
   readonly status: number
@@ -23,8 +23,13 @@ export function RequestTester({ config }: { readonly config: HttpRequestActionCo
     setResponse(null)
     setExpanded(true)
     try {
+      const parsed = httpRequestActionConfigSchema.safeParse(config)
+      if (!parsed.success) {
+        setError(parsed.error.issues.map((issue) => issue.message).join("；"))
+        return
+      }
       const bridge = (window as unknown as { synapse: { http: { testRequest: (c: HttpRequestActionConfig) => Promise<HttpTestResponse> } } }).synapse
-      const res = await bridge.http.testRequest(config)
+      const res = await bridge.http.testRequest(parsed.data)
       setResponse(res)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

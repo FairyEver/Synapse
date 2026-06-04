@@ -15,6 +15,13 @@ export const httpRequestActionConfigSchema = z.object({
     basicPassword: z.string().optional(),
   }).optional(),
 }).superRefine((config, ctx) => {
+  if (methodDisallowsBody(config.method) && config.bodyType !== "none") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["bodyType"],
+      message: `${config.method} 请求不支持 Body`,
+    })
+  }
   if (config.auth?.type === "bearer" && !config.auth.bearerToken?.trim()) {
     ctx.addIssue({
       code: "custom",
@@ -32,3 +39,7 @@ export const httpRequestActionConfigSchema = z.object({
 })
 
 export type HttpRequestActionConfig = z.infer<typeof httpRequestActionConfigSchema>
+
+function methodDisallowsBody(method: string): boolean {
+  return method === "GET" || method === "HEAD"
+}

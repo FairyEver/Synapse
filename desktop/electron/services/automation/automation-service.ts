@@ -218,6 +218,7 @@ export class AutomationService {
     if (!this.isItemValid(item)) {
       throw new Error(NEEDS_UPDATE_MESSAGE)
     }
+    this.cancel(id)
     try {
       const run = await this.executeOrSkip(item, "manual")
       this.deps.logger?.info("Automation manual run requested.", {
@@ -236,6 +237,8 @@ export class AutomationService {
         ...errorMetadata(error),
       })
       throw error
+    } finally {
+      await this.rescheduleAfterManualRun(id)
     }
   }
 
@@ -471,6 +474,16 @@ export class AutomationService {
         await this.schedule(id)
       }
     }
+  }
+
+  private async rescheduleAfterManualRun(id: string): Promise<void> {
+    if (!this.started) return
+    const item = await this.deps.items.get(id)
+    if (!item?.enabled) return
+    if (!this.isItemValid(item)) return
+    const trigger = this.deps.triggers.get(item.trigger.type)
+    if (trigger.manifest.kind !== "schedule") return
+    await this.schedule(id)
   }
 
   private async executeOrSkip(

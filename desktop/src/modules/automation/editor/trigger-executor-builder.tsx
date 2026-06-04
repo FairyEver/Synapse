@@ -83,7 +83,7 @@ function ChoiceList({
   items,
   onSelect,
 }: {
-  readonly items: Array<{ readonly id: string; readonly title: string; readonly summary: string }>
+  readonly items: Array<{ readonly id: string; readonly title: string; readonly summary?: string }>
   readonly onSelect: (id: string) => void
 }) {
   return (
@@ -97,7 +97,9 @@ function ChoiceList({
         >
           <span className="min-w-0">
             <span className="block text-sm font-semibold">{item.title}</span>
-            <span className="mt-1 block truncate text-xs text-muted-foreground">{item.summary}</span>
+            {item.summary ? (
+              <span className="mt-1 block truncate text-xs text-muted-foreground">{item.summary}</span>
+            ) : null}
           </span>
           <span className="shrink-0 text-xs text-muted-foreground">选择</span>
         </button>
@@ -171,7 +173,6 @@ export function TriggerExecutorBuilder({
             items={rendererAutomationTriggerRegistry.list().map((trigger) => ({
               id: trigger.manifest.id,
               title: trigger.manifest.title,
-              summary: trigger.summarizeConfig(trigger.manifest.defaultConfig),
             }))}
             onSelect={(id) => onTriggerChange(id, { ...rendererAutomationTriggerRegistry.getDefaultConfig(id) })}
           />
@@ -210,7 +211,6 @@ export function TriggerExecutorBuilder({
             items={rendererActionRegistry.list().map((executor) => ({
               id: executor.manifest.id,
               title: executor.manifest.title,
-              summary: executor.summarizeConfig(executor.manifest.defaultConfig),
             }))}
             onSelect={(id) => onExecutorChange(id, { ...rendererActionRegistry.getDefaultConfig(id) })}
           />

@@ -1,3 +1,7 @@
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
 import { describe, expect, it, vi } from "vitest"
 
 import type { ProjectContext } from "../../../runtime/project-container"
@@ -201,6 +205,7 @@ describe("createAgentRuntimeProjectService", () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
     const ctx = createRunnableProjectContext()
+    const workspacePath = ctx.projectMeta.workspacePath
     const service = await serviceFactory.create(ctx)
 
     try {
@@ -216,7 +221,7 @@ describe("createAgentRuntimeProjectService", () => {
         expect.objectContaining({ type: "result", content: "done" }),
       ]))
       expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
-        cwd: "/workspace/project-1",
+        cwd: workspacePath,
         plugins: [],
         allowPluginHooks: false,
         agents: {},
@@ -231,9 +236,9 @@ describe("createAgentRuntimeProjectService", () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
     const ctx = createRunnableProjectContext({
-      workspacePath: "/workspace/knowledge-bases/kb-1",
       managedKnowledgeBase: true,
     })
+    const workspacePath = ctx.projectMeta.workspacePath
     const service = await serviceFactory.create(ctx)
 
     try {
@@ -249,8 +254,8 @@ describe("createAgentRuntimeProjectService", () => {
         expect.objectContaining({ type: "result", content: "done" }),
       ]))
       expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
-        cwd: "/workspace/knowledge-bases/kb-1",
-        plugins: [{ type: "local", path: "/workspace/knowledge-bases/kb-1" }],
+        cwd: workspacePath,
+        plugins: [{ type: "local", path: workspacePath }],
         allowPluginHooks: true,
       }))
     } finally {
@@ -262,7 +267,6 @@ describe("createAgentRuntimeProjectService", () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
     const ctx = createRunnableProjectContext({
-      workspacePath: "/workspace/knowledge-bases/kb-1",
       managedKnowledgeBase: true,
     })
     const service = await serviceFactory.create(ctx)
@@ -292,7 +296,6 @@ describe("createAgentRuntimeProjectService", () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
     const ctx = createRunnableProjectContext({
-      workspacePath: "/workspace/knowledge-bases/kb-1",
       managedKnowledgeBase: true,
     })
     const service = await serviceFactory.create(ctx)
@@ -337,7 +340,7 @@ function createRunnableProjectContext(options: {
     projectMeta: {
       id: "project-1",
       name: "Project 1",
-      workspacePath: options.workspacePath ?? "/workspace/project-1",
+      workspacePath: options.workspacePath ?? createTestWorkspace(),
       managedKnowledgeBase: options.managedKnowledgeBase,
       createdAt: "2026-05-13T00:00:00.000Z",
     },
@@ -363,6 +366,10 @@ function createRunnableProjectContext(options: {
       }),
     },
   } as unknown as ProjectContext
+}
+
+function createTestWorkspace(): string {
+  return mkdtempSync(join(tmpdir(), "synapse-agent-runtime-"))
 }
 
 function createMemoryDataRepository(): Pick<DataRepository, "namespace"> {

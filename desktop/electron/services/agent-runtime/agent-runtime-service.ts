@@ -84,6 +84,7 @@ export interface AgentRuntimeServiceDeps {
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly providerService: ProviderService
   readonly createSession?: AgentLiveSessionFactory
+  readonly validateWorkspacePath?: (cwd: string) => void | Promise<void>
   readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
@@ -178,6 +179,7 @@ export class AgentRuntimeService {
       logger: deps.logger,
       now: deps.now,
       createSession: deps.createSession,
+      validateWorkspacePath: deps.validateWorkspacePath,
       getReplyTargetEnv: (projectId, sessionKey) => deps.replyTargets?.getAgentEnv(projectId, sessionKey),
       sdkPlugins: deps.sdkPlugins,
       allowPluginHooks: deps.allowPluginHooks,

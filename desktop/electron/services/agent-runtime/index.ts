@@ -22,6 +22,7 @@ import { listUsagePriceRules } from "../usage-analysis/pricing"
 import { ReplyOutboxService } from "../reply-target"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
+import { validateWorkspaceDirectory } from "./session-manager"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 import type { AgentMessage } from "./types"
@@ -89,6 +90,8 @@ export {
   type AgentLiveSessionHandle,
   type AgentLiveSessionFactory,
   type CreateAgentLiveSessionInput,
+  validateWorkspaceDirectory,
+  WorkspacePathUnavailableError,
 } from "./session-manager"
 export {
   ConversationRouter,
@@ -170,6 +173,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
+        validateWorkspacePath: validateWorkspaceDirectory,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),

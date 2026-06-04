@@ -84,6 +84,35 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).toContain("Agent")
   })
 
+  it("does not show default config summaries before trigger and executor are selected", async () => {
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+
+    expect(document.body.textContent).toContain("Cron")
+    expect(document.body.textContent).toContain("HTTP 请求")
+    expect(document.body.textContent).not.toContain("Cron · 0 9 * * *")
+    expect(document.body.textContent).not.toContain("命令 · 未设置")
+    expect(document.body.textContent).not.toContain("GET · 未设置 URL")
+
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("HTTP 请求")?.click()
+    })
+
+    expect(document.querySelector('[data-layout="automation-editor-trigger-summary"]')?.textContent)
+      .toContain("Cron · 0 9 * * *")
+    expect(document.querySelector('[data-layout="automation-editor-executor-summary"]')?.textContent)
+      .toContain("GET · 未设置 URL")
+  })
+
   it("shows a generated automation name in create mode instead of an empty title input", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0)
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
@@ -405,6 +434,11 @@ describe("AutomationEditorApp", () => {
       if (!prompt) return
       changeTextarea(prompt, "Reply exactly OK")
     })
+    const timeout = document.querySelector<HTMLInputElement>("#task-action-agent-timeout")
+    await act(async () => {
+      if (!timeout) return
+      changeInput(timeout, "5")
+    })
     await act(async () => {
       Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "保存并启用")?.click()
     })
@@ -419,6 +453,7 @@ describe("AutomationEditorApp", () => {
           providerId: "provider-1",
           modelTier: "sonnet",
           prompt: "Reply exactly OK",
+          timeoutMins: 5,
         }),
       },
     }))

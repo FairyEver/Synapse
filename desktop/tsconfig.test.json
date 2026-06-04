@@ -19,8 +19,8 @@
   "include": [
     "workflow-nodes/**/__tests__/**/*.ts",
     "workflow-nodes/**/*.ts",
-    "action-packages/**/__tests__/**/*.ts",
-    "action-packages/**/*.test.ts",
+    "action-packages/**/__tests__/**/*.{ts,tsx}",
+    "action-packages/**/*.test.{ts,tsx}",
     "electron/**/__tests__/**/*.ts",
     "electron/**/*.test.ts",
     "electron/**/*.spec.ts",
