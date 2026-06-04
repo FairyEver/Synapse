@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_WORKSPACE_PROJECT_ID } from "@/lib/default-agent-workspace"
 import { normalizePathForCompare } from "@/lib/path-compare"
 import type { SynapseProjectConfig, SynapseRepositoryConfig } from "@/types/config"
 
@@ -13,16 +14,17 @@ function resolveAgentProjectScope(
   projects: readonly SynapseProjectConfig[],
   platform?: string,
 ): AgentProjectScope {
-  const projectIds = unique(projects.map((project) => project.id).filter(Boolean))
+  const configuredProjectIds = unique(projects.map((project) => project.id).filter(Boolean))
+    .filter((projectId) => projectId !== DEFAULT_AGENT_WORKSPACE_PROJECT_ID)
+  const projectIds = [DEFAULT_AGENT_WORKSPACE_PROJECT_ID, ...configuredProjectIds]
   const repositoryPath = normalizePathForCompare(activeRepository?.localPath ?? "", { platform })
   const matchedProject = repositoryPath
     ? projects.find((project) => normalizePathForCompare(project.path, { platform }) === repositoryPath)
     : undefined
-  const scopedProjectIds = projectIds
 
   return {
-    projectIds: scopedProjectIds,
-    defaultProjectId: matchedProject?.id ?? scopedProjectIds[0],
+    projectIds,
+    defaultProjectId: matchedProject?.id ?? DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
     repositoryId: activeRepository?.uuid,
     repositoryName: activeRepository?.name,
   }
