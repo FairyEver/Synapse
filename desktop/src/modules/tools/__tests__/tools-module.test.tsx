@@ -54,15 +54,15 @@ describe("ToolsModule", () => {
     await renderModule()
 
     await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("文件转换")
+      expect(document.body.textContent).toContain("DOCX 转 Markdown")
     })
 
     await act(async () => {
-      buttonByLabel("打开文件转换").click()
+      buttonByLabel("打开 DOCX 转 Markdown").click()
       await Promise.resolve()
     })
 
-    expect(bridgeMocks.tools.openTool).toHaveBeenCalledWith("file-conversion")
+    expect(bridgeMocks.tools.openTool).toHaveBeenCalledWith("docx-to-markdown")
   })
 })
 
@@ -82,12 +82,14 @@ function createBridgeMocks() {
     tools: {
       listTools: vi.fn(async () => ({
         tools: [{
-          id: "file-conversion",
-          label: "文件转换",
-          windowTitle: "文件转换",
-          description: "转为 Markdown",
-          supportedExtensions: [".docx", ".xlsx", ".pdf", ".pptx"],
-          bounds: { width: 760, height: 560, minWidth: 560, minHeight: 420 },
+          id: "docx-to-markdown",
+          title: "DOCX 转 Markdown",
+          description: "转换一个 DOCX 文件",
+          category: "conversion",
+          inputFields: [{ id: "inputPath", kind: "file", label: "文件", required: true, extensions: [".docx"] }],
+          outputPreview: { kind: "markdown", pathFromOutput: "outputPath" },
+          input: { kind: "file", extensions: [".docx"] },
+          output: { kind: "markdown" },
         }],
       })),
       openTool: vi.fn(async () => undefined),

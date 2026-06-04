@@ -1,30 +1,29 @@
 import type { SynapseToolDefinition, SynapseToolId } from "../../../src/types/tools"
+import { listRendererBuiltinToolDescriptors } from "../builtin-tools/registry"
 
-const TOOL_DEFINITIONS = [
-  {
-    id: "file-conversion",
-    label: "文件转换",
-    windowTitle: "文件转换",
-    description: "转为 Markdown",
-    supportedExtensions: [".docx", ".xlsx", ".pdf", ".pptx"],
-    bounds: {
-      width: 760,
-      height: 560,
-      minWidth: 560,
-      minHeight: 420,
-    },
-  },
-] as const satisfies readonly SynapseToolDefinition[]
+const DEFAULT_BOUNDS = {
+  width: 760,
+  height: 560,
+  minWidth: 560,
+  minHeight: 420,
+} as const
+
+export type SynapseToolWindowDefinition = SynapseToolDefinition & {
+  readonly windowTitle: string
+  readonly bounds: typeof DEFAULT_BOUNDS
+}
 
 export function listToolDefinitions(): readonly SynapseToolDefinition[] {
-  return TOOL_DEFINITIONS
+  return listRendererBuiltinToolDescriptors() as readonly SynapseToolDefinition[]
 }
 
-export function getToolDefinition(toolId: string): SynapseToolDefinition | null {
-  return TOOL_DEFINITIONS.find((tool) => tool.id === toolId) ?? null
+export function getToolDefinition(toolId: string): SynapseToolWindowDefinition | null {
+  const tool = listToolDefinitions().find((definition) => definition.id === toolId)
+  if (!tool) return null
+  return { ...tool, windowTitle: tool.title, bounds: DEFAULT_BOUNDS }
 }
 
-export function requireToolDefinition(toolId: string): SynapseToolDefinition {
+export function requireToolDefinition(toolId: string): SynapseToolWindowDefinition {
   const tool = getToolDefinition(toolId)
   if (!tool) {
     throw new Error(`Unknown tool: ${toolId}`)

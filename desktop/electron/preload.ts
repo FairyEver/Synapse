@@ -262,10 +262,10 @@ const IPC_CHANNELS = {
   "tools": {
     "listTools": "synapse:tools:list",
     "openTool": "synapse:tools:open",
-    "selectFileConversionInputFiles": "synapse:tools:file-conversion:select-input-files",
-    "selectFileConversionOutputDirectory": "synapse:tools:file-conversion:select-output-directory",
-    "getDefaultFileConversionOutputDirectory": "synapse:tools:file-conversion:get-default-output-directory",
-    "convertFiles": "synapse:tools:file-conversion:convert",
+    "getToolDescriptor": "synapse:tools:descriptor",
+    "runTool": "synapse:tools:run",
+    "selectFile": "synapse:tools:select-file",
+    "selectDirectory": "synapse:tools:select-directory",
   },
   "usage-analysis": {
     "ccRefresh": "synapse:usage-analysis:cc:refresh",
@@ -811,16 +811,11 @@ const synapseBridge: SynapseBridge = {
   tools: {
     listTools: () => invoke(IPC_CHANNELS.tools.listTools)({}),
     openTool: (toolId) => invoke(IPC_CHANNELS.tools.openTool)({ toolId }),
-    fileConversion: {
-      selectInputFiles: () =>
-        invoke(IPC_CHANNELS.tools.selectFileConversionInputFiles)({}),
-      selectOutputDirectory: (payload = {}) =>
-        invoke(IPC_CHANNELS.tools.selectFileConversionOutputDirectory)(payload),
-      getDefaultOutputDirectory: () =>
-        invoke(IPC_CHANNELS.tools.getDefaultFileConversionOutputDirectory)({}),
-      filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
-      convert: (payload) => invoke(IPC_CHANNELS.tools.convertFiles)(payload),
-    },
+    getToolDescriptor: (toolId) => invoke(IPC_CHANNELS.tools.getToolDescriptor)({ toolId }),
+    runTool: (payload) => invoke(IPC_CHANNELS.tools.runTool)(payload),
+    selectFile: (payload) => invoke(IPC_CHANNELS.tools.selectFile)(payload),
+    selectDirectory: (payload) => invoke(IPC_CHANNELS.tools.selectDirectory)(payload),
+    filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
   },
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),

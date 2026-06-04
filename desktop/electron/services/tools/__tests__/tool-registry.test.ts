@@ -8,17 +8,21 @@ import {
 } from "../tool-registry"
 
 describe("tool registry", () => {
-  it("registers file conversion as a stable top-level tool", () => {
-    expect(listToolDefinitions()).toEqual([
-      expect.objectContaining({
-        id: "file-conversion",
-        label: "文件转换",
-        supportedExtensions: [".docx", ".xlsx", ".pdf", ".pptx"],
-        bounds: { width: 760, height: 560, minWidth: 560, minHeight: 420 },
-      }),
+  it("registers atomic builtin conversion tools", () => {
+    expect(listToolDefinitions().map((tool) => tool.id)).toEqual([
+      "docx-to-markdown",
+      "xlsx-to-markdown",
+      "csv-to-markdown",
+      "pdf-to-markdown",
+      "pptx-to-markdown",
     ])
-    expect(getToolDefinition("file-conversion")?.windowTitle).toBe("文件转换")
-    expect(isSynapseToolId("file-conversion")).toBe(true)
+    expect(getToolDefinition("docx-to-markdown")).toMatchObject({
+      id: "docx-to-markdown",
+      title: "DOCX 转 Markdown",
+      windowTitle: "DOCX 转 Markdown",
+      bounds: { width: 760, height: 560, minWidth: 560, minHeight: 420 },
+    })
+    expect(isSynapseToolId("docx-to-markdown")).toBe(true)
     expect(isSynapseToolId("unknown")).toBe(false)
   })
 

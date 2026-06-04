@@ -1,0 +1,2 @@
+export { pdfToMarkdownTool } from "./descriptor"
+

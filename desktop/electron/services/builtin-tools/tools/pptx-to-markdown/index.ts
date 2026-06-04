@@ -1,0 +1,2 @@
+export { pptxToMarkdownTool } from "./descriptor"
+

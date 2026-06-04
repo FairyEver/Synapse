@@ -1,0 +1,2 @@
+export { xlsxToMarkdownTool } from "./descriptor"
+
