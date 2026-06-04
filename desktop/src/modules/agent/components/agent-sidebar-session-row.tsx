@@ -6,6 +6,7 @@ type AgentSidebarSessionRowProps = {
   readonly active: boolean
   readonly children: ReactNode
   readonly icon?: ReactNode
+  readonly onDoubleClick?: () => void
   readonly onSelect: () => void
   readonly trailing: ReactNode
   readonly trackValue: string
@@ -15,6 +16,7 @@ function AgentSidebarSessionRow({
   active,
   children,
   icon,
+  onDoubleClick,
   onSelect,
   trailing,
   trackValue,
@@ -29,6 +31,11 @@ function AgentSidebarSessionRow({
     onSelect()
   }
 
+  function handleDoubleClick(event: MouseEvent<HTMLDivElement>) {
+    if (event.target instanceof Element && event.target.closest("button")) return
+    onDoubleClick?.()
+  }
+
   return (
     <div
       role="button"
@@ -36,6 +43,7 @@ function AgentSidebarSessionRow({
       data-track="agent-session-select"
       aria-current={active ? "page" : undefined}
       onClick={handleSelect}
+      onDoubleClick={handleDoubleClick}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return
         event.preventDefault()

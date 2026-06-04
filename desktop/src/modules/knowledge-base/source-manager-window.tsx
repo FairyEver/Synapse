@@ -40,6 +40,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
   Empty,
   EmptyHeader,
   EmptyTitle,
@@ -58,7 +64,7 @@ import type {
 const logger = createRendererLogger("knowledge-base.source-manager")
 const INTERNAL_RAW_DRAG_TYPE = "application/x-synapse-raw-entry-paths"
 type DirectoryTree = Record<string, SynapseKnowledgeBaseRawEntry[]>
-type TreeRenderer = (items: SynapseKnowledgeBaseRawEntry[]) => ReactNode
+type TreeRenderer = (items: SynapseKnowledgeBaseRawEntry[], depth?: number) => ReactNode
 type PendingRawMove = {
   relativePaths: string[]
   targetDirectoryPath: string
@@ -223,6 +229,30 @@ function skippedReasonLabel(reason: string): string {
 
 function hasDirectoryCache(tree: DirectoryTree, directoryPath: string): boolean {
   return Object.prototype.hasOwnProperty.call(tree, directoryPath)
+}
+
+const TREE_DEPTH_PADDING = [
+  "pl-0",
+  "pl-3",
+  "pl-6",
+  "pl-9",
+  "pl-12",
+  "pl-14",
+] as const
+
+function treeDepthPadding(depth: number): string {
+  return TREE_DEPTH_PADDING[Math.min(depth, TREE_DEPTH_PADDING.length - 1)]
+}
+
+function shouldShowTreeDisclosure(
+  entry: SynapseKnowledgeBaseRawEntry,
+  tree: DirectoryTree,
+  checkedDirectories: Set<string>,
+  loadingDirectories: Set<string>,
+): boolean {
+  if (loadingDirectories.has(entry.relativePath)) return true
+  if ((tree[entry.relativePath] ?? []).length > 0) return true
+  return !checkedDirectories.has(entry.relativePath)
 }
 
 function uniqueDirectoryPaths(directoryPaths: readonly string[]): string[] {
@@ -428,20 +458,23 @@ function SourceEntryList({
   }
 
   return (
-    <div role="list" aria-label="资料列表" className="divide-y divide-border">
+    <div role="list" aria-label="资料列表" className="flex flex-col gap-1">
       {entries.map((entry) => {
         const selected = selectedPaths.has(entry.relativePath)
+        const isDirectory = entry.kind === "directory"
         return (
           <div
             key={entry.relativePath}
             role="listitem"
             className={cn(
-              "grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-1 py-2",
-              internalDropTarget === entry.relativePath && "bg-accent",
+              "grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted",
+              isDirectory && "cursor-pointer",
+              internalDropTarget === entry.relativePath && "bg-muted",
             )}
             data-raw-path={entry.relativePath}
-            data-raw-drop-target={entry.kind === "directory" ? entry.relativePath : undefined}
+            data-raw-drop-target={isDirectory ? entry.relativePath : undefined}
             draggable
+            onClick={isDirectory ? () => onOpenDirectory(entry.relativePath) : undefined}
             onDragStart={(event) => {
               event.stopPropagation()
               onDragEntry(entry, event)
@@ -461,24 +494,29 @@ function SourceEntryList({
               onDropOnDirectory(entry.relativePath, event)
             }}
           >
-            <Checkbox
-              aria-label={`选择 ${entry.name}`}
-              checked={selected}
-              onCheckedChange={(checked) => onToggleSelected(entry.relativePath, checked === true)}
-            />
+            <div className="flex items-center" onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                aria-label={`选择 ${entry.name}`}
+                checked={selected}
+                onCheckedChange={(checked) => onToggleSelected(entry.relativePath, checked === true)}
+              />
+            </div>
             <div className="flex min-w-0 items-center gap-3">
-              {entry.kind === "directory" ? (
+              {isDirectory ? (
                 <Folder className="size-4 shrink-0 text-muted-foreground" />
               ) : (
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
               )}
               <div className="min-w-0">
-                {entry.kind === "directory" ? (
+                {isDirectory ? (
                   <Button
                     type="button"
                     variant="ghost"
-                    className="h-auto min-w-0 justify-start px-0 py-0 font-medium"
-                    onClick={() => onOpenDirectory(entry.relativePath)}
+                    className="h-auto min-w-0 justify-start px-0 py-0 font-medium hover:bg-transparent"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onOpenDirectory(entry.relativePath)
+                    }}
                     aria-label={`打开文件夹 ${entry.name}`}
                   >
                     <span className="truncate">{entry.name}</span>
@@ -491,7 +529,14 @@ function SourceEntryList({
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" aria-label={`更多 ${entry.name}`}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-10"
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={`更多 ${entry.name}`}
+                >
                   <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
@@ -532,6 +577,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const { error: showError, promise, warning: showWarning } = useAppNotifications()
   const [entries, setEntries] = useState<SynapseKnowledgeBaseRawEntry[]>([])
   const [directoryTree, setDirectoryTree] = useState<DirectoryTree>({})
+  const [checkedTreeDirectories, setCheckedTreeDirectories] = useState<Set<string>>(() => new Set())
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set([""]))
   const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set())
   const [currentDirectory, setCurrentDirectory] = useState("")
@@ -550,9 +596,18 @@ function KnowledgeBaseSourceManagerWindow() {
   const [trashPaths, setTrashPaths] = useState<string[]>([])
   const [internalDragPaths, setInternalDragPaths] = useState<string[]>([])
   const [internalDropTarget, setInternalDropTarget] = useState<string | null>(null)
+  const currentDirectoryRef = useRef("")
   const internalDragPathsRef = useRef<string[]>([])
+  const checkedTreeDirectoriesRef = useRef<Set<string>>(new Set())
   const loadingDirectoriesRef = useRef<Set<string>>(new Set())
+  const treeDirectoryVersionsRef = useRef<Map<string, number>>(new Map())
+  const activeDirectoryVersionsRef = useRef<Map<string, number>>(new Map())
   const bridge = getSynapseBridge()
+
+  const openDirectory = useCallback((directoryPath: string) => {
+    currentDirectoryRef.current = directoryPath
+    setCurrentDirectory(directoryPath)
+  }, [])
 
   const setTreeDirectoryLoading = useCallback((directoryPath: string, loading: boolean) => {
     const nextRef = new Set(loadingDirectoriesRef.current)
@@ -565,29 +620,92 @@ function KnowledgeBaseSourceManagerWindow() {
     setLoadingDirectories(nextRef)
   }, [])
 
+  const markTreeDirectoryChecked = useCallback((directoryPath: string) => {
+    const next = new Set(checkedTreeDirectoriesRef.current)
+    next.add(directoryPath)
+    checkedTreeDirectoriesRef.current = next
+    setCheckedTreeDirectories(next)
+  }, [])
+
+  const bumpTreeDirectoryVersion = useCallback((directoryPath: string) => {
+    const nextVersion = (treeDirectoryVersionsRef.current.get(directoryPath) ?? 0) + 1
+    treeDirectoryVersionsRef.current.set(directoryPath, nextVersion)
+    return nextVersion
+  }, [])
+
+  const bumpActiveDirectoryVersion = useCallback((directoryPath: string) => {
+    const nextVersion = (activeDirectoryVersionsRef.current.get(directoryPath) ?? 0) + 1
+    activeDirectoryVersionsRef.current.set(directoryPath, nextVersion)
+    return nextVersion
+  }, [])
+
+  const invalidateTreeDirectoryVersions = useCallback((directoryPaths: readonly string[]) => {
+    const stalePaths = uniqueDirectoryPaths(directoryPaths.filter(Boolean))
+    if (stalePaths.length === 0) return
+    const pathsToInvalidate = new Set(stalePaths)
+    for (const versionPath of treeDirectoryVersionsRef.current.keys()) {
+      if (stalePaths.some((stalePath) => isPathOrDescendant(versionPath, stalePath))) {
+        pathsToInvalidate.add(versionPath)
+      }
+    }
+    for (const directoryPath of pathsToInvalidate) {
+      bumpTreeDirectoryVersion(directoryPath)
+    }
+  }, [bumpTreeDirectoryVersion])
+
   const refreshDirectory = useCallback(async () => {
     if (!payload || !bridge) return
-    setIsLoading(true)
-    setLoadError(false)
+    const requestDirectory = currentDirectory
+    const activeRequestVersion = bumpActiveDirectoryVersion(requestDirectory)
+    const treeRequestVersion = bumpTreeDirectoryVersion(requestDirectory)
+    const isActiveDirectoryRequest = () =>
+      currentDirectoryRef.current === requestDirectory
+      && activeDirectoryVersionsRef.current.get(requestDirectory) === activeRequestVersion
+    const setActiveLoading = isActiveDirectoryRequest()
+    if (setActiveLoading) {
+      setIsLoading(true)
+      setLoadError(false)
+    }
     try {
       const result = await bridge.knowledgeBase.listRawDirectory({
         projectId: payload.projectId,
-        directoryPath: currentDirectory,
+        directoryPath: requestDirectory,
       })
-      setEntries(result.entries)
-      setDirectoryTree((previous) => ({
-        ...previous,
-        [currentDirectory]: directoriesOnly(result.entries),
-      }))
+      if (isActiveDirectoryRequest()) {
+        setEntries(result.entries)
+      }
+      if (treeDirectoryVersionsRef.current.get(requestDirectory) === treeRequestVersion) {
+        setDirectoryTree((previous) => ({
+          ...previous,
+          [requestDirectory]: directoriesOnly(result.entries),
+        }))
+        markTreeDirectoryChecked(requestDirectory)
+      }
     } catch (error) {
-      logger.error("Failed to load knowledge base raw directory.", { error })
-      setEntries([])
-      setLoadError(true)
-      showError("读取资料失败")
+      if (isActiveDirectoryRequest()) {
+        logger.error("Failed to load knowledge base raw directory.", { error })
+        setEntries([])
+        setLoadError(true)
+        showError("读取资料失败")
+      }
     } finally {
-      setIsLoading(false)
+      if (setActiveLoading && isActiveDirectoryRequest()) {
+        setIsLoading(false)
+      }
+      if (treeDirectoryVersionsRef.current.get(requestDirectory) === treeRequestVersion) {
+        setTreeDirectoryLoading(requestDirectory, false)
+      }
     }
-  }, [bridge, currentDirectory, payload, showError])
+  }, [
+    bridge,
+    bumpActiveDirectoryVersion,
+    bumpTreeDirectoryVersion,
+    currentDirectory,
+    markTreeDirectoryChecked,
+    payload,
+    setTreeDirectoryLoading,
+    showError,
+  ])
 
   useEffect(() => {
     void refreshDirectory()
@@ -600,6 +718,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const pruneTreeDirectories = useCallback((directoryPaths: readonly string[]) => {
     const stalePaths = uniqueDirectoryPaths(directoryPaths.filter(Boolean))
     if (stalePaths.length === 0) return
+    invalidateTreeDirectoryVersions(stalePaths)
     setDirectoryTree((previous) => {
       const next = { ...previous }
       let changed = false
@@ -611,32 +730,81 @@ function KnowledgeBaseSourceManagerWindow() {
       }
       return changed ? next : previous
     })
-  }, [])
+    const nextChecked = new Set(checkedTreeDirectoriesRef.current)
+    let checkedChanged = false
+    for (const checkedPath of checkedTreeDirectoriesRef.current) {
+      if (stalePaths.some((stalePath) => isPathOrDescendant(checkedPath, stalePath))) {
+        nextChecked.delete(checkedPath)
+        checkedChanged = true
+      }
+    }
+    if (checkedChanged) {
+      checkedTreeDirectoriesRef.current = nextChecked
+      setCheckedTreeDirectories(nextChecked)
+    }
+    const nextLoading = new Set(loadingDirectoriesRef.current)
+    let loadingChanged = false
+    for (const loadingPath of loadingDirectoriesRef.current) {
+      if (stalePaths.some((stalePath) => isPathOrDescendant(loadingPath, stalePath))) {
+        nextLoading.delete(loadingPath)
+        loadingChanged = true
+      }
+    }
+    if (loadingChanged) {
+      loadingDirectoriesRef.current = nextLoading
+      setLoadingDirectories(nextLoading)
+    }
+  }, [invalidateTreeDirectoryVersions])
 
   const refreshTreeDirectories = useCallback(async (directoryPaths: readonly string[]) => {
     if (!payload || !bridge) return
     const pathsToRefresh = uniqueDirectoryPaths(directoryPaths)
     if (pathsToRefresh.length === 0) return
-    try {
-      const results = await Promise.all(pathsToRefresh.map(async (directoryPath) => {
+    const requestVersions = new Map<string, number>()
+    for (const directoryPath of pathsToRefresh) {
+      requestVersions.set(directoryPath, bumpTreeDirectoryVersion(directoryPath))
+      setTreeDirectoryLoading(directoryPath, true)
+    }
+    await Promise.all(pathsToRefresh.map(async (directoryPath) => {
+      const requestVersion = requestVersions.get(directoryPath) ?? 0
+      try {
         const result = await bridge.knowledgeBase.listRawDirectory({
           projectId: payload.projectId,
           directoryPath,
         })
-        return [directoryPath, directoriesOnly(result.entries)] as const
-      }))
-      setDirectoryTree((previous) => {
-        const next = { ...previous }
-        for (const [directoryPath, childDirectories] of results) {
-          next[directoryPath] = childDirectories
+        if (treeDirectoryVersionsRef.current.get(directoryPath) === requestVersion) {
+          setDirectoryTree((previous) => ({
+            ...previous,
+            [directoryPath]: directoriesOnly(result.entries),
+          }))
+          markTreeDirectoryChecked(directoryPath)
         }
-        return next
-      })
-    } catch (error) {
-      logger.error("Failed to refresh knowledge base raw tree directories.", { error })
-      showError("读取资料失败")
-    }
-  }, [bridge, payload, showError])
+      } catch (error) {
+        if (treeDirectoryVersionsRef.current.get(directoryPath) === requestVersion) {
+          logger.error("Failed to refresh knowledge base raw tree directories.", { error })
+          showError("读取资料失败")
+        }
+      } finally {
+        if (treeDirectoryVersionsRef.current.get(directoryPath) === requestVersion) {
+          setTreeDirectoryLoading(directoryPath, false)
+        }
+      }
+    }))
+  }, [bridge, bumpTreeDirectoryVersion, markTreeDirectoryChecked, payload, setTreeDirectoryLoading, showError])
+
+  useEffect(() => {
+    if (!payload || !bridge) return
+    const rootDirectories = directoryTree[""] ?? []
+    const pathsToPreload = rootDirectories
+      .map((entry) => entry.relativePath)
+      .filter((directoryPath) =>
+        !hasDirectoryCache(directoryTree, directoryPath)
+        && !checkedTreeDirectoriesRef.current.has(directoryPath)
+        && !loadingDirectoriesRef.current.has(directoryPath)
+      )
+    if (pathsToPreload.length === 0) return
+    void refreshTreeDirectories(pathsToPreload)
+  }, [bridge, directoryTree, payload, refreshTreeDirectories])
 
   const loadTreeDirectory = useCallback(async (directoryPath: string) => {
     if (
@@ -645,29 +813,37 @@ function KnowledgeBaseSourceManagerWindow() {
       || hasDirectoryCache(directoryTree, directoryPath)
       || loadingDirectoriesRef.current.has(directoryPath)
     ) return
+    const treeRequestVersion = bumpTreeDirectoryVersion(directoryPath)
     setTreeDirectoryLoading(directoryPath, true)
     try {
       const result = await bridge.knowledgeBase.listRawDirectory({
         projectId: payload.projectId,
         directoryPath,
       })
-      setDirectoryTree((previous) => ({
-        ...previous,
-        [directoryPath]: directoriesOnly(result.entries),
-      }))
+      if (treeDirectoryVersionsRef.current.get(directoryPath) === treeRequestVersion) {
+        setDirectoryTree((previous) => ({
+          ...previous,
+          [directoryPath]: directoriesOnly(result.entries),
+        }))
+        markTreeDirectoryChecked(directoryPath)
+      }
     } catch (error) {
-      logger.error("Failed to load knowledge base raw tree directory.", { error })
-      showError("读取资料失败")
+      if (treeDirectoryVersionsRef.current.get(directoryPath) === treeRequestVersion) {
+        logger.error("Failed to load knowledge base raw tree directory.", { error })
+        showError("读取资料失败")
+      }
     } finally {
-      setTreeDirectoryLoading(directoryPath, false)
+      if (treeDirectoryVersionsRef.current.get(directoryPath) === treeRequestVersion) {
+        setTreeDirectoryLoading(directoryPath, false)
+      }
     }
-  }, [bridge, directoryTree, payload, setTreeDirectoryLoading, showError])
+  }, [bridge, bumpTreeDirectoryVersion, directoryTree, markTreeDirectoryChecked, payload, setTreeDirectoryLoading, showError])
 
   const openTreeDirectory = useCallback((directoryPath: string) => {
-    setCurrentDirectory(directoryPath)
+    openDirectory(directoryPath)
     setExpandedDirectories((previous) => new Set([...previous, directoryPath]))
     void loadTreeDirectory(directoryPath)
-  }, [loadTreeDirectory])
+  }, [loadTreeDirectory, openDirectory])
 
   const toggleTreeDirectory = useCallback((directoryPath: string) => {
     setExpandedDirectories((previous) => {
@@ -965,59 +1141,95 @@ function KnowledgeBaseSourceManagerWindow() {
     setRenameValue(entry.name)
   }, [])
 
-  const renderTreeItems = useCallback((items: SynapseKnowledgeBaseRawEntry[]) => (
-    <div className="ml-4 flex flex-col gap-1">
+  const renderTreeItems = useCallback((items: SynapseKnowledgeBaseRawEntry[], depth = 1) => (
+    <div className="flex flex-col gap-0.5">
       {items.map((entry) => {
         const isExpanded = expandedDirectories.has(entry.relativePath)
         const isLoadingDirectory = loadingDirectories.has(entry.relativePath)
         const childItems = directoryTree[entry.relativePath] ?? []
+        const showDisclosure = shouldShowTreeDisclosure(
+          entry,
+          directoryTree,
+          checkedTreeDirectories,
+          loadingDirectories,
+        )
         return (
-          <div key={entry.relativePath} className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => toggleTreeDirectory(entry.relativePath)}
-                aria-label={`${isExpanded ? "折叠" : "展开"} ${entry.name}`}
-              >
-                {isExpanded ? <ChevronDown /> : <ChevronRight />}
-              </Button>
-              <Button
-                type="button"
-                variant={currentDirectory === entry.relativePath ? "secondary" : "ghost"}
-                size="sm"
-                className="min-w-0 flex-1 justify-start"
-                data-raw-drop-target={entry.relativePath}
-                onClick={() => openTreeDirectory(entry.relativePath)}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  markInternalRawDropTarget(event.dataTransfer)
-                  if (internalDragPaths.length > 0) {
-                    setInternalDropTarget(entry.relativePath)
-                  }
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  void dropInternalDrag(entry.relativePath, event)
-                }}
-                aria-label={`打开树文件夹 ${entry.name}`}
-              >
-                <Folder data-icon="inline-start" />
-                <span className="truncate">{entry.name}</span>
-              </Button>
+          <div key={entry.relativePath} className="flex flex-col gap-0.5">
+            <div className={cn("flex items-center gap-1", treeDepthPadding(depth))}>
+              {showDisclosure ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => toggleTreeDirectory(entry.relativePath)}
+                  aria-label={`${isExpanded ? "折叠" : "展开"} ${entry.name}`}
+                >
+                  {isExpanded ? <ChevronDown /> : <ChevronRight />}
+                </Button>
+              ) : (
+                <span className="size-7 shrink-0" aria-hidden="true" />
+              )}
+              <ContextMenu data-track="knowledge-base-source-tree-folder-menu">
+                <ContextMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={currentDirectory === entry.relativePath ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 min-w-0 flex-1 justify-start"
+                    data-raw-drop-target={entry.relativePath}
+                    onClick={() => openTreeDirectory(entry.relativePath)}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      markInternalRawDropTarget(event.dataTransfer)
+                      if (internalDragPaths.length > 0) {
+                        setInternalDropTarget(entry.relativePath)
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      void dropInternalDrag(entry.relativePath, event)
+                    }}
+                    aria-label={`打开树文件夹 ${entry.name}`}
+                  >
+                    <Folder data-icon="inline-start" />
+                    <span className="truncate">{entry.name}</span>
+                  </Button>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem onSelect={() => openRenameDialog(entry)}>
+                    <Pencil />
+                    重命名
+                  </ContextMenuItem>
+                  <ContextMenuItem variant="destructive" onSelect={() => setTrashPaths([entry.relativePath])}>
+                    <Trash2 />
+                    删除
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             </div>
             {isExpanded && isLoadingDirectory ? (
-              <div className="ml-8 px-2 py-1 text-xs text-muted-foreground">读取中</div>
+              <div className={cn("px-2 py-1 text-xs text-muted-foreground", treeDepthPadding(depth + 1))}>读取中</div>
             ) : null}
-            {isExpanded && childItems.length > 0 ? renderTreeItems(childItems) : null}
+            {isExpanded && childItems.length > 0 ? renderTreeItems(childItems, depth + 1) : null}
           </div>
         )
       })}
     </div>
-  ), [currentDirectory, directoryTree, dropInternalDrag, expandedDirectories, internalDragPaths.length, loadingDirectories, openTreeDirectory, toggleTreeDirectory])
+  ), [
+    checkedTreeDirectories,
+    currentDirectory,
+    directoryTree,
+    dropInternalDrag,
+    expandedDirectories,
+    internalDragPaths.length,
+    loadingDirectories,
+    openRenameDialog,
+    openTreeDirectory,
+    setTrashPaths,
+    toggleTreeDirectory,
+  ])
 
   const renderMoveTreeItems = useCallback((items: SynapseKnowledgeBaseRawEntry[]) => (
     <div className="ml-4 flex flex-col gap-1">
@@ -1103,7 +1315,7 @@ function KnowledgeBaseSourceManagerWindow() {
           breadcrumbs={breadcrumbs}
           query={query}
           onQueryChange={setQuery}
-          onNavigate={setCurrentDirectory}
+          onNavigate={openDirectory}
           onCreateFolder={() => {
             setNewFolderName("")
             setCreateFolderOpen(true)
@@ -1136,7 +1348,7 @@ function KnowledgeBaseSourceManagerWindow() {
               query={query}
               selectedPaths={selectedPaths}
               onToggleSelected={toggleSelected}
-              onOpenDirectory={setCurrentDirectory}
+              onOpenDirectory={openDirectory}
               onRename={openRenameDialog}
               onMoveEntry={(entry) => {
                 setSelectedPaths(new Set([entry.relativePath]))

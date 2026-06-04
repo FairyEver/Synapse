@@ -102,6 +102,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameName, setRenameName] = useState("")
+  const renameInputRef = useRef<HTMLInputElement>(null)
   const automationBridge = useMemo(() => requireBridgeDomain("automation"), [])
 
   function setDirty(nextDirty: boolean) {
@@ -187,6 +188,12 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
     if (loadState.status !== "ready") return
     setRenameName(loadState.draft.name)
     setRenameOpen(true)
+  }
+
+  function handleRenameOpenAutoFocus(event: Event) {
+    event.preventDefault()
+    renameInputRef.current?.focus()
+    renameInputRef.current?.select()
   }
 
   function confirmRename() {
@@ -297,7 +304,11 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
         </Button>
       </div>
       <Dialog data-track="automation-editor-rename-dialog" open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent aria-describedby={undefined} className="sm:max-w-sm">
+        <DialogContent
+          aria-describedby={undefined}
+          className="sm:max-w-sm"
+          onOpenAutoFocus={handleRenameOpenAutoFocus}
+        >
           <DialogHeader>
             <DialogTitle>重命名自动化</DialogTitle>
           </DialogHeader>
@@ -307,7 +318,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
               <FieldContent>
                 <Input
                   id="automation-editor-rename-name"
-                  autoFocus
+                  ref={renameInputRef}
                   value={renameName}
                   onChange={(event) => setRenameName(event.target.value)}
                   onKeyDown={(event) => {

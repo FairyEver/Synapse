@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
+import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
@@ -40,26 +41,41 @@ import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 import type { SynapseRepositoryConfig } from "@/types/config"
 
 const logger = createRendererLogger("settings")
+const DEFAULT_SETTINGS_CATEGORY: SettingsCategoryId = "account"
+const ACCOUNT_HIDDEN_FALLBACK_CATEGORY: SettingsCategoryId = "general"
+
+function resolveSettingsCategory(
+  category: SettingsCategoryId | null,
+  accountUiVisible: boolean,
+): SettingsCategoryId {
+  const nextCategory = category ?? DEFAULT_SETTINGS_CATEGORY
+  if (!accountUiVisible && nextCategory === "account") {
+    return ACCOUNT_HIDDEN_FALLBACK_CATEGORY
+  }
+  return nextCategory
+}
 
 function SettingsModule() {
   const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
   const { replaceRepositories } = useRepositoryActions()
   const { promise, warning } = useAppNotifications()
+  const accountUiVisible = isAccountUiVisible()
   const [activeCategory, setActiveCategoryRaw] = useState<SettingsCategoryId>(
-    () => consumeRequestedSettingsCategory() ?? "account",
+    () => resolveSettingsCategory(consumeRequestedSettingsCategory(), accountUiVisible),
   )
   const activeCategoryRef = useRef(activeCategory)
   activeCategoryRef.current = activeCategory
   const [isAdminMode, setIsAdminModeState] = useState(false)
 
   const setActiveCategory = useCallback((nextCategory: SettingsCategoryId) => {
+    const normalizedCategory = resolveSettingsCategory(nextCategory, accountUiVisible)
     const prev = activeCategoryRef.current
-    if (prev !== nextCategory) {
-      logger.info("Settings category switched.", { from: prev, to: nextCategory })
+    if (prev !== normalizedCategory) {
+      logger.info("Settings category switched.", { from: prev, to: normalizedCategory })
     }
-    setActiveCategoryRaw(nextCategory)
-  }, [])
+    setActiveCategoryRaw(normalizedCategory)
+  }, [accountUiVisible])
 
   const setIsAdminMode = useCallback((enabled: boolean) => {
     setIsAdminModeState(enabled)
@@ -93,12 +109,15 @@ function SettingsModule() {
   const visibleCategories = useMemo<SettingsCategory[]>(
     () =>
       settingsCategories.filter((category) => {
+        if (category.id === "account") {
+          return accountUiVisible
+        }
         if (category.id === "admin") {
           return isAdminMode
         }
         return true
       }),
-    [isAdminMode],
+    [accountUiVisible, isAdminMode],
   )
 
   const categoryItems = useMemo(
@@ -278,7 +297,7 @@ function SettingsModule() {
           </SettingsGroup>
         ) : null}
 
-        {isReady && activeCategory === "account" ? <AccountPanel /> : null}
+        {isReady && activeCategory === "account" && accountUiVisible ? <AccountPanel /> : null}
 
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}

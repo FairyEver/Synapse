@@ -53,6 +53,12 @@ function renderTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>>
   )
 }
 
+function textFromMarkup(html: string): string {
+  const container = document.createElement("div")
+  container.innerHTML = html
+  return container.textContent ?? ""
+}
+
 describe("AgentTimeline", () => {
   it("uses compact vertical spacing between timeline items", () => {
     const html = renderTimeline()
@@ -444,6 +450,206 @@ describe("AgentTimeline", () => {
     expect(html).toContain("Native slash")
     expect(html).toContain("/wiki-ingest")
     expect(html).not.toContain("ingest all")
+  })
+
+  it("renders a completed tool call as one row with the matching result", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "tool-call-1",
+        kind: "toolCall",
+        toolUseId: "toolu-glob-1",
+        toolName: "Glob",
+        toolInputRaw: { path: "/Users/liyang/project", pattern: "wiki/**/*frontend*" },
+        timestamp: "2026-06-04T00:00:00.000Z",
+      },
+      {
+        id: "tool-result-1",
+        kind: "toolResult",
+        toolUseId: "toolu-glob-1",
+        toolName: "Glob",
+        content: "No files found",
+        status: "success",
+        success: true,
+        timestamp: "2026-06-04T00:00:01.000Z",
+      },
+    ]
+
+    const html = renderTimeline({
+      items,
+      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
+    })
+    const text = textFromMarkup(html)
+
+    expect(html.match(/Glob/g)).toHaveLength(1)
+    expect(html).toContain("Done")
+    expect(html).not.toContain("Running")
+    expect(text).toContain("wiki/**/*frontend*")
+    expect(text).toContain("No files found")
+  })
+
+  it("matches concurrent same-name tool results by tool use id", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "tool-call-a",
+        kind: "toolCall",
+        toolUseId: "toolu-glob-a",
+        toolName: "Glob",
+        toolInputRaw: { path: "/Users/liyang/project/a.md" },
+        timestamp: "2026-06-04T00:00:00.000Z",
+      },
+      {
+        id: "tool-call-b",
+        kind: "toolCall",
+        toolUseId: "toolu-glob-b",
+        toolName: "Glob",
+        toolInputRaw: { path: "/Users/liyang/project/b.md" },
+        timestamp: "2026-06-04T00:00:01.000Z",
+      },
+      {
+        id: "tool-result-b",
+        kind: "toolResult",
+        toolUseId: "toolu-glob-b",
+        toolName: "Glob",
+        content: "content b",
+        status: "success",
+        success: true,
+        timestamp: "2026-06-04T00:00:02.000Z",
+      },
+      {
+        id: "tool-result-a",
+        kind: "toolResult",
+        toolUseId: "toolu-glob-a",
+        toolName: "Glob",
+        content: "content a",
+        status: "success",
+        success: true,
+        timestamp: "2026-06-04T00:00:03.000Z",
+      },
+    ]
+
+    const html = renderTimeline({
+      items,
+      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
+    })
+    const text = textFromMarkup(html)
+
+    expect(html.match(/Glob/g)).toHaveLength(2)
+    expect(html).not.toContain("Running")
+    expect(text.indexOf("/Users/liyang/project/a.md")).toBeLessThan(text.indexOf("content a"))
+    expect(text.indexOf("/Users/liyang/project/b.md")).toBeLessThan(text.indexOf("content b"))
+    expect(text.indexOf("/Users/liyang/project/a.md")).toBeLessThan(text.indexOf("/Users/liyang/project/b.md"))
+    expect(text.indexOf("content a")).toBeLessThan(text.indexOf("/Users/liyang/project/b.md"))
+  })
+
+  it("shows failed and denied statuses on matched tool calls", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "tool-call-failed",
+        kind: "toolCall",
+        toolUseId: "toolu-failed",
+        toolName: "Bash",
+        toolInput: "pnpm test",
+        timestamp: "2026-06-04T00:00:00.000Z",
+      },
+      {
+        id: "tool-result-failed",
+        kind: "toolResult",
+        toolUseId: "toolu-failed",
+        toolName: "Bash",
+        content: "failed",
+        status: "error",
+        success: false,
+        timestamp: "2026-06-04T00:00:01.000Z",
+      },
+      {
+        id: "tool-call-denied",
+        kind: "toolCall",
+        toolUseId: "toolu-denied",
+        toolName: "Write",
+        toolInputRaw: { file_path: "/Users/liyang/project/file.ts" },
+        timestamp: "2026-06-04T00:00:02.000Z",
+      },
+      {
+        id: "tool-result-denied",
+        kind: "toolResult",
+        toolUseId: "toolu-denied",
+        toolName: "Write",
+        content: "permission denied",
+        status: "denied",
+        timestamp: "2026-06-04T00:00:03.000Z",
+      },
+    ]
+
+    const html = renderTimeline({
+      items,
+      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
+    })
+
+    expect(html).toContain("Failed")
+    expect(html).toContain("Denied")
+    expect(html).not.toContain("Running")
+  })
+
+  it("keeps legacy same-name result fallback only for unidentified tools", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "legacy-tool",
+        kind: "toolCall",
+        toolName: "Read",
+        toolInputRaw: { file_path: "/Users/liyang/project/legacy.md" },
+        timestamp: "2026-06-04T00:00:00.000Z",
+      },
+      {
+        id: "legacy-result",
+        kind: "toolResult",
+        toolName: "Read",
+        content: "legacy content",
+        status: "success",
+        success: true,
+        timestamp: "2026-06-04T00:00:01.000Z",
+      },
+      {
+        id: "identified-tool",
+        kind: "toolCall",
+        toolName: "Read",
+        toolInputRaw: { file_path: "/Users/liyang/project/identified.md" },
+        timestamp: "2026-06-04T00:00:02.000Z",
+      },
+      {
+        id: "identified-result",
+        kind: "toolResult",
+        toolUseId: "toolu-identified",
+        toolName: "Read",
+        content: "identified content",
+        status: "success",
+        success: true,
+        timestamp: "2026-06-04T00:00:03.000Z",
+      },
+    ]
+
+    const html = renderTimeline({
+      items,
+      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
+    })
+    const text = textFromMarkup(html)
+
+    expect(html.match(/Read/g)).toHaveLength(3)
+    expect(text).toContain("legacy content")
+    expect(text).toContain("identified content")
+    expect(html).toContain("Running")
+  })
+
+  it("hides generic SDK status events from the conversation timeline", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "status",
+      status: "requesting",
+    }, "2026-06-04T00:00:00.000Z", "claude")
+
+    const html = renderTimeline({ items })
+
+    expect(html).not.toContain("SDK event")
+    expect(html).not.toContain("status")
+    expect(html).not.toContain("requesting")
   })
 
   it("preserves result model, usage, and cost metadata", () => {

@@ -28,21 +28,24 @@ type AgentToolEventItem =
 
 function AgentToolEvent({
   item,
+  result,
   profile,
 }: {
   readonly item: AgentToolEventItem
+  readonly result?: SynapseAgentToolResultTimelineItem
   readonly profile: SynapseAgentDisplayProfile
 }) {
   const rule = profile.tools?.[item.toolName]
   const label = rule?.label ?? profile.aliases?.[item.toolName] ?? item.toolName
-  const body = toolBody(item)
-  const failed = isFailedToolResult(item)
+  const body = toolBody(item, result)
+  const effectiveResult = result ?? (item.kind === "toolResult" ? item : undefined)
+  const failed = effectiveResult ? isFailedToolResult(effectiveResult) : false
   const permission = item.kind === "permissionRequest"
   const defaultOpen = permission || failed || shouldDefaultOpen(
     body,
     rule?.defaultCollapsed ?? profile.toolDefaultCollapsed,
   )
-  const status = statusLabel(item, profile)
+  const status = statusLabel(item, profile, result)
   const [copyState, setCopyState] = useState<"idle" | "success" | "error">("idle")
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -144,8 +147,8 @@ function AgentToolEvent({
                 </Button>
               </>
             ) : null}
-            {item.kind === "toolResult" && typeof item.exitCode === "number" ? (
-              <span className="text-xs text-muted-foreground">exit {item.exitCode}</span>
+            {effectiveResult && typeof effectiveResult.exitCode === "number" ? (
+              <span className="text-xs text-muted-foreground">exit {effectiveResult.exitCode}</span>
             ) : null}
           </div>
         </CollapsibleContent>
@@ -154,29 +157,40 @@ function AgentToolEvent({
   )
 }
 
-function toolBody(item: AgentToolEventItem): string {
-  if (item.kind === "toolResult") return item.content ? formatAgentInputText(item.content) : ""
-  return item.toolInput ? formatAgentInputText(item.toolInput) : formatRawInput(item.toolInputRaw)
+function toolBody(item: AgentToolEventItem, result: SynapseAgentToolResultTimelineItem | undefined): string {
+  const input = item.kind === "toolResult"
+    ? ""
+    : item.toolInput
+      ? formatAgentInputText(item.toolInput)
+      : formatRawInput(item.toolInputRaw)
+  const outputItem = result ?? (item.kind === "toolResult" ? item : undefined)
+  const output = outputItem?.content ? formatAgentInputText(outputItem.content) : ""
+  if (input && output) return `Input\n${input}\n\nOutput\n${output}`
+  return input || output
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {
   return value ? JSON.stringify(sanitizeAgentRawInput(value), null, 2) : ""
 }
 
-function statusLabel(item: AgentToolEventItem, profile: SynapseAgentDisplayProfile): string {
+function statusLabel(
+  item: AgentToolEventItem,
+  profile: SynapseAgentDisplayProfile,
+  result: SynapseAgentToolResultTimelineItem | undefined,
+): string {
   if (item.kind === "permissionRequest") return profile.statusLabels.pending
-  if (item.kind === "toolCall") return profile.statusLabels.running
-  if (isDeniedToolResult(item)) return profile.statusLabels.denied
-  if (isFailedToolResult(item)) return profile.statusLabels.error
+  const effectiveResult = result ?? (item.kind === "toolResult" ? item : undefined)
+  if (!effectiveResult) return profile.statusLabels.running
+  if (isDeniedToolResult(effectiveResult)) return profile.statusLabels.denied
+  if (isFailedToolResult(effectiveResult)) return profile.statusLabels.error
   return profile.statusLabels.success
 }
 
-function isDeniedToolResult(item: AgentToolEventItem): boolean {
-  return item.kind === "toolResult" && item.status?.toLowerCase() === "denied"
+function isDeniedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
+  return item.status?.toLowerCase() === "denied"
 }
 
-function isFailedToolResult(item: AgentToolEventItem): boolean {
-  if (item.kind !== "toolResult") return false
+function isFailedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
   if (item.success === false) return true
   if (typeof item.exitCode === "number" && item.exitCode !== 0) return true
   const status = item.status?.toLowerCase()

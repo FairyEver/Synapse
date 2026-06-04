@@ -86,7 +86,6 @@ function AgentDefaultsContent() {
         >
           <AgentPermissionModeMenu
             selectedMode={selectedMode}
-            contentClassName="w-56"
             onSelect={selectPermissionMode}
             trigger={(
               <Button

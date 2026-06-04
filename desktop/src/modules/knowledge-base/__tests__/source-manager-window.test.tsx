@@ -157,6 +157,16 @@ function renderWindow() {
   })
 }
 
+function createDeferred<T>() {
+  let resolve: ((value: T) => void) | null = null
+  let reject: ((error: unknown) => void) | null = null
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve
+    reject = nextReject
+  })
+  return { promise, resolve: resolve!, reject: reject! }
+}
+
 async function waitForExpectation(assertion: () => void): Promise<void> {
   let lastError: unknown
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -184,6 +194,21 @@ function buttonByText(text: string): HTMLButtonElement {
     .find((candidate) => candidate.textContent?.trim() === text)
   if (!button) throw new Error(`Button not found: ${text}`)
   return button
+}
+
+function openContextMenuOnButton(label: string): void {
+  buttonByLabel(label).dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    button: 2,
+  }))
+}
+
+function menuItemByText(text: string): HTMLElement {
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!item) throw new Error(`Menu item not found: ${text}`)
+  return item
 }
 
 function lastSourceUploadSuccessMessage(result: SynapseKnowledgeBaseRawMutationResult): string | null {
@@ -299,6 +324,64 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(buttonByLabel("移到废纸篓").disabled).toBe(false)
   })
 
+  it("opens a directory when clicking the empty area of its row", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    const row = document.querySelector<HTMLElement>('[data-raw-path="客户"]')
+    if (!row) throw new Error("Directory row missing")
+
+    await act(async () => {
+      row.click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "客户",
+    })
+  })
+
+  it("does not open a directory when clicking its selection checkbox", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 客户").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("已选择 1 项")
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "",
+    })
+  })
+
+  it("does not open a directory when clicking its row action button", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("更多 客户").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "",
+    })
+  })
+
   it("selects every visible entry from the selection checkbox", async () => {
     renderWindow()
 
@@ -404,6 +487,249 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
   })
 
+  it("ignores a stale directory success after navigating away", async () => {
+    const customerRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    let customerRequestCount = 0
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        customerRequestCount += 1
+        if (customerRequestCount === 1) return { projectId: "project-1", directoryPath, entries: [] }
+        return customerRequest.promise
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [
+          {
+            relativePath: "客户",
+            name: "客户",
+            kind: "directory" as const,
+            size: null,
+            modifiedAt: "2026-05-22T11:03:00.000Z",
+          },
+          {
+            relativePath: "brief.md",
+            name: "brief.md",
+            kind: "file" as const,
+            size: 43008,
+            modifiedAt: "2026-05-23T14:20:00.000Z",
+          },
+        ],
+      }
+    })
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
+    })
+    await act(async () => {
+      buttonByText("资料").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="当前位置"]')?.textContent).not.toContain("客户")
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      customerRequest.resolve({
+        projectId: "project-1",
+        directoryPath: "客户",
+        entries: [{
+          relativePath: "客户/stale.md",
+          name: "stale.md",
+          kind: "file",
+          size: 24,
+          modifiedAt: "2026-05-23T14:20:00.000Z",
+        }],
+      })
+      await customerRequest.promise
+    })
+
+    expect(document.body.textContent).toContain("brief.md")
+    expect(document.body.textContent).not.toContain("stale.md")
+    expect(document.body.textContent).not.toContain("读取中")
+    expect(notifications.error).not.toHaveBeenCalledWith("读取资料失败")
+  })
+
+  it("ignores a stale directory failure after navigating away", async () => {
+    const customerRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    let customerRequestCount = 0
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        customerRequestCount += 1
+        if (customerRequestCount === 1) return { projectId: "project-1", directoryPath, entries: [] }
+        return customerRequest.promise
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [
+          {
+            relativePath: "客户",
+            name: "客户",
+            kind: "directory" as const,
+            size: null,
+            modifiedAt: "2026-05-22T11:03:00.000Z",
+          },
+          {
+            relativePath: "brief.md",
+            name: "brief.md",
+            kind: "file" as const,
+            size: 43008,
+            modifiedAt: "2026-05-23T14:20:00.000Z",
+          },
+        ],
+      }
+    })
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
+    })
+    await act(async () => {
+      buttonByText("资料").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      customerRequest.reject(new Error("stale read failed"))
+      try {
+        await customerRequest.promise
+      } catch {
+        // Expected from the stale request.
+      }
+    })
+
+    expect(document.body.textContent).toContain("brief.md")
+    expect(document.body.textContent).not.toContain("读取失败")
+    expect(document.body.textContent).not.toContain("读取中")
+    expect(notifications.error).not.toHaveBeenCalledWith("读取资料失败")
+  })
+
+  it("does not mark the active pane loading when a stale captured refresh starts", async () => {
+    const uploadRequest = createDeferred<SynapseKnowledgeBaseRawMutationResult>()
+    const staleRefreshRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    let customerRequestCount = 0
+    bridgeMocks.knowledgeBase.selectAndUploadRawFiles.mockReturnValue(uploadRequest.promise)
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        customerRequestCount += 1
+        if (customerRequestCount <= 2) {
+          return {
+            projectId: "project-1",
+            directoryPath,
+            entries: [{
+              relativePath: "客户/访谈.md",
+              name: "访谈.md",
+              kind: "file",
+              size: 24,
+              modifiedAt: "2026-05-23T14:20:00.000Z",
+            }],
+          }
+        }
+        return staleRefreshRequest.promise
+      }
+      if (directoryPath === "2026") {
+        return {
+          projectId: "project-1",
+          directoryPath,
+          entries: [],
+        }
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [
+          {
+            relativePath: "客户",
+            name: "客户",
+            kind: "directory" as const,
+            size: null,
+            modifiedAt: "2026-05-22T11:03:00.000Z",
+          },
+          {
+            relativePath: "2026",
+            name: "2026",
+            kind: "directory" as const,
+            size: null,
+            modifiedAt: "2026-05-24T16:05:00.000Z",
+          },
+        ],
+      }
+    })
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("2026")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("访谈.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("上传文件").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("资料").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="当前位置"]')?.textContent).not.toContain("客户")
+      expect(document.body.textContent).toContain("2026")
+    })
+    await act(async () => {
+      buttonByLabel("打开文件夹 2026").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("2026")
+      expect(document.body.textContent).toContain("没有文件")
+    })
+
+    await act(async () => {
+      uploadRequest.resolve({
+        projectId: "project-1",
+        entries: [],
+        skipped: [],
+      })
+      await uploadRequest.promise
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(3)
+    })
+
+    expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("2026")
+    expect(document.body.textContent).toContain("没有文件")
+    expect(document.body.textContent).not.toContain("读取中")
+    expect(document.body.textContent).not.toContain("读取失败")
+  })
+
   it("clears stale entries when opening a folder fails", async () => {
     bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
       if (directoryPath === "客户") throw new Error("read failed")
@@ -447,6 +773,261 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).not.toContain("brief.md")
   })
 
+  it("preloads one root child level for the folder tree", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "2026",
+      })
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "客户",
+      })
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).not.toHaveBeenCalledWith({
+      projectId: "project-1",
+      directoryPath: "2026/05",
+    })
+  })
+
+  it("settles one root child preload without waiting for a pending sibling", async () => {
+    const yearRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    const clientRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "2026") return yearRequest.promise
+      if (directoryPath === "客户") return clientRequest.promise
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [
+          {
+            relativePath: "2026",
+            name: "2026",
+            kind: "directory",
+            size: null,
+            modifiedAt: "2026-05-24T16:05:00.000Z",
+          },
+          {
+            relativePath: "客户",
+            name: "客户",
+            kind: "directory",
+            size: null,
+            modifiedAt: "2026-05-22T11:03:00.000Z",
+          },
+        ],
+      }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "2026",
+      })
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "客户",
+      })
+    })
+
+    await act(async () => {
+      buttonByLabel("展开 2026").click()
+      await Promise.resolve()
+    })
+    expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("读取中")
+
+    await act(async () => {
+      yearRequest.resolve({
+        projectId: "project-1",
+        directoryPath: "2026",
+        entries: [{
+          relativePath: "2026/05",
+          name: "05",
+          kind: "directory",
+          size: null,
+          modifiedAt: "2026-05-24T16:05:00.000Z",
+        }],
+      })
+      await yearRequest.promise
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      const treeText = document.querySelector('[aria-label="文件夹树"]')?.textContent
+      expect(treeText).toContain("05")
+      expect(treeText).not.toContain("读取中")
+    })
+    expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+      payload.directoryPath === "客户"
+    ))).toHaveLength(1)
+  })
+
+  it("does not duplicate pending root child preloads after an intervening render", async () => {
+    let resolvePreload: ((result: SynapseKnowledgeBaseListRawDirectoryResult) => void) | null = null
+    const preloadRequest = new Promise<SynapseKnowledgeBaseListRawDirectoryResult>((resolve) => {
+      resolvePreload = resolve
+    })
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "2026" || directoryPath === "客户") return preloadRequest
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [
+          {
+            relativePath: "2026",
+            name: "2026",
+            kind: "directory",
+            size: null,
+            modifiedAt: "2026-05-24T16:05:00.000Z",
+          },
+          {
+            relativePath: "客户",
+            name: "客户",
+            kind: "directory",
+            size: null,
+            modifiedAt: "2026-05-22T11:03:00.000Z",
+          },
+        ],
+      }
+    })
+
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "2026",
+      })
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "客户",
+      })
+    })
+
+    await act(async () => {
+      buttonByLabel("展开 2026").click()
+      await Promise.resolve()
+    })
+
+    expect(
+      bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => payload.directoryPath === "2026"),
+    ).toHaveLength(1)
+    expect(
+      bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => payload.directoryPath === "客户"),
+    ).toHaveLength(1)
+
+    await act(async () => {
+      resolvePreload?.({
+        projectId: "project-1",
+        directoryPath: "2026",
+        entries: [],
+      })
+      await preloadRequest
+    })
+  })
+
+  it("clears tree loading when opening a folder with a pending root child preload", async () => {
+    const clientDirectory = {
+      relativePath: "客户",
+      name: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-22T11:03:00.000Z",
+    }
+    const projectDirectory = {
+      relativePath: "客户/项目",
+      name: "项目",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-24T16:05:00.000Z",
+    }
+    const stalePreload = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    const activeRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    let clientDirectoryRequestCount = 0
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        clientDirectoryRequestCount += 1
+        if (clientDirectoryRequestCount === 1) return stalePreload.promise
+        return activeRequest.promise
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: directoryPath === "" ? [clientDirectory] : [],
+      }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(1)
+    })
+
+    await act(async () => {
+      buttonByLabel("打开树文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(2)
+    })
+
+    await act(async () => {
+      activeRequest.resolve({
+        projectId: "project-1",
+        directoryPath: "客户",
+        entries: [projectDirectory],
+      })
+      await activeRequest.promise
+    })
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("项目")
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).not.toContain("读取中")
+    })
+
+    await act(async () => {
+      stalePreload.reject(new Error("stale preload failed"))
+      try {
+        await stalePreload.promise
+      } catch {
+        // Expected from the stale request.
+      }
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByLabel("折叠 客户").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByLabel("展开 客户").click()
+      await Promise.resolve()
+    })
+    expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("项目")
+    expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).not.toContain("读取中")
+  })
+
+  it("hides disclosure actions for preloaded folders without child folders", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "客户",
+      })
+      expect(document.querySelector('[aria-label="展开 2026"]')).not.toBeNull()
+      expect(document.querySelector('[aria-label="展开 客户"]')).toBeNull()
+      expect(document.querySelector('[aria-label="折叠 客户"]')).toBeNull()
+    })
+  })
+
   it("opens folders from the left file tree", async () => {
     renderWindow()
 
@@ -465,6 +1046,195 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
       projectId: "project-1",
       directoryPath: "客户",
+    })
+  })
+
+  it("does not show rename or delete actions for the left file tree root", async () => {
+    renderWindow()
+
+    await act(async () => {
+      openContextMenuOnButton("打开树文件夹 资料")
+      await Promise.resolve()
+    })
+
+    expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(0)
+  })
+
+  it("renames folders from the left file tree context menu", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("客户")
+    })
+
+    await act(async () => {
+      openContextMenuOnButton("打开树文件夹 客户")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      menuItemByText("重命名").click()
+      await Promise.resolve()
+    })
+
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="新名称"]')
+    expect(input).not.toBeNull()
+    act(() => {
+      changeInput(input!, "客户资料")
+    })
+    await act(async () => {
+      buttonByLabel("确认重命名").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.renameRawEntry).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePath: "客户",
+      newName: "客户资料",
+    })
+  })
+
+  it("deletes folders from the left file tree context menu", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("客户")
+    })
+
+    await act(async () => {
+      openContextMenuOnButton("打开树文件夹 客户")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      menuItemByText("删除").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("移到废纸篓？")
+
+    await act(async () => {
+      buttonByLabel("确认移到废纸篓").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.trashRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["客户"],
+    })
+  })
+
+  it("keeps active directory content fresh when a tree load for the same directory resolves first", async () => {
+    const clientDirectory = {
+      relativePath: "客户",
+      name: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-22T11:03:00.000Z",
+    }
+    const projectDirectory = {
+      relativePath: "客户/项目",
+      name: "项目",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-24T16:05:00.000Z",
+    }
+    const projectNote = {
+      relativePath: "客户/项目/notes.md",
+      name: "notes.md",
+      kind: "file" as const,
+      size: 128,
+      modifiedAt: "2026-05-25T09:10:00.000Z",
+    }
+    const activeProjectRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    const treeProjectRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    let projectRequestCount = 0
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "") {
+        return {
+          projectId: "project-1",
+          directoryPath,
+          entries: [clientDirectory],
+        }
+      }
+      if (directoryPath === "客户") {
+        return {
+          projectId: "project-1",
+          directoryPath,
+          entries: [projectDirectory],
+        }
+      }
+      if (directoryPath === "客户/项目") {
+        projectRequestCount += 1
+        return projectRequestCount === 1 ? activeProjectRequest.promise : treeProjectRequest.promise
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [],
+      }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("客户")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开树文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("项目")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开文件夹 项目").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户/项目"
+      ))).toHaveLength(1)
+    })
+
+    const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="搜索当前文件夹"]')
+    if (!searchInput) throw new Error("Search input not found.")
+    await act(async () => {
+      changeInput(searchInput, "notes")
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain("读取中")
+
+    await act(async () => {
+      buttonByLabel("展开 项目").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户/项目"
+      ))).toHaveLength(2)
+    })
+
+    await act(async () => {
+      treeProjectRequest.resolve({
+        projectId: "project-1",
+        directoryPath: "客户/项目",
+        entries: [],
+      })
+      await treeProjectRequest.promise
+    })
+
+    await act(async () => {
+      activeProjectRequest.resolve({
+        projectId: "project-1",
+        directoryPath: "客户/项目",
+        entries: [projectNote],
+      })
+      await activeProjectRequest.promise
+    })
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("notes.md")
+      expect(document.body.textContent).not.toContain("读取中")
     })
   })
 
@@ -1009,10 +1779,6 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("客户")
     })
 
-    await act(async () => {
-      buttonByLabel("展开 客户").click()
-      await Promise.resolve()
-    })
     await waitForExpectation(() => {
       expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
         projectId: "project-1",
@@ -1039,8 +1805,350 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="展开 客户"]')).not.toBeNull()
+    })
+    await act(async () => {
+      buttonByLabel("展开 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
       expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("2026")
     })
+  })
+
+  it("ignores stale pending root preload after moving a directory into its target", async () => {
+    const rootDirectory = {
+      relativePath: "2026",
+      name: "2026",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-24T16:05:00.000Z",
+    }
+    const targetDirectory = {
+      relativePath: "客户",
+      name: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-22T11:03:00.000Z",
+    }
+    let moved = false
+    let clientDirectoryRequestCount = 0
+    let resolveStalePreload: ((result: SynapseKnowledgeBaseListRawDirectoryResult) => void) | null = null
+    const stalePreload = new Promise<SynapseKnowledgeBaseListRawDirectoryResult>((resolve) => {
+      resolveStalePreload = resolve
+    })
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        clientDirectoryRequestCount += 1
+        if (clientDirectoryRequestCount === 1) return stalePreload
+        return {
+          projectId: "project-1",
+          directoryPath,
+          entries: moved ? [{ ...rootDirectory, relativePath: "客户/2026" }] : [],
+        }
+      }
+      if (directoryPath === "2026") {
+        return { projectId: "project-1", directoryPath, entries: [] }
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: moved ? [targetDirectory] : [rootDirectory, targetDirectory],
+      }
+    })
+    bridgeMocks.knowledgeBase.moveRawEntries.mockImplementation(async ({ relativePaths, targetDirectoryPath }) => {
+      if (relativePaths.includes("2026") && targetDirectoryPath === "客户") {
+        moved = true
+      }
+      return { projectId: "project-1", entries: [], skipped: [] }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(1)
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 2026").click()
+    })
+    await act(async () => {
+      buttonByLabel("移动所选").click()
+    })
+    await act(async () => {
+      buttonByLabel("选择目标文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByLabel("确认移动").click()
+    })
+    await act(async () => {
+      buttonByText("确认").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(2)
+      expect(document.querySelector('[aria-label="展开 客户"]')).not.toBeNull()
+    })
+
+    await act(async () => {
+      resolveStalePreload?.({
+        projectId: "project-1",
+        directoryPath: "客户",
+        entries: [],
+      })
+      await stalePreload
+    })
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="展开 客户"]')).not.toBeNull()
+    })
+    await act(async () => {
+      buttonByLabel("展开 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("2026")
+    })
+  })
+
+  it("clears loading state when pruning a pending root preload", async () => {
+    const targetDirectory = {
+      relativePath: "客户",
+      name: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-22T11:03:00.000Z",
+    }
+    let resolveStalePreload: ((result: SynapseKnowledgeBaseListRawDirectoryResult) => void) | null = null
+    const stalePreload = new Promise<SynapseKnowledgeBaseListRawDirectoryResult>((resolve) => {
+      resolveStalePreload = resolve
+    })
+    let clientDirectoryRequestCount = 0
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        clientDirectoryRequestCount += 1
+        if (clientDirectoryRequestCount === 1) return stalePreload
+        return { projectId: "project-1", directoryPath, entries: [] }
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [targetDirectory],
+      }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(1)
+    })
+
+    await act(async () => {
+      buttonByLabel("更多 客户").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+    let renameItem: HTMLElement | undefined
+    await waitForExpectation(() => {
+      renameItem = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent?.includes("重命名"))
+      expect(renameItem).toBeDefined()
+    })
+    await act(async () => {
+      renameItem!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="新名称"]')
+    expect(input).not.toBeNull()
+    act(() => {
+      changeInput(input!, "客户")
+    })
+    await act(async () => {
+      buttonByLabel("确认重命名").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      resolveStalePreload?.({
+        projectId: "project-1",
+        directoryPath: "客户",
+        entries: [],
+      })
+      await stalePreload
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(2)
+    })
+  })
+
+  it("does not report a stale root preload failure after pruning it", async () => {
+    const targetDirectory = {
+      relativePath: "客户",
+      name: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-22T11:03:00.000Z",
+    }
+    const stalePreload = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    let clientDirectoryRequestCount = 0
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        clientDirectoryRequestCount += 1
+        if (clientDirectoryRequestCount === 1) return stalePreload.promise
+        return { projectId: "project-1", directoryPath, entries: [] }
+      }
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [targetDirectory],
+      }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+        payload.directoryPath === "客户"
+      ))).toHaveLength(1)
+    })
+
+    await act(async () => {
+      buttonByLabel("更多 客户").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+    let renameItem: HTMLElement | undefined
+    await waitForExpectation(() => {
+      renameItem = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent?.includes("重命名"))
+      expect(renameItem).toBeDefined()
+    })
+    await act(async () => {
+      renameItem!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="新名称"]')
+    expect(input).not.toBeNull()
+    act(() => {
+      changeInput(input!, "客户")
+    })
+    await act(async () => {
+      buttonByLabel("确认重命名").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      stalePreload.reject(new Error("stale preload failed"))
+      try {
+        await stalePreload.promise
+      } catch {
+        // Expected from the stale request.
+      }
+      await Promise.resolve()
+    })
+
+    expect(notifications.error).not.toHaveBeenCalledWith("读取资料失败")
+    expect(rendererLogger.error).not.toHaveBeenCalledWith(
+      "Failed to refresh knowledge base raw tree directories.",
+      expect.anything(),
+    )
+  })
+
+  it("does not report a stale failure from one path while another preload path remains fresh", async () => {
+    const clientDirectory = {
+      relativePath: "客户",
+      name: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-22T11:03:00.000Z",
+    }
+    const yearDirectory = {
+      relativePath: "2026",
+      name: "2026",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-24T16:05:00.000Z",
+    }
+    const staleClientPreload = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    const freshYearPreload = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+    let clientDirectoryRequestCount = 0
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "客户") {
+        clientDirectoryRequestCount += 1
+        if (clientDirectoryRequestCount === 1) return staleClientPreload.promise
+        return { projectId: "project-1", directoryPath, entries: [] }
+      }
+      if (directoryPath === "2026") return freshYearPreload.promise
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [clientDirectory, yearDirectory],
+      }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "客户",
+      })
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "2026",
+      })
+    })
+
+    await act(async () => {
+      buttonByLabel("更多 客户").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+    let renameItem: HTMLElement | undefined
+    await waitForExpectation(() => {
+      renameItem = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent?.includes("重命名"))
+      expect(renameItem).toBeDefined()
+    })
+    await act(async () => {
+      renameItem!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="新名称"]')
+    expect(input).not.toBeNull()
+    act(() => {
+      changeInput(input!, "客户")
+    })
+    await act(async () => {
+      buttonByLabel("确认重命名").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      staleClientPreload.reject(new Error("stale client preload failed"))
+      try {
+        await staleClientPreload.promise
+      } catch {
+        // Expected from the stale request.
+      }
+      freshYearPreload.resolve({
+        projectId: "project-1",
+        directoryPath: "2026",
+        entries: [],
+      })
+      await freshYearPreload.promise
+      await Promise.resolve()
+    })
+
+    expect(notifications.error).not.toHaveBeenCalledWith("读取资料失败")
+    expect(rendererLogger.error).not.toHaveBeenCalledWith(
+      "Failed to refresh knowledge base raw tree directories.",
+      expect.anything(),
+    )
   })
 
   it("asks for confirmation before trashing a selected directory", async () => {

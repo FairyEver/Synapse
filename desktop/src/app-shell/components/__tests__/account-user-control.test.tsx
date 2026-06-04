@@ -37,6 +37,7 @@ vi.mock("@/app-shell/notifications", () => ({
 }))
 
 import { AccountUserControl } from "../account-user-control"
+import { AppShellActions } from "../app-shell-actions"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -48,6 +49,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
 })
 
@@ -58,6 +60,17 @@ function renderControl(variant: "toolbar" | "panel") {
   roots.push(root)
   act(() => {
     root.render(<AccountUserControl variant={variant} />)
+  })
+  return container
+}
+
+function renderActions() {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  act(() => {
+    root.render(<AppShellActions onOpenAccountSettings={vi.fn()} />)
   })
   return container
 }
@@ -88,5 +101,16 @@ describe("AccountUserControl", () => {
     const container = renderControl("panel")
 
     expect(container.textContent).toContain("user@example.com")
+  })
+
+  it("does not render the top bar account control in packaged builds", () => {
+    ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
+      isPackaged: true,
+    }
+
+    const container = renderActions()
+
+    expect(container.textContent).not.toContain("Ada")
+    expect(container.querySelector("[data-track='account-user-menu']")).toBeNull()
   })
 })

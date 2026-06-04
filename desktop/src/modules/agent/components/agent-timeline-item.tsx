@@ -8,6 +8,7 @@ import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
   SynapseAgentTimelineItem,
+  SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { AgentMessageEvent } from "./agent-message-event"
 import { AgentAnnotation } from "./agent-annotation"
@@ -24,8 +25,10 @@ function AgentTimelineItem({
   latestPendingItemIds,
   onOpenReference,
   onRespondPermission,
+  toolResult,
 }: {
   readonly item: SynapseAgentTimelineItem
+  readonly toolResult?: SynapseAgentToolResultTimelineItem
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
@@ -52,7 +55,7 @@ function AgentTimelineItem({
       return <AgentThinkingEvent item={item} profile={profile} />
     case "toolCall":
     case "toolResult":
-      return <AgentToolEvent item={item} profile={profile} />
+      return <AgentToolEvent item={item} result={toolResult} profile={profile} />
     case "permissionRequest": {
       const hasPendingRequest = pendingPermissions.some((p) => p.requestId === item.requestId)
       const isPending = hasPendingRequest && (latestPendingItemIds?.has(item.id) ?? true)

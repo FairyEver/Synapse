@@ -53,6 +53,7 @@ function ProjectGroup({
   const [open, setOpen] = useState(isSelected || sessions.length > 0)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
   const [renameValue, setRenameValue] = useState("")
+  const renameInputRef = useRef<HTMLInputElement>(null)
 
   const prevIsSelectedRef = useRef(isSelected)
   const prevSessionCountRef = useRef(sessions.length)
@@ -65,6 +66,12 @@ function ProjectGroup({
   function handleRenameOpen(session: SynapseAgentSessionSummary) {
     setRenameTarget(session)
     setRenameValue(sessionLabel(session))
+  }
+
+  function handleRenameOpenAutoFocus(event: Event) {
+    event.preventDefault()
+    renameInputRef.current?.focus()
+    renameInputRef.current?.select()
   }
 
   async function handleRenameConfirm() {
@@ -127,6 +134,7 @@ function ProjectGroup({
                         }
                         trackValue={`${session.projectId}:${session.id}`}
                         onSelect={() => onSelect(session)}
+                        onDoubleClick={() => handleRenameOpen(session)}
                       >
                         {label}
                       </AgentSidebarSessionRow>
@@ -158,15 +166,19 @@ function ProjectGroup({
       </Collapsible>
 
       <Dialog open={renameTarget !== null} onOpenChange={(open) => { if (!open) setRenameTarget(null) }}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent
+          className="sm:max-w-sm"
+          aria-describedby={undefined}
+          onOpenAutoFocus={handleRenameOpenAutoFocus}
+        >
           <DialogHeader>
             <DialogTitle>重命名会话</DialogTitle>
           </DialogHeader>
           <Input
+            ref={renameInputRef}
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleRenameConfirm() }}
-            autoFocus
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameTarget(null)}>取消</Button>

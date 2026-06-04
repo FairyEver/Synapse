@@ -15,3 +15,4 @@ server/.env.local
 .superpowers/
 .worktrees/
 .superpowers/
+cdn-release-mac/

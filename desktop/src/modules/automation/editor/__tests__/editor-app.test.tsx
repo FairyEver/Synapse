@@ -179,6 +179,8 @@ describe("AutomationEditorApp", () => {
 
     const nameInput = document.querySelector<HTMLInputElement>("#automation-editor-rename-name")
     expect(nameInput).not.toBeNull()
+    expect(nameInput?.selectionStart).toBe(0)
+    expect(nameInput?.selectionEnd).toBe("自动化 #0000".length)
 
     await act(async () => {
       if (!nameInput) return

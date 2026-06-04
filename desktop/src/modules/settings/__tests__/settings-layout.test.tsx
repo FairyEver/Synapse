@@ -9,6 +9,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { createDefaultConfig } from "@/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "@/types/config"
 
+const requestedSettingsCategory = vi.hoisted((): { current: string | null } => ({
+  current: "quick-inputs",
+}))
+
 const updateConfig = vi.fn(async (patch: SynapseConfigPatch) => ({
   ...createDefaultConfig(),
   ...patch,
@@ -38,7 +42,7 @@ vi.mock("@/app-shell/config", () => ({
 }))
 
 vi.mock("@/app-shell/navigation", () => ({
-  consumeRequestedSettingsCategory: () => "quick-inputs",
+  consumeRequestedSettingsCategory: () => requestedSettingsCategory.current,
   subscribeOpenSettingsAccount: () => () => undefined,
   subscribeOpenSettingsAbout: () => () => undefined,
   subscribeOpenSettingsStorage: () => () => undefined,
@@ -67,6 +71,14 @@ vi.mock("@/components/sidebar-content-layout", () => ({
   ),
 }))
 
+vi.mock("@/modules/settings/components/identity-panel", () => ({
+  IdentityPanel: () => <div>本地身份</div>,
+}))
+
+vi.mock("@/modules/settings/components/app-reset-panel", () => ({
+  AppResetPanel: () => <div>重置应用</div>,
+}))
+
 import { SettingsModule } from "@/modules/settings"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -84,6 +96,8 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  requestedSettingsCategory.current = "quick-inputs"
+  delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
 })
 
@@ -95,6 +109,37 @@ describe("SettingsModule layout", () => {
     expect(contentRoot?.className).toContain("min-w-0")
     expect(contentRoot?.className).toContain("max-w-full")
     expect(contentRoot?.className).toContain("overflow-hidden")
+  })
+
+  it("hides the account category in packaged builds", async () => {
+    ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
+      isPackaged: true,
+    }
+
+    const container = await renderSettingsModule()
+    const sidebar = container.querySelector("aside")
+
+    expect(sidebar?.textContent).not.toContain("账号")
+    expect(sidebar?.textContent).toContain("基础设置")
+  })
+
+  it("falls back to general settings when packaged builds request account settings", async () => {
+    requestedSettingsCategory.current = "account"
+    ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
+      isPackaged: true,
+    }
+
+    const container = await renderSettingsModule()
+
+    expect(container.textContent).toContain("外观")
+    expect(container.textContent).not.toContain("登录")
+  })
+
+  it("keeps the account category visible outside packaged builds", async () => {
+    const container = await renderSettingsModule()
+    const sidebar = container.querySelector("aside")
+
+    expect(sidebar?.textContent).toContain("账号")
   })
 })
 

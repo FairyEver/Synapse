@@ -73,6 +73,36 @@ describe("AgentPermissionModeMenu", () => {
       },
     })
   })
+
+  it("explains each permission mode with the original English mode and risk copy", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentPermissionModeMenu
+          selectedMode="default"
+          trigger={<button type="button">权限模式</button>}
+          onSelect={vi.fn()}
+        />,
+      )
+    })
+
+    openMenu(container)
+    const item = getModeItem("bypassPermissions")
+
+    expect(item.textContent).toContain("跳过权限确认")
+    expect(item.textContent).toContain("高风险")
+
+    await hoverElement(item)
+
+    expect(document.body.textContent).toContain("bypassPermissions")
+    expect(document.body.textContent).toContain("Bypass all permission checks")
+    expect(document.body.textContent).toContain("所有到达权限层的工具都会直接执行")
+    expect(document.body.textContent).toContain("只建议在隔离环境或完全信任任务时使用")
+  })
 })
 
 function openMenu(container: HTMLElement) {
@@ -88,4 +118,18 @@ function getModeItem(mode: string) {
   const item = document.querySelector(`[data-mode="${mode}"]`)
   expect(item).toBeTruthy()
   return item as HTMLElement
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function hoverElement(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }))
+    element.dispatchEvent(new MouseEvent("pointerenter", { bubbles: false }))
+    element.dispatchEvent(new MouseEvent("pointermove", { bubbles: true }))
+    element.focus()
+    await wait(120)
+  })
 }
