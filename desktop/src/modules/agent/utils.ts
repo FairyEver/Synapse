@@ -195,15 +195,6 @@ function thinkingIndicatorText(frame: number): string {
   return `thinking${THINKING_DOT.repeat(dotCount)}`
 }
 
-function agentCliLabel(agentType: string | undefined): string | undefined {
-  const normalized = agentType?.trim()
-  if (!normalized) return undefined
-  if (normalized === "claude-code" || normalized === "claude-sdk" || normalized === "claude-agent-sdk") {
-    return "claudecode"
-  }
-  return normalized
-}
-
 const MAX_RAW_INPUT_STRING_LENGTH = 160
 
 function errorLogMeta(error: unknown): {
@@ -265,7 +256,6 @@ function truncateRawInputString(value: string): string {
 
 export {
   DEFAULT_LOCAL_SESSION_KEY,
-  agentCliLabel,
   defaultSessionId,
   defaultSessionKey,
   errorLogMeta,

@@ -384,7 +384,29 @@ describe("AgentModule pending prompt sessions", () => {
 
     expect(mocks.timelineProps).toBeNull()
     expect(container.textContent).toContain("请创建新的会话")
-    expect(container.textContent).not.toContain("claudecode")
+  })
+
+  it("renders selected session title without the agent cli badge", async () => {
+    mocks.chat = createChatState({
+      sessions: [{
+        ...targetSession,
+        agentType: "claude-code",
+        name: "deepseek",
+      }],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(container.textContent).toBe("deepseek")
   })
 
   it("does not render a selected session excluded by the active source filter", async () => {

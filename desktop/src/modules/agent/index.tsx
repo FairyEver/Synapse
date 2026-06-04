@@ -1,12 +1,11 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, CircleHelp, Clock, Copy, FolderOpen, ShieldAlert } from "lucide-react"
+import { AlertTriangle, CircleHelp, Copy, FolderOpen, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { createRendererLogger } from "@/app-shell/logging"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { AgentComposer } from "./components/agent-composer"
@@ -46,7 +45,6 @@ import {
   type ConversationSourceFilter,
 } from "./conversation-source"
 import {
-  agentCliLabel,
   formatAgentTranscript,
   sessionLabel,
 } from "./utils"
@@ -410,7 +408,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   )
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
     ?? DEFAULT_AGENT_DISPLAY_PROFILE
-  const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
   const selectedPermissionMode = selectedSession?.mode ?? "default"
   const pendingPermissionCount = chat.pendingPermissions.filter(isToolPermission).length
   const pendingQuestionCount = chat.pendingPermissions.filter(isUserQuestionPending).length
@@ -496,16 +493,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       <div className="relative flex h-full min-h-0 flex-col gap-0 bg-background px-2 py-2.5">
         <TooltipProvider>
           <div className="flex items-center justify-between gap-2 px-0 py-0">
-            {/* 左区：agent 类型 badge + 会话名称 */}
+            {/* 左区：会话名称 */}
             <div className="flex min-w-0 items-center gap-2">
-              {selectedCliLabel ? (
-                <Badge variant="secondary" className="flex shrink-0 items-center gap-1">
-                  {selectedCliLabel}
-                  {selectedSession?.platform === "scheduled" && (
-                    <Clock className="size-3 text-muted-foreground" />
-                  )}
-                </Badge>
-              ) : null}
               <h2 className="truncate text-sm font-medium">
                 {selectedSession ? sessionLabel(selectedSession) : "Agent"}
               </h2>
