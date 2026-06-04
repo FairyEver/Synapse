@@ -299,6 +299,64 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(buttonByLabel("移到废纸篓").disabled).toBe(false)
   })
 
+  it("opens a directory when clicking the empty area of its row", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    const row = document.querySelector<HTMLElement>('[data-raw-path="客户"]')
+    if (!row) throw new Error("Directory row missing")
+
+    await act(async () => {
+      row.click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "客户",
+    })
+  })
+
+  it("does not open a directory when clicking its selection checkbox", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 客户").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("已选择 1 项")
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "",
+    })
+  })
+
+  it("does not open a directory when clicking its row action button", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("更多 客户").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "",
+    })
+  })
+
   it("selects every visible entry from the selection checkbox", async () => {
     renderWindow()
 

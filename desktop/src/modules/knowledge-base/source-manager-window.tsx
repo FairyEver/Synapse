@@ -428,20 +428,23 @@ function SourceEntryList({
   }
 
   return (
-    <div role="list" aria-label="资料列表" className="divide-y divide-border">
+    <div role="list" aria-label="资料列表" className="flex flex-col gap-1">
       {entries.map((entry) => {
         const selected = selectedPaths.has(entry.relativePath)
+        const isDirectory = entry.kind === "directory"
         return (
           <div
             key={entry.relativePath}
             role="listitem"
             className={cn(
-              "grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-1 py-2",
-              internalDropTarget === entry.relativePath && "bg-accent",
+              "grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted",
+              isDirectory && "cursor-pointer",
+              internalDropTarget === entry.relativePath && "bg-muted",
             )}
             data-raw-path={entry.relativePath}
-            data-raw-drop-target={entry.kind === "directory" ? entry.relativePath : undefined}
+            data-raw-drop-target={isDirectory ? entry.relativePath : undefined}
             draggable
+            onClick={isDirectory ? () => onOpenDirectory(entry.relativePath) : undefined}
             onDragStart={(event) => {
               event.stopPropagation()
               onDragEntry(entry, event)
@@ -461,24 +464,29 @@ function SourceEntryList({
               onDropOnDirectory(entry.relativePath, event)
             }}
           >
-            <Checkbox
-              aria-label={`选择 ${entry.name}`}
-              checked={selected}
-              onCheckedChange={(checked) => onToggleSelected(entry.relativePath, checked === true)}
-            />
+            <div className="flex items-center" onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                aria-label={`选择 ${entry.name}`}
+                checked={selected}
+                onCheckedChange={(checked) => onToggleSelected(entry.relativePath, checked === true)}
+              />
+            </div>
             <div className="flex min-w-0 items-center gap-3">
-              {entry.kind === "directory" ? (
+              {isDirectory ? (
                 <Folder className="size-4 shrink-0 text-muted-foreground" />
               ) : (
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
               )}
               <div className="min-w-0">
-                {entry.kind === "directory" ? (
+                {isDirectory ? (
                   <Button
                     type="button"
                     variant="ghost"
-                    className="h-auto min-w-0 justify-start px-0 py-0 font-medium"
-                    onClick={() => onOpenDirectory(entry.relativePath)}
+                    className="h-auto min-w-0 justify-start px-0 py-0 font-medium hover:bg-transparent"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onOpenDirectory(entry.relativePath)
+                    }}
                     aria-label={`打开文件夹 ${entry.name}`}
                   >
                     <span className="truncate">{entry.name}</span>
@@ -491,7 +499,14 @@ function SourceEntryList({
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" aria-label={`更多 ${entry.name}`}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-10"
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={`更多 ${entry.name}`}
+                >
                   <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
