@@ -300,6 +300,76 @@ describe("Synapse quick inputs config", () => {
     expect(config.global.quickInputs.every((item) => item.directSend)).toBe(true)
   })
 
+  it("seeds built-in quick inputs for an empty legacy config", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [],
+      },
+    })
+
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
+    expect(config.global.quickInputs).toEqual(DEFAULT_QUICK_INPUTS)
+  })
+
+  it("does not add built-in quick inputs when user snippets already exist", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [
+          { id: "quick-1", content: "用户自己的片段", directSend: true },
+        ],
+      },
+    })
+
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
+    expect(config.global.quickInputs).toEqual([
+      { id: "quick-1", content: "用户自己的片段", directSend: true },
+    ])
+  })
+
+  it("does not re-add defaults after the current version already ran the seed check", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [],
+        defaultQuickInputsSeededVersion: SYNAPSE_APP_VERSION,
+      },
+    })
+
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
+    expect(config.global.quickInputs).toEqual([])
+  })
+
+  it("records the current seed version without replacing existing snippets from older versions", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [
+          { id: "quick-1", content: "保留我", directSend: false },
+        ],
+        defaultQuickInputsSeededVersion: "0.2.238",
+      },
+    })
+
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
+    expect(config.global.quickInputs).toEqual([
+      { id: "quick-1", content: "保留我", directSend: false },
+    ])
+  })
+
   it("preserves valid multi-line quick input content", () => {
     const config = sanitizeSynapseConfig({
       activeRepoUuid: null,
@@ -313,6 +383,7 @@ describe("Synapse quick inputs config", () => {
       },
     })
 
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
     expect(config.global.quickInputs).toEqual([
       { id: "quick-1", content: "第一行\n第二行", directSend: false },
     ])
@@ -332,6 +403,7 @@ describe("Synapse quick inputs config", () => {
       },
     })
 
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
     expect(config.global.quickInputs).toEqual([
       { id: "quick-1", content: "继续", directSend: true },
       { id: "quick-2", content: "插入这段", directSend: false },
@@ -352,6 +424,7 @@ describe("Synapse quick inputs config", () => {
       },
     })
 
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
     expect(config.global.quickInputs).toEqual([
       { id: "quick-1", content: "旧片段", directSend: false },
       { id: "quick-2", content: "错误开关", directSend: false },
@@ -376,6 +449,7 @@ describe("Synapse quick inputs config", () => {
       },
     })
 
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
     expect(config.global.quickInputs).toEqual([
       { id: "quick-1", content: "有效内容", directSend: false },
     ])
