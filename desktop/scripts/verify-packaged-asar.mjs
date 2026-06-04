@@ -79,6 +79,31 @@ function verifyPackedNode(header, relativePath, failures, message) {
   }
 }
 
+function verifyPackedTextIncludes(buffer, dataOffset, header, relativePath, expectedText, failures, message) {
+  const node = findNode(header, relativePath)
+  if (!node) {
+    failures.push(`${message}: ${relativePath}`)
+    return
+  }
+  if (node.unpacked) {
+    failures.push(`${relativePath} must stay packed`)
+    return
+  }
+  if (node.offset === undefined || node.size === undefined) {
+    failures.push(`${relativePath} is missing packed file data`)
+    return
+  }
+
+  try {
+    const text = readPackedFile(buffer, dataOffset, node).toString("utf8")
+    if (!text.includes(expectedText)) {
+      failures.push(`${message}: ${relativePath}`)
+    }
+  } catch (error) {
+    failures.push(`${relativePath}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 function verifyUnpackedNode(header, unpackedPath, relativePath, failures, message) {
   const node = findNode(header, relativePath)
   if (!node) {
@@ -216,6 +241,33 @@ function verifyResources(resourcesPath, label) {
     "dist-electron/electron/worker-bootstraps/file-conversion-worker-bootstrap.js.map",
     failures,
     "file conversion worker bootstrap sourcemap is missing from app.asar.unpacked",
+  )
+  verifyPackedTextIncludes(
+    buffer,
+    dataOffset,
+    header,
+    "dist-electron/electron/services/agent-runtime/claude-runtime-binary.js",
+    "inspectPackagedClaudeRuntime",
+    failures,
+    "packaged Claude runtime guard is missing from app.asar",
+  )
+  verifyPackedTextIncludes(
+    buffer,
+    dataOffset,
+    header,
+    "dist-electron/electron/services/agent-runtime/claude-sdk-session.js",
+    "pathToClaudeCodeExecutable",
+    failures,
+    "packaged Claude runtime executable override is missing from app.asar",
+  )
+  verifyPackedTextIncludes(
+    buffer,
+    dataOffset,
+    header,
+    "dist-electron/electron/services/diagnostics-service.js",
+    "app.claude-runtime",
+    failures,
+    "packaged Claude runtime diagnostics are missing from app.asar",
   )
   verifyClaudeRuntime(unpackedPath, failures)
 

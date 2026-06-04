@@ -30,10 +30,10 @@ jobs:
         include:
           - label: macOS
             os: macos-latest
-            package_script: package:mac
+            package_script: package:mac:compiled
           - label: Windows
             os: windows-latest
-            package_script: package:win
+            package_script: package:win:compiled
     steps:
       - name: Checkout repository
         run: |
@@ -69,6 +69,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate definitions registry
+        run: pnpm --filter @synapse/desktop run generate:definitions-registry
 
       - name: Build renderer
         run: pnpm --filter @synapse/desktop run build:renderer

@@ -57,6 +57,7 @@ interface CreateAsarBufferOptions {
   readonly includeFileConversionWorker?: boolean
   readonly includeFileConversionService?: boolean
   readonly unpackFileConversionWorker?: boolean
+  readonly includeClaudeRuntimeGuard?: boolean
 }
 
 function createPackedFileNode(offset: number, content: Buffer, unpacked = false) {
@@ -73,12 +74,16 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includeFileConversionWorker = true,
     includeFileConversionService = true,
     unpackFileConversionWorker = false,
+    includeClaudeRuntimeGuard = true,
   } = options
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
   const fileConversionWorker = Buffer.from("require('../services/file-conversion')\n", "utf8")
   const fileConversionWorkerMap = Buffer.from("{}\n", "utf8")
   const fileConversionService = Buffer.from("module.exports = {}\n", "utf8")
+  const diagnosticsService = Buffer.from("const id = 'app.claude-runtime'; const message = '内置 Claude Code runtime';\n", "utf8")
+  const claudeRuntimeBinary = Buffer.from("export function inspectPackagedClaudeRuntime() {} // 内置 Claude Code runtime\n", "utf8")
+  const claudeSdkSession = Buffer.from("inspectPackagedClaudeRuntime(); queryOptions.pathToClaudeCodeExecutable = executablePath;\n", "utf8")
   let offset = 0
   const packageNode = createPackedFileNode(offset, packageJson)
   offset += packageJson.length
@@ -95,6 +100,18 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const serviceNode = createPackedFileNode(offset, fileConversionService)
   if (includeFileConversionService) {
     offset += fileConversionService.length
+  }
+  const diagnosticsNode = createPackedFileNode(offset, diagnosticsService)
+  if (includeClaudeRuntimeGuard) {
+    offset += diagnosticsService.length
+  }
+  const claudeRuntimeBinaryNode = createPackedFileNode(offset, claudeRuntimeBinary)
+  if (includeClaudeRuntimeGuard) {
+    offset += claudeRuntimeBinary.length
+  }
+  const claudeSdkSessionNode = createPackedFileNode(offset, claudeSdkSession)
+  if (includeClaudeRuntimeGuard) {
+    offset += claudeSdkSession.length
   }
   const header = Buffer.from(JSON.stringify({
     files: {
@@ -130,6 +147,17 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
               },
               services: {
                 files: {
+                  ...(includeClaudeRuntimeGuard
+                    ? {
+                        "diagnostics-service.js": diagnosticsNode,
+                        "agent-runtime": {
+                          files: {
+                            "claude-runtime-binary.js": claudeRuntimeBinaryNode,
+                            "claude-sdk-session.js": claudeSdkSessionNode,
+                          },
+                        },
+                      }
+                    : {}),
                   ...(includeFileConversionService
                     ? {
                         "file-conversion": {
@@ -171,6 +199,9 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     ...(includeFileConversionWorker && !unpackFileConversionWorker ? [fileConversionWorker] : []),
     ...(includeFileConversionWorker && !unpackFileConversionWorker ? [fileConversionWorkerMap] : []),
     ...(includeFileConversionService ? [fileConversionService] : []),
+    ...(includeClaudeRuntimeGuard ? [diagnosticsService] : []),
+    ...(includeClaudeRuntimeGuard ? [claudeRuntimeBinary] : []),
+    ...(includeClaudeRuntimeGuard ? [claudeSdkSession] : []),
   ])
 }
 
@@ -219,6 +250,28 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("Claude SDK native binary is missing"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing the packaged Claude runtime guard", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeClaudeRuntimeGuard: false }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, fileConversionBootstrapSegments)
+      await writeUnpackedFixture(resourcesPath, fileConversionBootstrapMapSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("packaged Claude runtime guard"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })
