@@ -41,10 +41,12 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
     })
 
     try {
+      const ocr = normalizeOcrOptions(interpolated.ocr)
       const converted = await runtimeDeps.fileConversionService.convert({
         filePath: inputPath,
         preferredOutput: "markdown",
-        ocr: normalizeOcrOptions(interpolated.ocr),
+        ...(ocr ? { ocr } : {}),
+        imageHandling: { mode: "omit" },
       }, {
         actor: context.actor,
         runId: context.runId,

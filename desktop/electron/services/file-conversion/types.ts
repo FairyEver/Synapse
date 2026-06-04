@@ -12,11 +12,23 @@ export interface FileConversionInput {
   readonly filePath: string
   readonly preferredOutput?: "markdown" | "text"
   readonly ocr?: FileConversionOcrOptions
+  readonly imageHandling?: FileConversionImageHandling
 }
+
+export type FileConversionImageHandling =
+  | { readonly mode: "omit" }
+  | { readonly mode: "assets"; readonly assetDirectoryName: string }
 
 export interface FileConversionWarning {
   readonly code: string
   readonly message: string
+}
+
+export interface FileConversionAsset {
+  readonly relativePath: string
+  readonly fileName: string
+  readonly mimeType: string
+  readonly content: Buffer
 }
 
 export interface FileConversionResult {
@@ -28,6 +40,7 @@ export interface FileConversionResult {
   readonly text: string
   readonly metadata: Record<string, unknown>
   readonly warnings: readonly FileConversionWarning[]
+  readonly assets?: readonly FileConversionAsset[]
 }
 
 export type FileConversionErrorCode =

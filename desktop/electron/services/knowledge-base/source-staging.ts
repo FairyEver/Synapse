@@ -125,7 +125,11 @@ export async function stageKnowledgeBaseSources(
 
       let converted: FileConversionResult
       try {
-        converted = await input.converter.convert({ filePath: sourcePath, ocr: { enabled: true } })
+        converted = await input.converter.convert({
+          filePath: sourcePath,
+          ocr: { enabled: true },
+          imageHandling: { mode: "omit" },
+        })
       } catch (error) {
         knowledgeBaseLogger.warn("Knowledge Base source conversion failed.", {
           extension,

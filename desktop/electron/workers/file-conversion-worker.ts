@@ -1,4 +1,4 @@
-import { lstat, writeFile } from "node:fs/promises"
+import { lstat } from "node:fs/promises"
 import path from "node:path"
 import { parentPort, workerData } from "node:worker_threads"
 
@@ -6,7 +6,10 @@ import {
   createDefaultFileConversionService,
   FileConversionError,
 } from "../services/file-conversion"
-import { resolveUniqueMarkdownOutputPath } from "../services/tools/file-conversion-output"
+import {
+  resolveUniqueMarkdownOutputBundle,
+  writeMarkdownOutputBundle,
+} from "../services/tools/file-conversion-output"
 import type {
   ToolsFileConversionFailure,
   ToolsFileConversionPayload,
@@ -58,13 +61,22 @@ async function runConversion(): Promise<ToolsFileConversionResult> {
     }
 
     try {
-      const result = await service.convert({ filePath: sourcePath, preferredOutput: "markdown" })
-      const outputPath = await resolveUniqueMarkdownOutputPath(input.outputDirectory, sourcePath, reservedOutputPaths)
-      await writeMarkdownOutput(outputPath, result.markdown)
-      reservedOutputPaths.add(outputPath)
+      const outputBundle = await resolveUniqueMarkdownOutputBundle(input.outputDirectory, sourcePath, reservedOutputPaths)
+      const result = await service.convert({
+        filePath: sourcePath,
+        preferredOutput: "markdown",
+        imageHandling: { mode: "assets", assetDirectoryName: outputBundle.assetDirectoryName },
+      })
+      try {
+        await writeMarkdownOutputBundle(outputBundle, result.markdown, result.assets ?? [])
+      } catch (error) {
+        throw new FileConversionWorkerWriteError(error)
+      }
+      reservedOutputPaths.add(outputBundle.markdownPath)
+      reservedOutputPaths.add(outputBundle.assetDirectoryPath)
       successes.push({
         sourcePath,
-        outputPath,
+        outputPath: outputBundle.markdownPath,
         warningCount: result.warnings.length,
       })
     } catch (error) {
@@ -76,18 +88,6 @@ async function runConversion(): Promise<ToolsFileConversionResult> {
   }
 
   return { successes, failures }
-}
-
-function ensureTrailingNewline(markdown: string): string {
-  return markdown.endsWith("\n") ? markdown : `${markdown}\n`
-}
-
-async function writeMarkdownOutput(outputPath: string, markdown: string): Promise<void> {
-  try {
-    await writeFile(outputPath, ensureTrailingNewline(markdown), "utf8")
-  } catch (error) {
-    throw new FileConversionWorkerWriteError(error)
-  }
 }
 
 class FileConversionWorkerWriteError extends Error {

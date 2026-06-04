@@ -19,8 +19,10 @@ export { createUnavailableLocalOcrEngine, UnavailableLocalOcrEngine } from "./oc
 export type { LocalOcrEngine, LocalOcrRecognitionResult, LocalOcrWarning } from "./ocr/types"
 export {
   FileConversionError,
+  type FileConversionAsset,
   type FileConversionErrorCode,
   type FileConversionFormat,
+  type FileConversionImageHandling,
   type FileConversionInput,
   type FileConversionKind,
   type FileConversionResult,

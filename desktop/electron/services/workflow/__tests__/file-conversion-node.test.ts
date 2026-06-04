@@ -96,7 +96,7 @@ describe("file conversion workflow node", () => {
 
     expect(result.status).toBe("success")
     expect(convert).toHaveBeenCalledWith(
-      { filePath: "/tmp/source.docx", preferredOutput: "markdown" },
+      { filePath: "/tmp/source.docx", preferredOutput: "markdown", imageHandling: { mode: "omit" } },
       { actor: undefined, runId: "run-1" },
     )
     expect(result.output).toBe(conversionResult.markdown)
@@ -120,6 +120,7 @@ describe("file conversion workflow node", () => {
     expect(convert).toHaveBeenCalledWith({
       filePath: "/tmp/from-variable.pdf",
       preferredOutput: "markdown",
+      imageHandling: { mode: "omit" },
     }, { actor: undefined, runId: "run-1" })
     expect(result.outputs).toEqual(expect.objectContaining({
       outputPath: join(getWorkflowFileConversionOutputRoot(), "run-1", "Source.md"),
@@ -137,6 +138,7 @@ describe("file conversion workflow node", () => {
       filePath: "/tmp/source.docx",
       preferredOutput: "markdown",
       ocr: { enabled: true, languages: ["eng", "chi_sim"], maxPages: 3 },
+      imageHandling: { mode: "omit" },
     }, { actor: undefined, runId: "run-1" })
   })
 
@@ -193,6 +195,7 @@ describe("file conversion workflow node", () => {
     expect(convert).toHaveBeenCalledWith({
       filePath: "/tmp/source.docx",
       preferredOutput: "markdown",
+      imageHandling: { mode: "omit" },
     })
   })
 

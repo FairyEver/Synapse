@@ -28,23 +28,22 @@ describe("knowledge base source staging", () => {
     const inputDir = await tempDir()
     const sourcePath = path.join(inputDir, "report.docx")
     await writeFile(sourcePath, "binary")
+    const convert = vi.fn(async (): Promise<FileConversionResult> => ({
+      sourcePath,
+      format: "docx",
+      kind: "document",
+      title: "report.docx",
+      markdown: "# report.docx\n\nBody\n",
+      text: "Body",
+      metadata: {},
+      warnings: [],
+    }))
 
     const result = await stageKnowledgeBaseSources({
       projectPath,
       filePaths: [sourcePath],
       now: () => new Date("2026-05-23T13:00:00.000Z"),
-      converter: {
-        convert: async (): Promise<FileConversionResult> => ({
-          sourcePath,
-          format: "docx",
-          kind: "document",
-          title: "report.docx",
-          markdown: "# report.docx\n\nBody\n",
-          text: "Body",
-          metadata: {},
-          warnings: [],
-        }),
-      },
+      converter: { convert },
     })
 
     expect(result.uploaded).toEqual([expect.objectContaining({
@@ -56,6 +55,11 @@ describe("knowledge base source staging", () => {
       .resolves.toContain('source_format: "docx"')
     await expect(readFile(path.join(projectPath, "_attachments", "originals", "2026", "05", "23", "report.docx"), "utf8"))
       .resolves.toBe("binary")
+    expect(convert).toHaveBeenCalledWith({
+      filePath: sourcePath,
+      ocr: { enabled: true },
+      imageHandling: { mode: "omit" },
+    })
 
     const scan = await scanKnowledgeBaseSources(projectPath)
     expect(scan.sources).toEqual([expect.objectContaining({

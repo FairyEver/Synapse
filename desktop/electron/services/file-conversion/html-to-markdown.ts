@@ -12,5 +12,13 @@ export function htmlToMarkdown(html: string): string {
     codeBlockStyle: "fenced",
   })
   service.use(gfm)
+  service.addRule("dropDataUriImages", {
+    filter: (node) => {
+      const element = node as { readonly nodeName?: string; getAttribute?: (name: string) => string | null }
+      const src = element.nodeName === "IMG" ? element.getAttribute?.("src") : null
+      return typeof src === "string" && src.toLowerCase().startsWith("data:image/")
+    },
+    replacement: () => "",
+  })
   return service.turndown(html).trim()
 }

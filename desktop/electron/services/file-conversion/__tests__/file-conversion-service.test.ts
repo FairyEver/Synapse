@@ -82,6 +82,98 @@ describe("modern file extractors", () => {
     expect(result.warnings).toEqual([{ code: "warning", message: "Ignored style" }])
   })
 
+  it("omits DOCX inline images by default and records a warning", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "report.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [new DocxExtractor({
+        convertToHtml: async (_input, options?: MockMammothOptions) => {
+          const nodes = await options?.convertImage?.(mockDocxImage("image/png", "cover")) ?? []
+          return {
+            value: `<h1>Quarterly Report</h1><p>Revenue grew 12%.</p>${renderMockImageNodes(nodes)}`,
+            messages: [],
+          }
+        },
+      })],
+    })
+
+    const result = await service.convert({ filePath })
+
+    expect(result.markdown).toContain("# Quarterly Report")
+    expect(result.markdown).toContain("Revenue grew 12%.")
+    expect(result.markdown).not.toContain("data:image")
+    expect(result.markdown).not.toContain("![](")
+    expect(result.assets).toEqual([])
+    expect(result.warnings).toEqual([{
+      code: "docx_inline_images_omitted",
+      message: "DOCX inline images were omitted from the Markdown output.",
+    }])
+  })
+
+  it("returns DOCX inline images as assets when requested", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "report.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [new DocxExtractor({
+        convertToHtml: async (_input, options?: MockMammothOptions) => {
+          const first = await options?.convertImage?.(mockDocxImage("image/jpeg", "first")) ?? []
+          const second = await options?.convertImage?.(mockDocxImage("image/png", "second")) ?? []
+          return {
+            value: `<h1>Quarterly Report</h1>${renderMockImageNodes([...first, ...second])}<p>Body</p>`,
+            messages: [],
+          }
+        },
+      })],
+    })
+
+    const result = await service.convert({
+      filePath,
+      imageHandling: { mode: "assets", assetDirectoryName: "report.assets" },
+    })
+
+    expect(result.markdown).toContain("![](./report.assets/image-1.jpeg)")
+    expect(result.markdown).toContain("![](./report.assets/image-2.png)")
+    expect(result.markdown).not.toContain("data:image")
+    expect(result.assets).toEqual([
+      {
+        relativePath: "report.assets/image-1.jpeg",
+        fileName: "image-1.jpeg",
+        mimeType: "image/jpeg",
+        content: Buffer.from("first"),
+      },
+      {
+        relativePath: "report.assets/image-2.png",
+        fileName: "image-2.png",
+        mimeType: "image/png",
+        content: Buffer.from("second"),
+      },
+    ])
+    expect(result.warnings).toEqual([])
+  })
+
+  it("drops unexpected data URI images from converted DOCX HTML", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "report.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [new DocxExtractor({
+        convertToHtml: async () => ({
+          value: '<h1>Quarterly Report</h1><p>Body</p><img src="data:image/png;base64,YWJj" />',
+          messages: [],
+        }),
+      })],
+    })
+
+    const result = await service.convert({ filePath })
+
+    expect(result.markdown).toContain("# Quarterly Report")
+    expect(result.markdown).toContain("Body")
+    expect(result.markdown).not.toContain("data:image")
+    expect(result.markdown).not.toContain("![](")
+  })
+
   it("converts xlsx workbooks into markdown tables", async () => {
     const root = await tempDir()
     const filePath = path.join(root, "budget.xlsx")
@@ -242,3 +334,35 @@ describe("FileConversionService", () => {
     })
   })
 })
+
+type MockMammothOptions = {
+  readonly convertImage?: (image: MockDocxImage) => Promise<readonly MockImageNode[]>
+}
+
+type MockDocxImage = {
+  readonly contentType: string
+  readAsBase64String(): Promise<string>
+}
+
+type MockImageNode = {
+  readonly tag?: {
+    readonly attributes?: {
+      readonly src?: string
+    }
+  }
+}
+
+function mockDocxImage(contentType: string, content: string): MockDocxImage {
+  return {
+    contentType,
+    readAsBase64String: async () => Buffer.from(content).toString("base64"),
+  }
+}
+
+function renderMockImageNodes(nodes: readonly MockImageNode[]): string {
+  return nodes
+    .map((node) => node.tag?.attributes?.src)
+    .filter((src): src is string => typeof src === "string")
+    .map((src) => `<img src="${src}" />`)
+    .join("")
+}
