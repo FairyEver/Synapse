@@ -69,6 +69,7 @@ export type {
   AutomationReschedulePolicy,
   AutomationScheduleGuardInput,
   AutomationScheduleInput,
+  AutomationScheduleInput as AutomationTriggerRuntimeInput,
   AutomationTriggerConfig,
   AutomationTriggerDefinition,
   AutomationTriggerEvent,

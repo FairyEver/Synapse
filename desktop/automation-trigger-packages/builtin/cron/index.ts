@@ -1,5 +1,3 @@
-export { cronRendererTriggerDefinition } from "./index.renderer"
-export { CronTriggerConfigForm } from "./config.renderer"
 export { cronTriggerManifest } from "./manifest"
 export {
   cronTriggerConfigSchema,
