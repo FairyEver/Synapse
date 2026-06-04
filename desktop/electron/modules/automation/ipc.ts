@@ -12,26 +12,10 @@ const automationScopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project"), projectId: z.string().min(1) }),
 ])
 
-const activeDaysSchema = z.array(z.number().int().min(0).max(6)).min(1).max(7)
-
-const automationTriggerSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("builtin.cron"),
-    config: z.object({
-      expr: z.string().min(1),
-      timezone: z.string().min(1).optional(),
-      activeDays: activeDaysSchema,
-    }),
-  }),
-  z.object({
-    type: z.literal("builtin.interval"),
-    config: z.object({
-      everyMinutes: z.number().int().positive(),
-      anchor: z.enum(["created_at", "last_completed_at"]).optional(),
-      activeDays: activeDaysSchema,
-    }),
-  }),
-])
+const automationTriggerSchema = z.object({
+  type: z.string().min(1),
+  config: z.record(z.string(), z.unknown()),
+})
 
 const automationExecutorSchema = z.object({
   type: z.string().min(1),

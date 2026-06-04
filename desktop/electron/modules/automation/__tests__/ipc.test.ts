@@ -99,6 +99,37 @@ describe("automationIpcModule", () => {
     ])
   })
 
+  it("accepts generic trigger refs without editing IPC schemas per trigger", async () => {
+    const service = {
+      automationCreate: vi.fn(async (input) => automationItem({
+        ...defaultAutomationInput(),
+        trigger: input.trigger,
+        enabled: input.enabled ?? true,
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.automation") return service as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(automationIpcModule, { moduleId: "automation", resolve })
+
+    await harness.invoke("synapse:automation:items:create", {
+      ...defaultAutomationInput(),
+      trigger: {
+        type: "builtin.fake-event",
+        config: { source: "test", value: 1 },
+      },
+    })
+
+    expect(service.automationCreate).toHaveBeenCalledWith(expect.objectContaining({
+      trigger: {
+        type: "builtin.fake-event",
+        config: { source: "test", value: 1 },
+      },
+    }))
+  })
+
   it("preserves active run and needs-update validation through list IPC validation", async () => {
     const service = {
       automationList: vi.fn(async () => [
