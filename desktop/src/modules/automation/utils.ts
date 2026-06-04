@@ -3,68 +3,11 @@ import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
 import type { AutomationCreateInput, AutomationItem, AutomationRun, AutomationRunStatus, AutomationUpdateInput } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
-import type { ActionConfig } from "../../../action-packages/types"
-import type { AutomationEditorDraft, AutomationFormState } from "./types"
+import type { AutomationEditorDraft } from "./types"
 
-const DEFAULT_EXECUTOR_TYPE = "builtin.command"
-const DEFAULT_ACTIVE_DAYS = [0, 1, 2, 3, 4, 5, 6]
 const AUTOMATION_DRAFT_NAME_PREFIX = "自动化"
 const AUTOMATION_DRAFT_SUFFIX_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const logger = createRendererLogger("automation.utils")
-
-const DEFAULT_AUTOMATION_FORM_STATE: AutomationFormState = {
-  name: "",
-  description: "",
-  cwd: "",
-  enabled: true,
-  activeDays: DEFAULT_ACTIVE_DAYS,
-  triggerType: "cron",
-  cronExpr: "0 9 * * *",
-  cronTimezone: "",
-  everyMinutes: "60",
-  intervalAnchor: "created_at",
-  executorType: DEFAULT_EXECUTOR_TYPE,
-  executorConfig: createDefaultExecutorConfig(DEFAULT_EXECUTOR_TYPE),
-  missedRunPolicy: "skip",
-}
-
-function createAutomationFormState(item?: AutomationItem): AutomationFormState {
-  if (!item) {
-    return {
-      ...DEFAULT_AUTOMATION_FORM_STATE,
-      activeDays: [...DEFAULT_ACTIVE_DAYS],
-      executorConfig: createDefaultExecutorConfig(DEFAULT_EXECUTOR_TYPE),
-    }
-  }
-  const triggerConfig = item.trigger.config
-  return {
-    name: item.name,
-    description: item.description ?? "",
-    cwd: item.cwd ?? "",
-    enabled: item.enabled,
-    activeDays: readActiveDays(triggerConfig),
-    triggerType: item.trigger.type === "builtin.cron" ? "cron" : "interval",
-    cronExpr: item.trigger.type === "builtin.cron" && typeof triggerConfig.expr === "string"
-      ? triggerConfig.expr
-      : DEFAULT_AUTOMATION_FORM_STATE.cronExpr,
-    cronTimezone: item.trigger.type === "builtin.cron" && typeof triggerConfig.timezone === "string"
-      ? triggerConfig.timezone
-      : "",
-    everyMinutes: item.trigger.type === "builtin.interval" && typeof triggerConfig.everyMinutes === "number"
-      ? String(triggerConfig.everyMinutes)
-      : DEFAULT_AUTOMATION_FORM_STATE.everyMinutes,
-    intervalAnchor: item.trigger.type === "builtin.interval" && triggerConfig.anchor === "last_completed_at"
-      ? "last_completed_at"
-      : "created_at",
-    executorType: item.executor.type,
-    executorConfig: item.executor.config,
-    missedRunPolicy: item.policy.missedRunPolicy,
-  }
-}
-
-function createDefaultExecutorConfig(executorType: string): ActionConfig {
-  return { ...rendererActionRegistry.getDefaultConfig(executorType) }
-}
 
 function createDefaultAutomationDraft(name = ""): AutomationEditorDraft {
   return {
@@ -120,14 +63,6 @@ function createAutomationDraftFromItem(item: AutomationItem): AutomationEditorDr
   }
 }
 
-function buildAutomationCreateInput(form: AutomationFormState): AutomationCreateInput {
-  return buildAutomationPayload(form)
-}
-
-function buildAutomationUpdateInput(form: AutomationFormState): AutomationUpdateInput {
-  return buildAutomationPayload(form)
-}
-
 function buildAutomationCreateInputFromDraft(
   draft: AutomationEditorDraft,
   enabled: boolean,
@@ -172,54 +107,6 @@ function buildAutomationPayloadFromDraft(
     },
     policy: {
       missedRunPolicy: draft.missedRunPolicy,
-      overlapPolicy: "skip",
-    },
-  }
-}
-
-function buildAutomationPayload(form: AutomationFormState): AutomationCreateInput {
-  const name = requireTrimmed(form.name, "名称")
-  const description = optionalTrimmed(form.description)
-  const cwd = optionalTrimmed(form.cwd)
-  const executorConfig = rendererActionRegistry.parseConfig(form.executorType, form.executorConfig)
-  const projectId = (executorConfig as Record<string, unknown>).projectId
-  const scope = typeof projectId === "string" && projectId.trim()
-    ? { type: "project" as const, projectId: projectId.trim() }
-    : { type: "global" as const }
-
-  if (form.activeDays.length === 0) {
-    throw new Error("请至少选择一个活跃日")
-  }
-
-  return {
-    name,
-    description,
-    enabled: form.enabled,
-    scope,
-    cwd,
-    trigger: form.triggerType === "cron"
-      ? {
-          type: "builtin.cron",
-          config: {
-            expr: requireTrimmed(form.cronExpr, "Cron"),
-            ...(optionalTrimmed(form.cronTimezone) ? { timezone: optionalTrimmed(form.cronTimezone) } : {}),
-            activeDays: form.activeDays,
-          },
-        }
-      : {
-          type: "builtin.interval",
-          config: {
-            everyMinutes: readPositiveInteger(form.everyMinutes, "间隔"),
-            anchor: form.intervalAnchor,
-            activeDays: form.activeDays,
-          },
-        },
-    executor: {
-      type: form.executorType,
-      config: executorConfig,
-    },
-    policy: {
-      missedRunPolicy: form.missedRunPolicy,
       overlapPolicy: "skip",
     },
   }
@@ -303,13 +190,6 @@ function isCompletionAnchoredInterval(item: Pick<AutomationItem, "trigger">): bo
     item.trigger.config.anchor === "last_completed_at"
 }
 
-function readActiveDays(config: Record<string, unknown>): number[] {
-  const activeDays = config.activeDays
-  return Array.isArray(activeDays) && activeDays.every((day) => Number.isInteger(day))
-    ? activeDays as number[]
-    : [...DEFAULT_ACTIVE_DAYS]
-}
-
 function requireTrimmed(value: string, label: string): string {
   const trimmed = value.trim()
   if (!trimmed) throw new Error(`${label}不能为空`)
@@ -321,25 +201,11 @@ function optionalTrimmed(value: string): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
-function readPositiveInteger(value: string, label: string): number {
-  const numberValue = Number(value)
-  if (!Number.isInteger(numberValue) || numberValue < 1) {
-    throw new Error(`${label}需为正整数`)
-  }
-  return numberValue
-}
-
 export {
-  DEFAULT_ACTIVE_DAYS,
-  DEFAULT_AUTOMATION_FORM_STATE,
   buildAutomationCreateInputFromDraft,
-  buildAutomationCreateInput,
   buildAutomationUpdateInputFromDraft,
-  buildAutomationUpdateInput,
   createAutomationDraftFromItem,
   createDefaultAutomationDraft,
-  createAutomationFormState,
-  createDefaultExecutorConfig,
   generateAutomationDraftName,
   formatAutomationDate,
   formatAutomationExecutor,
