@@ -1,14 +1,4 @@
 import { useState } from "react"
-import { FolderOpen } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
 import {
   ModuleSidebar,
 } from "@/components/module-sidebar"
@@ -21,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useAppConfig } from "@/app-shell/config"
-import { requestOpenSettingsTab } from "@/app-shell/navigation"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { ArchivedGroup } from "./archived-group"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
@@ -107,54 +96,35 @@ function AgentSessionSidebar({
             </SelectContent>
           </Select>
         </div>
-        {projects.length === 0 && visibleArchivedSessions.length === 0 ? (
-          <Empty className="border-0 px-4 py-8">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <FolderOpen />
-              </EmptyMedia>
-              <EmptyTitle>尚未配置项目</EmptyTitle>
-              <EmptyDescription>添加项目后即可开始 Agent 对话</EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button variant="outline" size="sm" onClick={() => requestOpenSettingsTab()}>
-                前往设置
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : (
-          <>
-            {projects.map((project) => (
-              <ProjectGroup
-                key={project.id}
-                project={project}
-                sessions={sessionsByProject.get(project.id) ?? []}
-                selectedProjectId={selectedProjectId}
-                selectedConversationId={selectedConversationId}
-                unreadByConversationId={unreadByConversationId}
-                sendingConversationIds={sendingConversationIds}
-                onCreateSession={() => setCreateProject(project)}
-                onSelect={onSelect}
-                onDelete={onDelete}
-                onDeleteOthers={onDeleteOthers}
-                onRename={onRename}
-              />
-            ))}
-            {visibleArchivedSessions.length > 0 ? (
-              <ArchivedGroup
-                sessions={visibleArchivedSessions}
-                selectedProjectId={selectedProjectId}
-                selectedConversationId={selectedConversationId}
-                unreadByConversationId={unreadByConversationId}
-                sendingConversationIds={sendingConversationIds}
-                onSelect={onSelect}
-                onDelete={onDelete}
-                onDeleteOthers={onDeleteOthers}
-                onRename={onRename}
-              />
-            ) : null}
-          </>
-        )}
+        {projects.map((project) => (
+          <ProjectGroup
+            key={project.id}
+            project={project}
+            sessions={sessionsByProject.get(project.id) ?? []}
+            selectedProjectId={selectedProjectId}
+            selectedConversationId={selectedConversationId}
+            unreadByConversationId={unreadByConversationId}
+            sendingConversationIds={sendingConversationIds}
+            onCreateSession={() => setCreateProject(project)}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onDeleteOthers={onDeleteOthers}
+            onRename={onRename}
+          />
+        ))}
+        {visibleArchivedSessions.length > 0 ? (
+          <ArchivedGroup
+            sessions={visibleArchivedSessions}
+            selectedProjectId={selectedProjectId}
+            selectedConversationId={selectedConversationId}
+            unreadByConversationId={unreadByConversationId}
+            sendingConversationIds={sendingConversationIds}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onDeleteOthers={onDeleteOthers}
+            onRename={onRename}
+          />
+        ) : null}
       </div>
       <ProviderModelSelectDialog
         open={createProject !== null}

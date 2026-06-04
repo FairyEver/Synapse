@@ -11,6 +11,10 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { AgentComposer } from "./components/agent-composer"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
+import {
+  DEFAULT_AGENT_WORKSPACE_PROJECT,
+  isDefaultAgentWorkspaceProjectId,
+} from "@/lib/default-agent-workspace"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
@@ -103,13 +107,15 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const showJumpToBottom = !stick.isPinned && stick.hasUnread
   const showIdleJumpToBottom = !stick.isPinned && !stick.hasUnread && !chat.sending
 
-  const projectOptions: ProjectOption[] = useMemo(() =>
-    config.global.projects.map((project) => ({
-      id: project.id,
-      name: project.name,
-      path: project.path,
-    })),
-  [config.global.projects])
+  const projectOptions: ProjectOption[] = useMemo(() => [
+    DEFAULT_AGENT_WORKSPACE_PROJECT,
+    ...config.global.projects.filter((project) =>
+      !isDefaultAgentWorkspaceProjectId(project.id)),
+  ].map((project) => ({
+    id: project.id,
+    name: project.name,
+    path: project.path,
+  })), [config.global.projects])
   const visibleSessions = useMemo(
     () => filterSessionsBySource(chat.sessions, sourceFilter),
     [chat.sessions, sourceFilter],
@@ -118,7 +124,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
   const selectedProjectId = chat.selectedProjectId ?? chat.activeProjectId
   const selectedProject = selectedProjectId
-    ? config.global.projects.find((project) => project.id === selectedProjectId)
+    ? isDefaultAgentWorkspaceProjectId(selectedProjectId)
+        ? DEFAULT_AGENT_WORKSPACE_PROJECT
+        : config.global.projects.find((project) => project.id === selectedProjectId)
     : undefined
   const canManageKnowledgeSources = canUseManagedKnowledgeBase(selectedProject)
   const selectedTarget: PendingMessageTarget | undefined = selectedSession

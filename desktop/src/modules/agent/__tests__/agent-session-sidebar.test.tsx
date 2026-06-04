@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AgentSessionSidebar } from "../components/agent-session-sidebar"
 import { AgentSidebarSessionRow } from "../components/agent-sidebar-session-row"
+import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "@/lib/default-agent-workspace"
 
 const rendererLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -47,6 +48,32 @@ afterEach(() => {
 })
 
 describe("AgentSessionSidebar", () => {
+  it("renders the local conversation project instead of blocking on missing configured projects", () => {
+    const html = renderToStaticMarkup(
+      <AgentSessionSidebar
+        sessions={[]}
+        archivedSessions={[]}
+        projects={[DEFAULT_AGENT_WORKSPACE_PROJECT]}
+        selectedProjectId={DEFAULT_AGENT_WORKSPACE_PROJECT.id}
+        selectedConversationId={undefined}
+        sourceFilter="user"
+        unreadByConversationId={{}}
+        sendingConversationIds={new Set()}
+        onCreateSession={vi.fn()}
+        onSourceFilterChange={vi.fn()}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onDeleteOthers={vi.fn()}
+        onRename={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("本地对话")
+    expect(html).toContain("新建会话")
+    expect(html).not.toContain("尚未配置项目")
+    expect(html).not.toContain("添加项目后即可开始 Agent 对话")
+  })
+
   it("allows long session titles to truncate inside the sidebar", () => {
     const longTitle = "能力矩阵回归测试工作流 / 8A. 通道聚合与边界校验 · 05-22 21:19"
     const html = renderToStaticMarkup(
