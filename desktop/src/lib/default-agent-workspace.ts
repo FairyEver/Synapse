@@ -1,4 +1,4 @@
-import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseProjectConfig } from "../types/config"
 
 export const DEFAULT_AGENT_WORKSPACE_PROJECT_ID = "builtin:default-agent-workspace"
 export const DEFAULT_AGENT_WORKSPACE_PROJECT_NAME = "本地对话"
