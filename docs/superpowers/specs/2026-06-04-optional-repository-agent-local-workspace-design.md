@@ -14,6 +14,7 @@ Synapse 当前把“本地仓库”当成进入主界面的前置条件。用户
 - “本地对话”的 Agent 工作目录由 Synapse 管理，路径为 `<userData>/agent-workspaces/default/`。
 - 内置项目不写入 `config.global.projects`，不出现在设置的项目列表里。
 - 内容、同步、变量、仓库维护等仓库能力在无仓库时显示局部空态或禁用操作，不报错、不阻断其它模块。
+- 现有选择、创建、初始化仓库流程继续复用，但从启动强制页中拆成组件。
 - 添加真实项目、知识库、仓库时保持现有流程和行为。
 
 ## 非目标
@@ -58,7 +59,25 @@ Renderer 和 Electron 主进程都应从同一套语义获取 ID 和展示名，
 
 `EmptyRepositoryState` 可以保留给仓库设置页或未来局部入口使用，但不再是主应用启动门。
 
-### 3. Agent 项目范围
+### 3. 仓库引导组件复用
+
+现有 `EmptyRepositoryState` 中包含可继续复用的业务流程：
+
+- 选择已有目录。
+- 新建仓库。
+- 校验目录结构。
+- 初始化空目录或确认初始化非空目录。
+- 切换到其它可用仓库。
+
+这些流程不应随启动门禁一起删除。实现时应把它拆成可复用组件，例如：
+
+- `RepositorySetupPanel`：承载选择、创建、初始化、切换仓库的主体 UI 和交互。
+- `EmptyRepositoryState`：如果仍保留，只作为全屏 wrapper 或兼容入口，不再由 `App.tsx` 启动强制调用。
+- 仓库设置页或内容模块无仓库空态可以嵌入 `RepositorySetupPanel`，但应按场景控制文案和布局。
+
+拆组件时保持现有安全边界：初始化非空目录仍需危险提示和延迟确认；危险目录仍需阻断；失败 rollback 仍需保留。不要为了去掉全屏门禁而重写仓库创建逻辑。
+
+### 4. Agent 项目范围
 
 `resolveAgentProjectScope` 在真实项目列表为空时也返回内置本地对话项目。真实项目存在时，仍显示内置本地对话，并继续显示所有 `config.global.projects`。
 
@@ -75,7 +94,7 @@ Renderer 和 Electron 主进程都应从同一套语义获取 ID 和展示名，
 - 没有选中会话时默认 `builtin:default-agent-workspace`。
 - 如果从外部打开某个真实项目会话，按 payload 切到对应分组。
 
-### 4. Agent 侧边栏交互
+### 5. Agent 侧边栏交互
 
 侧边栏不再出现“尚未配置项目，添加项目后即可开始 Agent 对话”的全阻塞空态。即使没有任何用户配置项目，也渲染“本地对话”分组和新建按钮。
 
@@ -86,7 +105,7 @@ Renderer 和 Electron 主进程都应从同一套语义获取 ID 和展示名，
 - 使用现有会话列表、未读、发送状态、归档逻辑。
 - 不显示路径文案，避免暴露内部 userData 路径。
 
-### 5. 主进程项目解析
+### 6. 主进程项目解析
 
 `resolveProjectAgent` 增加对内置 ID 的解析：
 
@@ -95,7 +114,7 @@ Renderer 和 Electron 主进程都应从同一套语义获取 ID 和展示名，
 - 该工作区不标记为 Knowledge Base，不加载知识库 runtime、plugin、skill、hook 或 native slash allowlist。
 - `CustomCommandRegistry` 和 `SkillRegistry` 仍可加载用户 home 下全局 commands/skills；本地工作区内的 `.codex`、`.claude`、`.agents` 目录如果存在，则按现有 registry 逻辑读取。
 
-### 6. 会话与归档
+### 7. 会话与归档
 
 已有会话不迁移。
 
@@ -104,7 +123,7 @@ Renderer 和 Electron 主进程都应从同一套语义获取 ID 和展示名，
 - 如果历史数据里已经存在无法解析 projectId 的会话，仍按现有 `listAllSessions` orphan 逻辑归档。
 - 删除归档会话继续使用已有 fallback：项目缺失时可直接从全局 conversation namespace 删除。
 
-### 7. 内容和仓库模块
+### 8. 内容和仓库模块
 
 内容模块、变量、同步、维护仍依赖 active repository。无仓库时应表现为局部空态。
 
@@ -113,9 +132,10 @@ Renderer 和 Electron 主进程都应从同一套语义获取 ID 和展示名，
 - 不抛出导致 ErrorBoundary 或全局阻断的错误。
 - 不自动创建仓库。
 - 不隐藏“设置”里的添加仓库、添加项目、创建知识库入口。
+- 无仓库空态可以提供添加本地目录入口，复用 `RepositorySetupPanel`，但不能重新变成应用级阻塞门。
 - 内容创建、安装、导出遇到无 active repository 时沿用明确错误，但入口应尽量在 UI 层禁用或显示空态。
 
-### 8. 工作流后续收敛
+### 9. 工作流后续收敛
 
 当前 Workflow 设计文档曾描述无项目 fallback 到 home，但实际 `sendToAgent` 要求 projectId 存在。此次改造应优先保证 renderer Agent 对话；如果实现范围包含工作流，则 workflow prompt 节点在缺少 projectId 时可改为使用 `builtin:default-agent-workspace`。
 
@@ -146,6 +166,7 @@ Renderer 和 Electron 主进程都应从同一套语义获取 ID 和展示名，
 
 - `App` 在 `repositories: []` 时渲染主 shell，并默认展示 Agent tab。
 - `App` 在 active repository missing 时不渲染全屏 `EmptyRepositoryState`。
+- 仓库添加、创建和初始化流程被拆成可复用组件，仍可在设置或局部空态中使用。
 - Agent sidebar 在 `config.global.projects: []` 时显示“本地对话”分组和创建入口。
 - 创建会话时使用 `builtin:default-agent-workspace`。
 - 内容模块无 active repository 时显示局部空态，不抛 ErrorBoundary。
