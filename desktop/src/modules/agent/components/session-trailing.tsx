@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Check, Trash2 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { Check, LoaderCircle, Trash2 } from "lucide-react"
 
 function formatRelativeTime(timestamp: string): string | undefined {
   const now = Date.now()
@@ -29,11 +28,13 @@ function formatRelativeTime(timestamp: string): string | undefined {
 function SessionTrailing({
   updatedAt,
   unread,
+  running,
   canDelete,
   onDelete,
 }: {
   readonly updatedAt?: string
   readonly unread: number
+  readonly running: boolean
   readonly canDelete: boolean
   readonly onDelete: () => void
 }) {
@@ -59,13 +60,16 @@ function SessionTrailing({
 
   return (
     <span className="flex items-center gap-1">
-      {unread > 0 ? (
-        <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-          {unread}
-          <span className="sr-only"> 条未读</span>
-        </Badge>
-      ) : null}
-      {relativeTime ? (
+      {running ? (
+        <span className="text-muted-foreground group-hover/item:hidden" aria-label="正在输出">
+          <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+        </span>
+      ) : unread > 0 ? (
+        <span
+          className="size-2 rounded-full bg-blue-500 group-hover/item:hidden"
+          aria-label="未读"
+        />
+      ) : relativeTime ? (
         <span className="text-xs text-muted-foreground group-hover/item:hidden">
           {relativeTime}
         </span>
