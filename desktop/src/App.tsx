@@ -1,4 +1,5 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { EmptyRepositoryState } from "@/app-shell/components/empty-repository-state"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
@@ -327,6 +328,8 @@ function MainApp() {
     return <EmptyRepositoryState reason="active-repository-missing" />
   }
 
+  const accountUiVisible = isAccountUiVisible()
+
   return (
     <IdentityGate>
       <AppShellLayout
@@ -337,11 +340,11 @@ function MainApp() {
             onValueChange={(value) => setActiveTab(value as AppTabId, "navigation")}
           />
         }
-        actions={
+        actions={accountUiVisible ? (
           <AppShellActions
             onOpenAccountSettings={requestOpenSettingsAccount}
           />
-        }
+        ) : null}
       >
         <div className="flex h-full min-h-0 flex-col">
           {TOP_LEVEL_CONTENT_TAB_ORDER.map((contentType) => {
