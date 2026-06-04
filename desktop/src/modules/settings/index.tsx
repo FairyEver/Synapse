@@ -222,7 +222,7 @@ function SettingsModule() {
         />
       }
     >
-      <div className="flex flex-col gap-2 p-2">
+      <div className="flex min-w-0 max-w-full flex-col gap-2 overflow-hidden p-2">
         {activeCategory === "admin" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
             {activeRepository.name}

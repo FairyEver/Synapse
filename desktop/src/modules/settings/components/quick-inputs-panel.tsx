@@ -170,7 +170,7 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
   }, [deletingItem, onSave, quickInputs, saving])
 
   return (
-    <div className="flex min-w-0 flex-col gap-2">
+    <div className="flex min-w-0 w-full max-w-full flex-col gap-2 overflow-hidden">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium">片段</h2>
         <Button type="button" variant="outline" size="sm" onClick={openAddDialog}>
@@ -181,11 +181,11 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
       {panelError ? <p className="text-sm text-destructive">{panelError}</p> : null}
 
       {quickInputs.length > 0 ? (
-        <div className="flex min-w-0 flex-col gap-2 overflow-hidden">
+        <div className="flex min-w-0 w-full max-w-full flex-col gap-2 overflow-hidden">
           {quickInputs.map((item, index) => (
-            <div key={item.id} className="flex min-w-0 w-full max-w-full items-center gap-2 overflow-hidden rounded-lg bg-background px-3 py-2">
-              <p className="min-w-0 flex-1 truncate text-sm">{quickInputPreview(item.content)}</p>
-              <div className="flex shrink-0 items-center gap-2">
+            <div key={item.id} className="grid min-w-0 w-full max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg bg-background px-3 py-2">
+              <p className="min-w-0 truncate text-sm">{quickInputPreview(item.content)}</p>
+              <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">直接发送</span>
                   <Switch

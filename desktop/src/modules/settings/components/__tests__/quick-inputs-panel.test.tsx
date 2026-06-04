@@ -42,9 +42,12 @@ describe("QuickInputsPanel", () => {
     const list = row?.parentElement
 
     expect(preview.className).toContain("truncate")
+    expect(row?.className).toContain("grid")
+    expect(row?.className).toContain("grid-cols-[minmax(0,1fr)_auto]")
     expect(row?.className).toContain("w-full")
     expect(row?.className).toContain("max-w-full")
     expect(row?.className).toContain("overflow-hidden")
+    expect(preview.nextElementSibling?.className).toContain("whitespace-nowrap")
     expect(list?.className).toContain("overflow-hidden")
   })
 
