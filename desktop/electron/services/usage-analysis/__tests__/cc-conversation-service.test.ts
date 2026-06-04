@@ -13,7 +13,7 @@ type Fixture = {
 }
 
 const fixtures: Fixture[] = []
-const WINDOWS_CI_TEST_TIMEOUT = 15_000
+const WINDOWS_CI_TEST_TIMEOUT = process.platform === "win32" ? 60_000 : 15_000
 
 function setupFixture(): Fixture {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-conversation-service-"))
@@ -136,7 +136,7 @@ afterEach(() => {
 })
 
 describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
-  it("lists conversations from the usage index", { timeout: 15_000 }, () => {
+  it("lists conversations from the usage index", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
 
@@ -157,7 +157,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     })
   })
 
-  it("returns record rows with request counts", { timeout: 15_000 }, () => {
+  it("returns record rows with request counts", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
     insertUsage(db, {
