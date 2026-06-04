@@ -24,6 +24,8 @@ export const csvToMarkdownTool: BuiltinToolDescriptor<CsvToMarkdownInput, CsvToM
         ],
       },
       { id: "outputDirectory", kind: "directory", label: "输出目录", when: { field: "outputMode", equals: "write-file" } },
+      { id: "delimiter", kind: "text", label: "分隔符", defaultValue: "," },
+      { id: "maxRows", kind: "number", label: "最大行数", defaultValue: 1000, min: 1, max: 10000 },
     ],
     resultPreview: { kind: "markdown", pathFromOutput: "outputPath" },
   },
@@ -36,4 +38,3 @@ export const csvToMarkdownTool: BuiltinToolDescriptor<CsvToMarkdownInput, CsvToM
   output: { kind: "markdown" },
   executor: executeCsvToMarkdown,
 }
-
