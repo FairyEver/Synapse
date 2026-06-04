@@ -42,6 +42,7 @@ import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
+import { runBuiltinTool } from "../services/builtin-tools/runner"
 import { convertFilesInWorker } from "../services/tools/file-conversion-runner"
 import { toolWindowService, type ToolWindowService } from "../services/tools/tool-window-service"
 import { initDatabase, shutdownDatabase } from "../database"
@@ -248,6 +249,14 @@ export const coreToolsFileConversionRunnerDescriptor: ServiceDescriptor<typeof c
   criticality: "degraded",
   create() {
     return convertFilesInWorker
+  },
+}
+
+export const coreBuiltinToolRunnerDescriptor: ServiceDescriptor<typeof runBuiltinTool> = {
+  id: "tools.builtin-tool-runner",
+  criticality: "degraded",
+  create() {
+    return runBuiltinTool
   },
 }
 
