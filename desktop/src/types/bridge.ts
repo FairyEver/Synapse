@@ -177,13 +177,14 @@ import type {
   AutomationUpdateInput,
 } from "./automation"
 import type {
-  SynapseFileConversionDefaultOutputDirectoryResult,
-  SynapseFileConversionInputSelectionResult,
-  SynapseFileConversionOutputDirectoryResult,
-  SynapseFileConversionPayload,
-  SynapseFileConversionResult,
   SynapseToolDefinition,
+  SynapseToolDirectorySelectionPayload,
+  SynapseToolDirectorySelectionResult,
+  SynapseToolFileSelectionPayload,
+  SynapseToolFileSelectionResult,
   SynapseToolId,
+  SynapseToolRunPayload,
+  SynapseToolRunResult,
 } from "./tools"
 import type {
   WorkflowDefinition,
@@ -886,15 +887,11 @@ export type SynapseBridge = {
   tools: {
     listTools: () => Promise<{ tools: readonly SynapseToolDefinition[] }>
     openTool: (toolId: SynapseToolId) => Promise<void>
-    fileConversion: {
-      selectInputFiles: () => Promise<SynapseFileConversionInputSelectionResult>
-      selectOutputDirectory: (
-        payload?: { defaultPath?: string },
-      ) => Promise<SynapseFileConversionOutputDirectoryResult>
-      getDefaultOutputDirectory: () => Promise<SynapseFileConversionDefaultOutputDirectoryResult>
-      filePathForDroppedFile: (file: File) => string | null
-      convert: (payload: SynapseFileConversionPayload) => Promise<SynapseFileConversionResult>
-    }
+    getToolDescriptor: (toolId: SynapseToolId | string) => Promise<SynapseToolDefinition>
+    runTool: (payload: SynapseToolRunPayload) => Promise<SynapseToolRunResult>
+    selectFile: (payload: SynapseToolFileSelectionPayload) => Promise<SynapseToolFileSelectionResult>
+    selectDirectory: (payload: SynapseToolDirectorySelectionPayload) => Promise<SynapseToolDirectorySelectionResult>
+    filePathForDroppedFile: (file: File) => string | null
   }
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>

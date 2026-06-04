@@ -247,10 +247,10 @@ export const IPC_CHANNELS = {
   "tools": {
     "listTools": "synapse:tools:list",
     "openTool": "synapse:tools:open",
-    "selectFileConversionInputFiles": "synapse:tools:file-conversion:select-input-files",
-    "selectFileConversionOutputDirectory": "synapse:tools:file-conversion:select-output-directory",
-    "getDefaultFileConversionOutputDirectory": "synapse:tools:file-conversion:get-default-output-directory",
-    "convertFiles": "synapse:tools:file-conversion:convert",
+    "getToolDescriptor": "synapse:tools:descriptor",
+    "runTool": "synapse:tools:run",
+    "selectFile": "synapse:tools:select-file",
+    "selectDirectory": "synapse:tools:select-directory",
   },
   "usage-analysis": {
     "ccRefresh": "synapse:usage-analysis:cc:refresh",

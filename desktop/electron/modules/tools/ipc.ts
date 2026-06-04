@@ -1,25 +1,92 @@
-import { app, dialog } from "electron"
+import { dialog } from "electron"
 import { z } from "zod"
 
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
-import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
-import { convertFilesInWorker } from "../../services/tools/file-conversion-runner"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { getBuiltinToolDescriptor, listRendererBuiltinToolDescriptors, projectBuiltinToolDescriptor } from "../../services/builtin-tools/registry"
+import { runBuiltinTool } from "../../services/builtin-tools/runner"
 import type { ToolWindowService } from "../../services/tools/tool-window-service"
-import { listToolDefinitions } from "../../services/tools/tool-registry"
 
-const toolIdSchema = z.enum(["file-conversion"])
+const toolIdSchema = z.enum([
+  "docx-to-markdown",
+  "xlsx-to-markdown",
+  "csv-to-markdown",
+  "pdf-to-markdown",
+  "pptx-to-markdown",
+])
+
+const fieldConditionSchema = z.object({
+  field: z.string(),
+  equals: z.union([z.string(), z.number(), z.boolean()]),
+})
+
+const inputFieldSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: z.string(),
+    kind: z.literal("file"),
+    label: z.string(),
+    required: z.boolean().optional(),
+    extensions: z.array(z.string()).optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("directory"),
+    label: z.string(),
+    required: z.boolean().optional(),
+    when: fieldConditionSchema.optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("text"),
+    label: z.string(),
+    required: z.boolean().optional(),
+    defaultValue: z.string().optional(),
+    when: fieldConditionSchema.optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("select"),
+    label: z.string(),
+    required: z.boolean().optional(),
+    defaultValue: z.string().optional(),
+    options: z.array(z.object({ value: z.string(), label: z.string() })),
+    when: fieldConditionSchema.optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("checkbox"),
+    label: z.string(),
+    defaultValue: z.boolean().optional(),
+    when: fieldConditionSchema.optional(),
+  }),
+  z.object({
+    id: z.string(),
+    kind: z.literal("number"),
+    label: z.string(),
+    required: z.boolean().optional(),
+    defaultValue: z.number().optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    when: fieldConditionSchema.optional(),
+  }),
+])
 
 const toolDefinitionSchema = z.object({
   id: toolIdSchema,
-  label: z.string(),
-  windowTitle: z.string(),
+  title: z.string(),
   description: z.string(),
-  supportedExtensions: z.array(z.string()).optional(),
-  bounds: z.object({
-    width: z.number(),
-    height: z.number(),
-    minWidth: z.number(),
-    minHeight: z.number(),
+  category: z.enum(["conversion", "content", "utility"]),
+  inputFields: z.array(inputFieldSchema),
+  outputPreview: z.object({
+    kind: z.enum(["markdown", "text", "file"]),
+    pathFromOutput: z.string().optional(),
+  }),
+  input: z.object({
+    kind: z.literal("file"),
+    extensions: z.array(z.string()),
+  }),
+  output: z.object({
+    kind: z.enum(["markdown", "text", "file"]),
   }),
 })
 
@@ -27,64 +94,46 @@ const listToolsResultSchema = z.object({
   tools: z.array(toolDefinitionSchema),
 })
 
-const fileConversionPayloadSchema = z.object({
-  filePaths: z.array(z.string().min(1)).min(1),
-  outputDirectory: z.string().min(1),
+const runToolRequestSchema = z.object({
+  toolId: toolIdSchema,
+  input: z.record(z.string(), z.unknown()),
 })
 
-const fileConversionOutputDirectoryRequestSchema = z.object({
+const runToolResultSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    toolId: toolIdSchema,
+    output: z.record(z.string(), z.unknown()),
+    warnings: z.array(z.object({ code: z.string(), message: z.string() })),
+    metadata: z.record(z.string(), z.unknown()),
+  }),
+  z.object({
+    ok: z.literal(false),
+    toolId: toolIdSchema,
+    error: z.object({ code: z.string(), message: z.string() }),
+    metadata: z.record(z.string(), z.unknown()),
+  }),
+])
+
+const fieldSelectionSchema = z.object({
+  toolId: toolIdSchema,
+  fieldId: z.string().min(1),
+})
+
+const directorySelectionSchema = fieldSelectionSchema.extend({
   defaultPath: z.string().min(1).optional(),
-})
-
-const fileConversionResultSchema = z.object({
-  successes: z.array(z.object({
-    sourcePath: z.string(),
-    outputPath: z.string(),
-    warningCount: z.number(),
-  })),
-  failures: z.array(z.object({
-    sourcePath: z.string(),
-    reason: z.enum([
-      "unsupported-format",
-      "read-failed",
-      "conversion-failed",
-      "write-failed",
-      "invalid-output-path",
-    ]),
-    message: z.string(),
-  })),
 })
 
 function windowService(ctx: IpcHandlerContext): ToolWindowService {
   return ctx.resolve<ToolWindowService>("tools.window-service")
 }
 
-async function checkPermission(ctx: IpcHandlerContext, options: {
-  readonly action: PermissionAction
-  readonly resource: string
-  readonly source: string
-}): Promise<void> {
-  const actor = { kind: "user" } as const
-  const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
-  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
-  const permission = await permissionGuard.check({
-    action: options.action,
-    actor,
-    resource: options.resource,
-    context: { source: options.source },
-  })
-  auditSink.record({
-    action: options.action,
-    actor,
-    resource: options.resource,
-    outcome: permission.allowed ? "allowed" : "denied",
-    metadata: permission.allowed
-      ? { source: options.source }
-      : { source: options.source, reason: permission.reason, policyId: permission.policyId },
-  })
-  if (!permission.allowed) {
-    throw new Error(permission.reason)
+function requireTool(toolId: string) {
+  const descriptor = getBuiltinToolDescriptor(toolId)
+  if (!descriptor) {
+    throw new Error(`Unknown tool: ${toolId}`)
   }
+  return descriptor
 }
 
 export const toolsIpcModule: IpcModule = {
@@ -95,7 +144,7 @@ export const toolsIpcModule: IpcModule = {
       channel: "synapse:tools:list",
       request: z.object({}),
       response: listToolsResultSchema,
-      handler: () => ({ tools: listToolDefinitions() }),
+      handler: () => ({ tools: listRendererBuiltinToolDescriptors() }),
     },
     openTool: {
       kind: "invoke",
@@ -103,66 +152,69 @@ export const toolsIpcModule: IpcModule = {
       request: z.object({ toolId: toolIdSchema }),
       response: z.object({}),
       handler: async (ctx, request: { toolId: string }) => {
+        requireTool(request.toolId)
         await windowService(ctx).open(request.toolId)
         return {}
       },
     },
-    selectFileConversionInputFiles: {
+    getToolDescriptor: {
       kind: "invoke",
-      channel: "synapse:tools:file-conversion:select-input-files",
-      request: z.object({}),
-      response: z.object({ filePaths: z.array(z.string()) }),
-      handler: async () => {
-        const result = await dialog.showOpenDialog({
-          properties: ["openFile", "multiSelections"],
-          filters: [{ name: "支持的文档", extensions: ["docx", "xlsx", "pdf", "pptx"] }],
+      channel: "synapse:tools:descriptor",
+      request: z.object({ toolId: toolIdSchema }),
+      response: toolDefinitionSchema,
+      handler: (_ctx, request: { toolId: string }) => projectBuiltinToolDescriptor(requireTool(request.toolId)),
+    },
+    runTool: {
+      kind: "invoke",
+      channel: "synapse:tools:run",
+      request: runToolRequestSchema,
+      response: runToolResultSchema,
+      handler: async (ctx, request: { toolId: string; input: Record<string, unknown> }) => {
+        const runTool = ctx.resolve<typeof runBuiltinTool>("tools.builtin-tool-runner")
+        return runTool({
+          toolId: request.toolId,
+          input: request.input,
+          context: { entryPoint: "tools", actor: { kind: "user" } },
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
         })
-        return { filePaths: result.canceled ? [] : result.filePaths }
       },
     },
-    selectFileConversionOutputDirectory: {
+    selectFile: {
       kind: "invoke",
-      channel: "synapse:tools:file-conversion:select-output-directory",
-      request: fileConversionOutputDirectoryRequestSchema,
+      channel: "synapse:tools:select-file",
+      request: fieldSelectionSchema,
+      response: z.object({ filePath: z.string().nullable() }),
+      handler: async (_ctx, request: { toolId: string; fieldId: string }) => {
+        const descriptor = requireTool(request.toolId)
+        const field = descriptor.ui.fields.find((item) => item.id === request.fieldId)
+        if (!field || field.kind !== "file") {
+          throw new Error(`Unknown file field: ${request.fieldId}`)
+        }
+        const extensions = (field.extensions ?? descriptor.input.extensions).map((extension) => extension.replace(/^\./, ""))
+        const result = await dialog.showOpenDialog({
+          properties: ["openFile"],
+          filters: [{ name: "支持的文件", extensions }],
+        })
+        return { filePath: result.canceled ? null : result.filePaths[0] ?? null }
+      },
+    },
+    selectDirectory: {
+      kind: "invoke",
+      channel: "synapse:tools:select-directory",
+      request: directorySelectionSchema,
       response: z.object({ directoryPath: z.string().nullable() }),
-      handler: async (_ctx, request: { defaultPath?: string }) => {
+      handler: async (_ctx, request: { toolId: string; fieldId: string; defaultPath?: string }) => {
+        const descriptor = requireTool(request.toolId)
+        const field = descriptor.ui.fields.find((item) => item.id === request.fieldId)
+        if (!field || field.kind !== "directory") {
+          throw new Error(`Unknown directory field: ${request.fieldId}`)
+        }
         const result = await dialog.showOpenDialog({
           properties: ["openDirectory"],
           ...(request.defaultPath ? { defaultPath: request.defaultPath } : {}),
         })
         return { directoryPath: result.canceled ? null : result.filePaths[0] ?? null }
-      },
-    },
-    getDefaultFileConversionOutputDirectory: {
-      kind: "invoke",
-      channel: "synapse:tools:file-conversion:get-default-output-directory",
-      request: z.object({}),
-      response: z.object({ directoryPath: z.string() }),
-      handler: () => ({ directoryPath: app.getPath("downloads") }),
-    },
-    convertFiles: {
-      kind: "invoke",
-      channel: "synapse:tools:file-conversion:convert",
-      request: fileConversionPayloadSchema,
-      response: fileConversionResultSchema,
-      handler: async (ctx, request: { filePaths: string[]; outputDirectory: string }) => {
-        for (const filePath of request.filePaths) {
-          await checkPermission(ctx, {
-            action: "fs.read.outside-userdata",
-            resource: filePath,
-            source: "tools.fileConversion.convert.read",
-          })
-        }
-        await checkPermission(ctx, {
-          action: "fs.write",
-          resource: request.outputDirectory,
-          source: "tools.fileConversion.convert.write",
-        })
-        const runConversion = ctx.resolve<typeof convertFilesInWorker>("tools.file-conversion-runner")
-        return runConversion({
-          filePaths: request.filePaths,
-          outputDirectory: request.outputDirectory,
-        })
       },
     },
   },
