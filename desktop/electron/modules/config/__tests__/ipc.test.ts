@@ -237,6 +237,7 @@ function configFixture(agent: SynapseConfig["agent"]): SynapseConfig {
       themeMode: "light",
       projects: [],
       quickInputs: [],
+      defaultQuickInputsSeededVersion: null,
       favorites: { rule: [], skill: [], prompt: [] },
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",

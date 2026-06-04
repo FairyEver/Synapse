@@ -1114,6 +1114,7 @@ function createEmptyConfig(): SynapseConfig {
       themeMode: "system",
       projects: [],
       quickInputs: [],
+      defaultQuickInputsSeededVersion: null,
       favorites: { rule: [], skill: [], prompt: [] },
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",

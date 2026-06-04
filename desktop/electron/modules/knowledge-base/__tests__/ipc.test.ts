@@ -356,6 +356,7 @@ describe("knowledgeBaseIpcModule", () => {
           recentlyViewed: { rule: [], skill: [], prompt: [] },
           contentSortOrder: "modified-desc",
           quickInputs: [],
+          defaultQuickInputsSeededVersion: null,
           projects: [{
             id: "kb-1",
             name: "Knowledge",
