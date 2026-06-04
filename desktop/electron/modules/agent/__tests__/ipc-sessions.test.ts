@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import path from "node:path"
 
 const electronMock = vi.hoisted(() => ({
   app: {
@@ -136,6 +137,7 @@ describe("agent session IPC methods", () => {
   })
 
   it("creates sessions in the built-in local conversation workspace", async () => {
+    const workspacePath = path.join("/user-data", "agent-workspaces", "default")
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [],
       global: {
@@ -167,14 +169,14 @@ describe("agent session IPC methods", () => {
     }))
 
     expect(fsPromisesMock.mkdir).toHaveBeenCalledWith(
-      "/user-data/agent-workspaces/default",
+      workspacePath,
       { recursive: true },
     )
     expect(ctx.projectContainers.open).toHaveBeenCalledWith(
       DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
       {
         name: "本地对话",
-        workspacePath: "/user-data/agent-workspaces/default",
+        workspacePath,
         managedKnowledgeBase: undefined,
       },
     )

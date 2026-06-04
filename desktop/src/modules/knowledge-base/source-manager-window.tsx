@@ -494,10 +494,16 @@ function SourceEntryList({
               onDropOnDirectory(entry.relativePath, event)
             }}
           >
-            <div className="flex items-center" onClick={(event) => event.stopPropagation()}>
+            <div
+              className="flex items-center"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
               <Checkbox
                 aria-label={`选择 ${entry.name}`}
                 checked={selected}
+                onClick={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
                 onCheckedChange={(checked) => onToggleSelected(entry.relativePath, checked === true)}
               />
             </div>
@@ -527,44 +533,51 @@ function SourceEntryList({
                 <div className="truncate text-xs text-muted-foreground">{formatEntryMeta(entry)}</div>
               </div>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-10"
-                  onClick={(event) => event.stopPropagation()}
-                  aria-label={`更多 ${entry.name}`}
-                >
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {entry.kind === "directory" ? (
-                  <DropdownMenuItem onSelect={() => onOpenDirectory(entry.relativePath)}>
-                    <Folder />
-                    打开
+            <div
+              className="flex items-center"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-10"
+                    onClick={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    aria-label={`更多 ${entry.name}`}
+                  >
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {entry.kind === "directory" ? (
+                    <DropdownMenuItem onSelect={() => onOpenDirectory(entry.relativePath)}>
+                      <Folder />
+                      打开
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem onSelect={() => onRename(entry)}>
+                    <Pencil />
+                    重命名
                   </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem onSelect={() => onRename(entry)}>
-                  <Pencil />
-                  重命名
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onMoveEntry(entry)}>
-                  <MoveRight />
-                  移动
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onExportEntry(entry)}>
-                  <Download />
-                  导出
-                </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onSelect={() => onTrashEntry(entry)}>
-                  <Trash2 />
-                  删除
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem onSelect={() => onMoveEntry(entry)}>
+                    <MoveRight />
+                    移动
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onExportEntry(entry)}>
+                    <Download />
+                    导出
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onSelect={() => onTrashEntry(entry)}>
+                    <Trash2 />
+                    删除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         )
       })}

@@ -204,6 +204,12 @@ function openContextMenuOnButton(label: string): void {
   }))
 }
 
+function listDirectoryCallCount(directoryPath: string): number {
+  return bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
+    payload.directoryPath === directoryPath
+  )).length
+}
+
 function menuItemByText(text: string): HTMLElement {
   const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
     .find((candidate) => candidate.textContent?.trim() === text)
@@ -352,16 +358,15 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(document.body.textContent).toContain("brief.md")
     })
 
+    const directoryCallCount = listDirectoryCallCount("客户")
     await act(async () => {
       buttonByLabel("选择 客户").click()
       await Promise.resolve()
     })
 
     expect(document.body.textContent).toContain("已选择 1 项")
-    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
-      projectId: "project-1",
-      directoryPath: "",
-    })
+    expect(document.querySelector('[aria-label="当前位置"]')?.textContent).not.toContain("客户")
+    expect(listDirectoryCallCount("客户")).toBe(directoryCallCount)
   })
 
   it("does not open a directory when clicking its row action button", async () => {
@@ -371,15 +376,14 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(document.body.textContent).toContain("brief.md")
     })
 
+    const directoryCallCount = listDirectoryCallCount("客户")
     await act(async () => {
       buttonByLabel("更多 客户").click()
       await Promise.resolve()
     })
 
-    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
-      projectId: "project-1",
-      directoryPath: "",
-    })
+    expect(document.querySelector('[aria-label="当前位置"]')?.textContent).not.toContain("客户")
+    expect(listDirectoryCallCount("客户")).toBe(directoryCallCount)
   })
 
   it("selects every visible entry from the selection checkbox", async () => {
