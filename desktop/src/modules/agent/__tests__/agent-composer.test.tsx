@@ -87,7 +87,7 @@ describe("AgentComposer", () => {
     expect(html).toContain("agent-composer__input")
     expect(html).toContain("agent-composer__send")
     expect(html).toContain("agent-composer__permission-trigger")
-    expect(html).toContain("默认")
+    expect(html).toContain("按需询问")
     expect(html).toContain("lucide-chevron-down")
     expect(html).toContain('aria-label="发送"')
     expect(html).toContain('placeholder="输入消息"')
@@ -291,8 +291,8 @@ describe("AgentComposer", () => {
 
     expect(permissionIndex).toBeGreaterThan(-1)
     expect(sendIndex).toBeGreaterThan(permissionIndex)
-    expect(html).toContain('aria-label="权限模式：跳过权限"')
-    expect(html).toContain(">跳过权限")
+    expect(html).toContain('aria-label="权限模式：跳过权限确认"')
+    expect(html).toContain(">跳过权限确认")
     expect(html).toContain("lucide-chevron-down")
   })
 
@@ -429,12 +429,12 @@ describe("AgentComposer", () => {
     openPermissionMenu(container)
 
     expect(container.innerHTML).toContain("权限模式")
-    expect(document.body.textContent).toContain("默认")
-    expect(document.body.textContent).toContain("接受编辑")
-    expect(document.body.textContent).toContain("计划")
-    expect(document.body.textContent).toContain("自动")
-    expect(document.body.textContent).toContain("不再询问")
-    expect(document.body.textContent).toContain("跳过权限")
+    expect(document.body.textContent).toContain("按需询问")
+    expect(document.body.textContent).toContain("自动接受编辑")
+    expect(document.body.textContent).toContain("只读计划")
+    expect(document.body.textContent).toContain("自动判定")
+    expect(document.body.textContent).toContain("不询问并拒绝")
+    expect(document.body.textContent).toContain("跳过权限确认")
   })
 
   it("shows the original SDK mode name and description in a left-side hover card", async () => {
@@ -464,11 +464,12 @@ describe("AgentComposer", () => {
 
     openPermissionMenu(container)
     const item = getPermissionModeItem("bypassPermissions")
-    expect(item.textContent).toContain("跳过权限")
+    expect(item.textContent).toContain("跳过权限确认")
 
     await hoverElement(item)
 
     expect(document.body.textContent).toContain("bypassPermissions")
+    expect(document.body.textContent).toContain("Bypass all permission checks")
     expect(document.body.textContent).toContain("跳过所有权限确认")
   })
 
