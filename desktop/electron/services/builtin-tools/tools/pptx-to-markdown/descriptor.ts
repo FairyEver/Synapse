@@ -34,6 +34,6 @@ export const pptxToMarkdownTool: BuiltinToolDescriptor<PptxToMarkdownInput, Pptx
   entryPoints: ["tools", "workflow", "automation"],
   input: { kind: "file", extensions: [".pptx"] },
   output: { kind: "markdown" },
+  window: { bounds: { width: 500, height: 560, minWidth: 500, minHeight: 420 } },
   executor: executePptxToMarkdown,
 }
-

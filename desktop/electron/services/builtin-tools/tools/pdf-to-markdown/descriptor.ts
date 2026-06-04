@@ -34,6 +34,6 @@ export const pdfToMarkdownTool: BuiltinToolDescriptor<PdfToMarkdownInput, PdfToM
   entryPoints: ["tools", "workflow", "automation"],
   input: { kind: "file", extensions: [".pdf"] },
   output: { kind: "markdown" },
+  window: { bounds: { width: 500, height: 560, minWidth: 500, minHeight: 420 } },
   executor: executePdfToMarkdown,
 }
-

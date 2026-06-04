@@ -36,5 +36,6 @@ export const csvToMarkdownTool: BuiltinToolDescriptor<CsvToMarkdownInput, CsvToM
   entryPoints: ["tools", "workflow", "automation"],
   input: { kind: "file", extensions: [".csv"] },
   output: { kind: "markdown" },
+  window: { bounds: { width: 500, height: 560, minWidth: 500, minHeight: 420 } },
   executor: executeCsvToMarkdown,
 }

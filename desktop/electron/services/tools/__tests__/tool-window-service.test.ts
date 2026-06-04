@@ -41,9 +41,9 @@ describe("createToolWindowService", () => {
     await service.open("docx-to-markdown")
 
     expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
-      width: 760,
+      width: 500,
       height: 560,
-      minWidth: 560,
+      minWidth: 500,
       minHeight: 420,
       resizable: true,
       title: "DOCX 转 Markdown",

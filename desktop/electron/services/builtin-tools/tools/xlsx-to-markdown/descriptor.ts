@@ -34,6 +34,6 @@ export const xlsxToMarkdownTool: BuiltinToolDescriptor<XlsxToMarkdownInput, Xlsx
   entryPoints: ["tools", "workflow", "automation"],
   input: { kind: "file", extensions: [".xlsx"] },
   output: { kind: "markdown" },
+  window: { bounds: { width: 500, height: 560, minWidth: 500, minHeight: 420 } },
   executor: executeXlsxToMarkdown,
 }
-

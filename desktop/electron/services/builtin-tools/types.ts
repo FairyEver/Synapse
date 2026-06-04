@@ -12,6 +12,17 @@ export type BuiltinToolCategory = "conversion" | "content" | "utility"
 export type BuiltinToolEntryPoint = "tools" | "workflow" | "automation" | "knowledge-base"
 export type BuiltinToolOutputKind = "markdown" | "text" | "file"
 
+export interface BuiltinToolWindowBounds {
+  readonly width: number
+  readonly height: number
+  readonly minWidth: number
+  readonly minHeight: number
+}
+
+export interface BuiltinToolWindowDescriptor {
+  readonly bounds?: Partial<BuiltinToolWindowBounds>
+}
+
 export interface BuiltinToolFieldCondition {
   readonly field: string
   readonly equals: string | number | boolean
@@ -117,6 +128,7 @@ export interface BuiltinToolDescriptor<Input = unknown, Output = unknown> {
   readonly entryPoints: readonly BuiltinToolEntryPoint[]
   readonly input: BuiltinToolInputDescriptor
   readonly output: BuiltinToolOutputDescriptor
+  readonly window?: BuiltinToolWindowDescriptor
   executor(input: Input, context: BuiltinToolExecutionContext): Promise<Output>
 }
 

@@ -34,6 +34,6 @@ export const docxToMarkdownTool: BuiltinToolDescriptor<DocxToMarkdownInput, Docx
   entryPoints: ["tools", "workflow", "automation"],
   input: { kind: "file", extensions: [".docx"] },
   output: { kind: "markdown" },
+  window: { bounds: { width: 500, height: 560, minWidth: 500, minHeight: 420 } },
   executor: executeDocxToMarkdown,
 }
-

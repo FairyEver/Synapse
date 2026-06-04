@@ -1,5 +1,6 @@
 import type { SynapseToolDefinition, SynapseToolId } from "../../../src/types/tools"
-import { listRendererBuiltinToolDescriptors } from "../builtin-tools/registry"
+import type { BuiltinToolWindowBounds, BuiltinToolWindowDescriptor } from "../builtin-tools/types"
+import { listBuiltinToolDescriptors, listRendererBuiltinToolDescriptors } from "../builtin-tools/registry"
 
 const DEFAULT_BOUNDS = {
   width: 760,
@@ -10,7 +11,7 @@ const DEFAULT_BOUNDS = {
 
 export type SynapseToolWindowDefinition = SynapseToolDefinition & {
   readonly windowTitle: string
-  readonly bounds: typeof DEFAULT_BOUNDS
+  readonly bounds: BuiltinToolWindowBounds
 }
 
 export function listToolDefinitions(): readonly SynapseToolDefinition[] {
@@ -20,7 +21,12 @@ export function listToolDefinitions(): readonly SynapseToolDefinition[] {
 export function getToolDefinition(toolId: string): SynapseToolWindowDefinition | null {
   const tool = listToolDefinitions().find((definition) => definition.id === toolId)
   if (!tool) return null
-  return { ...tool, windowTitle: tool.title, bounds: DEFAULT_BOUNDS }
+  const builtinTool = listBuiltinToolDescriptors().find((definition) => definition.id === tool.id)
+  return {
+    ...tool,
+    windowTitle: tool.title,
+    bounds: resolveToolWindowBounds(builtinTool ?? {}),
+  }
 }
 
 export function requireToolDefinition(toolId: string): SynapseToolWindowDefinition {
@@ -33,4 +39,8 @@ export function requireToolDefinition(toolId: string): SynapseToolWindowDefiniti
 
 export function isSynapseToolId(toolId: string): toolId is SynapseToolId {
   return getToolDefinition(toolId) !== null
+}
+
+export function resolveToolWindowBounds(tool: { readonly window?: BuiltinToolWindowDescriptor }): BuiltinToolWindowBounds {
+  return { ...DEFAULT_BOUNDS, ...tool.window?.bounds }
 }
