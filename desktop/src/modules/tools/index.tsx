@@ -90,7 +90,7 @@ export function ToolsModule() {
               </ItemMedia>
               <ItemContent className="min-w-0">
                 <ItemTitle className="w-full min-w-0">
-                  <span className="min-w-0 truncate">{tool.label}</span>
+                  <span className="min-w-0 truncate">{tool.title}</span>
                 </ItemTitle>
                 <ItemDescription>{tool.description}</ItemDescription>
               </ItemContent>
@@ -99,7 +99,7 @@ export function ToolsModule() {
                   type="button"
                   size="icon-sm"
                   variant="ghost"
-                  aria-label={`打开${tool.label}`}
+                  aria-label={`打开 ${tool.title}`}
                   disabled={openingToolId !== null}
                   onClick={(event) => {
                     event.stopPropagation()

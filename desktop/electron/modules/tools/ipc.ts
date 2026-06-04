@@ -56,6 +56,7 @@ const inputFieldSchema = z.discriminatedUnion("kind", [
     id: z.string(),
     kind: z.literal("checkbox"),
     label: z.string(),
+    required: z.boolean().optional(),
     defaultValue: z.boolean().optional(),
     when: fieldConditionSchema.optional(),
   }),

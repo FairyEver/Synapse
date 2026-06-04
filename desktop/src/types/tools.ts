@@ -18,7 +18,7 @@ export type SynapseToolInputField =
   | { readonly id: string; readonly kind: "directory"; readonly label: string; readonly required?: boolean; readonly when?: SynapseToolFieldCondition }
   | { readonly id: string; readonly kind: "text"; readonly label: string; readonly required?: boolean; readonly defaultValue?: string; readonly when?: SynapseToolFieldCondition }
   | { readonly id: string; readonly kind: "select"; readonly label: string; readonly required?: boolean; readonly defaultValue?: string; readonly options: readonly { readonly value: string; readonly label: string }[]; readonly when?: SynapseToolFieldCondition }
-  | { readonly id: string; readonly kind: "checkbox"; readonly label: string; readonly defaultValue?: boolean; readonly when?: SynapseToolFieldCondition }
+  | { readonly id: string; readonly kind: "checkbox"; readonly label: string; readonly required?: boolean; readonly defaultValue?: boolean; readonly when?: SynapseToolFieldCondition }
   | { readonly id: string; readonly kind: "number"; readonly label: string; readonly required?: boolean; readonly defaultValue?: number; readonly min?: number; readonly max?: number; readonly when?: SynapseToolFieldCondition }
 
 export interface SynapseToolOutputPreviewDescriptor {
@@ -84,3 +84,31 @@ export interface SynapseToolDirectorySelectionResult {
   readonly directoryPath: string | null
 }
 
+export type SynapseFileConversionFailureReason =
+  | "unsupported-format"
+  | "read-failed"
+  | "conversion-failed"
+  | "write-failed"
+  | "invalid-output-path"
+
+export type SynapseFileConversionPayload = {
+  readonly filePaths: readonly string[]
+  readonly outputDirectory: string
+}
+
+export type SynapseFileConversionSuccess = {
+  readonly sourcePath: string
+  readonly outputPath: string
+  readonly warningCount: number
+}
+
+export type SynapseFileConversionFailure = {
+  readonly sourcePath: string
+  readonly reason: SynapseFileConversionFailureReason
+  readonly message: string
+}
+
+export type SynapseFileConversionResult = {
+  readonly successes: readonly SynapseFileConversionSuccess[]
+  readonly failures: readonly SynapseFileConversionFailure[]
+}

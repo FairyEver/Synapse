@@ -53,6 +53,7 @@ export type BuiltinToolInputField =
       readonly id: string
       readonly kind: "checkbox"
       readonly label: string
+      readonly required?: boolean
       readonly defaultValue?: boolean
       readonly when?: BuiltinToolFieldCondition
     }
@@ -116,7 +117,7 @@ export interface BuiltinToolDescriptor<Input = unknown, Output = unknown> {
   readonly entryPoints: readonly BuiltinToolEntryPoint[]
   readonly input: BuiltinToolInputDescriptor
   readonly output: BuiltinToolOutputDescriptor
-  readonly executor: BuiltinToolExecutor<Input, Output>
+  executor(input: Input, context: BuiltinToolExecutionContext): Promise<Output>
 }
 
 export interface RendererBuiltinToolDescriptor {
@@ -165,4 +166,3 @@ export type BuiltinToolRunResult<Output = unknown> =
       readonly error: BuiltinToolErrorPayload
       readonly metadata: Record<string, unknown>
     }
-

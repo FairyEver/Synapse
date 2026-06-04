@@ -79,13 +79,13 @@ void (async () => {
     )
   } else if (windowType === "tool") {
     const toolId = new URLSearchParams(window.location.search).get("toolId")
-    if (toolId === "file-conversion") {
-      const { FileConversionWindow } = await import("@/modules/tools/file-conversion/file-conversion-window")
+    if (toolId) {
+      const { BuiltinToolWindow } = await import("@/modules/tools/builtin-tools/shared/tool-window")
       createRoot(document.getElementById("root")!).render(
         <StrictMode>
           <AppErrorBoundary>
             <AppNotificationsProvider>
-              <FileConversionWindow />
+              <BuiltinToolWindow toolId={toolId} />
             </AppNotificationsProvider>
           </AppErrorBoundary>
         </StrictMode>,

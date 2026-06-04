@@ -17,13 +17,13 @@ export interface MarkdownToolOutput {
   readonly text: string
   readonly sourcePath: string
   readonly outputPath?: string
-  readonly assets?: readonly {
+  readonly assets?: {
     readonly relativePath: string
     readonly fileName: string
     readonly mimeType: string
   }[]
   readonly metadata: Record<string, unknown>
-  readonly warnings: readonly { readonly code: string; readonly message: string }[]
+  readonly warnings: { readonly code: string; readonly message: string }[]
 }
 
 export function assertExtension(inputPath: string, extension: string): void {
@@ -88,11 +88,10 @@ function mapConversionResult(result: FileConversionResult): MarkdownToolOutput {
       mimeType: asset.mimeType,
     })),
     metadata: result.metadata,
-    warnings: result.warnings,
+    warnings: result.warnings.map((warning) => ({ code: warning.code, message: warning.message })),
   }
 }
 
 function ensureTrailingNewline(markdown: string): string {
   return markdown.endsWith("\n") ? markdown : `${markdown}\n`
 }
-
