@@ -5,9 +5,12 @@ import { rendererAutomationTriggerRegistry } from "../builtin-triggers"
 
 describe("rendererAutomationTriggerRegistry", () => {
   it("registers built-in triggers in product order", () => {
-    expect(rendererAutomationTriggerRegistry.list().map((trigger) => trigger.manifest.id)).toEqual([
-      "builtin.cron",
-      "builtin.interval",
+    expect(rendererAutomationTriggerRegistry.list().map((trigger) => ({
+      id: trigger.manifest.id,
+      kind: trigger.manifest.kind,
+    }))).toEqual([
+      { id: "builtin.cron", kind: "schedule" },
+      { id: "builtin.interval", kind: "schedule" },
     ])
   })
 

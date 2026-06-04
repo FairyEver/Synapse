@@ -35,31 +35,37 @@ export function createBuiltinAutomationTriggerRegistry(): AutomationTriggerRegis
     manifest: {
       id: "builtin.cron",
       title: "Cron",
+      kind: "schedule",
       defaultConfig: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] },
       configSchema: cronTriggerSchema,
     },
     summarize: (config) => `Cron · ${config.expr}`,
-    computeNextRunAt: (input) => computeNextRunAt({
-      trigger: { type: "builtin.cron", config: input.config },
-      from: input.from,
-      createdAt: input.createdAt,
-    }),
+    runtime: {
+      computeNextRunAt: (input) => computeNextRunAt({
+        trigger: { type: "builtin.cron", config: input.config },
+        from: input.from,
+        createdAt: input.createdAt,
+      }),
+    },
   })
   registry.register({
     manifest: {
       id: "builtin.interval",
       title: "固定间隔",
+      kind: "schedule",
       defaultConfig: { everyMinutes: 60, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
       configSchema: intervalTriggerSchema,
     },
     summarize: (config) => config.anchor === "last_completed_at"
       ? `每 ${config.everyMinutes} 分钟 · 完成后`
       : `每 ${config.everyMinutes} 分钟`,
-    computeNextRunAt: (input) => computeNextRunAt({
-      trigger: { type: "builtin.interval", config: input.config },
-      from: input.from,
-      createdAt: input.createdAt,
-    }),
+    runtime: {
+      computeNextRunAt: (input) => computeNextRunAt({
+        trigger: { type: "builtin.interval", config: input.config },
+        from: input.from,
+        createdAt: input.createdAt,
+      }),
+    },
   })
   return registry
 }
