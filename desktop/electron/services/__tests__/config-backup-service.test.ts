@@ -4,6 +4,7 @@ import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseConfig } from "../../../src/types/config"
 import { createDefaultConfig } from "../../../src/lib/config"
+import { SYNAPSE_APP_VERSION } from "../../../src/lib/app-version"
 
 const mocks = vi.hoisted(() => ({
   configStore: {
@@ -116,6 +117,7 @@ describe("ConfigBackupService quick inputs", () => {
       favorites: { rule: ["rule-1"], skill: ["skill-1"], prompt: ["prompt-1"] },
       recentlyViewed: { rule: ["rule-2"], skill: ["skill-2"], prompt: ["prompt-2"] },
       contentSortOrder: "name-asc",
+      defaultQuickInputsSeededVersion: "0.2.238",
     }, {
       activeRepoUuid: "repo-1",
       repositories: [{
@@ -148,6 +150,7 @@ describe("ConfigBackupService quick inputs", () => {
           favorites: { rule: ["rule-1"], skill: ["skill-1"], prompt: ["prompt-1"] },
           recentlyViewed: { rule: ["rule-2"], skill: ["skill-2"], prompt: ["prompt-2"] },
           contentSortOrder: "name-asc",
+          defaultQuickInputsSeededVersion: "0.2.238",
         }),
         agent: {
           defaultPermissionMode: "bypassPermissions",
@@ -174,6 +177,21 @@ describe("ConfigBackupService quick inputs", () => {
     }
   })
 
+  it("rejects malformed quick input seed versions when importing a backup", async () => {
+    const filePath = await writeBackupFile({
+      defaultQuickInputsSeededVersion: 123,
+    })
+
+    try {
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow(
+        "config.global.defaultQuickInputsSeededVersion 必须是字符串或 null。",
+      )
+      expect(configStore.replace).not.toHaveBeenCalled()
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("preserves configured quick inputs in export payloads", async () => {
     const config: SynapseConfig = {
       ...createDefaultConfig(),
@@ -189,6 +207,7 @@ describe("ConfigBackupService quick inputs", () => {
     expect(backup.config.global.quickInputs).toEqual([
       { id: "quick-1", content: "第一行\n第二行", directSend: true },
     ])
+    expect(backup.config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
   })
 
   it("preserves repository variables and custom content directories in export payloads", async () => {
@@ -285,6 +304,7 @@ function createBackup(
     favorites: { rule: [], skill: [], prompt: [] },
     recentlyViewed: { rule: [], skill: [], prompt: [] },
     contentSortOrder: "modified-desc",
+    defaultQuickInputsSeededVersion: null,
     ...globalOverrides,
   }
 

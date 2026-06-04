@@ -394,6 +394,20 @@ function validateQuickInputs(rawValue: unknown, errors: string[]): SynapseQuickI
   return quickInputs
 }
 
+function validateQuickInputSeededVersion(rawValue: unknown, errors: string[]): string | null {
+  if (rawValue === undefined || rawValue === null) {
+    return null
+  }
+
+  if (typeof rawValue !== "string") {
+    errors.push("config.global.defaultQuickInputsSeededVersion 必须是字符串或 null。")
+    return null
+  }
+
+  const normalized = rawValue.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
 function validateAgentConfig(
   rawValue: unknown,
   errors: string[],
@@ -512,6 +526,10 @@ function validateConfig(
   const themeMode = readRequiredField(global, "themeMode", "config.global", errors)
   const projects = readRequiredField(global, "projects", "config.global", errors)
   const quickInputs = validateQuickInputs(global.quickInputs, errors)
+  const defaultQuickInputsSeededVersion = validateQuickInputSeededVersion(
+    global.defaultQuickInputsSeededVersion,
+    errors,
+  )
   const favorites = validateContentLists(global.favorites, "config.global.favorites", errors)
   const recentlyViewed = validateContentLists(global.recentlyViewed, "config.global.recentlyViewed", errors)
   const contentSortOrder = global.contentSortOrder ?? "modified-desc"
@@ -589,6 +607,7 @@ function validateConfig(
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
       projects: normalizedProjects,
       quickInputs,
+      defaultQuickInputsSeededVersion,
       favorites,
       recentlyViewed,
       contentSortOrder: contentSortOrder as SynapseConfigBackup["config"]["global"]["contentSortOrder"],
