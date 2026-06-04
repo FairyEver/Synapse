@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest"
+import { DEFAULT_QUICK_INPUTS } from "../../constants/defaults"
+import { SYNAPSE_APP_VERSION } from "../app-version"
 import {
   applySynapseConfigPatch,
   createDefaultConfig,
@@ -289,8 +291,13 @@ describe("Synapse quick inputs config", () => {
     })).toBe(false)
   })
 
-  it("defaults quick inputs to an empty list", () => {
-    expect(createDefaultConfig().global.quickInputs).toEqual([])
+  it("seeds built-in quick inputs in a default config", () => {
+    const config = createDefaultConfig()
+
+    expect(config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
+    expect(config.global.quickInputs).toEqual(DEFAULT_QUICK_INPUTS)
+    expect(config.global.quickInputs).toHaveLength(6)
+    expect(config.global.quickInputs.every((item) => item.directSend)).toBe(true)
   })
 
   it("preserves valid multi-line quick input content", () => {
