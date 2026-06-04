@@ -61,11 +61,12 @@ function AutomationModule() {
   const { promise } = useAppNotifications()
   const [historyItem, setHistoryItem] = useState<AutomationItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AutomationItem | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(() => new Set())
   const [openingEditor, setOpeningEditor] = useState(false)
   const [runningItemIds, setRunningItemIds] = useState<Set<string>>(() => new Set())
 
-  async function runMutation<T>(
+  async function runItemMutation<T>(
+    itemId: string,
     operation: () => Promise<T>,
     messages: {
       loading: string
@@ -73,8 +74,8 @@ function AutomationModule() {
       error: string
     },
   ): Promise<T | null> {
+    setPendingItemIds((current) => new Set([...current, itemId]))
     try {
-      setBusy(true)
       const result = await promise(operation, messages)
       await refresh()
       return result
@@ -85,14 +86,19 @@ function AutomationModule() {
       })
       return null
     } finally {
-      setBusy(false)
+      setPendingItemIds((current) => {
+        const next = new Set(current)
+        next.delete(itemId)
+        return next
+      })
     }
   }
 
   async function handleDelete() {
     if (!deleteTarget || deleteTarget.activeRun?.status === "running") return
     const item = deleteTarget
-    const result = await runMutation(
+    const result = await runItemMutation(
+      item.id,
       async () => {
         const deleted = await deleteAutomation(item.id)
         logger.info("Automation deleted.", { automationId: item.id, automationNameLength: item.name.length })
@@ -104,7 +110,8 @@ function AutomationModule() {
   }
 
   async function handleToggleEnabled(item: AutomationItem, enabled: boolean) {
-    await runMutation(
+    await runItemMutation(
+      item.id,
       async () => {
         const updated = await setAutomationEnabled(item.id, enabled)
         logger.info("Automation enabled state changed.", { automationId: item.id, enabled })
@@ -121,7 +128,6 @@ function AutomationModule() {
   async function handleRun(item: AutomationItem) {
     setRunningItemIds((current) => new Set([...current, item.id]))
     try {
-      setBusy(true)
       const result = await promise(
         async () => {
           const run = await runAutomation(item.id)
@@ -152,7 +158,6 @@ function AutomationModule() {
       await refresh()
       return null
     } finally {
-      setBusy(false)
       setRunningItemIds((current) => {
         const next = new Set(current)
         next.delete(item.id)
@@ -240,7 +245,8 @@ function AutomationModule() {
       <AutomationList
         items={items}
         projects={projects}
-        busy={busy}
+        createDisabled={openingEditor}
+        pendingItemIds={pendingItemIds}
         runningItemIds={runningItemIds}
         onOpen={(item) => { void handleEditorOpen(item) }}
         onRun={(item) => { void handleRun(item) }}
@@ -271,7 +277,7 @@ function AutomationModule() {
             <Button
               size="sm"
               variant="outline"
-              disabled={busy || openingEditor}
+              disabled={openingEditor}
               onClick={() => { void handleCreateEditorOpen() }}
             >
               <Plus />
@@ -287,7 +293,7 @@ function AutomationModule() {
         <AutomationRunsDialog
           open={Boolean(historyItem)}
           item={historyItem}
-          busy={busy}
+          busy={Boolean(historyItem && pendingItemIds.has(historyItem.id))}
           onOpenChange={(open) => {
             if (!open) setHistoryItem(null)
           }}
@@ -312,7 +318,8 @@ function AutomationModule() {
             <AlertDialogFooter>
               <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction
-                disabled={busy || deleteTarget?.activeRun?.status === "running"}
+                disabled={Boolean(deleteTarget && pendingItemIds.has(deleteTarget.id)) ||
+                  deleteTarget?.activeRun?.status === "running"}
                 onClick={() => { void handleDelete() }}
               >
                 删除

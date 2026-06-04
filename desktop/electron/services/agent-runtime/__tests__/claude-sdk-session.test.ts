@@ -371,8 +371,8 @@ describe("ClaudeSDKSession", () => {
 
   it.each(packagedRuntimeCases)(
     "uses the unpacked Claude binary for $platform-$arch packaged apps",
-    ({ platform, arch, packageName, binaryName }) => {
-      withPackagedRuntime({
+    async ({ platform, arch, packageName, binaryName }) => {
+      await withPackagedRuntime({
         platform,
         arch,
         files: [["node_modules", packageName, binaryName]],
@@ -387,8 +387,8 @@ describe("ClaudeSDKSession", () => {
     },
   )
 
-  it("prefers the Linux musl unpacked Claude binary when both Linux variants exist", () => {
-    withPackagedRuntime({
+  it("prefers the Linux musl unpacked Claude binary when both Linux variants exist", async () => {
+    await withPackagedRuntime({
       platform: "linux",
       arch: "x64",
       files: [
@@ -402,6 +402,29 @@ describe("ClaudeSDKSession", () => {
       expect(getOptions().pathToClaudeCodeExecutable).toBe(
         unpackedPath("node_modules", "@anthropic-ai/claude-agent-sdk-linux-x64-musl", "claude"),
       )
+    })
+  })
+
+  it("emits a clear packaged runtime error when the unpacked Claude binary is missing", async () => {
+    await withPackagedRuntime({
+      platform: "darwin",
+      arch: "arm64",
+      files: [],
+    }, async () => {
+      let factoryCalled = false
+      const factory: QueryFactory = () => {
+        factoryCalled = true
+        return new FakeQuery()
+      }
+
+      const session = createSession(factory)
+      const event = await resolveSoon(session.nextEvent())
+
+      expect(factoryCalled).toBe(false)
+      expect(event).toMatchObject({
+        type: "error",
+        message: expect.stringContaining("内置 Claude Code runtime 缺失"),
+      })
     })
   })
 
@@ -999,14 +1022,14 @@ function withProcessPlatform(platform: NodeJS.Platform, run: () => void): void {
   }
 }
 
-function withPackagedRuntime(
+async function withPackagedRuntime(
   options: {
     readonly platform: NodeJS.Platform
     readonly arch: NodeJS.Architecture
     readonly files: readonly (readonly string[])[]
   },
-  run: (helpers: { unpackedPath(...segments: string[]): string }) => void,
-): void {
+  run: (helpers: { unpackedPath(...segments: string[]): string }) => void | Promise<void>,
+): Promise<void> {
   const resourcesPath = mkdtempSync(path.join(tmpdir(), "synapse-resources-"))
   const unpackedPath = (...segments: string[]): string =>
     path.join(resourcesPath, "app.asar.unpacked", ...segments)
@@ -1015,6 +1038,7 @@ function withPackagedRuntime(
   const archDescriptor = Object.getOwnPropertyDescriptor(process, "arch")
 
   try {
+    writeFileSync(path.join(resourcesPath, "app.asar"), "")
     for (const fileSegments of options.files) {
       const filePath = unpackedPath(...fileSegments)
       mkdirSync(path.dirname(filePath), { recursive: true })
@@ -1033,7 +1057,7 @@ function withPackagedRuntime(
       value: options.arch,
     })
 
-    run({ unpackedPath })
+    await run({ unpackedPath })
   } finally {
     if (resourcesDescriptor) {
       Object.defineProperty(process, "resourcesPath", resourcesDescriptor)

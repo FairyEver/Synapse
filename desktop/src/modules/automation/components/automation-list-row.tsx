@@ -23,7 +23,8 @@ import {
 type AutomationListRowProps = {
   readonly item: AutomationItem
   readonly projects: readonly SynapseProjectConfig[]
-  readonly busy: boolean
+  readonly pending: boolean
+  readonly running: boolean
   readonly onOpen: () => void
   readonly onRun: () => void
   readonly onStop: () => void
@@ -47,7 +48,8 @@ function getStatusBadge(item: AutomationItem): {
 function AutomationListRow({
   item,
   projects,
-  busy,
+  pending,
+  running,
   onOpen,
   onRun,
   onStop,
@@ -66,7 +68,7 @@ function AutomationListRow({
   return (
     <Item
       size="sm"
-      className="grid cursor-pointer grid-cols-[minmax(0,1fr)_9rem_7rem_4rem_auto] items-center gap-3 bg-card hover:bg-muted/50"
+      className="grid cursor-pointer grid-cols-[minmax(0,1fr)_9rem_7rem_4rem_auto] items-center gap-3 bg-card"
       tabIndex={0}
       role="button"
       onClick={onOpen}
@@ -99,7 +101,7 @@ function AutomationListRow({
         <Switch
           size="sm"
           checked={item.enabled}
-          disabled={busy || needsUpdate}
+          disabled={pending || needsUpdate}
           aria-label={needsUpdate
             ? `需要更新后才能启用自动化 ${item.name}`
             : item.enabled ? `停用自动化 ${item.name}` : `启用自动化 ${item.name}`}
@@ -133,14 +135,14 @@ function AutomationListRow({
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                disabled={disabled || busy}
+                disabled={disabled || pending || running}
                 aria-label="运行自动化"
                 onClick={(event) => {
                   event.stopPropagation()
                   onRun()
                 }}
               >
-                {busy ? <Loader2 className="animate-spin" /> : <Play />}
+                {running ? <Loader2 className="animate-spin" /> : <Play />}
               </Button>
             </TooltipTrigger>
             <TooltipContent>运行</TooltipContent>
@@ -152,7 +154,7 @@ function AutomationListRow({
               type="button"
               size="icon-sm"
               variant="ghost"
-              disabled={busy}
+              disabled={pending}
               aria-label="查看运行历史"
               onClick={(event) => {
                 event.stopPropagation()
@@ -170,7 +172,7 @@ function AutomationListRow({
               type="button"
               size="icon-sm"
               variant="ghost"
-              disabled={busy || activeRunning}
+              disabled={pending || activeRunning}
               aria-label={activeRunning ? "运行中不能删除" : "删除自动化"}
               onClick={(event) => {
                 event.stopPropagation()

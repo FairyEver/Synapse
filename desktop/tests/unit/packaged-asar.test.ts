@@ -23,6 +23,32 @@ const fileConversionBootstrapMapSegments = [
   "file-conversion-worker-bootstrap.js.map",
 ]
 
+function nativeClaudePackageNames(platform: NodeJS.Platform, arch: string): readonly string[] {
+  if (platform === "linux") {
+    return [
+      `@anthropic-ai/claude-agent-sdk-linux-${arch}-musl`,
+      `@anthropic-ai/claude-agent-sdk-linux-${arch}`,
+    ]
+  }
+  if (platform === "darwin" || platform === "win32") {
+    return [`@anthropic-ai/claude-agent-sdk-${platform}-${arch}`]
+  }
+  return []
+}
+
+function currentClaudeBinarySegments(): readonly string[] {
+  const packageName = nativeClaudePackageNames(process.platform, process.arch)[0]
+  if (!packageName) {
+    return ["app.asar.unpacked", "node_modules", "@anthropic-ai", "unsupported", "claude"]
+  }
+  return [
+    "app.asar.unpacked",
+    "node_modules",
+    ...packageName.split("/"),
+    process.platform === "win32" ? "claude.exe" : "claude",
+  ]
+}
+
 function hash(value: Buffer): string {
   return createHash("sha256").update(value).digest("hex")
 }
@@ -165,6 +191,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, fileConversionBootstrapSegments)
       await writeUnpackedFixture(resourcesPath, fileConversionBootstrapMapSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
 
       const result = await execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
@@ -172,6 +199,27 @@ describe("packaged asar verification", () => {
       ])
 
       expect(result.stdout).toContain("Verified resources")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing the Claude SDK native binary", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, fileConversionBootstrapSegments)
+      await writeUnpackedFixture(resourcesPath, fileConversionBootstrapMapSegments)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("Claude SDK native binary is missing"),
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -16,7 +16,8 @@ import { AutomationCard } from "./automation-card"
 type AutomationCardGridProps = {
   items: AutomationItem[]
   projects: readonly SynapseProjectConfig[]
-  busy: boolean
+  createDisabled: boolean
+  pendingItemIds: ReadonlySet<string>
   runningItemIds: ReadonlySet<string>
   onRun: (item: AutomationItem) => void
   onStop: (item: AutomationItem) => void
@@ -30,7 +31,8 @@ type AutomationCardGridProps = {
 function AutomationCardGrid({
   items,
   projects,
-  busy,
+  createDisabled,
+  pendingItemIds,
   runningItemIds,
   onRun,
   onStop,
@@ -51,7 +53,7 @@ function AutomationCardGrid({
           <EmptyDescription>新建后会按触发器执行。</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button size="sm" disabled={busy} onClick={onCreateNew}>
+          <Button size="sm" disabled={createDisabled} onClick={onCreateNew}>
             <Plus />
             新建自动化
           </Button>
@@ -67,7 +69,8 @@ function AutomationCardGrid({
           key={item.id}
           item={item}
           projects={projects}
-          busy={busy || runningItemIds.has(item.id)}
+          pending={pendingItemIds.has(item.id)}
+          running={runningItemIds.has(item.id)}
           onRun={() => onRun(item)}
           onStop={() => onStop(item)}
           onToggleEnabled={(enabled) => onToggleEnabled(item, enabled)}

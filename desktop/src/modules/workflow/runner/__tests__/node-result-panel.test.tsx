@@ -251,6 +251,50 @@ describe("NodeResultPanel", () => {
     })
   })
 
+  it("keeps render mode controls inside width-constrained section headers", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            input: {
+              variables: {
+                selected: "{\"selected_id\":6,\"selected_titles\":[\"构建三级分层体系，支撑全域资产研判\"],\"selected_detail\":\"very-long-value\"}",
+              },
+            },
+          }}
+          nodeName="Prompt node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const section = Array.from(container.querySelectorAll("section"))
+      .find((candidate) => candidate.textContent?.includes("$selected"))
+    expect(section).toBeInstanceOf(HTMLElement)
+
+    const header = Array.from(section?.children ?? [])
+      .find((candidate) => candidate instanceof HTMLElement && candidate.textContent?.includes("输入变量"))
+    expect(header?.className).toContain("grid")
+    expect(header?.className).toContain("grid-cols-[minmax(0,1fr)_auto]")
+
+    const collapseButton = Array.from(section?.querySelectorAll("button") ?? [])
+      .find((candidate) => candidate.getAttribute("aria-label") === "折叠输入变量")
+    expect(collapseButton?.classList.contains("shrink")).toBe(true)
+    expect(collapseButton?.classList.contains("shrink-0")).toBe(false)
+
+    const toggleGroup = section?.querySelector("[data-slot='toggle-group']")
+    expect(toggleGroup?.className).toContain("justify-self-end")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
   it("copies the selected node report from the panel header", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

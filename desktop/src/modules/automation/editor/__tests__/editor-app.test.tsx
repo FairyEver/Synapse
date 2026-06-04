@@ -96,6 +96,7 @@ describe("AutomationEditorApp", () => {
     })
 
     expect(document.body.textContent).toContain("自动化 #0000")
+    expect(document.body.textContent).not.toContain("新建")
     expect(document.querySelector('input[aria-label="自动化标题"]')).toBeNull()
   })
 
@@ -225,6 +226,68 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
       .not.toContain("py-5")
     expect(document.querySelector('[data-layout="automation-editor-divider"]')).not.toBeNull()
+  })
+
+  it("constrains long executor content inside the editor viewport", async () => {
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("命令")?.click()
+    })
+
+    const body = document.querySelector('[data-layout="automation-editor-body"]')
+    const executorPanel = document.querySelector('[data-layout="automation-editor-executor-panel"]')
+    const executorConfig = document.querySelector('[data-layout="automation-editor-executor-config"]')
+
+    expect(body?.className).toContain("overflow-x-hidden")
+    expect(executorPanel?.className).toContain("overflow-hidden")
+    expect(executorConfig?.className).toContain("[&_[data-slot=field-content]]:min-w-0")
+  })
+
+  it("separates selected summaries from configuration panels", async () => {
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("命令")?.click()
+    })
+
+    const triggerSummary = document.querySelector('[data-layout="automation-editor-trigger-summary"]')
+    const triggerConfig = document.querySelector('[data-layout="automation-editor-trigger-config"]')
+    const executorSummary = document.querySelector('[data-layout="automation-editor-executor-summary"]')
+    const executorConfig = document.querySelector('[data-layout="automation-editor-executor-config"]')
+
+    expect(triggerSummary?.textContent).toContain("Cron")
+    expect(triggerSummary?.textContent).not.toContain("Cron 表达式")
+    expect(executorSummary?.textContent).toContain("命令")
+    expect(executorSummary?.textContent).not.toContain("Shell")
+    expect(document.body.textContent).not.toContain("触发器")
+    expect(document.body.textContent).not.toContain("执行器")
+    expect(Array.from(document.querySelectorAll('[data-slot="badge"]')).map((badge) => badge.textContent))
+      .not.toContain("配置")
+    expect(document.querySelector('[data-layout="automation-editor-trigger-config-separator"]')).toBeNull()
+    expect(document.querySelector('[data-layout="automation-editor-executor-config-separator"]')).toBeNull()
+    expect(triggerSummary?.compareDocumentPosition(triggerConfig as Node) ?? 0)
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(executorSummary?.compareDocumentPosition(executorConfig as Node) ?? 0)
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
   it("shows a discard confirmation when closing with unsaved changes", async () => {

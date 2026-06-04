@@ -18,7 +18,8 @@ import {
 type AutomationCardProps = {
   item: AutomationItem
   projects: readonly SynapseProjectConfig[]
-  busy: boolean
+  pending: boolean
+  running: boolean
   onRun: () => void
   onStop: () => void
   onToggleEnabled: (enabled: boolean) => void
@@ -48,7 +49,8 @@ function formatLastRun(item: AutomationItem): string {
 function AutomationCard({
   item,
   projects,
-  busy,
+  pending,
+  running,
   onRun,
   onStop,
   onToggleEnabled,
@@ -60,7 +62,7 @@ function AutomationCard({
   const disabled = !item.enabled
   const activeRunning = item.activeRun?.status === "running"
   const badge = getStatusBadge(item)
-  const deleteDisabled = busy || activeRunning
+  const deleteDisabled = pending || activeRunning
 
   return (
     <div className={`flex h-full flex-col rounded-lg bg-card p-4 text-card-foreground ${disabled ? "opacity-70" : ""}`}>
@@ -69,7 +71,7 @@ function AutomationCard({
         <Switch
           size="sm"
           checked={item.enabled}
-          disabled={busy || needsUpdate}
+          disabled={pending || needsUpdate}
           aria-label={needsUpdate
             ? `需要更新后才能启用自动化 ${item.name}`
             : item.enabled ? `停用自动化 ${item.name}` : `启用自动化 ${item.name}`}
@@ -86,7 +88,7 @@ function AutomationCard({
         </div>
         <div className="shrink-0">
           {activeRunning ? (
-            <Button variant="destructive" size="sm" disabled={busy} onClick={onStop}>
+            <Button variant="destructive" size="sm" onClick={onStop}>
               <Square className="size-3.5" />
               停止
             </Button>
@@ -94,7 +96,7 @@ function AutomationCard({
             <Button
               variant={item.lastStatus === "failed" || item.lastStatus === "timeout" ? "default" : "secondary"}
               size="sm"
-              disabled={disabled || busy}
+              disabled={disabled || pending || running}
               onClick={onRun}
             >
               <Play className="size-3.5" />
@@ -133,7 +135,7 @@ function AutomationCard({
       <div className="mt-auto flex items-center justify-end gap-1 pt-4">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" disabled={busy} aria-label="编辑" onClick={onEdit}>
+            <Button variant="ghost" size="icon-sm" disabled={pending} aria-label="编辑" onClick={onEdit}>
               <Pencil className="size-3.5" />
             </Button>
           </TooltipTrigger>
@@ -141,7 +143,7 @@ function AutomationCard({
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" disabled={busy} aria-label="历史" onClick={onHistory}>
+            <Button variant="ghost" size="icon-sm" disabled={pending} aria-label="历史" onClick={onHistory}>
               <History className="size-3.5" />
             </Button>
           </TooltipTrigger>

@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AutomationModule } from "../index"
+import { AutomationList } from "../components/automation-list"
 import { AutomationListRow } from "../components/automation-list-row"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { AutomationItem } from "@/types/automation"
@@ -112,6 +113,31 @@ describe("AutomationModule", () => {
     expect(html).toContain('data-slot="item"')
   })
 
+  it("keeps automation rows from changing background on hover", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <AutomationListRow
+          item={createItem()}
+          projects={[]}
+          pending={false}
+          running={false}
+          onOpen={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onHistory={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    const itemClass = html.match(/data-slot="item"[^>]*class="([^"]*)"/)?.[1] ?? ""
+    const rowHoverBackgroundClass = itemClass
+      .split(/\s+/)
+      .find((className) => className.startsWith("hover:bg-"))
+    expect(rowHoverBackgroundClass).toBeUndefined()
+  })
+
   it("uses the workflow-style scroll container", () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],
@@ -211,7 +237,8 @@ describe("AutomationModule", () => {
           <AutomationListRow
             item={createItem({ activeRun: { status: "running", id: "run-1" } })}
             projects={[]}
-            busy={true}
+            pending={false}
+            running={false}
             onOpen={vi.fn()}
             onRun={vi.fn()}
             onStop={vi.fn()}
@@ -226,6 +253,84 @@ describe("AutomationModule", () => {
     const stopButton = document.querySelector<HTMLButtonElement>('button[aria-label="停止运行"]')
     expect(stopButton).not.toBeNull()
     expect(stopButton?.disabled).toBe(false)
+  })
+
+  it("only shows a manual-run spinner on the automation being run", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <AutomationList
+          items={[
+            createItem({ id: "automation:1", name: "Running automation" }),
+            createItem({ id: "automation:2", name: "Idle automation" }),
+          ]}
+          projects={[]}
+          createDisabled={false}
+          pendingItemIds={new Set()}
+          runningItemIds={new Set(["automation:1"])}
+          onOpen={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onHistory={vi.fn()}
+          onDelete={vi.fn()}
+          onCreateNew={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    expect(html.match(/animate-spin/g)).toHaveLength(1)
+  })
+
+  it("keeps idle automation switches enabled while another automation is running", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <AutomationList
+          items={[
+            createItem({ id: "automation:1", name: "Running automation" }),
+            createItem({ id: "automation:2", name: "Idle automation" }),
+          ]}
+          projects={[]}
+          createDisabled={false}
+          pendingItemIds={new Set()}
+          runningItemIds={new Set(["automation:1"])}
+          onOpen={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onHistory={vi.fn()}
+          onDelete={vi.fn()}
+          onCreateNew={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    expect(html.match(/role="switch"[^>]* disabled=""/g)).toBeNull()
+  })
+
+  it("keeps the pending automation switch disabled", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <AutomationList
+          items={[
+            createItem({ id: "automation:1", name: "Pending automation" }),
+            createItem({ id: "automation:2", name: "Idle automation" }),
+          ]}
+          projects={[]}
+          createDisabled={false}
+          pendingItemIds={new Set(["automation:1"])}
+          runningItemIds={new Set()}
+          onOpen={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onHistory={vi.fn()}
+          onDelete={vi.fn()}
+          onCreateNew={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    expect(html.match(/role="switch"[^>]* disabled=""/g)).toHaveLength(1)
   })
 
   it("treats a cancelled manual run as stopped instead of a mutation failure", async () => {

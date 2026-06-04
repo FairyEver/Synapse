@@ -8,7 +8,8 @@ import { AutomationListRow } from "./automation-list-row"
 type AutomationListProps = {
   readonly items: AutomationItem[]
   readonly projects: readonly SynapseProjectConfig[]
-  readonly busy: boolean
+  readonly createDisabled: boolean
+  readonly pendingItemIds: ReadonlySet<string>
   readonly runningItemIds: ReadonlySet<string>
   readonly onOpen: (item: AutomationItem) => void
   readonly onRun: (item: AutomationItem) => void
@@ -22,7 +23,8 @@ type AutomationListProps = {
 function AutomationList({
   items,
   projects,
-  busy,
+  createDisabled,
+  pendingItemIds,
   runningItemIds,
   onOpen,
   onRun,
@@ -36,7 +38,7 @@ function AutomationList({
     return (
       <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center">
         <p className="text-sm text-muted-foreground">暂无自动化</p>
-        <Button size="sm" variant="outline" disabled={busy} onClick={onCreateNew}>
+        <Button size="sm" variant="outline" disabled={createDisabled} onClick={onCreateNew}>
           <Plus data-icon="inline-start" />
           新建
         </Button>
@@ -51,7 +53,8 @@ function AutomationList({
           key={item.id}
           item={item}
           projects={projects}
-          busy={busy || runningItemIds.has(item.id)}
+          pending={pendingItemIds.has(item.id)}
+          running={runningItemIds.has(item.id)}
           onOpen={() => onOpen(item)}
           onRun={() => onRun(item)}
           onStop={() => onStop(item)}

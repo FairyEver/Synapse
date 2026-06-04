@@ -95,6 +95,40 @@ function verifyUnpackedNode(header, unpackedPath, relativePath, failures, messag
   }
 }
 
+function nativeClaudePackageNames(platform, arch) {
+  if (platform === "linux") {
+    return [
+      `@anthropic-ai/claude-agent-sdk-linux-${arch}-musl`,
+      `@anthropic-ai/claude-agent-sdk-linux-${arch}`,
+    ]
+  }
+  if (platform === "darwin" || platform === "win32") {
+    return [`@anthropic-ai/claude-agent-sdk-${platform}-${arch}`]
+  }
+  return []
+}
+
+function verifyClaudeRuntime(unpackedPath, failures) {
+  const platform = process.env.SYNAPSE_PACKAGED_ASAR_PLATFORM || process.platform
+  const arch = process.env.SYNAPSE_PACKAGED_ASAR_ARCH || process.arch
+  const binaryName = platform === "win32" ? "claude.exe" : "claude"
+  const expectedPackages = nativeClaudePackageNames(platform, arch)
+
+  if (expectedPackages.length === 0) {
+    failures.push(`Unsupported Claude SDK native binary platform: ${platform}-${arch}`)
+    return
+  }
+
+  const expectedRelativePaths = expectedPackages.map((packageName) =>
+    path.join("node_modules", packageName, binaryName)
+  )
+  if (expectedRelativePaths.some((relativePath) => existsSync(path.join(unpackedPath, relativePath)))) {
+    return
+  }
+
+  failures.push(`Claude SDK native binary is missing: ${expectedRelativePaths.join(" or ")}`)
+}
+
 function verifyResources(resourcesPath, label) {
   const asarPath = path.join(resourcesPath, "app.asar")
   const unpackedPath = path.join(resourcesPath, "app.asar.unpacked")
@@ -183,6 +217,7 @@ function verifyResources(resourcesPath, label) {
     failures,
     "file conversion worker bootstrap sourcemap is missing from app.asar.unpacked",
   )
+  verifyClaudeRuntime(unpackedPath, failures)
 
   if (failures.length > 0) {
     throw new Error([

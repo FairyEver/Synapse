@@ -1,7 +1,13 @@
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "@/components/ui/item"
 import { Separator } from "@/components/ui/separator"
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
@@ -35,43 +41,41 @@ function safeExecutorSummary(type: string, config: ActionConfig): string {
 
 function BuilderHeader({
   title,
-  label,
-  detail,
 }: {
   readonly title: string
-  readonly label: string
-  readonly detail: string
 }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <h2 className="mt-1 text-base font-semibold">{title}</h2>
-      </div>
-      <Badge variant="outline">{detail}</Badge>
+    <div className="mb-5 min-w-0">
+      <h2 className="text-base font-semibold">{title}</h2>
     </div>
   )
 }
 
-function SelectedHeader({
+function SelectedSummary({
+  layout,
   title,
   summary,
   onClear,
 }: {
+  readonly layout: string
   readonly title: string
   readonly summary: string
   readonly onClear: () => void
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="mt-1 truncate text-xs text-muted-foreground">{summary}</p>
-      </div>
-      <Button type="button" variant="ghost" size="sm" onClick={onClear}>
-        重新选择
-      </Button>
-    </div>
+    <Item data-layout={layout} variant="muted" size="sm" className="min-w-0 flex-nowrap">
+      <ItemContent className="min-w-0">
+        <ItemTitle className="w-full min-w-0">
+          <span className="min-w-0 truncate">{title}</span>
+        </ItemTitle>
+        <ItemDescription className="truncate">{summary}</ItemDescription>
+      </ItemContent>
+      <ItemActions className="shrink-0">
+        <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onClear}>
+          重新选择
+        </Button>
+      </ItemActions>
+    </Item>
   )
 }
 
@@ -136,26 +140,30 @@ export function TriggerExecutorBuilder({
   return (
     <div
       data-layout="automation-editor-builder"
-      className="grid min-h-full grid-cols-[400px_1px_minmax(0,1fr)] gap-5"
+      className="grid min-h-full w-full max-w-full grid-cols-[400px_1px_minmax(0,1fr)] gap-5 overflow-hidden"
     >
-      <section className="min-w-0 py-5">
+      <section className="min-w-0 overflow-hidden py-5">
         <BuilderHeader
-          label="触发器"
           title="当以下情况发生时"
-          detail={selectedTrigger ? "配置" : "选择"}
         />
         {selectedTrigger ? (
-          <div className="grid gap-5">
-            <SelectedHeader
+          <div className="grid min-w-0 gap-4">
+            <SelectedSummary
+              layout="automation-editor-trigger-summary"
               title={selectedTrigger.manifest.title}
               summary={safeTriggerSummary(selectedTrigger.manifest.id, triggerConfig)}
               onClear={() => onTriggerChange(null, {})}
             />
             {TriggerConfigForm ? (
-              <TriggerConfigForm
-                value={parseTriggerValue(selectedTrigger.manifest.id, triggerConfig)}
-                onChange={(config) => onTriggerChange(selectedTrigger.manifest.id, config)}
-              />
+              <div
+                data-layout="automation-editor-trigger-config"
+                className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
+              >
+                <TriggerConfigForm
+                  value={parseTriggerValue(selectedTrigger.manifest.id, triggerConfig)}
+                  onChange={(config) => onTriggerChange(selectedTrigger.manifest.id, config)}
+                />
+              </div>
             ) : null}
           </div>
         ) : (
@@ -172,25 +180,29 @@ export function TriggerExecutorBuilder({
 
       <Separator data-layout="automation-editor-divider" orientation="vertical" />
 
-      <section className="min-w-0 py-5">
+      <section data-layout="automation-editor-executor-panel" className="min-w-0 overflow-hidden py-5">
         <BuilderHeader
-          label="执行器"
           title="就执行以下操作"
-          detail={selectedExecutor ? "配置" : "选择"}
         />
         {selectedExecutor ? (
-          <div className="grid gap-5">
-            <SelectedHeader
+          <div className="grid min-w-0 gap-4">
+            <SelectedSummary
+              layout="automation-editor-executor-summary"
               title={selectedExecutor.manifest.title}
               summary={safeExecutorSummary(selectedExecutor.manifest.id, executorConfig)}
               onClear={() => onExecutorChange(null, {})}
             />
             {ExecutorConfigForm ? (
-              <ExecutorConfigForm
-                value={parseExecutorValue(selectedExecutor.manifest.id, executorConfig)}
-                projects={projects}
-                onChange={(config) => onExecutorChange(selectedExecutor.manifest.id, config)}
-              />
+              <div
+                data-layout="automation-editor-executor-config"
+                className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
+              >
+                <ExecutorConfigForm
+                  value={parseExecutorValue(selectedExecutor.manifest.id, executorConfig)}
+                  projects={projects}
+                  onChange={(config) => onExecutorChange(selectedExecutor.manifest.id, config)}
+                />
+              </div>
             ) : null}
           </div>
         ) : (

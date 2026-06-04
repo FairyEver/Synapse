@@ -209,13 +209,13 @@ function ContentSection({ children, title, titleClassName, trackingName }: Conte
       className="min-w-0 max-w-full overflow-hidden rounded-lg border bg-background"
     >
       <section>
-        <div className={cn("flex items-center justify-between gap-2 px-3 py-2", open && "border-b")}>
+        <div className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2", open && "border-b")}>
           <CollapsibleTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="min-w-0 justify-start px-1"
+              className="w-full min-w-0 shrink justify-start px-1"
               aria-label={`${open ? "折叠" : "展开"}${title}`}
             >
               <ChevronDown className={cn("transition-transform", !open && "-rotate-90")} />
@@ -230,6 +230,7 @@ function ContentSection({ children, title, titleClassName, trackingName }: Conte
             }}
             variant="outline"
             size="sm"
+            className="justify-self-end"
             data-track={`${trackingName}-mode`}
             aria-label={`${title}渲染模式`}
           >

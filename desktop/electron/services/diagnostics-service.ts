@@ -37,6 +37,12 @@ import {
   summarizeWindowsCompatibilityLogSignals,
   type WindowsCompatibilitySnapshot,
 } from "./windows-compatibility"
+import {
+  inspectPackagedClaudeRuntime,
+  PACKAGED_CLAUDE_RUNTIME_MISSING_MESSAGE,
+  resourcesPathFromAppPath,
+  type PackagedClaudeRuntimeStatus,
+} from "./agent-runtime/claude-runtime-binary"
 
 type AppPathName = Parameters<Electron.App["getPath"]>[0]
 
@@ -125,6 +131,7 @@ type DiagnosticsServiceDeps = {
   removePath?: (targetPath: string) => Promise<void>
   createConfigBackupPayload?: () => Promise<unknown>
   collectShellEnvironment?: () => ShellEnvironmentSnapshot
+  inspectClaudeRuntime?: () => PackagedClaudeRuntimeStatus
 }
 
 const RECENT_LOG_FILE_LIMIT = 3
@@ -184,6 +191,7 @@ class DiagnosticsService {
       isPackaged: this.deps.appInfo.isPackaged,
       singleInstanceLocked: this.deps.appInfo.hasSingleInstanceLock(),
     }))
+    this.addClaudeRuntimeCheck(checks, platformInfo)
     this.addNodeVisibilityCheck(checks)
 
     await this.addPathChecks(checks, config)
@@ -265,6 +273,37 @@ class DiagnosticsService {
       "未找到可用 Node",
       details,
     ))
+  }
+
+  private addClaudeRuntimeCheck(checks: SynapseDiagnosticsCheck[], platformInfo: PlatformInfo): void {
+    const runtime = this.deps.inspectClaudeRuntime
+      ? this.deps.inspectClaudeRuntime()
+      : inspectPackagedClaudeRuntime({
+          resourcesPath: resourcesPathFromAppPath(this.deps.appInfo.getAppPath()),
+          platform: platformInfo.platform,
+          arch: platformInfo.arch,
+          isPackaged: this.deps.appInfo.isPackaged,
+        })
+    const details = {
+      appVersion: this.deps.appInfo.getVersion(),
+      isPackaged: this.deps.appInfo.isPackaged,
+      ...runtime,
+    }
+
+    if (runtime.status === "present") {
+      checks.push(this.ok("app.claude-runtime", "应用", "Claude runtime", "内置 Claude Code runtime 可用", details))
+      return
+    }
+    if (runtime.status === "missing") {
+      checks.push(this.failed("app.claude-runtime", "应用", "Claude runtime", PACKAGED_CLAUDE_RUNTIME_MISSING_MESSAGE, details))
+      return
+    }
+    if (runtime.status === "unsupported-platform") {
+      checks.push(this.degraded("app.claude-runtime", "应用", "Claude runtime", "当前平台未配置内置 Claude Code runtime", details))
+      return
+    }
+
+    checks.push(this.skipped("app.claude-runtime", "应用", "Claude runtime", "开发环境未检查内置 Claude Code runtime", details))
   }
 
   async exportBundle(payload: { report: SynapseDiagnosticsReport }): Promise<SynapseDiagnosticsBundleExportResult> {

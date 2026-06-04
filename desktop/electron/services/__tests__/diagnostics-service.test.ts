@@ -235,6 +235,90 @@ describe("DiagnosticsService.collect", () => {
     })
   })
 
+  it("reports packaged Claude runtime as available", async () => {
+    const service = createService({
+      appInfo: {
+        getAppPath: () => "/Applications/Synapse.app/Contents/Resources/app.asar",
+        getLocale: () => "zh-CN",
+        getName: () => "Synapse",
+        getVersion: () => "0.2.49",
+        hasSingleInstanceLock: () => true,
+        isPackaged: true,
+        getPath: (name) => `/app/${name}`,
+      },
+      inspectClaudeRuntime: vi.fn(() => ({
+        status: "present",
+        resourcesPath: "/Applications/Synapse.app/Contents/Resources",
+        platform: "darwin",
+        arch: "arm64",
+        expectedPackages: ["@anthropic-ai/claude-agent-sdk-darwin-arm64"],
+        expectedPaths: [
+          "/Applications/Synapse.app/Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude",
+        ],
+        packageName: "@anthropic-ai/claude-agent-sdk-darwin-arm64",
+        binaryName: "claude",
+        executablePath: "/Applications/Synapse.app/Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude",
+      })),
+    })
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "app.claude-runtime")
+
+    expect(check).toMatchObject({
+      status: "ok",
+      group: "应用",
+      name: "Claude runtime",
+      details: {
+        appVersion: "0.2.49",
+        isPackaged: true,
+        status: "present",
+        packageName: "@anthropic-ai/claude-agent-sdk-darwin-arm64",
+        binaryName: "claude",
+      },
+    })
+  })
+
+  it("fails diagnostics when packaged Claude runtime is missing", async () => {
+    const service = createService({
+      appInfo: {
+        getAppPath: () => "/Applications/Synapse.app/Contents/Resources/app.asar",
+        getLocale: () => "zh-CN",
+        getName: () => "Synapse",
+        getVersion: () => "0.2.49",
+        hasSingleInstanceLock: () => true,
+        isPackaged: true,
+        getPath: (name) => `/app/${name}`,
+      },
+      inspectClaudeRuntime: vi.fn(() => ({
+        status: "missing",
+        resourcesPath: "/Applications/Synapse.app/Contents/Resources",
+        platform: "darwin",
+        arch: "arm64",
+        expectedPackages: ["@anthropic-ai/claude-agent-sdk-darwin-arm64"],
+        expectedPaths: [
+          "/Applications/Synapse.app/Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude",
+        ],
+        binaryName: "claude",
+      })),
+    })
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "app.claude-runtime")
+
+    expect(report.overallStatus).toBe("failed")
+    expect(check).toMatchObject({
+      status: "failed",
+      message: "内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。",
+      details: {
+        appVersion: "0.2.49",
+        isPackaged: true,
+        status: "missing",
+        expectedPackages: ["@anthropic-ai/claude-agent-sdk-darwin-arm64"],
+        binaryName: "claude",
+      },
+    })
+  })
+
   it("surfaces Agent runtime log signals without raw prompt or auth details", async () => {
     const service = createService({
       logStore: {

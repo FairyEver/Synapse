@@ -9,7 +9,6 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
-import { existsSync } from "node:fs"
 import path from "node:path"
 
 import {
@@ -33,6 +32,11 @@ import type {
   AgentUserQuestion,
   AgentUserQuestionOption,
 } from "./types"
+import {
+  createMissingPackagedClaudeRuntimeError,
+  inspectPackagedClaudeRuntime,
+  type PackagedClaudeRuntimeStatus,
+} from "./claude-runtime-binary"
 
 export interface QueryLike {
   next(): Promise<IteratorResult<SDKMessage, void>>
@@ -90,6 +94,24 @@ export type ClaudeSDKToolPolicy = (
 
 export const DEFAULT_CLAUDE_SDK_MAX_TURNS = 80
 
+class FailedQuery implements QueryLike {
+  readonly #error: Error
+
+  constructor(error: Error) {
+    this.#error = error
+  }
+
+  next(): Promise<IteratorResult<SDKMessage, void>> {
+    return Promise.reject(this.#error)
+  }
+
+  interrupt(): Promise<void> {
+    return Promise.resolve()
+  }
+
+  close(): void {}
+}
+
 export class ClaudeSDKSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
 
@@ -133,12 +155,17 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.abortController = forwardedAbort?.controller
     this.abortCleanup = forwardedAbort?.cleanup
 
-    const queryFactory = options.queryFactory ?? defaultQueryFactory
-    this.query = queryFactory({
-      prompt: this.inputQueue,
-      options: this.buildQueryOptions(options),
-      logger: this.logger,
-    })
+    const packagedRuntime = inspectPackagedClaudeRuntime()
+    if (packagedRuntime.status === "missing") {
+      this.query = new FailedQuery(createMissingPackagedClaudeRuntimeError(packagedRuntime))
+    } else {
+      const queryFactory = options.queryFactory ?? defaultQueryFactory
+      this.query = queryFactory({
+        prompt: this.inputQueue,
+        options: this.buildQueryOptions(options, packagedRuntime),
+        logger: this.logger,
+      })
+    }
     this.pumpPromise = this.pumpQueryEvents()
   }
 
@@ -245,7 +272,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
   }
 
-  private buildQueryOptions(options: ClaudeSDKSessionOptions): Record<string, unknown> {
+  private buildQueryOptions(
+    options: ClaudeSDKSessionOptions,
+    packagedRuntime: PackagedClaudeRuntimeStatus,
+  ): Record<string, unknown> {
     const hostEnv = buildHostEnvironment({
       baseEnv: options.hostEnv ?? process.env,
       shellPath: options.resolveShellPath
@@ -274,9 +304,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
       canUseTool: (toolName, input, context) => this.canUseTool(toolName, input, context),
     }
 
-    const packagedClaudeExecutable = resolvePackagedClaudeExecutable()
-    if (packagedClaudeExecutable) {
-      queryOptions.pathToClaudeCodeExecutable = packagedClaudeExecutable
+    if (packagedRuntime.status === "present") {
+      queryOptions.pathToClaudeCodeExecutable = packagedRuntime.executablePath
     }
     if (options.model) queryOptions.model = options.model
     queryOptions.maxTurns = options.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS
@@ -742,39 +771,6 @@ function pathMatchesPolicy(filePath: string, policyPath: string): boolean {
 function allowedWriteRootsMessage(agentType: string, allowedWriteRoots: readonly string[] | undefined): string {
   const roots = allowedWriteRoots?.length ? allowedWriteRoots.join(", ") : "no paths"
   return `Subagent ${agentType} may write only inside: ${roots}.`
-}
-
-function resolvePackagedClaudeExecutable(
-  resourcesPath = (process as NodeJS.Process & { readonly resourcesPath?: string }).resourcesPath,
-  platform = process.platform,
-  arch = process.arch,
-  fileExists: (filePath: string) => boolean = existsSync,
-): string | undefined {
-  if (!resourcesPath) return undefined
-  for (const packageName of nativeClaudePackageNames(platform, arch)) {
-    const executablePath = path.join(
-      resourcesPath,
-      "app.asar.unpacked",
-      "node_modules",
-      packageName,
-      platform === "win32" ? "claude.exe" : "claude",
-    )
-    if (fileExists(executablePath)) return executablePath
-  }
-  return undefined
-}
-
-function nativeClaudePackageNames(platform: string, arch: string): readonly string[] {
-  if (platform === "linux") {
-    return [
-      `@anthropic-ai/claude-agent-sdk-linux-${arch}-musl`,
-      `@anthropic-ai/claude-agent-sdk-linux-${arch}`,
-    ]
-  }
-  if (platform === "darwin" || platform === "win32") {
-    return [`@anthropic-ai/claude-agent-sdk-${platform}-${arch}`]
-  }
-  return []
 }
 
 function errorMessage(error: unknown): string {

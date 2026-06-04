@@ -13,7 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -274,9 +273,8 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
           <Pencil />
           <span className="sr-only">重命名</span>
         </Button>
-        <Badge variant="outline">{mode.mode === "edit" ? "编辑" : "新建"}</Badge>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-5">
+      <div data-layout="automation-editor-body" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5">
         <TriggerExecutorBuilder
           triggerType={draft.triggerType}
           triggerConfig={draft.triggerConfig}
