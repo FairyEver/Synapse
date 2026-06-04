@@ -4,7 +4,7 @@ import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AutomationExecutionService } from "./execution-service"
 import type { AutomationItemRepository } from "./item-repository"
 import type { AutomationRunRepository } from "./run-repository"
-import type { AutomationTriggerDefinition, AutomationTriggerRegistry } from "./trigger-registry"
+import type { AutomationTriggerRegistry } from "./trigger-registry"
 import type {
   AutomationCreateInput,
   AutomationItem,
@@ -368,6 +368,18 @@ export class AutomationService {
     if (!item?.enabled) return
     if (!this.isItemValid(item)) return
     const nextRunAt = this.resolveNextRunAt(item, preferredNextRunAt)
+    if (!nextRunAt) {
+      try {
+        await this.deps.items.markScheduled(id, undefined)
+      } catch (error) {
+        this.deps.logger?.warn?.("Automation markScheduled failed for unscheduled trigger.", {
+          automationId: id,
+          boundary: "automation-schedule-none",
+          ...errorMetadata(error),
+        })
+      }
+      return
+    }
     try {
       await this.deps.items.markScheduled(id, nextRunAt.toISOString())
     } catch (error) {
@@ -418,14 +430,19 @@ export class AutomationService {
     if (!this.isItemValid(item)) {
       return this.recordSkipped(item, triggeredBy, NEEDS_UPDATE_MESSAGE)
     }
-    if (!isActiveToday(item, this.now())) {
+    const trigger = this.deps.triggers.get(item.trigger.type)
+    const parsedTriggerConfig = trigger.manifest.configSchema.parse(item.trigger.config)
+    if (trigger.runtime.shouldRunNow && !trigger.runtime.shouldRunNow({
+      config: parsedTriggerConfig,
+      now: this.now(),
+    })) {
       await this.schedule(id)
-      return this.recordSkipped(item, triggeredBy, "day not in activeDays")
+      return this.recordSkipped(item, triggeredBy, "trigger runtime guard skipped run")
     }
-    const deferSchedule =
-      item.trigger.type === "builtin.interval" &&
-      item.trigger.config.anchor === "last_completed_at"
-    if (triggeredBy === "trigger" && !deferSchedule) await this.schedule(id)
+    const reschedulePolicy = trigger.runtime.getReschedulePolicy?.(parsedTriggerConfig) ??
+      { mode: "before_run" as const }
+    const deferSchedule = reschedulePolicy.mode === "after_completion"
+    if (triggeredBy === "trigger" && reschedulePolicy.mode === "before_run") await this.schedule(id)
     try {
       return await this.executeOrSkip(item, triggeredBy)
     } finally {
@@ -503,16 +520,17 @@ export class AutomationService {
     }, { backpressure: "coalesce" })
   }
 
-  private resolveNextRunAt(item: AutomationItem, preferredNextRunAt?: string): Date {
+  private resolveNextRunAt(item: AutomationItem, preferredNextRunAt?: string): Date | null {
     if (preferredNextRunAt) {
       const preferred = new Date(preferredNextRunAt)
       if (preferred.getTime() > this.now().getTime()) return preferred
     }
-    const trigger = this.deps.triggers.get(item.trigger.type) as AutomationTriggerDefinition<Record<string, unknown>>
-    if (!trigger.computeNextRunAt) {
+    const trigger = this.deps.triggers.get(item.trigger.type)
+    if (trigger.manifest.kind !== "schedule") return null
+    if (!trigger.runtime.computeNextRunAt) {
       throw new Error(`Automation trigger "${item.trigger.type}" does not support scheduling`)
     }
-    return trigger.computeNextRunAt({
+    return trigger.runtime.computeNextRunAt({
       config: item.trigger.config,
       from: this.now(),
       createdAt: item.createdAt,
@@ -617,22 +635,4 @@ function errorMetadata(error: unknown): { readonly errorName: string; readonly e
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
-}
-
-function isActiveToday(item: AutomationItem, date: Date): boolean {
-  const activeDays = item.trigger.config.activeDays
-  if (!Array.isArray(activeDays) || activeDays.length >= 7) return true
-  const timezone = item.trigger.type === "builtin.cron" && typeof item.trigger.config.timezone === "string"
-    ? item.trigger.config.timezone
-    : undefined
-  const currentDay = getWeekdayForDate(date, timezone)
-  return activeDays.includes(currentDay)
-}
-
-function getWeekdayForDate(date: Date, timezone?: string): number {
-  if (!timezone) return date.getDay()
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).formatToParts(date)
-  const weekdayStr = parts.find((part) => part.type === "weekday")?.value ?? ""
-  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  return map[weekdayStr] ?? date.getDay()
 }
