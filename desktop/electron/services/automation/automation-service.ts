@@ -1,3 +1,4 @@
+import type { AutomationTriggerEvent } from "../../../automation-trigger-packages/types.shared"
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import type { EventBus } from "../../runtime/event-bus"
 import type { StructuredLogger } from "../../runtime/service-registry"
@@ -240,6 +241,23 @@ export class AutomationService {
 
   runAutomationNow(id: string): Promise<AutomationRun | null> {
     return this.runNow(id)
+  }
+
+  async acceptEvent(event: AutomationTriggerEvent): Promise<AutomationRun[]> {
+    const items = await this.deps.items.list()
+    const acceptedRuns: AutomationRun[] = []
+    for (const item of items) {
+      if (!item.enabled) continue
+      if (!this.isItemValid(item)) continue
+      const trigger = this.deps.triggers.get(item.trigger.type)
+      if (trigger.manifest.kind !== "event") continue
+      if (!trigger.runtime.shouldAcceptEvent) continue
+      const config = trigger.manifest.configSchema.parse(item.trigger.config)
+      const accepted = trigger.runtime.shouldAcceptEvent({ config, event })
+      if (!accepted) continue
+      acceptedRuns.push(await this.executeOrSkip(item, "trigger"))
+    }
+    return acceptedRuns
   }
 
   async stopRun(runId: string): Promise<{ readonly stopped: boolean }> {

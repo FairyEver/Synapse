@@ -196,6 +196,49 @@ describe("AutomationService", () => {
     expect(run?.status).toBe("success")
     expect(stored?.nextRunAt).toBe("2026-06-03T00:05:00.000Z")
   })
+
+  it("accepts events through trigger runtime matching", async () => {
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
+    const item = await harness.service.automationCreate({
+      name: "Event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const runs = await harness.service.acceptEvent({
+      source: "test",
+      type: "demo.created",
+      payload: { id: "1" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toEqual(expect.objectContaining({
+      automationId: item.id,
+      status: "success",
+      triggeredBy: "trigger",
+    }))
+  })
+
+  it("ignores events that trigger runtime rejects", async () => {
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
+    await harness.service.automationCreate({
+      name: "Event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const runs = await harness.service.acceptEvent({
+      source: "test",
+      type: "demo.deleted",
+      payload: { id: "1" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+
+    expect(runs).toEqual([])
+  })
 })
 
 function createHarness(options: {
@@ -260,6 +303,24 @@ function fakeScheduleTriggerRegistry(): AutomationTriggerRegistry {
       computeNextRunAt: () => new Date("2026-06-03T00:05:00.000Z"),
       shouldRunNow: ({ config }) => config.enabled,
       getReschedulePolicy: () => ({ mode: "after_completion" }),
+    },
+  })
+  return registry
+}
+
+function fakeEventTriggerRegistry(): AutomationTriggerRegistry {
+  const registry = createBuiltinAutomationTriggerRegistry()
+  registry.register({
+    manifest: {
+      id: "builtin.fake-event",
+      title: "Fake Event",
+      kind: "event",
+      defaultConfig: { eventType: "demo.created" },
+      configSchema: z.object({ eventType: z.string().min(1) }),
+    },
+    summarize: (config) => `Event · ${config.eventType}`,
+    runtime: {
+      shouldAcceptEvent: ({ config, event }) => event.type === config.eventType,
     },
   })
   return registry

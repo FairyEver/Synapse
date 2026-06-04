@@ -3,6 +3,10 @@ import type {
   ActionStoredConfigValidation,
 } from "../../../action-packages/types"
 
+export type {
+  AutomationTriggerEvent,
+} from "../../../automation-trigger-packages/types.shared"
+
 export const AUTOMATION_SERVICE_ID = "core.automation"
 
 export type AutomationTriggerRef = {
