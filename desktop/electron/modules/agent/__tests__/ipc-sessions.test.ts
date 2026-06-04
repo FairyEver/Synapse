@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const electronMock = vi.hoisted(() => ({
+  app: {
+    getPath: vi.fn(() => "/user-data"),
+  },
+}))
+
+const fsPromisesMock = vi.hoisted(() => ({
+  mkdir: vi.fn(),
+  stat: vi.fn(),
+}))
+
 const logStoreMock = vi.hoisted(() => ({
   logger: {
     debug: vi.fn(),
@@ -17,6 +28,11 @@ import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
 import { configStore } from "../../../services/config-store"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { sessionMethods } from "../ipc-sessions"
+import { DEFAULT_AGENT_WORKSPACE_PROJECT_ID } from "../../../../src/lib/default-agent-workspace"
+
+vi.mock("electron", () => electronMock)
+
+vi.mock("node:fs/promises", () => fsPromisesMock)
 
 vi.mock("../../../services/config-store", () => ({
   configStore: {
@@ -31,6 +47,11 @@ vi.mock("../../../services/log-store", () => ({
 describe("agent session IPC methods", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    electronMock.app.getPath.mockReturnValue("/user-data")
+    fsPromisesMock.mkdir.mockResolvedValue(undefined)
+    fsPromisesMock.stat.mockResolvedValue({
+      isDirectory: () => true,
+    })
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -112,6 +133,55 @@ describe("agent session IPC methods", () => {
     )
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("/Users/liyang/private/repo")
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("sk-test")
+  })
+
+  it("creates sessions in the built-in local conversation workspace", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const createSession = vi.fn().mockResolvedValue(storedConversation({
+      id: "local-conv",
+      projectId: DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
+    }))
+    const ctx = createContext({
+      agent: { createSession },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+    })
+
+    await expect(sessionMethods.createSession.handler(ctx, {
+      projectId: DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
+      agentType: "claude-code",
+      providerId: "anthropic",
+    })).resolves.toEqual(expect.objectContaining({
+      id: "local-conv",
+      projectId: DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
+    }))
+
+    expect(fsPromisesMock.mkdir).toHaveBeenCalledWith(
+      "/user-data/agent-workspaces/default",
+      { recursive: true },
+    )
+    expect(ctx.projectContainers.open).toHaveBeenCalledWith(
+      DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
+      {
+        name: "本地对话",
+        workspacePath: "/user-data/agent-workspaces/default",
+        managedKnowledgeBase: undefined,
+      },
+    )
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      platform: "local-renderer",
+      sessionKey: "local:renderer",
+    }))
   })
 
   it("logs session deletion failures with conversation context", async () => {
@@ -270,7 +340,9 @@ function createContext(overrides: {
   readonly agent: Record<string, unknown>
   readonly dataRepo: DataRepository
   readonly windowManager?: WindowManager
-}): IpcHandlerContext {
+}): IpcHandlerContext & {
+  readonly projectContainers: Pick<ProjectContainerRegistry, "open">
+} {
   const providerService = {}
   const container: ProjectContainer = {
     projectId: "project-1",
@@ -287,6 +359,7 @@ function createContext(overrides: {
   }
   return {
     moduleId: "agent",
+    projectContainers,
     resolve: <T>(serviceId: string): T => {
       if (serviceId === "core.project-containers") return projectContainers as T
       if (serviceId === "core.data-repository") return overrides.dataRepo as T

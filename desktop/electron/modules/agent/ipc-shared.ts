@@ -19,6 +19,8 @@ import {
 import { createMainLogger } from "../../services/log-store"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
+import { isDefaultAgentWorkspaceProjectId } from "../../../src/lib/default-agent-workspace"
+import { resolveDefaultAgentWorkspaceProject } from "./default-agent-workspace"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -201,7 +203,7 @@ export async function resolveProjectAgent(
   readonly managedKnowledgeBase?: boolean
 }> {
   const config = await configStore.load()
-  const project = resolveAgentProjectConfig(config, projectId)
+  const project = await resolveAgentProjectConfig(config, projectId)
   if (!project) {
     throw new Error("找不到当前项目。")
   }
@@ -220,15 +222,18 @@ export async function resolveProjectAgent(
   }
 }
 
-function resolveAgentProjectConfig(
+async function resolveAgentProjectConfig(
   config: Awaited<ReturnType<typeof configStore.load>>,
   projectId: string,
-): {
+): Promise<{
   readonly uuid: string
   readonly name: string
   readonly localPath: string
   readonly managedKnowledgeBase?: boolean
-} | null {
+} | null> {
+  if (isDefaultAgentWorkspaceProjectId(projectId)) {
+    return resolveDefaultAgentWorkspaceProject()
+  }
   const repository = config.repositories.find((item) => item.uuid === projectId)
   if (repository) {
     return repository
