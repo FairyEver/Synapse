@@ -1,0 +1,2 @@
+export { docxToMarkdownTool } from "./descriptor"
+
