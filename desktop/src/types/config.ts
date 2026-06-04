@@ -72,6 +72,7 @@ export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
   projects: SynapseProjectConfig[]
   quickInputs: SynapseQuickInput[]
+  defaultQuickInputsSeededVersion: string | null
   favorites: SynapseFavorites
   recentlyViewed: SynapseRecentlyViewed
   contentSortOrder: SynapseContentSortOrder

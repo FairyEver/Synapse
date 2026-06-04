@@ -33,6 +33,7 @@ import type {
   SynapseVariable,
 } from "../types/config"
 import type { SynapseAgentPermissionMode } from "../types/agent"
+import { SYNAPSE_APP_VERSION } from "./app-version"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -422,6 +423,27 @@ function normalizeQuickInputs(value: unknown): SynapseQuickInput[] {
   )
 }
 
+function normalizeQuickInputSeededVersion(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null
+}
+
+function applyDefaultQuickInputSeed(
+  quickInputs: SynapseQuickInput[],
+  seededVersion: string | null,
+): { quickInputs: SynapseQuickInput[]; seededVersion: string } {
+  if (seededVersion === SYNAPSE_APP_VERSION) {
+    return {
+      quickInputs,
+      seededVersion: SYNAPSE_APP_VERSION,
+    }
+  }
+
+  return {
+    quickInputs: quickInputs.length === 0 ? structuredClone(DEFAULT_QUICK_INPUTS) : quickInputs,
+    seededVersion: SYNAPSE_APP_VERSION,
+  }
+}
+
 function normalizeRepositories(value: unknown): SynapseRepositoryConfig[] {
   if (!Array.isArray(value)) {
     return structuredClone(DEFAULT_CONFIG.repositories)
@@ -470,10 +492,16 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     return structuredClone(DEFAULT_GLOBAL_CONFIG)
   }
 
+  const seeded = applyDefaultQuickInputSeed(
+    normalizeQuickInputs(value.quickInputs),
+    normalizeQuickInputSeededVersion(value.defaultQuickInputsSeededVersion),
+  )
+
   return {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
     projects: normalizeProjects(value.projects),
-    quickInputs: normalizeQuickInputs(value.quickInputs),
+    quickInputs: seeded.quickInputs,
+    defaultQuickInputsSeededVersion: seeded.seededVersion,
     favorites: normalizeFavorites(value.favorites),
     recentlyViewed: normalizeRecentlyViewed(value.recentlyViewed),
     contentSortOrder: isSynapseContentSortOrder(value.contentSortOrder)

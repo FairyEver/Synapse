@@ -74,6 +74,7 @@ async function managedFixture() {
         recentlyViewed: { rule: [], skill: [], prompt: [] },
         contentSortOrder: "modified-desc",
         quickInputs: [],
+        defaultQuickInputsSeededVersion: null,
         projects: [{
           id: projectId,
           name: "Knowledge",

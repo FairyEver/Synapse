@@ -657,6 +657,7 @@ function createConfig(): SynapseConfig {
       themeMode: "system",
       projects: [{ id: "project-1", name: "Project", path: "/missing-project" }],
       quickInputs: [],
+      defaultQuickInputsSeededVersion: null,
       favorites: { rule: [], skill: [], prompt: [] },
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",

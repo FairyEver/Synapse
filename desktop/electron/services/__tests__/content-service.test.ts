@@ -79,6 +79,7 @@ function createConfig(): SynapseConfig {
       },
       projects: [],
       quickInputs: [],
+      defaultQuickInputsSeededVersion: null,
       recentlyViewed: {
         prompt: [],
         rule: [],

@@ -56,6 +56,7 @@ async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
         recentlyViewed: { rule: [], skill: [], prompt: [] },
         contentSortOrder: "modified-desc",
         quickInputs: [],
+        defaultQuickInputsSeededVersion: null,
         projects: [{
           id: projectId,
           name: "Knowledge",
@@ -238,6 +239,7 @@ describe("KnowledgeBaseService", () => {
           recentlyViewed: { rule: [], skill: [], prompt: [] },
           contentSortOrder: "modified-desc",
           quickInputs: [],
+          defaultQuickInputsSeededVersion: null,
           projects: [],
         },
         agent: { defaultPermissionMode: "default", defaultProviderModel: null },
