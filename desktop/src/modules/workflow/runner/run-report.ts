@@ -172,9 +172,6 @@ function resolveNodeMainContent(node: WorkflowNode, result: NodeRunResult): { ti
   if (node.type === "http_request") {
     return { title: "请求配置", language: "json", content: formatJson(sanitizeReportValue(node.config)) }
   }
-  if (node.type === "file_conversion") {
-    return { title: "转换配置", language: "json", content: formatJson(sanitizeReportValue(node.config)) }
-  }
   if (node.type === "end" && typeof node.config.template === "string") {
     return { title: "返回模板", language: "text", content: sanitizeError(node.config.template) }
   }

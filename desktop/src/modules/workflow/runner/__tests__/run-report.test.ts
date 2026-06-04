@@ -103,38 +103,6 @@ describe("workflow run reports", () => {
     expect(report).not.toContain("secret-value")
   })
 
-  it("includes file conversion configuration in node reports", () => {
-    const fileConversionNode: WorkflowDefinition["nodes"][number] = {
-      id: "convert",
-      name: "Convert document",
-      type: "file_conversion",
-      position: { x: 0, y: 0 },
-      config: {
-        inputPath: "/tmp/source.docx",
-        outputMode: "markdown-file",
-        outputDirectory: "/tmp/synapse-workflow-outputs/run-1",
-        ocr: { enabled: true, languages: ["eng"], maxPages: 3 },
-      },
-    }
-    const definition: WorkflowDefinition = {
-      ...workflowDefinition(),
-      nodes: [fileConversionNode],
-      edges: [],
-    }
-
-    const report = formatNodeRunReport({
-      definition,
-      node: fileConversionNode,
-      result: nodeResult("convert", { output: "# Source" }),
-      orderIndex: 1,
-    })
-
-    expect(report).toContain("## 转换配置")
-    expect(report).toContain('"inputPath": "[path]"')
-    expect(report).toContain('"outputMode": "markdown-file"')
-    expect(report).toContain('"enabled": true')
-  })
-
   it("includes token usage in node reports", () => {
     const report = formatNodeRunReport({
       definition: workflowDefinition(),

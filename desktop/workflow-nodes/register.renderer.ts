@@ -12,11 +12,9 @@ import { switchNodeManifest } from "./switch/manifest"
 import { endNodeManifest } from "./end/manifest"
 import { httpRequestNodeManifest } from "./http-request/manifest"
 import { scriptNodeManifest } from "./script/manifest"
-import { fileConversionNodeManifest } from "./file-conversion/manifest"
 
 nodeTypeRegistry.registerManifest(promptNodeManifest)
 nodeTypeRegistry.registerManifest(switchNodeManifest)
 nodeTypeRegistry.registerManifest(endNodeManifest)
 nodeTypeRegistry.registerManifest(httpRequestNodeManifest)
 nodeTypeRegistry.registerManifest(scriptNodeManifest)
-nodeTypeRegistry.registerManifest(fileConversionNodeManifest)

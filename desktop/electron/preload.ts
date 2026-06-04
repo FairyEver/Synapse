@@ -256,7 +256,6 @@ const IPC_CHANNELS = {
     "exportPackage": "synapse:workflow:export-package",
     "inspectImportPackage": "synapse:workflow:inspect-import-package",
     "importPackage": "synapse:workflow:import-package",
-    "selectFileConversionInputFile": "synapse:workflow:file-conversion:select-input-file",
     "event": "synapse:workflow:event",
   },
   "tools": {
@@ -920,10 +919,6 @@ const synapseBridge: SynapseBridge = {
     inspectImportPackage: () => invoke(IPC_CHANNELS.workflow.inspectImportPackage)(),
     importPackage: (packagePath: string, mappings) =>
       invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, mappings }),
-    selectFileConversionInputFile: async () => {
-      const result = await invoke(IPC_CHANNELS.workflow.selectFileConversionInputFile)()
-      return result?.path ?? null
-    },
     onEvent: (listener) =>
       subscribe(EVENT_CHANNELS.workflow.event)((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)

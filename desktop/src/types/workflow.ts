@@ -15,34 +15,6 @@ export interface WorkflowVariableBinding {
   readonly name: string
   readonly source: WorkflowVariableSource
 }
-export interface WorkflowFileConversionNodeConfig {
-  readonly inputPath: string
-  readonly outputMode?: "result" | "markdown-file"
-  readonly outputPath?: string
-  readonly outputDirectory?: string
-  readonly ocr?: {
-    readonly enabled?: boolean
-    readonly languages?: readonly string[]
-    readonly maxPages?: number
-  }
-  readonly variables?: readonly WorkflowVariableBinding[]
-}
-export interface WorkflowFileConversionNodeResult {
-  readonly sourcePath: string
-  readonly format: string
-  readonly kind: string
-  readonly title: string
-  readonly text: string
-  readonly metadata: Record<string, unknown>
-  readonly warnings: readonly { readonly code: string; readonly message: string }[]
-  readonly outputPath?: string
-}
-export interface WorkflowFileConversionNodeFailure {
-  readonly ok: false
-  readonly code: "unsupported_format" | "encrypted" | "missing_local_helper" | "parse_failed" | "read_failed" | "size_limit_exceeded" | "invalid_output_path" | "write_failed"
-  readonly message: string
-  readonly sourcePath: string
-}
 export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number

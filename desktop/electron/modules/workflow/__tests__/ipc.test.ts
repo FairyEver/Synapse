@@ -72,50 +72,6 @@ describe("workflowIpcModule", () => {
     } as never)
   })
 
-  it("selects a supported file conversion input file", async () => {
-    electronMock.dialog.showOpenDialog.mockResolvedValue({
-      canceled: false,
-      filePaths: ["/tmp/source.docx"],
-    })
-    const harness = createInMemoryHarness()
-    harness.registry.register(workflowIpcModule, {
-      moduleId: "workflow",
-      resolve: <T,>(serviceId: string): T => {
-        throw new Error(`Unknown service: ${serviceId}`)
-      },
-    })
-
-    const result = await harness.invoke("synapse:workflow:file-conversion:select-input-file", undefined)
-
-    expect(result).toEqual({ path: "/tmp/source.docx" })
-    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith({
-      title: "选择文件",
-      filters: [{
-        name: "支持的文件",
-        extensions: ["doc", "docx", "xlsx", "pdf", "ppt", "pptx", "png", "jpg", "jpeg", "webp"],
-      }],
-      properties: ["openFile"],
-    })
-  })
-
-  it("returns null when file conversion input selection is cancelled", async () => {
-    electronMock.dialog.showOpenDialog.mockResolvedValue({
-      canceled: true,
-      filePaths: [],
-    })
-    const harness = createInMemoryHarness()
-    harness.registry.register(workflowIpcModule, {
-      moduleId: "workflow",
-      resolve: <T,>(serviceId: string): T => {
-        throw new Error(`Unknown service: ${serviceId}`)
-      },
-    })
-
-    const result = await harness.invoke("synapse:workflow:file-conversion:select-input-file", undefined)
-
-    expect(result).toBeNull()
-  })
-
   it("sanitizes workflow engine rejection diagnostics and visible failure state", async () => {
     const rawError = "engine failed token=sk-secret at /Users/example/repo with prompt text"
     const runStatuses = new Map<string, WorkflowRunStatus>()

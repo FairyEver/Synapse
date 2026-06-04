@@ -6,12 +6,15 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
+  activeRepository: null as { uuid: string; name: string; localPath: string } | null,
   getStates: vi.fn(),
+  hasRepositories: false,
   logger: {
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
   },
+  repositoryState: undefined as { status: "checking" | "missing" | "ready" } | undefined,
 }))
 
 vi.mock("@/app-shell/account-ui-visibility", () => ({
@@ -62,11 +65,11 @@ vi.mock("@/app-shell/config", () => ({
 }))
 
 vi.mock("@/app-shell/use-repository-manager", () => ({
-  useActiveRepository: () => null,
-  useHasRepositories: () => false,
+  useActiveRepository: () => mocks.activeRepository,
+  useHasRepositories: () => mocks.hasRepositories,
   useRepositoryActions: () => ({ syncRepository: vi.fn() }),
   useRepositoryManager: () => ({ refreshRepositoryStates: vi.fn() }),
-  useRepositoryState: () => undefined,
+  useRepositoryState: () => mocks.repositoryState,
 }))
 
 vi.mock("@/app-shell/navigation", () => ({
@@ -142,7 +145,10 @@ import App from "@/App"
 let roots: Root[] = []
 
 beforeEach(() => {
+  mocks.activeRepository = null
   mocks.getStates.mockResolvedValue({})
+  mocks.hasRepositories = false
+  mocks.repositoryState = undefined
   vi.clearAllMocks()
 })
 
@@ -162,6 +168,22 @@ describe("App without repositories", () => {
 
     expect(document.querySelector("[data-testid='empty-repository-state']")).toBeNull()
     expect(document.body.textContent).toContain("对话模块")
+  })
+
+  it("keeps the main shell visible when the active repository is missing", async () => {
+    mocks.activeRepository = {
+      uuid: "repo-missing",
+      name: "Missing Repo",
+      localPath: "/missing/repo",
+    }
+    mocks.hasRepositories = true
+    mocks.repositoryState = { status: "missing" }
+
+    await renderApp()
+
+    expect(document.querySelector("[data-testid='empty-repository-state']")).toBeNull()
+    expect(document.body.textContent).toContain("导航")
+    expect(document.body.textContent).toContain("技能模块")
   })
 })
 
