@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { z } from "zod"
 
 import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import { createBuiltinAutomationTriggerRegistry } from "../builtin-triggers"
@@ -118,6 +119,40 @@ describe("AutomationItemRepository", () => {
       nextRunAt: undefined,
       runCount: 2,
     }))
+  })
+
+  it("recomputes next run after completion using trigger reschedule policy", async () => {
+    const registry = createBuiltinAutomationTriggerRegistry()
+    registry.register({
+      manifest: {
+        id: "builtin.fake-after-completion",
+        title: "Fake After Completion",
+        kind: "schedule",
+        defaultConfig: { value: "ok" },
+        configSchema: z.object({ value: z.string() }),
+      },
+      summarize: () => "Fake After Completion",
+      runtime: {
+        computeNextRunAt: () => new Date("2026-06-03T00:15:00.000Z"),
+        getReschedulePolicy: () => ({ mode: "after_completion" }),
+      },
+    })
+    const repo = new AutomationItemRepository({
+      items: new MemoryNamespace<AutomationItem>("automation.items"),
+      triggers: registry,
+      now: () => new Date("2026-06-03T00:00:00.000Z"),
+      idFactory: () => "automation:1",
+    })
+    const item = await repo.create({
+      name: "Fake",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-after-completion", config: { value: "ok" } },
+      executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
+    })
+
+    const result = await repo.markRunResult(item.id, { status: "success" })
+
+    expect(result?.nextRunAt).toBe("2026-06-03T00:15:00.000Z")
   })
 })
 

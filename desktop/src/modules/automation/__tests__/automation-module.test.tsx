@@ -174,6 +174,24 @@ describe("AutomationModule", () => {
     expect(mocks.openCreateEditorWindow).toHaveBeenCalledTimes(1)
   })
 
+  it("does not render the legacy automation form dialog", async () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+
+    expect(document.querySelector('[data-track="automation-form-dialog"]')).toBeNull()
+  })
+
   it("opens the editor window from a list row", async () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],

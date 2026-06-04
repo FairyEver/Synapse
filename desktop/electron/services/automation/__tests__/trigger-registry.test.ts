@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 
+import { cronTriggerDefinition } from "../../../../automation-trigger-packages/builtin/cron/index.main"
+import { intervalTriggerDefinition } from "../../../../automation-trigger-packages/builtin/interval/index.main"
 import { AutomationTriggerRegistry } from "../trigger-registry"
 
 const testTrigger = {
   manifest: {
     id: "builtin.test",
     title: "Test",
+    kind: "schedule" as const,
     defaultConfig: { value: "ok" },
     configSchema: z.object({ value: z.string().min(1) }),
   },
   summarize: (config: { value: string }) => config.value,
+  runtime: {
+    computeNextRunAt: () => new Date("2026-06-03T00:10:00.000Z"),
+  },
 }
 
 describe("AutomationTriggerRegistry", () => {
@@ -20,6 +26,36 @@ describe("AutomationTriggerRegistry", () => {
 
     expect(registry.parseConfig("builtin.test", { value: "hello" })).toEqual({ value: "hello" })
     expect(registry.summarize("builtin.test", { value: "hello" })).toBe("hello")
+  })
+
+  it("exposes schedule runtime through the trigger definition", () => {
+    const registry = new AutomationTriggerRegistry()
+    registry.register(testTrigger)
+
+    const trigger = registry.get("builtin.test")
+
+    expect(trigger.manifest.kind).toBe("schedule")
+    expect(trigger.runtime.computeNextRunAt?.({
+      config: { value: "ok" },
+      from: new Date("2026-06-03T00:00:00.000Z"),
+      createdAt: "2026-06-03T00:00:00.000Z",
+    })).toEqual(new Date("2026-06-03T00:10:00.000Z"))
+  })
+
+  it("uses custom stored config validation when provided", () => {
+    const registry = new AutomationTriggerRegistry()
+    registry.register({
+      ...testTrigger,
+      validateStoredConfig: () => ({
+        status: "needs_update" as const,
+        issues: [{ field: "trigger.config.value", message: "值已失效" }],
+      }),
+    })
+
+    expect(registry.validateStoredConfig("builtin.test", { value: "ok" })).toEqual({
+      status: "needs_update",
+      issues: [{ field: "trigger.config.value", message: "值已失效" }],
+    })
   })
 
   it("rejects duplicate trigger ids", () => {
@@ -36,5 +72,19 @@ describe("AutomationTriggerRegistry", () => {
       status: "needs_update",
       issues: [{ field: "trigger.type", message: "选择触发器" }],
     })
+  })
+
+  it("exports built-in main trigger definitions from trigger packages", () => {
+    expect(cronTriggerDefinition.manifest.id).toBe("builtin.cron")
+    expect(cronTriggerDefinition.manifest.kind).toBe("schedule")
+    expect(cronTriggerDefinition.runtime.computeNextRunAt).toBeTypeOf("function")
+
+    expect(intervalTriggerDefinition.manifest.id).toBe("builtin.interval")
+    expect(intervalTriggerDefinition.manifest.kind).toBe("schedule")
+    expect(intervalTriggerDefinition.runtime.getReschedulePolicy?.({
+      everyMinutes: 60,
+      anchor: "last_completed_at",
+      activeDays: [0, 1, 2, 3, 4, 5, 6],
+    })).toEqual({ mode: "after_completion" })
   })
 })

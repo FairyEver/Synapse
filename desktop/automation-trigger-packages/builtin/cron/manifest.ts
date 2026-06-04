@@ -1,4 +1,4 @@
-import type { AutomationTriggerManifest } from "../../../src/automation-triggers/action-registry"
+import type { AutomationTriggerManifest } from "../../types.shared"
 import {
   cronTriggerConfigSchema,
   type CronTriggerConfig,
@@ -7,6 +7,7 @@ import {
 export const cronTriggerManifest = {
   id: "builtin.cron",
   title: "Cron",
+  kind: "schedule",
   defaultConfig: {
     expr: "0 9 * * *",
     activeDays: [0, 1, 2, 3, 4, 5, 6],

@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 
+import { cronRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/cron/index.renderer"
+import { intervalRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/interval/index.renderer"
 import { rendererAutomationTriggerRegistry } from "../builtin-triggers"
 
 describe("rendererAutomationTriggerRegistry", () => {
   it("registers built-in triggers in product order", () => {
-    expect(rendererAutomationTriggerRegistry.list().map((trigger) => trigger.manifest.id)).toEqual([
-      "builtin.cron",
-      "builtin.interval",
+    expect(rendererAutomationTriggerRegistry.list().map((trigger) => ({
+      id: trigger.manifest.id,
+      kind: trigger.manifest.kind,
+    }))).toEqual([
+      { id: "builtin.cron", kind: "schedule" },
+      { id: "builtin.interval", kind: "schedule" },
     ])
   })
 
@@ -65,5 +70,13 @@ describe("rendererAutomationTriggerRegistry", () => {
     expect(() => rendererAutomationTriggerRegistry.register(existing)).toThrow(
       'Automation trigger "builtin.cron" is already registered',
     )
+  })
+
+  it("exports built-in renderer trigger definitions from trigger packages", () => {
+    expect(cronRendererTriggerDefinition.manifest.id).toBe("builtin.cron")
+    expect(cronRendererTriggerDefinition.ConfigForm).toBeTypeOf("function")
+
+    expect(intervalRendererTriggerDefinition.manifest.id).toBe("builtin.interval")
+    expect(intervalRendererTriggerDefinition.ConfigForm).toBeTypeOf("function")
   })
 })

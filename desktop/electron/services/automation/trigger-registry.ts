@@ -1,35 +1,16 @@
-import type { z } from "zod"
-
 import type {
   ActionStoredConfigValidation,
 } from "../../../action-packages/types"
+import type {
+  AutomationTriggerConfig,
+  AutomationTriggerDefinition,
+} from "../../../automation-trigger-packages/types.shared"
 import type { AutomationTriggerRef } from "./types"
-
-export type AutomationTriggerManifest<TConfig extends Record<string, unknown> = Record<string, unknown>> = {
-  readonly id: string
-  readonly title: string
-  readonly defaultConfig: TConfig
-  readonly configSchema: z.ZodType<TConfig>
-}
-
-export type AutomationTriggerRuntimeInput<TConfig extends Record<string, unknown>> = {
-  readonly config: TConfig
-  readonly from: Date
-  readonly createdAt: string
-  readonly lastRunAt?: string
-}
-
-export type AutomationTriggerDefinition<TConfig extends Record<string, unknown> = Record<string, unknown>> = {
-  readonly manifest: AutomationTriggerManifest<TConfig>
-  summarize(config: TConfig): string
-  computeNextRunAt?(input: AutomationTriggerRuntimeInput<TConfig>): Date
-  shouldRunNow?(input: { readonly config: TConfig; readonly now: Date }): boolean
-}
 
 export class AutomationTriggerRegistry {
   private readonly triggers = new Map<string, AutomationTriggerDefinition>()
 
-  register<TConfig extends Record<string, unknown>>(trigger: AutomationTriggerDefinition<TConfig>): void {
+  register<TConfig extends AutomationTriggerConfig>(trigger: AutomationTriggerDefinition<TConfig>): void {
     const id = trigger.manifest.id
     if (this.triggers.has(id)) {
       throw new Error(`Automation trigger "${id}" is already registered`)
@@ -68,6 +49,9 @@ export class AutomationTriggerRegistry {
         issues: [{ field: "trigger.type", message: "选择触发器" }],
       }
     }
+    if (trigger.validateStoredConfig) {
+      return trigger.validateStoredConfig(config)
+    }
     const parsed = trigger.manifest.configSchema.safeParse(config)
     return parsed.success
       ? { status: "valid", issues: [] }
@@ -79,3 +63,16 @@ export class AutomationTriggerRegistry {
     return trigger.summarize(trigger.manifest.configSchema.parse(config))
   }
 }
+
+export type {
+  AutomationEventInput,
+  AutomationReschedulePolicy,
+  AutomationScheduleGuardInput,
+  AutomationScheduleInput,
+  AutomationTriggerConfig,
+  AutomationTriggerDefinition,
+  AutomationTriggerEvent,
+  AutomationTriggerKind,
+  AutomationTriggerManifest,
+  AutomationTriggerRuntime,
+} from "../../../automation-trigger-packages/types.shared"

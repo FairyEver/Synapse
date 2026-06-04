@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 
 import type { DataNamespace } from "../../runtime/data-repo"
-import type { AutomationTriggerDefinition, AutomationTriggerRegistry } from "./trigger-registry"
+import type { AutomationTriggerRegistry } from "./trigger-registry"
 import type {
   AutomationCreateInput,
   AutomationItem,
@@ -60,7 +60,7 @@ export class AutomationItemRepository {
     validateItem(item)
     const next: AutomationItem = {
       ...item,
-      nextRunAt: enabled ? this.computeNextRunAt(item, this.now()).toISOString() : undefined,
+      nextRunAt: enabled ? this.computeNextRunAtIso(item, this.now()) : undefined,
     }
     await this.items.upsert(next)
     return next
@@ -87,9 +87,7 @@ export class AutomationItemRepository {
       validateItem(candidate)
       return {
         ...candidate,
-        nextRunAt: candidate.enabled
-          ? this.computeNextRunAt(candidate, this.now()).toISOString()
-          : undefined,
+        nextRunAt: candidate.enabled ? this.computeNextRunAtIso(candidate, this.now()) : undefined,
       }
     })
     if (!next) throw new Error(`Automation "${id}" was not found`)
@@ -120,9 +118,7 @@ export class AutomationItemRepository {
       }
       return {
         ...candidate,
-        nextRunAt: enabled
-          ? this.computeNextRunAt(candidate, this.now()).toISOString()
-          : undefined,
+        nextRunAt: enabled ? this.computeNextRunAtIso(candidate, this.now()) : undefined,
       }
     })
     if (!next) throw new Error(`Automation "${id}" was not found`)
@@ -143,9 +139,14 @@ export class AutomationItemRepository {
   ): Promise<AutomationItem | null> {
     return this.mutateItem(id, (existing) => {
       const now = this.isoNow()
+      const trigger = this.triggers.get(existing.trigger.type)
+      const reschedulePolicy = existing.enabled
+        ? trigger.runtime.getReschedulePolicy?.(
+          trigger.manifest.configSchema.parse(existing.trigger.config),
+        )
+        : undefined
       const recalcNextRunAt = existing.enabled &&
-        existing.trigger.type === "builtin.interval" &&
-        existing.trigger.config.anchor === "last_completed_at"
+        reschedulePolicy?.mode === "after_completion"
       const next: AutomationItem = {
         ...existing,
         lastRunAt: now,
@@ -153,11 +154,12 @@ export class AutomationItemRepository {
         runCount: existing.runCount + 1,
         updatedAt: now,
       }
+      const nextRunAt = recalcNextRunAt
+        ? this.computeNextRunAtIso(next, this.now())
+        : existing.nextRunAt
       return {
         ...next,
-        ...(recalcNextRunAt
-          ? { nextRunAt: this.computeNextRunAt(next, this.now()).toISOString() }
-          : {}),
+        ...(recalcNextRunAt ? { nextRunAt } : {}),
       }
     })
   }
@@ -193,17 +195,22 @@ export class AutomationItemRepository {
     return this.triggers.normalize(trigger)
   }
 
-  private computeNextRunAt(item: AutomationItem, from: Date): Date {
-    const trigger = this.triggers.get(item.trigger.type) as AutomationTriggerDefinition<Record<string, unknown>>
-    if (!trigger.computeNextRunAt) {
+  private computeNextRunAt(item: AutomationItem, from: Date): Date | null {
+    const trigger = this.triggers.get(item.trigger.type)
+    if (trigger.manifest.kind !== "schedule") return null
+    if (!trigger.runtime.computeNextRunAt) {
       throw new Error(`Automation trigger "${item.trigger.type}" does not support scheduling`)
     }
-    return trigger.computeNextRunAt({
+    return trigger.runtime.computeNextRunAt({
       config: item.trigger.config,
       from,
       createdAt: item.createdAt,
       lastRunAt: item.lastRunAt,
     })
+  }
+
+  private computeNextRunAtIso(item: AutomationItem, from: Date): string | undefined {
+    return this.computeNextRunAt(item, from)?.toISOString()
   }
 
   private isoNow(): string {

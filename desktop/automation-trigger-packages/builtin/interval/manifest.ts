@@ -1,4 +1,4 @@
-import type { AutomationTriggerManifest } from "../../../src/automation-triggers/action-registry"
+import type { AutomationTriggerManifest } from "../../types.shared"
 import {
   intervalTriggerConfigSchema,
   type IntervalTriggerConfig,
@@ -7,6 +7,7 @@ import {
 export const intervalTriggerManifest = {
   id: "builtin.interval",
   title: "固定间隔",
+  kind: "schedule",
   defaultConfig: {
     everyMinutes: 60,
     anchor: "created_at",

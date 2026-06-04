@@ -1,30 +1,9 @@
-import type { ReactElement } from "react"
-
-export type AutomationTriggerConfig = Record<string, unknown>
-
-export type AutomationTriggerConfigFormComponent<
-  TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
-> = (props: {
-  readonly value: TConfig
-  readonly onChange: (value: TConfig) => void
-}) => ReactElement
-
-export type AutomationTriggerManifest<
-  TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
-> = {
-  readonly id: string
-  readonly title: string
-  readonly defaultConfig: TConfig
-  readonly configSchema: { parse(config: unknown): TConfig }
-}
-
-export type RendererAutomationTriggerDefinition<
-  TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
-> = {
-  readonly manifest: AutomationTriggerManifest<TConfig>
-  summarizeConfig(config: TConfig): string
-  ConfigForm?: AutomationTriggerConfigFormComponent<TConfig>
-}
+import type {
+  AutomationTriggerConfig,
+  AutomationTriggerConfigFormComponent,
+  AutomationTriggerManifest,
+  RendererAutomationTriggerDefinition,
+} from "../../automation-trigger-packages/types.shared"
 
 export class RendererAutomationTriggerRegistry {
   private readonly triggers = new Map<string, RendererAutomationTriggerDefinition>()
@@ -63,4 +42,11 @@ export class RendererAutomationTriggerRegistry {
     const trigger = this.get(id)
     return trigger.summarizeConfig(trigger.manifest.configSchema.parse(config))
   }
+}
+
+export type {
+  AutomationTriggerConfig,
+  AutomationTriggerConfigFormComponent,
+  AutomationTriggerManifest,
+  RendererAutomationTriggerDefinition,
 }

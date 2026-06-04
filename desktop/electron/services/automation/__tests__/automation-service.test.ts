@@ -18,6 +18,7 @@ import { createBuiltinAutomationTriggerRegistry } from "../builtin-triggers"
 import { AutomationExecutionService } from "../execution-service"
 import { AutomationItemRepository } from "../item-repository"
 import { AutomationRunRepository } from "../run-repository"
+import type { AutomationTriggerRegistry } from "../trigger-registry"
 import type { AutomationItem, AutomationRun } from "../types"
 
 const testActionSchema = z.object({ message: z.string().min(1) })
@@ -148,14 +149,105 @@ describe("AutomationService", () => {
     await harness.service.stopRun(running!.id)
     await runPromise
   })
+
+  it("schedules a package-defined trigger without core type branches", async () => {
+    const harness = createHarness({ triggers: fakeScheduleTriggerRegistry() })
+    const item = await harness.service.automationCreate({
+      name: "Fake schedule",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-schedule", config: { enabled: true } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    await harness.service.start()
+
+    expect(item.nextRunAt).toBe("2026-06-03T00:05:00.000Z")
+    expect(harness.service.automationRuntimeInspect().timers).toContain(item.id)
+    await harness.service.stop()
+  })
+
+  it("uses trigger runtime guard instead of activeDays from core", async () => {
+    const harness = createHarness({ triggers: fakeScheduleTriggerRegistry() })
+    const item = await harness.service.automationCreate({
+      name: "Guarded fake schedule",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-schedule", config: { enabled: false } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const run = await harness.service.triggerForTest(item.id, "trigger")
+
+    expect(run?.status).toBe("skipped")
+    expect(run?.error).toBe("trigger runtime guard skipped run")
+  })
+
+  it("reschedules after completion when trigger policy requests it", async () => {
+    const harness = createHarness({ triggers: fakeScheduleTriggerRegistry() })
+    const item = await harness.service.automationCreate({
+      name: "Completion anchored fake schedule",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-schedule", config: { enabled: true } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const run = await harness.service.triggerForTest(item.id, "trigger")
+    const stored = await harness.items.get(item.id)
+
+    expect(run?.status).toBe("success")
+    expect(stored?.nextRunAt).toBe("2026-06-03T00:05:00.000Z")
+  })
+
+  it("accepts events through trigger runtime matching", async () => {
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
+    const item = await harness.service.automationCreate({
+      name: "Event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const runs = await harness.service.acceptEvent({
+      source: "test",
+      type: "demo.created",
+      payload: { id: "1" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toEqual(expect.objectContaining({
+      automationId: item.id,
+      status: "success",
+      triggeredBy: "trigger",
+    }))
+  })
+
+  it("ignores events that trigger runtime rejects", async () => {
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
+    await harness.service.automationCreate({
+      name: "Event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const runs = await harness.service.acceptEvent({
+      source: "test",
+      type: "demo.deleted",
+      payload: { id: "1" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+
+    expect(runs).toEqual([])
+  })
 })
 
 function createHarness(options: {
   readonly action?: MainActionDefinition<TestActionConfig>
   readonly logger?: StructuredLogger
   readonly eventBus?: Pick<EventBus, "emit">
+  readonly triggers?: AutomationTriggerRegistry
 } = {}) {
-  const triggers = createBuiltinAutomationTriggerRegistry()
+  const triggers = options.triggers ?? createBuiltinAutomationTriggerRegistry()
   const items = new AutomationItemRepository({
     items: new MemoryNamespace<AutomationItem>("automation.items"),
     triggers,
@@ -194,6 +286,44 @@ function createHarness(options: {
     now: () => new Date("2026-06-03T00:00:00.000Z"),
   })
   return { service, items, runs, execution }
+}
+
+function fakeScheduleTriggerRegistry(): AutomationTriggerRegistry {
+  const registry = createBuiltinAutomationTriggerRegistry()
+  registry.register({
+    manifest: {
+      id: "builtin.fake-schedule",
+      title: "Fake Schedule",
+      kind: "schedule",
+      defaultConfig: { enabled: true },
+      configSchema: z.object({ enabled: z.boolean() }),
+    },
+    summarize: () => "Fake Schedule",
+    runtime: {
+      computeNextRunAt: () => new Date("2026-06-03T00:05:00.000Z"),
+      shouldRunNow: ({ config }) => config.enabled,
+      getReschedulePolicy: () => ({ mode: "after_completion" }),
+    },
+  })
+  return registry
+}
+
+function fakeEventTriggerRegistry(): AutomationTriggerRegistry {
+  const registry = createBuiltinAutomationTriggerRegistry()
+  registry.register({
+    manifest: {
+      id: "builtin.fake-event",
+      title: "Fake Event",
+      kind: "event",
+      defaultConfig: { eventType: "demo.created" },
+      configSchema: z.object({ eventType: z.string().min(1) }),
+    },
+    summarize: (config) => `Event · ${config.eventType}`,
+    runtime: {
+      shouldAcceptEvent: ({ config, event }) => event.type === config.eventType,
+    },
+  })
+  return registry
 }
 
 function createAutomationInput() {
