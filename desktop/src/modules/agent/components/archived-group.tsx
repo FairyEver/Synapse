@@ -28,6 +28,7 @@ type ArchivedGroupProps = {
   selectedProjectId?: string
   selectedConversationId?: string
   unreadByConversationId: Record<string, number>
+  sendingConversationIds: ReadonlySet<string>
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
@@ -39,6 +40,7 @@ function ArchivedGroup({
   selectedProjectId,
   selectedConversationId,
   unreadByConversationId,
+  sendingConversationIds,
   onSelect,
   onDelete,
   onDeleteOthers,
@@ -87,6 +89,7 @@ function ArchivedGroup({
           <div className="flex w-full min-w-0 flex-col gap-0 pl-3">
             {sessions.map((session) => {
               const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
+              const running = sendingConversationIds.has(session.id)
               const active = session.projectId === selectedProjectId
                 && session.id === selectedConversationId
               const def = session.agentType
@@ -106,6 +109,7 @@ function ArchivedGroup({
                           <SessionTrailing
                             updatedAt={session.updatedAt}
                             unread={unread}
+                            running={running}
                             canDelete
                             onDelete={() => onDelete(session)}
                           />

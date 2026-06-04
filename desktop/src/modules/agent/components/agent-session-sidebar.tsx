@@ -47,6 +47,7 @@ type AgentSessionSidebarProps = {
   selectedConversationId?: string
   sourceFilter: ConversationSourceFilter
   unreadByConversationId: Record<string, number>
+  sendingConversationIds: ReadonlySet<string>
   onCreateSession: (projectId: string, selection: ProviderModelSelection) => void | Promise<void>
   onSourceFilterChange: (sourceFilter: ConversationSourceFilter) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
@@ -63,6 +64,7 @@ function AgentSessionSidebar({
   selectedConversationId,
   sourceFilter,
   unreadByConversationId,
+  sendingConversationIds,
   onCreateSession,
   onSourceFilterChange,
   onSelect,
@@ -130,6 +132,7 @@ function AgentSessionSidebar({
                 selectedProjectId={selectedProjectId}
                 selectedConversationId={selectedConversationId}
                 unreadByConversationId={unreadByConversationId}
+                sendingConversationIds={sendingConversationIds}
                 onCreateSession={() => setCreateProject(project)}
                 onSelect={onSelect}
                 onDelete={onDelete}
@@ -143,6 +146,7 @@ function AgentSessionSidebar({
                 selectedProjectId={selectedProjectId}
                 selectedConversationId={selectedConversationId}
                 unreadByConversationId={unreadByConversationId}
+                sendingConversationIds={sendingConversationIds}
                 onSelect={onSelect}
                 onDelete={onDelete}
                 onDeleteOthers={onDeleteOthers}

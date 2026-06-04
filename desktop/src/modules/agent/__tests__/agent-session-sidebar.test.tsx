@@ -68,6 +68,7 @@ describe("AgentSessionSidebar", () => {
         selectedConversationId="workflow-conv"
         sourceFilter="user"
         unreadByConversationId={{ "project-1:workflow-conv": 1 }}
+        sendingConversationIds={new Set()}
         onCreateSession={vi.fn()}
         onSourceFilterChange={vi.fn()}
         onSelect={vi.fn()}
@@ -185,6 +186,7 @@ describe("AgentSessionSidebar", () => {
           selectedConversationId="workflow-conv"
           sourceFilter={sourceFilter}
           unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
           onCreateSession={vi.fn()}
           onSourceFilterChange={(next) => {
             sourceFilter = next as typeof sourceFilter
@@ -257,6 +259,7 @@ describe("AgentSessionSidebar", () => {
         selectedConversationId="local-conv"
         sourceFilter="user"
         unreadByConversationId={{ "project-1:external-conv": 2 }}
+        sendingConversationIds={new Set()}
         onCreateSession={vi.fn()}
         onSourceFilterChange={vi.fn()}
         onSelect={vi.fn()}
@@ -267,7 +270,46 @@ describe("AgentSessionSidebar", () => {
     )
 
     expect(html).toContain("Dev Group / User One")
-    expect(html).toContain("2<span class=\"sr-only\"> 条未读</span>")
+    expect(html).toContain("bg-blue-500")
+    expect(html).toContain("未读")
+    expect(html).not.toContain(">2<")
+  })
+
+  it("renders running status from sending conversation ids", () => {
+    const html = renderToStaticMarkup(
+      <AgentSessionSidebar
+        sessions={[{
+          projectId: "project-1",
+          id: "running-conv",
+          sessionKey: "local:renderer",
+          platform: "local-renderer",
+          name: "Active Session",
+          active: true,
+          historyCount: 1,
+          createdAt: "2026-06-04T05:00:00.000Z",
+          updatedAt: "2026-06-04T05:58:00.000Z",
+        }]}
+        archivedSessions={[]}
+        projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
+        selectedProjectId="project-other"
+        selectedConversationId="other-conv"
+        sourceFilter="user"
+        unreadByConversationId={{ "project-1:running-conv": 4 }}
+        sendingConversationIds={new Set(["running-conv"])}
+        onCreateSession={vi.fn()}
+        onSourceFilterChange={vi.fn()}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onDeleteOthers={vi.fn()}
+        onRename={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("Active Session")
+    expect(html).toContain("animate-spin")
+    expect(html).toContain("正在输出")
+    expect(html).not.toContain(">4<")
+    expect(html).not.toContain("未读")
   })
 
   it("requires a provider selection before creating a session", async () => {
@@ -319,6 +361,7 @@ describe("AgentSessionSidebar", () => {
           selectedConversationId={undefined}
           sourceFilter="user"
           unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
           onCreateSession={onCreateSession}
           onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
@@ -403,6 +446,7 @@ describe("AgentSessionSidebar", () => {
           selectedConversationId={undefined}
           sourceFilter="user"
           unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
           onCreateSession={onCreateSession}
           onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
@@ -477,6 +521,7 @@ describe("AgentSessionSidebar", () => {
           selectedConversationId={undefined}
           sourceFilter="user"
           unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
           onCreateSession={onCreateSession}
           onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
@@ -537,6 +582,7 @@ describe("AgentSessionSidebar", () => {
           selectedConversationId={undefined}
           sourceFilter="user"
           unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
           onCreateSession={onCreateSession}
           onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
@@ -615,6 +661,7 @@ describe("AgentSessionSidebar", () => {
           selectedConversationId={undefined}
           sourceFilter="user"
           unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
           onCreateSession={onCreateSession}
           onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}

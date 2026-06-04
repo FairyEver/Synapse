@@ -23,6 +23,7 @@ describe("ArchivedGroup", () => {
         selectedProjectId="project-1"
         selectedConversationId="archived-conv"
         unreadByConversationId={{}}
+        sendingConversationIds={new Set()}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
         onDeleteOthers={vi.fn()}

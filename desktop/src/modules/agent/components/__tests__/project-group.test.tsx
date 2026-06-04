@@ -51,6 +51,7 @@ describe("ProjectGroup", () => {
           project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
           sessions={[]}
           unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
           onCreateSession={onCreateSession}
           onSelect={vi.fn()}
           onDelete={vi.fn()}

@@ -28,6 +28,7 @@ type ProjectGroupProps = {
   selectedProjectId?: string
   selectedConversationId?: string
   unreadByConversationId: Record<string, number>
+  sendingConversationIds: ReadonlySet<string>
   onCreateSession: () => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
@@ -41,6 +42,7 @@ function ProjectGroup({
   selectedProjectId,
   selectedConversationId,
   unreadByConversationId,
+  sendingConversationIds,
   onCreateSession,
   onSelect,
   onDelete,
@@ -104,6 +106,7 @@ function ProjectGroup({
           <div className="flex w-full min-w-0 flex-col gap-0 pl-3">
             {sessions.map((session) => {
               const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
+              const running = sendingConversationIds.has(session.id)
               const active = session.projectId === selectedProjectId
                 && session.id === selectedConversationId
               const label = sessionLabel(session)
@@ -117,6 +120,7 @@ function ProjectGroup({
                           <SessionTrailing
                             updatedAt={session.updatedAt}
                             unread={unread}
+                            running={running}
                             canDelete
                             onDelete={() => onDelete(session)}
                           />
