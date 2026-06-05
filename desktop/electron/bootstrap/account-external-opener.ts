@@ -2,6 +2,7 @@ import { shell } from "electron"
 
 import { sanitizeUrl } from "../../src/lib/url-sanitize"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
+import { createMainLogger } from "../services/log-store"
 
 type AccountExternalUrlOpener = (url: string) => Promise<void>
 
@@ -13,6 +14,24 @@ type AccountExternalUrlOpenerDeps = {
 
 const ACCOUNT_LOGIN_SHELL_SOURCE = "account.startLogin"
 const userActor = { kind: "user" } as const
+const logger = createMainLogger("bootstrap.account-external-opener")
+
+function recordAccountShellAudit(
+  auditSink: AuditSink,
+  event: Parameters<AuditSink["record"]>[0],
+): void {
+  try {
+    auditSink.record(event)
+  } catch (error) {
+    logger.warn("Failed to record account shell audit event.", {
+      action: event.action,
+      outcome: event.outcome,
+      source: ACCOUNT_LOGIN_SHELL_SOURCE,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: String(error).length,
+    })
+  }
+}
 
 function createAccountExternalUrlOpener({
   auditSink,
@@ -35,7 +54,7 @@ function createAccountExternalUrlOpener({
     })
 
     if (!permission.allowed) {
-      auditSink.record({
+      recordAccountShellAudit(auditSink, {
         action: "shell.exec",
         actor: userActor,
         resource,
@@ -51,15 +70,8 @@ function createAccountExternalUrlOpener({
 
     try {
       await openExternal(externalUrl)
-      auditSink.record({
-        action: "shell.exec",
-        actor: userActor,
-        resource,
-        outcome: "allowed",
-        metadata: { source: ACCOUNT_LOGIN_SHELL_SOURCE },
-      })
     } catch (error) {
-      auditSink.record({
+      recordAccountShellAudit(auditSink, {
         action: "shell.exec",
         actor: userActor,
         resource,
@@ -72,6 +84,14 @@ function createAccountExternalUrlOpener({
       })
       throw error
     }
+
+    recordAccountShellAudit(auditSink, {
+      action: "shell.exec",
+      actor: userActor,
+      resource,
+      outcome: "allowed",
+      metadata: { source: ACCOUNT_LOGIN_SHELL_SOURCE },
+    })
   }
 }
 

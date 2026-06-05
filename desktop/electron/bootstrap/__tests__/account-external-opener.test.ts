@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("electron", () => ({
+  app: {
+    getPath: vi.fn(() => "/tmp"),
+  },
   shell: {
     openExternal: vi.fn().mockResolvedValue(undefined),
   },
@@ -12,6 +15,7 @@ import type { AuditSink, PermissionGuard } from "../../runtime/security"
 function createDeps(input: {
   allowed?: boolean
   reason?: string
+  record?: AuditSink["record"]
 } = {}) {
   const permissionGuard = {
     check: vi.fn().mockResolvedValue(
@@ -21,7 +25,7 @@ function createDeps(input: {
     ),
   } as unknown as PermissionGuard
   const auditSink = {
-    record: vi.fn(),
+    record: vi.fn(input.record),
   } as unknown as AuditSink
   const openExternal = vi.fn().mockResolvedValue(undefined)
 
@@ -53,6 +57,26 @@ describe("createAccountExternalUrlOpener", () => {
     expect(JSON.stringify(vi.mocked(deps.permissionGuard.check).mock.calls)).not.toContain("secret-challenge")
     expect(JSON.stringify(vi.mocked(deps.auditSink.record).mock.calls)).not.toContain("secret-state")
     expect(JSON.stringify(vi.mocked(deps.auditSink.record).mock.calls)).not.toContain("secret-challenge")
+  })
+
+  it("does not fail login opening when allowed audit recording fails", async () => {
+    const deps = createDeps({
+      record: () => {
+        throw new Error("disk full")
+      },
+    })
+    const openExternal = createAccountExternalUrlOpener(deps)
+
+    await expect(openExternal("https://synapse.d2.pub/dashboard/auth/desktop"))
+      .resolves
+      .toBeUndefined()
+
+    expect(deps.openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/dashboard/auth/desktop")
+    expect(deps.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      outcome: "allowed",
+      metadata: { source: "account.startLogin" },
+    }))
   })
 
   it("does not open denied login links", async () => {
