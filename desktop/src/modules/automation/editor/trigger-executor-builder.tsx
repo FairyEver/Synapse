@@ -142,9 +142,9 @@ export function TriggerExecutorBuilder({
   return (
     <div
       data-layout="automation-editor-builder"
-      className="grid min-h-full w-full max-w-full grid-cols-[400px_1px_minmax(0,1fr)] gap-5 overflow-hidden"
+      className="grid h-full min-h-0 w-full max-w-full grid-cols-[400px_1px_minmax(0,1fr)] gap-5 overflow-hidden"
     >
-      <section className="min-w-0 overflow-hidden py-5">
+      <section data-layout="automation-editor-trigger-panel" className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden py-5">
         <BuilderHeader
           title="当以下情况发生时"
         />
@@ -181,7 +181,7 @@ export function TriggerExecutorBuilder({
 
       <Separator data-layout="automation-editor-divider" orientation="vertical" />
 
-      <section data-layout="automation-editor-executor-panel" className="min-w-0 overflow-hidden py-5">
+      <section data-layout="automation-editor-executor-panel" className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden py-5">
         <BuilderHeader
           title="就执行以下操作"
         />

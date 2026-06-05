@@ -253,7 +253,9 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
       .toContain("grid-cols-[400px_1px_minmax(0,1fr)]")
     expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
-      .toContain("min-h-full")
+      .toContain("h-full")
+    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
+      .toContain("min-h-0")
     expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
       .not.toContain("py-5")
     expect(document.querySelector('[data-layout="automation-editor-divider"]')).not.toBeNull()
@@ -292,11 +294,14 @@ describe("AutomationEditorApp", () => {
     })
 
     const body = document.querySelector('[data-layout="automation-editor-body"]')
+    const triggerPanel = document.querySelector('[data-layout="automation-editor-trigger-panel"]')
     const executorPanel = document.querySelector('[data-layout="automation-editor-executor-panel"]')
     const executorConfig = document.querySelector('[data-layout="automation-editor-executor-config"]')
 
-    expect(body?.className).toContain("overflow-x-hidden")
-    expect(executorPanel?.className).toContain("overflow-hidden")
+    expect(body?.className).toContain("overflow-hidden")
+    expect(body?.className).not.toContain("overflow-y-auto")
+    expect(triggerPanel?.className).toContain("overflow-y-auto")
+    expect(executorPanel?.className).toContain("overflow-y-auto")
     expect(executorConfig?.className).toContain("[&_[data-slot=field-content]]:min-w-0")
   })
 
