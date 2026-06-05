@@ -6,6 +6,7 @@
 import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
+  getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
 import { sanitizeError } from "../../src/lib/error-sanitize"
 
@@ -52,14 +53,8 @@ function isDryRun(data: unknown): boolean {
 function normalizeToolResult(action: string, result: unknown): unknown {
   if (!isRecord(result) || result.ok !== true) return result
 
-  if (
-    action.startsWith("scheduler.")
-    || action.startsWith("workflow.")
-    || action.startsWith("content.")
-    || action.startsWith("model_price.")
-    || action.startsWith("repository.")
-    || action.startsWith("variable.")
-  ) {
+  const domainId = getActionDomainId(action)
+  if (domainId && domainId !== "database") {
     return result.data ?? null
   }
 
@@ -97,6 +92,7 @@ function normalizeToolResult(action: string, result: unknown): unknown {
       }
 
     default:
+      if (Object.prototype.hasOwnProperty.call(result, "data")) return result.data
       return { ok: true }
   }
 }

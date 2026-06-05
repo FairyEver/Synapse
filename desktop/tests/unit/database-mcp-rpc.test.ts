@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { processMcpRequest, sanitizeMcpErrorMessage } from "../../database/shared/mcp-rpc"
+import { MCP_TOOL_ACTIONS, getActionDomainId } from "../../synapse-capabilities/shared/registry"
 
 const identity = { name: "test-database", version: "0.0.0" }
 
@@ -166,6 +167,33 @@ describe("Database MCP RPC", () => {
     })
 
     expect(payload).toEqual({ id: 7 })
+  })
+
+  it("preserves data for registered database actions without specialized output shaping", async () => {
+    const payload = await callTool("database_table_create", {
+      ok: true,
+      data: { tableId: "table-1" },
+    })
+
+    expect(payload).toEqual({ tableId: "table-1" })
+  })
+})
+
+describe("MCP RPC capability normalization coverage", () => {
+  it("unwraps dispatcher data for every registered non-database capability domain", async () => {
+    const entries = Object.entries(MCP_TOOL_ACTIONS)
+      .filter(([, action]) => getActionDomainId(action) !== "database")
+
+    expect(entries.length).toBeGreaterThan(0)
+
+    for (const [toolName, action] of entries) {
+      const payload = await callTool(toolName, {
+        ok: true,
+        data: { action },
+      })
+
+      expect(payload).toEqual({ action })
+    }
   })
 })
 
