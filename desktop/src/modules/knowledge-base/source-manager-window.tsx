@@ -349,24 +349,8 @@ function SourceManagerToolbar({
   onUploadFolder,
 }: SourceManagerToolbarProps) {
   return (
-    <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
-      <nav aria-label="当前位置" className="flex min-w-0 items-center gap-1 text-sm">
-        {breadcrumbs.map((item, index) => (
-          <div key={item.path || "root"} className="flex min-w-0 items-center gap-1">
-            {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="min-w-0"
-              onClick={() => onNavigate(item.path)}
-            >
-              <span className="truncate">{item.label}</span>
-            </Button>
-          </div>
-        ))}
-      </nav>
-      <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 flex-col border-b border-border">
+      <header className="flex flex-wrap items-center justify-end gap-2 px-4 pb-2 pt-3">
         <Input
           className="w-48"
           value={query}
@@ -385,8 +369,26 @@ function SourceManagerToolbar({
           <FolderUp data-icon="inline-start" />
           上传文件夹
         </Button>
-      </div>
-    </header>
+      </header>
+      <nav aria-label="当前位置" className="overflow-x-auto px-4 pb-3">
+        <div className="flex min-w-max items-center gap-1 text-sm">
+          {breadcrumbs.map((item, index) => (
+            <div key={item.path || "root"} className="flex shrink-0 items-center gap-1">
+              {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-w-0 max-w-48 shrink-0"
+                onClick={() => onNavigate(item.path)}
+              >
+                <span className="truncate">{item.label}</span>
+              </Button>
+            </div>
+          ))}
+        </div>
+      </nav>
+    </div>
   )
 }
 
