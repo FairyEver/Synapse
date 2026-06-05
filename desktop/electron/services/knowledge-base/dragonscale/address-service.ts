@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { Dirent } from "node:fs"
-import { mkdir, readFile, readdir, rm } from "node:fs/promises"
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -8,6 +8,7 @@ import { atomicWriteTextFile } from "../atomic-write"
 import type { DragonScaleAddress, DragonScaleAddressServiceResult } from "./types"
 
 const vaultLocks = new Map<string, Promise<void>>()
+const LOCK_OWNER_FILE = "owner"
 
 export interface DragonScaleAddressServiceOptions {
   readonly lockRoot?: string
@@ -134,17 +135,35 @@ class DragonScaleAddressLockTimeoutError extends Error {
   }
 }
 
-async function acquireDragonScaleAddressFileLock(
+export async function acquireDragonScaleAddressFileLock(
   vaultPath: string,
-  options: { readonly lockRoot?: string; readonly timeoutMs: number; readonly retryMs: number },
+  options: {
+    readonly lockRoot?: string
+    readonly ownerId?: string
+    readonly timeoutMs: number
+    readonly retryMs: number
+  },
 ): Promise<() => Promise<void>> {
   const lockPath = dragonScaleAddressLockPath(vaultPath, { lockRoot: options.lockRoot })
   await mkdir(path.dirname(lockPath), { recursive: true })
   const startedAt = Date.now()
+  const ownerId = options.ownerId ?? `${process.pid}:${randomUUID()}`
   while (true) {
     try {
       await mkdir(lockPath)
+      try {
+        await writeFile(path.join(lockPath, LOCK_OWNER_FILE), `${ownerId}\n`, { flag: "wx" })
+      } catch (error) {
+        await rm(lockPath, { recursive: true, force: true })
+        throw error
+      }
       return async () => {
+        const lockOwner = await readFile(path.join(lockPath, LOCK_OWNER_FILE), "utf8")
+          .catch((error) => {
+            if (isMissingPathError(error)) return null
+            throw error
+          })
+        if (lockOwner?.trim() !== ownerId) return
         await rm(lockPath, { recursive: true, force: true })
       }
     } catch (error) {

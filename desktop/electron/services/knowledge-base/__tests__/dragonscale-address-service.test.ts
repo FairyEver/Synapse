@@ -3,7 +3,11 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { DragonScaleAddressService, dragonScaleAddressLockPath } from "../dragonscale/address-service"
+import {
+  acquireDragonScaleAddressFileLock,
+  DragonScaleAddressService,
+  dragonScaleAddressLockPath,
+} from "../dragonscale/address-service"
 
 const roots: string[] = []
 
@@ -148,6 +152,26 @@ describe("DragonScaleAddressService", () => {
 
     await rm(lockPath, { recursive: true, force: true })
     await expect(service.allocate(root)).resolves.toMatchObject({ address: "c-000001" })
+  })
+
+  it("does not let an old file lock release remove a new lock owner", async () => {
+    const root = await tempDir()
+    const lockRoot = await tempDir()
+    const lockPath = dragonScaleAddressLockPath(root, { lockRoot })
+    const releaseOldOwner = await acquireDragonScaleAddressFileLock(root, {
+      lockRoot,
+      ownerId: "owner-a",
+      retryMs: 1,
+      timeoutMs: 20,
+    })
+
+    await rm(lockPath, { recursive: true, force: true })
+    await mkdir(lockPath, { recursive: true })
+    await writeFile(path.join(lockPath, "owner"), "owner-b\n")
+
+    await releaseOldOwner()
+
+    await expect(readFile(path.join(lockPath, "owner"), "utf8")).resolves.toBe("owner-b\n")
   })
 
   it("exports the address service from the knowledge-base service barrel", async () => {
