@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => {
 
   return {
     coordinator: {
+      requestMaintenance: vi.fn(),
+      requestPush: vi.fn(),
       requestSync: vi.fn(),
     },
     contentIndexService: {
@@ -159,6 +161,14 @@ describe("repositoryIpcModule", () => {
       repository: mocks.repositoryState,
       completedAt: "2026-05-21T13:00:00.000Z",
     })
+    mocks.coordinator.requestMaintenance.mockResolvedValue({
+      operation: "maintenance",
+      repository: mocks.repositoryState,
+      completedAt: "2026-05-21T13:00:00.000Z",
+      message: "维护完成",
+      pendingPushCount: 0,
+    })
+    mocks.coordinator.requestPush.mockResolvedValue(undefined)
     mocks.repositoryStructureService.checkInitializationPreview.mockResolvedValue({
       isEmpty: false,
       nonGitEntries: ["notes.md"],
@@ -269,5 +279,56 @@ describe("repositoryIpcModule", () => {
     )
     expect(installStatusEmits).toHaveLength(2)
     expect(installStatusEmits.every(([, options]) => options?.backpressure === "block")).toBe(true)
+  })
+
+  it("sanitizes Git errors in repository sync failure logs", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.coordinator.requestSync.mockRejectedValueOnce(
+      new Error("fatal: Authentication failed for 'https://token:ghp_secret123456@github.com/owner/repo.git' at /Users/me/.ssh/id_rsa"),
+    )
+
+    await expect(repositoryIpcModule.methods.sync.handler(createContext() as never, {
+      repositoryUuid: "repo-1",
+    })).rejects.toThrow("Authentication failed")
+
+    const logged = JSON.stringify(mocks.logger.error.mock.calls)
+    expect(logged).not.toContain("ghp_secret123456")
+    expect(logged).not.toContain("/Users/me/.ssh/id_rsa")
+    expect(logged).toContain("[redacted]")
+    expect(logged).toContain("[path]")
+  })
+
+  it("sanitizes Git errors in repository maintenance failure logs", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.coordinator.requestMaintenance.mockRejectedValueOnce(
+      new Error("fatal: Authentication failed for 'https://token:ghp_secret123456@github.com/owner/repo.git' at /Users/me/.ssh/id_rsa"),
+    )
+
+    await expect(repositoryIpcModule.methods.runMaintenance.handler(createContext() as never, {
+      repositoryUuid: "repo-1",
+    })).rejects.toThrow("Authentication failed")
+
+    const logged = JSON.stringify(mocks.logger.error.mock.calls)
+    expect(logged).not.toContain("ghp_secret123456")
+    expect(logged).not.toContain("/Users/me/.ssh/id_rsa")
+    expect(logged).toContain("[redacted]")
+    expect(logged).toContain("[path]")
+  })
+
+  it("sanitizes Git errors in pending push flush failure logs", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.coordinator.requestPush.mockRejectedValueOnce(
+      new Error("fatal: Authentication failed for 'https://token:ghp_secret123456@github.com/owner/repo.git' at /Users/me/.ssh/id_rsa"),
+    )
+
+    await expect(repositoryIpcModule.methods.flushPendingPushes.handler(createContext() as never, {
+      repositoryUuid: "repo-1",
+    })).rejects.toThrow("Authentication failed")
+
+    const logged = JSON.stringify(mocks.logger.error.mock.calls)
+    expect(logged).not.toContain("ghp_secret123456")
+    expect(logged).not.toContain("/Users/me/.ssh/id_rsa")
+    expect(logged).toContain("[redacted]")
+    expect(logged).toContain("[path]")
   })
 })

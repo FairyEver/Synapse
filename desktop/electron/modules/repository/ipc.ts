@@ -19,6 +19,7 @@ import { createMainLogger } from "../../services/log-store"
 import { repositoryStore } from "../../services/repository-store"
 import { repositoryStructureService } from "../../services/repository-structure-service"
 import { RepositorySyncCoordinator } from "../../services/repository-sync-coordinator"
+import { sanitizeError } from "../../services/error-sanitize"
 import type { InstallStatusEntry, InstallStatusMap } from "../../../src/types/install-status"
 
 const logger = createMainLogger("ipc.repository")
@@ -48,6 +49,10 @@ function getInstallStatusEntryKey(entry: InstallStatusEntry): string {
 
 function normalizeInstallStatusEntries(entries: InstallStatusEntry[] | undefined): string[] {
   return (entries ?? []).map(getInstallStatusEntryKey).sort()
+}
+
+function sanitizeErrorForRepositoryLog(error: unknown): string {
+  return sanitizeError(String(error)) || "unknown error"
 }
 
 function installStatusEntriesEqual(
@@ -448,7 +453,7 @@ export const repositoryIpcModule: IpcModule = {
 
           return result
         } catch (error) {
-          logger.error(`repository.sync request failed. repositoryUuid: ${request.repositoryUuid}, error: ${error}`)
+          logger.error(`repository.sync request failed. repositoryUuid: ${request.repositoryUuid}, error: ${sanitizeErrorForRepositoryLog(error)}`)
           throw error
         }
       },
@@ -489,7 +494,7 @@ export const repositoryIpcModule: IpcModule = {
 
           return result
         } catch (error) {
-          logger.error(`repository.runMaintenance request failed. repositoryUuid: ${request.repositoryUuid}, error: ${error}`)
+          logger.error(`repository.runMaintenance request failed. repositoryUuid: ${request.repositoryUuid}, error: ${sanitizeErrorForRepositoryLog(error)}`)
           throw error
         }
       },
@@ -536,7 +541,7 @@ export const repositoryIpcModule: IpcModule = {
             completedAt,
           }
         } catch (error) {
-          logger.error(`repository.flushPendingPushes request failed. repositoryUuid: ${request.repositoryUuid}, error: ${error}`)
+          logger.error(`repository.flushPendingPushes request failed. repositoryUuid: ${request.repositoryUuid}, error: ${sanitizeErrorForRepositoryLog(error)}`)
           throw error
         }
       },
