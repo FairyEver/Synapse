@@ -806,6 +806,31 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
           })
           throw new Error(permission.reason)
         }
+        const shellMetadata = {
+          projectId: request.projectId,
+          command: "open-reference",
+          line: reference.line,
+        }
+        const shellPermission = await permissionGuard.check({
+          action: "shell.exec",
+          actor,
+          resource: reference.path,
+          context: shellMetadata,
+        })
+        if (!shellPermission.allowed) {
+          auditSink.record({
+            action: "shell.exec",
+            actor,
+            resource: reference.path,
+            outcome: "denied",
+            metadata: {
+              ...shellMetadata,
+              reason: shellPermission.reason,
+              policyId: shellPermission.policyId,
+            },
+          })
+          throw new Error(shellPermission.reason)
+        }
         let error: string | undefined
         try {
           if (reference.line !== undefined && await openFileWithLine(reference.path, reference.line)) {
@@ -814,6 +839,17 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
             error = await shell.openPath(reference.path)
           }
         } catch (openError) {
+          auditSink.record({
+            action: "shell.exec",
+            actor,
+            resource: reference.path,
+            outcome: "failed",
+            metadata: {
+              ...shellMetadata,
+              boundary: "agent.ipc.open-reference.shell",
+              ...shellOpenErrorMetadata(openError),
+            },
+          })
           auditSink.record({
             action: "fs.read.outside-userdata",
             actor,
@@ -829,6 +865,21 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
           })
           throw openError
         }
+        auditSink.record({
+          action: "shell.exec",
+          actor,
+          resource: reference.path,
+          outcome: error ? "failed" : "allowed",
+          metadata: {
+            ...shellMetadata,
+            ...(error
+              ? {
+                  boundary: "agent.ipc.open-reference.shell",
+                  ...shellOpenErrorMetadata(error),
+                }
+              : {}),
+          },
+        })
         auditSink.record({
           action: "fs.read.outside-userdata",
           actor,

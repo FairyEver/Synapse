@@ -56,6 +56,7 @@ describe("agent tool IPC methods", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     fsPromisesMock.realpath.mockImplementation(async (value: string) => value)
+    electronMock.shell.openPath.mockResolvedValue("")
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -71,6 +72,66 @@ describe("agent tool IPC methods", () => {
         contentSortOrder: "modified-desc",
       },
     } as never)
+  })
+
+  it("checks and audits shell execution when opening an Agent reference", async () => {
+    const auditSink = fakeAuditSink()
+    const permissionGuard = fakePermissionGuard()
+    const expectedPath = path.resolve("/repo", "src/app.ts")
+
+    await expect(toolMethods.openReference.handler(createContext({ auditSink, permissionGuard }), {
+      projectId: "project-1",
+      reference: "src/app.ts:12",
+    })).resolves.toEqual({ ok: true, path: expectedPath })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "shell.exec",
+      actor: { kind: "user", id: "renderer" },
+      resource: expectedPath,
+      context: {
+        projectId: "project-1",
+        command: "open-reference",
+        line: 12,
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      outcome: "allowed",
+      resource: expectedPath,
+      metadata: expect.objectContaining({
+        projectId: "project-1",
+        command: "open-reference",
+        line: 12,
+      }),
+    }))
+  })
+
+  it("blocks Agent reference opens when shell execution is denied", async () => {
+    const auditSink = fakeAuditSink()
+    const permissionGuard = fakePermissionGuard()
+    permissionGuard.check
+      .mockResolvedValueOnce({ allowed: true as const })
+      .mockResolvedValueOnce({ allowed: false as const, reason: "shell blocked", policyId: "policy-shell" })
+    const expectedPath = path.resolve("/repo", "src/app.ts")
+
+    await expect(toolMethods.openReference.handler(createContext({ auditSink, permissionGuard }), {
+      projectId: "project-1",
+      reference: "src/app.ts:12",
+    })).rejects.toThrow("shell blocked")
+
+    expect(electronMock.shell.openPath).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      outcome: "denied",
+      resource: expectedPath,
+      metadata: expect.objectContaining({
+        projectId: "project-1",
+        command: "open-reference",
+        line: 12,
+        reason: "shell blocked",
+        policyId: "policy-shell",
+      }),
+    }))
   })
 
   it("records a failed audit when opening an Agent reference rejects", async () => {
@@ -152,11 +213,9 @@ describe("agent tool IPC methods", () => {
 
 function createContext(options: {
   readonly auditSink: AuditSink
+  readonly permissionGuard?: PermissionGuard
 }) {
-  const permissionGuard: PermissionGuard = {
-    registerPolicy: () => () => {},
-    check: vi.fn(async () => ({ allowed: true as const })),
-  }
+  const permissionGuard = options.permissionGuard ?? fakePermissionGuard()
   const container = {
     get: vi.fn((serviceId: string) => {
       if (serviceId === AGENT_RUNTIME_SERVICE_ID) return {}
@@ -181,6 +240,13 @@ function createContext(options: {
       if (serviceId === "core.audit-sink") return options.auditSink as T
       throw new Error(`Unknown service: ${serviceId}`)
     },
+  }
+}
+
+function fakePermissionGuard(): PermissionGuard & { check: ReturnType<typeof vi.fn> } {
+  return {
+    registerPolicy: () => () => {},
+    check: vi.fn(async () => ({ allowed: true as const })),
   }
 }
 
