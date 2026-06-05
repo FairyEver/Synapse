@@ -5,7 +5,7 @@ import type { AuditLogService } from "../common/audit-log.service";
 
 function createController() {
   const service = {
-    cleanup: vi.fn().mockResolvedValue(2),
+    cleanup: vi.fn().mockResolvedValue({ deleted: 2, failures: [] }),
     listFiles: vi.fn().mockResolvedValue([{ name: "server.log", size: 123, modifiedAt: "2026-05-23T00:00:00.000Z" }]),
     readRecent: vi.fn().mockResolvedValue([]),
     streamZipTo: vi.fn().mockResolvedValue({ bytes: 9, fileCount: 2 }),
@@ -143,6 +143,35 @@ describe("LogFileController", () => {
       targetType: "logs",
       targetId: "2026-05-01",
       detail: { before: "2026-05-01", deleted: 2 },
+      ipAddress: "203.0.113.10",
+    });
+  });
+
+  it("records failed audit logs and rejects when cleanup partially fails", async () => {
+    const { controller, auditLog, service } = createController();
+    service.cleanup.mockResolvedValueOnce({
+      deleted: 1,
+      failures: [{ name: "server.2026-05-01.log", errorName: "Error" }],
+    });
+
+    await expect(controller.cleanup("2026-05-01", {
+      admin: { email: "admin@example.com" },
+      ip: "203.0.113.10",
+    } as never))
+      .rejects
+      .toThrow("部分日志清理失败，请检查系统日志。");
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "logs.cleanup.failed",
+      targetType: "logs",
+      targetId: "2026-05-01",
+      detail: {
+        before: "2026-05-01",
+        deleted: 1,
+        failed: 1,
+        failures: [{ name: "server.2026-05-01.log", errorName: "Error" }],
+      },
       ipAddress: "203.0.113.10",
     });
   });

@@ -34,6 +34,17 @@ export interface LogZipStreamResult {
   fileCount: number;
 }
 
+export interface LogCleanupFailure {
+  name: string;
+  errorName: string;
+  errorCode?: string;
+}
+
+export interface LogCleanupResult {
+  deleted: number;
+  failures: LogCleanupFailure[];
+}
+
 @Injectable()
 export class LogFileService {
   private readonly logDir: string;
@@ -143,9 +154,10 @@ export class LogFileService {
     });
   }
 
-  async cleanup(before: string): Promise<number> {
+  async cleanup(before: string): Promise<LogCleanupResult> {
     const files = await this.listFiles();
     let deleted = 0;
+    const failures: LogCleanupFailure[] = [];
 
     for (const file of files) {
       const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
@@ -154,13 +166,13 @@ export class LogFileService {
         try {
           await unlink(join(this.logDir, file.name));
           deleted++;
-        } catch {
-          continue;
+        } catch (error) {
+          failures.push(this.cleanupFailure(file.name, error));
         }
       }
     }
 
-    return deleted;
+    return { deleted, failures };
   }
 
   private levelToName(level: number): string {
@@ -173,6 +185,18 @@ export class LogFileService {
 
   private isFileNotFoundError(error: unknown): boolean {
     return error instanceof Error && "code" in error && error.code === "ENOENT";
+  }
+
+  private cleanupFailure(name: string, error: unknown): LogCleanupFailure {
+    return {
+      name,
+      errorName: error instanceof Error ? error.name : typeof error,
+      ...(
+        error instanceof Error && "code" in error && typeof error.code === "string"
+          ? { errorCode: error.code }
+          : {}
+      ),
+    };
   }
 
   private async *readLinesFromTail(filePath: string, fileSize: number): AsyncGenerator<string> {

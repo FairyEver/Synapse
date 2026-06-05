@@ -134,7 +134,7 @@ describe("LogFileService", () => {
     ]);
   });
 
-  it("continues cleanup when one log file cannot be deleted", async () => {
+  it("reports cleanup failures when one log file cannot be deleted", async () => {
     mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
     mockedStat.mockResolvedValue({
       size: 12,
@@ -148,7 +148,13 @@ describe("LogFileService", () => {
     });
     const service = new LogFileService("/tmp/synapse-logs");
 
-    await expect(service.cleanup("2026-05-03")).resolves.toBe(1);
+    await expect(service.cleanup("2026-05-03")).resolves.toEqual({
+      deleted: 1,
+      failures: [{
+        name: "server.2026-05-01.log",
+        errorName: "Error",
+      }],
+    });
 
     expect(mockedUnlink).toHaveBeenCalledTimes(2);
   });

@@ -1,4 +1,4 @@
-import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException } from "@nestjs/common";
+import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException, InternalServerErrorException } from "@nestjs/common";
 import type { Response } from "express";
 import { LogFileService } from "./log-file.service";
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard";
@@ -133,13 +133,26 @@ export class LogFileController {
   @Delete("cleanup")
   async cleanup(@Query("before") before: string | undefined, @Req() request?: AdminRequest) {
     const cutoffDate = parseCleanupBeforeDate(before);
-    const deleted = await this.logFileService.cleanup(cutoffDate);
+    const result = await this.logFileService.cleanup(cutoffDate);
+    if (result.failures.length > 0) {
+      await this.recordLogAudit(request, {
+        action: "logs.cleanup.failed",
+        targetId: cutoffDate,
+        detail: {
+          before: cutoffDate,
+          deleted: result.deleted,
+          failed: result.failures.length,
+          failures: result.failures,
+        },
+      });
+      throw new InternalServerErrorException("部分日志清理失败，请检查系统日志。");
+    }
     await this.recordLogAudit(request, {
       action: "logs.cleanup",
       targetId: cutoffDate,
-      detail: { before: cutoffDate, deleted },
+      detail: { before: cutoffDate, deleted: result.deleted },
     });
-    return { deleted };
+    return { deleted: result.deleted };
   }
 
   private recordLogAudit(
