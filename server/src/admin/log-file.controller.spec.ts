@@ -212,7 +212,9 @@ describe("LogFileController", () => {
 
   it("records failed downloads without rethrowing after headers are sent", async () => {
     const { controller, auditLog, service } = createController();
-    const error = new Error("zip stream failed");
+    const error = Object.assign(new Error("zip stream failed at /var/log/synapse/server.2026-05-23.log"), {
+      code: "EACCES",
+    });
     service.streamZipTo.mockRejectedValueOnce(error);
     const response = {
       set: vi.fn(),
@@ -235,16 +237,20 @@ describe("LogFileController", () => {
         from: "2026-05-01",
         to: "2026-05-23",
         filename: "logs-2026-05-01-2026-05-23.zip",
-        error: "zip stream failed",
+        failure: "stream_error",
+        errorName: "Error",
+        errorCode: "EACCES",
       },
       ipAddress: "203.0.113.10",
     });
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("/var/log/synapse");
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("server.2026-05-23.log");
     expect(response.destroy).toHaveBeenCalledWith(error);
   });
 
   it("rethrows download stream errors before headers are sent", async () => {
     const { controller, auditLog, service } = createController();
-    const error = new Error("zip stream failed");
+    const error = new Error("zip stream failed at /var/log/synapse/server.2026-05-23.log");
     service.streamZipTo.mockRejectedValueOnce(error);
     const response = {
       set: vi.fn(),
@@ -266,10 +272,13 @@ describe("LogFileController", () => {
         from: "2026-05-01",
         to: "2026-05-23",
         filename: "logs-2026-05-01-2026-05-23.zip",
-        error: "zip stream failed",
+        failure: "stream_error",
+        errorName: "Error",
       },
       ipAddress: "203.0.113.10",
     });
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("/var/log/synapse");
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("server.2026-05-23.log");
   });
 
   it("rejects invalid download dates before streaming logs", async () => {

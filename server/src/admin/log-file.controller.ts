@@ -48,6 +48,27 @@ function parseDownloadDateRange(from: string | undefined, to: string | undefined
   return { from: parsedFrom, to: parsedTo };
 }
 
+function logDownloadFailureDetail(
+  range: { from?: string; to?: string },
+  filename: string,
+  error: unknown,
+) {
+  const errorCode = typeof error === "object"
+    && error !== null
+    && "code" in error
+    && typeof error.code === "string"
+    ? error.code
+    : undefined;
+  return {
+    from: range.from,
+    to: range.to,
+    filename,
+    failure: "stream_error",
+    errorName: error instanceof Error ? error.name : typeof error,
+    ...(errorCode ? { errorCode } : {}),
+  };
+}
+
 @Controller("/api/admin/logs")
 @UseGuards(AdminAuthGuard)
 export class LogFileController {
@@ -112,12 +133,7 @@ export class LogFileController {
       await this.recordLogAudit(request, {
         action: "logs.download.failed",
         targetId: filename,
-        detail: {
-          from: range.from,
-          to: range.to,
-          filename,
-          error: error instanceof Error ? error.message : String(error),
-        },
+        detail: logDownloadFailureDetail(range, filename, error),
       });
       if (!res.headersSent) throw error;
       if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
