@@ -934,54 +934,12 @@ class ConfigBackupService {
   async importBackup(
     ctx?: ConfigBackupContext,
   ): Promise<SynapseConfigBackupImportResult | null> {
-    const parentWindow = ctx?.getParentWindow?.()
-    const result = parentWindow
-      ? await dialog.showOpenDialog(parentWindow, {
-          properties: ["openFile"],
-        })
-      : await dialog.showOpenDialog({
-          properties: ["openFile"],
-        })
-
-    if (result.canceled) {
-      return null
-    }
-
-    const filePath = result.filePaths[0] ?? null
-
+    const filePath = await this.selectImportSource(ctx)
     if (!filePath) {
       return null
     }
 
-    const fileContent = await readFile(filePath, "utf8")
-    let parsedValue: unknown
-
-    try {
-      parsedValue = JSON.parse(fileContent) as unknown
-    } catch {
-      throw new Error("备份文件不是有效的 JSON。")
-    }
-
-    const backup = parseBackup(parsedValue)
-
-    const previousConfig = await configStore.load()
-    await configStore.replace(mergeBackupVariables(backup.config))
-
-    try {
-      await userIdentityService.importIdentity(backup.identity)
-    } catch (identityError) {
-      logger.warn("Identity import failed, rolling back config.", { filePath: redactedFilePathForLog() })
-      await configStore.replace(previousConfig)
-      throw identityError
-    }
-
-    logger.info("Config backup imported.", {
-      filePath: redactedFilePathForLog(),
-    })
-
-    return {
-      filePath,
-    }
+    return this.readImport(filePath)
   }
 }
 

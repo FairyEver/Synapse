@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { dialog } from "electron"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseConfig } from "../../../src/types/config"
 import { createDefaultConfig } from "../../../src/lib/config"
@@ -269,6 +270,25 @@ describe("ConfigBackupService quick inputs", () => {
       expect(mocks.logger.warn).toHaveBeenCalledWith("Identity import failed, rolling back config.", { filePath: "[path]" })
       expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain(path.dirname(filePath))
     } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
+  it("imports dialog-selected backups through readImport", async () => {
+    const filePath = await writeBackupFile({})
+    const readImportSpy = vi.spyOn(configBackupService, "readImport")
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [filePath],
+    } as Electron.OpenDialogReturnValue)
+
+    try {
+      await expect(configBackupService.importBackup()).resolves.toEqual({ filePath })
+
+      expect(readImportSpy).toHaveBeenCalledTimes(1)
+      expect(readImportSpy).toHaveBeenCalledWith(filePath)
+    } finally {
+      readImportSpy.mockRestore()
       await rm(path.dirname(filePath), { recursive: true, force: true })
     }
   })
