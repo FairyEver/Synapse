@@ -1,10 +1,20 @@
 import { DatabaseSync } from "node:sqlite"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { CcConversationService } from "../cc-conversation-service"
 import { initUsageAnalysisSchema } from "../db-schema"
+
+const logger = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => logger,
+}))
 
 type Fixture = {
   readonly db: DatabaseSync
@@ -129,6 +139,7 @@ function insertUsage(
 }
 
 afterEach(() => {
+  vi.clearAllMocks()
   for (const fixture of fixtures.splice(0)) {
     fixture.db.close()
     fs.rmSync(fixture.dir, { recursive: true, force: true })
@@ -154,6 +165,21 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
         toolCalls: 1,
         sourceFilePath: expect.stringContaining("session-1.jsonl"),
       })],
+    })
+    expect(logger.info).toHaveBeenCalledWith("CC conversations listed.", {
+      limit: 20,
+      offset: 0,
+      total: 1,
+      returnedCount: 1,
+      filters: {
+        hasQuery: false,
+        rawText: false,
+        hasProject: false,
+        hasModel: false,
+        hasTool: false,
+        hasEventType: false,
+        preset: "all",
+      },
     })
   })
 
@@ -286,7 +312,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
   })
 
   it("opens a conversation by reading raw JSONL on demand", async () => {
-    const { db } = setupFixture()
+    const { db, filePath } = setupFixture()
     const service = new CcConversationService({ db })
 
     const detail = await service.getConversation("session-1")
@@ -294,6 +320,13 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     expect(detail.session.sessionId).toBe("session-1")
     expect(detail.events.map((event) => event.type)).toEqual(["ai-title", "user", "assistant"])
     expect(detail.parseErrors).toEqual([])
+    expect(logger.info).toHaveBeenCalledWith("CC conversation loaded.", {
+      sessionId: "session-1",
+      filePath: filePath,
+      fileSizeBytes: fs.statSync(filePath).size,
+      eventCount: 3,
+      parseErrorCount: 0,
+    })
   })
 
   it("searches raw text only when requested", async () => {
@@ -308,6 +341,14 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
       eventType: "user",
       text: expect.stringContaining("登录"),
     }))
+    expect(logger.info).toHaveBeenCalledWith("CC conversation raw text search completed.", {
+      candidateCount: 1,
+      matchedCount: 1,
+      missingFileCount: 0,
+      parseErrorCount: 0,
+      partial: false,
+      queryLength: 2,
+    })
   })
 
   it("redacts raw conversation secrets in details and search snippets", async () => {
@@ -363,5 +404,9 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const service = new CcConversationService({ db })
 
     await expect(service.getConversation("session-1")).rejects.toThrow("Claude Code transcript file is missing")
+    expect(logger.error).toHaveBeenCalledWith("CC conversation source file missing.", {
+      sessionId: "session-1",
+      filePath,
+    })
   })
 })

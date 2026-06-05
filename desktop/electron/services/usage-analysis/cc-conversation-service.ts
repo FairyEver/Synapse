@@ -13,6 +13,8 @@ import type {
   CcRecordListInput,
   CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
+import { sanitizeError } from "../error-sanitize"
+import { createMainLogger } from "../log-store"
 import { parseCcConversationFile } from "./cc-conversation-parser"
 import { roundUsageCost } from "./pricing"
 import { createUsageRangeFilter } from "./range"
@@ -20,6 +22,8 @@ import { createUsageRangeFilter } from "./range"
 type ServiceOptions = {
   readonly db: DatabaseSync
 }
+
+type CcConversationLogger = Pick<ReturnType<typeof createMainLogger>, "error" | "info" | "warn">
 
 type SessionRow = {
   readonly session_id: string
@@ -44,6 +48,7 @@ type RecordAggregateRow = AggregateRow & {
 }
 
 const MAX_QUERY_LIMIT = 5000
+const logger: CcConversationLogger = createMainLogger("service.cc-conversation")
 
 function toNumber(value: unknown): number {
   const numberValue = Number(value)
@@ -95,6 +100,27 @@ function sqlBindList(values: readonly string[]): string {
   return values.map(() => "?").join(", ")
 }
 
+function errorLogMeta(error: unknown): { errorName: string; errorMessage: string } {
+  const errorName = error instanceof Error ? error.name : typeof error
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName,
+    errorMessage: sanitizeError(message),
+  }
+}
+
+function conversationFilterSummary(input: CcConversationListInput): Record<string, unknown> {
+  return {
+    hasQuery: Boolean(input.query?.trim()),
+    rawText: input.rawText === true,
+    hasProject: Boolean(input.project?.trim()),
+    hasModel: Boolean(input.model?.trim()),
+    hasTool: Boolean(input.tool?.trim()),
+    hasEventType: Boolean(input.eventType?.trim()),
+    preset: input.preset,
+  }
+}
+
 export class CcConversationService {
   private readonly db: DatabaseSync
 
@@ -144,39 +170,83 @@ export class CcConversationService {
       params.push(input.tool.trim())
     }
 
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : ""
-    const count = this.db.prepare(`
-      SELECT COUNT(*) AS total
-      FROM cc_sessions s
-      ${whereSql}
-    `).get(...params) as { total?: number } | undefined
-    const rows = this.db.prepare(`
-      SELECT s.*
-      FROM cc_sessions s
-      ${whereSql}
-      ORDER BY COALESCE(NULLIF(s.ended_at, ''), s.started_at) DESC
-      LIMIT ? OFFSET ?
-    `).all(...params, limit, offset) as SessionRow[]
-
-    return {
-      items: rows.map((row) => this.toListItem(row)),
-      total: toNumber(count?.total),
-      partial: false,
+    try {
+      const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : ""
+      const count = this.db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM cc_sessions s
+        ${whereSql}
+      `).get(...params) as { total?: number } | undefined
+      const rows = this.db.prepare(`
+        SELECT s.*
+        FROM cc_sessions s
+        ${whereSql}
+        ORDER BY COALESCE(NULLIF(s.ended_at, ''), s.started_at) DESC
+        LIMIT ? OFFSET ?
+      `).all(...params, limit, offset) as SessionRow[]
+      const result = {
+        items: rows.map((row) => this.toListItem(row)),
+        total: toNumber(count?.total),
+        partial: false,
+      }
+      logger.info("CC conversations listed.", {
+        limit,
+        offset,
+        total: result.total,
+        returnedCount: result.items.length,
+        filters: conversationFilterSummary(input),
+      })
+      return result
+    } catch (error) {
+      logger.error("CC conversations list failed.", {
+        limit,
+        offset,
+        filters: conversationFilterSummary(input),
+        ...errorLogMeta(error),
+      })
+      throw error
     }
   }
 
   async getConversation(sessionId: string): Promise<CcConversationDetail> {
     const row = this.getSessionRow(sessionId)
-    if (!row) throw new Error(`Claude Code session not found: ${sessionId}`)
-    if (!fs.existsSync(row.file_path)) throw new Error(`Claude Code transcript file is missing: ${row.file_path}`)
+    if (!row) {
+      logger.error("CC conversation session row missing.", { sessionId })
+      throw new Error(`Claude Code session not found: ${sessionId}`)
+    }
+    if (!fs.existsSync(row.file_path)) {
+      logger.error("CC conversation source file missing.", {
+        sessionId,
+        filePath: row.file_path,
+      })
+      throw new Error(`Claude Code transcript file is missing: ${row.file_path}`)
+    }
 
-    const parsed = await parseCcConversationFile(row.file_path)
-
-    return {
-      session: this.toListItem(row, parsed.events.length),
-      events: parsed.events,
-      parseErrors: parsed.parseErrors,
-      hasMore: false,
+    let fileSizeBytes = 0
+    try {
+      fileSizeBytes = fs.statSync(row.file_path).size
+      const parsed = await parseCcConversationFile(row.file_path)
+      logger.info("CC conversation loaded.", {
+        sessionId,
+        filePath: row.file_path,
+        fileSizeBytes,
+        eventCount: parsed.events.length,
+        parseErrorCount: parsed.parseErrors.length,
+      })
+      return {
+        session: this.toListItem(row, parsed.events.length),
+        events: parsed.events,
+        parseErrors: parsed.parseErrors,
+        hasMore: false,
+      }
+    } catch (error) {
+      logger.error("CC conversation load failed.", {
+        sessionId,
+        filePath: row.file_path,
+        fileSizeBytes,
+        ...errorLogMeta(error),
+      })
+      throw error
     }
   }
 
@@ -186,11 +256,31 @@ export class CcConversationService {
 
     const candidates = this.listConversations({ ...input, query: undefined, rawText: false, limit: 100 }).items
     const matches: CcConversationListItem[] = []
+    let missingFileCount = 0
+    let parseErrorCount = 0
 
     for (const candidate of candidates) {
-      if (!fs.existsSync(candidate.sourceFilePath)) continue
+      if (!fs.existsSync(candidate.sourceFilePath)) {
+        missingFileCount += 1
+        logger.warn("CC conversation search skipped missing source file.", {
+          sessionId: candidate.sessionId,
+          filePath: candidate.sourceFilePath,
+        })
+        continue
+      }
 
-      const parsed = await parseCcConversationFile(candidate.sourceFilePath)
+      let parsed: Awaited<ReturnType<typeof parseCcConversationFile>>
+      try {
+        parsed = await parseCcConversationFile(candidate.sourceFilePath)
+        parseErrorCount += parsed.parseErrors.length
+      } catch (error) {
+        logger.error("CC conversation search parse failed.", {
+          sessionId: candidate.sessionId,
+          filePath: candidate.sourceFilePath,
+          ...errorLogMeta(error),
+        })
+        throw error
+      }
       const snippets: CcConversationMatchSnippet[] = []
 
       for (const event of parsed.events) {
@@ -214,31 +304,57 @@ export class CcConversationService {
       }
     }
 
-    return { items: matches, total: matches.length, partial: candidates.length >= 100 }
+    const result = { items: matches, total: matches.length, partial: candidates.length >= 100 }
+    logger.info("CC conversation raw text search completed.", {
+      candidateCount: candidates.length,
+      matchedCount: matches.length,
+      missingFileCount,
+      parseErrorCount,
+      partial: result.partial,
+      queryLength: query.length,
+    })
+    return result
   }
 
   listRecords(input: CcRecordListInput): CcRecordListResult {
     const limit = normalizeLimit(input.limit)
     const offset = normalizeOffset(input.offset)
-    const { whereSql, params } = this.createSessionListFilter(input)
-    const count = this.db.prepare(`
-      SELECT COUNT(*) AS total
-      FROM cc_sessions s
-      ${whereSql}
-    `).get(...params) as { total?: number } | undefined
-    const rows = this.db.prepare(`
-      SELECT s.*
-      FROM cc_sessions s
-      ${whereSql}
-      ORDER BY COALESCE(NULLIF(s.ended_at, ''), s.started_at) DESC
-      LIMIT ? OFFSET ?
-    `).all(...params, limit, offset) as SessionRow[]
-    const aggregates = this.queryRecordAggregates(rows.map((row) => row.session_id))
-
-    return {
-      items: rows.map((row) => this.toRecordListItem(row, aggregates.get(row.session_id))),
-      total: toNumber(count?.total),
-      partial: false,
+    try {
+      const { whereSql, params } = this.createSessionListFilter(input)
+      const count = this.db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM cc_sessions s
+        ${whereSql}
+      `).get(...params) as { total?: number } | undefined
+      const rows = this.db.prepare(`
+        SELECT s.*
+        FROM cc_sessions s
+        ${whereSql}
+        ORDER BY COALESCE(NULLIF(s.ended_at, ''), s.started_at) DESC
+        LIMIT ? OFFSET ?
+      `).all(...params, limit, offset) as SessionRow[]
+      const aggregates = this.queryRecordAggregates(rows.map((row) => row.session_id))
+      const result = {
+        items: rows.map((row) => this.toRecordListItem(row, aggregates.get(row.session_id))),
+        total: toNumber(count?.total),
+        partial: false,
+      }
+      logger.info("CC records listed.", {
+        limit,
+        offset,
+        total: result.total,
+        returnedCount: result.items.length,
+        filters: conversationFilterSummary(input),
+      })
+      return result
+    } catch (error) {
+      logger.error("CC records list failed.", {
+        limit,
+        offset,
+        filters: conversationFilterSummary(input),
+        ...errorLogMeta(error),
+      })
+      throw error
     }
   }
 
@@ -259,29 +375,46 @@ export class CcConversationService {
 
     const limit = normalizeLimit(input.limit)
     const offset = normalizeOffset(input.offset)
-    const count = this.db.prepare(`
-      SELECT COUNT(*) AS total
-      FROM cc_usage_events
-      WHERE session_id = ?
-    `).get(sessionId) as { total?: number } | undefined
-    const rows = this.db.prepare(`
-      SELECT u.*, COALESCE(t.tool_calls, 0) AS tool_calls, COALESCE(t.duration_ms, 0) AS duration_ms
-      FROM cc_usage_events u
-      LEFT JOIN (
-        SELECT session_id, timestamp_ms, COUNT(*) AS tool_calls, SUM(COALESCE(duration_ms, 0)) AS duration_ms
-        FROM cc_tool_events
+    try {
+      const count = this.db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM cc_usage_events
         WHERE session_id = ?
-        GROUP BY session_id, timestamp_ms
-      ) t ON t.session_id = u.session_id AND t.timestamp_ms = u.timestamp_ms
-      WHERE u.session_id = ?
-      ORDER BY u.timestamp_ms DESC
-      LIMIT ? OFFSET ?
-    `).all(sessionId, sessionId, limit, offset) as Record<string, unknown>[]
-
-    return {
-      sessionId,
-      rows: rows.map(toRecordDetailRow),
-      total: toNumber(count?.total),
+      `).get(sessionId) as { total?: number } | undefined
+      const rows = this.db.prepare(`
+        SELECT u.*, COALESCE(t.tool_calls, 0) AS tool_calls, COALESCE(t.duration_ms, 0) AS duration_ms
+        FROM cc_usage_events u
+        LEFT JOIN (
+          SELECT session_id, timestamp_ms, COUNT(*) AS tool_calls, SUM(COALESCE(duration_ms, 0)) AS duration_ms
+          FROM cc_tool_events
+          WHERE session_id = ?
+          GROUP BY session_id, timestamp_ms
+        ) t ON t.session_id = u.session_id AND t.timestamp_ms = u.timestamp_ms
+        WHERE u.session_id = ?
+        ORDER BY u.timestamp_ms DESC
+        LIMIT ? OFFSET ?
+      `).all(sessionId, sessionId, limit, offset) as Record<string, unknown>[]
+      const result = {
+        sessionId,
+        rows: rows.map(toRecordDetailRow),
+        total: toNumber(count?.total),
+      }
+      logger.info("CC record details listed.", {
+        sessionId,
+        limit,
+        offset,
+        total: result.total,
+        returnedCount: result.rows.length,
+      })
+      return result
+    } catch (error) {
+      logger.error("CC record details list failed.", {
+        sessionId,
+        limit,
+        offset,
+        ...errorLogMeta(error),
+      })
+      throw error
     }
   }
 

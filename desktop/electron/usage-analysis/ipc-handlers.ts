@@ -82,6 +82,23 @@ export function normalizeConversationListInput(input: CcConversationListInput | 
   }
 }
 
+function conversationListLogSummary(input: CcConversationListInput): Record<string, unknown> {
+  return {
+    limit: input.limit,
+    offset: input.offset,
+    filters: {
+      preset: input.preset,
+      hasQuery: Boolean(input.query),
+      queryLength: input.query?.length ?? 0,
+      rawText: input.rawText === true,
+      hasProject: Boolean(input.project),
+      hasModel: Boolean(input.model),
+      hasTool: Boolean(input.tool),
+      hasEventType: Boolean(input.eventType),
+    },
+  }
+}
+
 export function normalizeRecordDetailsInput(input: CcRecordDetailsInput | undefined): CcRecordDetailsInput {
   const sessionId = optionalString(input?.sessionId)
   if (!sessionId) throw new Error("sessionId is required")
@@ -216,41 +233,94 @@ export function registerUsageAnalysisHandlers(): void {
   })
 
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async () => {
+    logger.info("Usage Analysis CC refresh requested.", { rootCount: ccRoots.length })
     return refreshUsageInWorker({
       dbPath,
       prefix: "cc",
       roots: ccRoots,
     })
   })
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccOverview, async (_event, range?: UsageRangeInput) => cc.getOverview(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTime, async (_event, range?: UsageRangeInput) => cc.getTime(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccModels, async (_event, range?: UsageRangeInput) => cc.getModels(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccProjects, async (_event, range?: UsageRangeInput) => cc.getProjects(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTools, async (_event, range?: UsageRangeInput) => cc.getTools(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccDetails, async (_event, range?: UsageDetailInput) => cc.getDetails(normalizeDetailsRange(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccOverview, async (_event, range?: UsageRangeInput) => {
+    const normalized = normalizeUsageRangeForIpc(range)
+    logger.info("Usage Analysis CC overview requested.", normalized)
+    return cc.getOverview(normalized)
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTime, async (_event, range?: UsageRangeInput) => {
+    const normalized = normalizeUsageRangeForIpc(range)
+    logger.info("Usage Analysis CC time series requested.", normalized)
+    return cc.getTime(normalized)
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccModels, async (_event, range?: UsageRangeInput) => {
+    const normalized = normalizeUsageRangeForIpc(range)
+    logger.info("Usage Analysis CC models requested.", normalized)
+    return cc.getModels(normalized)
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccProjects, async (_event, range?: UsageRangeInput) => {
+    const normalized = normalizeUsageRangeForIpc(range)
+    logger.info("Usage Analysis CC projects requested.", normalized)
+    return cc.getProjects(normalized)
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTools, async (_event, range?: UsageRangeInput) => {
+    const normalized = normalizeUsageRangeForIpc(range)
+    logger.info("Usage Analysis CC tools requested.", normalized)
+    return cc.getTools(normalized)
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccDetails, async (_event, range?: UsageDetailInput) => {
+    const normalized = normalizeDetailsRange(range)
+    logger.info("Usage Analysis CC details requested.", {
+      preset: normalized.preset,
+      bucket: normalized.bucket,
+      limit: normalized.limit,
+      offset: normalized.offset,
+    })
+    return cc.getDetails(normalized)
+  })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRecordsList, async (_event, input?: CcConversationListInput) => {
-    return listCcRecordsInWorker(dbPath, normalizeConversationListInput(input))
+    const normalized = normalizeConversationListInput(input)
+    logger.info("Usage Analysis CC records list requested.", conversationListLogSummary(normalized))
+    return listCcRecordsInWorker(dbPath, normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRecordDetailsList, async (_event, input?: CcRecordDetailsInput) => {
-    return listCcRecordDetailsInWorker(dbPath, normalizeRecordDetailsInput(input))
+    const normalized = normalizeRecordDetailsInput(input)
+    logger.info("Usage Analysis CC record details requested.", {
+      sessionId: normalized.sessionId,
+      limit: normalized.limit,
+      offset: normalized.offset,
+    })
+    return listCcRecordDetailsInWorker(dbPath, normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRecordsSearchText, async (_event, input?: CcConversationListInput) => {
-    return searchCcRecordsTextInWorker(dbPath, { ...normalizeConversationListInput(input), rawText: true })
+    const normalized = { ...normalizeConversationListInput(input), rawText: true }
+    logger.info("Usage Analysis CC records raw text search requested.", conversationListLogSummary(normalized))
+    return searchCcRecordsTextInWorker(dbPath, normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationsList, async (_event, input?: CcConversationListInput) => {
-    return listCcConversationsInWorker(dbPath, normalizeConversationListInput(input))
+    const normalized = normalizeConversationListInput(input)
+    logger.info("Usage Analysis CC conversations list requested.", conversationListLogSummary(normalized))
+    return listCcConversationsInWorker(dbPath, normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationGet, async (_event, payload?: { sessionId?: string; focus?: CcConversationFocus }) => {
     const sessionId = optionalString(payload?.sessionId)
     if (!sessionId) throw new Error("sessionId is required")
+    logger.info("Usage Analysis CC conversation get requested.", {
+      sessionId,
+      hasFocus: Boolean(normalizeConversationFocus(payload?.focus)),
+    })
     return getCcConversationInWorker(dbPath, sessionId)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationSearchText, async (_event, input?: CcConversationListInput) => {
-    return searchCcConversationTextInWorker(dbPath, { ...normalizeConversationListInput(input), rawText: true })
+    const normalized = { ...normalizeConversationListInput(input), rawText: true }
+    logger.info("Usage Analysis CC conversation raw text search requested.", conversationListLogSummary(normalized))
+    return searchCcConversationTextInWorker(dbPath, normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationWindowOpen, async (_event, request?: CcConversationWindowRequest) => {
     const sessionId = optionalString(request?.sessionId)
     if (!sessionId) throw new Error("sessionId is required")
+    logger.info("Usage Analysis CC conversation window open requested.", {
+      sessionId,
+      hasTitle: Boolean(optionalString(request?.title)),
+      hasFocus: Boolean(normalizeConversationFocus(request?.focus)),
+    })
     await ccConversationWindowService.openConversationWindow({
       sessionId,
       title: optionalString(request?.title),
