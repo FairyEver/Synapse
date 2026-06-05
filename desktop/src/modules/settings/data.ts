@@ -34,25 +34,25 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "repositories",
     icon: FolderGit2,
-    label: "本地仓库",
+    label: "资源仓库",
     description: "管理 Synapse 内容仓库。",
   },
   {
     id: "projects",
     icon: FolderOpen,
-    label: "本地项目",
+    label: "项目和知识库",
     description: "管理 Agent 可用项目。",
   },
   {
     id: "quick-inputs",
     icon: TextCursorInput,
-    label: "片段",
+    label: "提示词片段",
     description: "维护常用片段。",
   },
   {
     id: "tools",
     icon: Blocks,
-    label: "编辑器",
+    label: "本机IDE",
     description: "编辑器目录与集成。",
   },
   {
@@ -64,7 +64,7 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "variables",
     icon: Braces,
-    label: "变量替换",
+    label: "私人令牌",
     description: "管理内容安装占位符。",
   },
   {
