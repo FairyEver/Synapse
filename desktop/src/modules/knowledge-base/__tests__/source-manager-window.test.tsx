@@ -491,6 +491,40 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
   })
 
+  it("keeps breadcrumbs in a dedicated scroll row below toolbar actions", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("2026")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开文件夹 2026").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("05")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开文件夹 05").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("05")
+    })
+
+    const breadcrumbNav = document.querySelector<HTMLElement>('nav[aria-label="当前位置"]')
+    expect(breadcrumbNav).not.toBeNull()
+    expect(breadcrumbNav?.className).toContain("overflow-x-auto")
+    expect(breadcrumbNav?.previousElementSibling?.tagName).toBe("HEADER")
+    expect(breadcrumbNav?.previousElementSibling?.querySelector('input[placeholder="搜索当前文件夹"]')).not.toBeNull()
+    expect(breadcrumbNav?.querySelector('input[placeholder="搜索当前文件夹"]')).toBeNull()
+    expect(breadcrumbNav?.querySelector("div")?.className).toContain("min-w-max")
+  })
+
   it("ignores a stale directory success after navigating away", async () => {
     const customerRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
     let customerRequestCount = 0
