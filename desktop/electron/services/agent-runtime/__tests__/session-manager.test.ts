@@ -14,7 +14,7 @@ import type {
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("../claude-sdk-session", () => ({
-  DEFAULT_CLAUDE_SDK_MAX_TURNS: 80,
+  DEFAULT_CLAUDE_SDK_MAX_TURNS: 200,
   ClaudeSDKSession: vi.fn(function MockClaudeSDKSession() {
     return {
       agentType: "claude-sdk",
@@ -294,7 +294,7 @@ describe("SessionManager", () => {
     })
 
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
-      maxTurns: 80,
+      maxTurns: 200,
       providerId: "anthropic",
       mode: "default",
       sdkSessionId: "sdk-1",

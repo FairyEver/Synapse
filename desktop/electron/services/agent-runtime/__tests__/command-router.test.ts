@@ -48,13 +48,13 @@ describe("AgentCommandRouter", () => {
     const byAlias = expectRuntimeResult(
       await router.handle(baseMessage("/model switch haiku"), conversation),
     )
-    expect(byAlias.resultText).toBe("Model changed: claude-haiku-3.5")
+    expect(byAlias.resultText).toBe("模型已切换：claude-haiku-3.5")
     await expect(providerService.getActiveProvider()).resolves.toMatchObject({
       model: "claude-haiku-3.5",
     })
 
     const byIndex = expectRuntimeResult(await router.handle(baseMessage("/model 2"), conversation))
-    expect(byIndex.resultText).toBe("Model changed: claude-sonnet-4.5")
+    expect(byIndex.resultText).toBe("模型已切换：claude-sonnet-4.5")
     expect(resets).toEqual(["s1", "s1"])
   })
 
@@ -93,7 +93,7 @@ describe("AgentCommandRouter", () => {
 
     const switched = expectRuntimeResult(await router.handle(baseMessage("/model haiku"), conversation))
 
-    expect(switched.resultText).toBe("Model changed: deepseek-fast")
+    expect(switched.resultText).toBe("模型已切换：deepseek-fast")
     await expect(providerService.getProvider("deepseek")).resolves.toMatchObject({
       model: "deepseek-fast",
     })
@@ -143,7 +143,7 @@ describe("AgentCommandRouter", () => {
       }, baseConversation()),
     )
 
-    expect(result.error).toBe("Only admins can change models.")
+    expect(result.error).toBe("只有管理员可以切换模型。")
     await expect(providerService.getActiveProvider()).resolves.toMatchObject({
       model: "claude-sonnet-4.5",
     })
@@ -175,7 +175,7 @@ describe("AgentCommandRouter", () => {
       await router.handle(baseMessage("/model haiku"), { ...baseConversation(), providerId: "anthropic" }),
     )
 
-    expect(result.error).toBe("Provider not found: anthropic")
+    expect(result.error).toBe("找不到模型供应商：anthropic")
     expect(records).toEqual([{
       message: "Agent command provider lookup failed.",
       meta: expect.objectContaining({
@@ -220,7 +220,7 @@ describe("AgentCommandRouter", () => {
       await router.handle(baseMessage("/model haiku"), { ...baseConversation(), providerId: "anthropic" }),
     )
 
-    expect(result.error).toBe("Provider not found: anthropic")
+    expect(result.error).toBe("找不到模型供应商：anthropic")
     expect(records[0]?.meta).toEqual(expect.objectContaining({
       projectId: "project-1",
       conversationId: "conversation-1",
@@ -262,7 +262,7 @@ describe("AgentCommandRouter", () => {
       await router.handle(baseMessage("/status"), { ...baseConversation(), providerId: "anthropic" }),
     )
 
-    expect(result.resultText).toContain("Provider: anthropic")
+    expect(result.resultText).toContain("供应商：anthropic")
     expect(records[0]?.meta).toEqual(expect.objectContaining({
       projectId: "project-1",
       conversationId: "conversation-1",
@@ -361,7 +361,7 @@ describe("AgentCommandRouter", () => {
     const switched = expectRuntimeResult(
       await router.handle(baseMessage("/mode acceptEdits"), baseConversation()),
     )
-    expect(switched.resultText).toBe("Mode changed: acceptEdits")
+    expect(switched.resultText).toBe("权限模式已切换：acceptEdits")
     expect(modeSwitches).toEqual(["acceptEdits"])
 
     const dangerous = expectRuntimeResult(
@@ -370,20 +370,20 @@ describe("AgentCommandRouter", () => {
     expect(dangerous.error).toBe("请使用权限模式选择器确认切换。")
 
     const next = expectRuntimeResult(await router.handle(baseMessage("/new"), baseConversation()))
-    expect(next.resultText).toBe("New session will start on the next message.")
+    expect(next.resultText).toBe("下一条消息将开启新会话。")
 
     const status = expectRuntimeResult(await router.handle(baseMessage("/status"), {
       ...baseConversation(),
       agentConfig: { mode: "acceptEdits" },
     }))
-    expect(status.resultText).toContain("Agent: claude-code")
-    expect(status.resultText).toContain("Provider: anthropic")
-    expect(status.resultText).toContain("Model: claude-sonnet-4.5")
-    expect(status.resultText).toContain("Mode: acceptEdits")
-    expect(status.resultText).toContain("Agent session: thread-1")
+    expect(status.resultText).toContain("Agent：claude-code")
+    expect(status.resultText).toContain("供应商：anthropic")
+    expect(status.resultText).toContain("模型：claude-sonnet-4.5")
+    expect(status.resultText).toContain("权限模式：acceptEdits")
+    expect(status.resultText).toContain("Agent 会话：thread-1")
 
     const unknown = expectRuntimeResult(await router.handle(baseMessage("/unknown"), baseConversation()))
-    expect(unknown.error).toBe("Unsupported command: /unknown")
+    expect(unknown.error).toBe("不支持的命令：/unknown")
     expect(resets).toEqual(["s1"])
   })
 
@@ -418,7 +418,7 @@ describe("AgentCommandRouter", () => {
       }, baseConversation()),
     )
 
-    expect(result.error).toBe("Only admins can change permission modes.")
+    expect(result.error).toBe("只有管理员可以切换权限模式。")
     expect(modeSwitches).toEqual([])
   })
 
@@ -566,7 +566,7 @@ describe("AgentCommandRouter", () => {
       }, baseConversation()),
     )
 
-    expect(result.error).toBe("Command requires admin: /admin-plan")
+    expect(result.error).toBe("命令需要管理员权限：/admin-plan")
   })
 
   it("stores the requested shell for admin exec commands", async () => {
@@ -592,7 +592,7 @@ describe("AgentCommandRouter", () => {
       ),
     )
 
-    expect(result.resultText).toBe("Exec command saved: /deploy")
+    expect(result.resultText).toBe("执行命令已保存：/deploy")
     expect(await registry.resolve("deploy")).toEqual(expect.objectContaining({
       exec: "Write-Output ok",
       shell: "powershell",

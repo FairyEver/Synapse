@@ -135,7 +135,7 @@ describe("AgentRuntimeService", () => {
 
     const result = await service.send({ ...baseMessage("hello"), platform: "local-renderer" })
 
-    expect(result.error).toBe("Agent spawn denied by permission policy.")
+    expect(result.error).toBe("Agent 启动被权限策略拒绝。")
     expect(createSession).not.toHaveBeenCalled()
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "agent.spawn",
@@ -420,7 +420,7 @@ describe("AgentRuntimeService", () => {
 
     await expect(service.forceKillTurn(id)).resolves.toEqual({ status: "hard-killed" })
     expect(session.calls).toEqual(["interrupt", "close"])
-    await expect(turn).resolves.toMatchObject({ error: "cancelled" })
+    await expect(turn).resolves.toMatchObject({ error: "已停止本次执行。" })
   })
 
   it("emits cancel escalation with conversation correlation", async () => {
@@ -467,7 +467,7 @@ describe("AgentRuntimeService", () => {
     }
 
     await service.forceKillTurn(id)
-    await expect(turn).resolves.toMatchObject({ error: "cancelled" })
+    await expect(turn).resolves.toMatchObject({ error: "已停止本次执行。" })
   })
 
   it("routes concurrent permission responses to their own SDK sessions", async () => {
@@ -653,7 +653,7 @@ describe("AgentRuntimeService", () => {
       requestId: "conversation-a-permission-1",
       behavior: "allow",
       actor: { kind: "user" },
-    })).rejects.toThrow("AskUserQuestion requires answers before continuing.")
+    })).rejects.toThrow("继续前需要先提供用户回复。")
 
     expect(permissionGuard.check).not.toHaveBeenCalled()
     expect(session.responses).toEqual([{
@@ -693,7 +693,7 @@ describe("AgentRuntimeService", () => {
     expect(session.responses).toEqual([{
       requestId: "conversation-a-permission-1",
       behavior: "deny",
-      message: "User question timed out waiting for response.",
+      message: "等待用户回复超时，已停止本次操作。",
     }])
     await expect(turn).resolves.toMatchObject({ resultText: "question timed out" })
   })
@@ -790,7 +790,7 @@ describe("AgentRuntimeService", () => {
 
     expect(service.listPendingPermissions()).toEqual([])
     expect(session.closed).toBe(true)
-    await expect(turn).resolves.toMatchObject({ error: "cancelled" })
+    await expect(turn).resolves.toMatchObject({ error: "已停止本次执行。" })
   })
 
   it("resetSession settles a pending permission and resolves the send", async () => {
@@ -856,7 +856,7 @@ describe("AgentRuntimeService", () => {
 
     await service.deleteSession(conversationId("local", "s1", "active"))
 
-    await expect(resolveSoon(secondTurn)).resolves.toMatchObject({ error: "cancelled" })
+    await expect(resolveSoon(secondTurn)).resolves.toMatchObject({ error: "已停止本次执行。" })
     await expect(resolveSoon(firstTurn)).resolves.not.toBe("timeout")
   })
 

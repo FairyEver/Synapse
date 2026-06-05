@@ -3,6 +3,12 @@ import { stat } from "node:fs/promises"
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ProviderService } from "../provider"
+import {
+  AGENT_CANCELLED_MESSAGE,
+  AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
+  AGENT_PROVIDER_REQUIRED_MESSAGE,
+  AGENT_SESSION_RESETTING_MESSAGE,
+} from "./agent-error-messages"
 import { ClaudeSDKSession, DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./claude-sdk-session"
 import type {
   AgentSdkAgentDefinitions,
@@ -104,7 +110,7 @@ export class SessionManager {
 
   stateForConversation(conversationId: string, message?: AgentMessage): RuntimeSessionState {
     if (this.resettingConversations.has(conversationId)) {
-      throw new Error("Session is resetting.")
+      throw new Error(AGENT_SESSION_RESETTING_MESSAGE)
     }
     const existing = this.deps.states.get(conversationId)
     if (existing) {
@@ -144,11 +150,11 @@ export class SessionManager {
   }): Promise<AgentLiveSessionHandle> {
     const providerId = input.conversation.providerId ?? input.message.providerId
     if (!providerId) {
-      throw new Error("Provider is required")
+      throw new Error(AGENT_PROVIDER_REQUIRED_MESSAGE)
     }
     const cwd = input.message.workspacePath ?? this.deps.workDir
     if (!cwd) {
-      throw new Error("Project workspace path is required")
+      throw new Error(AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE)
     }
     await this.deps.validateWorkspacePath?.(cwd)
 
@@ -381,7 +387,7 @@ function cancelledTurnResult(conversationId: string): AgentRuntimeTurnResult {
     conversationId,
     events: [event],
     resultText: "",
-    error: "cancelled",
+    error: AGENT_CANCELLED_MESSAGE,
   }
 }
 
