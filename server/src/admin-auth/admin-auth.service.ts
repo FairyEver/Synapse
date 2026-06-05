@@ -55,8 +55,7 @@ export class AdminAuthService {
 
   async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; displayName: string | null; token: string; role: DashboardRole; modulePermissions: readonly string[] }> {
     const normalizedEmail = email.trim().toLowerCase()
-    const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
-    const matchedAdmin = admin && normalizedEmail === admin.email ? admin : null
+    const matchedAdmin = await this.prisma.adminUser.findUnique({ where: { email: normalizedEmail } })
     const passwordMatches = matchedAdmin ? await verifyPassword(password, matchedAdmin.passwordHash) : false
     if (matchedAdmin && matchedAdmin.status === "active" && passwordMatches) {
       const token = this.signDashboardToken({ sub: matchedAdmin.id, email: matchedAdmin.email, type: "admin" })

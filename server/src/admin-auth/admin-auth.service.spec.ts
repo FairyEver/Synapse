@@ -6,19 +6,20 @@ import { AdminAuthService } from "./admin-auth.service"
 async function createTestService(auditLog?: { record: ReturnType<typeof vi.fn> }) {
   const jwt = new JwtService({ secret: "test-secret-at-least-32-chars-long!", signOptions: { expiresIn: "1h" } })
   const passwordHash = await hashPassword("admin@pwd1234!")
+  const admin = {
+    id: "admin-1",
+    email: "admin@d2.com",
+    passwordHash,
+    status: "active",
+  }
   const prisma = {
     adminUser: {
-      findFirst: vi.fn().mockResolvedValue({
-        id: "admin-1",
-        email: "admin@d2.com",
-        passwordHash,
-        status: "active",
-      }),
-      findUnique: vi.fn().mockResolvedValue({
-        id: "admin-1",
-        email: "admin@d2.com",
-        passwordHash,
-        status: "active",
+      findFirst: vi.fn().mockResolvedValue(admin),
+      findUnique: vi.fn().mockImplementation(({ where }: { where: { email?: string; id?: string } }) => {
+        if (where.email === admin.email || where.id === admin.id) {
+          return Promise.resolve(admin)
+        }
+        return Promise.resolve(null)
       }),
     },
     user: {
@@ -43,6 +44,30 @@ describe("AdminAuthService", () => {
 
     expect(result.email).toBe("admin@d2.com")
     expect(result.token.length).toBeGreaterThan(20)
+  })
+
+  it("accepts a later administrator by email instead of only the first admin", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
+    prisma.adminUser.findUnique.mockResolvedValueOnce({
+      id: "admin-2",
+      email: "admin2@d2.com",
+      passwordHash: await hashPassword("admin2@pwd1234!"),
+      status: "active",
+    })
+
+    const result = await service.login("admin2@d2.com", "admin2@pwd1234!", "203.0.113.15")
+
+    expect(result.email).toBe("admin2@d2.com")
+    expect(result.role).toBe("admin")
+    expect(prisma.adminUser.findUnique).toHaveBeenCalledWith({ where: { email: "admin2@d2.com" } })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin2@d2.com",
+      action: "admin.login.success",
+      targetType: "admin",
+      targetId: "admin-2",
+      ipAddress: "203.0.113.15",
+    })
   })
 
   it("rejects a wrong password", async () => {
@@ -112,7 +137,7 @@ describe("AdminAuthService", () => {
   it("records disabled administrator login attempts separately from wrong passwords", async () => {
     const auditLog = { record: vi.fn() }
     const { service, prisma } = await createTestService(auditLog)
-    prisma.adminUser.findFirst.mockResolvedValueOnce({
+    prisma.adminUser.findUnique.mockResolvedValueOnce({
       id: "admin-1",
       email: "admin@d2.com",
       passwordHash: await hashPassword("admin@pwd1234!"),
@@ -136,7 +161,7 @@ describe("AdminAuthService", () => {
     const auditLog = { record: vi.fn() }
     const { service, prisma } = await createTestService(auditLog)
     const sharedPasswordHash = await hashPassword("shared-password")
-    prisma.adminUser.findFirst.mockResolvedValueOnce({
+    prisma.adminUser.findUnique.mockResolvedValueOnce({
       id: "admin-1",
       email: "admin@d2.com",
       passwordHash: sharedPasswordHash,
