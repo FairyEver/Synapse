@@ -111,6 +111,7 @@ function isContentPayloadDirty<T extends ContentPayload>(
     || payload.category.trim() !== ""
     || payload.icon.trim() !== ""
     || payload.iconBg !== DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE
+    || (payload.iconType || "icon") !== "icon"
     || payload.iconImage.trim() !== ""
     || payload.content.trim() !== ""
     || extraChecks(payload)
