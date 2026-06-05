@@ -176,6 +176,28 @@ describe("LogFileService", () => {
     expect(mockedUnlink).toHaveBeenCalledTimes(2);
   });
 
+  it("treats cleanup ENOENT as already deleted by another request", async () => {
+    mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
+    mockedStat.mockResolvedValue({
+      size: 12,
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+    } as never);
+    mockedUnlink.mockImplementation(async (path) => {
+      if (String(path).endsWith("server.2026-05-01.log")) {
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      }
+      return undefined;
+    });
+    const service = new LogFileService("/tmp/synapse-logs");
+
+    await expect(service.cleanup("2026-05-03")).resolves.toEqual({
+      deleted: 2,
+      failures: [],
+    });
+
+    expect(mockedUnlink).toHaveBeenCalledTimes(2);
+  });
+
   it("streams log zip data to the provided writable without buffering the archive", async () => {
     mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
     mockedStat.mockResolvedValue({

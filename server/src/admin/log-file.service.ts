@@ -173,6 +173,10 @@ export class LogFileService {
           await unlink(join(this.logDir, file.name));
           deleted++;
         } catch (error) {
+          if (this.isFileNotFoundError(error)) {
+            deleted++;
+            continue;
+          }
           failures.push(this.cleanupFailure(file.name, error));
         }
       }
