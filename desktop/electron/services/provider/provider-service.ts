@@ -279,7 +279,7 @@ export class ProviderService {
 
   async createProvider(input: CreateProviderInput): Promise<CCProvider> {
     if (input.id === LOCAL_PROVIDER_ID) {
-      throw new Error("The local Claude Code provider is built in and cannot be created.")
+      throw new Error("The ClaudeCode/Synapse provider is built in and cannot be created.")
     }
     const hasSecretWrite = input.apiKey !== undefined
       || (input.secretEnv !== undefined && Object.keys(input.secretEnv).length > 0)
@@ -338,7 +338,7 @@ export class ProviderService {
 
   async updateProvider(id: string, patch: UpdateProviderInput): Promise<CCProvider> {
     if (id === LOCAL_PROVIDER_ID) {
-      throw new Error("The local Claude Code provider cannot be edited.")
+      throw new Error("The ClaudeCode/Synapse provider cannot be edited.")
     }
     const existing = await this.getProvider(id)
     const nextActive = patch.active ?? existing.active
@@ -422,7 +422,7 @@ export class ProviderService {
 
   async deleteProvider(id: string): Promise<void> {
     if (id === LOCAL_PROVIDER_ID) {
-      throw new Error("The local Claude Code provider cannot be deleted.")
+      throw new Error("The ClaudeCode/Synapse provider cannot be deleted.")
     }
     if (this.scanReferences) {
       const result = await this.scanReferences(id)
@@ -464,7 +464,7 @@ export class ProviderService {
 
   async archiveProvider(id: string): Promise<void> {
     if (id === LOCAL_PROVIDER_ID) {
-      throw new Error("The local Claude Code provider cannot be archived.")
+      throw new Error("The ClaudeCode/Synapse provider cannot be archived.")
     }
     await this.updateProvider(id, { active: false, archived: true })
   }
@@ -940,7 +940,7 @@ export class ProviderService {
     const env = settings.env
     return {
       id: LOCAL_PROVIDER_ID,
-      name: "本机 Claude Code",
+      name: "ClaudeCode/Synapse",
       category: "official",
       source: "local",
       readonly: true,

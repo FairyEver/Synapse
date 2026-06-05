@@ -3,7 +3,7 @@ import type { SynapseEditorDefinition } from "../../types"
 
 export const editorDefinition = {
   id: "claude-code",
-  label: "Claude Code",
+  label: "ClaudeCode/Synapse",
   order: 30,
   icon: ccIcon,
   supportsGlobal: true,

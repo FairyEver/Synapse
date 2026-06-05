@@ -36,7 +36,7 @@ vi.mock("@/modules/settings/hooks/use-agent-runtime-status", () => ({
         },
         {
           id: "claude-code",
-          label: "Claude Code",
+          label: "ClaudeCode/Synapse",
           ready: false,
           cli: {
             required: true,
@@ -63,7 +63,7 @@ describe("AgentRuntimePanel", () => {
     expect(html).toContain("Codex")
     expect(html).toContain("codex-agent.png")
     expect(html).toContain("可用")
-    expect(html).toContain("Claude Code")
+    expect(html).toContain("ClaudeCode/Synapse")
     expect(html).toContain("claude-code-agent.png")
     expect(html).toContain("未就绪")
     expect(html).toContain("未检测到 claude")

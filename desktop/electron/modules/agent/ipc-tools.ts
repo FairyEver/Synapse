@@ -721,7 +721,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
         projectId: request.projectId,
         agents: [{
           id: "claude-code",
-          label: "Claude Code",
+          label: "ClaudeCode/Synapse",
           ready: issues.length === 0,
           cli: {
             required: false,
@@ -752,7 +752,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     handler: async () => {
       return [{
         agentType: "claude-code",
-        label: "Claude Code",
+        label: "ClaudeCode/Synapse",
         available: true,
       }]
     },

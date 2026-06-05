@@ -16,7 +16,7 @@ function createItem(name: string): EditorScanSkillCopyItem {
     fileCount: 1,
     synapseContentId: null,
     editorId: "claude-code",
-    editorLabel: "Claude Code",
+    editorLabel: "ClaudeCode/Synapse",
     scope: "project",
     projectName: "Repo",
     projectPath: "/repo",
