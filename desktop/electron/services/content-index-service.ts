@@ -410,11 +410,23 @@ class ContentIndexService {
         row: ContentIndexWriteRow | null
       }> = []
       for (const changedContent of changedContentKeys) {
-        const summary = await contentHistoryService.readCurrentSummary(
-          repository,
-          changedContent.contentType,
-          changedContent.contentId,
-        )
+        let summary: SynapseContentMeta | null
+        try {
+          summary = await contentHistoryService.readCurrentSummary(
+            repository,
+            changedContent.contentType,
+            changedContent.contentId,
+          )
+        } catch (error) {
+          logger.warn("Failed to read changed content summary for content index. Falling back to rebuild.", {
+            contentId: changedContent.contentId,
+            contentType: changedContent.contentType,
+            error,
+            repositoryUuid: repository.uuid,
+          })
+          shouldRebuild = true
+          return
+        }
 
         if (!summary) {
           changedRows.push({ changedContent, row: null })
