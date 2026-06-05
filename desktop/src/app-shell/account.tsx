@@ -12,7 +12,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseAccountProfile, SynapseAccountState } from "@/types/account"
 
-type AccountPendingAction = "refresh" | "logout"
+type AccountPendingAction = "refresh" | "logout" | "login"
 
 type AccountContextValue = {
   state: SynapseAccountState
@@ -102,17 +102,8 @@ function AccountProvider({ children }: { children: ReactNode }) {
       setState(nextState)
       return nextState
     }
-    try {
-      const nextState = await bridge.account.startLogin()
-      setState(nextState)
-      return nextState
-    } catch (error) {
-      logger.error("Account action failed.", error)
-      const nextState = createActionErrorState(stateRef.current)
-      setState(nextState)
-      return nextState
-    }
-  }, [])
+    return runAccountAction("login", bridge.account.startLogin)
+  }, [runAccountAction])
 
   const refresh = useCallback(async () => {
     const bridge = getSynapseBridge()
