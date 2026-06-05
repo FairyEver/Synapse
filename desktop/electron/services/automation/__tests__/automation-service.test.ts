@@ -132,6 +132,35 @@ describe("AutomationService", () => {
     )
   })
 
+  it("emits run-started after the active run id is available", async () => {
+    const activeRunIdsAtEmit: Array<string | undefined> = []
+    const emit = vi.fn(async (event) => {
+      if (event.payload.reason !== "run-started") return
+      const items = await harness.service.automationList()
+      activeRunIdsAtEmit.push(items.find((listed) => listed.id === item.id)?.activeRun?.id)
+    })
+    const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
+    const harness = createHarness({ action: longRunningAction(), eventBus })
+    const item = await harness.service.automationCreate(createAutomationInput())
+
+    const runPromise = harness.service.runNow(item.id)
+    await waitFor(async () => activeRunIdsAtEmit.length > 0)
+
+    const startedPayload = emit.mock.calls
+      .map(([event]) => event.payload)
+      .find((payload) => payload.reason === "run-started")
+
+    expect(startedPayload).toEqual(expect.objectContaining({
+      automationId: item.id,
+      runId: "automation-run:1",
+      reason: "run-started",
+    }))
+    expect(activeRunIdsAtEmit).toEqual(["automation-run:1"])
+
+    await harness.service.stopRun("automation-run:1")
+    await runPromise
+  })
+
   it("keeps the successful run status after scheduling the next cron trigger", async () => {
     const harness = createHarness()
     const item = await harness.service.automationCreate(createCronAutomationInput())

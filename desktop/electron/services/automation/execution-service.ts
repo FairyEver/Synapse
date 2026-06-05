@@ -27,6 +27,10 @@ export interface AutomationExecutionLogger {
   warn(message: string, metadata: Record<string, unknown>): void
 }
 
+export interface AutomationRunItemOptions {
+  readonly onRunStarted?: (run: AutomationRun) => void
+}
+
 export class AutomationExecutionService {
   private readonly activeRuns = new Map<string, AbortController>()
   private readonly activeRunCompletions = new Map<string, Promise<void>>()
@@ -40,6 +44,7 @@ export class AutomationExecutionService {
   async runItem(
     item: AutomationItem,
     triggeredBy: AutomationRunTrigger,
+    options: AutomationRunItemOptions = {},
   ): Promise<AutomationRun> {
     const run = await this.deps.runs.start(item.id, triggeredBy, {
       triggerType: item.trigger.type,
@@ -68,6 +73,7 @@ export class AutomationExecutionService {
     let permissionDenied = false
     let executorPending = false
     try {
+      options.onRunStarted?.(run)
       const executor = this.deps.actions.get(item.executor.type)
       const config = executor.manifest.configSchema.parse(item.executor.config)
       const context = {

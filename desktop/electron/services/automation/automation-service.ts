@@ -589,9 +589,16 @@ export class AutomationService {
       return this.recordSkipped(item, triggeredBy, "automation is already running")
     }
     this.runningItemIds.add(item.id)
-    this.emitAutomationChanged({ automationId: item.id, reason: "run-started" })
     try {
-      const run = await this.deps.execution.runItem(item, triggeredBy)
+      const run = await this.deps.execution.runItem(item, triggeredBy, {
+        onRunStarted: (startedRun) => {
+          this.emitAutomationChanged({
+            automationId: item.id,
+            runId: startedRun.id,
+            reason: "run-started",
+          })
+        },
+      })
       this.emitAutomationChanged({ automationId: item.id, runId: run.id, reason: "run-finished" })
       return run
     } finally {
