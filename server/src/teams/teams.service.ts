@@ -251,7 +251,17 @@ export class TeamsService {
 
   async leaveTeam(userId: string, ipAddress = "system") {
     const membership = await this.getMembership(userId)
-    if (!membership) throw new BadRequestException("账号未加入团队。")
+    if (!membership) {
+      await this.recordTeamFailure({
+        actorUserId: userId,
+        action: "team.leave.failure",
+        targetType: "team",
+        targetId: "unknown",
+        reason: "not_in_team",
+        ipAddress,
+      })
+      throw new BadRequestException("账号未加入团队。")
+    }
     let dissolved = false
 
     if (membership.role === "owner") {
@@ -270,11 +280,34 @@ export class TeamsService {
         if (deletedTeam.count === 0) {
           throw new BadRequestException("团队已解散。")
         }
+      }).catch(async (error: unknown) => {
+        const reason = teamDissolveFailureReason(error)
+        if (reason) {
+          await this.recordTeamFailure({
+            actorUserId: userId,
+            action: "team.dissolve.failure",
+            targetType: "team",
+            targetId: membership.teamId,
+            reason,
+            detail: { teamId: membership.teamId },
+            ipAddress,
+          })
+        }
+        throw error
       })
       dissolved = true
     } else {
       const deletedMembership = await this.prisma.teamMembership.deleteMany({ where: { userId, teamId: membership.teamId } })
       if (deletedMembership.count === 0) {
+        await this.recordTeamFailure({
+          actorUserId: userId,
+          action: "team.leave.failure",
+          targetType: "team",
+          targetId: membership.teamId,
+          reason: "membership_missing",
+          detail: { teamId: membership.teamId },
+          ipAddress,
+        })
         throw new BadRequestException("账号未加入团队。")
       }
     }
@@ -327,7 +360,7 @@ export class TeamsService {
 
   private async recordTeamFailure(input: {
     readonly actorUserId: string
-    readonly action: "team.create.failure" | "team.join.failure" | "team.member.remove.failure"
+    readonly action: "team.create.failure" | "team.join.failure" | "team.member.remove.failure" | "team.leave.failure" | "team.dissolve.failure"
     readonly targetType: "team" | "user"
     readonly targetId: string
     readonly reason: string
@@ -351,6 +384,13 @@ function isBadRequestMessage(error: unknown, message: string): boolean {
   const response = error.getResponse()
   if (typeof response === "string") return response === message
   return Boolean(response && typeof response === "object" && "message" in response && (response as { message: unknown }).message === message)
+}
+
+function teamDissolveFailureReason(error: unknown): string | null {
+  if (isBadRequestMessage(error, "请先移除其他成员。")) return "members_remaining"
+  if (isBadRequestMessage(error, "账号未加入团队。")) return "membership_missing"
+  if (isBadRequestMessage(error, "团队已解散。")) return "team_missing"
+  return null
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

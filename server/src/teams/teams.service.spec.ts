@@ -285,12 +285,23 @@ describe("TeamsService", () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-2" })
     prisma.teamMembership.deleteMany.mockResolvedValue({ count: 0 })
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
+      auditLog as never,
     )
 
-    await expect(service.leaveTeam("user-2")).rejects.toThrow("账号未加入团队。")
+    await expect(service.leaveTeam("user-2", "203.0.113.31")).rejects.toThrow("账号未加入团队。")
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "user@example.com",
+      action: "team.leave.failure",
+      targetType: "team",
+      targetId: "team-1",
+      detail: { teamId: "team-1", reason: "membership_missing" },
+      ipAddress: "203.0.113.31",
+    }))
   })
 
   it("prevents an owner from leaving while members remain", async () => {
@@ -306,13 +317,24 @@ describe("TeamsService", () => {
       invitation: { deleteMany: vi.fn() },
       team: { deleteMany: vi.fn() },
     }))
+    prisma.user.findUnique.mockResolvedValue({ email: "owner@example.com" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
+      auditLog as never,
     )
 
-    await expect(service.leaveTeam("user-1")).rejects.toThrow(BadRequestException)
+    await expect(service.leaveTeam("user-1", "203.0.113.32")).rejects.toThrow(BadRequestException)
     expect(deleteMemberships).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "owner@example.com",
+      action: "team.dissolve.failure",
+      targetType: "team",
+      targetId: "team-1",
+      detail: { teamId: "team-1", reason: "members_remaining" },
+      ipAddress: "203.0.113.32",
+    }))
   })
 
   it("deletes the team when the last owner leaves", async () => {
@@ -389,12 +411,23 @@ describe("TeamsService", () => {
       },
       team: { deleteMany: vi.fn() },
     }))
+    prisma.user.findUnique.mockResolvedValue({ email: "owner@example.com" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
+      auditLog as never,
     )
 
-    await expect(service.leaveTeam("user-1")).rejects.toThrow("账号未加入团队。")
+    await expect(service.leaveTeam("user-1", "203.0.113.33")).rejects.toThrow("账号未加入团队。")
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "owner@example.com",
+      action: "team.dissolve.failure",
+      targetType: "team",
+      targetId: "team-1",
+      detail: { teamId: "team-1", reason: "membership_missing" },
+      ipAddress: "203.0.113.33",
+    }))
   })
 
   it("records member removals with the owner email", async () => {
