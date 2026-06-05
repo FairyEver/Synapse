@@ -6,6 +6,7 @@ import { createMainLogger } from "../../services/log-store"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
+import { sanitizeError } from "../../services/error-sanitize"
 
 const logger = createMainLogger("knowledge-base.ipc")
 const KNOWLEDGE_BASE_RESOURCE_PREFIX = "managed-knowledge-base:"
@@ -272,6 +273,7 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
       metadata: {
         source: options.source,
         errorName: error instanceof Error ? error.name : typeof error,
+        error: sanitizeError(String(error)),
         errorLength: String(error).length,
       },
     })

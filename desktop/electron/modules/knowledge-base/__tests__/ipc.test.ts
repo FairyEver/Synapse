@@ -110,22 +110,34 @@ describe("knowledgeBaseIpcModule", () => {
   })
 
   it("logs guarded IPC failures without leaking error text", async () => {
-    const createManaged = vi.fn().mockRejectedValue(new Error("failed with secret-token at /Users/liyang/private"))
-    const { harness } = createHarness({ service: { createManaged } })
+    const createManaged = vi.fn().mockRejectedValue(new Error("failed with token=secret-token at /Users/liyang/private"))
+    const { auditSink, harness } = createHarness({ service: { createManaged } })
 
     await expect(harness.invoke("synapse:knowledge-base:create-managed", {
       projectId: "kb-1",
       name: "Knowledge",
-    })).rejects.toThrow("failed with secret-token at /Users/liyang/private")
+    })).rejects.toThrow("failed with token=secret-token at /Users/liyang/private")
 
     expect(logStoreMock.logger.warn).toHaveBeenCalledWith("Knowledge Base IPC failed.", expect.objectContaining({
       action: "fs.write",
       boundary: "knowledge-base.ipc.operation",
-      errorLength: "Error: failed with secret-token at /Users/liyang/private".length,
+      errorLength: "Error: failed with token=secret-token at /Users/liyang/private".length,
       errorName: "Error",
       projectId: "kb-1",
       source: "knowledgeBase.createManaged",
     }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "knowledgeBase.createManaged",
+        errorName: "Error",
+        error: "Error: failed with token=[redacted] at [path]",
+      }),
+    }))
+    const auditFailure = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
+    expect(auditFailure).not.toContain("secret-token")
+    expect(auditFailure).not.toContain("/Users/liyang/private")
     const loggedFailure = JSON.stringify(logStoreMock.logger.warn.mock.calls)
     expect(loggedFailure).not.toContain("secret-token")
     expect(loggedFailure).not.toContain("/Users/liyang/private")
