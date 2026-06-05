@@ -203,6 +203,7 @@ describe("TeamsService", () => {
       userId: "user-2",
       role: "member",
       user: { id: "user-2", email: "member@example.com", status: "active" },
+      accessRoles: [],
     }
     const createMembership = vi.fn().mockResolvedValue(member)
     prisma.teamMembership.findUnique.mockResolvedValue(null)
@@ -221,6 +222,10 @@ describe("TeamsService", () => {
       data: { teamId: "team-1", userId: "user-2", role: "member" },
       include: {
         user: { select: { id: true, email: true, status: true } },
+        accessRoles: {
+          select: { role: { select: { id: true, name: true } } },
+          orderBy: { assignedAt: "asc" },
+        },
       },
     })
   })

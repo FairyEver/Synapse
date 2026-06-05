@@ -131,6 +131,10 @@ export class TeamsService {
         data: { teamId: invitation.teamId, userId, role: "member" },
         include: {
           user: { select: { id: true, email: true, status: true } },
+          accessRoles: {
+            select: { role: { select: { id: true, name: true } } },
+            orderBy: { assignedAt: "asc" },
+          },
         },
       })
       return { membership, teamId: invitation.teamId }
