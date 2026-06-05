@@ -54,7 +54,13 @@ export class LogFileService {
   }
 
   async listFiles(): Promise<LogFileInfo[]> {
-    const entries = await readdir(this.logDir).catch(() => []);
+    let entries: string[];
+    try {
+      entries = await readdir(this.logDir);
+    } catch (error) {
+      if (this.isFileNotFoundError(error)) return [];
+      throw error;
+    }
     const files: LogFileInfo[] = [];
 
     for (const name of entries) {

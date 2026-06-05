@@ -88,6 +88,23 @@ describe("LogFileService", () => {
     await expect(service.listFiles()).rejects.toThrow("permission denied");
   });
 
+  it("treats missing log directories as empty", async () => {
+    mockedReaddir.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
+
+    const service = new LogFileService("/tmp/synapse-logs");
+
+    await expect(service.listFiles()).resolves.toEqual([]);
+  });
+
+  it("keeps unexpected log directory read errors visible", async () => {
+    mockedReaddir.mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+
+    const service = new LogFileService("/tmp/synapse-logs");
+
+    await expect(service.listFiles()).rejects.toThrow("permission denied");
+    expect(mockedStat).not.toHaveBeenCalled();
+  });
+
   it("reads recent entries from the file tail without loading the whole file", async () => {
     const entry = JSON.stringify({ time: "2026-05-23T01:00:00.000Z", level: 30, msg: "ready" });
     const content = `${"not-json\n".repeat(20_000)}${entry}\n`;
