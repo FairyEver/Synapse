@@ -165,6 +165,16 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
   }, [automationBridge, mode, reloadKey])
 
   useEffect(() => {
+    if (mode.mode !== "edit") return
+    const handleFocus = () => {
+      if (dirtyRef.current) return
+      setReloadKey((current) => current + 1)
+    }
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
+  }, [mode])
+
+  useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirtyRef.current) return
       event.preventDefault()

@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { AutomationEditorApp } from "../editor-app"
+import type { AutomationItem } from "@/types/automation"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -127,6 +128,30 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).toContain("自动化 #0000")
     expect(document.body.textContent).not.toContain("新建")
     expect(document.querySelector('input[aria-label="自动化标题"]')).toBeNull()
+  })
+
+  it("reloads edit data when the editor window is focused again", async () => {
+    getItem.mockReset()
+    getItem
+      .mockResolvedValueOnce(buildAutomationItem({ name: "旧配置" }))
+      .mockResolvedValueOnce(buildAutomationItem({ name: "新配置" }))
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    expect(document.body.textContent).toContain("旧配置")
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"))
+    })
+
+    expect(getItem).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain("新配置")
+    expect(document.body.textContent).not.toContain("旧配置")
   })
 
   it("generates a different create-mode name when the first random suffix already exists", async () => {
@@ -529,4 +554,29 @@ function changeTextarea(textarea: HTMLTextAreaElement, value: string): void {
 function findButtonContaining(text: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll("button"))
     .find((button) => button.textContent?.includes(text))
+}
+
+function buildAutomationItem(overrides: Partial<AutomationItem> = {}): AutomationItem {
+  return {
+    id: "automation:1",
+    schemaVersion: 1,
+    name: "自动化",
+    description: "",
+    enabled: true,
+    scope: { type: "global" },
+    trigger: {
+      type: "builtin.interval",
+      config: { everyMinutes: 10, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+    },
+    executor: {
+      type: "builtin.command",
+      config: { command: "echo ok", shell: "posix", timeoutMins: 30 },
+    },
+    policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
+    createdAt: "2026-06-03T00:00:00.000Z",
+    updatedAt: "2026-06-03T00:00:00.000Z",
+    runCount: 0,
+    configVersion: 0,
+    ...overrides,
+  }
 }
