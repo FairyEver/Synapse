@@ -170,6 +170,39 @@ describe("JsonNamespace (T2.2)", () => {
     }
   })
 
+  it("serializes concurrent upserts so later writes do not drop earlier items", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "users.json")
+
+    class DelayedPersistJsonNamespace extends JsonNamespace<User> {
+      override async persist(envelope: JsonFileEnvelope<User>): Promise<void> {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        await super.persist(envelope)
+      }
+    }
+
+    try {
+      const ns = new DelayedPersistJsonNamespace({
+        name: "users",
+        schemaVersion: 1,
+        backend: "json",
+        filePath: file,
+      })
+
+      await Promise.all([
+        ns.upsert({ id: "u1", name: "Ada" }),
+        ns.upsert({ id: "u2", name: "Bob" }),
+      ])
+
+      expect(await ns.list()).toEqual([
+        { id: "u1", name: "Ada" },
+        { id: "u2", name: "Bob" },
+      ])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("keeps cached collection state unchanged when upsert persistence fails", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "users.json")
