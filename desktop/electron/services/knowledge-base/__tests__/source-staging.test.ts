@@ -212,7 +212,7 @@ describe("knowledge base source staging", () => {
     await expect(access(path.join(projectPath, "wiki"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("redacts URL source skipped paths after acquisition failure", async () => {
+  it("redacts URL source skipped paths and keeps acquisition failure reasons", async () => {
     const projectPath = await tempDir()
     const fetchUrl: FetchUrl = async () => {
       throw new Error("fetch failed")
@@ -227,12 +227,12 @@ describe("knowledge base source staging", () => {
 
     expect(result).toEqual({
       uploaded: [],
-      skipped: [{ path: "https://example.com/articles/alpha?token=%5Bredacted%5D", reason: "read-error" }],
+      skipped: [{ path: "https://example.com/articles/alpha?token=%5Bredacted%5D", reason: "network_error" }],
     })
     expect(JSON.stringify(result)).not.toContain("input-secret")
   })
 
-  it("keeps URL acquisition failures visible as skipped read errors", async () => {
+  it("keeps URL validation failures visible as skipped URL reasons", async () => {
     const projectPath = await tempDir()
     const fetchUrl = vi.fn<FetchUrl>()
 
@@ -245,7 +245,7 @@ describe("knowledge base source staging", () => {
 
     expect(result).toEqual({
       uploaded: [],
-      skipped: [{ path: "javascript:alert(1)", reason: "read-error" }],
+      skipped: [{ path: "javascript:alert(1)", reason: "unsupported_protocol" }],
     })
     expect(fetchUrl).not.toHaveBeenCalled()
   })

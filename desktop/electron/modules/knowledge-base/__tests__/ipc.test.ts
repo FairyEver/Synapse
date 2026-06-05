@@ -305,6 +305,28 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("allows URL acquisition skipped reasons in add URL results", async () => {
+    const addUrlSource = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      uploaded: [],
+      skipped: [{
+        path: "https://example.com/missing",
+        reason: "network_error",
+      }],
+    })
+    const { harness } = createHarness({ service: { addUrlSource } })
+
+    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+      projectId: "kb-1",
+      url: "https://example.com/missing",
+    }) as { skipped: Array<{ reason: string }> }
+
+    expect(result.skipped).toEqual([{
+      path: "https://example.com/missing",
+      reason: "network_error",
+    }])
+  })
+
   it("does not audit network failure when URL source write is denied", async () => {
     const addUrlSource = vi.fn()
     const { auditSink, harness } = createHarness({

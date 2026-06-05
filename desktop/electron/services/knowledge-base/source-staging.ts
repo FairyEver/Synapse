@@ -6,7 +6,7 @@ import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import type { FileConversionInput, FileConversionResult } from "../file-conversion"
 import { sourceFrontmatter } from "../file-conversion/markdown"
-import { acquireUrlSource, type FetchUrl } from "../source-acquisition/url-source"
+import { acquireUrlSource, type FetchUrl, type UrlSourceErrorCode } from "../source-acquisition/url-source"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 type SourceConverter = {
@@ -203,7 +203,7 @@ export async function stageKnowledgeBaseUrlSource(
     })
     return {
       uploaded: [],
-      skipped: [urlAcquisitionFailure(input.url)],
+      skipped: [urlAcquisitionFailure(input.url, result.code)],
     }
   }
 
@@ -240,10 +240,11 @@ function hasOcrUnavailableWarning(result: FileConversionResult): boolean {
   return result.warnings.some((warning) => warning.code === "ocr_unavailable")
 }
 
-function urlAcquisitionFailure(url: string): SynapseKnowledgeBaseUploadSourcesResult["skipped"][number] {
-  // Public upload result types currently expose only not-file/read-error/conversion-error.
-  // Keep URL acquisition failures centralized here so the API can gain URL-specific reasons later.
-  return { path: sanitizeUrl(url), reason: "read-error" }
+function urlAcquisitionFailure(
+  url: string,
+  reason: UrlSourceErrorCode,
+): SynapseKnowledgeBaseUploadSourcesResult["skipped"][number] {
+  return { path: sanitizeUrl(url), reason }
 }
 
 function imageIntakeMarkdown(input: {

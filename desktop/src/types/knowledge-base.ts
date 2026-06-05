@@ -79,12 +79,22 @@ export type SynapseKnowledgeBaseUploadedSource = {
   readonly conversionWarnings?: readonly SynapseKnowledgeBaseFileConversionWarning[]
 }
 
+export type SynapseKnowledgeBaseUrlSkipReason =
+  | "invalid_url"
+  | "unsupported_protocol"
+  | "url_credentials"
+  | "local_or_private_host"
+  | "http_error"
+  | "unsupported_content_type"
+  | "size_limit_exceeded"
+  | "network_error"
+
 export type SynapseKnowledgeBaseUploadSourcesResult = {
   projectId: string
   uploaded: SynapseKnowledgeBaseUploadedSource[]
   skipped: Array<{
     path: string
-    reason: "not-file" | "read-error" | "conversion-error" | "unsupported"
+    reason: "not-file" | "read-error" | "conversion-error" | "unsupported" | SynapseKnowledgeBaseUrlSkipReason
   }>
 }
 

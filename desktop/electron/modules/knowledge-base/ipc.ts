@@ -144,7 +144,20 @@ const uploadSourcesResultSchema = z.object({
   })),
   skipped: z.array(z.object({
     path: z.string(),
-    reason: z.enum(["not-file", "read-error", "conversion-error", "unsupported"]),
+    reason: z.enum([
+      "not-file",
+      "read-error",
+      "conversion-error",
+      "unsupported",
+      "invalid_url",
+      "unsupported_protocol",
+      "url_credentials",
+      "local_or_private_host",
+      "http_error",
+      "unsupported_content_type",
+      "size_limit_exceeded",
+      "network_error",
+    ]),
   })),
 })
 

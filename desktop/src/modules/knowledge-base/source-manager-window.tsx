@@ -230,6 +230,22 @@ function skippedReasonLabel(reason: string): string {
       return "系统文件"
     case "export-error":
       return "导出失败"
+    case "invalid_url":
+      return "URL 无效"
+    case "unsupported_protocol":
+      return "协议不支持"
+    case "url_credentials":
+      return "URL 含凭据"
+    case "local_or_private_host":
+      return "本地地址不支持"
+    case "http_error":
+      return "HTTP 错误"
+    case "unsupported_content_type":
+      return "内容类型不支持"
+    case "size_limit_exceeded":
+      return "内容过大"
+    case "network_error":
+      return "网络错误"
     default:
       return "跳过"
   }
