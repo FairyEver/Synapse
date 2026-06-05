@@ -620,6 +620,96 @@ describe("workflowIpcModule", () => {
     }
   })
 
+  it("audits invalid workflow package schema failures during inspect", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-inspect-invalid-test-"))
+    const packagePath = path.join(tempRoot, "invalid.synapse-workflow.json")
+    await writeFile(packagePath, `${JSON.stringify({ format: "not-a-workflow-package", secret: "package-secret" })}\n`, "utf8")
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [packagePath] })
+    const packageService = { buildImportPreview: vi.fn() }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+        .rejects
+        .toThrow("工作流包格式无效。")
+
+      expect(packageService.buildImportPreview).not.toHaveBeenCalled()
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: packagePath,
+        metadata: expect.objectContaining({
+          source: "workflow.inspectImportPackage",
+          errorName: "ZodError",
+          errorLength: expect.any(Number),
+        }),
+      }))
+      expect(logStoreMock.logger.warn).toHaveBeenCalledWith("workflow:inspectImportPackage schema validation failed", {
+        fileBase: "invalid.synapse-workflow.json",
+        errorName: "ZodError",
+        errorLength: expect.any(Number),
+      })
+      expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("package-secret")
+      expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("package-secret")
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("audits invalid workflow package schema failures during import", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-import-invalid-test-"))
+    const packagePath = path.join(tempRoot, "invalid.synapse-workflow.json")
+    await writeFile(packagePath, `${JSON.stringify({ format: "not-a-workflow-package", secret: "package-secret" })}\n`, "utf8")
+    const packageService = { importPackage: vi.fn() }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+        .rejects
+        .toThrow("工作流包格式无效。")
+
+      expect(packageService.importPackage).not.toHaveBeenCalled()
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: packagePath,
+        metadata: expect.objectContaining({
+          source: "workflow.importPackage",
+          errorName: "ZodError",
+          errorLength: expect.any(Number),
+        }),
+      }))
+      expect(logStoreMock.logger.warn).toHaveBeenCalledWith("workflow:importPackage schema validation failed", {
+        fileBase: "invalid.synapse-workflow.json",
+        mappingCount: 0,
+        errorName: "ZodError",
+        errorLength: expect.any(Number),
+      })
+      expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("package-secret")
+      expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("package-secret")
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
   it("records audit after workflow package export writes the selected file", async () => {
     const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-export-test-"))
     const targetPath = path.join(tempRoot, "workflow.synapse-workflow.json")

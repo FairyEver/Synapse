@@ -192,6 +192,35 @@ function recordFilePermissionFailure(options: {
   })
 }
 
+function parseWorkflowPackageOrFail(options: {
+  readonly raw: unknown
+  readonly auditSink: AuditSink
+  readonly action: PermissionAction
+  readonly resource: string
+  readonly source: "workflow.inspectImportPackage" | "workflow.importPackage"
+  readonly fileBase: string
+  readonly mappingCount?: number
+}): SynapseWorkflowPackageV1 {
+  try {
+    return workflowPackageSchema.parse(options.raw) as SynapseWorkflowPackageV1
+  } catch (error) {
+    recordFilePermissionFailure({
+      auditSink: options.auditSink,
+      action: options.action,
+      resource: options.resource,
+      source: options.source,
+      error,
+    })
+    logger.warn(`${options.source.replace("workflow.", "workflow:")} schema validation failed`, {
+      fileBase: options.fileBase,
+      ...(options.mappingCount === undefined ? {} : { mappingCount: options.mappingCount }),
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: (error instanceof Error ? error.message : String(error)).length,
+    })
+    throw new Error("工作流包格式无效。")
+  }
+}
+
 function saveRunSnapshot(
   snapshots: RunSnapshotService,
   snapshot: Parameters<RunSnapshotService["save"]>[0],
@@ -662,7 +691,14 @@ export const workflowIpcModule: IpcModule = {
           })
           throw error
         }
-        const packageData = workflowPackageSchema.parse(raw) as SynapseWorkflowPackageV1
+        const packageData = parseWorkflowPackageOrFail({
+          raw,
+          auditSink,
+          action,
+          resource: packagePath,
+          source,
+          fileBase: path.basename(packagePath),
+        })
         logger.info("workflow:inspectImportPackage requested", {
           fileBase: path.basename(packagePath),
           workflowId: packageData.workflow.id,
@@ -701,7 +737,15 @@ export const workflowIpcModule: IpcModule = {
           })
           throw error
         }
-        const packageData = workflowPackageSchema.parse(raw) as SynapseWorkflowPackageV1
+        const packageData = parseWorkflowPackageOrFail({
+          raw,
+          auditSink,
+          action,
+          resource: packagePath,
+          source,
+          fileBase: path.basename(packagePath),
+          mappingCount: mappings.length,
+        })
         logger.info("workflow:importPackage requested", {
           fileBase: path.basename(packagePath),
           mappingCount: mappings.length,
