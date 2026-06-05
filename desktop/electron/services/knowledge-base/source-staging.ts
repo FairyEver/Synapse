@@ -76,7 +76,7 @@ export async function stageKnowledgeBaseSources(
         await mkdir(rawDir, { recursive: true })
         const intakePath = await writeUtf8FileToAvailablePath(rawDir, `${path.parse(sourcePath).name}.md`, imageIntakeMarkdown({
           title: path.parse(sourcePath).name,
-          originalPath: filePath,
+          originalPath: imageRelativePath,
           attachment: imageRelativePath,
           format: extension.slice(1),
           stagedAt: input.now().toISOString(),

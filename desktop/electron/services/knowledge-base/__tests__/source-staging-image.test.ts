@@ -14,7 +14,8 @@ afterEach(async () => {
 describe("stageKnowledgeBaseSources image intake", () => {
   it("copies image originals to attachments and creates immutable raw intake records", async () => {
     const root = await makeTempKnowledgeBase()
-    const imagePath = path.join(root, "source.png")
+    const sourceRoot = await makeTempDirectory("synapse-kb-image-source-")
+    const imagePath = path.join(sourceRoot, "source.png")
     await writeFile(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
 
     const result = await stageKnowledgeBaseSources({
@@ -35,8 +36,11 @@ describe("stageKnowledgeBaseSources image intake", () => {
 
     const intake = await readFile(path.join(root, ".raw/images/2026/05/24/source.md"), "utf8")
     expect(intake).toContain("source_type: image")
+    expect(intake).toContain('original_file: "_attachments/images/2026/05/24/source.png"')
     expect(intake).toContain('attachment: "_attachments/images/2026/05/24/source.png"')
     expect(intake).toContain('source_format: "png"')
+    expect(intake).not.toContain(sourceRoot)
+    expect(intake).not.toContain(sourceRoot.replaceAll("\\", "\\\\"))
   })
 
   it("quotes image intake frontmatter fields that may contain YAML delimiters", async () => {
@@ -67,7 +71,11 @@ describe("stageKnowledgeBaseSources image intake", () => {
 })
 
 async function makeTempKnowledgeBase(): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-image-"))
+  return makeTempDirectory("synapse-kb-image-")
+}
+
+async function makeTempDirectory(prefix: string): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), prefix))
   roots.push(root)
   return root
 }
