@@ -455,6 +455,14 @@ function dispatchCorrelation(params: Record<string, unknown>): Record<string, un
   return correlation
 }
 
+function dispatchResultCorrelation(action: string, result: DispatchResult): Record<string, unknown> {
+  if (action !== "workflow.run.execute") return {}
+  const data = result.data
+  if (!data || typeof data !== "object" || Array.isArray(data)) return {}
+  const runId = (data as Record<string, unknown>).runId
+  return typeof runId === "string" && runId ? { runId } : {}
+}
+
 function dispatchErrorDiagnostic(error: unknown): {
   readonly errorName: string
   readonly errorMessage: string
@@ -478,16 +486,20 @@ export function createWorkflowDispatcher(deps: WorkflowDispatchDeps) {
       if (security) await authorizeWorkflowMutation(deps, security)
       try {
         const result = await handler(params, deps)
+        const resultCorrelation = dispatchResultCorrelation(action, result)
         if (security) {
           deps.auditSink?.record({
             action: "workflow.mutate",
             actor: security.actor,
             resource: security.resource,
             outcome: "allowed",
-            metadata: security.metadata,
+            metadata: {
+              ...security.metadata,
+              ...resultCorrelation,
+            },
           })
         }
-        logger.info("workflow mcp dispatch succeeded", { action, ...dispatchCorrelation(params) })
+        logger.info("workflow mcp dispatch succeeded", { action, ...dispatchCorrelation(params), ...resultCorrelation })
         return result
       } catch (error) {
         if (security) {

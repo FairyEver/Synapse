@@ -475,6 +475,51 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" })
   })
 
+  it("audits and logs the returned runId for successful workflow.run.execute mutations", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const deps = makeDeps({
+      auditSink,
+      permissionGuard,
+      runWorkflow: vi.fn(async () => ({ runId: "run-audit-1" })),
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch(
+      "workflow.run.execute",
+      { workflowId: "wf-1", params: { key: "val" } },
+      { source: "mcp-http" },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual({ runId: "run-audit-1" })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      resource: "workflow:wf-1",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.run.execute",
+        workflowId: "wf-1",
+        hasRunParams: true,
+        runId: "run-audit-1",
+      }),
+    }))
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow mcp dispatch succeeded", expect.objectContaining({
+      action: "workflow.run.execute",
+      workflowId: "wf-1",
+      hasRunParams: true,
+      runId: "run-audit-1",
+    }))
+  })
+
   it("workflow.run.disable calls cancelRun", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
