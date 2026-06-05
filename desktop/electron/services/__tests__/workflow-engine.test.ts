@@ -321,6 +321,40 @@ describe("WorkflowEngine", () => {
     expect(result.status).toBe("cancelled")
   })
 
+  it("keeps not-started downstream nodes cancelled when the run is cancelled", async () => {
+    const ctrl = new AbortController()
+    nodeTypeRegistry.register(
+      { ...promptNodeManifest, type: "abort-on-start" },
+      {
+        execute: vi.fn().mockImplementation(async () => {
+          ctrl.abort()
+          return { status: "success" as const, output: "started", durationMs: 1 }
+        }),
+      },
+    )
+    const abortingNode = {
+      ...nodeA,
+      id: "abort",
+      name: "Abort",
+      type: "abort-on-start",
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-cancel-downstream", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [abortingNode, nodeB, nodeEnd],
+      edges: [{ id: "e1", from: "abort", to: "b" }, { id: "e2", from: "b", to: "end" }],
+    }
+    const events: WorkflowEvent[] = []
+    const engine = new WorkflowEngine(fakeAgent("unused"), ctrl.signal)
+
+    const result = await engine.run(def, {}, "run-cancel-downstream", (event) => events.push(event))
+
+    expect(result.status).toBe("cancelled")
+    expect(result.nodeResults.abort?.status).toBe("cancelled")
+    expect(result.nodeResults.b).toMatchObject({ status: "cancelled", error: "运行被取消" })
+    expect(result.nodeResults.end).toMatchObject({ status: "cancelled", error: "运行被取消" })
+    expect(events.some((event) => event.type === "node:skipped" && (event.nodeId === "b" || event.nodeId === "end"))).toBe(false)
+  })
+
   it("marks node failed and short-circuits when executor fails", async () => {
     const def: WorkflowDefinition = { id: "wf3", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, nodeB, nodeEnd], edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }] }
     const events: WorkflowEvent[] = []

@@ -400,14 +400,34 @@ export class WorkflowEngine {
       executableNodes, executableEdges, taskFactory, callbacks, effectiveAbortSignal,
     )
 
-    // Mark scheduler-skipped nodes
+    // Mark scheduler outcomes that never reached onNodeReady/onNodeDone.
     for (const [nodeId, outcome] of schedulerResults) {
       if (!(nodeId in nodeResults)) {
         const node = def.nodes.find((n) => n.id === nodeId)
-        logger.info("node skipped", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-skipped", error: outcome.error })
-        const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} }, ...(outcome.error ? { error: outcome.error } : {}) }
+        const res: NodeRunResult = {
+          nodeId,
+          status: outcome.status,
+          input: { variables: {} },
+          ...(outcome.output !== undefined ? { output: outcome.output } : {}),
+          ...(outcome.outputs !== undefined ? { outputs: outcome.outputs } : {}),
+          ...(outcome.activeBranch !== undefined ? { activeBranch: outcome.activeBranch } : {}),
+          ...(outcome.error ? { error: outcome.error } : {}),
+          ...(outcome.durationMs !== undefined ? { durationMs: outcome.durationMs } : {}),
+        }
         nodeResults[nodeId] = res
-        emit({ type: "node:skipped", runId, nodeId, result: res })
+        if (outcome.status === "skipped") {
+          logger.info("node skipped", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-skipped", error: outcome.error })
+          emit({ type: "node:skipped", runId, nodeId, result: res })
+        } else if (outcome.status === "cancelled") {
+          logger.info("node cancelled", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-cancelled" })
+        } else if (outcome.status === "failed") {
+          logger.warn("node failed", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-failed", ...stringDiagnostic(outcome.error, "scheduler") })
+          emit({ type: "node:failed", runId, nodeId, error: outcome.error ?? "Unknown error", result: { ...res } })
+        } else {
+          logger.info("node succeeded", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-success" })
+          if (outcome.output !== undefined) nodeOutputs[nodeId] = outcome.output
+          emit({ type: "node:completed", runId, nodeId, output: outcome.output, result: { ...res } })
+        }
       }
     }
 
