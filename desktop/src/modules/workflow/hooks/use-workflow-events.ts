@@ -85,7 +85,7 @@ export function useWorkflowEvents(
     const unsub = window.synapse?.workflow.onEvent((event: WorkflowEvent) => {
       if (event.runId !== runId) return
       if (event.type === "node:started") {
-        cbRef.current.onNodeStarted?.(event.nodeId, { startedAt: event.startedAt ?? Date.now() })
+        cbRef.current.onNodeStarted?.(event.nodeId, event.result ?? { startedAt: event.startedAt ?? Date.now() })
       } else if (event.type === "node:progress") {
         cbRef.current.onNodeProgress?.(event.nodeId, event.phase, event.label)
       } else if (event.type === "node:agent-conversation") {

@@ -221,20 +221,60 @@ describe("useWorkflowEvents", () => {
 
     expect(onNodeAgentConversation).toHaveBeenCalledWith("node-1", target)
   })
+
+  it("passes live node started results with resolved input details", async () => {
+    const onNodeStarted = vi.fn()
+    const startedResult = {
+      nodeId: "node-1",
+      status: "running",
+      input: {
+        variables: { customer: "Acme" },
+        prompt: "Review Acme contract",
+      },
+      startedAt: 42,
+    } satisfies NodeRunResult
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          onFailed={vi.fn()}
+          onNodeStarted={onNodeStarted}
+        />,
+      )
+    })
+
+    await act(async () => {
+      workflowListener?.({
+        type: "node:started",
+        runId: "run-1",
+        nodeId: "node-1",
+        startedAt: 42,
+        result: startedResult,
+      })
+      await Promise.resolve()
+    })
+
+    expect(onNodeStarted).toHaveBeenCalledWith("node-1", startedResult)
+  })
 })
 
 function HookProbe({
   onFailed,
+  onNodeStarted,
   onNodeAgentConversation,
 }: {
   readonly onFailed: (error: string, nodeResults?: Record<string, NodeRunResult>) => void
+  readonly onNodeStarted?: (nodeId: string, partial?: Partial<NodeRunResult>) => void
   readonly onNodeAgentConversation?: (
     nodeId: string,
     target: NonNullable<NodeRunResult["outputs"]>["agentConversation"],
   ) => void
 }): ReactNode {
-  const callbacks = useMemo(() => ({ onFailed, onNodeAgentConversation }), [
+  const callbacks = useMemo(() => ({ onFailed, onNodeStarted, onNodeAgentConversation }), [
     onFailed,
+    onNodeStarted,
     onNodeAgentConversation,
   ])
   useWorkflowEvents("run-1", callbacks)
