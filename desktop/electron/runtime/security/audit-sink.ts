@@ -20,6 +20,8 @@ const MAX_MEMORY_EVENTS = 10_000
 const SENSITIVE_TEXT_VALUE_PATTERN = /\b(token|secret|authorization|api[_-]?key|password|auth)\b(\s*[:=]\s*)(Bearer\s+[^\s"'`<>),;]+|"[^"]*"|'[^']*'|[^\s"'`<>),;]+)/gi
 const BEARER_TEXT_VALUE_PATTERN = /\bBearer\s+[^\s"'`<>),;]+/gi
 const POSIX_PATH_PATTERN = /(?:\/Users|\/home|\/Volumes|\/private|\/tmp)\/[^\s"'`<>),;]+/g
+const WINDOWS_DRIVE_PATH_PATTERN = /\b[A-Za-z]:\\(?:[^\\\s"'`<>),;]+(?:\s+[^\\\s"'`<>),;]+)*\\)+[^\\\s"'`<>),;]+/g
+const WINDOWS_UNC_PATH_PATTERN = /\\\\(?:[^\\\s"'`<>),;]+(?:\s+[^\\\s"'`<>),;]+)*\\){2,}[^\\\s"'`<>),;]+/g
 const SENSITIVE_URL_PARAM_PATTERN = /(^|[-_])(token|secret|signature|sig|password|auth|key|credential|api[-_]?key|access[-_]?token|security[-_]?token|session[-_]?token)([-_]|$)/i
 
 export class DataRepositoryAuditSink implements AuditSink {
@@ -158,7 +160,10 @@ function sanitizeText(value: string): string {
 }
 
 function sanitizePathText(value: string): string {
-  return value.replace(POSIX_PATH_PATTERN, "[path]")
+  return value
+    .replace(POSIX_PATH_PATTERN, "[path]")
+    .replace(WINDOWS_UNC_PATH_PATTERN, "[path]")
+    .replace(WINDOWS_DRIVE_PATH_PATTERN, "[path]")
 }
 
 function sanitizeUrlText(value: string): string {

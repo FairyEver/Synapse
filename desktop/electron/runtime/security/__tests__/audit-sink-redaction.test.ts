@@ -71,6 +71,40 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(JSON.stringify(namespace.items)).not.toContain("/home/alice")
   })
 
+  it("redacts Windows absolute paths in metadata values before persistence", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-windows-path",
+      now: () => new Date("2026-05-19T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "config-import",
+      outcome: "allowed",
+      metadata: {
+        projectId: "project-1",
+        backupPath: "C:\\Users\\Ada Lovelace\\Downloads\\synapse-backup.zip",
+        nested: {
+          filePath: "failed at \\\\fileserver\\Audit Share\\logs\\audit.txt",
+        },
+      },
+    })
+    await sink.flushForTests()
+
+    expect(namespace.items[0]?.metadata).toEqual({
+      projectId: "project-1",
+      backupPath: "[path]",
+      nested: {
+        filePath: "failed at [path]",
+      },
+    })
+    expect(JSON.stringify(namespace.items)).not.toContain("C:\\Users\\Ada Lovelace")
+    expect(JSON.stringify(namespace.items)).not.toContain("\\\\fileserver\\Audit Share")
+  })
+
   it("redacts POSIX absolute paths in resources before caching and persistence", async () => {
     const namespace = new FakeAuditNamespace()
     const sink = new DataRepositoryAuditSink({
@@ -91,6 +125,29 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(namespace.items[0]?.resource.id).toBe("[path] token=[redacted]")
     expect(JSON.stringify(sink.list())).not.toContain("/Users/alice")
     expect(JSON.stringify(namespace.items)).not.toContain("/Users/alice")
+    expect(JSON.stringify(namespace.items)).not.toContain("sk-test-secret")
+  })
+
+  it("redacts Windows absolute paths in resources before caching and persistence", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-resource-windows-path",
+      now: () => new Date("2026-05-19T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "C:\\Users\\Ada Lovelace\\Downloads\\synapse-logs.zip token=sk-test-secret",
+      outcome: "allowed",
+    })
+    await sink.flushForTests()
+
+    expect(sink.list()[0]?.resource).toBe("[path] token=[redacted]")
+    expect(namespace.items[0]?.resource.id).toBe("[path] token=[redacted]")
+    expect(JSON.stringify(sink.list())).not.toContain("C:\\Users\\Ada Lovelace")
+    expect(JSON.stringify(namespace.items)).not.toContain("C:\\Users\\Ada Lovelace")
     expect(JSON.stringify(namespace.items)).not.toContain("sk-test-secret")
   })
 
