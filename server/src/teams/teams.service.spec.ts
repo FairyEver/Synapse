@@ -154,13 +154,24 @@ describe("TeamsService", () => {
 
   it("rejects team invitation creation for non-owners", async () => {
     const prisma = createPrismaMock()
-    prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1" })
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-1" })
+    prisma.user.findUnique.mockResolvedValue({ email: "member@example.com" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
+      auditLog as never,
     )
 
-    await expect(service.createInvitation("user-1", "https://app.example.com")).rejects.toThrow(ForbiddenException)
+    await expect(service.createInvitation("user-1", "https://app.example.com", "203.0.113.30")).rejects.toThrow(ForbiddenException)
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "member@example.com",
+      action: "team.invitation.create.failure",
+      targetType: "invitation",
+      targetId: "unknown",
+      detail: { reason: "permission_denied" },
+      ipAddress: "203.0.113.30",
+    })
   })
 
   it("lets team owners create team invitations", async () => {

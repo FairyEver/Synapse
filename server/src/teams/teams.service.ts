@@ -78,7 +78,22 @@ export class TeamsService {
   }
 
   async createInvitation(userId: string, publicAppUrl: string, ipAddress = "system") {
-    const membership = await this.requireTeamOwner(userId)
+    let membership: NonNullable<Awaited<ReturnType<typeof this.getMembership>>>
+    try {
+      membership = await this.requireTeamOwner(userId)
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        await this.recordTeamFailure({
+          actorUserId: userId,
+          action: "team.invitation.create.failure",
+          targetType: "invitation",
+          targetId: "unknown",
+          reason: "permission_denied",
+          ipAddress,
+        })
+      }
+      throw error
+    }
     const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId, publicAppUrl })
     const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
@@ -360,8 +375,8 @@ export class TeamsService {
 
   private async recordTeamFailure(input: {
     readonly actorUserId: string
-    readonly action: "team.create.failure" | "team.join.failure" | "team.member.remove.failure" | "team.leave.failure" | "team.dissolve.failure"
-    readonly targetType: "team" | "user"
+    readonly action: "team.create.failure" | "team.join.failure" | "team.invitation.create.failure" | "team.member.remove.failure" | "team.leave.failure" | "team.dissolve.failure"
+    readonly targetType: "invitation" | "team" | "user"
     readonly targetId: string
     readonly reason: string
     readonly detail?: Record<string, unknown>
