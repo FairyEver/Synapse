@@ -36,6 +36,9 @@ type AcceptedManualRun = AutomationRun & {
   status: Extract<AutomationRun["status"], "running" | "success">
 }
 
+const ALREADY_RUNNING_SKIP_REASON = "automation is already running"
+const ALREADY_RUNNING_MESSAGE = "自动化正在运行中"
+
 class AutomationRunCancelledError extends Error {
   readonly run: AutomationRun
 
@@ -46,12 +49,33 @@ class AutomationRunCancelledError extends Error {
   }
 }
 
+class AutomationRunSkippedError extends Error {
+  readonly run: AutomationRun
+
+  constructor(run: AutomationRun, message: string) {
+    super(message)
+    this.name = "AutomationRunSkippedError"
+    this.run = run
+  }
+}
+
 function isAcceptedManualRun(run: AutomationRun | null): run is AcceptedManualRun {
   return run !== null && (run.status === "running" || run.status === "success")
 }
 
 function isAutomationRunCancelledError(error: unknown): error is AutomationRunCancelledError {
   return error instanceof AutomationRunCancelledError
+}
+
+function isAutomationRunSkippedError(error: unknown): error is AutomationRunSkippedError {
+  return error instanceof AutomationRunSkippedError
+}
+
+function getSkippedManualRunMessage(run: AutomationRun): string | null {
+  if (run.status === "skipped" && run.error === ALREADY_RUNNING_SKIP_REASON) {
+    return ALREADY_RUNNING_MESSAGE
+  }
+  return null
 }
 
 function AutomationModule() {
@@ -133,15 +157,21 @@ function AutomationModule() {
           const run = await runAutomation(item.id)
           logger.info("Automation manual run requested.", { automationId: item.id, runId: run?.id })
           if (run?.status === "cancelled") throw new AutomationRunCancelledError(run)
+          if (run?.status === "skipped") {
+            const skippedMessage = getSkippedManualRunMessage(run)
+            if (skippedMessage) throw new AutomationRunSkippedError(run, skippedMessage)
+          }
           if (!isAcceptedManualRun(run)) throw new Error(run?.error ?? "运行未开始")
           return run
         },
         {
           loading: "正在运行自动化...",
           success: "自动化已运行。",
-          error: (runError) => isAutomationRunCancelledError(runError)
-            ? { message: null }
-            : "运行自动化失败。",
+          error: (runError) => {
+            if (isAutomationRunCancelledError(runError)) return { message: null }
+            if (isAutomationRunSkippedError(runError)) return runError.message
+            return "运行自动化失败。"
+          },
         },
       )
       await refresh()
@@ -149,6 +179,13 @@ function AutomationModule() {
     } catch (runError) {
       if (isAutomationRunCancelledError(runError)) {
         logger.info("Automation manual run stopped.", { automationId: item.id, runId: runError.run.id })
+      } else if (isAutomationRunSkippedError(runError)) {
+        logger.info("Automation manual run skipped.", {
+          automationId: item.id,
+          runId: runError.run.id,
+          status: runError.run.status,
+          reasonLength: runError.run.error?.length ?? 0,
+        })
       } else {
         logger.error("Automation mutation failed.", {
           boundary: "renderer.automation.mutation",

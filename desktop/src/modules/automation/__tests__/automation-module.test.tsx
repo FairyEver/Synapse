@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   useAutomationItems: vi.fn(),
   openCreateEditorWindow: vi.fn(),
   openEditorWindow: vi.fn(),
+  notificationError: vi.fn(),
   runAutomation: vi.fn(),
   stopAutomationRun: vi.fn(),
 }))
@@ -63,7 +64,33 @@ vi.mock("@/app-shell/config", () => ({
 
 vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
-    promise: async <T,>(operation: () => Promise<T>) => operation(),
+    promise: async <T,>(
+      operation: () => Promise<T>,
+      messages: {
+        error?: unknown | ((error: unknown) => unknown)
+      },
+    ) => {
+      try {
+        return await operation()
+      } catch (error) {
+        const resolved = typeof messages.error === "function"
+          ? messages.error(error)
+          : messages.error
+
+        if (
+          resolved
+          && typeof resolved === "object"
+          && "message" in resolved
+          && resolved.message !== null
+        ) {
+          mocks.notificationError(resolved.message)
+        } else if (resolved !== null && resolved !== undefined) {
+          mocks.notificationError(resolved)
+        }
+
+        throw error
+      }
+    },
   }),
 }))
 
@@ -386,6 +413,43 @@ describe("AutomationModule", () => {
     expect(mocks.runAutomation).toHaveBeenCalledWith("automation:1")
     expect(refresh).toHaveBeenCalled()
     expect(mocks.rendererLogger.error).not.toHaveBeenCalled()
+  })
+
+  it("shows an already-running message when a manual run is skipped by overlap policy", async () => {
+    const refresh = vi.fn()
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem()],
+      loading: false,
+      error: null,
+      refresh,
+    })
+    mocks.runAutomation.mockResolvedValue({
+      id: "run-1",
+      automationId: "automation:1",
+      status: "skipped",
+      triggeredBy: "manual",
+      startedAt: "2026-06-03T00:00:00.000Z",
+      finishedAt: "2026-06-03T00:00:00.000Z",
+      error: "automation is already running",
+    })
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((button) => button.getAttribute("aria-label") === "运行自动化")
+        ?.click()
+    })
+
+    expect(mocks.runAutomation).toHaveBeenCalledWith("automation:1")
+    expect(mocks.notificationError).toHaveBeenCalledWith("自动化正在运行中")
+    expect(mocks.notificationError).not.toHaveBeenCalledWith("运行自动化失败。")
+    expect(refresh).toHaveBeenCalled()
   })
 })
 
