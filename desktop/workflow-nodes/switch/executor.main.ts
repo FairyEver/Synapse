@@ -29,11 +29,23 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
+function containsCjkCharacter(value: string): boolean {
+  return /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]/.test(value)
+}
+
+function branchIdAppearsInResponse(normalizedResponse: string, branchId: string): boolean {
+  const normalizedBranchId = branchId.toLowerCase()
+  if (containsCjkCharacter(normalizedBranchId)) {
+    return normalizedResponse.includes(normalizedBranchId)
+  }
+  return new RegExp(`\\b${escapeRegex(normalizedBranchId)}\\b`).test(normalizedResponse)
+}
+
 /**
  * Multi-strategy branch matching. Tries in order:
  * 1. Exact match on full trimmed+lowercased response vs lowercased branch IDs
  * 2. Exact match on normalized first-line response vs lowercased branch IDs
- * 3. Search for branch IDs as whole words within the normalized response (longest match wins)
+ * 3. Search for branch IDs within the normalized response (longest match wins)
  *
  * All comparisons are case-insensitive: the response is lowercased by
  * normalizeResponse / trim().toLowerCase(), and branch IDs are lowercased at
@@ -51,10 +63,11 @@ function matchBranch(response: string, branchIds: string[]): string | null {
   const normalizedMatch = branchIds.find((id) => id.toLowerCase() === normalized)
   if (normalizedMatch) return normalizedMatch
 
-  // Strategy 3: search for branch IDs as whole words within normalized response (case-insensitive)
+  // Strategy 3: search for branch IDs in the normalized response (case-insensitive).
+  // ASCII branch IDs keep word-boundary matching; CJK IDs use contains because JS \b is ASCII-centric.
   // Sort by length descending to prefer longest match (avoids substring false positives)
   const sorted = [...branchIds].sort((a, b) => b.length - a.length)
-  const found = sorted.find((id) => new RegExp(`\\b${escapeRegex(id.toLowerCase())}\\b`).test(normalized))
+  const found = sorted.find((id) => branchIdAppearsInResponse(normalized, id))
   if (found) return found
 
   return null

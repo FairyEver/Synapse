@@ -119,6 +119,25 @@ describe("switchNodeExecutor", () => {
     expect(r.activeBranch).toBeUndefined()
     expect(r.error).toBe("Agent 响应不匹配任何分支 [yes, no]")
   })
+  it("matches Chinese branch IDs inside explanatory responses", async () => {
+    const r = await switchNodeExecutor.execute({
+      config: {
+        ...config,
+        branches: [{ id: "正面", label: "正面" }, { id: "负面", label: "负面" }],
+      },
+      resolvedVariables: {},
+      context: ctx,
+      agentDeps: {
+        sendToAgent: vi.fn().mockResolvedValue({
+          status: "success" as const,
+          response: "这个观点是正面的。",
+          durationMs: 5,
+        }),
+      },
+    })
+    expect(r.status).toBe("success")
+    expect(r.activeBranch).toBe("正面")
+  })
   it("fails provider API error text instead of falling back to defaultBranch", async () => {
     const r = await switchNodeExecutor.execute({
       config: { ...config, defaultBranch: "no" }, resolvedVariables: {}, context: ctx,
