@@ -303,4 +303,62 @@ describe("ContentInstallService security", () => {
       }),
     ])
   })
+
+  it("reports restore failure when replacement fails after backup", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.rename.mockImplementation(async (
+      oldPath: Parameters<typeof import("node:fs/promises")["rename"]>[0],
+      newPath: Parameters<typeof import("node:fs/promises")["rename"]>[1],
+    ) => {
+      if (String(oldPath) === backupPath && String(newPath) === targetPath) {
+        throw new Error("restore failed")
+      }
+
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      return actual.rename(oldPath, newPath)
+    })
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockRejectedValue(new Error("prepare failed"))
+
+    const auditSink = new InMemoryAuditSink()
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      replaceConfirmed: true,
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })).rejects.toThrow("旧 Skill 备份恢复失败")
+
+    await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        outcome: "failed",
+        resource: targetPath,
+      }),
+    ])
+  })
 })

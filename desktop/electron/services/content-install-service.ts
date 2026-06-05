@@ -188,6 +188,10 @@ function getDesktopSkillBackupPath(targetPath: string): string {
   return path.join(app.getPath("desktop"), `${path.basename(targetPath)}-synapse备份`)
 }
 
+function createSkillBackupRestoreFailureError(backupPath: string): Error {
+  return new Error(`安装失败，且旧 Skill 备份恢复失败。旧备份仍保留在桌面：${path.basename(backupPath)}，请手动检查目标目录。`)
+}
+
 function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
   const relative = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
   return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
@@ -399,6 +403,7 @@ export class ContentInstallService {
                   targetPath: path.basename(target.targetPath),
                   error: restoreError,
                 })
+                throw createSkillBackupRestoreFailureError(backupPathForRestore)
               }
             }
 
