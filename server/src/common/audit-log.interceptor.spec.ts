@@ -92,6 +92,36 @@ describe("AuditLogInterceptor", () => {
     expect(rejected).toBe(true)
   })
 
+  it("preserves the original operation error when failed audit writing fails", async () => {
+    const auditError = new Error("审计日志写入失败。")
+    const auditLog = { record: vi.fn().mockRejectedValue(auditError) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const logger = { warn: vi.fn() }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never, logger as never)
+    const sourceError = new Error("用户不存在。")
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PATCH",
+        path: "/api/admin/users/user-1/status",
+        params: { id: "user-1" },
+        body: { status: "disabled" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => sourceError) },
+    ))).rejects.toBe(sourceError)
+
+    expect(auditLog.record).toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        err: auditError,
+        action: "admin.user.status_update.failed",
+        originalErrorName: "Error",
+      }),
+      "Failed to record audit log from interceptor",
+    )
+  })
+
   it("redacts sensitive request body fields before recording audit details", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }

@@ -3,8 +3,10 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  Optional,
 } from "@nestjs/common"
 import type { Request } from "express"
+import { PinoLogger } from "nestjs-pino"
 import { catchError, from, mergeMap, Observable, throwError } from "rxjs"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -30,6 +32,7 @@ export class AuditLogInterceptor implements NestInterceptor {
   constructor(
     private readonly auditLog: AuditLogService,
     private readonly auth: AdminAuthService,
+    @Optional() private readonly logger?: PinoLogger,
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -53,19 +56,31 @@ export class AuditLogInterceptor implements NestInterceptor {
       )
       if (!action) return
 
-      await this.auditLog.record({
-        adminEmail: request.admin?.email ?? UNAUTHENTICATED_ADMIN_EMAIL,
-        action: error ? `${action}.failed` : action,
-        targetType,
-        targetId,
-        detail: {
-          method,
-          path,
-          body: redactSensitiveBody(request.body),
-          ...(error ? { error: formatAuditError(error) } : {}),
-        },
-        ipAddress: request.ip ?? "",
-      })
+      const auditAction = error ? `${action}.failed` : action
+      try {
+        await this.auditLog.record({
+          adminEmail: request.admin?.email ?? UNAUTHENTICATED_ADMIN_EMAIL,
+          action: auditAction,
+          targetType,
+          targetId,
+          detail: {
+            method,
+            path,
+            body: redactSensitiveBody(request.body),
+            ...(error ? { error: formatAuditError(error) } : {}),
+          },
+          ipAddress: request.ip ?? "",
+        })
+      } catch (auditError) {
+        this.logger?.warn({
+          err: auditError,
+          action: auditAction,
+          targetType,
+          targetId,
+          originalErrorName: error instanceof Error ? error.name : typeof error,
+          originalErrorLength: error instanceof Error ? error.message.length : error ? String(error).length : 0,
+        }, "Failed to record audit log from interceptor")
+      }
     }
 
     return next.handle().pipe(
