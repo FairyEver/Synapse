@@ -15,6 +15,12 @@ describe("sanitizeUrl", () => {
     )
   })
 
+  it("redacts OAuth handoff query parameters", () => {
+    expect(sanitizeUrl("https://example.com/dashboard/auth/desktop?state=secret-state&code_challenge=secret-challenge&code_challenge_method=S256")).toBe(
+      "https://example.com/dashboard/auth/desktop?state=%5Bredacted%5D&code_challenge=%5Bredacted%5D&code_challenge_method=S256",
+    )
+  })
+
   it("falls back to text redaction when URL parsing fails", () => {
     expect(sanitizeUrl("fetch https://user:pass@example.com/api?token=sk-secret failed")).toBe(
       "fetch https://[redacted]@example.com/api?token=[redacted] failed",

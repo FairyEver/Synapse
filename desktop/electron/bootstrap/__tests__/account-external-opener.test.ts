@@ -33,22 +33,26 @@ describe("createAccountExternalUrlOpener", () => {
     const deps = createDeps()
     const openExternal = createAccountExternalUrlOpener(deps)
 
-    await openExternal("https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state")
+    await openExternal("https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state&code_challenge=secret-challenge&code_challenge_method=S256")
 
     expect(deps.permissionGuard.check).toHaveBeenCalledWith({
       action: "shell.exec",
       actor: { kind: "user" },
-      resource: "https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state",
+      resource: "https://synapse.d2.pub/dashboard/auth/desktop?state=%5Bredacted%5D&code_challenge=%5Bredacted%5D&code_challenge_method=S256",
       context: { source: "account.startLogin" },
     })
-    expect(deps.openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state")
+    expect(deps.openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state&code_challenge=secret-challenge&code_challenge_method=S256")
     expect(deps.auditSink.record).toHaveBeenCalledWith({
       action: "shell.exec",
       actor: { kind: "user" },
-      resource: "https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state",
+      resource: "https://synapse.d2.pub/dashboard/auth/desktop?state=%5Bredacted%5D&code_challenge=%5Bredacted%5D&code_challenge_method=S256",
       outcome: "allowed",
       metadata: { source: "account.startLogin" },
     })
+    expect(JSON.stringify(vi.mocked(deps.permissionGuard.check).mock.calls)).not.toContain("secret-state")
+    expect(JSON.stringify(vi.mocked(deps.permissionGuard.check).mock.calls)).not.toContain("secret-challenge")
+    expect(JSON.stringify(vi.mocked(deps.auditSink.record).mock.calls)).not.toContain("secret-state")
+    expect(JSON.stringify(vi.mocked(deps.auditSink.record).mock.calls)).not.toContain("secret-challenge")
   })
 
   it("does not open denied login links", async () => {
