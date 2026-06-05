@@ -6,6 +6,7 @@ import { AuditLogService } from "../common/audit-log.service";
 
 const DEFAULT_RECENT_LOG_LIMIT = 200;
 const MAX_RECENT_LOG_LIMIT = 1000;
+const MIN_CLEANUP_RETENTION_DAYS = 30;
 
 function parseRecentLogLimit(limitStr?: string): number {
   if (!limitStr) return DEFAULT_RECENT_LOG_LIMIT;
@@ -35,6 +36,11 @@ function parseCleanupBeforeDate(before: string | undefined): string {
   }
   if (parsed > new Date().toISOString().slice(0, 10)) {
     throw new BadRequestException("before 不能是未来日期。");
+  }
+  const retentionFloor = new Date();
+  retentionFloor.setUTCDate(retentionFloor.getUTCDate() - MIN_CLEANUP_RETENTION_DAYS);
+  if (parsed < retentionFloor.toISOString().slice(0, 10)) {
+    throw new BadRequestException("before 不能早于最近 30 天。");
   }
   return parsed;
 }

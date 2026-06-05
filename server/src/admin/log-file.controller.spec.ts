@@ -128,33 +128,44 @@ describe("LogFileController", () => {
     expect(service.cleanup).not.toHaveBeenCalled();
   });
 
+  it("rejects cleanup dates beyond the retention floor before deleting log files", async () => {
+    const { controller, service } = createController();
+
+    await expect(controller.cleanup("1970-01-01"))
+      .rejects
+      .toThrow("before 不能早于最近 30 天。");
+    expect(service.cleanup).not.toHaveBeenCalled();
+  });
+
   it("records audit logs for cleanup", async () => {
     const { controller, auditLog, service } = createController();
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    await expect(controller.cleanup("2026-05-01", {
+    await expect(controller.cleanup(cutoff, {
       admin: { email: "admin@example.com" },
       ip: "203.0.113.10",
     } as never)).resolves.toEqual({ deleted: 2 });
 
-    expect(service.cleanup).toHaveBeenCalledWith("2026-05-01");
+    expect(service.cleanup).toHaveBeenCalledWith(cutoff);
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
       action: "logs.cleanup",
       targetType: "logs",
-      targetId: "2026-05-01",
-      detail: { before: "2026-05-01", deleted: 2 },
+      targetId: cutoff,
+      detail: { before: cutoff, deleted: 2 },
       ipAddress: "203.0.113.10",
     });
   });
 
   it("records failed audit logs and rejects when cleanup partially fails", async () => {
     const { controller, auditLog, service } = createController();
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     service.cleanup.mockResolvedValueOnce({
       deleted: 1,
       failures: [{ name: "server.2026-05-01.log", errorName: "Error" }],
     });
 
-    await expect(controller.cleanup("2026-05-01", {
+    await expect(controller.cleanup(cutoff, {
       admin: { email: "admin@example.com" },
       ip: "203.0.113.10",
     } as never))
@@ -165,9 +176,9 @@ describe("LogFileController", () => {
       adminEmail: "admin@example.com",
       action: "logs.cleanup.failed",
       targetType: "logs",
-      targetId: "2026-05-01",
+      targetId: cutoff,
       detail: {
-        before: "2026-05-01",
+        before: cutoff,
         deleted: 1,
         failed: 1,
         failures: [{ name: "server.2026-05-01.log", errorName: "Error" }],
