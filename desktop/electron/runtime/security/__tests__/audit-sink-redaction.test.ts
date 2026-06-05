@@ -214,6 +214,72 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(JSON.stringify(namespace.items)).not.toContain("nested-secret")
     expect(JSON.stringify(namespace.items)).not.toContain("nested-api-key")
   })
+
+  it("preserves operational error metadata while sanitizing sensitive fragments", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-error-message",
+      now: () => new Date("2026-06-05T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "shell.exec",
+      actor: { kind: "user" },
+      resource: "run_as_user:command",
+      outcome: "failed",
+      metadata: {
+        error: "spawn failed token=sk-test-secret at /Users/alice/private/script.sh",
+        nested: {
+          errors: ["Authorization: Bearer nested-secret failed at C:\\Users\\Ada\\secret.log"],
+        },
+      },
+    })
+    await sink.flushForTests()
+
+    expect(namespace.items[0]?.metadata).toEqual({
+      error: "spawn failed token=[redacted] at [path]",
+      nested: {
+        errors: ["Authorization: [redacted] failed at [path]"],
+      },
+    })
+    expect(JSON.stringify(namespace.items)).not.toContain("sk-test-secret")
+    expect(JSON.stringify(namespace.items)).not.toContain("nested-secret")
+    expect(JSON.stringify(namespace.items)).not.toContain("/Users/alice")
+    expect(JSON.stringify(namespace.items)).not.toContain("C:\\Users\\Ada")
+  })
+
+  it("keeps request and prompt body metadata redacted", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-request-body",
+      now: () => new Date("2026-06-05T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "network.connect",
+      actor: { kind: "agent", id: "diagnostics" },
+      resource: "https://api.example.test",
+      outcome: "denied",
+      metadata: {
+        body: "raw request body",
+        content: "generated content",
+        message: "user message",
+        reason: "policy reason",
+        text: "plain text body",
+      },
+    })
+    await sink.flushForTests()
+
+    expect(namespace.items[0]?.metadata).toEqual({
+      body: "[redacted]",
+      content: "[redacted]",
+      message: "[redacted]",
+      reason: "[redacted]",
+      text: "[redacted]",
+    })
+  })
 })
 
 class FakeAuditNamespace implements DataNamespace<AuditEntryV1> {
