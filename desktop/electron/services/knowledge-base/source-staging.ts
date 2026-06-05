@@ -1,5 +1,5 @@
 import { constants } from "node:fs"
-import { copyFile, lstat, mkdir, writeFile } from "node:fs/promises"
+import { copyFile, lstat, mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
@@ -136,6 +136,7 @@ export async function stageKnowledgeBaseSources(
           fileName: path.basename(sourcePath),
           ...knowledgeBaseErrorMeta(error),
         })
+        await removeStagedOriginal(projectPath, originalPath, originalRelativePath, "conversion-error")
         skipped.push({ path: filePath, reason: "conversion-error" })
         continue
       }
@@ -145,6 +146,7 @@ export async function stageKnowledgeBaseSources(
           fileName: path.basename(sourcePath),
           warningCodes: converted.warnings.map((warning) => warning.code),
         })
+        await removeStagedOriginal(projectPath, originalPath, originalRelativePath, "ocr-unavailable")
         skipped.push({ path: filePath, reason: "conversion-error" })
         continue
       }
@@ -238,6 +240,23 @@ function rawDirectoryForKind(kind: FileConversionResult["kind"]): string {
 
 function hasOcrUnavailableWarning(result: FileConversionResult): boolean {
   return result.warnings.some((warning) => warning.code === "ocr_unavailable")
+}
+
+async function removeStagedOriginal(
+  projectPath: string,
+  originalPath: string,
+  originalRelativePath: string,
+  reason: string,
+): Promise<void> {
+  try {
+    await rm(assertInside(projectPath, originalPath), { force: true })
+  } catch (error) {
+    knowledgeBaseLogger.warn("Knowledge Base staged original cleanup failed.", {
+      originalRelativePath,
+      reason,
+      ...knowledgeBaseErrorMeta(error),
+    })
+  }
 }
 
 function urlAcquisitionFailure(

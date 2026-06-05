@@ -179,6 +179,63 @@ describe("knowledge base source staging", () => {
     expect(String((warn.mock.calls[0]?.[1] as { error?: unknown } | undefined)?.error)).not.toContain("secret-value")
   })
 
+  it("removes archived originals when conversion fails", async () => {
+    const projectPath = await tempDir()
+    const inputDir = await tempDir()
+    const sourcePath = path.join(inputDir, "failed.docx")
+    await writeFile(sourcePath, "binary")
+
+    const result = await stageKnowledgeBaseSources({
+      projectPath,
+      filePaths: [sourcePath],
+      now: () => new Date("2026-05-23T13:00:00.000Z"),
+      converter: {
+        convert: async () => {
+          throw new Error("conversion failed")
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      uploaded: [],
+      skipped: [{ path: sourcePath, reason: "conversion-error" }],
+    })
+    await expect(access(path.join(projectPath, "_attachments", "originals", "2026", "05", "23", "failed.docx")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("removes archived originals when conversion reports OCR unavailable", async () => {
+    const projectPath = await tempDir()
+    const inputDir = await tempDir()
+    const sourcePath = path.join(inputDir, "scan.pdf")
+    await writeFile(sourcePath, "%PDF-1.7\n")
+
+    const result = await stageKnowledgeBaseSources({
+      projectPath,
+      filePaths: [sourcePath],
+      now: () => new Date("2026-05-23T13:00:00.000Z"),
+      converter: {
+        convert: async (): Promise<FileConversionResult> => ({
+          sourcePath,
+          format: "pdf",
+          kind: "pdf",
+          title: "scan.pdf",
+          markdown: "",
+          text: "",
+          metadata: {},
+          warnings: [{ code: "ocr_unavailable", message: "Local OCR is unavailable." }],
+        }),
+      },
+    })
+
+    expect(result).toEqual({
+      uploaded: [],
+      skipped: [{ path: sourcePath, reason: "conversion-error" }],
+    })
+    await expect(access(path.join(projectPath, "_attachments", "originals", "2026", "05", "23", "scan.pdf")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("stages URL sources into the dated raw web directory", async () => {
     const projectPath = await tempDir()
     const fetchUrl: FetchUrl = async () => ({
