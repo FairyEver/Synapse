@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import { createMainLogger } from "../services/log-store"
+import { sanitizeError } from "../services/error-sanitize"
 import {
   createUsagePriceRule,
   deleteUsagePriceRule,
@@ -23,7 +25,10 @@ type ModelPriceDispatcherDeps = {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly actor?: ActorIdentity
+  readonly logger?: ModelPriceDispatcherLogger
 }
+
+type ModelPriceDispatcherLogger = Pick<ReturnType<typeof createMainLogger>, "info" | "warn">
 
 type UsedModelRow = {
   readonly model: string
@@ -60,10 +65,14 @@ const MODEL_PRICE_MUTATION_ACTIONS = new Set([
   "model_price.rule.disable",
 ])
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
+const defaultLogger = createMainLogger("capability.model-price-dispatcher")
 
 export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherDeps) {
   return {
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
+      const logger = deps.logger ?? defaultLogger
+      const correlation = dispatchCorrelation(action, params, context)
+      logger.info("model price mcp dispatch", correlation)
       const security = modelPriceMutationSecurity(deps, action, params, context)
       if (security) await authorizeModelPriceMutation(deps, security)
       try {
@@ -77,6 +86,7 @@ export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherD
             metadata: security.metadata,
           })
         }
+        logger.info("model price mcp dispatch succeeded", correlation)
         return result
       } catch (error) {
         if (security) {
@@ -92,9 +102,49 @@ export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherD
             },
           })
         }
+        logger.warn("model price mcp dispatch failed", {
+          ...correlation,
+          ...dispatchErrorDiagnostic(error),
+        })
         throw error
       }
     },
+  }
+}
+
+function dispatchCorrelation(
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+): Record<string, unknown> {
+  const correlation: Record<string, unknown> = {
+    action,
+    source: context.source ?? "api",
+  }
+  if (typeof params.ruleId === "string" && params.ruleId.trim()) {
+    correlation.ruleId = sanitizeError(params.ruleId.trim())
+  }
+  if (typeof params.modelPattern === "string" && params.modelPattern.trim()) {
+    correlation.hasModelPattern = true
+  }
+  if (PRICE_FIELDS.some((field) => field in params)) {
+    correlation.hasPricePatch = true
+  }
+  if ("enabled" in params) {
+    correlation.hasEnabled = true
+  }
+  return correlation
+}
+
+function dispatchErrorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorMessage: string
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  const sanitized = sanitizeError(message)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorMessage: sanitized.length <= 200 ? sanitized : sanitized.slice(0, 200) + "...",
   }
 }
 

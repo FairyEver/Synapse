@@ -119,6 +119,42 @@ describe("model price capability dispatcher", () => {
     db.close()
   })
 
+  it("logs model price dispatch success and failures with sanitized error details", async () => {
+    const db = createTestDb()
+    const logger = createLoggerHarness()
+    const dispatcher = createModelPriceCapabilityDispatcher({ db, logger })
+
+    await dispatcher.dispatch("model_price.rule.create", {
+      modelPattern: "logged-model",
+      inputPer1M: 1,
+    }, { source: "mcp-http" })
+
+    expect(logger.info).toHaveBeenCalledWith("model price mcp dispatch", expect.objectContaining({
+      action: "model_price.rule.create",
+      source: "mcp-http",
+      hasModelPattern: true,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("model price mcp dispatch succeeded", expect.objectContaining({
+      action: "model_price.rule.create",
+      source: "mcp-http",
+      hasModelPattern: true,
+    }))
+
+    await expect(dispatcher.dispatch("model_price.rule.update", {
+      ruleId: "missing-token=secret-value",
+      outputPer1M: 2,
+    }, { source: "mcp-http" })).rejects.toThrow(/Model price rule not found/)
+
+    expect(logger.warn).toHaveBeenCalledWith("model price mcp dispatch failed", expect.objectContaining({
+      action: "model_price.rule.update",
+      source: "mcp-http",
+      ruleId: "missing-token=[redacted]",
+      errorName: "Error",
+      errorMessage: "Model price rule not found: missing-token=[redacted]",
+    }))
+    db.close()
+  })
+
   it("creates partially updates disables enables and deletes price rules by ruleId", async () => {
     const db = createTestDb()
     const dispatcher = createModelPriceCapabilityDispatcher({ db })
@@ -259,4 +295,12 @@ function createSecurityHarness() {
   }
 
   return { auditEvents, auditSink, permissionGuard }
+}
+
+function createLoggerHarness() {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
 }
