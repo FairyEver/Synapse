@@ -49,7 +49,8 @@ function AccountUserControl({
     state,
   } = useAccount()
   const { warning } = useAppNotifications()
-  const isBusy = isLoading || pendingAction !== null
+  const isAuthenticating = state.status === "authenticating"
+  const isBusy = isLoading || pendingAction !== null || isAuthenticating
 
   const runAndReport = async (action: () => Promise<SynapseAccountState>): Promise<void> => {
     const nextState = await action()
@@ -96,8 +97,12 @@ function AccountUserControl({
             </>
           ) : (
             <Button size="sm" disabled={isBusy} onClick={handleLogin}>
-              <CircleUserRound data-icon="inline-start" />
-              登录
+              {isAuthenticating ? (
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <CircleUserRound data-icon="inline-start" />
+              )}
+              {isAuthenticating ? "登录中" : "登录"}
             </Button>
           )}
         </div>
@@ -113,8 +118,12 @@ function AccountUserControl({
         disabled={isBusy}
         onClick={handleLogin}
       >
-        <CircleUserRound data-icon="inline-start" />
-        登录
+        {isAuthenticating ? (
+          <LoaderCircle data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <CircleUserRound data-icon="inline-start" />
+        )}
+        {isAuthenticating ? "登录中" : "登录"}
       </Button>
     )
   }

@@ -103,6 +103,19 @@ describe("AccountUserControl", () => {
     expect(container.textContent).toContain("user@example.com")
   })
 
+  it("disables login controls while waiting for browser authentication", () => {
+    accountState.current = { status: "authenticating", loginUrl: "https://example.com/login" }
+
+    const toolbar = renderControl("toolbar")
+    const panel = renderControl("panel")
+
+    expect(toolbar.textContent).toContain("登录")
+    expect(toolbar.querySelector("button")?.disabled).toBe(true)
+    expect(panel.textContent).toContain("登录中")
+    expect(panel.textContent).toContain("正在等待浏览器登录")
+    expect(panel.querySelector("button")?.disabled).toBe(true)
+  })
+
   it("does not render the top bar account control in packaged builds", () => {
     ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
       isPackaged: true,
