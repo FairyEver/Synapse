@@ -9,7 +9,7 @@ const logStoreMock = vi.hoisted(() => ({
 }))
 
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
-import type { WorkflowDefinition } from "../../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowRunSnapshot } from "../../../src/types/workflow"
 
 vi.mock("../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
@@ -90,6 +90,51 @@ describe("createWorkflowDispatcher", () => {
     const result = await dispatcher.dispatch("workflow.definition.create", {}, { source: "api" })
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({ id: "wf-new", versionHash: "v_new" })
+  })
+
+  it("workflow.run.get hydrates snapshot fallback to the run status contract", async () => {
+    const snapshot: WorkflowRunSnapshot = {
+      runId: "run-snap",
+      workflowId: "wf-1",
+      version: "v1",
+      startedAt: 1000,
+      endedAt: 1600,
+      status: "failed",
+      params: { topic: "alpha" },
+      nodeResults: {
+        prompt: {
+          nodeId: "prompt",
+          status: "failed",
+          input: { variables: {} },
+          error: "node failed",
+        },
+      },
+      error: "workflow failed",
+    }
+    const deps = makeDeps({
+      getRunStatus: vi.fn(async () => null),
+      snapshotService: {
+        ...makeDeps().snapshotService,
+        findByRunId: vi.fn(async () => snapshot),
+      } as unknown as WorkflowDispatchDeps["snapshotService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch("workflow.run.get", { runId: "run-snap" }, { source: "api" })
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual({
+      runId: "run-snap",
+      workflowId: "wf-1",
+      status: "failed",
+      nodeResults: snapshot.nodeResults,
+      startedAt: 1000,
+      endedAt: 1600,
+      durationMs: 600,
+      params: { topic: "alpha" },
+      error: "workflow failed",
+    })
+    expect(result.data).not.toHaveProperty("version")
   })
 
   it("serializes workflow.definition.update behind in-flight workflow mutations", async () => {

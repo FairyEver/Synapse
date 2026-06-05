@@ -4,7 +4,7 @@ import type { WorkflowService, WorkflowSaveResult, WorkflowSaveError } from "../
 import type { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import type { NodeTypeRegistry } from "../../workflow-nodes/registry"
 import type { EventBus } from "../runtime/event-bus/types"
-import type { WorkflowDefinition, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
+import type { WorkflowDefinition, WorkflowRunSnapshot, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
 import { validateWorkflow } from "../services/workflow/workflow-validator"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { createMainLogger } from "../services/log-store"
@@ -137,6 +137,28 @@ function autoPosition(nodes: WorkflowDefinition["nodes"]): { x: number; y: numbe
   return { x: maxX + 250, y: avgY }
 }
 
+function snapshotToRunStatus(snapshot: WorkflowRunSnapshot): WorkflowRunStatus {
+  let error = snapshot.error
+  if (snapshot.status === "failed" && !error) {
+    const failedNode = Object.values(snapshot.nodeResults).find((nodeResult) =>
+      nodeResult.status === "failed" && nodeResult.error
+    )
+    error = failedNode?.error
+  }
+  return {
+    runId: snapshot.runId,
+    workflowId: snapshot.workflowId,
+    status: snapshot.status,
+    nodeResults: snapshot.nodeResults,
+    startedAt: snapshot.startedAt,
+    endedAt: snapshot.endedAt,
+    durationMs: snapshot.endedAt ? snapshot.endedAt - snapshot.startedAt : undefined,
+    params: snapshot.params,
+    definition: snapshot.definition,
+    ...(error ? { error } : {}),
+  }
+}
+
 type ActionHandler = (params: Record<string, unknown>, deps: WorkflowDispatchDeps) => Promise<DispatchResult>
 
 const ACTION_HANDLERS: Record<string, ActionHandler> = {
@@ -201,7 +223,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const status = await deps.getRunStatus(runId)
     if (status) return { ok: true, data: status }
     const snapshot = await deps.snapshotService.findByRunId(runId)
-    return { ok: true, data: snapshot }
+    return { ok: true, data: snapshot ? snapshotToRunStatus(snapshot) : null }
   },
 
   "workflow.run.list": async (params, deps) => {
