@@ -280,6 +280,12 @@ describe("agent session IPC methods", () => {
     const filter = windowManager.broadcast.mock.calls[0]?.[2]
     expect(filter?.({ role: "main" })).toBe(true)
     expect(filter?.({ role: "detail" })).toBe(false)
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Agent conversation opened.", {
+      projectId: "project-1",
+      conversationId: "conv-workflow",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow",
+    })
   })
 
   it("does not open the Agent tab when the workflow conversation is gone", async () => {
@@ -302,6 +308,13 @@ describe("agent session IPC methods", () => {
 
     expect(windowManager.open).not.toHaveBeenCalled()
     expect(windowManager.broadcast).not.toHaveBeenCalled()
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith("Agent conversation open skipped.", {
+      projectId: "project-1",
+      conversationId: "conv-workflow",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow",
+      reason: "not-found",
+    })
   })
 
   it("logs session rename failures without recording the requested title", async () => {

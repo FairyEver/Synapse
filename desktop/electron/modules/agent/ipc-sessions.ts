@@ -151,6 +151,13 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
       const conversation = await conversations.get(request.conversationId)
       if (!isRequestedConversation(conversation, request)) {
+        logger.warn("Agent conversation open skipped.", {
+          projectId: request.projectId,
+          conversationId: request.conversationId,
+          sessionKey: request.sessionKey,
+          platform: request.platform,
+          reason: "not-found",
+        })
         return { opened: false, reason: "not-found" }
       }
 
@@ -166,6 +173,12 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
         },
         (window) => window.role === "main",
       )
+      logger.info("Agent conversation opened.", {
+        projectId: request.projectId,
+        conversationId: request.conversationId,
+        sessionKey: request.sessionKey,
+        platform: request.platform,
+      })
       return { opened: true }
     },
   },
