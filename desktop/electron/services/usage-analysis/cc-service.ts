@@ -30,11 +30,15 @@ import type {
   UsageTimeBucket,
   UsageToolRow,
 } from "./types"
+import { createMainLogger } from "../log-store"
 
 interface UsageAnalysisServiceOptions {
   readonly db: DatabaseSync
   readonly roots: string[]
+  readonly logger?: UsageAnalysisLogger
 }
+
+type UsageAnalysisLogger = Pick<ReturnType<typeof createMainLogger>, "info" | "warn">
 
 interface ScanFileRow extends CcStoredScanFile {
   readonly size: number
@@ -143,14 +147,67 @@ function toCostNumber(value: unknown): number {
   return roundUsageCost(toNumber(value))
 }
 
+function countUsageEvents(db: DatabaseSync, prefix: "cc" | "cx"): number {
+  const row = db.prepare(`SELECT COUNT(*) AS count_value FROM ${prefix}_usage_events`).get() as { count_value?: number } | undefined
+  return toNumber(row?.count_value)
+}
+
+function pricingRuleLogSignature(rule: UsageModelPriceRule): string {
+  return JSON.stringify({
+    modelPattern: rule.modelPattern,
+    inputPer1M: rule.inputPer1M,
+    outputPer1M: rule.outputPer1M,
+    cacheReadPer1M: rule.cacheReadPer1M,
+    cacheWritePer1M: rule.cacheWritePer1M,
+    reasoningPer1M: rule.reasoningPer1M,
+    currency: rule.currency,
+    enabled: rule.enabled,
+    source: rule.source,
+    sortIndex: rule.sortIndex,
+  })
+}
+
+function createPricingRulesSaveLogMetadata(
+  db: DatabaseSync,
+  oldRules: readonly UsageModelPriceRule[],
+  newRules: readonly UsageModelPriceRule[],
+): Record<string, unknown> {
+  const oldById = new Map(oldRules.map((rule) => [rule.id, rule]))
+  const newById = new Map(newRules.map((rule) => [rule.id, rule]))
+  const addedRuleIds = newRules.filter((rule) => !oldById.has(rule.id)).map((rule) => rule.id)
+  const removedRuleIds = oldRules.filter((rule) => !newById.has(rule.id)).map((rule) => rule.id)
+  const changedRuleIds = newRules
+    .filter((rule) => {
+      const oldRule = oldById.get(rule.id)
+      return oldRule !== undefined && pricingRuleLogSignature(oldRule) !== pricingRuleLogSignature(rule)
+    })
+    .map((rule) => rule.id)
+
+  return {
+    oldRuleCount: oldRules.length,
+    newRuleCount: newRules.length,
+    oldRulesHash: hashUsagePriceRules(oldRules),
+    newRulesHash: hashUsagePriceRules(newRules),
+    addedRuleIds,
+    removedRuleIds,
+    changedRuleIds,
+    affectedEvents: {
+      cc: countUsageEvents(db, "cc"),
+      cx: countUsageEvents(db, "cx"),
+    },
+  }
+}
+
 export class CcUsageAnalysisService {
   protected readonly db: DatabaseSync
   protected readonly roots: string[]
   protected readonly prefix: "cc" | "cx" = "cc"
+  private readonly logger: UsageAnalysisLogger
 
   constructor(options: UsageAnalysisServiceOptions) {
     this.db = options.db
     this.roots = options.roots
+    this.logger = options.logger ?? createMainLogger("service.usage-analysis")
   }
 
   async refresh(): Promise<UsageRefreshResult> {
@@ -203,7 +260,14 @@ export class CcUsageAnalysisService {
   }
 
   savePricingRules(rules: readonly UsageModelPriceRuleInput[]): UsageModelPriceRule[] {
-    return saveUsagePriceRules(this.db, rules)
+    const startedAt = Date.now()
+    const oldRules = listUsagePriceRules(this.db)
+    const savedRules = saveUsagePriceRules(this.db, rules)
+    this.logger.info("Usage pricing rules saved.", {
+      ...createPricingRulesSaveLogMetadata(this.db, oldRules, savedRules),
+      elapsedMs: Date.now() - startedAt,
+    })
+    return savedRules
   }
 
   resetPricingRules(): UsageModelPriceRule[] {

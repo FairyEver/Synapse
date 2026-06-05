@@ -4,6 +4,7 @@ import path from "node:path"
 import { app } from "electron"
 import { USAGE_ANALYSIS_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
+import { createMainLogger } from "../services/log-store"
 import {
   getUsageAnalysisDb,
   getUsageAnalysisDbPath,
@@ -197,6 +198,7 @@ function pathForPlatform(platform: NodeJS.Platform): typeof path.posix {
 
 export function registerUsageAnalysisHandlers(): void {
   if (registered) return
+  const logger = createMainLogger("usage-analysis.ipc")
   const userDataPath = app.getPath("userData")
   const db = getUsageAnalysisDb(userDataPath)
   const dbPath = getUsageAnalysisDbPath(userDataPath)
@@ -268,7 +270,15 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTools, async (_event, range?: UsageRangeInput) => codex.getTools(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexDetails, async (_event, range?: UsageDetailInput) => codex.getDetails(normalizeDetailsRange(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesGet, async () => cc.getPricingRules())
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesSave, async (_event, rules?: readonly UsageModelPriceRuleInput[]) => cc.savePricingRules(Array.isArray(rules) ? rules : []))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesSave, async (_event, rules?: readonly UsageModelPriceRuleInput[]) => {
+    const normalizedRules = Array.isArray(rules) ? rules : []
+    const savedRules = cc.savePricingRules(normalizedRules)
+    logger.info("Usage pricing rules save completed.", {
+      requestedRuleCount: normalizedRules.length,
+      savedRuleCount: savedRules.length,
+    })
+    return savedRules
+  })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesReset, async () => cc.resetPricingRules())
 
   registered = true

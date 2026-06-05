@@ -11,6 +11,18 @@ import { CodexUsageAnalysisService } from "../codex-service"
 const tempDirs: string[] = []
 const WINDOWS_CI_TEST_TIMEOUT = 15_000
 
+function createRecordingLogger() {
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    child: vi.fn(() => logger),
+  }
+  return logger
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
@@ -19,6 +31,38 @@ afterEach(() => {
 })
 
 describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
+  it("logs pricing rule saves with rule changes and affected event counts", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const logger = createRecordingLogger()
+    const service = new CcUsageAnalysisService({ db, roots: [], logger })
+    db.exec(`
+      INSERT INTO cc_usage_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider
+      ) VALUES ('cc-usage-1', 'session-1', 1779843600000, '2026-05-27', '2026-05-27 09', '-repo', '/repo', 'local-model', 'anthropic')
+    `)
+    db.exec(`
+      INSERT INTO cx_usage_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider
+      ) VALUES ('cx-usage-1', 'session-2', 1779847200000, '2026-05-27', '2026-05-27 10', '-repo', '/repo', 'local-model', 'openai')
+    `)
+
+    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
+
+    expect(logger.info).toHaveBeenCalledWith("Usage pricing rules saved.", expect.objectContaining({
+      oldRuleCount: expect.any(Number),
+      newRuleCount: 1,
+      oldRulesHash: expect.any(String),
+      newRulesHash: expect.any(String),
+      addedRuleIds: ["local-model"],
+      removedRuleIds: expect.any(Array),
+      changedRuleIds: expect.any(Array),
+      affectedEvents: { cc: 1, cx: 1 },
+      elapsedMs: expect.any(Number),
+    }))
+  })
+
   it("includes stable focus fields in CC details rows", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)
