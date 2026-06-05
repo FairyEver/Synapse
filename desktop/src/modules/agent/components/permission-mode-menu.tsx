@@ -45,7 +45,7 @@ function AgentPermissionModeMenu({
       <DropdownMenuTrigger asChild>
         {trigger}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className={cn("w-[390px]", contentClassName)} forceMount>
+      <DropdownMenuContent align={align} className={cn("w-[340px]", contentClassName)} forceMount>
         {permissionModes.map((mode) => (
           <HoverCard key={mode} openDelay={100} closeDelay={100}>
             <HoverCardTrigger asChild>
@@ -74,7 +74,6 @@ function AgentPermissionModeMenu({
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate font-medium">{permissionModeLabels[mode]}</span>
-                    <PermissionModeRiskBadge mode={mode} />
                     {mode === selectedMode ? (
                       <span className="text-xs text-muted-foreground">当前</span>
                     ) : null}

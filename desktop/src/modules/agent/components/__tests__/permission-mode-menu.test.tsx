@@ -96,15 +96,16 @@ describe("AgentPermissionModeMenu", () => {
     const description = findElementByText("跳过所有权限确认；所有到达权限层的工具都会直接执行。")
 
     expect(item.textContent).toContain("跳过权限确认")
-    expect(item.textContent).toContain("高风险")
+    expect(item.textContent).not.toContain("高风险")
     expect(item.querySelector("svg")).toBeNull()
-    expect(content?.className).toContain("w-[390px]")
+    expect(content?.className).toContain("w-[340px]")
     expect(description?.className).toContain("text-[11px]")
 
     await hoverElement(item)
 
     expect(document.body.textContent).toContain("bypassPermissions")
     expect(document.body.textContent).toContain("Bypass all permission checks")
+    expect(document.body.textContent).toContain("高风险")
     expect(document.body.textContent).toContain("所有到达权限层的工具都会直接执行")
     expect(document.body.textContent).toContain("只建议在隔离环境或完全信任任务时使用")
     expect(findElementByText("只建议在隔离环境或完全信任任务时使用。")?.className).toContain("text-xs")
