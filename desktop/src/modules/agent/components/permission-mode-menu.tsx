@@ -1,7 +1,5 @@
 import type { ReactNode } from "react"
 
-import { AlertTriangle } from "lucide-react"
-
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -47,7 +45,7 @@ function AgentPermissionModeMenu({
       <DropdownMenuTrigger asChild>
         {trigger}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className={cn("w-72", contentClassName)} forceMount>
+      <DropdownMenuContent align={align} className={cn("w-[390px]", contentClassName)} forceMount>
         {permissionModes.map((mode) => (
           <HoverCard key={mode} openDelay={100} closeDelay={100}>
             <HoverCardTrigger asChild>
@@ -73,9 +71,6 @@ function AgentPermissionModeMenu({
                   onSelect(mode)
                 }}
               >
-                {mode === "bypassPermissions" ? (
-                  <AlertTriangle className="mt-0.5 size-4 text-destructive" />
-                ) : null}
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate font-medium">{permissionModeLabels[mode]}</span>
@@ -84,25 +79,20 @@ function AgentPermissionModeMenu({
                       <span className="text-xs text-muted-foreground">当前</span>
                     ) : null}
                   </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
                     {permissionModeDescriptions[mode]}
                   </span>
                 </span>
               </DropdownMenuItem>
             </HoverCardTrigger>
             <HoverCardContent side="left" align="center" className="w-80">
-              <div className="flex items-start gap-2">
-                {mode === "bypassPermissions" ? (
-                  <AlertTriangle className="mt-0.5 size-4 text-destructive" />
-                ) : null}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <div className="min-w-0 flex-1 truncate font-medium">{permissionModeLabels[mode]}</div>
-                    <PermissionModeRiskBadge mode={mode} />
-                  </div>
-                  <div className="mt-1 font-mono text-xs text-muted-foreground">{mode}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{permissionModeHelp[mode].englishLabel}</div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <div className="min-w-0 flex-1 truncate font-medium">{permissionModeLabels[mode]}</div>
+                  <PermissionModeRiskBadge mode={mode} />
                 </div>
+                <div className="mt-1 font-mono text-xs text-muted-foreground">{mode}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{permissionModeHelp[mode].englishLabel}</div>
               </div>
               <Separator className="my-2" />
               <div className="space-y-2 text-sm">
@@ -137,7 +127,7 @@ function PermissionModeHelpLine({ label, text }: { readonly label: string; reado
   return (
     <div className="flex gap-2">
       <div className="w-16 shrink-0 text-xs text-muted-foreground">{label}</div>
-      <div className="min-w-0 flex-1 leading-relaxed">{text}</div>
+      <div className="min-w-0 flex-1 text-xs leading-relaxed">{text}</div>
     </div>
   )
 }

@@ -92,9 +92,14 @@ describe("AgentPermissionModeMenu", () => {
 
     openMenu(container)
     const item = getModeItem("bypassPermissions")
+    const content = document.querySelector('[data-slot="dropdown-menu-content"]')
+    const description = findElementByText("跳过所有权限确认；所有到达权限层的工具都会直接执行。")
 
     expect(item.textContent).toContain("跳过权限确认")
     expect(item.textContent).toContain("高风险")
+    expect(item.querySelector("svg")).toBeNull()
+    expect(content?.className).toContain("w-[390px]")
+    expect(description?.className).toContain("text-[11px]")
 
     await hoverElement(item)
 
@@ -102,6 +107,7 @@ describe("AgentPermissionModeMenu", () => {
     expect(document.body.textContent).toContain("Bypass all permission checks")
     expect(document.body.textContent).toContain("所有到达权限层的工具都会直接执行")
     expect(document.body.textContent).toContain("只建议在隔离环境或完全信任任务时使用")
+    expect(findElementByText("只建议在隔离环境或完全信任任务时使用。")?.className).toContain("text-xs")
   })
 })
 
@@ -118,6 +124,10 @@ function getModeItem(mode: string) {
   const item = document.querySelector(`[data-mode="${mode}"]`)
   expect(item).toBeTruthy()
   return item as HTMLElement
+}
+
+function findElementByText(text: string) {
+  return Array.from(document.querySelectorAll("*")).find((element) => element.textContent === text)
 }
 
 function wait(ms: number) {
