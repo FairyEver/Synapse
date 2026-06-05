@@ -8,6 +8,7 @@ import type { Request } from "express"
 import { catchError, from, mergeMap, Observable, throwError } from "rxjs"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
+import { formatAuditError } from "./audit-error"
 import { AuditLogService } from "./audit-log.service"
 
 const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
@@ -60,7 +61,7 @@ export class AuditLogInterceptor implements NestInterceptor {
           method,
           path,
           body: redactSensitiveBody(request.body),
-          ...(error ? { error: formatError(error) } : {}),
+          ...(error ? { error: formatAuditError(error) } : {}),
         },
         ipAddress: request.ip ?? "",
       })
@@ -79,10 +80,6 @@ export class AuditLogInterceptor implements NestInterceptor {
       }),
     )
   }
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function redactSensitiveBody(value: unknown): unknown {

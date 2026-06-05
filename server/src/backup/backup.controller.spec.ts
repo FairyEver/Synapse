@@ -106,6 +106,46 @@ describe("BackupController", () => {
     }))
   })
 
+  it("redacts sensitive backup download errors before recording audit details", async () => {
+    const rawError = [
+      "download failed Authorization: Bearer secret-bearer",
+      "token=plain-token",
+      "apiKey=plain-api-key",
+      "https://user:password@internal.example.com/bucket/key",
+      "/Users/liyang/private/backup.sql",
+    ].join(" ")
+    const error = new Error(rawError)
+    const stream = new Readable({
+      read() {
+        this.destroy(error)
+      },
+    })
+    const service = {
+      downloadBackup: vi.fn().mockReturnValue(stream),
+    }
+    const response = new Writable({
+      write(_chunk: Buffer, _encoding, callback) {
+        callback()
+      },
+    }) as Writable & { set: ReturnType<typeof vi.fn>; headersSent: boolean }
+    response.set = vi.fn()
+    Object.defineProperty(response, "headersSent", { value: false })
+    const auditLog = {
+      record: vi.fn().mockResolvedValue(undefined),
+    }
+    const controller = new BackupController(service as unknown as BackupService, auditLog as never)
+
+    await expect(controller.downloadBackup("synapse-backup.tar", response as never)).rejects.toThrow(rawError)
+
+    const detail = auditLog.record.mock.calls[0]?.[0].detail
+    expect(detail.error).toContain("[REDACTED]")
+    expect(JSON.stringify(detail)).not.toContain("secret-bearer")
+    expect(JSON.stringify(detail)).not.toContain("plain-token")
+    expect(JSON.stringify(detail)).not.toContain("plain-api-key")
+    expect(JSON.stringify(detail)).not.toContain("internal.example.com")
+    expect(JSON.stringify(detail)).not.toContain("/Users/liyang/private")
+  })
+
   it("destroys the response on backup stream errors after headers are sent", async () => {
     const error = new Error("COS stream failed")
     let readStarted = false

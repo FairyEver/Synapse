@@ -3,6 +3,7 @@ import type { Response } from "express"
 import { pipeline } from "node:stream/promises"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
+import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { BackupService } from "./backup.service"
 
@@ -66,15 +67,11 @@ export class BackupController {
       targetId: filename,
       detail: {
         filename,
-        ...(error ? { error: formatError(error) } : {}),
+        ...(error ? { error: formatAuditError(error) } : {}),
       },
       ipAddress: request?.ip ?? "",
     })
   }
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function contentType(filename: string): string {

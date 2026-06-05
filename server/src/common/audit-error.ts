@@ -1,0 +1,28 @@
+const REDACTED_VALUE = "[REDACTED]"
+const REDACTED_URL = "[URL]"
+const REDACTED_PATH = "[PATH]"
+const MAX_AUDIT_ERROR_LENGTH = 300
+
+const AUTHORIZATION_PATTERN = /\bAuthorization\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/gi
+const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+const SENSITIVE_ASSIGNMENT_PATTERN = /\b(token|api[_-]?key|secret|password|credential)\s*=\s*[^&\s,;]+/gi
+const SENSITIVE_JSON_FIELD_PATTERN = /(["']?(?:token|api[_-]?key|secret|password|credential)["']?\s*:\s*)["'][^"']*["']/gi
+const URL_PATTERN = /\bhttps?:\/\/[^\s<>"']+/gi
+const POSIX_PATH_PATTERN = /(?:\/(?:Users|home|private|tmp|var|opt)\/[^\s,;)]*)/g
+const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\[^\s,;)]+/g
+
+export function formatAuditError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error)
+  const redacted = raw
+    .replace(AUTHORIZATION_PATTERN, `Authorization: ${REDACTED_VALUE}`)
+    .replace(BEARER_PATTERN, `Bearer ${REDACTED_VALUE}`)
+    .replace(SENSITIVE_JSON_FIELD_PATTERN, `$1"${REDACTED_VALUE}"`)
+    .replace(SENSITIVE_ASSIGNMENT_PATTERN, (_match, key: string) => `${key}=${REDACTED_VALUE}`)
+    .replace(URL_PATTERN, REDACTED_URL)
+    .replace(POSIX_PATH_PATTERN, REDACTED_PATH)
+    .replace(WINDOWS_PATH_PATTERN, REDACTED_PATH)
+
+  return redacted.length > MAX_AUDIT_ERROR_LENGTH
+    ? `${redacted.slice(0, MAX_AUDIT_ERROR_LENGTH)}...`
+    : redacted
+}

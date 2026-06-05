@@ -299,6 +299,39 @@ describe("AuditLogInterceptor", () => {
     expect(auth.getEmail).not.toHaveBeenCalled()
   })
 
+  it("redacts sensitive failed operation errors before recording audit details", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+    const rawError = [
+      "COS failed Authorization: Bearer secret-bearer",
+      "token=plain-token",
+      "apiKey=plain-api-key",
+      "https://user:password@internal.example.com/bucket/key",
+      "/Users/liyang/private/backup.sql",
+    ].join(" ")
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/logs/recent",
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error(rawError)) },
+    ))).rejects.toThrow(rawError)
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalled()
+    })
+    const detail = auditLog.record.mock.calls[0]?.[0].detail
+    expect(detail.error).toContain("[REDACTED]")
+    expect(JSON.stringify(detail)).not.toContain("secret-bearer")
+    expect(JSON.stringify(detail)).not.toContain("plain-token")
+    expect(JSON.stringify(detail)).not.toContain("plain-api-key")
+    expect(JSON.stringify(detail)).not.toContain("internal.example.com")
+    expect(JSON.stringify(detail)).not.toContain("/Users/liyang/private")
+  })
+
   it("records failed module permission updates with the module permission audit action", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
