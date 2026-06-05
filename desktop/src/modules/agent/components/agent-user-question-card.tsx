@@ -13,6 +13,8 @@ import type {
 } from "@/types/agent"
 import { formatAgentInputText, sanitizeAgentRawInput } from "../utils"
 
+const ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE = "未收到选择，已停止操作。"
+
 type AgentUserQuestionCardProps = {
   readonly item: SynapseAgentPermissionRequestTimelineItem
   readonly pending: boolean
@@ -106,7 +108,7 @@ function AgentUserQuestionCard({
       },
     })
     try {
-      await onRespond(item.requestId, "deny", undefined, "User skipped the question.")
+      await onRespond(item.requestId, "deny", undefined, ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE)
     } catch {
       setSubmitting(false)
     }

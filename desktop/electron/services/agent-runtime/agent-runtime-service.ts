@@ -730,7 +730,7 @@ export class AgentRuntimeService {
       await pending.liveSession.respondPermission(request.requestId, {
         behavior: request.behavior,
         updatedInput,
-        message: request.message,
+        message: askUserQuestionResponseMessage(request),
       })
       this.sessionManager.settlePendingPermission(pending)
       return
@@ -1265,6 +1265,14 @@ function askUserQuestionUpdatedInput(
     questions,
     answers,
   }
+}
+
+function askUserQuestionResponseMessage(request: AgentPermissionResponseRequest): string | undefined {
+  if (request.behavior !== "deny") return request.message
+  const answers = recordValue(request.updatedInput?.answers)
+  return answers && Object.keys(answers).length > 0
+    ? request.message
+    : ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {

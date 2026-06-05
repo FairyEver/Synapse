@@ -664,6 +664,48 @@ describe("AgentRuntimeService", () => {
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
 
+  it("uses empty answer stop wording for AskUserQuestion deny responses without answers", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "该怎么处理？",
+      header: "处理方式",
+      options: [
+        { label: "跳过" },
+        { label: "重试" },
+      ],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "question skipped")
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionGuard: permissionGuard as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choice"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "deny",
+      message: "User skipped the question.",
+      actor: { kind: "user" },
+    })
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "deny",
+      message: "未收到选择，已停止操作。",
+    }])
+    await expect(turn).resolves.toMatchObject({ resultText: "question skipped" })
+  })
+
   it("uses answer timeout wording for AskUserQuestion pending requests", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const questions = [{

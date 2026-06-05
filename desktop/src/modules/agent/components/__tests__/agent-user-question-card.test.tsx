@@ -137,7 +137,7 @@ describe("AgentUserQuestionCard", () => {
       "request-1",
       "deny",
       undefined,
-      "User skipped the question.",
+      "未收到选择，已停止操作。",
     )
   })
 })
