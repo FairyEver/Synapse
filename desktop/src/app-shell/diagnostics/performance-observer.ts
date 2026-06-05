@@ -23,7 +23,7 @@ export function installPerformanceObserver(logger: RendererLogger): () => void {
             guardedLog(logger, "warn", `长任务 duration=${Math.round(entry.duration)}ms startTime=${Math.round(entry.startTime)}ms`, {
               duration: entry.duration,
               startTime: entry.startTime,
-              attribution: (entry as unknown as { attribution?: unknown[] }).attribution,
+              attributionCount: getAttributionCount(entry),
             })
           }
         }
@@ -54,4 +54,9 @@ export function installPerformanceObserver(logger: RendererLogger): () => void {
     observer?.disconnect()
     if (memoryTimer !== null) clearInterval(memoryTimer)
   }
+}
+
+function getAttributionCount(entry: PerformanceEntry): number {
+  const attribution = (entry as unknown as { attribution?: unknown[] }).attribution
+  return Array.isArray(attribution) ? attribution.length : 0
 }

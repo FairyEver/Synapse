@@ -35,6 +35,7 @@ describe("installPerformanceObserver", () => {
     const [msg, meta] = logger.warn.mock.calls[0]
     expect(msg).toContain("230")
     expect(meta).toHaveProperty("duration", 230)
+    expect(meta).toHaveProperty("attributionCount", 0)
     cleanup()
   })
 

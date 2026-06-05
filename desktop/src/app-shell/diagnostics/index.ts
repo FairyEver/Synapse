@@ -5,6 +5,7 @@ import { installNetworkInterceptor } from "./network-interceptor"
 import { installResourceErrorListener } from "./resource-error-listener"
 import { installPerformanceObserver } from "./performance-observer"
 import { installHeartbeatResponder } from "./heartbeat-responder"
+import { installReactPerformanceMeasureGuard } from "./react-performance-measure-guard"
 
 export function installDiagnostics(): () => void {
   const consoleLogger = createRendererLogger("diagnostics.console")
@@ -14,6 +15,7 @@ export function installDiagnostics(): () => void {
   const performanceLogger = createRendererLogger("diagnostics.performance")
 
   const cleanups = [
+    installReactPerformanceMeasureGuard(),
     installConsoleInterceptor(consoleLogger),
     installGlobalErrorListener(globalErrorLogger),
     installNetworkInterceptor(networkLogger),

@@ -61,6 +61,8 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
     logger.error("Preload script failed.", { error })
   })
 
+  attachDevelopmentInputShortcuts(window)
+
   window.once("ready-to-show", () => {
     logger.info("Main window is ready to show.")
     window.show()
@@ -96,6 +98,23 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
   }
 
   return window
+}
+
+export function isDevToolsToggleShortcut(input: Electron.Input): boolean {
+  if (input.type !== "keyDown") return false
+  const key = input.key.toLowerCase()
+  const commandOrControl = input.meta || input.control
+  return key === "f12" || (commandOrControl && input.alt && key === "i")
+}
+
+function attachDevelopmentInputShortcuts(window: BrowserWindow): void {
+  if (!process.env.VITE_DEV_SERVER_URL) return
+
+  window.webContents.on("before-input-event", (event, input) => {
+    if (!isDevToolsToggleShortcut(input)) return
+    event.preventDefault()
+    window.webContents.toggleDevTools()
+  })
 }
 
 export function showOrCreateMainWindow(deps: MainWindowDeps): void {
