@@ -140,17 +140,6 @@ export async function stageKnowledgeBaseSources(
         skipped.push({ path: filePath, reason: "conversion-error" })
         continue
       }
-      if (hasOcrUnavailableWarning(converted)) {
-        knowledgeBaseLogger.warn("Knowledge Base source conversion returned OCR unavailable.", {
-          extension,
-          fileName: path.basename(sourcePath),
-          warningCodes: converted.warnings.map((warning) => warning.code),
-        })
-        await removeStagedOriginal(projectPath, originalPath, originalRelativePath, "ocr-unavailable")
-        skipped.push({ path: filePath, reason: "conversion-error" })
-        continue
-      }
-
       const rawKindDir = rawDirectoryForKind(converted.kind)
       const rawRelativeDir = path.join(".raw", rawKindDir, ...datePathSegments(input.now()))
       const rawDir = assertInside(projectPath, path.join(projectPath, rawRelativeDir))
@@ -237,10 +226,6 @@ function rawDirectoryForKind(kind: FileConversionResult["kind"]): string {
   if (kind === "presentation") return "presentations"
   if (kind === "image") return "images"
   return "pdfs"
-}
-
-function hasOcrUnavailableWarning(result: FileConversionResult): boolean {
-  return result.warnings.some((warning) => warning.code === "ocr_unavailable")
 }
 
 async function removeStagedOriginal(

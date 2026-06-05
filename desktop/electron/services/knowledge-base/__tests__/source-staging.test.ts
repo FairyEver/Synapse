@@ -204,7 +204,7 @@ describe("knowledge base source staging", () => {
       .rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("removes archived originals when conversion reports OCR unavailable", async () => {
+  it("keeps converted markdown when conversion reports OCR unavailable", async () => {
     const projectPath = await tempDir()
     const inputDir = await tempDir()
     const sourcePath = path.join(inputDir, "scan.pdf")
@@ -229,11 +229,18 @@ describe("knowledge base source staging", () => {
     })
 
     expect(result).toEqual({
-      uploaded: [],
-      skipped: [{ path: sourcePath, reason: "conversion-error" }],
+      uploaded: [expect.objectContaining({
+        originalPath: sourcePath,
+        relativePath: ".raw/pdfs/2026/05/23/scan.md",
+        originalRelativePath: "_attachments/originals/2026/05/23/scan.pdf",
+        conversionWarnings: [{ code: "ocr_unavailable", message: "Local OCR is unavailable." }],
+      })],
+      skipped: [],
     })
-    await expect(access(path.join(projectPath, "_attachments", "originals", "2026", "05", "23", "scan.pdf")))
-      .rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(projectPath, ".raw", "pdfs", "2026", "05", "23", "scan.md"), "utf8"))
+      .resolves.toContain('source_format: "pdf"')
+    await expect(readFile(path.join(projectPath, "_attachments", "originals", "2026", "05", "23", "scan.pdf"), "utf8"))
+      .resolves.toBe("%PDF-1.7\n")
   })
 
   it("stages URL sources into the dated raw web directory", async () => {
