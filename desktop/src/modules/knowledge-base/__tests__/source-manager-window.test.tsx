@@ -240,6 +240,14 @@ function lastRawMutationSuccessMessage(result: SynapseKnowledgeBaseRawMutationRe
   return options.success ?? null
 }
 
+function lastPromiseErrorMessage(): string | null {
+  const options = notifications.promise.mock.calls.at(-1)?.[1] as {
+    error?: string | null
+  } | undefined
+  if (!options) throw new Error("Promise notification options not found.")
+  return options.error ?? null
+}
+
 function changeInput(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
   setter?.call(input, value)
@@ -1649,6 +1657,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       relativePaths: ["brief.md"],
     })
     expect(lastRawMutationSuccessMessage(trashResult)).toBe("已移到废纸篓 1 项，跳过 1 项（删除失败 1）")
+    expect(lastPromiseErrorMessage()).toBe("移到废纸篓失败")
   })
 
   it("exports one entry from the row menu", async () => {

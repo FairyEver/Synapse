@@ -1123,7 +1123,7 @@ function KnowledgeBaseSourceManagerWindow() {
       {
         loading: "正在移到废纸篓",
         success: (result) => rawMutationSuccessMessage(result, "已移到废纸篓", "没有可删除的条目"),
-        error: "移动失败",
+        error: "移到废纸篓失败",
       },
     )
   }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory])
