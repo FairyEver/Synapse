@@ -259,6 +259,22 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('[data-layout="automation-editor-divider"]')).not.toBeNull()
   })
 
+  it("keeps automation choice rows auto-height with compact padding", async () => {
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+
+    const cronChoice = findButtonContaining("Cron")
+
+    expect(cronChoice?.className).not.toMatch(/\bmin-h-/)
+    expect(cronChoice?.className).toContain("py-2")
+  })
+
   it("constrains long executor content inside the editor viewport", async () => {
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
     const rootElement = document.createElement("div")

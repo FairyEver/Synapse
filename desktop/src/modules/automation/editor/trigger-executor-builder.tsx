@@ -92,7 +92,7 @@ function ChoiceList({
         <button
           key={item.id}
           type="button"
-          className="flex min-h-16 w-full items-center justify-between gap-4 rounded-lg bg-transparent px-2 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full items-center justify-between gap-4 rounded-lg bg-transparent px-3 py-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onSelect(item.id)}
         >
           <span className="min-w-0">
