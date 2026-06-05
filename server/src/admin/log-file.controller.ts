@@ -1,4 +1,4 @@
-import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException, InternalServerErrorException } from "@nestjs/common";
+import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException, InternalServerErrorException, Logger } from "@nestjs/common";
 import type { Response } from "express";
 import { LogFileService } from "./log-file.service";
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard";
@@ -7,6 +7,7 @@ import { AuditLogService } from "../common/audit-log.service";
 const DEFAULT_RECENT_LOG_LIMIT = 200;
 const MAX_RECENT_LOG_LIMIT = 1000;
 const MIN_CLEANUP_RETENTION_DAYS = 30;
+type AuditRecordInput = Parameters<AuditLogService["record"]>[0];
 
 function parseRecentLogLimit(limitStr?: string): number {
   if (!limitStr) return DEFAULT_RECENT_LOG_LIMIT;
@@ -78,6 +79,8 @@ function logDownloadFailureDetail(
 @Controller("/api/admin/logs")
 @UseGuards(AdminAuthGuard)
 export class LogFileController {
+  private readonly logger = new Logger(LogFileController.name);
+
   constructor(
     private readonly logFileService: LogFileService,
     private readonly auditLog: AuditLogService,
@@ -181,7 +184,7 @@ export class LogFileController {
     request: AdminRequest | undefined,
     input: { action: string; targetId: string; detail: unknown },
   ) {
-    return this.auditLog.record({
+    return this.recordAuditSafely({
       adminEmail: request?.admin?.email ?? "",
       action: input.action,
       targetType: "logs",
@@ -190,4 +193,25 @@ export class LogFileController {
       ipAddress: request?.ip ?? "",
     });
   }
+
+  private async recordAuditSafely(input: AuditRecordInput): Promise<void> {
+    try {
+      await this.auditLog.record(input);
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        ...auditWriteErrorMetadata(error),
+      }, "Failed to record log file audit");
+    }
+  }
+}
+
+function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  };
 }

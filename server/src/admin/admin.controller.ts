@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Logger, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -33,10 +33,13 @@ const userModulePermissionsSchema = z.object({
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
 const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
+type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(AdminAuthGuard)
 @Controller("/api/admin")
 export class AdminController {
+  private readonly logger = new Logger(AdminController.name)
+
   constructor(
     private readonly admin: AdminService,
     private readonly auditLog: AuditLogService,
@@ -200,7 +203,7 @@ export class AdminController {
     response.setHeader("Content-Type", "text/csv; charset=utf-8")
     response.setHeader("Content-Disposition", "attachment; filename=audit-logs.csv")
     response.send(csv)
-    await this.auditLog.record({
+    await this.recordAuditSafely({
       adminEmail: request.admin!.email,
       action: "admin.audit_logs.export",
       targetType: "audit_log",
@@ -219,7 +222,7 @@ export class AdminController {
       readonly detail?: unknown
     },
   ): Promise<void> {
-    await this.auditLog.record({
+    await this.recordAuditSafely({
       adminEmail: request?.admin?.email ?? "system",
       action: input.action,
       targetType: input.targetType,
@@ -227,5 +230,26 @@ export class AdminController {
       ...(input.detail === undefined ? undefined : { detail: input.detail }),
       ipAddress: request?.ip ?? "system",
     })
+  }
+
+  private async recordAuditSafely(input: AuditRecordInput): Promise<void> {
+    try {
+      await this.auditLog.record(input)
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        ...auditWriteErrorMetadata(error),
+      }, "Failed to record admin audit log")
+    }
+  }
+}
+
+function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
   }
 }

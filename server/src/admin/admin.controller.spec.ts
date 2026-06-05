@@ -68,6 +68,24 @@ describe("AdminController", () => {
     })
   })
 
+  it("keeps admin read responses when audit writes fail", async () => {
+    const result = { data: [], total: 0, page: 1, pageSize: 20 }
+    const list = vi.fn().mockResolvedValue(result)
+    const record = vi.fn().mockRejectedValue(new Error("audit database unavailable"))
+    const controller = createController({}, { list, record })
+
+    await expect(controller.listAuditLogs(
+      {},
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.10" } as never,
+    )).resolves.toEqual(result)
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.audit_logs.list",
+      targetType: "audit_log",
+      targetId: "list",
+    }))
+  })
+
   it("records audit logs for sensitive admin read endpoints", async () => {
     const list = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
     const record = vi.fn().mockResolvedValue(undefined)
@@ -120,6 +138,31 @@ describe("AdminController", () => {
       action: "admin.user_module_permissions.list",
       targetType: "user",
       targetId: "user-1",
+    }))
+  })
+
+  it("keeps exported audit log responses when audit writes fail after send", async () => {
+    const listForExport = vi.fn().mockResolvedValue([
+      { id: "audit-1", adminEmail: "admin@example.com", action: "admin.login" },
+    ])
+    const record = vi.fn().mockRejectedValue(new Error("audit database unavailable"))
+    const controller = createController({}, { listForExport, record })
+    const response = {
+      setHeader: vi.fn(),
+      send: vi.fn(),
+    }
+
+    await expect(controller.exportAuditLogs(
+      {},
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.12" } as never,
+      response as never,
+    )).resolves.toBeUndefined()
+
+    expect(response.send).toHaveBeenCalledWith(expect.stringContaining("audit-1"))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.audit_logs.export",
+      targetType: "audit_log",
+      targetId: "export",
     }))
   })
 

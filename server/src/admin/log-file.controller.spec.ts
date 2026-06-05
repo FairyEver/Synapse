@@ -157,6 +157,24 @@ describe("LogFileController", () => {
     });
   });
 
+  it("keeps cleanup responses when audit writes fail", async () => {
+    const { controller, auditLog, service } = createController();
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    auditLog.record.mockRejectedValueOnce(new Error("audit database unavailable"));
+
+    await expect(controller.cleanup(cutoff, {
+      admin: { email: "admin@example.com" },
+      ip: "203.0.113.10",
+    } as never)).resolves.toEqual({ deleted: 2 });
+
+    expect(service.cleanup).toHaveBeenCalledWith(cutoff);
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "logs.cleanup",
+      targetType: "logs",
+      targetId: cutoff,
+    }));
+  });
+
   it("records failed audit logs and rejects when cleanup partially fails", async () => {
     const { controller, auditLog, service } = createController();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
