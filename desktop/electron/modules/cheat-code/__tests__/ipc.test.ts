@@ -3,6 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createInMemoryHarness } from "../../../runtime/ipc/registry"
 import { cheatCodeIpcModule } from "../ipc"
 
+const logger = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("../../../services/log-store", () => ({
+  createMainLogger: () => logger,
+}))
+
 const service = {
   getStates: vi.fn(),
   setState: vi.fn(),
@@ -25,6 +35,10 @@ describe("cheatCodeIpcModule", () => {
     })).resolves.toEqual({ "settings:test": false })
 
     expect(service.getStates).toHaveBeenCalledWith(["settings:test"])
+    expect(logger.info).toHaveBeenCalledWith("Cheat code IPC get states requested.", {
+      requestedCount: 1,
+      allStates: false,
+    })
   })
 
   it("sets and toggles state", async () => {
@@ -40,6 +54,14 @@ describe("cheatCodeIpcModule", () => {
 
     expect(service.setState).toHaveBeenCalledWith({ active: true, name: "settings:test" })
     expect(service.toggleState).toHaveBeenCalledWith("settings:test")
+    expect(logger.info).toHaveBeenCalledWith("Cheat code IPC set state requested.", {
+      name: "settings:test",
+      active: true,
+    })
+    expect(logger.info).toHaveBeenCalledWith("Cheat code IPC toggle state requested.", {
+      name: "settings:test",
+    })
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("sequence")
   })
 })
 
