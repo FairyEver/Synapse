@@ -194,7 +194,7 @@ function MainApp() {
       { id: "task-scheduler" as const, label: "定时" },
       { id: "automation" as const, label: "自动化" },
       { id: "tools" as const, label: "工具" },
-      { id: "editor-scan" as const, label: "本机" },
+      { id: "editor-scan" as const, label: "IDE" },
       { id: "usage-cc" as const, label: "CC" },
       { id: "usage-codex" as const, label: "Codex" },
       ...(workflowEntryVisible ? [{ id: "workflow" as const, label: "工作流" }] : []),
