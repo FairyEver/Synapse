@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     syncIndex: vi.fn(),
   },
   contentWriteService: {
+    createContent: vi.fn(),
     purgeContent: vi.fn(),
     updateContent: vi.fn(),
   },
@@ -27,9 +28,19 @@ const mocks = vi.hoisted(() => ({
   repositoryStore: {
     getRepositoryState: vi.fn(),
   },
+  pendingPushesService: {
+    clear: vi.fn(),
+    enqueue: vi.fn(),
+    markFailure: vi.fn(),
+    readState: vi.fn(),
+  },
   runGitCommand: vi.fn(),
   userIdentityService: {
     requireReadyRepoProfile: vi.fn(),
+  },
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }))
 
@@ -56,21 +67,16 @@ vi.mock("../config-store", () => ({
 }))
 
 vi.mock("../git-command", () => ({
+  isGitRebaseInProgress: vi.fn(),
   runGitCommand: mocks.runGitCommand,
 }))
 
 vi.mock("../log-store", () => ({
-  createMainLogger: () => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-  }),
+  createMainLogger: () => mocks.logger,
 }))
 
 vi.mock("../pending-pushes-service", () => ({
-  pendingPushesService: {
-    enqueue: vi.fn(),
-    readState: vi.fn(),
-  },
+  pendingPushesService: mocks.pendingPushesService,
 }))
 
 vi.mock("../repository-maintenance-service", () => ({
@@ -105,11 +111,33 @@ describe("contentSubmissionService", () => {
     })
     mocks.userIdentityService.requireReadyRepoProfile.mockResolvedValue(mocks.identity)
     mocks.contentIndexService.syncIndex.mockResolvedValue(undefined)
+    mocks.contentWriteService.createContent.mockResolvedValue({
+      id: "rule-1",
+      type: "rule",
+      title: "Rule",
+      latestHistoryDirname: "history-1",
+      modifiedAt: "2026-05-20T12:00:00.000Z",
+      gitPaths: ["/repo/rules/rule-1.md"],
+    })
     mocks.contentHistoryService.readCurrentDetail.mockResolvedValue({
       latestHistoryDirname: "remote-new",
       modifiedAt: "2026-05-20T12:00:00.000Z",
       modifiedByDisplayName: "Remote User",
     })
+    mocks.pendingPushesService.clear.mockResolvedValue(undefined)
+    mocks.pendingPushesService.enqueue.mockResolvedValue({
+      count: 1,
+      items: [{
+        id: "pending-1",
+        action: "create",
+        commitHash: "commit-1",
+        targetId: "rule-1",
+        title: "Rule",
+        createdAt: "2026-05-20T12:00:00.000Z",
+      }],
+    })
+    mocks.pendingPushesService.markFailure.mockResolvedValue(undefined)
+    mocks.pendingPushesService.readState.mockResolvedValue({ count: 0, items: [] })
   })
 
   it("pulls and syncs before update conflict detection", async () => {
@@ -212,6 +240,62 @@ describe("contentSubmissionService", () => {
       latestHistoryDirname: "local-old",
       latestModifiedAt: "2026-05-20T12:00:00.000Z",
       latestModifiedByDisplayName: "Remote User",
+    })
+  })
+
+  it("returns saved content when syncIndex fails after a git commit", async () => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    const syncError = new Error("index database locked")
+    mocks.contentIndexService.syncIndex.mockRejectedValueOnce(syncError)
+
+    const result = await contentSubmissionService.createContent({
+      contentType: "rule",
+      payload: {
+        title: "Rule",
+        body: "content",
+      },
+    } as never)
+
+    expect(result).toEqual(expect.objectContaining({
+      id: "rule-1",
+      type: "rule",
+      status: "saved",
+      pushed: false,
+      pendingPushCount: 1,
+    }))
+    expect(mocks.pendingPushesService.enqueue).toHaveBeenCalled()
+    expect(mocks.logger.warn).toHaveBeenCalledWith("commitAndMaybePush: syncIndex failed after git mutation.", {
+      action: "create",
+      error: syncError,
+      repositoryUuid: "repo-1",
+    })
+  })
+
+  it("does not fail pending push flush when syncIndex fails after push records are cleared", async () => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    const syncError = new Error("index database locked")
+    mocks.pendingPushesService.readState.mockResolvedValueOnce({
+      count: 1,
+      items: [{
+        id: "pending-1",
+        action: "create",
+        commitHash: "commit-1",
+        targetId: "rule-1",
+        title: "Rule",
+        createdAt: "2026-05-20T12:00:00.000Z",
+      }],
+    })
+    mocks.contentIndexService.syncIndex.mockRejectedValueOnce(syncError)
+
+    await expect(contentSubmissionService.flushPendingPushes(mocks.repository, undefined, { skipLock: true }))
+      .resolves
+      .toBeUndefined()
+
+    expect(mocks.pendingPushesService.clear).toHaveBeenCalledWith(mocks.repository, ["pending-1"])
+    expect(mocks.pendingPushesService.markFailure).not.toHaveBeenCalled()
+    expect(mocks.logger.warn).toHaveBeenCalledWith("flushPendingPushes: syncIndex failed after git mutation.", {
+      error: syncError,
+      repositoryUuid: "repo-1",
     })
   })
 })

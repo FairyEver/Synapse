@@ -201,6 +201,32 @@ async function readReadyRepositoryState(repository: SynapseRepositoryConfig) {
   return repositoryState
 }
 
+async function syncIndexAfterGitMutation(
+  repository: SynapseRepositoryConfig,
+  options: {
+    successMessage: string
+    warningMessage: string
+    metadata?: Record<string, unknown>
+  },
+): Promise<void> {
+  const startedAt = Date.now()
+
+  try {
+    await contentIndexService.syncIndex(repository)
+    logger.info(options.successMessage, {
+      durationMs: Date.now() - startedAt,
+      repositoryUuid: repository.uuid,
+      ...options.metadata,
+    })
+  } catch (error) {
+    logger.warn(options.warningMessage, {
+      ...options.metadata,
+      error,
+      repositoryUuid: repository.uuid,
+    })
+  }
+}
+
 class ContentSubmissionService {
   async createContent(request: SynapseCreateContentRequest): Promise<SynapseContentMutationResult> {
     const repository = await this.resolveActiveRepository()
@@ -312,9 +338,10 @@ class ContentSubmissionService {
       await pushRepository(repository, onProgress)
       logger.info("flushPendingPushes: pushRepository done.", { durationMs: Date.now() - tPush, repositoryUuid: repository.uuid })
       await pendingPushesService.clear(repository, attemptedPendingPushIds)
-      const tFlushSync = Date.now()
-      await contentIndexService.syncIndex(repository)
-      logger.info("flushPendingPushes: syncIndex done.", { durationMs: Date.now() - tFlushSync, repositoryUuid: repository.uuid })
+      await syncIndexAfterGitMutation(repository, {
+        successMessage: "flushPendingPushes: syncIndex done.",
+        warningMessage: "flushPendingPushes: syncIndex failed after git mutation.",
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : "推送到仓库失败。"
 
@@ -324,9 +351,10 @@ class ContentSubmissionService {
         await pushRepository(repository, onProgress)
         logger.info("flushPendingPushes: retry pushRepository done.", { durationMs: Date.now() - tRetryPush, repositoryUuid: repository.uuid })
         await pendingPushesService.clear(repository, attemptedPendingPushIds)
-        const tRetrySync = Date.now()
-        await contentIndexService.syncIndex(repository)
-        logger.info("flushPendingPushes: retry syncIndex done.", { durationMs: Date.now() - tRetrySync, repositoryUuid: repository.uuid })
+        await syncIndexAfterGitMutation(repository, {
+          successMessage: "flushPendingPushes: retry syncIndex done.",
+          warningMessage: "flushPendingPushes: syncIndex failed after git mutation.",
+        })
         return
       }
 
@@ -548,9 +576,11 @@ class ContentSubmissionService {
     )
     logger.info("commitAndMaybePush: commitChanges done.", { durationMs: Date.now() - tCommit, commitHash, action, repositoryUuid: repository.uuid })
 
-    const tSyncIndex = Date.now()
-    await contentIndexService.syncIndex(repository)
-    logger.info("commitAndMaybePush: syncIndex done.", { durationMs: Date.now() - tSyncIndex, action, repositoryUuid: repository.uuid })
+    await syncIndexAfterGitMutation(repository, {
+      successMessage: "commitAndMaybePush: syncIndex done.",
+      warningMessage: "commitAndMaybePush: syncIndex failed after git mutation.",
+      metadata: { action },
+    })
 
     if (options.deferPush) {
       const tEnqueue = Date.now()
@@ -621,7 +651,11 @@ class ContentSubmissionService {
       }
     }
 
-    await contentIndexService.syncIndex(repository)
+    await syncIndexAfterGitMutation(repository, {
+      successMessage: "commitAndMaybePush: syncIndex done.",
+      warningMessage: "commitAndMaybePush: syncIndex failed after git mutation.",
+      metadata: { action },
+    })
 
     const pendingPushState = await pendingPushesService.readState(repository)
 
