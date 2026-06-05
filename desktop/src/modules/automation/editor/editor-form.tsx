@@ -281,7 +281,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
           <span className="sr-only">重命名</span>
         </Button>
       </div>
-      <div data-layout="automation-editor-body" className="min-h-0 flex-1 overflow-hidden px-5">
+      <div data-layout="automation-editor-body" className="min-h-0 flex-1 overflow-hidden">
         <TriggerExecutorBuilder
           triggerType={draft.triggerType}
           triggerConfig={draft.triggerConfig}

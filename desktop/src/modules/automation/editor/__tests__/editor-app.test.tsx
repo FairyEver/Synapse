@@ -300,8 +300,11 @@ describe("AutomationEditorApp", () => {
 
     expect(body?.className).toContain("overflow-hidden")
     expect(body?.className).not.toContain("overflow-y-auto")
+    expect(body?.className).not.toContain("px-5")
     expect(triggerPanel?.className).toContain("overflow-y-auto")
+    expect(triggerPanel?.className).toContain("p-5")
     expect(executorPanel?.className).toContain("overflow-y-auto")
+    expect(executorPanel?.className).toContain("p-5")
     expect(executorConfig?.className).toContain("[&_[data-slot=field-content]]:min-w-0")
   })
 
