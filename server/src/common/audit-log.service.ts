@@ -6,6 +6,14 @@ import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./paginat
 const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "targetId"] as const
 export const auditLogExportLimit = 50000
 const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/
+const auditRecordMaxAttempts = 2
+
+export class AuditLogWriteError extends Error {
+  constructor() {
+    super("审计日志写入失败。")
+    this.name = "AuditLogWriteError"
+  }
+}
 
 interface AuditLogFilterOptions {
   readonly action?: string
@@ -71,27 +79,35 @@ export class AuditLogService {
     detail?: unknown
     ipAddress: string
   }): Promise<void> {
-    try {
-      await this.prisma.auditLog.create({
-        data: {
-          adminEmail: input.adminEmail,
+    for (let attempt = 1; attempt <= auditRecordMaxAttempts; attempt += 1) {
+      try {
+        await this.prisma.auditLog.create({
+          data: {
+            adminEmail: input.adminEmail,
+            action: input.action,
+            targetType: input.targetType,
+            targetId: input.targetId,
+            detail: input.detail ?? undefined,
+            ipAddress: input.ipAddress,
+          },
+        })
+        return
+      } catch (error) {
+        this.recordFailureCount += 1
+        this.logger?.warn({
+          err: error,
           action: input.action,
           targetType: input.targetType,
           targetId: input.targetId,
-          detail: input.detail ?? undefined,
-          ipAddress: input.ipAddress,
-        },
-      })
-    } catch (error) {
-      this.recordFailureCount += 1
-      this.logger?.warn({
-        err: error,
-        action: input.action,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        adminEmail: input.adminEmail,
-        recordFailureCount: this.recordFailureCount,
-      }, "Failed to record audit log")
+          adminEmail: input.adminEmail,
+          attempt,
+          maxAttempts: auditRecordMaxAttempts,
+          recordFailureCount: this.recordFailureCount,
+        }, "Failed to record audit log")
+        if (attempt === auditRecordMaxAttempts) {
+          throw new AuditLogWriteError()
+        }
+      }
     }
   }
 

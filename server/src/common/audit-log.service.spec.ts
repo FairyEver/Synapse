@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { BadRequestException } from "@nestjs/common"
 import type { PrismaService } from "../prisma/prisma.service"
-import { AuditLogService } from "./audit-log.service"
+import { AuditLogService, AuditLogWriteError } from "./audit-log.service"
 
 const auditInput = {
   adminEmail: "admin@example.com",
@@ -28,7 +28,7 @@ describe("AuditLogService", () => {
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
-  it("does not reject business operations when audit persistence fails", async () => {
+  it("retries once and rejects when audit persistence keeps failing", async () => {
     const error = new Error("database unavailable")
     const prisma = {
       auditLog: { create: vi.fn().mockRejectedValue(error) },
@@ -36,14 +36,41 @@ describe("AuditLogService", () => {
     const logger = { warn: vi.fn() }
     const service = new AuditLogService(prisma as unknown as PrismaService, logger as never)
 
+    await expect(service.record(auditInput)).rejects.toThrow(AuditLogWriteError)
+
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(2)
+    expect(logger.warn).toHaveBeenLastCalledWith({
+      err: error,
+      action: auditInput.action,
+      targetType: auditInput.targetType,
+      targetId: auditInput.targetId,
+      adminEmail: auditInput.adminEmail,
+      attempt: 2,
+      maxAttempts: 2,
+      recordFailureCount: 2,
+    }, "Failed to record audit log")
+    expect(service.getRecordFailureCount()).toBe(2)
+  })
+
+  it("succeeds when audit persistence recovers on retry", async () => {
+    const error = new Error("database unavailable")
+    const prisma = {
+      auditLog: { create: vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce({ id: "audit-1" }) },
+    }
+    const logger = { warn: vi.fn() }
+    const service = new AuditLogService(prisma as unknown as PrismaService, logger as never)
+
     await expect(service.record(auditInput)).resolves.toBeUndefined()
 
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(2)
     expect(logger.warn).toHaveBeenCalledWith({
       err: error,
       action: auditInput.action,
       targetType: auditInput.targetType,
       targetId: auditInput.targetId,
       adminEmail: auditInput.adminEmail,
+      attempt: 1,
+      maxAttempts: 2,
       recordFailureCount: 1,
     }, "Failed to record audit log")
     expect(service.getRecordFailureCount()).toBe(1)
@@ -56,13 +83,14 @@ describe("AuditLogService", () => {
     const logger = { warn: vi.fn() }
     const service = new AuditLogService(prisma as unknown as PrismaService, logger as never)
 
-    await service.record(auditInput)
-    await service.record({ ...auditInput, action: "admin.team.update" })
+    await expect(service.record(auditInput)).rejects.toThrow(AuditLogWriteError)
+    await expect(service.record({ ...auditInput, action: "admin.team.update" })).rejects.toThrow(AuditLogWriteError)
 
-    expect(service.getRecordFailureCount()).toBe(2)
+    expect(service.getRecordFailureCount()).toBe(4)
     expect(logger.warn).toHaveBeenLastCalledWith(expect.objectContaining({
       action: "admin.team.update",
-      recordFailureCount: 2,
+      attempt: 2,
+      recordFailureCount: 4,
     }), "Failed to record audit log")
   })
 
