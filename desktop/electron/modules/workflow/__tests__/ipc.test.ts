@@ -22,6 +22,7 @@ const electronMock = vi.hoisted(() => ({
   },
   dialog: {
     showOpenDialog: vi.fn(),
+    showSaveDialog: vi.fn(),
   },
 }))
 
@@ -54,6 +55,7 @@ describe("workflowIpcModule", () => {
     logStoreMock.logger.info.mockClear()
     logStoreMock.logger.warn.mockClear()
     electronMock.dialog.showOpenDialog.mockReset()
+    electronMock.dialog.showSaveDialog.mockReset()
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -603,6 +605,60 @@ describe("workflowIpcModule", () => {
         workflowId: "workflow-imported",
         versionHash: "v-imported",
       })
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "workflow.mutate",
+        outcome: "allowed",
+        resource: "workflow-imported",
+        metadata: {
+          fileBase: "shared.synapse-workflow.json",
+          source: "workflow.importPackage",
+          versionHash: "v-imported",
+        },
+      }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("records audit after workflow package export writes the selected file", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-export-test-"))
+    const targetPath = path.join(tempRoot, "workflow.synapse-workflow.json")
+    electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: targetPath })
+    const packageService = {
+      buildExportPackage: vi.fn(async () => ({
+        format: "synapse-workflow-package-v1",
+        exportedAt: "2026-05-26T00:00:00.000Z",
+        workflow: workflowDefinition(),
+        modelReferences: [],
+      })),
+    }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      const result = await harness.invoke("synapse:workflow:export-package", {
+        workflowId: "workflow-1",
+        workflowName: "Workflow",
+      })
+
+      expect(result).toEqual({ path: targetPath })
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write",
+        outcome: "allowed",
+        resource: targetPath,
+        metadata: {
+          source: "workflow.exportPackage.write",
+          workflowId: "workflow-1",
+        },
+      }))
     } finally {
       await rm(tempRoot, { recursive: true, force: true })
     }

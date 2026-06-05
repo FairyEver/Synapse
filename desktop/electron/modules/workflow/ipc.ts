@@ -614,6 +614,16 @@ export const workflowIpcModule: IpcModule = {
           recordFilePermissionFailure({ auditSink, action, resource: result.filePath, source, error })
           throw error
         }
+        auditSink.record({
+          action,
+          actor: { kind: "user" },
+          resource: result.filePath,
+          outcome: "allowed",
+          metadata: {
+            source: "workflow.exportPackage.write",
+            workflowId,
+          },
+        })
         logger.info("workflow package exported", { workflowId, fileBase: path.basename(result.filePath) })
         return { path: result.filePath }
       },
@@ -704,6 +714,17 @@ export const workflowIpcModule: IpcModule = {
               errorCount: result.errors.length,
             })
           } else {
+            auditSink.record({
+              action: "workflow.mutate",
+              actor: { kind: "user" },
+              resource: result.workflowId,
+              outcome: "allowed",
+              metadata: {
+                fileBase: path.basename(packagePath),
+                source: "workflow.importPackage",
+                versionHash: result.versionHash,
+              },
+            })
             logger.info("workflow:importPackage succeeded", {
               fileBase: path.basename(packagePath),
               workflowId: result.workflowId,
