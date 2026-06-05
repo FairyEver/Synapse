@@ -639,6 +639,50 @@ describe("KnowledgeBaseService", () => {
     expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(sourcePath)
   })
 
+  it("logs raw-relative paths for destructive raw mutations", async () => {
+    const trashItem = vi.fn(async () => undefined)
+    const { projectId, projectPath, service } = await managedFixture({
+      rawFileManager: new KnowledgeBaseRawFileManager({ trashItem }),
+    })
+    await mkdir(path.join(projectPath, ".raw", "client-a"), { recursive: true })
+    await mkdir(path.join(projectPath, ".raw", "archive"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "client-a", "brief.md"), "alpha\n")
+    mocks.logger.info.mockClear()
+
+    await service.renameRawEntry({
+      projectId,
+      relativePath: "client-a/brief.md",
+      newName: "brief-renamed.md",
+    })
+    await service.moveRawEntries({
+      projectId,
+      relativePaths: ["client-a/brief-renamed.md"],
+      targetDirectoryPath: "archive",
+    })
+    await service.trashRawEntries({
+      projectId,
+      relativePaths: ["archive/brief-renamed.md"],
+    })
+
+    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw mutation completed.", expect.objectContaining({
+      affectedRawPaths: ["client-a/brief-renamed.md"],
+      operation: "renameRawEntry",
+      rawNewName: "brief-renamed.md",
+      rawRelativePaths: ["client-a/brief.md"],
+    }))
+    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw mutation completed.", expect.objectContaining({
+      affectedRawPaths: ["archive/brief-renamed.md"],
+      operation: "moveRawEntries",
+      rawRelativePaths: ["client-a/brief-renamed.md"],
+      rawTargetDirectoryPath: "archive",
+    }))
+    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw mutation completed.", expect.objectContaining({
+      affectedRawPaths: ["archive/brief-renamed.md"],
+      operation: "trashRawEntries",
+      rawRelativePaths: ["archive/brief-renamed.md"],
+    }))
+  })
+
   it("skips raw moves that target a directory inside itself", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     await mkdir(path.join(projectPath, ".raw", "folder", "child"), { recursive: true })

@@ -705,7 +705,7 @@ describe("knowledgeBaseIpcModule", () => {
     const renameRawEntry = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const moveRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
     const trashRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
-    const { harness, permissionGuard } = createHarness({
+    const { auditSink, harness, permissionGuard } = createHarness({
       service: { createRawFolder, renameRawEntry, moveRawEntries, trashRawEntries },
     })
 
@@ -755,6 +755,35 @@ describe("knowledgeBaseIpcModule", () => {
       resource: "managed-knowledge-base:kb-1",
       context: { source: "knowledgeBase.trashRawEntries" },
     })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "managed-knowledge-base:kb-1",
+      metadata: expect.objectContaining({
+        source: "knowledgeBase.renameRawEntry",
+        rawNewName: "brief-renamed.md",
+        rawRelativePaths: ["brief.md"],
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "managed-knowledge-base:kb-1",
+      metadata: expect.objectContaining({
+        source: "knowledgeBase.moveRawEntries",
+        rawRelativePaths: ["brief-renamed.md"],
+        rawTargetDirectoryPath: "client-a",
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "managed-knowledge-base:kb-1",
+      metadata: expect.objectContaining({
+        source: "knowledgeBase.trashRawEntries",
+        rawRelativePaths: ["client-a/brief-renamed.md"],
+      }),
+    }))
   })
 
 })

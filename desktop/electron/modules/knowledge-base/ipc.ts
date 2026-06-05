@@ -213,6 +213,19 @@ function permissionLogMeta(options: {
   }
 }
 
+function rawMutationAuditMetadata(options: {
+  rawNewName?: string
+  rawRelativePaths?: readonly string[]
+  rawTargetDirectoryPath?: string
+}): Record<string, unknown> {
+  return {
+    ...(options.rawNewName ? { rawNewName: options.rawNewName } : {}),
+    ...(options.rawRelativePaths && options.rawRelativePaths.length > 0 ? { rawRelativePaths: options.rawRelativePaths.slice(0, 25) } : {}),
+    ...(options.rawRelativePaths && options.rawRelativePaths.length > 25 ? { rawRelativePathsOmittedCount: options.rawRelativePaths.length - 25 } : {}),
+    ...(options.rawTargetDirectoryPath !== undefined ? { rawTargetDirectoryPath: options.rawTargetDirectoryPath } : {}),
+  }
+}
+
 function focusedWindow(): Electron.BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow()
     ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
@@ -231,6 +244,7 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
   action: PermissionAction
   resource: string
   source: string
+  auditMetadata?: Record<string, unknown>
   run(): Promise<T>
 }): Promise<T> {
   const startedAt = Date.now()
@@ -268,10 +282,11 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
       actor,
       resource: options.resource,
       outcome: "allowed",
-      metadata: { source: options.source },
+      metadata: { source: options.source, ...(options.auditMetadata ?? {}) },
     })
     logger.info("Knowledge Base IPC completed.", {
       ...logMeta,
+      ...(options.auditMetadata ?? {}),
       durationMs: Date.now() - startedAt,
     })
     return result
@@ -477,6 +492,10 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.write",
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.createRawFolder",
+        auditMetadata: rawMutationAuditMetadata({
+          rawNewName: request.name,
+          rawTargetDirectoryPath: request.parentDirectoryPath,
+        }),
         run: () => service(ctx).createRawFolder(request),
       }),
     },
@@ -490,6 +509,10 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.write",
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.renameRawEntry",
+        auditMetadata: rawMutationAuditMetadata({
+          rawNewName: request.newName,
+          rawRelativePaths: [request.relativePath],
+        }),
         run: () => service(ctx).renameRawEntry(request),
       }),
     },
@@ -503,6 +526,10 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.write",
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.moveRawEntries",
+        auditMetadata: rawMutationAuditMetadata({
+          rawRelativePaths: request.relativePaths,
+          rawTargetDirectoryPath: request.targetDirectoryPath,
+        }),
         run: () => service(ctx).moveRawEntries(request),
       }),
     },
@@ -516,6 +543,9 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.write",
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.trashRawEntries",
+        auditMetadata: rawMutationAuditMetadata({
+          rawRelativePaths: request.relativePaths,
+        }),
         run: () => service(ctx).trashRawEntries(request),
       }),
     },

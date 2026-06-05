@@ -268,7 +268,10 @@ export class KnowledgeBaseService {
     const rawRoot = await this.ensureRawRoot(projectPath)
     const entry = await this.rawFileManager.createFolder(rawRoot, payload.parentDirectoryPath, payload.name)
     const result = { entries: [entry], skipped: [] }
-    this.recordRawMutation("createRawFolder", payload.projectId, result)
+    this.recordRawMutation("createRawFolder", payload.projectId, result, {
+      rawNewName: payload.name,
+      rawTargetDirectoryPath: payload.parentDirectoryPath,
+    })
     return { projectId: payload.projectId, ...result }
   }
 
@@ -276,7 +279,9 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.uploadFiles(rawRoot, payload.targetDirectoryPath, payload.filePaths)
-    this.recordRawMutation("uploadRawFiles", payload.projectId, result)
+    this.recordRawMutation("uploadRawFiles", payload.projectId, result, {
+      rawTargetDirectoryPath: payload.targetDirectoryPath,
+    })
     return { projectId: payload.projectId, ...result }
   }
 
@@ -284,7 +289,9 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.uploadItems(rawRoot, payload.targetDirectoryPath, payload.itemPaths)
-    this.recordRawMutation("uploadRawItems", payload.projectId, result)
+    this.recordRawMutation("uploadRawItems", payload.projectId, result, {
+      rawTargetDirectoryPath: payload.targetDirectoryPath,
+    })
     return { projectId: payload.projectId, ...result }
   }
 
@@ -292,7 +299,9 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.exportEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
-    this.recordRawMutation("exportRawEntries", payload.projectId, result)
+    this.recordRawMutation("exportRawEntries", payload.projectId, result, {
+      rawRelativePaths: payload.relativePaths,
+    })
     return { projectId: payload.projectId, ...result }
   }
 
@@ -306,7 +315,10 @@ export class KnowledgeBaseService {
       to: entry.relativePath,
       kind: entry.kind,
     }])
-    this.recordRawMutation("renameRawEntry", payload.projectId, result)
+    this.recordRawMutation("renameRawEntry", payload.projectId, result, {
+      rawNewName: payload.newName,
+      rawRelativePaths: [payload.relativePath],
+    })
     return { projectId: payload.projectId, ...result }
   }
 
@@ -321,7 +333,10 @@ export class KnowledgeBaseService {
       return entry ? [{ from: relativePath, to: entry.relativePath, kind: entry.kind }] : []
     })
     await this.syncManifestAfterRawMutation(projectPath, payload.projectId, "moveRawEntries", changes)
-    this.recordRawMutation("moveRawEntries", payload.projectId, result)
+    this.recordRawMutation("moveRawEntries", payload.projectId, result, {
+      rawRelativePaths: payload.relativePaths,
+      rawTargetDirectoryPath: payload.targetDirectoryPath,
+    })
     return { projectId: payload.projectId, ...result }
   }
 
@@ -333,7 +348,9 @@ export class KnowledgeBaseService {
       from: entry.relativePath,
       kind: entry.kind,
     })))
-    this.recordRawMutation("trashRawEntries", payload.projectId, result)
+    this.recordRawMutation("trashRawEntries", payload.projectId, result, {
+      rawRelativePaths: payload.relativePaths,
+    })
     return { projectId: payload.projectId, ...result }
   }
 
@@ -341,12 +358,24 @@ export class KnowledgeBaseService {
     operation: string,
     projectId: string,
     result: Omit<SynapseKnowledgeBaseRawMutationResult, "projectId">,
+    details: RawMutationLogDetails = {},
   ): void {
+    const affectedRawPaths = limitRawLogPaths(result.entries.map((entry) => entry.relativePath))
+    const skippedRawPaths = limitRawLogPaths(result.skipped.map((entry) => entry.path))
+    const rawRelativePaths = limitRawLogPaths(details.rawRelativePaths ?? [])
     logger.info("Knowledge Base raw mutation completed.", {
       affectedCount: result.entries.length,
+      ...(affectedRawPaths.length > 0 ? { affectedRawPaths } : {}),
+      ...(result.entries.length > affectedRawPaths.length ? { affectedRawPathsOmittedCount: result.entries.length - affectedRawPaths.length } : {}),
       operation,
       projectId,
+      ...(details.rawNewName ? { rawNewName: details.rawNewName } : {}),
+      ...(rawRelativePaths.length > 0 ? { rawRelativePaths } : {}),
+      ...(details.rawRelativePaths && details.rawRelativePaths.length > rawRelativePaths.length ? { rawRelativePathsOmittedCount: details.rawRelativePaths.length - rawRelativePaths.length } : {}),
+      ...(details.rawTargetDirectoryPath !== undefined ? { rawTargetDirectoryPath: normalizeRawRelativePath(details.rawTargetDirectoryPath) } : {}),
       skippedCount: result.skipped.length,
+      ...(skippedRawPaths.length > 0 ? { skippedRawPaths } : {}),
+      ...(result.skipped.length > skippedRawPaths.length ? { skippedRawPathsOmittedCount: result.skipped.length - skippedRawPaths.length } : {}),
       skippedReasons: skippedReasonCounts(result.skipped),
     })
   }
@@ -443,6 +472,14 @@ type RawFileEntry = {
   modifiedAt: string
 }
 
+type RawMutationLogDetails = {
+  readonly rawNewName?: string
+  readonly rawRelativePaths?: readonly string[]
+  readonly rawTargetDirectoryPath?: string
+}
+
+const RAW_MUTATION_LOG_PATH_LIMIT = 25
+
 const SUPPORTED_SOURCE_EXTENSIONS = new Set([
   ".md",
   ".markdown",
@@ -514,6 +551,10 @@ function skippedReasonCounts(
     counts[item.reason] = (counts[item.reason] ?? 0) + 1
     return counts
   }, {})
+}
+
+function limitRawLogPaths(paths: readonly string[]): string[] {
+  return paths.slice(0, RAW_MUTATION_LOG_PATH_LIMIT).map((pathValue) => normalizeRawRelativePath(pathValue))
 }
 
 function sourceStatusCounts(
