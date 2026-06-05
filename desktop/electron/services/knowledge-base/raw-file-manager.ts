@@ -29,11 +29,11 @@ export class KnowledgeBaseRawFileManager {
     const entries = await readdir(directory, { withFileTypes: true })
     const result: SynapseKnowledgeBaseRawEntry[] = []
     for (const entry of entries) {
-      if (entry.name === ".manifest.json") continue
       if (entry.isSymbolicLink()) continue
       if (!entry.isFile() && !entry.isDirectory()) continue
       const absolutePath = path.join(directory, entry.name)
       const relativePath = normalizeRelativePath(path.relative(rawRoot, absolutePath))
+      if (entry.name === ".manifest.json" || isRootInternalRawFile(relativePath)) continue
       const entryStat = await lstat(absolutePath)
       result.push({
         name: entry.name,
@@ -306,6 +306,9 @@ export class KnowledgeBaseRawFileManager {
   ): Promise<void> {
     const sourceStat = await lstat(sourcePath)
     const relativePath = normalizeRelativePath(path.relative(rawRoot, sourcePath))
+    if (isRootInternalRawFile(relativePath) || relativePath === ".manifest.json") {
+      return
+    }
     if (isSystemNoiseFile(path.basename(sourcePath))) {
       knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
         reason: "system-noise",
@@ -367,6 +370,10 @@ function joinRawPath(parent: string, name: string): string {
 
 function isSystemNoiseFile(name: string): boolean {
   return name === ".DS_Store" || name === "Thumbs.db" || name === "desktop.ini"
+}
+
+function isRootInternalRawFile(relativePath: string): boolean {
+  return relativePath === ".gitkeep"
 }
 
 function validateEntryName(name: string): void {

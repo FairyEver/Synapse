@@ -24,6 +24,7 @@ describe("knowledge base source scan", () => {
     await mkdir(path.join(root, ".raw", "notes"), { recursive: true })
     await writeFile(path.join(root, ".raw", "a.md"), "alpha\n")
     await writeFile(path.join(root, ".raw", "notes", "b.txt"), "bravo\n")
+    await writeFile(path.join(root, ".raw", ".gitkeep"), "")
     await writeFile(path.join(root, ".raw", "skip.png"), "not text")
 
     const initial = await scanKnowledgeBaseSources(root)
@@ -58,6 +59,8 @@ describe("knowledge base source scan", () => {
     expect(result.skippedSources).toEqual([
       expect.objectContaining({ relativePath: ".raw/skip.png", reason: "unsupported-extension" }),
     ])
+    expect(result.sources.some((source) => source.relativePath === ".raw/.gitkeep")).toBe(false)
+    expect(result.skippedSources.some((source) => source.relativePath === ".raw/.gitkeep")).toBe(false)
   })
 
   it("marks matching sources as changed when force is true", async () => {

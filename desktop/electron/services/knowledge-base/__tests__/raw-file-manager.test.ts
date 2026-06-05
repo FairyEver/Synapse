@@ -20,6 +20,22 @@ afterEach(async () => {
 })
 
 describe("KnowledgeBaseRawFileManager", () => {
+  it("hides only root internal placeholder files from directory listings", async () => {
+    const rawRoot = await tempDir()
+    await mkdir(path.join(rawRoot, "子目录"), { recursive: true })
+    await writeFile(path.join(rawRoot, ".gitkeep"), "", "utf8")
+    await writeFile(path.join(rawRoot, ".manifest.json"), "{}\n", "utf8")
+    await writeFile(path.join(rawRoot, "brief.md"), "brief\n", "utf8")
+    await writeFile(path.join(rawRoot, "子目录", ".gitkeep"), "user file\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    const rootEntries = await manager.list(rawRoot, "")
+    const childEntries = await manager.list(rawRoot, "子目录")
+
+    expect(rootEntries.map((entry) => entry.name)).toEqual(["子目录", "brief.md"])
+    expect(childEntries.map((entry) => entry.name)).toEqual([".gitkeep"])
+  })
+
   it("logs skipped uploads without raw absolute paths", async () => {
     const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
     const rawRoot = await tempDir()
@@ -168,6 +184,25 @@ describe("KnowledgeBaseRawFileManager", () => {
     ])
     await expect(readFile(path.join(exportRoot, "会议资料", "01.pdf"), "utf8")).resolves.toBe("old\n")
     await expect(readFile(path.join(exportRoot, "会议资料", "01-2.pdf"), "utf8")).resolves.toBe("new\n")
+  })
+
+  it("does not export root internal files when exporting the raw root", async () => {
+    const rawRoot = await tempDir()
+    const exportRoot = await tempDir()
+    await writeFile(path.join(rawRoot, ".gitkeep"), "", "utf8")
+    await writeFile(path.join(rawRoot, ".manifest.json"), "{}\n", "utf8")
+    await writeFile(path.join(rawRoot, "brief.md"), "brief\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    const result = await manager.exportEntries(rawRoot, [""], exportRoot)
+    const exportedRoot = path.join(exportRoot, path.basename(rawRoot))
+
+    expect(result.skipped).toEqual([])
+    expect(result.entries.map((entry) => entry.relativePath)).not.toContain(".gitkeep")
+    expect(result.entries.map((entry) => entry.relativePath)).not.toContain(".manifest.json")
+    await expect(readFile(path.join(exportedRoot, "brief.md"), "utf8")).resolves.toBe("brief\n")
+    await expect(readFile(path.join(exportedRoot, ".gitkeep"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(exportedRoot, ".manifest.json"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("rejects raw path traversal during export", async () => {

@@ -148,7 +148,7 @@ async function walkRawSources(
       skippedSources.push(...nested.skippedSources)
       continue
     }
-    if (!entry.isFile() || relativePath === ".raw/.manifest.json") continue
+    if (!entry.isFile() || isInternalRawSource(relativePath)) continue
     if (!SUPPORTED_SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       skippedSources.push({ relativePath, reason: "unsupported-extension" })
       continue
@@ -160,6 +160,10 @@ async function walkRawSources(
 
 function normalizeRelativePath(value: string): string {
   return value.split(path.sep).join("/")
+}
+
+function isInternalRawSource(relativePath: string): boolean {
+  return relativePath === ".raw/.gitkeep" || relativePath === ".raw/.manifest.json"
 }
 
 function sha256File(filePath: string): Promise<string> {

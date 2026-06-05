@@ -127,6 +127,7 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(result.runtimePath, "wiki", "questions", "_index.md"), "utf8")).resolves.toBe("# Questions\n\nNo entries yet.\n")
     await expect(readFile(path.join(result.runtimePath, "wiki", "example.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
     await expect(readFile(path.join(result.runtimePath, ".raw", "example.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(result.runtimePath, ".raw", ".gitkeep"), "utf8")).resolves.toBe("")
     await expect(readFile(path.join(result.runtimePath, ".raw", ".manifest.json"), "utf8"))
       .resolves.toBe(`${JSON.stringify({ version: 1, sources: {}, address_map: {} }, null, 2)}\n`)
     await expect(readFile(path.join(result.runtimePath, ".vault-meta", "address-counter.txt"), "utf8")).resolves.toBe("1\n")
@@ -354,6 +355,7 @@ describe("KnowledgeBaseService", () => {
     const { projectId, projectPath, service } = await managedFixture()
     await mkdir(path.join(projectPath, ".raw", "projects"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", "brief.md"), "alpha\n")
+    await writeFile(path.join(projectPath, ".raw", ".gitkeep"), "")
     await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{}}\n")
     mocks.logger.info.mockClear()
 
@@ -375,6 +377,7 @@ describe("KnowledgeBaseService", () => {
       { name: "projects", relativePath: "projects", kind: "directory", size: null },
       { name: "brief.md", relativePath: "brief.md", kind: "file", size: 6 },
     ])
+    expect(result.entries.some((entry) => entry.name === ".gitkeep")).toBe(false)
     expect(result.entries.some((entry) => entry.name === ".manifest.json")).toBe(false)
     expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw directory listed.", {
       projectId,
