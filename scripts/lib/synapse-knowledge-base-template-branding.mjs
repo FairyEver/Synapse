@@ -22,6 +22,25 @@ const TEXT_REPLACEMENTS = [
   [/Obsidian Wiki Vault/gi, "Synapse Knowledge Base"],
 ]
 
+const SAVE_WORKFLOW_REPLACEMENTS = [
+  [
+    /When the conversation contains long pasted source material, preserve that material under `\.raw\/saves\/` and cite the `\.raw\/\.\.\.` path from the saved wiki note\./g,
+    "The save workflow writes structured wiki notes only. Do not create `.raw/` source files from the save workflow; source ingestion must go through explicit Knowledge Base source-management flows.",
+  ],
+  [
+    /5\. \*\*Preserve raw source when applicable\*\*: if the user provided long pasted material, source notes, transcript text, or external material in the chat, write the original material unchanged to `\.raw\/saves\/\[YYYY-MM-DD\]-\[slug\]\.md` before creating the wiki page\. Do not overwrite or rewrite existing `\.raw\/` source files\./g,
+    "5. **Keep save separate from source ingest**: create or update a structured wiki note from the conversation. Do not create `.raw/` source files from the save workflow; only explicit source-management or `/wiki-ingest` flows should add raw sources.",
+  ],
+  [
+    /6\. \*\*Create\*\* the note in the correct folder with full frontmatter\. If a raw source was saved, include that `\.raw\/\.\.\.` path in `sources`\./g,
+    "6. **Create** the note in the correct folder with full frontmatter. Use `sources` only for existing wiki/source references that were already part of the knowledge base.",
+  ],
+  [
+    /\n\s*- Raw source: `\.raw\/saves\/\[YYYY-MM-DD\]-\[slug\]\.md` \(if saved\)/g,
+    "",
+  ],
+]
+
 export function rewritePluginManifest(manifest) {
   return {
     ...manifest,
@@ -34,9 +53,13 @@ export function rewritePluginManifest(manifest) {
 }
 
 export function brandTemplateText(content) {
-  return TEXT_REPLACEMENTS.reduce(
+  const branded = TEXT_REPLACEMENTS.reduce(
     (current, [pattern, replacement]) => current.replace(pattern, replacement),
     content,
+  )
+  return SAVE_WORKFLOW_REPLACEMENTS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    branded,
   )
 }
 

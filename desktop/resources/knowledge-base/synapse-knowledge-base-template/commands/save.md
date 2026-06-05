@@ -3,7 +3,7 @@ description: Save the current conversation or a specific insight into the wiki v
 ---
 
 Read the `save` skill. Then run the save workflow for this conversation.
-When the conversation contains long pasted source material, preserve that material under `.raw/saves/` and cite the `.raw/...` path from the saved wiki note.
+The save workflow writes structured wiki notes only. Do not create `.raw/` source files from the save workflow; source ingestion must go through explicit Knowledge Base source-management flows.
 
 Usage:
 - `/save` — analyze the full conversation and save the most valuable content

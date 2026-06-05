@@ -41,6 +41,21 @@ test("brandTemplateText replaces upstream runtime branding", () => {
   assert.doesNotMatch(output, /Claude \+ Obsidian/)
 })
 
+test("brandTemplateText removes save workflow raw source writes", () => {
+  const input = [
+    "When the conversation contains long pasted source material, preserve that material under `.raw/saves/` and cite the `.raw/...` path from the saved wiki note.",
+    "5. **Preserve raw source when applicable**: if the user provided long pasted material, source notes, transcript text, or external material in the chat, write the original material unchanged to `.raw/saves/[YYYY-MM-DD]-[slug].md` before creating the wiki page. Do not overwrite or rewrite existing `.raw/` source files.",
+    "6. **Create** the note in the correct folder with full frontmatter. If a raw source was saved, include that `.raw/...` path in `sources`.",
+    "- Raw source: `.raw/saves/[YYYY-MM-DD]-[slug].md` (if saved)",
+  ].join("\n")
+
+  const output = brandTemplateText(input)
+
+  assert.doesNotMatch(output, /\.raw\/saves/)
+  assert.doesNotMatch(output, /write the original material unchanged/)
+  assert.match(output, /Do not create `.raw\/` source files from the save workflow/)
+})
+
 test("findDisallowedBrandHits ignores source and license files only", () => {
   const hits = findDisallowedBrandHits([
     {
