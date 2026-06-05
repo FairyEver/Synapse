@@ -82,7 +82,16 @@ export function WorkflowModule() {
       setImportPreview(null)
       setListKey((key) => key + 1)
       toast.success("工作流已导入")
-      await requireBridgeDomain("workflow").openEditor(result.workflowId)
+      try {
+        await requireBridgeDomain("workflow").openEditor(result.workflowId)
+      } catch (err) {
+        logger.warn("Workflow import open editor failed.", {
+          boundary: "renderer.workflow.import.openEditor",
+          workflowId: result.workflowId,
+          ...errorDiagnostic(err),
+        })
+        toast.error("工作流已导入，但打开编辑器失败")
+      }
     } catch (err) {
       logger.warn("Workflow import failed.", {
         boundary: "renderer.workflow.import",
