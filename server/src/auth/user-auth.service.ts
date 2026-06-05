@@ -219,6 +219,12 @@ export class UserAuthService {
         })
         throw new BadRequestException("邮箱已注册。")
       }
+      await this.recordUserRegistrationFailure({
+        adminEmail: email,
+        reason: "infrastructure_error",
+        ipAddress,
+        error,
+      }).catch(() => undefined)
       throw error
     }
   }
@@ -708,15 +714,19 @@ export class UserAuthService {
 
   private async recordUserRegistrationFailure(input: {
     readonly adminEmail: string
-    readonly reason: "duplicate_email"
+    readonly reason: "duplicate_email" | "infrastructure_error"
     readonly ipAddress: string
+    readonly error?: unknown
   }): Promise<void> {
     await this.auditLog?.record({
       adminEmail: input.adminEmail,
       action: "user.register.failure",
       targetType: "user",
       targetId: "unknown",
-      detail: { reason: input.reason },
+      detail: {
+        reason: input.reason,
+        ...safeAuditErrorDetail(input.error),
+      },
       ipAddress: input.ipAddress,
     })
   }
@@ -767,4 +777,18 @@ export class UserAuthService {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
+function safeAuditErrorDetail(error: unknown): { readonly errorName?: string; readonly errorCode?: string } {
+  if (error === undefined) return {}
+  const errorCode = typeof error === "object"
+    && error !== null
+    && "code" in error
+    && typeof error.code === "string"
+    ? error.code
+    : undefined
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    ...(errorCode ? { errorCode } : {}),
+  }
 }

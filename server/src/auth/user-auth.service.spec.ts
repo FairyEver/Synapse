@@ -493,6 +493,35 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("records infrastructure registration failures without replacing the original error", async () => {
+    const prisma = createPrismaMock()
+    const registrationError = Object.assign(new Error("database unavailable token=secret-value"), { code: "P1001" })
+    prisma.$transaction.mockRejectedValue(registrationError)
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.register({
+      email: "U@example.com",
+      password: "StrongPassword123!",
+    }, "203.0.113.27"))
+      .rejects
+      .toBe(registrationError)
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.register.failure",
+      targetType: "user",
+      targetId: "unknown",
+      detail: {
+        reason: "infrastructure_error",
+        errorName: "Error",
+        errorCode: "P1001",
+      },
+      ipAddress: "203.0.113.27",
+    })
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("secret-value")
+  })
+
   it("requests a password reset without exposing unknown users", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)
