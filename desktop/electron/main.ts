@@ -168,15 +168,6 @@ if (!gotSingleInstanceLock) {
         void accountService.refreshFromStorage()
       }
 
-      repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
-        eventBus.emit({
-          domain: "repository",
-          type: "repository.disappeared",
-          payload: { repositoryUuid },
-          timestamp: new Date().toISOString(),
-        })
-      })
-
       attachBeforeQuitHandler({
         state: mainWindowState,
         registry,

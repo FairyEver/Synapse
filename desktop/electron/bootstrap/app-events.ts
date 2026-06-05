@@ -2,13 +2,8 @@
  * Phase 0.1 — App-wide event handlers (uncaught/rejection logging,
  * second-instance, activate).
  *
- * Note: The repository-disappeared broadcast (today's
- * `webContents.send(SYNAPSE_IPC_CHANNELS.repository.updated, ...)`) deliberately
- * stays in `main.ts` until Phase 0.4 (T4.5) replaces it with EventBus. Moving
- * the bare `webContents.send` into `bootstrap/` would violate the SPEC §1 hard
- * constraint "禁止裸 webContents.send → 必须通过 EventBus" outside the allowed
- * homes; keeping it in the entry-point preserves the count of forbidden calls
- * (it stays at 1, soon to drop to 0).
+ * Repository disappearance is broadcast by repo.watch through EventBus as a
+ * `repository.updated` event, keeping this module focused on app-level handlers.
  */
 
 import { app } from "electron"
