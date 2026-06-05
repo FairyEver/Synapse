@@ -114,8 +114,9 @@ describe("AdminAuthController", () => {
       verifyDashboardSession: vi.fn().mockResolvedValue({ id: "admin-1", email: "admin@example.com", role: "admin" }),
       revokeDashboardSession: vi.fn().mockRejectedValue(new Error("database unavailable")),
     }
+    const auditLog = { record: vi.fn() }
     const response = { cookie: vi.fn(), clearCookie: vi.fn() }
-    const controller = new AdminAuthController(auth as never)
+    const controller = new AdminAuthController(auth as never, auditLog as never)
 
     await expect(controller.logout(response as never, {
       ip: "203.0.113.10",
@@ -126,6 +127,13 @@ describe("AdminAuthController", () => {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.logout",
+      targetType: "admin",
+      targetId: "admin-1",
+      ipAddress: "203.0.113.10",
     })
   })
 

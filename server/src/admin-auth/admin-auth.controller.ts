@@ -54,13 +54,6 @@ export class AdminAuthController {
   async logout(@Res({ passthrough: true }) response: Response, @Req() request: AdminRequest) {
     const token = request.cookies?.[adminCookieName]
     const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
-    try {
-      if (typeof token === "string") {
-        await this.auth.revokeDashboardSession(token)
-      }
-    } finally {
-      response.clearCookie(adminCookieName, adminCookieOptions())
-    }
     if (session) {
       await this.auditLog?.record({
         adminEmail: session.email,
@@ -69,6 +62,13 @@ export class AdminAuthController {
         targetId: session.id,
         ipAddress: request.ip ?? "system",
       })
+    }
+    try {
+      if (typeof token === "string") {
+        await this.auth.revokeDashboardSession(token)
+      }
+    } finally {
+      response.clearCookie(adminCookieName, adminCookieOptions())
     }
     return { ok: true }
   }
