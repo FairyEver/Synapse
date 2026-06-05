@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { mkdtemp, rm, readFile } from "node:fs/promises"
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -95,6 +95,24 @@ describe("InMemoryBackupRegistry + LocalArchiveStrategy (T2.10)", () => {
           namespaces: [],
         }),
       ).rejects.toBeInstanceOf(BackupFormatError)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("restore rejects payloads missing required backup fields", async () => {
+    const dir = await tempDir()
+    try {
+      const strat = new LocalArchiveStrategy({ backupRoot: dir })
+      const artifact = {
+        id: "bad-backup",
+        createdAt: "2026-04-25T00:00:00.000Z",
+        bytes: 0,
+        path: path.join(dir, "bad-backup.json"),
+      }
+      await writeFile(artifact.path, JSON.stringify({ format: "synapse-backup-v1" }), "utf8")
+
+      await expect(strat.restore(artifact)).rejects.toBeInstanceOf(BackupFormatError)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

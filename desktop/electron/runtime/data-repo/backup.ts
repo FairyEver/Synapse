@@ -45,6 +45,31 @@ export interface LocalArchiveStrategyDeps {
   readonly backupRoot: string
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isValidBackupTimestamp(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value))
+}
+
+function isValidBackupPayloadEntry(value: unknown): value is BackupPayload["namespaces"][number] {
+  if (!isRecord(value)) return false
+  return typeof value.name === "string"
+    && value.name.trim().length > 0
+    && Number.isInteger(value.schemaVersion)
+    && typeof value.encrypted === "boolean"
+    && "data" in value
+}
+
+function isValidBackupPayload(value: unknown): value is BackupPayload {
+  if (!isRecord(value)) return false
+  return value.format === "synapse-backup-v1"
+    && isValidBackupTimestamp(value.exportedAt)
+    && Array.isArray(value.namespaces)
+    && value.namespaces.every(isValidBackupPayloadEntry)
+}
+
 export class LocalArchiveStrategy implements BackupStrategy {
   readonly id: string
   readonly displayName: string
@@ -85,14 +110,13 @@ export class LocalArchiveStrategy implements BackupStrategy {
     } catch (err) {
       throw new BackupFormatError(`invalid JSON in ${artifact.path}: ${(err as Error).message}`)
     }
-    if (
-      typeof parsed !== "object"
-      || parsed === null
-      || (parsed as { format?: string }).format !== "synapse-backup-v1"
-    ) {
+    if (!isRecord(parsed) || parsed.format !== "synapse-backup-v1") {
       throw new BackupFormatError(`unexpected payload shape in ${artifact.path}`)
     }
-    return parsed as BackupPayload
+    if (!isValidBackupPayload(parsed)) {
+      throw new BackupFormatError(`invalid backup payload in ${artifact.path}`)
+    }
+    return parsed
   }
 
   async list(): Promise<BackupArtifact[]> {
