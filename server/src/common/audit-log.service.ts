@@ -52,10 +52,16 @@ function parseAuditDate(value: string): Date {
 
 @Injectable()
 export class AuditLogService {
+  private recordFailureCount = 0
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly logger?: PinoLogger,
   ) {}
+
+  getRecordFailureCount(): number {
+    return this.recordFailureCount
+  }
 
   async record(input: {
     adminEmail: string
@@ -77,12 +83,14 @@ export class AuditLogService {
         },
       })
     } catch (error) {
+      this.recordFailureCount += 1
       this.logger?.warn({
         err: error,
         action: input.action,
         targetType: input.targetType,
         targetId: input.targetId,
         adminEmail: input.adminEmail,
+        recordFailureCount: this.recordFailureCount,
       }, "Failed to record audit log")
     }
   }

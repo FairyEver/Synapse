@@ -25,6 +25,73 @@ function createContext(options: {
 }
 
 describe("AuditLogInterceptor", () => {
+  it("waits for successful audit writes before completing audited responses", async () => {
+    let resolveRecord: (() => void) | undefined
+    const recordPromise = new Promise<void>((resolve) => {
+      resolveRecord = resolve
+    })
+    const auditLog = { record: vi.fn(() => recordPromise) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    let completed = false
+    const resultPromise = lastValueFrom(interceptor.intercept(
+      createContext({ method: "GET", path: "/api/admin/backup/list" }),
+      { handle: () => of([]) },
+    )).then((result) => {
+      completed = true
+      return result
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(auditLog.record).toHaveBeenCalled()
+    expect(completed).toBe(false)
+
+    resolveRecord?.()
+
+    await expect(resultPromise).resolves.toEqual([])
+    expect(completed).toBe(true)
+  })
+
+  it("waits for failed operation audit writes before rethrowing the original error", async () => {
+    let resolveRecord: (() => void) | undefined
+    const recordPromise = new Promise<void>((resolve) => {
+      resolveRecord = resolve
+    })
+    const auditLog = { record: vi.fn(() => recordPromise) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+    const sourceError = new Error("COS unavailable")
+
+    let rejected = false
+    const resultPromise = lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "DELETE",
+        path: "/api/admin/backup/synapse-backup.tar.gz",
+        params: { filename: "synapse-backup.tar.gz" },
+      }),
+      { handle: () => throwError(() => sourceError) },
+    ))
+    resultPromise.catch(() => undefined)
+    let rejection: unknown
+    const observedPromise = resultPromise.catch((error) => {
+      rejected = true
+      rejection = error
+    })
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(auditLog.record).toHaveBeenCalled()
+    expect(rejected).toBe(false)
+
+    resolveRecord?.()
+
+    await observedPromise
+    expect(rejection).toBe(sourceError)
+    expect(rejected).toBe(true)
+  })
+
   it("redacts sensitive request body fields before recording audit details", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }

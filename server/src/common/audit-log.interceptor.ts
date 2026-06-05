@@ -5,7 +5,7 @@ import {
   NestInterceptor,
 } from "@nestjs/common"
 import type { Request } from "express"
-import { Observable, tap } from "rxjs"
+import { catchError, from, mergeMap, Observable, throwError } from "rxjs"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuditLogService } from "./audit-log.service"
@@ -51,7 +51,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       )
       if (!action) return
 
-      void this.auditLog.record({
+      await this.auditLog.record({
         adminEmail: request.admin?.email ?? UNAUTHENTICATED_ADMIN_EMAIL,
         action: error ? `${action}.failed` : action,
         targetType,
@@ -67,13 +67,15 @@ export class AuditLogInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      tap({
-        next: (responseBody) => {
-          if (policy.success) void recordAudit(responseBody)
-        },
-        error: (error) => {
-          if (policy.failure) void recordAudit(undefined, error)
-        },
+      mergeMap(async (responseBody) => {
+        if (policy.success) await recordAudit(responseBody)
+        return responseBody
+      }),
+      catchError((error) => {
+        if (!policy.failure) return throwError(() => error)
+        return from(recordAudit(undefined, error)).pipe(
+          mergeMap(() => throwError(() => error)),
+        )
       }),
     )
   }

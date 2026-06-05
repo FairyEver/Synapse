@@ -44,7 +44,26 @@ describe("AuditLogService", () => {
       targetType: auditInput.targetType,
       targetId: auditInput.targetId,
       adminEmail: auditInput.adminEmail,
+      recordFailureCount: 1,
     }, "Failed to record audit log")
+    expect(service.getRecordFailureCount()).toBe(1)
+  })
+
+  it("increments audit record failure count for repeated persistence failures", async () => {
+    const prisma = {
+      auditLog: { create: vi.fn().mockRejectedValue(new Error("database unavailable")) },
+    }
+    const logger = { warn: vi.fn() }
+    const service = new AuditLogService(prisma as unknown as PrismaService, logger as never)
+
+    await service.record(auditInput)
+    await service.record({ ...auditInput, action: "admin.team.update" })
+
+    expect(service.getRecordFailureCount()).toBe(2)
+    expect(logger.warn).toHaveBeenLastCalledWith(expect.objectContaining({
+      action: "admin.team.update",
+      recordFailureCount: 2,
+    }), "Failed to record audit log")
   })
 
   it("lists audit logs for export without pagination", async () => {
