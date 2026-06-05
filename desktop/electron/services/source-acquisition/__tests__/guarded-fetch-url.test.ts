@@ -1,17 +1,34 @@
 import http from "node:http"
 import { once } from "node:events"
 
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const logger = vi.hoisted(() => ({
+  warn: vi.fn(),
+}))
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => logger,
+}))
 
 import { createGuardedFetchUrl } from "../guarded-fetch-url"
 
 describe("createGuardedFetchUrl", () => {
+  beforeEach(() => {
+    logger.warn.mockClear()
+  })
+
   it("rejects private literal hosts before opening a request", async () => {
     const fetchUrl = createGuardedFetchUrl()
 
     await expect(fetchUrl("http://127.0.0.1/source", {
       signal: new AbortController().signal,
     })).rejects.toThrow("Local and private network URLs are not allowed.")
+    expect(logger.warn).toHaveBeenCalledWith("Guarded URL fetch blocked local or private host.", {
+      url: "http://127.0.0.1/source",
+      hostname: "127.0.0.1",
+      addresses: ["127.0.0.1"],
+    })
   })
 
   it("rejects and closes oversized response streams without content-length", async () => {

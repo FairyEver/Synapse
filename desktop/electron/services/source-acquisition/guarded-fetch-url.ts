@@ -4,9 +4,11 @@ import https from "node:https"
 import type { IncomingMessage, RequestOptions } from "node:http"
 
 import { isLocalOrPrivateHost, UrlResponseSizeLimitError, type FetchUrl } from "./url-source"
+import { createMainLogger } from "../log-store"
 
 const MAX_REDIRECTS = 5
 const DEFAULT_TIMEOUT_MS = 30_000
+const logger = createMainLogger("source-acquisition.guarded-fetch")
 
 export interface CreateGuardedFetchUrlOptions {
   readonly timeoutMs?: number
@@ -34,10 +36,18 @@ async function fetchWithRedirects(
   const response = await requestUrl(url, options)
   if (isRedirect(response.status)) {
     if (options.redirectsRemaining <= 0) {
+      logger.warn("Guarded URL fetch redirect limit exceeded.", {
+        url: safeUrlForLog(url),
+        maxRedirects: MAX_REDIRECTS,
+      })
       throw new Error("URL redirect limit exceeded.")
     }
     const location = response.headers.get("location")
     if (!location) {
+      logger.warn("Guarded URL fetch redirect missing location.", {
+        url: safeUrlForLog(url),
+        status: response.status,
+      })
       throw new Error("URL redirect response did not include a Location header.")
     }
     return fetchWithRedirects(new URL(location, url), {
@@ -56,11 +66,15 @@ async function requestUrl(
     readonly timeoutMs: number
   },
 ): ReturnType<FetchUrl> {
-  const resolvedAddress = await resolvePublicAddress(url.hostname, options.allowLocalOrPrivateHosts)
-  const transport = url.protocol === "https:" ? https : http
   if (url.protocol !== "http:" && url.protocol !== "https:") {
+    logger.warn("Guarded URL fetch rejected unsupported protocol.", {
+      url: safeUrlForLog(url),
+      protocol: url.protocol,
+    })
     throw new Error(`URL protocol is not supported: ${url.protocol}`)
   }
+  const resolvedAddress = await resolvePublicAddress(url, options.allowLocalOrPrivateHosts)
+  const transport = url.protocol === "https:" ? https : http
 
   const requestOptions: RequestOptions = {
     protocol: url.protocol,
@@ -89,9 +103,20 @@ async function requestUrl(
     }
     options.signal.addEventListener("abort", abort, { once: true })
     request.on("timeout", () => {
+      logger.warn("Guarded URL fetch timed out.", {
+        url: safeUrlForLog(url),
+        timeoutMs: options.timeoutMs,
+      })
       request.destroy(new Error("URL fetch timed out."))
     })
-    request.on("error", reject)
+    request.on("error", (error) => {
+      logger.warn("Guarded URL fetch request failed.", {
+        url: safeUrlForLog(url),
+        errorName: error.name,
+        message: error.message,
+      })
+      reject(error)
+    })
     request.on("close", () => {
       options.signal.removeEventListener("abort", abort)
     })
@@ -100,20 +125,33 @@ async function requestUrl(
 }
 
 async function resolvePublicAddress(
-  hostname: string,
+  url: URL,
   allowLocalOrPrivateHosts: boolean,
 ): Promise<{ readonly address: string; readonly family: 4 | 6 }> {
+  const hostname = url.hostname
   const addresses = await lookup(hostname, { all: true, verbatim: false })
   const publicAddress = addresses.find((entry) => (
     allowLocalOrPrivateHosts || !isLocalOrPrivateHost(entry.address)
   ))
   if (!publicAddress) {
+    logger.warn("Guarded URL fetch blocked local or private host.", {
+      url: safeUrlForLog(url),
+      hostname,
+      addresses: addresses.map((entry) => entry.address),
+    })
     throw new Error("Local and private network URLs are not allowed.")
   }
   return {
     address: publicAddress.address,
     family: publicAddress.family === 6 ? 6 : 4,
   }
+}
+
+function safeUrlForLog(url: URL): string {
+  const safeUrl = new URL(url)
+  safeUrl.username = ""
+  safeUrl.password = ""
+  return safeUrl.toString()
 }
 
 function responseFromMessage(url: string, message: IncomingMessage): Awaited<ReturnType<FetchUrl>> {

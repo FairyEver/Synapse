@@ -271,6 +271,7 @@ describe("knowledge base source staging", () => {
 
   it("redacts URL source skipped paths and keeps acquisition failure reasons", async () => {
     const projectPath = await tempDir()
+    const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
     const fetchUrl: FetchUrl = async () => {
       throw new Error("fetch failed")
     }
@@ -286,6 +287,10 @@ describe("knowledge base source staging", () => {
       uploaded: [],
       skipped: [{ path: "https://example.com/articles/alpha?token=%5Bredacted%5D", reason: "network_error" }],
     })
+    expect(warn).toHaveBeenCalledWith("Knowledge Base URL source acquisition failed.", expect.objectContaining({
+      code: "network_error",
+      url: "https://example.com/articles/alpha?token=%5Bredacted%5D",
+    }))
     expect(JSON.stringify(result)).not.toContain("input-secret")
   })
 

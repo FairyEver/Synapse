@@ -201,6 +201,7 @@ export async function stageKnowledgeBaseUrlSource(
   if (!result.ok) {
     knowledgeBaseLogger.warn("Knowledge Base URL source acquisition failed.", {
       code: result.code,
+      url: sanitizeUrl(input.url),
       ...knowledgeBaseErrorMeta(result.message),
     })
     return {
