@@ -1112,6 +1112,7 @@ export const workflowIpcModule: IpcModule = {
         if (!force) {
           for (const [existingRunId, status] of runStatuses) {
             if (status.workflowId === workflowId && status.status === "running") {
+              logger.info("workflow:rerun conflict", { workflowId, activeRunId: existingRunId })
               return { conflict: true as const, activeRunId: existingRunId }
             }
           }
@@ -1139,6 +1140,8 @@ export const workflowIpcModule: IpcModule = {
           abortMap,
           runStatuses,
         })
+
+        logger.info("workflow:rerun started", { previousRunId, workflowId, runId, nodeCount: def.nodes.length })
 
         return { runId }
       },
@@ -1178,17 +1181,29 @@ export const workflowIpcModule: IpcModule = {
       handler: async (ctx, { workflowId }: { workflowId: string }) => {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const snapshots = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId)
-        return [
-          ...listActiveRunItems(runStatuses, workflowId),
-          ...snapshots.map(snapshotToListItem),
+        const activeItems = listActiveRunItems(runStatuses, workflowId)
+        const snapshotItems = snapshots.map(snapshotToListItem)
+        const history = [
+          ...activeItems,
+          ...snapshotItems,
         ].sort(compareRunListItems)
+        logger.info("workflow:runHistory", {
+          workflowId,
+          count: history.length,
+          activeCount: activeItems.length,
+          snapshotCount: snapshotItems.length,
+        })
+        return history
       },
     },
     runStatus: {
       channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: z.string() }), response: workflowRunStatusSchema.nullable(),
       handler: async (ctx, { runId }: { runId: string }) => {
         const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
-        if (live) return live
+        if (live) {
+          logger.info("run-status served from memory", { runId, workflowId: live.workflowId, status: live.status })
+          return live
+        }
         // Fallback: terminal runs pruned from the in-memory map (MAX_TERMINAL_STATUSES_PER_WORKFLOW = 5)
         // are still on disk (up to MAX = 20 snapshots per workflow). Without this, opening an
         // older run from the history dialog would render an empty runner (no definition,

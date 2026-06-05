@@ -302,6 +302,66 @@ describe("workflowIpcModule", () => {
     }
   })
 
+  it("logs rerun conflicts and successful rerun starts", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    runStatuses.set("previous-run", {
+      runId: "previous-run",
+      workflowId: "workflow-1",
+      status: "completed",
+      nodeResults: {},
+      startedAt: 1,
+      endedAt: 2,
+      params: { q: "previous" },
+      definition: workflowDefinition(),
+    })
+    runStatuses.set("active-run", {
+      runId: "active-run",
+      workflowId: "workflow-1",
+      status: "running",
+      nodeResults: {},
+      startedAt: 3,
+      definition: workflowDefinition(),
+    })
+    const eventBus = { emit: vi.fn() }
+    const snapshots = { save: vi.fn(async () => undefined), findByRunId: vi.fn(async () => null) }
+    const engine = { run: vi.fn(async () => undefined) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const conflict = await harness.invoke("synapse:workflow:rerun", {
+      previousRunId: "previous-run",
+      params: {},
+    })
+    expect(conflict).toEqual({ conflict: true, activeRunId: "active-run" })
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:rerun conflict", {
+      workflowId: "workflow-1",
+      activeRunId: "active-run",
+    })
+
+    runStatuses.delete("active-run")
+    const started = await harness.invoke("synapse:workflow:rerun", {
+      previousRunId: "previous-run",
+      params: {},
+    })
+    const runId = (started as { runId: string }).runId
+
+    expect(started).toEqual({ runId })
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:rerun started", {
+      previousRunId: "previous-run",
+      workflowId: "workflow-1",
+      runId,
+      nodeCount: 0,
+    })
+  })
+
   it("blocks workflow delete when the active run does not finish after abort timeout", async () => {
     vi.useFakeTimers()
     let finishActiveRun: (() => void) | undefined
@@ -825,6 +885,11 @@ describe("workflowIpcModule", () => {
         "node-1": expect.objectContaining({ usage, costUsd: 0.01 }),
       },
     }))
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("run-status served from memory", {
+      runId: "run-usage",
+      workflowId: "workflow-1",
+      status: "completed",
+    })
   })
 
   it("stores node progress labels in live run status", async () => {
@@ -924,6 +989,12 @@ describe("workflowIpcModule", () => {
       }),
     ])
     expect(JSON.stringify(history)).not.toContain("other-active-run")
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:runHistory", {
+      workflowId: "workflow-1",
+      count: 2,
+      activeCount: 1,
+      snapshotCount: 1,
+    })
   })
 
   it("rejects unsafe workflow ids before reading run history snapshots", async () => {
