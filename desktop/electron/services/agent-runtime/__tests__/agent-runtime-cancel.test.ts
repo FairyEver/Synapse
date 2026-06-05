@@ -7,6 +7,7 @@ import type {
   DataNamespace,
 } from "../../../runtime/data-repo"
 import type { ProviderService } from "../../provider"
+import { AGENT_CANCELLED_MESSAGE } from "../agent-error-messages"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
 import type {
   AgentEvent,
@@ -37,7 +38,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     expect(session.closed).toBe(true)
 
     const result = await sendPromise
-    expect(result.error).toBe("cancelled")
+    expect(result.error).toBe(AGENT_CANCELLED_MESSAGE)
   })
 
   it("returns graceful-pending for a session that supports cancel", async () => {
@@ -161,7 +162,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     expect(session.closed).toBe(true)
 
     const firstResult = await firstTurn
-    expect(firstResult.error).toBe("cancelled")
+    expect(firstResult.error).toBe(AGENT_CANCELLED_MESSAGE)
 
     const nextSession = await waitForNewSession(factory, session)
     nextSession.emitResult("done-2")
@@ -184,7 +185,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     await service.cancelTurn(convId)
 
     const r1 = await send1
-    expect(r1.error).toBe("cancelled")
+    expect(r1.error).toBe(AGENT_CANCELLED_MESSAGE)
 
     const session2 = await waitForNewSession(factory, session)
     session2.emitResult("done-2")
