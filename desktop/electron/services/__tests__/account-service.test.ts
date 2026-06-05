@@ -227,6 +227,37 @@ describe("AccountService", () => {
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain(attempt!.codeVerifier)
   })
 
+  it("logs HTTP details for callback exchange failures without leaking response secrets", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url) => {
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ error: "code expired", token: "secret-response-token" }, 400)
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=secret-code&state=${attempt!.state}`,
+    )
+
+    expect(state.status).toBe("error")
+    const warning = accountLogger.warn.mock.calls.find(
+      ([message]) => message === "Desktop account callback exchange failed.",
+    )
+    const error = warning?.[1]?.error as Error | undefined
+    expect(error?.message).toContain("POST /api/auth/desktop/token")
+    expect(error?.message).toContain("HTTP 400")
+    expect(error?.message).toContain("code expired")
+    expect(error?.message).not.toContain("secret-response-token")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-code")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.state)
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.codeVerifier)
+  })
+
   it("preserves active login state on callback state mismatch", async () => {
     const fetch = vi.fn()
     const { service } = await createTestAccountService({ fetch: fetch as typeof fetch })
@@ -393,6 +424,36 @@ describe("AccountService", () => {
       refreshToken: "refresh-2",
       lastProfile: { user: { email: "u@example.com" } },
     })
+  })
+
+  it("logs HTTP details when profile loading fails after callback exchange", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url) => {
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          return jsonResponse({ error: "access denied" }, 401)
+        }
+        if (String(url).endsWith("/auth/refresh")) {
+          return jsonResponse({ error: "refresh denied" }, 401)
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
+
+    const warning = accountLogger.warn.mock.calls.find(
+      ([message]) => message === "Desktop account profile load failed after exchange; retrying refresh.",
+    )
+    const error = warning?.[1]?.error as Error | undefined
+    expect(error?.message).toContain("GET /api/auth/me")
+    expect(error?.message).toContain("HTTP 401")
+    expect(error?.message).toContain("access denied")
   })
 
   it("refreshes from stored refresh token and keeps access token in memory only", async () => {

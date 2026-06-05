@@ -15,6 +15,8 @@ const DEV_API_BASE_URL = "http://localhost:3000/api"
 const DESKTOP_CLIENT_ID = "synapse-desktop"
 const DESKTOP_REDIRECT_URI = "synapse://auth/desktop/callback"
 const PKCE_CHALLENGE_METHOD = "S256"
+const HTTP_ERROR_BODY_MAX_LENGTH = 200
+const SENSITIVE_HTTP_DETAIL_KEY_PATTERN = /password|token|secret|credential|authorization|cookie|apiKey/i
 
 type PersistedAccount = Record<string, unknown> & {
   refreshToken?: string
@@ -424,10 +426,11 @@ export class AccountService {
   }
 
   private async loadMe(baseUrl: string): Promise<SynapseAccountProfile> {
-    const response = await this.fetchImpl(`${baseUrl}/auth/me`, {
+    const url = `${baseUrl}/auth/me`
+    const response = await this.fetchImpl(url, {
       headers: this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : undefined,
     })
-    if (!response.ok) throw new Error("账号信息同步失败。")
+    if (!response.ok) throw await createHttpError("GET", url, response, "账号信息同步失败。")
     const payload = await response.json() as Omit<SynapseAccountProfile, "syncedAt">
     return { ...payload, syncedAt: new Date().toISOString() }
   }
@@ -451,7 +454,7 @@ export class AccountService {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     })
-    if (!response.ok) throw new Error("请求失败。")
+    if (!response.ok) throw await createHttpError("POST", url, response, "请求失败。")
     const text = await response.text()
     return (text ? JSON.parse(text) : undefined) as T
   }
@@ -590,6 +593,47 @@ function authenticatedLogMeta(
     status: "authenticated",
     userId: profile.user.id,
     teamCount: profile.teams.length,
+  }
+}
+
+async function createHttpError(method: string, url: string, response: Response, fallbackMessage: string): Promise<Error> {
+  const detail = await formatHttpFailureBody(response)
+  const detailText = detail ? `: ${detail}` : ""
+  return new Error(`${fallbackMessage} (${method} ${endpointPath(url)} HTTP ${response.status})${detailText}`)
+}
+
+async function formatHttpFailureBody(response: Response): Promise<string> {
+  const text = await response.text().catch(() => "")
+  if (!text) return ""
+
+  try {
+    return truncateHttpFailureDetail(JSON.stringify(redactHttpFailureDetail(JSON.parse(text))))
+  } catch {
+    return truncateHttpFailureDetail(text)
+  }
+}
+
+function redactHttpFailureDetail(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactHttpFailureDetail)
+  if (!value || typeof value !== "object") return value
+
+  const result: Record<string, unknown> = {}
+  for (const [key, childValue] of Object.entries(value)) {
+    result[key] = SENSITIVE_HTTP_DETAIL_KEY_PATTERN.test(key) ? "[REDACTED]" : redactHttpFailureDetail(childValue)
+  }
+  return result
+}
+
+function truncateHttpFailureDetail(value: string): string {
+  if (value.length <= HTTP_ERROR_BODY_MAX_LENGTH) return value
+  return `${value.slice(0, HTTP_ERROR_BODY_MAX_LENGTH)}...`
+}
+
+function endpointPath(url: string): string {
+  try {
+    return new URL(url).pathname
+  } catch {
+    return url.split("?")[0] ?? url
   }
 }
 
