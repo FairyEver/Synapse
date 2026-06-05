@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   resolveEditorCopyTarget: vi.fn(),
   onCopied: vi.fn(),
   promise: vi.fn(async <T,>(factory: () => Promise<T>) => factory()),
+  rendererLogger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
 }))
 
 vi.mock("@/app-shell/editor-copy", () => ({
@@ -27,11 +32,7 @@ vi.mock("@/app-shell/config", () => ({
 }))
 
 vi.mock("@/app-shell/logging", () => ({
-  createRendererLogger: () => ({
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  }),
+  createRendererLogger: () => mocks.rendererLogger,
 }))
 
 vi.mock("@/app-shell/notifications", () => ({
@@ -193,6 +194,14 @@ describe("EditorBulkSkillCopyDialog", () => {
     await act(async () => clickButton("选择目标"))
 
     expect(document.body.textContent).toContain("可复制 1 个")
+    expect(mocks.rendererLogger.info).toHaveBeenCalledWith("Bulk Skill copy preflight completed.", {
+      editorId: "codex",
+      overwrite: 0,
+      ready: 1,
+      scope: "global",
+      total: 1,
+      unavailable: 0,
+    })
 
     await act(async () => clickButton("复制"))
 
@@ -202,6 +211,23 @@ describe("EditorBulkSkillCopyDialog", () => {
       targetScope: "global",
     }))
     expect(mocks.onCopied).toHaveBeenCalledTimes(1)
+    expect(mocks.rendererLogger.info).toHaveBeenCalledWith("Bulk Skill copy started.", {
+      editorId: "codex",
+      executable: 1,
+      overwrite: 0,
+      scope: "global",
+      skipped: 0,
+      total: 1,
+    })
+    expect(mocks.rendererLogger.info).toHaveBeenCalledWith("Bulk Skill copy completed.", {
+      copied: 1,
+      durationMs: expect.any(Number),
+      editorId: "codex",
+      failed: 0,
+      scope: "global",
+      skipped: 0,
+      total: 1,
+    })
   })
 
   it("asks once before copying overwrite items", async () => {

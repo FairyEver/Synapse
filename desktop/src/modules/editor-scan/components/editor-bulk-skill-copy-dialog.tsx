@@ -139,6 +139,22 @@ function EditorBulkSkillCopyDialog({
       }
     }
 
+    const preflightSummary = nextItems.reduce(
+      (summary, item) => {
+        summary.total += 1
+        if (item.status === "ready") summary.ready += 1
+        if (item.status === "overwrite") summary.overwrite += 1
+        if (item.status === "unavailable") summary.unavailable += 1
+        return summary
+      },
+      { overwrite: 0, ready: 0, total: 0, unavailable: 0 },
+    )
+    logger.info("Bulk Skill copy preflight completed.", {
+      editorId: selectedEditor.id,
+      scope,
+      ...preflightSummary,
+    })
+
     setPreflightItems(nextItems)
     setIsPreflighting(false)
   }, [items, projectPath, scope, selectedEditor, selection?.activeTarget])
@@ -153,9 +169,19 @@ function EditorBulkSkillCopyDialog({
 
     setIsCopying(true)
     setCopyError(null)
+    const copyStartedAt = Date.now()
     const nextResults: BulkSkillCopyResultItem[] = preflightItems
       .filter((item): item is Extract<BulkSkillCopyPreflightItem, { status: "unavailable" }> => item.status === "unavailable")
       .map((item) => ({ status: "skipped", item: item.item, message: item.message }))
+
+    logger.info("Bulk Skill copy started.", {
+      editorId: selectedEditor.id,
+      executable: executableItems.length,
+      overwrite: overwriteCount,
+      scope,
+      skipped: nextResults.length,
+      total: preflightItems.length,
+    })
 
     for (const item of executableItems) {
       try {
@@ -195,6 +221,15 @@ function EditorBulkSkillCopyDialog({
 
     setResults(nextResults)
     const summary = buildBulkSkillCopySummary(nextResults)
+    logger.info("Bulk Skill copy completed.", {
+      copied: summary.copied,
+      durationMs: Date.now() - copyStartedAt,
+      editorId: selectedEditor.id,
+      failed: summary.failed,
+      scope,
+      skipped: summary.skipped,
+      total: summary.total,
+    })
     try {
       await onCopied?.()
     } catch (error) {
