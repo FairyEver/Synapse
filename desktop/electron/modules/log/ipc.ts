@@ -8,11 +8,11 @@
 import { z } from "zod"
 import { app, dialog } from "electron"
 import path from "node:path"
-import type { IpcModule } from "../../runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import { logStore } from "../../services/log-store"
 import type { SynapseRendererLogPayload } from "../../../src/types/log"
-import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import { createControlledProcessRunner } from "../../runtime/process"
 
 // Schemas
@@ -32,6 +32,68 @@ const logFileInfoSchema = z.object({
   name: z.string(),
   sizeBytes: z.number(),
 })
+
+async function runGuardedLogOperation<T>(
+  ctx: IpcHandlerContext,
+  options: {
+    readonly action: PermissionAction
+    readonly metadata?: Record<string, unknown>
+    readonly run: () => Promise<T>
+    readonly source: string
+  },
+): Promise<T> {
+  const actor = { kind: "user" } as const
+  const resource = logStore.getLogDirectory()
+  const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+  const metadata = { source: options.source, ...options.metadata }
+  const permission = await permissionGuard.check({
+    action: options.action,
+    actor,
+    resource,
+    context: metadata,
+  })
+
+  if (!permission.allowed) {
+    auditSink.record({
+      action: options.action,
+      actor,
+      resource,
+      outcome: "denied",
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+
+  try {
+    const result = await options.run()
+    auditSink.record({
+      action: options.action,
+      actor,
+      resource,
+      outcome: "allowed",
+      metadata,
+    })
+    return result
+  } catch (error) {
+    auditSink.record({
+      action: options.action,
+      actor,
+      resource,
+      outcome: "failed",
+      metadata: {
+        ...metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    throw error
+  }
+}
 
 export const logIpcModule: IpcModule = {
   id: "log",
@@ -135,8 +197,12 @@ export const logIpcModule: IpcModule = {
       channel: "synapse:log:clear",
       request: z.void(),
       response: z.object({ fileCount: z.number() }),
-      handler: async (_ctx) => {
-        return logStore.clearAllLogs()
+      handler: async (ctx) => {
+        return runGuardedLogOperation(ctx, {
+          action: "fs.write",
+          source: "log.clear",
+          run: () => logStore.clearAllLogs(),
+        })
       },
     },
     readAll: {
@@ -144,8 +210,12 @@ export const logIpcModule: IpcModule = {
       channel: "synapse:log:read-all",
       request: z.void(),
       response: z.string(),
-      handler: async (_ctx) => {
-        return logStore.readAllLogs()
+      handler: async (ctx) => {
+        return runGuardedLogOperation(ctx, {
+          action: "fs.read.outside-userdata",
+          source: "log.readAll",
+          run: () => logStore.readAllLogs(),
+        })
       },
     },
     listFiles: {
@@ -162,8 +232,13 @@ export const logIpcModule: IpcModule = {
       channel: "synapse:log:read-files",
       request: z.array(z.string()),
       response: z.string(),
-      handler: async (_ctx, fileNames: string[]) => {
-        return logStore.readLogsByNames(fileNames)
+      handler: async (ctx, fileNames: string[]) => {
+        return runGuardedLogOperation(ctx, {
+          action: "fs.read.outside-userdata",
+          source: "log.readFiles",
+          metadata: { fileCount: fileNames.length },
+          run: () => logStore.readLogsByNames(fileNames),
+        })
       },
     },
   },
