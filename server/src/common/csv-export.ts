@@ -13,8 +13,9 @@ function formatCsvValue(value: unknown): string {
 }
 
 function escapeCsvField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`
+  const safeValue = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+  if (safeValue.includes(",") || safeValue.includes('"') || safeValue.includes("\n") || safeValue.includes("\r")) {
+    return `"${safeValue.replace(/"/g, '""')}"`
   }
-  return value
+  return safeValue
 }
