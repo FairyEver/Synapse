@@ -257,10 +257,36 @@ export class AccountService {
       await this.clearActiveAttemptIfState(callbackState)
       const latest = await this.readPersisted("Failed to read stored account after account callback exchange failed.")
       if (this.hasDifferentActiveAttempt(latest, callbackState)) return this.state
+      const previousRefreshToken = persisted?.refreshToken
+      if (previousRefreshToken && latest?.refreshToken === previousRefreshToken) {
+        try {
+          const revision = this.authRevision
+          const refreshed = await this.refreshWithToken(attempt.apiBaseUrl, previousRefreshToken)
+          const committed = await this.writeAccountPatchIfRefreshTokenCurrent(
+            revision,
+            previousRefreshToken,
+            { refreshToken: refreshed.refreshToken, lastProfile: refreshed.profile },
+          )
+          if (!committed) {
+            this.accessToken = null
+            return this.state
+          }
+          if (committed.activeAttempt) return this.state
+          this.setState({ status: "authenticated", profile: refreshed.profile })
+          logger.info("Desktop account authenticated after callback exchange recovery.", authenticatedLogMeta(
+            "handleAuthCallback",
+            refreshed.profile,
+          ))
+          return this.state
+        } catch (refreshError) {
+          logger.warn("Desktop account callback exchange recovery refresh failed.", { error: refreshError })
+          this.accessToken = null
+        }
+      }
       this.setState({
         status: "error",
         message: "登录失败，请重试。",
-        profile: persisted?.lastProfile,
+        profile: latest?.lastProfile ?? persisted?.lastProfile,
       })
       return this.state
     }

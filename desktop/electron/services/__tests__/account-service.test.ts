@@ -258,6 +258,51 @@ describe("AccountService", () => {
     expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.codeVerifier)
   })
 
+  it("recovers from a callback exchange failure with the existing refresh token", async () => {
+    const calls: string[] = []
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        calls.push(String(url))
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ error: "server unavailable", token: "secret-response-token" }, 503)
+        }
+        if (String(url).endsWith("/auth/refresh")) {
+          expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+          return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=secret-code&state=${attempt!.state}`,
+    )
+
+    expect(state.status).toBe("authenticated")
+    expect(calls).toEqual([
+      "http://localhost:3000/api/auth/desktop/token",
+      "http://localhost:3000/api/auth/refresh",
+      "http://localhost:3000/api/auth/me",
+    ])
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-new",
+      lastProfile: { user: { email: "u@example.com" } },
+    })
+    expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-code")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-response-token")
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("refresh-old")
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("refresh-new")
+  })
+
   it("preserves active login state on callback state mismatch", async () => {
     const fetch = vi.fn()
     const { service } = await createTestAccountService({ fetch: fetch as typeof fetch })
