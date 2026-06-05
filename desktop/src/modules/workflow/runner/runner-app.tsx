@@ -52,6 +52,7 @@ export function WorkflowRunnerApp() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [retrySignal, setRetrySignal] = useState(0)
   const [confirmRerunActiveRunId, setConfirmRerunActiveRunId] = useState<string | null>(null)
+  const [hydratedRunId, setHydratedRunId] = useState<string | null>(null)
 
   const runIdRef = useRef(runId)
   runIdRef.current = runId
@@ -74,6 +75,7 @@ export function WorkflowRunnerApp() {
         }
         setLoadError(null)
         logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
+        setHydratedRunId(runId)
         if (status.definition) setDefinition(status.definition)
         if (status.params) setRunParams(status.params)
       } catch (err) {
@@ -98,10 +100,10 @@ export function WorkflowRunnerApp() {
     // has been pruned from disk, rather than staying on "加载中…" forever.
     if (definition) return
     if (!workflowId) return
-    // Only skip the fallback when runId is set AND hydration succeeded
-    // (loadError is null). If loadError is set and runId exists, hydration
-    // failed — allow fallback to proceed.
-    if (runId && !loadError) return
+    // Skip fallback while runStatus is still hydrating. Once hydration has
+    // returned for this runId without a definition, fetch the latest workflow
+    // definition so old snapshots can still show the DAG structure.
+    if (runId && !loadError && hydratedRunId !== runId) return
     let cancelled = false
     void (async () => {
       try {
@@ -122,7 +124,7 @@ export function WorkflowRunnerApp() {
       }
     })()
     return () => { cancelled = true }
-  }, [workflowId, definition, runId, loadError, retrySignal])
+  }, [workflowId, definition, runId, loadError, hydratedRunId, retrySignal])
 
   useEffect(() => {
     if (!workflowId) return

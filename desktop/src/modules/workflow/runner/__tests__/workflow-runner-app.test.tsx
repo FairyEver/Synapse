@@ -188,6 +188,31 @@ describe("WorkflowRunnerApp", () => {
     expect(container.textContent).not.toContain(rawMessage)
   })
 
+  it("falls back to the workflow definition when a hydrated run status has no definition", async () => {
+    const runStatus = vi.fn(async () => ({
+      status: "completed",
+      params: {},
+      nodeResults: {},
+    }))
+    const get = vi.fn(async () => workflowDefinition())
+    installWorkflowBridge({ runStatus, get })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(get).toHaveBeenCalledWith("workflow-1")
+    expect(container.querySelector("[data-testid='dag-view']")).toBeInstanceOf(HTMLButtonElement)
+  })
+
   it("logs cancel IPC failures without raw backend error text", async () => {
     const rawMessage = "cancel failed with token=secret-value and /Users/example/repo"
     const cancel = vi.fn(async () => {
