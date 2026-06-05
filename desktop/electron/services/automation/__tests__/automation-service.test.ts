@@ -174,6 +174,50 @@ describe("AutomationService", () => {
     expect(await harness.runs.listByAutomation(item.id)).toEqual([])
   })
 
+  it("recovers interrupted running runs on start", async () => {
+    const emit = vi.fn()
+    const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
+    const logger = structuredLogger()
+    const harness = createHarness({ eventBus, logger })
+    const item = await harness.service.automationCreate(createAutomationInput())
+    const interrupted = await harness.runs.start(item.id, "manual", {
+      triggerType: item.trigger.type,
+      executorType: item.executor.type,
+    })
+
+    await harness.service.start()
+
+    await expect(harness.runs.get(interrupted.id)).resolves.toEqual(expect.objectContaining({
+      status: "failed",
+      error: "应用异常退出，运行已在启动恢复时标记为失败。",
+      result: expect.objectContaining({
+        status: "failed",
+        summary: "应用异常退出",
+      }),
+    }))
+    await expect(harness.items.get(item.id)).resolves.toEqual(expect.objectContaining({
+      lastStatus: "failed",
+      runCount: 1,
+    }))
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "automation",
+        type: "automation.itemChanged",
+        payload: expect.objectContaining({
+          automationId: item.id,
+          runId: interrupted.id,
+          reason: "run-finished",
+        }),
+      }),
+      { backpressure: "coalesce" },
+    )
+    expect(logger.info).toHaveBeenCalledWith("Recovered interrupted automation runs.", {
+      boundary: "automation-startup-run-recovery",
+      recoveredCount: 1,
+    })
+    await harness.service.stop()
+  })
+
   it("schedules a package-defined trigger without core type branches", async () => {
     const harness = createHarness({ triggers: fakeScheduleTriggerRegistry() })
     const item = await harness.service.automationCreate({

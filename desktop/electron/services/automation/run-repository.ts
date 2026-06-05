@@ -68,6 +68,11 @@ export class AutomationRunRepository {
     return this.listSorted(automationId, options?.limit)
   }
 
+  async listRunning(): Promise<AutomationRun[]> {
+    const runs = await this.runs.list({ status: "running" } as Partial<AutomationRun>)
+    return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  }
+
   async deleteByAutomation(automationId: string): Promise<number> {
     const runs = await this.listSorted(automationId)
     await Promise.all(runs.map((run) => this.runs.remove(run.id)))

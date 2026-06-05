@@ -71,6 +71,37 @@ describe("AutomationRunRepository", () => {
     expect(await repo.listByAutomation("automation:1")).toEqual([])
     expect(await repo.listByAutomation("automation:2")).toHaveLength(1)
   })
+
+  it("lists running runs across automations", async () => {
+    let nextMinute = 0
+    const repo = new AutomationRunRepository({
+      runs: new MemoryNamespace<AutomationRun>("automation.runs"),
+      now: () => new Date(Date.UTC(2026, 5, 3, 0, nextMinute, 0)),
+      idFactory: (automationId, index) => `automation-run:${automationId}:${index}`,
+    })
+
+    nextMinute = 0
+    await repo.start("automation:1", "manual", {
+      triggerType: "builtin.cron",
+      executorType: "builtin.command",
+    })
+    nextMinute = 1
+    await repo.start("automation:2", "manual", {
+      triggerType: "builtin.cron",
+      executorType: "builtin.command",
+    })
+    nextMinute = 2
+    const finished = await repo.start("automation:3", "manual", {
+      triggerType: "builtin.cron",
+      executorType: "builtin.command",
+    })
+    await repo.finish(finished.id, { status: "success" })
+
+    expect(await repo.listRunning()).toEqual([
+      expect.objectContaining({ id: "automation-run:automation:2:2" }),
+      expect.objectContaining({ id: "automation-run:automation:1:1" }),
+    ])
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

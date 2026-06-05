@@ -18,6 +18,7 @@ import type {
 const TIMER_MAX_DELAY_MS = 2_147_483_647
 const STOP_SETTLE_WAIT_MS = 3_000
 const NEEDS_UPDATE_MESSAGE = "自动化配置需要更新"
+const INTERRUPTED_RUN_ERROR = "应用异常退出，运行已在启动恢复时标记为失败。"
 
 export interface AutomationServiceDeps {
   readonly items: AutomationItemRepository
@@ -58,6 +59,7 @@ export class AutomationService {
 
   async start(): Promise<void> {
     if (this.started) return
+    await this.recoverInterruptedRuns()
     const items = await this.deps.items.list()
     for (const item of items) {
       try {
@@ -72,6 +74,55 @@ export class AutomationService {
       }
     }
     this.started = true
+  }
+
+  private async recoverInterruptedRuns(): Promise<void> {
+    const runs = await this.deps.runs.listRunning()
+    let recoveredCount = 0
+    for (const run of runs) {
+      try {
+        const finished = await this.deps.runs.finish(run.id, {
+          status: "failed",
+          error: INTERRUPTED_RUN_ERROR,
+          result: {
+            status: "failed",
+            summary: "应用异常退出",
+            error: INTERRUPTED_RUN_ERROR,
+          },
+        })
+        recoveredCount += 1
+        this.emitAutomationChanged({
+          automationId: finished.automationId,
+          runId: finished.id,
+          reason: "run-finished",
+        })
+        try {
+          await this.deps.items.markRunResult(finished.automationId, { status: "failed" })
+        } catch (markError) {
+          this.deps.logger?.warn("markRunResult failed after startup automation run recovery.", {
+            source: "automation",
+            automationId: finished.automationId,
+            runId: finished.id,
+            status: "failed",
+            boundary: "automation-startup-run-recovery",
+            ...errorMetadata(markError),
+          })
+        }
+      } catch (error) {
+        this.deps.logger?.warn("Automation run startup recovery failed.", {
+          automationId: run.automationId,
+          runId: run.id,
+          boundary: "automation-startup-run-recovery",
+          ...errorMetadata(error),
+        })
+      }
+    }
+    if (recoveredCount > 0) {
+      this.deps.logger?.info("Recovered interrupted automation runs.", {
+        boundary: "automation-startup-run-recovery",
+        recoveredCount,
+      })
+    }
   }
 
   async stop(): Promise<void> {
