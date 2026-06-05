@@ -11,10 +11,15 @@ type TestEventBus = Pick<EventBus, "emit"> & {
 
 describe("CheatCodeStateService", () => {
   it("returns canonical false values for missing requested states", async () => {
-    const service = createService()
+    const logger = createLoggerHarness()
+    const service = createService({ logger })
 
     await expect(service.getStates(["settings:missing"])).resolves.toEqual({
       "settings:missing": false,
+    })
+    expect(logger.info).toHaveBeenCalledWith("Cheat code states read.", {
+      requestedCount: 1,
+      allStates: false,
     })
   })
 
@@ -51,15 +56,63 @@ describe("CheatCodeStateService", () => {
     }))
     expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("sequence")
   })
+
+  it("logs persisted state changes without exposing input sequences", async () => {
+    const logger = createLoggerHarness()
+    const service = createService({ logger })
+
+    await service.setState({ name: "settings:test-state", active: true })
+    await service.setState({ name: "settings:test-state", active: true })
+
+    expect(logger.info).toHaveBeenCalledWith("Cheat code state persisted.", {
+      name: "settings:test-state",
+      active: true,
+      previousActive: false,
+    })
+    expect(logger.info).toHaveBeenCalledWith("Cheat code state unchanged.", {
+      name: "settings:test-state",
+      active: true,
+    })
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("sequence")
+  })
+
+  it("logs persistence failures before rethrowing", async () => {
+    const logger = createLoggerHarness()
+    const service = createService({
+      logger,
+      states: new FailingNamespace(),
+    })
+
+    await expect(service.setState({ name: "settings:test-state", active: true }))
+      .rejects.toThrow("write failed")
+
+    expect(logger.error).toHaveBeenCalledWith("Cheat code state persist failed.", {
+      name: "settings:test-state",
+      active: true,
+      previousActive: false,
+      errorName: "Error",
+      errorMessage: "write failed",
+    })
+  })
 })
 
 function createService(options: {
   readonly eventBus?: Pick<EventBus, "emit">
+  readonly logger?: ReturnType<typeof createLoggerHarness>
+  readonly states?: DataNamespace<CheatCodeStatesEntryV1>
 } = {}): CheatCodeStateService {
   return new CheatCodeStateService({
     eventBus: options.eventBus,
-    states: new MemoryNamespace(),
+    logger: options.logger,
+    states: options.states ?? new MemoryNamespace(),
   })
+}
+
+function createLoggerHarness() {
+  return {
+    info: vi.fn(),
+    error: vi.fn(),
+  }
 }
 
 class MemoryNamespace implements DataNamespace<CheatCodeStatesEntryV1> {
@@ -94,5 +147,11 @@ class MemoryNamespace implements DataNamespace<CheatCodeStatesEntryV1> {
 
   onChange(_listener: DataChangeListener<CheatCodeStatesEntryV1>): () => void {
     return () => {}
+  }
+}
+
+class FailingNamespace extends MemoryNamespace {
+  override async setSingleton(_value: CheatCodeStatesEntryV1): Promise<void> {
+    throw new Error("write failed")
   }
 }
