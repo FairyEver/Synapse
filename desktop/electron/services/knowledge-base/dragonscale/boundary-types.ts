@@ -24,5 +24,6 @@ export interface DragonScaleBoundaryScoreReport {
   readonly generated: string
   readonly halflifeDays: typeof DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS
   readonly pageCountScoreable: number
+  readonly skipped: Record<string, number>
   readonly results: readonly DragonScaleBoundaryScoreResult[]
 }

@@ -3,6 +3,8 @@ import { lstat, readFile, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
 import { TextDecoder } from "node:util"
 
+import { sanitizeError } from "../../error-sanitize"
+import { createMainLogger } from "../../log-store"
 import {
   DRAGONSCALE_BOUNDARY_DEFAULT_TOP,
   DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS,
@@ -20,6 +22,11 @@ interface BoundaryPage {
   readonly body: string
   readonly updated?: string
   readonly created?: string
+}
+
+interface BoundaryPageScanResult {
+  readonly pages: Map<string, BoundaryPage>
+  readonly skipped: Record<string, number>
 }
 
 interface ParsedFrontmatter {
@@ -49,6 +56,7 @@ const TITLE_RE = /^title:\s*"?([^"\n]+?)"?\s*$/m
 const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g
 const FENCE_RE = /^(\s*)(`{3,}|~{3,})/
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true })
+const logger = createMainLogger("knowledge-base.dragonscale.boundary")
 
 export class DragonScaleBoundaryService {
   async score(
@@ -62,7 +70,8 @@ export class DragonScaleBoundaryService {
 
     const root = path.resolve(projectPath)
     const today = options.today ?? localDateString(new Date())
-    const pages = await collectPages(root)
+    const scan = await collectPages(root)
+    const pages = scan.pages
     const { outEdges, inEdges } = buildGraph(pages)
     let results = [...pages.values()].map((page) => scorePage(page, outEdges, inEdges, today))
 
@@ -88,12 +97,13 @@ export class DragonScaleBoundaryService {
       generated: generatedTimestamp(),
       halflifeDays: DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS,
       pageCountScoreable: pages.size,
+      skipped: scan.skipped,
       results,
     }
   }
 }
 
-async function collectPages(root: string): Promise<Map<string, BoundaryPage>> {
+async function collectPages(root: string): Promise<BoundaryPageScanResult> {
   const wikiPath = path.join(root, "wiki")
   const rootRealPath = await resolveExistingPath(root)
   const markdownPaths = await collectMarkdownPaths(root, rootRealPath, wikiPath)
@@ -102,10 +112,22 @@ async function collectPages(root: string): Promise<Map<string, BoundaryPage>> {
   ))
 
   const pages = new Map<string, BoundaryPage>()
+  const skipped: Record<string, number> = {}
   for (const markdownPath of markdownPaths) {
     const relativePath = normalizeRelativePath(path.relative(root, markdownPath))
-    const content = await readSmallUtf8(markdownPath)
-    if (content === null) continue
+    const read = await readSmallUtf8(markdownPath)
+    if (!read.ok) {
+      if (read.reason === "read_error") {
+        logger.warn("DragonScale boundary page read failed.", {
+          pagePath: relativePath,
+          reason: read.reason,
+          ...errorLogMeta(read.error),
+        })
+      }
+      increment(skipped, read.reason)
+      continue
+    }
+    const content = read.content
     const { frontmatter, body } = parseFrontmatter(content)
     const parsed = parseFrontmatterFields(frontmatter)
     if (!included(relativePath, parsed)) continue
@@ -121,7 +143,7 @@ async function collectPages(root: string): Promise<Map<string, BoundaryPage>> {
       ...(parsed.created ? { created: parsed.created } : undefined),
     })
   }
-  return pages
+  return { pages, skipped }
 }
 
 async function collectMarkdownPaths(root: string, rootRealPath: string, directoryPath: string): Promise<string[]> {
@@ -152,14 +174,16 @@ async function collectMarkdownPaths(root: string, rootRealPath: string, director
   return results
 }
 
-async function readSmallUtf8(filePath: string): Promise<string | null> {
+async function readSmallUtf8(filePath: string): Promise<
+  | { readonly ok: true; readonly content: string }
+  | { readonly ok: false; readonly reason: "too_large" | "read_error"; readonly error?: unknown }
+> {
   try {
     const bytes = await readFile(filePath)
-    if (bytes.byteLength > DRAGONSCALE_BOUNDARY_MAX_BODY_BYTES) return null
-    return UTF8_DECODER.decode(bytes)
+    if (bytes.byteLength > DRAGONSCALE_BOUNDARY_MAX_BODY_BYTES) return { ok: false, reason: "too_large" }
+    return { ok: true, content: UTF8_DECODER.decode(bytes) }
   } catch (error) {
-    if (error instanceof TypeError || error instanceof Error) return null
-    throw error
+    return { ok: false, reason: "read_error", error }
   }
 }
 
@@ -308,6 +332,19 @@ function parseDateOnly(value: string | undefined): Date | null {
 
 function round4(value: number): number {
   return Math.round(value * 10_000) / 10_000
+}
+
+function increment(counts: Record<string, number>, key: string): void {
+  counts[key] = (counts[key] ?? 0) + 1
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
+  const raw = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: raw.length,
+    errorMessage: sanitizeError(raw),
+  }
 }
 
 function localDateString(date: Date): string {

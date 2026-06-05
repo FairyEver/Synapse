@@ -42,6 +42,7 @@ describe("DragonScaleBoundaryService", () => {
       generated: "2026-05-24T00:00:00Z",
       halflifeDays: 30,
       pageCountScoreable: 0,
+      skipped: {},
       results: [],
     }
     expect(report.results).toEqual([])
@@ -56,6 +57,7 @@ describe("DragonScaleBoundaryService", () => {
     expect(result).toMatchObject({
       halflifeDays: 30,
       pageCountScoreable: 0,
+      skipped: {},
       results: [],
     })
     await expect(pathExists(path.join(root, ".vault-meta"))).resolves.toBe(false)
@@ -82,6 +84,7 @@ describe("DragonScaleBoundaryService", () => {
     })
 
     expect(result.pageCountScoreable).toBe(2)
+    expect(result.skipped).toEqual({ too_large: 1 })
     expect(result.results.map((item) => item.path).sort()).toEqual([
       "wiki/concepts/Alpha.md",
       "wiki/concepts/Beta.md",
@@ -234,7 +237,7 @@ describe("DragonScaleBoundaryService", () => {
     ])
   })
 
-  it("skips invalid utf8 without failing the scan", async () => {
+  it("reports invalid utf8 as a read error without failing the scan", async () => {
     const root = await tempDir()
     await writePage(root, "wiki/concepts/Valid.md", "---\ntype: concept\ncreated: 2026-05-24\n---\n\n# Valid\n")
     const invalidPath = path.join(root, "wiki", "concepts", "Invalid.md")
@@ -246,6 +249,7 @@ describe("DragonScaleBoundaryService", () => {
     })
 
     expect(result.results.map((item) => item.titleKey)).toEqual(["Valid"])
+    expect(result.skipped).toEqual({ read_error: 1 })
   })
 
   it("does not write reports or metadata while scoring", async () => {
