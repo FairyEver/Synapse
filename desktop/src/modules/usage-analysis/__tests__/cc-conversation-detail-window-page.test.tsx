@@ -67,6 +67,16 @@ describe("CcConversationDetailWindowPage", () => {
     expect(document.body.textContent).toContain("Unexpected token")
   })
 
+  it("shows sanitized load failure details instead of a generic error", async () => {
+    mocks.getConversation.mockRejectedValue(new Error("Claude Code transcript file is missing token=secret-value"))
+
+    await renderWindow()
+
+    expect(document.body.textContent).toContain("Claude Code transcript file is missing")
+    expect(document.body.textContent).not.toContain("token=secret-value")
+    expect(document.body.textContent).not.toContain("读取失败")
+  })
+
   it("redacts secret values in the event stream and inspector", async () => {
     mocks.getConversation.mockResolvedValue(createDetail({
       events: [{

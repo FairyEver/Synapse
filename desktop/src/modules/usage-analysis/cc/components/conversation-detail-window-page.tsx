@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { sanitizeError } from "@/lib/error-sanitize"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type {
   CcConversationDetail,
@@ -25,6 +26,11 @@ function parseErrorSummary(errors: readonly CcConversationParseError[]): string 
   return `${errors.length} 行解析失败`
 }
 
+function loadErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return sanitizeError(message).trim() || "读取失败"
+}
+
 export function CcConversationDetailWindowPage({ request }: { readonly request: CcConversationWindowRequest }) {
   const [detail, setDetail] = useState<CcConversationDetail | null>(null)
   const [selected, setSelected] = useState<CcRawConversationEvent | null>(null)
@@ -44,8 +50,8 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
         setSelected(selectFocusedEvent(next.events, request))
         setError(null)
       })
-      .catch(() => {
-        if (!cancelled) setError("读取失败")
+      .catch((err: unknown) => {
+        if (!cancelled) setError(loadErrorMessage(err))
       })
 
     return () => {
