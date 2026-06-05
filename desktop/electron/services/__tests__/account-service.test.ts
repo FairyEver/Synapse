@@ -1,7 +1,21 @@
 import { mkdtemp } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const accountLogger = vi.hoisted(() => {
+  const logger = {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(),
+  }
+  logger.child.mockReturnValue(logger)
+  return logger
+})
 
 vi.mock("electron", () => ({
   app: {
@@ -19,6 +33,10 @@ vi.mock("electron", () => ({
   shell: {
     openExternal: vi.fn().mockResolvedValue(undefined),
   },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => accountLogger,
 }))
 
 import {
@@ -86,6 +104,11 @@ async function createTestAccountService(input: {
 }
 
 describe("AccountService", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    accountLogger.child.mockReturnValue(accountLogger)
+  })
+
   it("starts login by persisting an attempt and opening the browser", async () => {
     const { namespace, openExternal, service } = await createTestAccountService()
     const result = await service.startLogin()
@@ -107,6 +130,21 @@ describe("AccountService", () => {
         apiBaseUrl: "http://localhost:3000/api",
       },
     })
+  })
+
+  it("logs login start success without leaking the login state", async () => {
+    const { service } = await createTestAccountService()
+
+    const result = await service.startLogin()
+    const loginUrl = new URL(result.loginUrl)
+
+    expect(accountLogger.info).toHaveBeenCalledWith("Desktop account login started.", {
+      operation: "startLogin",
+      status: "success",
+      apiMode: "development",
+    })
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain(loginUrl.searchParams.get("state"))
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain(loginUrl.searchParams.get("code_challenge"))
   })
 
   it("exchanges protocol callback, stores refresh token, and loads me", async () => {
@@ -140,6 +178,53 @@ describe("AccountService", () => {
     expect(state.profile.user.email).toBe("u@example.com")
     expect((await namespace.getSingleton())?.refreshToken).toBe("refresh-1")
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+  })
+
+  it("logs successful callback exchange and authentication without leaking credentials", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        if (String(url).endsWith("/auth/desktop/token")) {
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            code: "secret-code",
+            state: expect.any(String),
+            codeVerifier: expect.any(String),
+          })
+          return jsonResponse({ accessToken: "secret-access", refreshToken: "secret-refresh" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=secret-code&state=${attempt!.state}`,
+    )
+
+    expect(state.status).toBe("authenticated")
+    expect(accountLogger.info).toHaveBeenCalledWith("Desktop account callback accepted.", {
+      operation: "handleAuthCallback",
+      status: "accepted",
+    })
+    expect(accountLogger.info).toHaveBeenCalledWith("Desktop account callback exchange succeeded.", {
+      operation: "handleAuthCallback",
+      status: "exchange-success",
+    })
+    expect(accountLogger.info).toHaveBeenCalledWith("Desktop account authenticated.", {
+      operation: "handleAuthCallback",
+      status: "authenticated",
+      userId: "u1",
+      teamCount: 0,
+    })
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-code")
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-access")
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-refresh")
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain(attempt!.state)
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain(attempt!.codeVerifier)
   })
 
   it("preserves active login state on callback state mismatch", async () => {
@@ -340,6 +425,40 @@ describe("AccountService", () => {
       lastProfile: { user: { email: "u@example.com" } },
     })
     expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
+  })
+
+  it("logs refresh and logout success without leaking tokens", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url) => {
+        if (String(url).endsWith("/auth/refresh")) {
+          return jsonResponse({ accessToken: "secret-access", refreshToken: "secret-refresh-new" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        if (String(url).endsWith("/auth/logout")) return jsonResponse({})
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "secret-refresh-old" })
+
+    await service.refreshFromStorage()
+    await service.logout()
+
+    expect(accountLogger.info).toHaveBeenCalledWith("Desktop account refreshed from storage.", {
+      operation: "refreshFromStorage",
+      status: "authenticated",
+      userId: "u1",
+      teamCount: 0,
+    })
+    expect(accountLogger.info).toHaveBeenCalledWith("Desktop account logged out.", {
+      operation: "logout",
+      status: "success",
+      hadRefreshToken: true,
+    })
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-access")
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-refresh-old")
+    expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-refresh-new")
   })
 
   it("keeps active login state when refresh finds an attempt without a token", async () => {

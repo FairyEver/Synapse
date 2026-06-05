@@ -54,6 +54,10 @@ function apiBaseUrl(isPackaged: boolean): string {
   return isPackaged ? PROD_API_BASE_URL : DEV_API_BASE_URL
 }
 
+function apiMode(isPackaged: boolean): "production" | "development" {
+  return isPackaged ? "production" : "development"
+}
+
 function dashboardLoginUrl(baseUrl: string, state: string, codeChallenge: string): string {
   const origin = baseUrl.replace(/\/api\/?$/u, "")
   const query = new URLSearchParams({
@@ -151,6 +155,11 @@ export class AccountService {
       if (this.authRevision !== revision) return { state: this.state, loginUrl }
       this.setState({ status: "authenticating", loginUrl })
       await this.openExternal(loginUrl)
+      logger.info("Desktop account login started.", {
+        operation: "startLogin",
+        status: "success",
+        apiMode: apiMode(this.isPackaged),
+      })
     } catch (error) {
       logger.warn("Failed to start desktop account login.", { error })
       this.setState({ status: "error", message: "无法保存登录状态。" })
@@ -225,12 +234,21 @@ export class AccountService {
       return this.state
     }
 
+    logger.info("Desktop account callback accepted.", {
+      operation: "handleAuthCallback",
+      status: "accepted",
+    })
+
     let tokens: { accessToken: string; refreshToken: string }
     try {
       tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
         `${attempt.apiBaseUrl}/auth/desktop/token`,
         { code, state: callbackState, codeVerifier: attempt.codeVerifier },
       )
+      logger.info("Desktop account callback exchange succeeded.", {
+        operation: "handleAuthCallback",
+        status: "exchange-success",
+      })
     } catch (error) {
       logger.warn("Desktop account callback exchange failed.", { error })
       this.accessToken = null
@@ -267,6 +285,7 @@ export class AccountService {
         return this.state
       }
       this.setState({ status: "authenticated", profile })
+      logger.info("Desktop account authenticated.", authenticatedLogMeta("handleAuthCallback", profile))
     } catch (error) {
       logger.warn("Desktop account profile load failed after exchange; retrying refresh.", { error })
       this.accessToken = null
@@ -294,6 +313,10 @@ export class AccountService {
         }
         if (committed.activeAttempt) return this.state
         this.setState({ status: "authenticated", profile: refreshed.profile })
+        logger.info("Desktop account authenticated after refresh recovery.", authenticatedLogMeta(
+          "handleAuthCallback",
+          refreshed.profile,
+        ))
       } catch (refreshError) {
         logger.warn("Desktop account callback refresh recovery failed.", { error: refreshError })
         this.accessToken = null
@@ -320,8 +343,18 @@ export class AccountService {
     try {
       const persisted = await this.namespace.getSingleton()
       if (!persisted?.refreshToken) {
-        if (persisted?.activeAttempt) return this.state
+        if (persisted?.activeAttempt) {
+          logger.info("Desktop account refresh skipped.", {
+            operation: "refreshFromStorage",
+            status: "active-attempt",
+          })
+          return this.state
+        }
         this.setState({ status: "unauthenticated" })
+        logger.info("Desktop account refresh skipped.", {
+          operation: "refreshFromStorage",
+          status: "no-refresh-token",
+        })
         return this.state
       }
       attemptedRefreshToken = persisted.refreshToken
@@ -355,6 +388,7 @@ export class AccountService {
       }
       if (committed.activeAttempt) return this.state
       this.setState({ status: "authenticated", profile })
+      logger.info("Desktop account refreshed from storage.", authenticatedLogMeta("refreshFromStorage", profile))
     } catch (error) {
       logger.warn("Account refresh failed.", { error })
       this.accessToken = null
@@ -381,6 +415,11 @@ export class AccountService {
 
     await this.clearStoredAccount()
     this.setState({ status: "unauthenticated" })
+    logger.info("Desktop account logged out.", {
+      operation: "logout",
+      status: "success",
+      hadRefreshToken: Boolean(persisted?.refreshToken),
+    })
     return this.state
   }
 
@@ -539,6 +578,18 @@ export class AccountService {
       payload: { state: nextState },
       timestamp: new Date().toISOString(),
     })
+  }
+}
+
+function authenticatedLogMeta(
+  operation: "handleAuthCallback" | "refreshFromStorage",
+  profile: SynapseAccountProfile,
+): Record<string, unknown> {
+  return {
+    operation,
+    status: "authenticated",
+    userId: profile.user.id,
+    teamCount: profile.teams.length,
   }
 }
 
