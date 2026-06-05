@@ -317,14 +317,41 @@ export class AutomationService {
     const acceptedRuns: AutomationRun[] = []
     for (const item of items) {
       if (!item.enabled) continue
-      if (!this.isItemValid(item)) continue
+      if (!this.isItemValid(item)) {
+        this.logInvalidEventTriggerConfig(item)
+        continue
+      }
       const trigger = this.deps.triggers.get(item.trigger.type)
       if (trigger.manifest.kind !== "event") continue
       if (!trigger.runtime.shouldAcceptEvent) continue
-      const config = trigger.manifest.configSchema.parse(item.trigger.config)
-      const accepted = trigger.runtime.shouldAcceptEvent({ config, event })
-      if (!accepted) continue
-      acceptedRuns.push(await this.executeOrSkip(item, "trigger"))
+      const parsedConfig = trigger.manifest.configSchema.safeParse(item.trigger.config)
+      if (!parsedConfig.success) {
+        this.warnEventTriggerConfigInvalid(item, parsedConfig.error)
+        continue
+      }
+      try {
+        const accepted = trigger.runtime.shouldAcceptEvent({ config: parsedConfig.data, event })
+        if (!accepted) continue
+      } catch (error) {
+        this.deps.logger?.warn("Automation event trigger failed, skipping item.", {
+          automationId: item.id,
+          triggerType: item.trigger.type,
+          boundary: "automation-event-trigger",
+          ...errorMetadata(error),
+        })
+        continue
+      }
+      try {
+        acceptedRuns.push(await this.executeOrSkip(item, "trigger"))
+      } catch (error) {
+        this.deps.logger?.warn("Automation event execution failed, skipping item.", {
+          automationId: item.id,
+          triggerType: item.trigger.type,
+          executorType: item.executor.type,
+          boundary: "automation-event-trigger",
+          ...errorMetadata(error),
+        })
+      }
     }
     return acceptedRuns
   }
@@ -698,6 +725,33 @@ export class AutomationService {
         ...(executorValidation.status === "needs_update" ? executorValidation.issues : []),
       ],
     }
+  }
+
+  private logInvalidEventTriggerConfig(item: AutomationItem): void {
+    try {
+      const trigger = this.deps.triggers.get(item.trigger.type)
+      if (trigger.manifest.kind !== "event") return
+      const parsed = trigger.manifest.configSchema.safeParse(item.trigger.config)
+      if (!parsed.success) {
+        this.warnEventTriggerConfigInvalid(item, parsed.error)
+      }
+    } catch (error) {
+      this.deps.logger?.warn("Automation event trigger lookup failed, skipping item.", {
+        automationId: item.id,
+        triggerType: item.trigger.type,
+        boundary: "automation-event-trigger",
+        ...errorMetadata(error),
+      })
+    }
+  }
+
+  private warnEventTriggerConfigInvalid(item: AutomationItem, error: unknown): void {
+    this.deps.logger?.warn("Automation event trigger config invalid, skipping item.", {
+      automationId: item.id,
+      triggerType: item.trigger.type,
+      boundary: "automation-event-trigger",
+      ...errorMetadata(error),
+    })
   }
 
   private normalizeCreateInput(input: AutomationCreateInput): AutomationCreateInput {

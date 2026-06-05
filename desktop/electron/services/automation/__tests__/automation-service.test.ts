@@ -366,6 +366,92 @@ describe("AutomationService", () => {
 
     expect(runs).toEqual([])
   })
+
+  it("logs invalid event trigger config and continues matching later automations", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry(), logger })
+    await harness.itemStore.upsert({
+      id: "automation:broken",
+      schemaVersion: 1,
+      name: "Broken event automation",
+      enabled: true,
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: {} },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+      policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
+      createdAt: "2026-06-03T00:00:00.000Z",
+      updatedAt: "2026-06-03T00:00:00.000Z",
+      runCount: 0,
+      configVersion: 0,
+    })
+    const item = await harness.service.automationCreate({
+      name: "Event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const runs = await harness.service.acceptEvent({
+      source: "test",
+      type: "demo.created",
+      payload: { id: "1" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+
+    expect(runs).toEqual([
+      expect.objectContaining({
+        automationId: item.id,
+        status: "success",
+        triggeredBy: "trigger",
+      }),
+    ])
+    expect(logger.warn).toHaveBeenCalledWith("Automation event trigger config invalid, skipping item.", {
+      automationId: "automation:broken",
+      triggerType: "builtin.fake-event",
+      boundary: "automation-event-trigger",
+      errorName: "ZodError",
+      errorLength: expect.any(Number),
+    })
+  })
+
+  it("skips event trigger runtime errors and continues matching later automations", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ triggers: throwingEventTriggerRegistry(), logger })
+    await harness.service.automationCreate({
+      name: "Broken event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.throwing-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+    const item = await harness.service.automationCreate({
+      name: "Event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const runs = await harness.service.acceptEvent({
+      source: "test",
+      type: "demo.created",
+      payload: { id: "1" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+
+    expect(runs).toEqual([
+      expect.objectContaining({
+        automationId: item.id,
+        status: "success",
+        triggeredBy: "trigger",
+      }),
+    ])
+    expect(logger.warn).toHaveBeenCalledWith("Automation event trigger failed, skipping item.", {
+      automationId: "automation:1",
+      triggerType: "builtin.throwing-event",
+      boundary: "automation-event-trigger",
+      errorName: "Error",
+      errorLength: expect.any(Number),
+    })
+  })
 })
 
 function createHarness(options: {
@@ -376,11 +462,13 @@ function createHarness(options: {
   readonly now?: () => Date
 } = {}) {
   const triggers = options.triggers ?? createBuiltinAutomationTriggerRegistry()
+  let automationIndex = 0
+  const itemStore = new MemoryNamespace<AutomationItem>("automation.items")
   const items = new AutomationItemRepository({
-    items: new MemoryNamespace<AutomationItem>("automation.items"),
+    items: itemStore,
     triggers,
     now: options.now ?? (() => new Date("2026-06-03T00:00:00.000Z")),
-    idFactory: () => "automation:1",
+    idFactory: () => `automation:${++automationIndex}`,
   })
   const runs = new AutomationRunRepository({
     runs: new MemoryNamespace<AutomationRun>("automation.runs"),
@@ -413,7 +501,7 @@ function createHarness(options: {
     logger: options.logger,
     now: options.now ?? (() => new Date("2026-06-03T00:00:00.000Z")),
   })
-  return { service, items, runs, execution }
+  return { service, items, itemStore, runs, execution }
 }
 
 function fakeScheduleTriggerRegistry(): AutomationTriggerRegistry {
@@ -449,6 +537,26 @@ function fakeEventTriggerRegistry(): AutomationTriggerRegistry {
     summarize: (config) => `Event · ${config.eventType}`,
     runtime: {
       shouldAcceptEvent: ({ config, event }) => event.type === config.eventType,
+    },
+  })
+  return registry
+}
+
+function throwingEventTriggerRegistry(): AutomationTriggerRegistry {
+  const registry = fakeEventTriggerRegistry()
+  registry.register({
+    manifest: {
+      id: "builtin.throwing-event",
+      title: "Throwing Event",
+      kind: "event",
+      defaultConfig: { eventType: "demo.created" },
+      configSchema: z.object({ eventType: z.string().min(1) }),
+    },
+    summarize: (config) => `Throwing event · ${config.eventType}`,
+    runtime: {
+      shouldAcceptEvent: () => {
+        throw new Error("matcher failed")
+      },
     },
   })
   return registry
