@@ -35,10 +35,26 @@ export default function UsersPage() {
     queryFn: () => adminApi.listUsers({ page, pageSize, ...sortQuery }),
   })
 
-  const { data: modulePermissionDefinitions = [] } = useQuery({
+  const {
+    data: modulePermissionDefinitions = [],
+    error: modulePermissionDefinitionsError,
+    isError: isModulePermissionDefinitionsError,
+    isLoading: isModulePermissionDefinitionsLoading,
+    refetch: refetchModulePermissionDefinitions,
+  } = useQuery({
     queryKey: ['admin-module-permissions'],
     queryFn: () => adminApi.listModulePermissions(),
   })
+  const isTableLoading = isLoading || isModulePermissionDefinitionsLoading
+  const tableError = isError
+    ? error
+    : isModulePermissionDefinitionsError
+      ? modulePermissionDefinitionsError
+      : null
+  const retryTable = () => {
+    void refetch()
+    void refetchModulePermissionDefinitions()
+  }
 
   const toggleStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'active' | 'disabled' }) =>
@@ -142,7 +158,7 @@ export default function UsersPage() {
         <h1 className='text-lg font-semibold'>用户管理</h1>
       </Header>
       <Main>
-        {isLoading ? (
+        {isTableLoading ? (
           <div className='text-muted-foreground'>加载中...</div>
         ) : (
           <ServerDataTable
@@ -151,8 +167,8 @@ export default function UsersPage() {
             page={page}
             pageSize={pageSize}
             total={data?.total ?? 0}
-            error={isError ? error : null}
-            onRetry={() => void refetch()}
+            error={tableError}
+            onRetry={retryTable}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             sorting={sorting}
