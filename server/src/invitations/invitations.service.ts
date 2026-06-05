@@ -47,7 +47,7 @@ export class InvitationsService {
   ) {
     const tokenHash = hashToken(parseInviteTokenInput(input.token))
     const consumedAt = new Date()
-    const update = await client.invitation.updateMany({
+    const invitations = await client.invitation.updateManyAndReturn({
       where: {
         tokenHash,
         type: input.type,
@@ -60,16 +60,10 @@ export class InvitationsService {
       },
     })
 
-    if (update.count !== 1) {
+    if (invitations.length !== 1) {
       throw new BadRequestException("邀请无效或已过期。")
     }
 
-    const invitation = await client.invitation.findUnique({
-      where: { tokenHash },
-    })
-
-    if (!invitation) throw new BadRequestException("邀请无效或已过期。")
-
-    return invitation
+    return invitations[0]
   }
 }
