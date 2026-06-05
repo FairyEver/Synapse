@@ -68,6 +68,12 @@ export class AutomationRunRepository {
     return this.listSorted(automationId, options?.limit)
   }
 
+  async deleteByAutomation(automationId: string): Promise<number> {
+    const runs = await this.listSorted(automationId)
+    await Promise.all(runs.map((run) => this.runs.remove(run.id)))
+    return runs.length
+  }
+
   get(id: string): Promise<AutomationRun | null> {
     return this.runs.get(id)
   }

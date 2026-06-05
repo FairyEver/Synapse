@@ -163,6 +163,17 @@ describe("AutomationService", () => {
     await runPromise
   })
 
+  it("deletes stored run history when deleting an automation", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate(createAutomationInput())
+    await harness.service.runNow(item.id)
+
+    await expect(harness.service.automationDelete(item.id)).resolves.toEqual({ deleted: true })
+
+    expect(await harness.items.get(item.id)).toBeNull()
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+  })
+
   it("schedules a package-defined trigger without core type branches", async () => {
     const harness = createHarness({ triggers: fakeScheduleTriggerRegistry() })
     const item = await harness.service.automationCreate({

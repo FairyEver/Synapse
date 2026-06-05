@@ -173,11 +173,13 @@ export class AutomationService {
     this.cancel(id)
     try {
       const deleted = await this.deps.items.delete(id)
+      const deletedRunCount = deleted ? await this.deleteRunsAfterItemDelete(id) : 0
       if (deleted) this.emitAutomationChanged({ automationId: id, reason: "deleted" })
       this.deps.logger?.info("Automation deleted.", {
         boundary: "automation.item-delete",
         automationId: id,
         deleted,
+        deletedRunCount,
         durationMs: Date.now() - startedAt,
       })
       return { deleted }
@@ -192,6 +194,19 @@ export class AutomationService {
         ...errorMetadata(error),
       })
       throw error
+    }
+  }
+
+  private async deleteRunsAfterItemDelete(id: string): Promise<number> {
+    try {
+      return await this.deps.runs.deleteByAutomation(id)
+    } catch (error) {
+      this.deps.logger?.warn("Automation run cleanup after delete failed.", {
+        boundary: "automation.run-delete",
+        automationId: id,
+        ...errorMetadata(error),
+      })
+      return 0
     }
   }
 
