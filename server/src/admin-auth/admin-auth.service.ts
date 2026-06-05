@@ -127,12 +127,6 @@ export class AdminAuthService {
     throw new UnauthorizedException("邮箱或密码错误。")
   }
 
-  async verify(token: string): Promise<{ id: string; email: string } | null> {
-    const session = await this.verifyDashboardSession(token)
-    if (session?.role !== "admin") return null
-    return { id: session.id, email: session.email }
-  }
-
   async verifyDashboardSession(token: string): Promise<DashboardSession | null> {
     try {
       const payload = this.jwt.verify<AdminJwtPayload>(token)

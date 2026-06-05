@@ -287,21 +287,6 @@ describe("AdminAuthService", () => {
     })
   })
 
-  it("does not verify a normal user token as an administrator", async () => {
-    const { service, prisma } = await createTestService()
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user-1",
-      email: "user@example.com",
-      displayName: "Ada",
-      passwordHash: await hashPassword("user-password"),
-      status: "active",
-    })
-
-    const result = await service.login("user@example.com", "user-password")
-
-    await expect(service.verify(result.token)).resolves.toBeNull()
-  })
-
   it("verifies dashboard sessions with their role", async () => {
     const { service, prisma } = await createTestService()
     prisma.user.findUnique.mockResolvedValue({
