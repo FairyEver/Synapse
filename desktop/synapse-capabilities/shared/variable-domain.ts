@@ -6,7 +6,7 @@ const variableCapabilities: readonly CapabilityDefinition[] = [
   {
     id: "variable.item.list" as CapabilityId,
     title: "List variables",
-    description: "List local variables for one repository without values.",
+    description: "List user local variables without values.",
     mutates: false,
   },
   {
@@ -18,7 +18,7 @@ const variableCapabilities: readonly CapabilityDefinition[] = [
   {
     id: "variable.item.create" as CapabilityId,
     title: "Create variable",
-    description: "Create one local variable in one repository.",
+    description: "Create one user local variable.",
     mutates: true,
   },
   {
@@ -36,7 +36,7 @@ const variableCapabilities: readonly CapabilityDefinition[] = [
   {
     id: "variable.item.delete" as CapabilityId,
     title: "Delete variable",
-    description: "Delete one local variable from one repository.",
+    description: "Delete one user local variable.",
     mutates: true,
   },
 ]
@@ -49,11 +49,6 @@ export const VARIABLE_DOMAIN: CapabilityDomainDefinition = {
 export const VARIABLE_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries(
   variableCapabilities.map((capability) => [capabilityIdToMcpTool(capability.id), capability.id]),
 )
-
-const repositoryUuidProperty = {
-  type: "string",
-  description: "Optional repository uuid. Omit to use the current active repository.",
-}
 
 const nameProperty = {
   type: "string",
@@ -74,21 +69,18 @@ export function buildVariableTools(): McpToolDefinition[] {
   return [
     {
       name: "variable_item_list",
-      description: "List repository-scoped Synapse local variables without returning values.",
+      description: "List user-scoped Synapse local variables without returning values.",
       inputSchema: {
         type: "object",
-        properties: {
-          repositoryUuid: repositoryUuidProperty,
-        },
+        properties: {},
       },
     },
     {
       name: "variable_item_get",
-      description: "Get one repository-scoped local variable. The value is returned only when includeValue is true.",
+      description: "Get one user-scoped local variable. The value is returned only when includeValue is true.",
       inputSchema: {
         type: "object",
         properties: {
-          repositoryUuid: repositoryUuidProperty,
           name: nameProperty,
           includeValue: {
             type: "boolean",
@@ -104,7 +96,6 @@ export function buildVariableTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          repositoryUuid: repositoryUuidProperty,
           name: nameProperty,
           value: valueProperty,
           description: descriptionProperty,
@@ -118,11 +109,10 @@ export function buildVariableTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          repositoryUuid: repositoryUuidProperty,
           name: nameProperty,
           newName: {
             type: "string",
-            description: "Optional replacement name. Must not collide with another variable in the same repository.",
+            description: "Optional replacement name. Must not collide with another user variable.",
           },
           value: valueProperty,
           description: descriptionProperty,
@@ -136,7 +126,6 @@ export function buildVariableTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          repositoryUuid: repositoryUuidProperty,
           name: nameProperty,
           value: valueProperty,
           description: descriptionProperty,
@@ -150,7 +139,6 @@ export function buildVariableTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          repositoryUuid: repositoryUuidProperty,
           name: nameProperty,
         },
         required: ["name"],

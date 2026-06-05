@@ -65,7 +65,6 @@ export type SynapseRepositoryConfig = {
   contentDirs: Partial<Record<SynapseContentType, string>>
   rulesDir?: string
   skillsDir?: string
-  variables?: SynapseVariable[]
 }
 
 export type SynapseGlobalConfig = {
@@ -76,6 +75,7 @@ export type SynapseGlobalConfig = {
   favorites: SynapseFavorites
   recentlyViewed: SynapseRecentlyViewed
   contentSortOrder: SynapseContentSortOrder
+  variables: SynapseVariable[]
 }
 
 export type SynapseAgentGlobalConfig = {

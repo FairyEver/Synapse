@@ -26,6 +26,12 @@ import { normalizeUserId, userIdentityService } from "./user-identity-service"
 
 const BACKUP_SCHEMA_VERSION = 1 as const
 const logger = createMainLogger("service.config-backup")
+type LegacyBackupRepositoryConfig = SynapseConfigBackup["config"]["repositories"][number] & {
+  variables?: unknown
+}
+type BackupConfigWithLegacyVariables = Omit<SynapseConfigBackup["config"], "repositories"> & {
+  repositories: LegacyBackupRepositoryConfig[]
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -218,11 +224,91 @@ function validateVariables(
   return variables.length > 0 ? variables : undefined
 }
 
+function variableKey(variable: SynapseVariable): string {
+  return variable.name.toLowerCase()
+}
+
+function sanitizeVariableNamePart(value: string): string {
+  const sanitized = value.trim().replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "")
+  return sanitized.length > 0 ? sanitized : "Repository"
+}
+
+function appendLegacyVariableSource(variable: SynapseVariable, repositoryName: string): SynapseVariable {
+  const sourceDescription = `来源：${repositoryName}`
+  return {
+    ...variable,
+    description: variable.description
+      ? `${variable.description}；${sourceDescription}`
+      : sourceDescription,
+  }
+}
+
+function uniqueLegacyVariableName(baseName: string, repositoryName: string, usedNames: Set<string>): string {
+  const prefix = `${baseName}__${sanitizeVariableNamePart(repositoryName)}`
+  let candidate = prefix
+  let index = 2
+
+  while (usedNames.has(candidate.toLowerCase())) {
+    candidate = `${prefix}_${index}`
+    index += 1
+  }
+
+  return candidate
+}
+
+function normalizeLegacyRepositoryVariables(rawValue: unknown): SynapseVariable[] {
+  const ignoredErrors: string[] = []
+  return validateVariables(rawValue, "config.repositories.variables", ignoredErrors) ?? []
+}
+
+function mergeBackupVariables(config: BackupConfigWithLegacyVariables): SynapseConfigBackup["config"] {
+  const repositories = config.repositories.map(({ variables: _variables, ...repository }) => repository)
+  const result = [...config.global.variables]
+  const usedNames = new Set(result.map(variableKey))
+  const orderedRepositories = [
+    ...config.repositories.filter((repository) => repository.uuid === config.activeRepoUuid),
+    ...config.repositories.filter((repository) => repository.uuid !== config.activeRepoUuid),
+  ]
+
+  for (const repository of orderedRepositories) {
+    const legacyVariables = normalizeLegacyRepositoryVariables(repository.variables)
+
+    for (const variable of legacyVariables) {
+      const existing = result.find((item) => variableKey(item) === variableKey(variable))
+      if (!existing) {
+        result.push(variable)
+        usedNames.add(variableKey(variable))
+        continue
+      }
+
+      if (existing.value === variable.value) {
+        continue
+      }
+
+      const renamed = appendLegacyVariableSource({
+        ...variable,
+        name: uniqueLegacyVariableName(variable.name, repository.name, usedNames),
+      }, repository.name)
+      result.push(renamed)
+      usedNames.add(variableKey(renamed))
+    }
+  }
+
+  return {
+    ...config,
+    repositories,
+    global: {
+      ...config.global,
+      variables: result,
+    },
+  }
+}
+
 function validateRepository(
   rawValue: unknown,
   index: number,
   errors: string[],
-): SynapseConfigBackup["config"]["repositories"][number] | null {
+): LegacyBackupRepositoryConfig | null {
   const itemPath = `config.repositories[${index}]`
 
   if (!isRecord(rawValue)) {
@@ -234,7 +320,6 @@ function validateRepository(
   const name = readRequiredField(rawValue, "name", itemPath, errors)
   const localPath = readRequiredField(rawValue, "localPath", itemPath, errors)
   const rawContentDirs = rawValue.contentDirs
-  const variables = validateVariables(rawValue.variables, `${itemPath}.variables`, errors)
   const rulesDir = rawValue.rulesDir
   const skillsDir = rawValue.skillsDir
 
@@ -300,7 +385,7 @@ function validateRepository(
     contentDirs,
     ...(isNonEmptyString(rulesDir) ? { rulesDir: rulesDir.trim() } : undefined),
     ...(isNonEmptyString(skillsDir) ? { skillsDir: skillsDir.trim() } : undefined),
-    ...(variables ? { variables } : undefined),
+    ...(rawValue.variables !== undefined ? { variables: rawValue.variables } : undefined),
   }
 }
 
@@ -478,7 +563,7 @@ function validateAgentConfig(
 function validateConfig(
   rawValue: unknown,
   errors: string[],
-): SynapseConfigBackup["config"] | null {
+): BackupConfigWithLegacyVariables | null {
   if (!isRecord(rawValue)) {
     errors.push("config 不是对象。")
     return null
@@ -493,7 +578,7 @@ function validateConfig(
     errors.push("config.activeRepoUuid 必须是字符串或 null。")
   }
 
-  const normalizedRepositories: SynapseConfigBackup["config"]["repositories"] = []
+  const normalizedRepositories: LegacyBackupRepositoryConfig[] = []
 
   if (!Array.isArray(repositories)) {
     errors.push("config.repositories 必须是数组。")
@@ -533,6 +618,7 @@ function validateConfig(
   const favorites = validateContentLists(global.favorites, "config.global.favorites", errors)
   const recentlyViewed = validateContentLists(global.recentlyViewed, "config.global.recentlyViewed", errors)
   const contentSortOrder = global.contentSortOrder ?? "modified-desc"
+  const variables = validateVariables(global.variables, "config.global.variables", errors) ?? []
 
   if (
     typeof themeMode !== "string"
@@ -611,6 +697,7 @@ function validateConfig(
       favorites,
       recentlyViewed,
       contentSortOrder: contentSortOrder as SynapseConfigBackup["config"]["global"]["contentSortOrder"],
+      variables,
     },
     agent: normalizedAgent,
   }
@@ -727,7 +814,6 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
         contentDirs: repository.contentDirs,
         ...(repository.rulesDir !== undefined ? { rulesDir: repository.rulesDir } : undefined),
         ...(repository.skillsDir !== undefined ? { skillsDir: repository.skillsDir } : undefined),
-        ...(repository.variables !== undefined ? { variables: repository.variables } : undefined),
       })),
     },
     identity: await userIdentityService.exportIdentity(),
@@ -826,7 +912,7 @@ class ConfigBackupService {
     const backup = parseBackup(parsedValue)
 
     const previousConfig = await configStore.load()
-    await configStore.replace(backup.config)
+    await configStore.replace(mergeBackupVariables(backup.config))
 
     try {
       await userIdentityService.importIdentity(backup.identity)
@@ -879,7 +965,7 @@ class ConfigBackupService {
     const backup = parseBackup(parsedValue)
 
     const previousConfig = await configStore.load()
-    await configStore.replace(backup.config)
+    await configStore.replace(mergeBackupVariables(backup.config))
 
     try {
       await userIdentityService.importIdentity(backup.identity)

@@ -86,6 +86,7 @@ function createConfig(): SynapseConfig {
         skill: [],
       },
       themeMode: "system",
+      variables: [],
     },
     agent: {
       defaultPermissionMode: "default",

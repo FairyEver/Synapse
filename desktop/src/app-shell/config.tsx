@@ -224,12 +224,19 @@ function useAppConfig(): AppConfigContextValue {
 export { AppConfigProvider, useAppConfig }
 
 function sanitizePatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
-  if (!patch.repositories || !Array.isArray(patch.repositories)) return patch
+  const nextPatch: SynapseConfigPatch = patch.global?.variables
+    ? {
+        ...patch,
+        global: {
+          ...patch.global,
+          variables: patch.global.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })),
+        },
+      }
+    : patch
+
+  if (!nextPatch.repositories || !Array.isArray(nextPatch.repositories)) return nextPatch
   return {
-    ...patch,
-    repositories: patch.repositories.map((repo) => {
-      if (!repo.variables) return repo
-      return { ...repo, variables: repo.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })) }
-    }),
+    ...nextPatch,
+    repositories: nextPatch.repositories,
   }
 }

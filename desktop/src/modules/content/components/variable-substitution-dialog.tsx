@@ -11,7 +11,7 @@ type VariableSubstitutionDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   placeholders: string[]
-  repositoryVariables: SynapseVariable[]
+  variables: SynapseVariable[]
   onConfirm: (substitutions: Record<string, string>) => Promise<void> | void
 }
 
@@ -28,7 +28,7 @@ function VariableSubstitutionDialog({
   open,
   onOpenChange,
   placeholders,
-  repositoryVariables,
+  variables,
   onConfirm,
 }: VariableSubstitutionDialogProps) {
   const [values, setValues] = useState<Record<string, string>>({})
@@ -37,11 +37,11 @@ function VariableSubstitutionDialog({
   const initialValues = useMemo(() => {
     const result: Record<string, string> = {}
     for (const name of placeholders) {
-      const matched = matchVariable(name, repositoryVariables)
+      const matched = matchVariable(name, variables)
       result[name] = matched?.value ?? ""
     }
     return result
-  }, [placeholders, repositoryVariables])
+  }, [placeholders, variables])
 
   useEffect(() => {
     if (open) {

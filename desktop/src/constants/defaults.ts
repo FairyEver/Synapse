@@ -84,6 +84,7 @@ export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   favorites: DEFAULT_FAVORITES,
   recentlyViewed: DEFAULT_RECENTLY_VIEWED,
   contentSortOrder: DEFAULT_CONTENT_SORT_ORDER,
+  variables: [],
 }
 
 export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {

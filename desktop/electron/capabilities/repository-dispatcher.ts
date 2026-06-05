@@ -14,7 +14,6 @@ type RepositorySummary = {
   readonly name: string
   readonly localPath: string
   readonly isActive: boolean
-  readonly variableCount: number
 }
 
 type RepositoryAccessSecurity = {
@@ -128,6 +127,5 @@ function toRepositorySummary(
     name: repository.name,
     localPath: repository.localPath,
     isActive: repository.uuid === activeRepositoryUuid,
-    variableCount: repository.variables?.length ?? 0,
   }
 }

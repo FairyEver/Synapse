@@ -2,16 +2,6 @@
 
 All tools are accessed through the `synapse-mcp` MCP server. Each tool maps to the same canonical Synapse API action.
 
-## Shared Field
-
-Every tool accepts optional `repositoryUuid`:
-
-```json
-{ "repositoryUuid": "repo-1" }
-```
-
-Omit it to use the current active repository.
-
 ## Safe Variable View
 
 Tools return this safe view unless `variable_item_get` is called with `includeValue: true`:
@@ -35,16 +25,13 @@ Canonical action: `variable.item.list`
 Input:
 
 ```json
-{
-  "repositoryUuid": "repo-1"
-}
+{}
 ```
 
 Returns:
 
 ```json
 {
-  "repository": { "uuid": "repo-1", "name": "Main", "isActive": true },
   "variables": [
     { "name": "GITEE_TOKEN", "description": "gitee 操作用的 token", "hasValue": true }
   ],
@@ -62,7 +49,6 @@ Input without value:
 
 ```json
 {
-  "repositoryUuid": "repo-1",
   "name": "GITEE_TOKEN"
 }
 ```
@@ -71,7 +57,6 @@ Input with value:
 
 ```json
 {
-  "repositoryUuid": "repo-1",
   "name": "GITEE_TOKEN",
   "includeValue": true
 }
@@ -87,7 +72,6 @@ Input:
 
 ```json
 {
-  "repositoryUuid": "repo-1",
   "name": "BARK_ID",
   "value": "example-value",
   "description": "手机消息推送使用"
@@ -104,7 +88,6 @@ Input:
 
 ```json
 {
-  "repositoryUuid": "repo-1",
   "name": "BARK_ID",
   "newName": "BARK_TOKEN",
   "value": "replacement-value",
@@ -122,7 +105,6 @@ Input:
 
 ```json
 {
-  "repositoryUuid": "repo-1",
   "name": "BARK_ID",
   "value": "example-value",
   "description": "手机消息推送使用"
@@ -139,7 +121,6 @@ Input:
 
 ```json
 {
-  "repositoryUuid": "repo-1",
   "name": "BARK_ID"
 }
 ```
@@ -148,18 +129,11 @@ Deletes one variable and returns only the safe variable view.
 
 ## Common Flows
 
-### Set a variable in the active repository
+### Set a user variable
 
-1. Call `variable_item_upsert` without `repositoryUuid`.
+1. Call `variable_item_upsert`.
 2. Report the variable name and whether it was created or updated.
 3. Do not include the value in the response.
-
-### Set a variable in a named repository
-
-1. Call `repository_item_list`.
-2. Match the repository by `name` or `localPath`.
-3. Call `variable_item_upsert` with that repository's `uuid`.
-4. Report the repository name, variable name, and result.
 
 ### Read a value
 

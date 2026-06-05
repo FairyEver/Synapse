@@ -1,21 +1,12 @@
 # Synapse 变量 MCP
 
-You have access to Synapse Variable MCP tools for managing repository-scoped local variables used by `${{ NAME }}` placeholders.
+You have access to Synapse Variable MCP tools for managing user-scoped local variables used by `${{ NAME }}` placeholders.
 
 ## Scope Boundary
 
-Use this skill only for Synapse local variables stored on configured repositories.
+Use this skill only for Synapse local variables stored in the user's Synapse configuration.
 
 Do not use this skill for Database rows, Scheduler tasks, Workflow variables, Content publishing, provider settings, shell environment variables, or editor installation.
-
-## Repository Scope
-
-Every variable tool accepts optional `repositoryUuid`.
-
-- If the user names a repository or the target repository is unclear, call `repository_item_list` first.
-- Pass the selected repository `uuid` as `repositoryUuid`.
-- Omit `repositoryUuid` only when using the current active repository is acceptable.
-- Never assume the first repository is the target.
 
 ## Default Flow
 
@@ -25,19 +16,19 @@ Every variable tool accepts optional `repositoryUuid`.
 4. Use `variable_item_upsert` when the user asks to set a variable and does not care whether it already exists.
 5. Use `variable_item_create` only when the user wants creation to fail if the variable already exists.
 6. Use `variable_item_update` when the variable must already exist or when renaming with `newName`.
-7. Use `variable_item_delete` only after the repository and variable name are clear.
+7. Use `variable_item_delete` only after the variable name is clear.
 
 ## Sensitive Value Rules
 
 - `variable_item_list` never returns values.
 - Mutation tools never return values.
 - Do not repeat token, password, secret, credential, API key, cookie, or authorization values in your final answer.
-- After writing a value, report the variable name, repository, and operation result only.
+- After writing a value, report the variable name and operation result only.
 - If you read a value with `includeValue: true`, use it only for the user's requested operation.
 
 ## Name Rules
 
-Variable names must contain only letters, digits, and underscores. Names are matched case-insensitively within one repository.
+Variable names must contain only letters, digits, and underscores. Names are matched case-insensitively.
 
 ## API Reference
 

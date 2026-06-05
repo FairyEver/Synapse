@@ -96,7 +96,7 @@ describe("Repository capability domain", () => {
 })
 
 describe("Variable capability domain", () => {
-  it("registers repository-scoped variable CRUD actions", () => {
+  it("registers user-scoped variable CRUD actions", () => {
     expect(VARIABLE_DOMAIN.id).toBe("variable")
     expect(VARIABLE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
       "variable.item.list",
@@ -126,6 +126,14 @@ describe("Variable capability domain", () => {
     const listTool = buildVariableTools().find((tool) => tool.name === "variable_item_list")
     expect(listTool?.inputSchema.properties).not.toHaveProperty("includeValue")
     expect(listTool?.inputSchema.properties).not.toHaveProperty("value")
+    expect(listTool?.inputSchema.properties).not.toHaveProperty("repositoryUuid")
+    expect(listTool?.description).not.toContain("repository")
+  })
+
+  it("does not expose repositoryUuid on variable tools", () => {
+    for (const tool of buildVariableTools()) {
+      expect(tool.inputSchema.properties).not.toHaveProperty("repositoryUuid")
+    }
   })
 })
 

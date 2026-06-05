@@ -355,6 +355,7 @@ describe("knowledgeBaseIpcModule", () => {
           favorites: { rule: [], skill: [], prompt: [] },
           recentlyViewed: { rule: [], skill: [], prompt: [] },
           contentSortOrder: "modified-desc",
+          variables: [],
           quickInputs: [],
           defaultQuickInputsSeededVersion: null,
           projects: [{

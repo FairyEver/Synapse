@@ -477,3 +477,116 @@ describe("Synapse quick inputs config", () => {
     ])
   })
 })
+
+describe("Synapse user variables config", () => {
+  it("defaults user variables to an empty list", () => {
+    expect(createDefaultConfig().global.variables).toEqual([])
+  })
+
+  it("normalizes global variables and drops malformed entries", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        variables: [
+          { name: "TOKEN", value: "secret", description: " api token " },
+          { name: "bad-name", value: "bad" },
+          { name: "EMPTY", value: "" },
+          { name: "TOKEN", value: "duplicate" },
+        ],
+      },
+    })
+
+    expect(config.global.variables).toEqual([
+      { name: "TOKEN", value: "secret", description: "api token" },
+      { name: "EMPTY", value: "" },
+    ])
+  })
+
+  it("migrates legacy repository variables into global variables without keeping repository variables", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: "repo-2",
+      repositories: [
+        {
+          uuid: "repo-1",
+          name: "First Repo",
+          localPath: "/repo/first",
+          contentDirs: {},
+          variables: [
+            { name: "TOKEN", value: "first-secret", description: "first token" },
+            { name: "SHARED", value: "same" },
+          ],
+        },
+        {
+          uuid: "repo-2",
+          name: "Active Repo",
+          localPath: "/repo/active",
+          contentDirs: {},
+          variables: [
+            { name: "TOKEN", value: "active-secret", description: "active token" },
+            { name: "SHARED", value: "same" },
+            { name: "OTHER", value: "other-secret" },
+          ],
+        },
+      ],
+      global: { themeMode: "light", projects: [] },
+    })
+
+    expect(config.repositories.every((repository) => !("variables" in repository))).toBe(true)
+    expect(config.global.variables).toEqual([
+      { name: "TOKEN", value: "active-secret", description: "active token" },
+      { name: "SHARED", value: "same" },
+      { name: "OTHER", value: "other-secret" },
+      {
+        name: "TOKEN__First_Repo",
+        value: "first-secret",
+        description: "first token；来源：First Repo",
+      },
+    ])
+  })
+
+  it("preserves existing global variables before adding legacy repository variables", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: "repo-1",
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repo",
+        localPath: "/repo",
+        contentDirs: {},
+        variables: [
+          { name: "TOKEN", value: "repo-secret" },
+          { name: "NEW_ONE", value: "new-secret" },
+        ],
+      }],
+      global: {
+        themeMode: "light",
+        projects: [],
+        variables: [{ name: "TOKEN", value: "global-secret", description: "global token" }],
+      },
+    })
+
+    expect(config.global.variables).toEqual([
+      { name: "TOKEN", value: "global-secret", description: "global token" },
+      { name: "TOKEN__Repo", value: "repo-secret", description: "来源：Repo" },
+      { name: "NEW_ONE", value: "new-secret" },
+    ])
+  })
+
+  it("applies global variable patches without changing existing projects", () => {
+    const current = applySynapseConfigPatch(createDefaultConfig(), {
+      global: {
+        projects: [{ id: "project-1", name: "Project", path: "/project" }],
+      },
+    })
+    const next = applySynapseConfigPatch(current, {
+      global: {
+        variables: [{ name: "API_KEY", value: "secret" }],
+      },
+    })
+
+    expect(next.global.projects).toEqual(current.global.projects)
+    expect(next.global.variables).toEqual([{ name: "API_KEY", value: "secret" }])
+  })
+})

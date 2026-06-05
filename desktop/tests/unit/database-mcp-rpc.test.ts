@@ -198,14 +198,14 @@ describe("Repository and Variable MCP RPC", () => {
       ok: true,
       data: {
         activeRepositoryUuid: "repo-1",
-        repositories: [{ uuid: "repo-1", name: "Main", localPath: "/repo", isActive: true, variableCount: 1 }],
+        repositories: [{ uuid: "repo-1", name: "Main", localPath: "/repo", isActive: true }],
       },
       total: 1,
     })
 
     expect(payload).toEqual({
       activeRepositoryUuid: "repo-1",
-      repositories: [{ uuid: "repo-1", name: "Main", localPath: "/repo", isActive: true, variableCount: 1 }],
+      repositories: [{ uuid: "repo-1", name: "Main", localPath: "/repo", isActive: true }],
     })
   })
 
@@ -213,13 +213,11 @@ describe("Repository and Variable MCP RPC", () => {
     const payload = await callTool("variable_item_get", {
       ok: true,
       data: {
-        repository: { uuid: "repo-1", name: "Main", isActive: true },
         variable: { name: "TOKEN", hasValue: true },
       },
     })
 
     expect(payload).toEqual({
-      repository: { uuid: "repo-1", name: "Main", isActive: true },
       variable: { name: "TOKEN", hasValue: true },
     })
   })

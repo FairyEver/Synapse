@@ -55,6 +55,7 @@ async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
         favorites: { rule: [], skill: [], prompt: [] },
         recentlyViewed: { rule: [], skill: [], prompt: [] },
         contentSortOrder: "modified-desc",
+        variables: [],
         quickInputs: [],
         defaultQuickInputsSeededVersion: null,
         projects: [{
@@ -238,6 +239,7 @@ describe("KnowledgeBaseService", () => {
           favorites: { rule: [], skill: [], prompt: [] },
           recentlyViewed: { rule: [], skill: [], prompt: [] },
           contentSortOrder: "modified-desc",
+          variables: [],
           quickInputs: [],
           defaultQuickInputsSeededVersion: null,
           projects: [],

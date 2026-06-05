@@ -24,8 +24,7 @@ Returns:
       "uuid": "repo-1",
       "name": "Main",
       "localPath": "/Users/me/SynapseContent",
-      "isActive": true,
-      "variableCount": 2
+      "isActive": true
     }
   ]
 }
@@ -34,12 +33,11 @@ Returns:
 Fields:
 
 - `activeRepositoryUuid`: current active repository uuid, or `null`.
-- `repositories[].uuid`: pass this as `repositoryUuid` to repository-scoped MCP tools.
+- `repositories[].uuid`: repository identifier.
 - `repositories[].name`: display name.
 - `repositories[].localPath`: local folder path.
 - `repositories[].isActive`: whether this repository is currently active in Synapse.
-- `repositories[].variableCount`: number of local variables configured for this repository.
 
 ## Boundaries
 
-This tool is read-only. It does not expose variable names or values and cannot modify repository configuration.
+This tool is read-only and cannot modify repository configuration.

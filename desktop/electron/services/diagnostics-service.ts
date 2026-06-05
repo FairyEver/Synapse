@@ -1118,6 +1118,7 @@ function createEmptyConfig(): SynapseConfig {
       favorites: { rule: [], skill: [], prompt: [] },
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",
+      variables: [],
     },
     agent: {
       defaultPermissionMode: "default",

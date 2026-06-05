@@ -78,7 +78,6 @@ describe("repository capability dispatcher", () => {
               name: "One",
               localPath: "/repo/one",
               contentDirs: {},
-              variables: [{ name: "TOKEN", value: "secret" }],
             },
             {
               uuid: "repo-2",
@@ -100,14 +99,12 @@ describe("repository capability dispatcher", () => {
             name: "One",
             localPath: "/repo/one",
             isActive: false,
-            variableCount: 1,
           },
           {
             uuid: "repo-2",
             name: "Two",
             localPath: "/repo/two",
             isActive: true,
-            variableCount: 0,
           },
         ],
       },

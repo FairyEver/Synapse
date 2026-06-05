@@ -1,6 +1,6 @@
 import type { EventBus } from "../runtime/event-bus"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
-import type { SynapseConfig, SynapseConfigPatch, SynapseRepositoryConfig, SynapseVariable } from "../../src/types/config"
+import type { SynapseConfig, SynapseConfigPatch, SynapseVariable } from "../../src/types/config"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 
 type VariableCapabilityDispatcherDeps = {
@@ -12,22 +12,12 @@ type VariableCapabilityDispatcherDeps = {
   readonly actor?: ActorIdentity
 }
 
-type RepositoryRef = {
-  readonly uuid: string
-  readonly name: string
-  readonly isActive: boolean
-}
-
 type VariableSafeView = {
   readonly name: string
   readonly description?: string
   readonly hasValue: boolean
 }
 
-type ResolvedRepository = {
-  readonly config: SynapseConfig
-  readonly repository: SynapseRepositoryConfig
-}
 type SecretAuditContext = {
   readonly action: PermissionAction
   readonly actor: ActorIdentity
@@ -37,7 +27,7 @@ type SecretAuditContext = {
 
 const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
-const variableMutationChains = new WeakMap<VariableCapabilityDispatcherDeps, Map<string, Promise<void>>>()
+const variableMutationChains = new WeakMap<VariableCapabilityDispatcherDeps, Promise<void>>()
 
 export function createVariableCapabilityDispatcher(deps: VariableCapabilityDispatcherDeps) {
   return {
@@ -62,62 +52,39 @@ export function createVariableCapabilityDispatcher(deps: VariableCapabilityDispa
   }
 }
 
-async function resolveRepository(
-  deps: VariableCapabilityDispatcherDeps,
-  params: Record<string, unknown>,
-): Promise<ResolvedRepository> {
-  const config = await deps.loadConfig()
-  const repositoryUuid = optionalString(params.repositoryUuid) ?? config.activeRepoUuid
-  if (!repositoryUuid) throw new Error("No active repository. Pass repositoryUuid explicitly.")
-  const repository = config.repositories.find((item) => item.uuid === repositoryUuid)
-  if (!repository) throw new Error(`Repository not found: ${repositoryUuid}`)
-  return { config, repository }
-}
-
-async function resolveRepositoryByUuid(
-  deps: VariableCapabilityDispatcherDeps,
-  repositoryUuid: string,
-): Promise<ResolvedRepository> {
-  const config = await deps.loadConfig()
-  const repository = config.repositories.find((item) => item.uuid === repositoryUuid)
-  if (!repository) throw new Error(`Repository not found: ${repositoryUuid}`)
-  return { config, repository }
+function rejectRepositoryScope(params: Record<string, unknown>): void {
+  if (Object.prototype.hasOwnProperty.call(params, "repositoryUuid")) {
+    throw new Error("repositoryUuid is no longer supported for user variables.")
+  }
 }
 
 async function withVariableMutationLock<T>(
   deps: VariableCapabilityDispatcherDeps,
-  repositoryUuid: string,
   task: () => Promise<T>,
 ): Promise<T> {
-  let chains = variableMutationChains.get(deps)
-  if (!chains) {
-    chains = new Map()
-    variableMutationChains.set(deps, chains)
-  }
-
-  const previous = chains.get(repositoryUuid) ?? Promise.resolve()
+  const previous = variableMutationChains.get(deps) ?? Promise.resolve()
   const run = previous.catch(() => undefined).then(task)
   const done = run.then(() => undefined, () => undefined)
-  chains.set(repositoryUuid, done)
+  variableMutationChains.set(deps, done)
 
   try {
     return await run
   } finally {
-    if (chains.get(repositoryUuid) === done) {
-      chains.delete(repositoryUuid)
+    if (variableMutationChains.get(deps) === done) {
+      variableMutationChains.delete(deps)
     }
   }
 }
 
-async function mutateRepositoryVariables<T>(
+async function mutateUserVariables<T>(
   deps: VariableCapabilityDispatcherDeps,
   params: Record<string, unknown>,
-  task: (config: SynapseConfig, repository: SynapseRepositoryConfig) => Promise<T>,
+  task: (config: SynapseConfig) => Promise<T>,
 ): Promise<T> {
-  const { repository } = await resolveRepository(deps, params)
-  return withVariableMutationLock(deps, repository.uuid, async () => {
-    const latest = await resolveRepositoryByUuid(deps, repository.uuid)
-    return task(latest.config, latest.repository)
+  rejectRepositoryScope(params)
+  return withVariableMutationLock(deps, async () => {
+    const config = await deps.loadConfig()
+    return task(config)
   })
 }
 
@@ -176,14 +143,6 @@ function assertNoDuplicate(
   if (duplicate) throw new Error(`Variable already exists: ${name}`)
 }
 
-function toRepositoryRef(repository: SynapseRepositoryConfig, activeRepoUuid: string | null): RepositoryRef {
-  return {
-    uuid: repository.uuid,
-    name: repository.name,
-    isActive: repository.uuid === activeRepoUuid,
-  }
-}
-
 function toSafeVariable(variable: SynapseVariable): VariableSafeView {
   return {
     name: variable.name,
@@ -197,16 +156,14 @@ async function authorizeSecret(
   action: PermissionAction,
   capabilityAction: string,
   context: DispatchContext,
-  repositoryUuid: string,
   variableName: string,
   includeValue: boolean,
 ): Promise<SecretAuditContext> {
   const actor = deps.actor ?? DEFAULT_ACTOR
-  const resource = `variable:${repositoryUuid}:${variableName}`
+  const resource = `variable:user:${variableName}`
   const metadata = {
     source: context.source ?? "api",
     variableAction: capabilityAction,
-    repositoryUuid,
     variableName,
     includeValue,
   }
@@ -257,22 +214,14 @@ function recordSecretAudit(
 
 async function persistVariables(
   deps: VariableCapabilityDispatcherDeps,
-  config: SynapseConfig,
-  repository: SynapseRepositoryConfig,
   variables: SynapseVariable[],
 ): Promise<void> {
-  const repositories = config.repositories.map((item) =>
-    item.uuid === repository.uuid
-      ? { ...item, variables: variables.length > 0 ? variables : undefined }
-      : item,
-  )
-  await deps.updateConfig({ repositories })
+  await deps.updateConfig({ global: { variables } })
   const timestamp = new Date().toISOString()
   deps.eventBus?.emit({
     domain: "repository",
     type: "repository.updated",
     payload: {
-      repositoryUuid: repository.uuid,
       operation: "variables",
       completedAt: timestamp,
       message: "变量已更新",
@@ -283,13 +232,11 @@ async function persistVariables(
 
 async function persistVariablesWithAudit(
   deps: VariableCapabilityDispatcherDeps,
-  config: SynapseConfig,
-  repository: SynapseRepositoryConfig,
   variables: SynapseVariable[],
   audit: SecretAuditContext,
 ): Promise<void> {
   try {
-    await persistVariables(deps, config, repository, variables)
+    await persistVariables(deps, variables)
     recordSecretAudit(deps, audit, "allowed")
   } catch (error) {
     recordSecretAudit(deps, audit, "failed", {
@@ -300,9 +247,8 @@ async function persistVariablesWithAudit(
   }
 }
 
-function variableResponse(config: SynapseConfig, repository: SynapseRepositoryConfig, variable: SynapseVariable) {
+function variableResponse(variable: SynapseVariable) {
   return {
-    repository: toRepositoryRef(repository, config.activeRepoUuid),
     variable: toSafeVariable(variable),
   }
 }
@@ -311,12 +257,12 @@ async function listVariables(
   deps: VariableCapabilityDispatcherDeps,
   params: Record<string, unknown>,
 ): Promise<DispatchResult> {
-  const { config, repository } = await resolveRepository(deps, params)
-  const variables = (repository.variables ?? []).map(toSafeVariable)
+  rejectRepositoryScope(params)
+  const config = await deps.loadConfig()
+  const variables = config.global.variables.map(toSafeVariable)
   return {
     ok: true,
     data: {
-      repository: toRepositoryRef(repository, config.activeRepoUuid),
       variables,
       total: variables.length,
     },
@@ -330,18 +276,19 @@ async function getVariable(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
+  rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
   const includeValue = params.includeValue === true
-  const { config, repository } = await resolveRepository(deps, params)
-  const { variable } = requireExistingVariable(repository.variables ?? [], name)
+  const config = await deps.loadConfig()
+  const { variable } = requireExistingVariable(config.global.variables, name)
   if (includeValue) {
-    const audit = await authorizeSecret(deps, "secret.read", action, context, repository.uuid, variable.name, true)
+    const audit = await authorizeSecret(deps, "secret.read", action, context, variable.name, true)
     recordSecretAudit(deps, audit, "allowed")
   }
   return {
     ok: true,
     data: {
-      ...variableResponse(config, repository, variable),
+      ...variableResponse(variable),
       variable: includeValue ? { ...toSafeVariable(variable), value: variable.value } : toSafeVariable(variable),
     },
   }
@@ -353,20 +300,21 @@ async function createVariable(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
+  rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
   const value = requireString(params, "value")
   const description = optionalDescription(params)
-  return mutateRepositoryVariables(deps, params, async (config, repository) => {
-    const variables = [...(repository.variables ?? [])]
+  return mutateUserVariables(deps, params, async (config) => {
+    const variables = [...config.global.variables]
     assertNoDuplicate(variables, name)
     const variable: SynapseVariable = {
       name,
       value,
       ...(description ? { description } : undefined),
     }
-    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
-    await persistVariablesWithAudit(deps, config, repository, [...variables, variable], audit)
-    return { ok: true, data: { ...variableResponse(config, repository, variable), created: true } }
+    const audit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
+    await persistVariablesWithAudit(deps, [...variables, variable], audit)
+    return { ok: true, data: { ...variableResponse(variable), created: true } }
   })
 }
 
@@ -376,13 +324,14 @@ async function updateVariable(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
+  rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
   const hasNewName = Object.prototype.hasOwnProperty.call(params, "newName")
   const hasValue = Object.prototype.hasOwnProperty.call(params, "value")
   const hasDescription = Object.prototype.hasOwnProperty.call(params, "description")
   if (!hasNewName && !hasValue && !hasDescription) throw new Error("No variable fields provided for update")
-  return mutateRepositoryVariables(deps, params, async (config, repository) => {
-    const variables = [...(repository.variables ?? [])]
+  return mutateUserVariables(deps, params, async (config) => {
+    const variables = [...config.global.variables]
     const { index, variable } = requireExistingVariable(variables, name)
     const newName = hasNewName ? requireVariableName(params, "newName") : variable.name
     assertNoDuplicate(variables, newName, variable.name)
@@ -393,9 +342,9 @@ async function updateVariable(
       ...(description ? { description } : undefined),
     }
     variables[index] = updated
-    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
-    await persistVariablesWithAudit(deps, config, repository, variables, audit)
-    return { ok: true, data: { ...variableResponse(config, repository, updated), updated: true } }
+    const audit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
+    await persistVariablesWithAudit(deps, variables, audit)
+    return { ok: true, data: { ...variableResponse(updated), updated: true } }
   })
 }
 
@@ -405,9 +354,10 @@ async function upsertVariable(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
+  rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
-  return mutateRepositoryVariables(deps, params, async (config, repository) => {
-    const variables = [...(repository.variables ?? [])]
+  return mutateUserVariables(deps, params, async (config) => {
+    const variables = [...config.global.variables]
     const index = findVariableIndex(variables, name)
     if (index < 0) {
       if (!Object.prototype.hasOwnProperty.call(params, "value")) {
@@ -419,9 +369,9 @@ async function upsertVariable(
         value: requireString(params, "value"),
         ...(description ? { description } : undefined),
       }
-      const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, created.name, false)
-      await persistVariablesWithAudit(deps, config, repository, [...variables, created], audit)
-      return { ok: true, data: { ...variableResponse(config, repository, created), created: true, updated: false } }
+      const audit = await authorizeSecret(deps, "secret.write", action, context, created.name, false)
+      await persistVariablesWithAudit(deps, [...variables, created], audit)
+      return { ok: true, data: { ...variableResponse(created), created: true, updated: false } }
     }
 
     const current = variables[index]
@@ -435,9 +385,9 @@ async function upsertVariable(
       ...(description ? { description } : undefined),
     }
     variables[index] = updated
-    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, current.name, false)
-    await persistVariablesWithAudit(deps, config, repository, variables, audit)
-    return { ok: true, data: { ...variableResponse(config, repository, updated), created: false, updated: true } }
+    const audit = await authorizeSecret(deps, "secret.write", action, context, current.name, false)
+    await persistVariablesWithAudit(deps, variables, audit)
+    return { ok: true, data: { ...variableResponse(updated), created: false, updated: true } }
   })
 }
 
@@ -447,13 +397,14 @@ async function deleteVariable(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
+  rejectRepositoryScope(params)
   const name = requireVariableName(params, "name")
-  return mutateRepositoryVariables(deps, params, async (config, repository) => {
-    const variables = [...(repository.variables ?? [])]
+  return mutateUserVariables(deps, params, async (config) => {
+    const variables = [...config.global.variables]
     const { index, variable } = requireExistingVariable(variables, name)
-    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
+    const audit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
     variables.splice(index, 1)
-    await persistVariablesWithAudit(deps, config, repository, variables, audit)
-    return { ok: true, data: { ...variableResponse(config, repository, variable), deleted: true } }
+    await persistVariablesWithAudit(deps, variables, audit)
+    return { ok: true, data: { ...variableResponse(variable), deleted: true } }
   })
 }

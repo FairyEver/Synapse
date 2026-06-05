@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { Pencil, Plus, Trash2 } from "lucide-react"
-import { useActiveRepository, useRepositoryActions } from "@/app-shell/use-repository-manager"
+import { useAppConfig } from "@/app-shell/config"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -72,8 +72,7 @@ function VariableCard({
 }
 
 function VariablesPanel() {
-  const activeRepository = useActiveRepository()
-  const { updateRepository } = useRepositoryActions()
+  const { config, updateConfig } = useAppConfig()
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [editingVariable, setEditingVariable] = useState<SynapseVariable | null>(null)
   const [deletingVariable, setDeletingVariable] = useState<SynapseVariable | null>(null)
@@ -83,8 +82,8 @@ function VariablesPanel() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const variables = useMemo(
-    () => activeRepository?.variables ?? [],
-    [activeRepository],
+    () => config.global.variables,
+    [config.global.variables],
   )
 
   const handleAdd = useCallback(() => {
@@ -104,7 +103,7 @@ function VariablesPanel() {
   }, [])
 
   const handleSubmitAdd = useCallback(async () => {
-    if (!activeRepository || isSubmitting) return
+    if (isSubmitting) return
 
     const name = form.name.trim()
     if (!name || !VARIABLE_NAME_REGEX.test(name)) {
@@ -126,8 +125,8 @@ function VariablesPanel() {
 
     setIsSubmitting(true)
     try {
-      await updateRepository(activeRepository.uuid, {
-        variables: [...variables, newVariable],
+      await updateConfig({
+        global: { variables: [...variables, newVariable] },
       })
       setIsAddOpen(false)
     } catch {
@@ -135,10 +134,10 @@ function VariablesPanel() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [activeRepository, form, updateRepository, variables, isSubmitting])
+  }, [form, updateConfig, variables, isSubmitting])
 
   const handleSubmitEdit = useCallback(async () => {
-    if (!activeRepository || !editingVariable || isSubmitting) return
+    if (!editingVariable || isSubmitting) return
 
     const name = form.name.trim()
     if (!name || !VARIABLE_NAME_REGEX.test(name)) {
@@ -168,8 +167,8 @@ function VariablesPanel() {
 
     setIsSubmitting(true)
     try {
-      await updateRepository(activeRepository.uuid, {
-        variables: nextVariables.length > 0 ? nextVariables : undefined,
+      await updateConfig({
+        global: { variables: nextVariables },
       })
       setEditingVariable(null)
     } catch {
@@ -177,17 +176,17 @@ function VariablesPanel() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [activeRepository, editingVariable, form, updateRepository, variables, isSubmitting])
+  }, [editingVariable, form, updateConfig, variables, isSubmitting])
 
   const handleDelete = useCallback(async () => {
-    if (!activeRepository || !deletingVariable || isSubmitting) return
+    if (!deletingVariable || isSubmitting) return
 
     const nextVariables = variables.filter((v) => v.name !== deletingVariable.name)
     setDeleting(true)
 
     try {
-      await updateRepository(activeRepository.uuid, {
-        variables: nextVariables.length > 0 ? nextVariables : undefined,
+      await updateConfig({
+        global: { variables: nextVariables },
       })
       setDeletingVariable(null)
     } catch {
@@ -195,13 +194,7 @@ function VariablesPanel() {
     } finally {
       setDeleting(false)
     }
-  }, [activeRepository, deletingVariable, updateRepository, variables, isSubmitting])
-
-  if (!activeRepository) {
-    return (
-      <p className="text-sm text-muted-foreground">请先选择一个仓库。</p>
-    )
-  }
+  }, [deletingVariable, updateConfig, variables, isSubmitting])
 
   const formFields = (
     <div className="flex flex-col gap-2">

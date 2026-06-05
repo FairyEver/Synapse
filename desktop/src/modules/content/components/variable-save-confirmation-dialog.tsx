@@ -3,11 +3,11 @@ import { Dialog } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { FormDialog } from "@/components/form-dialog"
-import type { RepositoryVariableChangeSet } from "@/modules/content/lib/repository-variables"
+import type { UserVariableChangeSet } from "@/modules/content/lib/repository-variables"
 import type { SynapseVariable } from "@/types/config"
 
 type VariableSaveConfirmationDialogProps = {
-  changes: RepositoryVariableChangeSet | null
+  changes: UserVariableChangeSet | null
   isSubmitting: boolean
   onOpenChange: (open: boolean) => void
   onSave: () => Promise<void> | void
@@ -60,7 +60,7 @@ function VariableSaveConfirmationDialog({
     >
       <FormDialog
         title="保存变量变更"
-        description="这些变量可在当前仓库复用。"
+        description="这些变量可在之后安装内容时复用。"
         footer={
           <>
             <Button

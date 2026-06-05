@@ -1,6 +1,6 @@
-import type { SynapseRepositoryConfig, SynapseVariable } from "@/types/config"
+import type { SynapseConfigPatch, SynapseVariable } from "@/types/config"
 
-type RepositoryVariableChangeSet = {
+type UserVariableChangeSet = {
   newVariables: SynapseVariable[]
   updatedVariables: SynapseVariable[]
 }
@@ -14,11 +14,11 @@ function findVariable(
   return variables.find((variable) => variable.name.toLowerCase() === normalizedName)
 }
 
-function buildRepositoryVariableChangeSet(
-  repository: SynapseRepositoryConfig,
+function buildUserVariableChangeSet(
+  variables: SynapseVariable[],
   substitutions: Record<string, string>,
-): RepositoryVariableChangeSet {
-  const existingVariables = repository.variables ?? []
+): UserVariableChangeSet {
+  const existingVariables = variables
   const newVariables: SynapseVariable[] = []
   const updatedVariables: SynapseVariable[] = []
 
@@ -40,15 +40,15 @@ function buildRepositoryVariableChangeSet(
   return { newVariables, updatedVariables }
 }
 
-function hasRepositoryVariableChanges(changeSet: RepositoryVariableChangeSet): boolean {
+function hasUserVariableChanges(changeSet: UserVariableChangeSet): boolean {
   return changeSet.newVariables.length > 0 || changeSet.updatedVariables.length > 0
 }
 
-function buildRepositoryVariablesPatch(
-  repository: SynapseRepositoryConfig,
-  changeSet: RepositoryVariableChangeSet,
-): Pick<SynapseRepositoryConfig, "variables"> | null {
-  if (!hasRepositoryVariableChanges(changeSet)) {
+function buildUserVariablesPatch(
+  variables: SynapseVariable[],
+  changeSet: UserVariableChangeSet,
+): Pick<SynapseConfigPatch, "global"> | null {
+  if (!hasUserVariableChanges(changeSet)) {
     return null
   }
 
@@ -58,19 +58,21 @@ function buildRepositoryVariablesPatch(
       variable,
     ]),
   )
-  const existingVariables = repository.variables ?? []
+  const existingVariables = variables
   const nextExistingVariables = existingVariables.map((variable) =>
     updatedByName.get(variable.name.toLowerCase()) ?? variable,
   )
 
   return {
-    variables: [...nextExistingVariables, ...changeSet.newVariables],
+    global: {
+      variables: [...nextExistingVariables, ...changeSet.newVariables],
+    },
   }
 }
 
 export {
-  buildRepositoryVariableChangeSet,
-  buildRepositoryVariablesPatch,
-  hasRepositoryVariableChanges,
+  buildUserVariableChangeSet,
+  buildUserVariablesPatch,
+  hasUserVariableChanges,
 }
-export type { RepositoryVariableChangeSet }
+export type { UserVariableChangeSet }

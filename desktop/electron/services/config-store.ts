@@ -311,18 +311,15 @@ class ConfigStore {
 export const configStore = new ConfigStore()
 
 function sanitizeConfigPatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
-  if (!patch.repositories || !Array.isArray(patch.repositories)) return patch
+  if (!patch.global?.variables) return patch
   return {
     ...patch,
-    repositories: patch.repositories.map((repository) => {
-      if (!repository.variables) return repository
-      return {
-        ...repository,
-        variables: repository.variables.map((variable) => ({
-          ...variable,
-          value: variable.value ? "[redacted]" : variable.value,
-        })),
-      }
-    }),
+    global: {
+      ...patch.global,
+      variables: patch.global.variables.map((variable) => ({
+        ...variable,
+        value: variable.value ? "[redacted]" : variable.value,
+      })),
+    },
   }
 }

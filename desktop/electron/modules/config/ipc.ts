@@ -375,12 +375,12 @@ function writeResetAppSystemLog(message: string, details: Record<string, unknown
 }
 
 function sanitizePatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
-  if (!patch.repositories || !Array.isArray(patch.repositories)) return patch
+  if (!patch.global?.variables) return patch
   return {
     ...patch,
-    repositories: patch.repositories.map((repo) => {
-      if (!repo.variables) return repo
-      return { ...repo, variables: repo.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })) }
-    }),
+    global: {
+      ...patch.global,
+      variables: patch.global.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })),
+    },
   }
 }

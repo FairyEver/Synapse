@@ -63,7 +63,7 @@ export type SynapseRepositoryProgressEvent = {
 }
 
 export type SynapseRepositoryUpdatedEvent = {
-  repositoryUuid: string
+  repositoryUuid?: string
   operation: SynapseRepositoryOperationKind
   completedAt: string
   message?: string

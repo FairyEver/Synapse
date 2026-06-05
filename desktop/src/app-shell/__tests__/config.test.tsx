@@ -116,7 +116,7 @@ describe("AppConfigProvider", () => {
     expect(probe?.textContent).toBe("repo-1:1:true")
   })
 
-  it("refreshes config when repository variables change outside the renderer", async () => {
+  it("refreshes config when user variables change outside the renderer", async () => {
     const firstConfig = {
       ...createDefaultConfig(),
       activeRepoUuid: "repo-1",
@@ -125,15 +125,18 @@ describe("AppConfigProvider", () => {
         name: "Repo",
         localPath: "/repo",
         contentDirs: {},
-        variables: [{ name: "OLD", value: "old" }],
       }],
+      global: {
+        ...createDefaultConfig().global,
+        variables: [{ name: "OLD", value: "old" }],
+      },
     }
     const secondConfig = {
       ...firstConfig,
-      repositories: [{
-        ...firstConfig.repositories[0],
+      global: {
+        ...firstConfig.global,
         variables: [{ name: "NEW", value: "new" }],
-      }],
+      },
     }
     mocks.configGet
       .mockResolvedValueOnce(firstConfig)
@@ -183,7 +186,7 @@ function VariableProbe() {
 
   return (
     <div data-testid="variable-probe">
-      {config.repositories[0]?.variables?.[0]?.name}
+      {config.global.variables[0]?.name}
     </div>
   )
 }

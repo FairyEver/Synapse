@@ -334,6 +334,10 @@ function normalizeVariables(value: unknown): SynapseVariable[] | undefined {
   return variables.length > 0 ? variables : undefined
 }
 
+function normalizeVariableList(value: unknown): SynapseVariable[] {
+  return normalizeVariables(value) ?? []
+}
+
 function normalizeRepositoryConfig(value: unknown): SynapseRepositoryConfig | null {
   if (!isRecord(value)) {
     return null
@@ -347,15 +351,113 @@ function normalizeRepositoryConfig(value: unknown): SynapseRepositoryConfig | nu
     return null
   }
 
-  const variables = normalizeVariables(value.variables)
-
   return {
     uuid,
     name,
     localPath,
     contentDirs: resolveContentDirs(value),
-    ...(variables ? { variables } : undefined),
   }
+}
+
+function legacyRepositoryVariableEntries(
+  rawRepositories: unknown,
+  repositories: SynapseRepositoryConfig[],
+  activeRepoUuid: string | null,
+): Array<{ repository: SynapseRepositoryConfig; variables: SynapseVariable[] }> {
+  if (!Array.isArray(rawRepositories)) {
+    return []
+  }
+
+  const rawByUuid = new Map<string, Record<string, unknown>>()
+  for (const rawRepository of rawRepositories) {
+    if (!isRecord(rawRepository)) continue
+    const uuid = asTrimmedString(rawRepository.uuid)
+    if (!uuid || rawByUuid.has(uuid)) continue
+    rawByUuid.set(uuid, rawRepository)
+  }
+
+  const orderedRepositories = [
+    ...repositories.filter((repository) => repository.uuid === activeRepoUuid),
+    ...repositories.filter((repository) => repository.uuid !== activeRepoUuid),
+  ]
+
+  return orderedRepositories.flatMap((repository) => {
+    const rawRepository = rawByUuid.get(repository.uuid)
+    const variables = normalizeVariableList(rawRepository?.variables)
+    return variables.length > 0 ? [{ repository, variables }] : []
+  })
+}
+
+function variableKey(variable: SynapseVariable): string {
+  return variable.name.toLowerCase()
+}
+
+function sameVariableValue(existing: SynapseVariable, next: SynapseVariable): boolean {
+  return existing.value === next.value
+}
+
+function sanitizeVariableNamePart(value: string): string {
+  const sanitized = value.trim().replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "")
+  return sanitized.length > 0 ? sanitized : "Repository"
+}
+
+function appendLegacySourceDescription(variable: SynapseVariable, repositoryName: string): SynapseVariable {
+  const sourceDescription = `来源：${repositoryName}`
+  return {
+    ...variable,
+    description: variable.description
+      ? `${variable.description}；${sourceDescription}`
+      : sourceDescription,
+  }
+}
+
+function uniqueLegacyVariableName(
+  baseName: string,
+  repositoryName: string,
+  usedNames: Set<string>,
+): string {
+  const prefix = `${baseName}__${sanitizeVariableNamePart(repositoryName)}`
+  let candidate = prefix
+  let index = 2
+
+  while (usedNames.has(candidate.toLowerCase())) {
+    candidate = `${prefix}_${index}`
+    index += 1
+  }
+
+  return candidate
+}
+
+function mergeGlobalAndLegacyVariables(
+  globalVariables: SynapseVariable[],
+  legacyEntries: Array<{ repository: SynapseRepositoryConfig; variables: SynapseVariable[] }>,
+): SynapseVariable[] {
+  const result = [...globalVariables]
+  const usedNames = new Set(result.map((variable) => variableKey(variable)))
+
+  for (const entry of legacyEntries) {
+    for (const variable of entry.variables) {
+      const existing = result.find((item) => variableKey(item) === variableKey(variable))
+      if (!existing) {
+        result.push(variable)
+        usedNames.add(variableKey(variable))
+        continue
+      }
+
+      if (sameVariableValue(existing, variable)) {
+        continue
+      }
+
+      const renamed = appendLegacySourceDescription({
+        ...variable,
+        name: uniqueLegacyVariableName(variable.name, entry.repository.name, usedNames),
+      }, entry.repository.name)
+      result.push(renamed)
+      usedNames.add(variableKey(renamed))
+    }
+  }
+
+  return result
 }
 
 function resolveContentDirs(
@@ -507,6 +609,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     contentSortOrder: isSynapseContentSortOrder(value.contentSortOrder)
       ? value.contentSortOrder
       : DEFAULT_CONTENT_SORT_ORDER,
+    variables: normalizeVariableList(value.variables),
   }
 }
 
@@ -561,10 +664,18 @@ export function sanitizeSynapseConfig(value: unknown): SynapseConfig {
       ? requestedActiveRepoUuid
       : null
 
+  const globalConfig = normalizeGlobalConfig(value.global)
+
   return {
     activeRepoUuid,
     repositories,
-    global: normalizeGlobalConfig(value.global),
+    global: {
+      ...globalConfig,
+      variables: mergeGlobalAndLegacyVariables(
+        globalConfig.variables,
+        legacyRepositoryVariableEntries(value.repositories, repositories, activeRepoUuid),
+      ),
+    },
     agent: normalizeAgentGlobalConfig(value.agent),
   }
 }

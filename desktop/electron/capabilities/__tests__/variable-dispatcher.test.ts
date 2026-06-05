@@ -53,36 +53,22 @@ function createHarness(config: SynapseConfig) {
 }
 
 const baseConfig = configFixture({
-  activeRepoUuid: "repo-1",
-  repositories: [
-    {
-      uuid: "repo-1",
-      name: "Main",
-      localPath: "/repo/main",
-      contentDirs: {},
-      variables: [
-        { name: "TOKEN", value: "secret", description: "api token" },
-        { name: "EMPTY", value: "" },
-      ],
-    },
-    {
-      uuid: "repo-2",
-      name: "Other",
-      localPath: "/repo/other",
-      contentDirs: {},
-      variables: [{ name: "OTHER", value: "other-secret" }],
-    },
-  ],
+  global: {
+    ...createDefaultConfig().global,
+    variables: [
+      { name: "TOKEN", value: "secret", description: "api token" },
+      { name: "EMPTY", value: "" },
+    ],
+  },
 })
 
 describe("variable capability dispatcher", () => {
-  it("lists variables in the active repository without values", async () => {
+  it("lists user variables without values", async () => {
     const { dispatcher } = createHarness(baseConfig)
 
     await expect(dispatcher.dispatch("variable.item.list", {}, { source: "api" })).resolves.toEqual({
       ok: true,
       data: {
-        repository: { uuid: "repo-1", name: "Main", isActive: true },
         variables: [
           { name: "TOKEN", description: "api token", hasValue: true },
           { name: "EMPTY", hasValue: false },
@@ -93,16 +79,12 @@ describe("variable capability dispatcher", () => {
     })
   })
 
-  it("uses repositoryUuid when provided", async () => {
+  it("rejects repositoryUuid because variables are user scoped", async () => {
     const { dispatcher } = createHarness(baseConfig)
-    const result = await dispatcher.dispatch("variable.item.list", { repositoryUuid: "repo-2" }, { source: "api" })
 
-    expect(result).toMatchObject({
-      data: {
-        repository: { uuid: "repo-2", name: "Other", isActive: false },
-        variables: [{ name: "OTHER", hasValue: true }],
-      },
-    })
+    await expect(
+      dispatcher.dispatch("variable.item.list", { repositoryUuid: "repo-2" }, { source: "api" }),
+    ).rejects.toThrow("repositoryUuid is no longer supported")
   })
 
   it("gets one variable without value by default", async () => {
@@ -130,11 +112,10 @@ describe("variable capability dispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "secret.read",
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
-      resource: "variable:repo-1:TOKEN",
+      resource: "variable:user:TOKEN",
       context: {
         source: "mcp-http",
         variableAction: "variable.item.get",
-        repositoryUuid: "repo-1",
         variableName: "TOKEN",
         includeValue: true,
       },
@@ -145,7 +126,7 @@ describe("variable capability dispatcher", () => {
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "secret.read",
       outcome: "allowed",
-      resource: "variable:repo-1:TOKEN",
+      resource: "variable:user:TOKEN",
     }))
   })
 
@@ -213,7 +194,7 @@ describe("variable capability dispatcher", () => {
       },
     })
 
-    expect(getConfig().repositories[0]?.variables?.map((variable) => variable.name)).toEqual(["TOKEN", "EMPTY"])
+    expect(getConfig().global.variables.map((variable) => variable.name)).toEqual(["TOKEN", "EMPTY"])
     expect(updateConfig).toHaveBeenCalled()
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({ action: "secret.write" }))
     expect(JSON.stringify(auditEvents)).not.toContain("new-secret")
@@ -222,23 +203,17 @@ describe("variable capability dispatcher", () => {
       domain: "repository",
       type: "repository.updated",
       payload: expect.objectContaining({
-        repositoryUuid: "repo-1",
         operation: "variables",
       }),
     }))
   })
 
-  it("preserves concurrent creates in the same repository", async () => {
+  it("preserves concurrent user variable creates", async () => {
     const { dispatcher, getConfig } = createHarness(configFixture({
-      activeRepoUuid: "repo-1",
-      repositories: [
-        {
-          uuid: "repo-1",
-          name: "Main",
-          localPath: "/repo/main",
-          contentDirs: {},
-        },
-      ],
+      global: {
+        ...createDefaultConfig().global,
+        variables: [],
+      },
     }))
 
     await Promise.all([
@@ -246,7 +221,7 @@ describe("variable capability dispatcher", () => {
       dispatcher.dispatch("variable.item.create", { name: "SECOND", value: "two" }, { source: "mcp-http" }),
     ])
 
-    expect(getConfig().repositories[0]?.variables?.map((variable) => variable.name)).toEqual(["FIRST", "SECOND"])
+    expect(getConfig().global.variables.map((variable) => variable.name)).toEqual(["FIRST", "SECOND"])
   })
 
   it("records failed instead of allowed when a secret write persist fails", async () => {
@@ -257,16 +232,16 @@ describe("variable capability dispatcher", () => {
       dispatcher.dispatch("variable.item.create", { name: "BROKEN", value: "secret" }, { source: "mcp-http" }),
     ).rejects.toThrow("disk unavailable")
 
-    expect(getConfig().repositories[0]?.variables?.map((variable) => variable.name)).toEqual(["TOKEN", "EMPTY"])
+    expect(getConfig().global.variables.map((variable) => variable.name)).toEqual(["TOKEN", "EMPTY"])
     expect(auditEvents).not.toContainEqual(expect.objectContaining({
       action: "secret.write",
       outcome: "allowed",
-      resource: "variable:repo-1:BROKEN",
+      resource: "variable:user:BROKEN",
     }))
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "secret.write",
       outcome: "failed",
-      resource: "variable:repo-1:BROKEN",
+      resource: "variable:user:BROKEN",
       metadata: expect.objectContaining({
         errorName: "Error",
       }),
@@ -274,29 +249,25 @@ describe("variable capability dispatcher", () => {
   })
 
   it("rejects invalid scopes names duplicates and missing creation values", async () => {
-    const { dispatcher } = createHarness(configFixture({
-      activeRepoUuid: null,
-      repositories: baseConfig.repositories,
-    }))
+    const { dispatcher } = createHarness(baseConfig)
 
-    await expect(dispatcher.dispatch("variable.item.list", {}, { source: "api" })).rejects.toThrow("No active repository")
     await expect(dispatcher.dispatch("variable.item.list", { repositoryUuid: "missing" }, { source: "api" })).rejects.toThrow(
-      "Repository not found",
+      "repositoryUuid is no longer supported",
     )
     await expect(
-      dispatcher.dispatch("variable.item.create", { repositoryUuid: "repo-1", name: "bad-name", value: "x" }, { source: "api" }),
+      dispatcher.dispatch("variable.item.create", { name: "bad-name", value: "x" }, { source: "api" }),
     ).rejects.toThrow("Variable name")
     await expect(
-      dispatcher.dispatch("variable.item.create", { repositoryUuid: "repo-1", name: "token", value: "x" }, { source: "api" }),
+      dispatcher.dispatch("variable.item.create", { name: "token", value: "x" }, { source: "api" }),
     ).rejects.toThrow("already exists")
     await expect(
-      dispatcher.dispatch("variable.item.upsert", { repositoryUuid: "repo-1", name: "NEW_ONE" }, { source: "api" }),
+      dispatcher.dispatch("variable.item.upsert", { name: "NEW_ONE" }, { source: "api" }),
     ).rejects.toThrow("requires 'value'")
     await expect(
-      dispatcher.dispatch("variable.item.update", { repositoryUuid: "repo-1", name: "missing", value: "x" }, { source: "api" }),
+      dispatcher.dispatch("variable.item.update", { name: "missing", value: "x" }, { source: "api" }),
     ).rejects.toThrow("Variable not found")
     await expect(
-      dispatcher.dispatch("variable.item.delete", { repositoryUuid: "repo-1", name: "missing" }, { source: "api" }),
+      dispatcher.dispatch("variable.item.delete", { name: "missing" }, { source: "api" }),
     ).rejects.toThrow("Variable not found")
   })
 

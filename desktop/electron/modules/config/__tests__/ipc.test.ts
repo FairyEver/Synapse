@@ -241,6 +241,7 @@ function configFixture(agent: SynapseConfig["agent"]): SynapseConfig {
       favorites: { rule: [], skill: [], prompt: [] },
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",
+      variables: [],
     },
     agent,
   }

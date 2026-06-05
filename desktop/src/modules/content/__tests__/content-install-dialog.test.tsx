@@ -11,10 +11,16 @@ import type { SynapseContentMeta } from "@/types/content"
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 
 const mocks = vi.hoisted(() => ({
+  config: {
+    global: {
+      variables: [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }],
+    },
+  },
   installToEditor: vi.fn(),
   readContent: vi.fn(),
   resolveEditorInstallTarget: vi.fn(),
   targetStatus: "conflict" as "conflict" | "ready",
+  updateConfig: vi.fn(),
   updateRepository: vi.fn(),
   warning: vi.fn(),
 }))
@@ -44,6 +50,13 @@ vi.mock("@/app-shell/use-repository-manager", () => ({
   useActiveRepository: () => null,
   useRepositoryActions: () => ({
     updateRepository: mocks.updateRepository,
+  }),
+}))
+
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: mocks.config,
+    updateConfig: mocks.updateConfig,
   }),
 }))
 
@@ -155,6 +168,12 @@ function clickButton(text: string, index = 0) {
   matches[index]?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
+function setInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
 async function renderInstallDialog(onOpenChange = vi.fn()) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -186,6 +205,7 @@ afterEach(() => {
   document.body.innerHTML = ""
   vi.clearAllMocks()
   mocks.targetStatus = "conflict"
+  mocks.config.global.variables = [{ name: "GITEE_TOKEN", value: "saved-token", description: "saved" }]
 })
 
 describe("detectInstallPlaceholders", () => {
@@ -213,8 +233,52 @@ describe("ContentInstallDialog", () => {
 
     expect(document.body.textContent).toContain("变量替换")
     expect(document.body.textContent).toContain("${{ GITEE_TOKEN }}")
+    const input = document.querySelector<HTMLInputElement>("input")
+    expect(input?.value).toBe("saved-token")
     expect(document.body.textContent).not.toContain("确认覆盖目标目录？")
     expect(mocks.installToEditor).not.toHaveBeenCalled()
+  })
+
+  it("saves submitted substitutions to user variables before continuing install", async () => {
+    mocks.targetStatus = "ready"
+    mocks.config.global.variables = []
+    mocks.readContent.mockResolvedValue({ content: "GITEE_TOKEN=${{ GITEE_TOKEN }}" })
+    mocks.updateConfig.mockResolvedValue(undefined)
+    mocks.installToEditor.mockResolvedValue({ targetPath: "/tmp/codex/skills/demo" })
+
+    await renderInstallDialog()
+
+    await act(async () => {
+      clickButton("选择冲突目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+
+    const input = document.querySelector<HTMLInputElement>("input")
+    expect(input?.value).toBe("")
+
+    await act(async () => {
+      if (input) setInputValue(input, "new-token")
+    })
+
+    await act(async () => {
+      clickButton("继续安装")
+    })
+
+    expect(document.body.textContent).toContain("保存变量变更")
+    expect(document.body.textContent).not.toContain("当前仓库")
+
+    await act(async () => {
+      clickButton("保存并继续")
+    })
+
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      global: {
+        variables: [{ name: "GITEE_TOKEN", value: "new-token" }],
+      },
+    })
+    expect(mocks.updateRepository).not.toHaveBeenCalled()
   })
 
   it("asks for variables again after cancelling a Skill replacement", async () => {

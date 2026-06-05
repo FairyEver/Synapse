@@ -41,19 +41,15 @@ describe("ConfigStore log redaction", () => {
     for (const fn of Object.values(mocks.logger)) fn.mockReset()
   })
 
-  it("redacts repository variable values before logging config update patches", async () => {
+  it("redacts user variable values before logging config update patches", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-redaction-"))
     mocks.userDataPath = dir
 
     try {
       await configStore.update({
-        repositories: [{
-          uuid: "repo-1",
-          name: "Repo",
-          localPath: "/repo",
-          contentDirs: {},
+        global: {
           variables: [{ name: "TOKEN", value: "super-secret-value", description: "api token" }],
-        }],
+        },
       })
 
       const updatingCall = mocks.logger.info.mock.calls.find(([message]) => message === "Updating config.")

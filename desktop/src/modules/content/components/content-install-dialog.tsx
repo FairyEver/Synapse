@@ -5,9 +5,9 @@ import {
   readContent,
   resolveEditorInstallTarget,
 } from "@/app-shell/content"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useActiveRepository, useRepositoryActions } from "@/app-shell/use-repository-manager"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -39,10 +39,10 @@ import { VariableSaveConfirmationDialog } from "./variable-save-confirmation-dia
 import { detectPlaceholders } from "@/lib/variable-substitution"
 import { installFormDefinitionByEditorId } from "@/definitions/generated/renderer-registry"
 import {
-  buildRepositoryVariableChangeSet,
-  buildRepositoryVariablesPatch,
-  hasRepositoryVariableChanges,
-  type RepositoryVariableChangeSet,
+  buildUserVariableChangeSet,
+  buildUserVariablesPatch,
+  hasUserVariableChanges,
+  type UserVariableChangeSet,
 } from "@/modules/content/lib/repository-variables"
 import {
   EditorWriteTargetSelector,
@@ -89,14 +89,14 @@ function ContentInstallDialog({
     [item.type],
   )
   const { promise, warning } = useAppNotifications()
-  const activeRepository = useActiveRepository()
-  const { updateRepository } = useRepositoryActions()
+  const { config, updateConfig } = useAppConfig()
+  const userVariables = config.global.variables
   const [preloadedContent, setPreloadedContent] = useState<string | null>(null)
   const [isVariableConfirmOpen, setIsVariableConfirmOpen] = useState(false)
   const [isVariableSaveConfirmOpen, setIsVariableSaveConfirmOpen] = useState(false)
   const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([])
   const [pendingVariableChanges, setPendingVariableChanges] =
-    useState<RepositoryVariableChangeSet | null>(null)
+    useState<UserVariableChangeSet | null>(null)
   const [isSavingVariables, setIsSavingVariables] = useState(false)
   const pendingSubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
   const variableConfirmPassedRef = useRef(false)
@@ -295,15 +295,13 @@ function ContentInstallDialog({
     pendingSubstitutionsRef.current = Object.keys(filtered).length > 0 ? filtered : undefined
     variableConfirmPassedRef.current = true
 
-    if (activeRepository) {
-      const changes = buildRepositoryVariableChangeSet(activeRepository, substitutions)
+    const changes = buildUserVariableChangeSet(userVariables, substitutions)
 
-      if (hasRepositoryVariableChanges(changes)) {
-        setPendingVariableChanges(changes)
-        setIsVariableConfirmOpen(false)
-        setIsVariableSaveConfirmOpen(true)
-        return
-      }
+    if (hasUserVariableChanges(changes)) {
+      setPendingVariableChanges(changes)
+      setIsVariableConfirmOpen(false)
+      setIsVariableSaveConfirmOpen(true)
+      return
     }
 
     setIsVariableConfirmOpen(false)
@@ -330,14 +328,14 @@ function ContentInstallDialog({
 
     setIsSavingVariables(true)
     try {
-      if (activeRepository && pendingVariableChanges) {
-        const patch = buildRepositoryVariablesPatch(activeRepository, pendingVariableChanges)
+      if (pendingVariableChanges) {
+        const patch = buildUserVariablesPatch(userVariables, pendingVariableChanges)
         if (patch) {
-          await updateRepository(activeRepository.uuid, patch)
+          await updateConfig(patch)
         }
       }
     } catch (error) {
-      logger.warn("Failed to save variables to repository.", { error })
+      logger.warn("Failed to save user variables.", { error })
       warning("变量未保存，安装会继续。")
     } finally {
       setIsSavingVariables(false)
@@ -449,7 +447,7 @@ function ContentInstallDialog({
           setIsVariableConfirmOpen(next)
         }}
         placeholders={detectedPlaceholders}
-        repositoryVariables={activeRepository?.variables ?? []}
+        variables={userVariables}
         onConfirm={handleVariableConfirm}
       />
       <VariableSaveConfirmationDialog

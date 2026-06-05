@@ -780,6 +780,10 @@ class RepositoryManager {
     })
 
     this.unsubscribeUpdated = bridge.onUpdated((event: SynapseRepositoryUpdatedEvent) => {
+      if (event.operation === "variables" || !event.repositoryUuid) {
+        return
+      }
+
       this.setOperationState(event.repositoryUuid, {
         operation: event.operation,
         isRunning: false,
