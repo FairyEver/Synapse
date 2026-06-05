@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -349,6 +349,14 @@ describe("KnowledgeBaseService", () => {
     })
   })
 
+  it("does not create missing raw directory while listing sources", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    await rm(path.join(projectPath, ".raw"), { recursive: true, force: true })
+
+    await expect(service.listSources(projectId)).rejects.toThrow("知识库资料目录缺失")
+    await expect(access(path.join(projectPath, ".raw"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("uploads source files into a date folder with collision-safe names", async () => {
     const sourcePath = path.join(await tempDir(), "note.md")
     await writeFile(sourcePath, "alpha\n")
@@ -434,6 +442,17 @@ describe("KnowledgeBaseService", () => {
       directoryCount: 1,
       fileCount: 1,
     })
+  })
+
+  it("does not create missing raw directory while listing raw entries", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    await rm(path.join(projectPath, ".raw"), { recursive: true, force: true })
+
+    await expect(service.listRawDirectory({
+      projectId,
+      directoryPath: "",
+    })).rejects.toThrow("知识库资料目录缺失")
+    await expect(access(path.join(projectPath, ".raw"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("uploads raw files into the selected raw folder without conversion", async () => {

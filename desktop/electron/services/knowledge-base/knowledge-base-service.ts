@@ -177,9 +177,7 @@ export class KnowledgeBaseService {
 
   async listSources(projectId: string): Promise<SynapseKnowledgeBaseListSourcesResult> {
     const projectPath = await this.resolveProjectPath(projectId)
-    const rawPath = assertInside(projectPath, path.join(projectPath, ".raw"))
-    await assertNoSymlinkInRequiredPath(projectPath, ".raw")
-    await mkdir(rawPath, { recursive: true })
+    const rawPath = await this.requireRawRoot(projectPath)
     const scan = await scanKnowledgeBaseSources(projectPath)
     const supportedByPath = new Map(scan.sources.map((source) => [source.relativePath, source]))
     const rawFiles = await walkRawFiles(projectPath, rawPath)
@@ -252,7 +250,8 @@ export class KnowledgeBaseService {
 
   async listRawDirectory(payload: SynapseKnowledgeBaseListRawDirectoryPayload): Promise<SynapseKnowledgeBaseListRawDirectoryResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
-    const rawRoot = await this.ensureRawRoot(projectPath)
+    assertRawRelativePathInside(projectPath, payload.directoryPath)
+    const rawRoot = await this.requireRawRoot(projectPath)
     const entries = await this.rawFileManager.list(rawRoot, payload.directoryPath)
     logger.info("Knowledge Base raw directory listed.", {
       projectId: payload.projectId,
@@ -419,6 +418,23 @@ export class KnowledgeBaseService {
     await mkdir(rawPath, { recursive: true })
     return rawPath
   }
+
+  private async requireRawRoot(projectPath: string): Promise<string> {
+    const rawPath = assertInside(projectPath, path.join(projectPath, ".raw"))
+    await assertNoSymlinkInRequiredPath(projectPath, ".raw")
+    try {
+      const stat = await lstat(rawPath)
+      if (!stat.isDirectory()) {
+        throw new Error("知识库资料目录不是文件夹。")
+      }
+      return rawPath
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error("知识库资料目录缺失。")
+      }
+      throw error
+    }
+  }
 }
 
 type RawFileEntry = {
@@ -560,6 +576,15 @@ function rawManifestKey(rawRelativePath: string): string {
 
 function normalizeRawRelativePath(value: string): string {
   return value.split("\\").join("/").replace(/^\/+/, "").replace(/\/+$/g, "")
+}
+
+function assertRawRelativePathInside(projectPath: string, rawRelativePath: string): void {
+  const rawRoot = path.resolve(projectPath, ".raw")
+  const target = path.resolve(rawRoot, normalizeRawRelativePath(rawRelativePath))
+  const relative = path.relative(rawRoot, target)
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("目标路径不在资料目录中。")
+  }
 }
 
 function joinRawPath(parent: string, name: string): string {
