@@ -34,6 +34,13 @@ const logger = createRendererLogger("workflow.runner")
 
 type ViewMode = "dag" | "timeline" | "token"
 
+function syncRunnerUrl(workflowId: string, runId: string): void {
+  const nextUrl = new URL(window.location.href)
+  nextUrl.searchParams.set("workflowId", workflowId)
+  nextUrl.searchParams.set("runId", runId)
+  window.history.replaceState(window.history.state, "", nextUrl)
+}
+
 export function WorkflowRunnerApp() {
   const searchParams = new URLSearchParams(window.location.search)
   const workflowId = searchParams.get("workflowId") ?? ""
@@ -132,6 +139,7 @@ export function WorkflowRunnerApp() {
       if (event.type === "workflow:started" && event.workflowId === workflowId) {
         if (!runIdRef.current) {
           logger.info("workflow:started in runner — switching to new run", { newRunId: event.runId })
+          syncRunnerUrl(workflowId, event.runId)
           setRunId(event.runId)
           setRunState("running")
           setNodeResults({})
@@ -149,6 +157,7 @@ export function WorkflowRunnerApp() {
     const unsubSwitch = window.synapse?.workflow.onRunnerSwitchRun((payload) => {
       if (payload?.runId && payload.runId !== runIdRef.current) {
         logger.info("runner-switch-run received", { newRunId: payload.runId })
+        syncRunnerUrl(workflowId, payload.runId)
         setRunId(payload.runId)
         setRunState("running")
         setNodeResults({})

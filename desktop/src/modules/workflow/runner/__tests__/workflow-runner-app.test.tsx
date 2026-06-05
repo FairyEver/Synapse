@@ -348,6 +348,44 @@ describe("WorkflowRunnerApp", () => {
     expect(runStatus).not.toHaveBeenCalledWith("run-2")
   })
 
+  it("updates the runner URL when switching to another run", async () => {
+    let emitRunnerSwitch: ((payload: { runId: string }) => void) | null = null
+    const runStatus = vi.fn(async () => ({
+      definition: workflowDefinition(),
+      params: {},
+    }))
+    installWorkflowBridge({
+      runStatus,
+      onRunnerSwitchRun: vi.fn((listener) => {
+        emitRunnerSwitch = listener
+        return vi.fn()
+      }),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+
+    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(emitRunnerSwitch).toBeInstanceOf(Function)
+
+    await act(async () => {
+      emitRunnerSwitch?.({ runId: "run-2" })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-2")
+    expect(new URLSearchParams(window.location.search).get("workflowId")).toBe("workflow-1")
+    expect(runStatus).toHaveBeenCalledWith("run-2")
+  })
+
   it("copies the whole workflow run report from the toolbar", async () => {
     installWorkflowBridge({
       runStatus: vi.fn(async () => ({
@@ -456,6 +494,7 @@ function installWorkflowBridge(overrides: {
   readonly cancel?: (runId: string) => Promise<unknown>
   readonly get?: (workflowId: string) => Promise<unknown>
   readonly onEvent?: (listener: (event: WorkflowEvent) => void) => () => void
+  readonly onRunnerSwitchRun?: (listener: (payload: { runId: string }) => void) => () => void
   readonly runStatus?: (runId: string) => Promise<unknown>
 }): void {
   ;(window as unknown as { synapse: { workflow: Record<string, unknown> } }).synapse = {
@@ -472,7 +511,7 @@ function installWorkflowBridge(overrides: {
       })),
       get: overrides.get ?? vi.fn(),
       onEvent: overrides.onEvent ?? vi.fn(() => vi.fn()),
-      onRunnerSwitchRun: vi.fn(() => vi.fn()),
+      onRunnerSwitchRun: overrides.onRunnerSwitchRun ?? vi.fn(() => vi.fn()),
       cancel: overrides.cancel ?? vi.fn(),
       rerun: vi.fn(),
       openEditor: vi.fn(),
