@@ -1,5 +1,13 @@
 import { createContext, useContext } from "react"
 import { Handle, Position, type NodeProps } from "@xyflow/react"
+import { MessageSquare } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
 import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
@@ -12,15 +20,48 @@ import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
 import type { HttpRequestNodeConfig } from "../../../../workflow-nodes/http-request/schema"
 import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
 import type { NodeRunResult } from "@/types/workflow"
+import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
 
 export const RunnerNodeResultsContext = createContext<Record<string, NodeRunResult>>({})
+export const RunnerOpenAgentConversationContext = createContext<
+  ((target: SynapseAgentConversationTarget) => void) | undefined
+>(undefined)
+
+function AgentConversationNodeAction({ result }: { result?: NodeRunResult }) {
+  const onOpenAgentConversation = useContext(RunnerOpenAgentConversationContext)
+  const agentConversation = agentConversationTargetFromOutputs(result?.outputs)
+  if (!agentConversation || !onOpenAgentConversation) return null
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            size="icon"
+            variant="secondary"
+            className="absolute -right-3 -top-3 z-10 h-7 w-7 rounded-full"
+            aria-label="打开对话"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenAgentConversation(agentConversation)
+            }}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>打开对话</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
 
 function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
   return (
-    <div>
+    <div className="relative">
       <Handle type="target" position={Position.Left} />
       <PromptNodeCard
         config={data as PromptNodeConfig}
@@ -30,6 +71,7 @@ function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
+      <AgentConversationNodeAction result={result} />
       <Handle type="source" position={Position.Right} />
     </div>
   )
@@ -41,7 +83,7 @@ function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
   return (
-    <div>
+    <div className="relative">
       <Handle type="target" position={Position.Left} />
       <SwitchNodeCard
         config={data as SwitchNodeConfig}
@@ -51,6 +93,7 @@ function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
+      <AgentConversationNodeAction result={result} />
       {branches.map((b, i) => (
         <Handle
           key={b.id}
@@ -69,7 +112,7 @@ function RunnerEndNodeWrapper({ id, data, selected }: NodeProps) {
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
   return (
-    <div>
+    <div className="relative">
       <Handle type="target" position={Position.Left} />
       <EndNodeCard
         config={data as EndNodeConfig}
@@ -79,6 +122,7 @@ function RunnerEndNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
+      <AgentConversationNodeAction result={result} />
     </div>
   )
 }
@@ -88,7 +132,7 @@ function RunnerHttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
   return (
-    <div>
+    <div className="relative">
       <Handle type="target" position={Position.Left} />
       <HttpRequestNodeCard
         config={data as HttpRequestNodeConfig}
@@ -98,6 +142,7 @@ function RunnerHttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
+      <AgentConversationNodeAction result={result} />
       <Handle type="source" position={Position.Right} />
     </div>
   )
@@ -108,7 +153,7 @@ function RunnerScriptNodeWrapper({ id, data, selected }: NodeProps) {
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
   return (
-    <div>
+    <div className="relative">
       <Handle type="target" position={Position.Left} />
       <ScriptNodeCard
         config={data as ScriptNodeConfig}
@@ -118,6 +163,7 @@ function RunnerScriptNodeWrapper({ id, data, selected }: NodeProps) {
         progressLabel={result?.progressLabel}
         startedAt={result?.startedAt}
       />
+      <AgentConversationNodeAction result={result} />
       <Handle type="source" position={Position.Right} />
     </div>
   )

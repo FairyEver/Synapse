@@ -1,0 +1,98 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import type { NodeRunResult } from "@/types/workflow"
+import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import {
+  RunnerOpenAgentConversationContext,
+  RunnerNodeResultsContext,
+  runnerNodeTypes,
+} from "../runner-node-wrappers"
+
+vi.mock("@xyflow/react", () => ({
+  Handle: () => null,
+  Position: { Left: "left", Right: "right" },
+}))
+
+vi.mock("../../../../workflow-nodes/provider-lookup-context", () => ({
+  useProviderLookup: () => ({
+    getModelName: () => undefined,
+    getProviderName: () => undefined,
+  }),
+}))
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots.length = 0
+  document.body.innerHTML = ""
+})
+
+describe("runnerNodeTypes", () => {
+  it("opens the agent conversation directly from a DAG node card", async () => {
+    const target: SynapseAgentConversationTarget = {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:project-1:conversation-1",
+      platform: "workflow",
+    }
+    const onOpenAgentConversation = vi.fn()
+    const PromptNode = runnerNodeTypes.prompt
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <RunnerOpenAgentConversationContext.Provider value={onOpenAgentConversation}>
+          <RunnerNodeResultsContext.Provider value={{ node_1: nodeResult("node_1", target) }}>
+            <PromptNode
+              id="node_1"
+              data={{ name: "生成总结", providerId: "provider-1", prompt: "run" }}
+              selected={false}
+              type="prompt"
+              zIndex={0}
+              isConnectable={false}
+              positionAbsoluteX={0}
+              positionAbsoluteY={0}
+              dragging={false}
+              draggable={false}
+              selectable
+              deletable={false}
+            />
+          </RunnerNodeResultsContext.Provider>
+        </RunnerOpenAgentConversationContext.Provider>,
+      )
+    })
+
+    const button = container.querySelector<HTMLButtonElement>("button[aria-label='打开对话']")
+    expect(button).not.toBeNull()
+
+    await act(async () => {
+      button?.click()
+    })
+
+    expect(onOpenAgentConversation).toHaveBeenCalledWith(target)
+  })
+})
+
+function nodeResult(nodeId: string, target: SynapseAgentConversationTarget): NodeRunResult {
+  return {
+    nodeId,
+    status: "success",
+    input: { variables: {} },
+    outputs: { agentConversation: target },
+  }
+}

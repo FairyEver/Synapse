@@ -15,6 +15,7 @@ import {
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
+import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import { Badge } from "@/components/ui/badge"
 import {
   ContextMenu,
@@ -23,7 +24,11 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { Maximize2 } from "lucide-react"
-import { RunnerNodeResultsContext, runnerNodeTypes } from "./runner-node-wrappers"
+import {
+  RunnerNodeResultsContext,
+  RunnerOpenAgentConversationContext,
+  runnerNodeTypes,
+} from "./runner-node-wrappers"
 import { resolveBranchLabel } from "../lib/branch-label"
 import {
   FIT_WORKFLOW_NODES_OPTIONS,
@@ -83,9 +88,10 @@ interface DagViewProps {
   runState: WorkflowRunStatus["status"]
   selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
+  onOpenAgentConversation?: (target: SynapseAgentConversationTarget) => void
 }
 
-function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNodeSelect }: DagViewProps) {
+function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNodeSelect, onOpenAgentConversation }: DagViewProps) {
   const reactFlow = useReactFlow()
 
   const nodes: Node[] = useMemo(() =>
@@ -150,43 +156,45 @@ function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNod
   }, [allNodeKey, reactFlow, reactFlow.viewportInitialized, runState])
 
   return (
-    <RunnerNodeResultsContext.Provider value={nodeResults}>
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <div className="h-full w-full">
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={runnerNodeTypes}
-              edgeTypes={edgeTypes}
-              onNodeClick={(_e, node) => onNodeSelect(node.id)}
-              onPaneClick={() => onNodeSelect(null)}
-              panOnScroll
-              panOnScrollMode={PanOnScrollMode.Free}
-              selectionMode={SelectionMode.Partial}
-              nodesDraggable={false}
-              nodesConnectable={false}
-              edgesReconnectable={false}
-              minZoom={WORKFLOW_RUNNER_MIN_ZOOM}
-              fitView={shouldFitInitialView}
-              fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
-            >
-              <Background />
-              <Controls
-                showInteractive={false}
+    <RunnerOpenAgentConversationContext.Provider value={onOpenAgentConversation}>
+      <RunnerNodeResultsContext.Provider value={nodeResults}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div className="h-full w-full">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={runnerNodeTypes}
+                edgeTypes={edgeTypes}
+                onNodeClick={(_e, node) => onNodeSelect(node.id)}
+                onPaneClick={() => onNodeSelect(null)}
+                panOnScroll
+                panOnScrollMode={PanOnScrollMode.Free}
+                selectionMode={SelectionMode.Partial}
+                nodesDraggable={false}
+                nodesConnectable={false}
+                edgesReconnectable={false}
+                minZoom={WORKFLOW_RUNNER_MIN_ZOOM}
+                fitView={shouldFitInitialView}
                 fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
-              />
-            </ReactFlow>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onSelect={handleFitAllNodes}>
-            <Maximize2 className="size-4" />
-            适应画布
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    </RunnerNodeResultsContext.Provider>
+              >
+                <Background />
+                <Controls
+                  showInteractive={false}
+                  fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
+                />
+              </ReactFlow>
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onSelect={handleFitAllNodes}>
+              <Maximize2 className="size-4" />
+              适应画布
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      </RunnerNodeResultsContext.Provider>
+    </RunnerOpenAgentConversationContext.Provider>
   )
 }
 

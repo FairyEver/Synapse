@@ -455,6 +455,7 @@ export function WorkflowRunnerApp() {
               runState={runState}
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
+              onOpenAgentConversation={handleOpenAgentConversation}
             />
           ) : viewMode === "timeline" ? (
             <TimelineView

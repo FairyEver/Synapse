@@ -19,8 +19,10 @@ const reactFlowProps = vi.hoisted(() => [] as Array<{ fitView?: boolean; minZoom
 
 vi.mock("@xyflow/react", async () => {
   return {
-    ReactFlow: ({ edges, edgeTypes, children, fitView, minZoom }: {
+    ReactFlow: ({ nodes, edges, nodeTypes, edgeTypes, children, fitView, minZoom }: {
+      nodes: Array<{ id: string; type?: string; data?: unknown; selected?: boolean }>
       edges: Array<{ id: string; source: string; target: string; type?: string; sourceHandle?: string; data?: unknown }>
+      nodeTypes: Record<string, ComponentType<Record<string, unknown>>>
       edgeTypes: Record<string, ComponentType<Record<string, unknown>>>
       children?: ReactNode
       fitView?: boolean
@@ -46,6 +48,18 @@ vi.mock("@xyflow/react", async () => {
                   sourceHandleId={edge.sourceHandle}
                 />
               </svg>
+            )
+          })}
+          {nodes.map((node) => {
+            const NodeComponent = node.type ? nodeTypes[node.type] : undefined
+            if (!NodeComponent) return null
+            return (
+              <NodeComponent
+                key={node.id}
+                id={node.id}
+                data={node.data}
+                selected={node.selected}
+              />
             )
           })}
           {children}
@@ -84,9 +98,32 @@ vi.mock("@/components/ui/context-menu", () => ({
 
 vi.mock("../runner-node-wrappers", async () => {
   const React = await vi.importActual<typeof import("react")>("react")
+  const RunnerOpenAgentConversationContext = React.createContext<
+    ((target: { projectId: string; conversationId: string; sessionKey: string; platform: "workflow" }) => void) | undefined
+  >(undefined)
   return {
+    RunnerOpenAgentConversationContext,
     RunnerNodeResultsContext: React.createContext({}),
-    runnerNodeTypes: {},
+    runnerNodeTypes: {
+      prompt: () => {
+        const onOpen = React.useContext(RunnerOpenAgentConversationContext)
+        if (!onOpen) return null
+        return (
+          <button
+            type="button"
+            data-testid="dag-agent-action"
+            onClick={() => onOpen({
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "workflow:project-1:conversation-1",
+              platform: "workflow",
+            })}
+          >
+            open
+          </button>
+        )
+      },
+    },
   }
 })
 
@@ -269,6 +306,37 @@ describe("DagView", () => {
     })
     rafSpy.mockRestore()
     cancelAnimationFrameSpy.mockRestore()
+  })
+
+  it("passes the agent conversation open callback to runner nodes", async () => {
+    const onOpenAgentConversation = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <DagView
+          definition={definition()}
+          nodeResults={{}}
+          runState="running"
+          onNodeSelect={vi.fn()}
+          onOpenAgentConversation={onOpenAgentConversation}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[data-testid='dag-agent-action']")?.click()
+    })
+
+    expect(onOpenAgentConversation).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:project-1:conversation-1",
+      platform: "workflow",
+    })
   })
 })
 
