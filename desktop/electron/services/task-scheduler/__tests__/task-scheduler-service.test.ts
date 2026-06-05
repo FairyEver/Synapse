@@ -33,6 +33,45 @@ describe("TaskSchedulerService", () => {
     await harness.service.stop()
   })
 
+  it("marks persisted running runs as failed on startup recovery", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ logger })
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      enabled: false,
+      runCount: 1,
+    }))
+    await harness.runItems.upsert({
+      id: "run:stale",
+      schemaVersion: 2,
+      taskId: "task:1",
+      startedAt: "2026-04-29T09:59:00.000Z",
+      status: "running",
+      triggeredBy: "schedule",
+    })
+
+    await harness.service.start()
+
+    expect(await harness.runs.get("run:stale")).toEqual(expect.objectContaining({
+      status: "failed",
+      finishedAt: "2026-04-29T10:00:00.000Z",
+      error: "应用异常退出，运行已在启动恢复时标记为失败。",
+      result: {
+        status: "failed",
+        summary: "应用异常退出",
+        error: "应用异常退出，运行已在启动恢复时标记为失败。",
+      },
+    }))
+    expect(await harness.tasks.get("task:1")).toEqual(expect.objectContaining({
+      lastStatus: "failed",
+      runCount: 2,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("Recovered interrupted scheduled task runs.", {
+      boundary: "task-scheduler-startup-run-recovery",
+      recoveredCount: 1,
+    })
+  })
+
   it("skips overlapping scheduled runs", async () => {
     const logger = structuredLogger()
     const harness = createHarness({ action: longRunningAction(), logger })
@@ -501,6 +540,7 @@ function createHarness(options: {
   return {
     service: new TaskSchedulerService(serviceDeps),
     taskItems,
+    runItems,
     tasks,
     runs,
   }

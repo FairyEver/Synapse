@@ -59,6 +59,11 @@ export class ScheduledTaskRunRepository {
     return this.listSorted(taskId, options?.limit)
   }
 
+  async listRunning(): Promise<ScheduledTaskRunEntry[]> {
+    const runs = await this.runs.list({ status: "running" } as Partial<ScheduledTaskRunEntry>)
+    return runs.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  }
+
   get(id: string): Promise<ScheduledTaskRunEntry | null> {
     return this.runs.get(id)
   }
