@@ -103,36 +103,46 @@ export async function parseCcConversationFile(filePath: string): Promise<ParsedC
   let lineNumber = 0
   let byteOffset = 0
 
-  for await (const line of reader) {
-    lineNumber += 1
-    const currentOffset = byteOffset
-    byteOffset += Buffer.byteLength(line, "utf8") + 1
+  try {
+    for await (const line of reader) {
+      lineNumber += 1
+      const currentOffset = byteOffset
+      byteOffset += Buffer.byteLength(line, "utf8") + 1
 
-    if (!line.trim()) continue
+      if (!line.trim()) continue
 
-    try {
-      const raw = asRecord(JSON.parse(line) as unknown)
-      if (!raw) {
+      try {
+        const raw = asRecord(JSON.parse(line) as unknown)
+        if (!raw) {
+          parseErrors.push({
+            id: `parse-error:${lineNumber}`,
+            lineNumber,
+            byteOffset: currentOffset,
+            message: "JSONL line is not an object.",
+            rawLine: line,
+          })
+          continue
+        }
+
+        events.push(toConversationEvent(raw, lineNumber, currentOffset))
+      } catch (error) {
         parseErrors.push({
           id: `parse-error:${lineNumber}`,
           lineNumber,
           byteOffset: currentOffset,
-          message: "JSONL line is not an object.",
-          rawLine: line,
+          message: error instanceof Error ? error.message : "Invalid JSONL line.",
+          rawLine: redactSensitiveText(line),
         })
-        continue
       }
-
-      events.push(toConversationEvent(raw, lineNumber, currentOffset))
-    } catch (error) {
-      parseErrors.push({
-        id: `parse-error:${lineNumber}`,
-        lineNumber,
-        byteOffset: currentOffset,
-        message: error instanceof Error ? error.message : "Invalid JSONL line.",
-        rawLine: redactSensitiveText(line),
-      })
     }
+  } catch (error) {
+    parseErrors.push({
+      id: `stream-error:${lineNumber + 1}`,
+      lineNumber: lineNumber + 1,
+      byteOffset,
+      message: redactSensitiveText(error instanceof Error ? error.message : String(error)),
+      rawLine: "",
+    })
   }
 
   return { events, parseErrors }

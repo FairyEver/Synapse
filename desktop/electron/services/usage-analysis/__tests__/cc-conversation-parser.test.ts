@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { Readable } from "node:stream"
 import { parseCcConversationFile } from "../cc-conversation-parser"
 
 const tempDirs: string[] = []
@@ -15,6 +16,7 @@ function writeJsonl(lines: readonly string[]): string {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -110,4 +112,32 @@ describe("parseCcConversationFile", () => {
       rawLine: "{bad json",
     })])
   })
+
+  it("records stream read failures as parse errors instead of rejecting", async () => {
+    vi.spyOn(fs, "createReadStream").mockReturnValue(createFailingReadStream() as ReturnType<typeof fs.createReadStream>)
+
+    const result = await parseCcConversationFile("/tmp/session.jsonl")
+
+    expect(result.events).toHaveLength(1)
+    expect(result.parseErrors).toEqual([
+      expect.objectContaining({
+        id: "stream-error:2",
+        lineNumber: 2,
+        byteOffset: expect.any(Number),
+        message: "stream read failed token=[redacted]",
+      }),
+    ])
+  })
 })
+
+function createFailingReadStream(): Readable {
+  let sent = false
+  return new Readable({
+    read() {
+      if (sent) return
+      sent = true
+      this.push(`${JSON.stringify({ type: "user", sessionId: "s1", uuid: "u1", message: { role: "user", content: "ok" } })}\n`)
+      this.destroy(new Error("stream read failed token=secret-value"))
+    },
+  })
+}
