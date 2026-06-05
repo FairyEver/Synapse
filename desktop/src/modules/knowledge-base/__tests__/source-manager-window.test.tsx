@@ -8,6 +8,7 @@ import { KnowledgeBaseSourceManagerWindow } from "../source-manager-window"
 import type {
   SynapseKnowledgeBaseListRawDirectoryResult,
   SynapseKnowledgeBaseRawMutationResult,
+  SynapseKnowledgeBaseUploadSourcesResult,
 } from "@/types/knowledge-base"
 
 const rendererLogger = vi.hoisted(() => ({
@@ -123,6 +124,19 @@ function createBridgeMocks() {
       uploadRawItems: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; itemPaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
       uploadSources: vi.fn(),
+      addUrlSource: vi.fn<(payload: { projectId: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+        .mockResolvedValue({
+          projectId: "project-1",
+          uploaded: [{
+            originalPath: "https://example.com/notes",
+            relativePath: ".raw/web/2026/05/24/notes.md",
+            name: "notes.md",
+            size: 120,
+            sourceKind: "url",
+            sourceUrl: "https://example.com/notes",
+          }],
+          skipped: [],
+        }),
       selectAndUploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
       selectAndUploadRawDirectory: vi.fn<(payload: { projectId: string; targetDirectoryPath: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
@@ -489,6 +503,38 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       directoryPath: "客户",
     })
     expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
+  })
+
+  it("adds a URL source from the source manager toolbar", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("添加 URL").click()
+      await Promise.resolve()
+    })
+    const urlInput = document.querySelector<HTMLInputElement>('input[placeholder="https://example.com/page"]')
+    expect(urlInput).not.toBeNull()
+
+    act(() => {
+      changeInput(urlInput!, "https://example.com/notes")
+    })
+    await act(async () => {
+      buttonByText("添加").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
+      projectId: "project-1",
+      url: "https://example.com/notes",
+    })
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+      projectId: "project-1",
+      directoryPath: "",
+    })
   })
 
   it("keeps breadcrumbs in a dedicated scroll row below toolbar actions", async () => {

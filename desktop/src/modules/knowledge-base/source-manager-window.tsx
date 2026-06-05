@@ -7,6 +7,7 @@ import {
   Folder,
   FolderPlus,
   FolderUp,
+  Link,
   MoreHorizontal,
   MoveRight,
   Pencil,
@@ -59,6 +60,7 @@ import type {
   SynapseKnowledgeBaseOpenSourceManagerPayload,
   SynapseKnowledgeBaseRawEntry,
   SynapseKnowledgeBaseRawMutationResult,
+  SynapseKnowledgeBaseUploadSourcesResult,
 } from "@/types/knowledge-base"
 
 const logger = createRendererLogger("knowledge-base.source-manager")
@@ -82,6 +84,7 @@ type SourceManagerToolbarProps = {
   query: string
   onQueryChange: (query: string) => void
   onNavigate: (path: string) => void
+  onAddUrl: () => void
   onCreateFolder: () => void
   onUploadFiles: () => void
   onUploadFolder: () => void
@@ -180,6 +183,20 @@ function sourceUploadSuccessMessage(
   emptyMessage: string | null,
 ): string | null {
   return rawMutationSuccessMessage(result, "已上传", emptyMessage)
+}
+
+function sourceUrlSuccessMessage(
+  result: SynapseKnowledgeBaseUploadSourcesResult,
+  emptyMessage: string | null,
+): string | null {
+  if (result.skipped.length > 0) {
+    const skippedSummary = skippedReasonSummary(result.skipped)
+    if (result.uploaded.length > 0) {
+      return `已添加 ${result.uploaded.length} 项，跳过 ${result.skipped.length} 项${skippedSummary}`
+    }
+    return `跳过 ${result.skipped.length} 项${skippedSummary}`
+  }
+  return result.uploaded.length > 0 ? "已添加" : emptyMessage
 }
 
 function rawMutationSuccessMessage(
@@ -368,6 +385,7 @@ function SourceManagerToolbar({
   query,
   onQueryChange,
   onNavigate,
+  onAddUrl,
   onCreateFolder,
   onUploadFiles,
   onUploadFolder,
@@ -388,6 +406,10 @@ function SourceManagerToolbar({
         <Button type="button" variant="outline" onClick={onUploadFiles} aria-label="上传文件">
           <Upload data-icon="inline-start" />
           上传文件
+        </Button>
+        <Button type="button" variant="outline" onClick={onAddUrl} aria-label="添加 URL">
+          <Link data-icon="inline-start" />
+          添加 URL
         </Button>
         <Button type="button" variant="outline" onClick={onUploadFolder} aria-label="上传文件夹">
           <FolderUp data-icon="inline-start" />
@@ -625,6 +647,8 @@ function KnowledgeBaseSourceManagerWindow() {
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [addUrlOpen, setAddUrlOpen] = useState(false)
+  const [sourceUrl, setSourceUrl] = useState("")
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [renameTarget, setRenameTarget] = useState<SynapseKnowledgeBaseRawEntry | null>(null)
@@ -970,6 +994,29 @@ function KnowledgeBaseSourceManagerWindow() {
       },
     )
   }, [bridge, currentDirectory, payload, promise, refreshDirectory])
+
+  const addUrlSource = useCallback(async () => {
+    if (!payload || !bridge) return
+    const url = sourceUrl.trim()
+    if (!url) return
+    await promise(
+      async () => {
+        const result = await bridge.knowledgeBase.addUrlSource({
+          projectId: payload.projectId,
+          url,
+        })
+        await refreshDirectory()
+        return result
+      },
+      {
+        loading: "正在添加",
+        success: (result) => sourceUrlSuccessMessage(result, "没有可添加的 URL"),
+        error: "添加失败",
+      },
+    )
+    setSourceUrl("")
+    setAddUrlOpen(false)
+  }, [bridge, payload, promise, refreshDirectory, sourceUrl])
 
   const createFolder = useCallback(async () => {
     if (!payload || !bridge) return
@@ -1355,6 +1402,10 @@ function KnowledgeBaseSourceManagerWindow() {
           query={query}
           onQueryChange={setQuery}
           onNavigate={openDirectory}
+          onAddUrl={() => {
+            setSourceUrl("")
+            setAddUrlOpen(true)
+          }}
           onCreateFolder={() => {
             setNewFolderName("")
             setCreateFolderOpen(true)
@@ -1416,6 +1467,28 @@ function KnowledgeBaseSourceManagerWindow() {
           ) : null}
         </section>
       </div>
+
+      <Dialog open={addUrlOpen} onOpenChange={setAddUrlOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加 URL</DialogTitle>
+            <DialogDescription>输入网页地址。</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={sourceUrl}
+            onChange={(event) => setSourceUrl(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void addUrlSource()
+            }}
+            placeholder="https://example.com/page"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAddUrlOpen(false)}>取消</Button>
+            <Button type="button" onClick={addUrlSource} aria-label="确认添加 URL">添加</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
         <DialogContent>
