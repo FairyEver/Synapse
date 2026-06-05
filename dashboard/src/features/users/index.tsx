@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { formatModulePermissionSummary } from './module-permissions'
 import { UserModulePermissionsSheet } from './user-module-permissions-sheet'
 import { useUserModulePermissionsEditor } from './use-user-module-permissions-editor'
+import { getUsersTableError } from './users-page-error'
 
 const pageSizeOptions = {
   initial: 20,
@@ -37,8 +38,6 @@ export default function UsersPage() {
 
   const {
     data: modulePermissionDefinitions = [],
-    error: modulePermissionDefinitionsError,
-    isError: isModulePermissionDefinitionsError,
     isLoading: isModulePermissionDefinitionsLoading,
     refetch: refetchModulePermissionDefinitions,
   } = useQuery({
@@ -46,11 +45,7 @@ export default function UsersPage() {
     queryFn: () => adminApi.listModulePermissions(),
   })
   const isTableLoading = isLoading || isModulePermissionDefinitionsLoading
-  const tableError = isError
-    ? error
-    : isModulePermissionDefinitionsError
-      ? modulePermissionDefinitionsError
-      : null
+  const tableError = getUsersTableError(isError, error)
   const retryTable = () => {
     void refetch()
     void refetchModulePermissionDefinitions()
