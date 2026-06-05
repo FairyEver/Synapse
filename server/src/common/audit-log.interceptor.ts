@@ -15,6 +15,7 @@ const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
 const USER_MODULE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/module-permissions$/
+const TEAM_ROLE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/access-roles\/[^/]+\/permissions$/
 const UNAUTHENTICATED_ADMIN_EMAIL = "unauthenticated"
 
 interface AuditPolicy {
@@ -147,6 +148,9 @@ function resolveKnownAdminAuditTarget(
   }
   if (method === "PUT" && USER_MODULE_PERMISSIONS_PATH_PATTERN.test(path)) {
     return { action: "admin.user_module_permissions.replace", targetType: "user", targetId: params.id ?? readId(responseBody) }
+  }
+  if (method === "PUT" && TEAM_ROLE_PERMISSIONS_PATH_PATTERN.test(path)) {
+    return { action: "admin.team_role_permissions.update", targetType: "team_access_role", targetId: params.roleId ?? readId(responseBody) }
   }
   if (method === "GET" && path === "/api/admin/backup/list") {
     return { action: "backup.list", targetType: "backup", targetId: "list" }
