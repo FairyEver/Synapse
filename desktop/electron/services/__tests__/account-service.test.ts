@@ -567,6 +567,30 @@ describe("AccountService", () => {
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain("secret-refresh-new")
   })
 
+  it("does not report logged out when local credential cleanup fails", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url) => {
+        if (String(url).endsWith("/auth/logout")) return jsonResponse({})
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+    vi.spyOn(namespace, "clearSingleton").mockRejectedValueOnce(new Error("disk locked"))
+
+    const state = await service.logout()
+
+    expect(state).toEqual({
+      status: "error",
+      message: "退出登录失败，请重试。",
+      profile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-old" })
+    expect(accountLogger.warn).toHaveBeenCalledWith("Failed to clear stored account.", {
+      error: expect.any(Error),
+    })
+    expect(accountLogger.info).not.toHaveBeenCalledWith("Desktop account logged out.", expect.anything())
+  })
+
   it("keeps active login state when refresh finds an attempt without a token", async () => {
     const { service } = await createTestAccountService()
 

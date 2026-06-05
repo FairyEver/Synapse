@@ -441,7 +441,16 @@ export class AccountService {
       })
     }
 
-    await this.clearStoredAccount()
+    try {
+      await this.clearStoredAccount()
+    } catch {
+      this.setState({
+        status: "error",
+        message: "退出登录失败，请重试。",
+        profile: persisted?.lastProfile,
+      })
+      return this.state
+    }
     this.setState({ status: "unauthenticated" })
     logger.info("Desktop account logged out.", {
       operation: "logout",
@@ -543,11 +552,14 @@ export class AccountService {
   }
 
   private async clearStoredAccount(): Promise<void> {
-    await this.runStorageMutation(async () => {
-      await this.namespace.clearSingleton()
-    }).catch((error) => {
+    try {
+      await this.runStorageMutation(async () => {
+        await this.namespace.clearSingleton()
+      })
+    } catch (error) {
       logger.warn("Failed to clear stored account.", { error })
-    })
+      throw error
+    }
   }
 
   private async clearStoredRefreshTokenIfCurrent(expectedRefreshToken: string | undefined): Promise<void> {
