@@ -93,6 +93,13 @@ export function createCcConversationWindowService(deps: Deps) {
       const health = deps.createHealthService(payload)
       health.attach(window.webContents)
       windowsBySession.set(payload.sessionId, window)
+      let cleanedUp = false
+      const cleanupWindowTracking = () => {
+        if (cleanedUp) return
+        cleanedUp = true
+        health.detach()
+        windowsBySession.delete(payload.sessionId)
+      }
 
       window.webContents.on("preload-error", (_event, _preloadPath, error) => {
         deps.logger.error("CC conversation window preload script failed.", { error })
@@ -103,12 +110,23 @@ export function createCcConversationWindowService(deps: Deps) {
       })
 
       window.on("closed", () => {
-        health.detach()
-        windowsBySession.delete(payload.sessionId)
+        cleanupWindowTracking()
       })
 
-      await (deps.loadWindow ?? ((targetWindow, targetPayload) =>
-        loadConversationWindow(targetWindow, targetPayload, deps.getAppPath())))(window, payload)
+      try {
+        await (deps.loadWindow ?? ((targetWindow, targetPayload) =>
+          loadConversationWindow(targetWindow, targetPayload, deps.getAppPath())))(window, payload)
+      } catch (error) {
+        cleanupWindowTracking()
+        deps.logger.error("Failed to load CC conversation window.", {
+          error,
+          sessionId: payload.sessionId,
+        })
+        if (!window.isDestroyed()) {
+          window.close()
+        }
+        throw error
+      }
     },
   }
 }

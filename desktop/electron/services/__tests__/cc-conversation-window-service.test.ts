@@ -30,17 +30,7 @@ describe("createCcConversationWindowService", () => {
   })
 
   it("opens one window per session and focuses duplicates", async () => {
-    const webContents = { on: vi.fn() }
-    const window = {
-      webContents,
-      focus: vi.fn(),
-      isDestroyed: vi.fn(() => false),
-      isMinimized: vi.fn(() => false),
-      once: vi.fn(),
-      on: vi.fn(),
-      restore: vi.fn(),
-      show: vi.fn(),
-    }
+    const window = createMockWindow()
     const createWindow = vi.fn(() => window as never)
     const loadWindow = vi.fn(async () => undefined)
     const service = createCcConversationWindowService({
@@ -60,4 +50,52 @@ describe("createCcConversationWindowService", () => {
     expect(loadWindow).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
+
+  it("cleans up tracking state when loading a conversation window fails", async () => {
+    const firstWindow = createMockWindow()
+    const secondWindow = createMockWindow()
+    const windows = [firstWindow, secondWindow]
+    const health = { attach: vi.fn(), detach: vi.fn() }
+    const createWindow = vi.fn(() => windows.shift() as never)
+    const loadError = new Error("load failed")
+    const loadWindow = vi.fn()
+      .mockRejectedValueOnce(loadError)
+      .mockResolvedValueOnce(undefined)
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const service = createCcConversationWindowService({
+      createWindow,
+      createHealthService: vi.fn(() => health),
+      getAppPath: () => "/app",
+      getIconPath: () => null,
+      getPreloadPath: () => "/preload.js",
+      logger,
+      loadWindow,
+    })
+
+    await expect(service.openConversationWindow({ sessionId: "s1", title: "对话" })).rejects.toThrow(loadError)
+    await expect(service.openConversationWindow({ sessionId: "s1", title: "对话" })).resolves.toBeUndefined()
+
+    expect(createWindow).toHaveBeenCalledTimes(2)
+    expect(loadWindow).toHaveBeenCalledTimes(2)
+    expect(health.detach).toHaveBeenCalledTimes(1)
+    expect(firstWindow.focus).not.toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith(
+      "Failed to load CC conversation window.",
+      { error: loadError, sessionId: "s1" },
+    )
+  })
 })
+
+function createMockWindow() {
+  return {
+    webContents: { on: vi.fn() },
+    close: vi.fn(),
+    focus: vi.fn(),
+    isDestroyed: vi.fn(() => false),
+    isMinimized: vi.fn(() => false),
+    once: vi.fn(),
+    on: vi.fn(),
+    restore: vi.fn(),
+    show: vi.fn(),
+  }
+}
