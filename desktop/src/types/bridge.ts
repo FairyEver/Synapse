@@ -172,6 +172,7 @@ import type {
   AutomationCreateInput,
   AutomationItem,
   AutomationRun,
+  AutomationStopRunResult,
   AutomationUpdateInput,
 } from "./automation"
 import type {
@@ -873,7 +874,7 @@ export type SynapseBridge = {
     deleteItem: (id: string) => Promise<{ deleted: boolean }>
     setItemEnabled: (payload: { id: string; enabled: boolean }) => Promise<AutomationItem>
     runItem: (id: string) => Promise<AutomationRun | null>
-    stopRun: (runId: string) => Promise<{ stopped: boolean }>
+    stopRun: (runId: string) => Promise<AutomationStopRunResult>
     listRuns: (automationId: string, options?: { limit?: number }) => Promise<AutomationRun[]>
     onChanged: (listener: (event: AutomationChangedEvent) => void) => () => void
   }

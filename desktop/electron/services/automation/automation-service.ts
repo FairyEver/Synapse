@@ -263,9 +263,10 @@ export class AutomationService {
     return acceptedRuns
   }
 
-  async stopRun(runId: string): Promise<{ readonly stopped: boolean }> {
+  async stopRun(runId: string): Promise<{ readonly stopped: boolean; readonly alreadyFinished?: boolean }> {
     const run = await this.deps.runs.get(runId)
     const stopped = this.deps.execution.stopRun(runId)
+    const alreadyFinished = Boolean(run && !stopped)
     if (stopped) {
       await Promise.race([
         this.deps.execution.waitForRunToSettle(runId),
@@ -276,13 +277,14 @@ export class AutomationService {
       ...(run ? { automationId: run.automationId } : {}),
       runId,
       stopped,
+      alreadyFinished,
       runFound: Boolean(run),
       boundary: "automation-stop-run",
     })
     if (stopped || run) {
       this.emitAutomationChanged({ automationId: run?.automationId, runId, reason: "run-stopped" })
     }
-    return { stopped }
+    return { stopped, ...(alreadyFinished ? { alreadyFinished: true } : {}) }
   }
 
   async automationRunList(

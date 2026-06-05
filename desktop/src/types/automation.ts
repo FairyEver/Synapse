@@ -91,6 +91,11 @@ export type AutomationRun = {
   error?: string
 }
 
+export type AutomationStopRunResult = {
+  stopped: boolean
+  alreadyFinished?: boolean
+}
+
 export type AutomationChangedEvent = {
   automationId?: string
   runId?: string

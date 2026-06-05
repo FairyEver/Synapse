@@ -51,6 +51,19 @@ describe("AutomationService", () => {
     ])
   })
 
+  it("reports already finished runs when stop finds a stored but inactive run", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate(createAutomationInput())
+    const run = await harness.service.runNow(item.id)
+
+    expect(run?.status).toBe("success")
+
+    await expect(harness.service.stopRun(run!.id)).resolves.toEqual({
+      stopped: false,
+      alreadyFinished: true,
+    })
+  })
+
   it("skips overlapping scheduled runs", async () => {
     const logger = structuredLogger()
     const harness = createHarness({ action: longRunningAction(), logger })

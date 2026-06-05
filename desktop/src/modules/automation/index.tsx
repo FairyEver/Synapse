@@ -223,9 +223,9 @@ function AutomationModule() {
     }
   }
 
-  async function stopRunOrThrow(runId: string): Promise<{ readonly stopped: boolean }> {
+  async function stopRunOrThrow(runId: string): Promise<{ readonly stopped: boolean; readonly alreadyFinished?: boolean }> {
     const result = await stopAutomationRun(runId)
-    if (!result.stopped) throw new Error("Automation run was not active")
+    if (!result.stopped && !result.alreadyFinished) throw new Error("Automation run was not active")
     return result
   }
 

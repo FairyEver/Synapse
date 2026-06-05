@@ -56,7 +56,7 @@ describe("automationIpcModule", () => {
       automationEnable: vi.fn(async () => automationItem({ ...defaultAutomationInput(), enabled: true })),
       automationDisable: vi.fn(async () => automationItem({ ...defaultAutomationInput(), enabled: false })),
       runAutomationNow: vi.fn(async () => automationRun()),
-      stopRun: vi.fn(async () => ({ stopped: true })),
+      stopRun: vi.fn(async () => ({ stopped: false, alreadyFinished: true })),
       automationRunList: vi.fn(async () => [automationRun()]),
     }
     const harness = createInMemoryHarness()
@@ -77,7 +77,9 @@ describe("automationIpcModule", () => {
       enabled: false,
     })
     await harness.invoke("synapse:automation:items:run", { automationId: "automation:1" })
-    await harness.invoke("synapse:automation:runs:stop", { runId: "automation-run:1" })
+    await expect(harness.invoke("synapse:automation:runs:stop", { runId: "automation-run:1" }))
+      .resolves
+      .toEqual({ stopped: false, alreadyFinished: true })
     const runs = await harness.invoke("synapse:automation:runs:list", {
       automationId: "automation:1",
       limit: 20,

@@ -271,6 +271,34 @@ describe("AutomationModule", () => {
     expect(mocks.openEditorWindow).not.toHaveBeenCalled()
   })
 
+  it("treats an already finished stale active run as a successful stop", async () => {
+    const refresh = vi.fn()
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem({ activeRun: { status: "running", id: "run-1" } })],
+      loading: false,
+      error: null,
+      refresh,
+    })
+    mocks.stopAutomationRun.mockResolvedValue({ stopped: false, alreadyFinished: true })
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+    const stopButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.getAttribute("aria-label") === "停止运行")
+
+    await act(async () => {
+      stopButton?.click()
+    })
+
+    expect(mocks.stopAutomationRun).toHaveBeenCalledWith("run-1")
+    expect(refresh).toHaveBeenCalled()
+    expect(mocks.rendererLogger.warn).not.toHaveBeenCalled()
+  })
+
   it("keeps the stop action enabled for a running row while other mutations are busy", async () => {
     const rootElement = document.createElement("div")
     document.body.appendChild(rootElement)

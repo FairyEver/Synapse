@@ -6,6 +6,7 @@ import type {
   AutomationCreateInput,
   AutomationItem,
   AutomationRun,
+  AutomationStopRunResult,
   AutomationUpdateInput,
 } from "@/types/automation"
 
@@ -84,7 +85,7 @@ async function runAutomation(id: string): Promise<AutomationRun | null> {
   return requireSynapseBridge().automation.runItem(id)
 }
 
-async function stopAutomationRun(runId: string): Promise<{ stopped: boolean }> {
+async function stopAutomationRun(runId: string): Promise<AutomationStopRunResult> {
   return requireSynapseBridge().automation.stopRun(runId)
 }
 
