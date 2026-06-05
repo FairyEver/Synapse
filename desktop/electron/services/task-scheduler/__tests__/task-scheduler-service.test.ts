@@ -257,6 +257,29 @@ describe("TaskSchedulerService", () => {
     }))
   })
 
+  it("cancels stale timers after manual last-completed interval runs", async () => {
+    vi.useFakeTimers()
+    try {
+      const harness = createHarness()
+      await harness.taskItems.upsert(createTask({
+        id: "task:1",
+        trigger: { type: "builtin.interval", config: { everyMinutes: 10, anchor: "last_completed_at" } },
+        nextRunAt: "2026-04-29T10:01:00.000Z",
+      }))
+      await harness.service.start()
+
+      await harness.service.runNow("task:1")
+      expect(await harness.runs.listByTask("task:1")).toHaveLength(1)
+
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(await harness.runs.listByTask("task:1")).toHaveLength(1)
+      await harness.service.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("stops active runs when the scheduler service stops", async () => {
     const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))

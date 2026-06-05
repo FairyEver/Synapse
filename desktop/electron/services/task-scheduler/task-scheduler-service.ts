@@ -314,6 +314,8 @@ export class TaskSchedulerService {
         ...errorMetadata(error),
       })
       throw error
+    } finally {
+      await this.rescheduleAfterManualRun(id)
     }
   }
 
@@ -414,6 +416,15 @@ export class TaskSchedulerService {
       return
     }
     await this.schedule(task.id, task.nextRunAt)
+  }
+
+  private async rescheduleAfterManualRun(id: string): Promise<void> {
+    if (!this.started) return
+    this.cancel(id)
+    const task = await this.deps.tasks.get(id)
+    if (!task?.enabled) return
+    if (!this.isTaskValid(task)) return
+    await this.schedule(id)
   }
 
   private async schedule(id: string, preferredNextRunAt?: string): Promise<void> {
