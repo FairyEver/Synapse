@@ -175,7 +175,7 @@ describe("LogFileController", () => {
     }));
   });
 
-  it("records failed audit logs and rejects when cleanup partially fails", async () => {
+  it("leaves partial cleanup failure audits to the interceptor", async () => {
     const { controller, auditLog, service } = createController();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     service.cleanup.mockResolvedValueOnce({
@@ -190,19 +190,7 @@ describe("LogFileController", () => {
       .rejects
       .toThrow("部分日志清理失败，请检查系统日志。");
 
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "logs.cleanup.failed",
-      targetType: "logs",
-      targetId: cutoff,
-      detail: {
-        before: cutoff,
-        deleted: 1,
-        failed: 1,
-        failures: [{ name: "server.2026-05-01.log", errorName: "Error" }],
-      },
-      ipAddress: "203.0.113.10",
-    });
+    expect(auditLog.record).not.toHaveBeenCalled();
   });
 
   it("records audit logs for downloads", async () => {
@@ -292,22 +280,7 @@ describe("LogFileController", () => {
     } as never))
       .rejects
       .toThrow("zip stream failed");
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "logs.download.failed",
-      targetType: "logs",
-      targetId: "logs-2026-05-01-2026-05-23.zip",
-      detail: {
-        from: "2026-05-01",
-        to: "2026-05-23",
-        filename: "logs-2026-05-01-2026-05-23.zip",
-        failure: "stream_error",
-        errorName: "Error",
-      },
-      ipAddress: "203.0.113.10",
-    });
-    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("/var/log/synapse");
-    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("server.2026-05-23.log");
+    expect(auditLog.record).not.toHaveBeenCalled();
   });
 
   it("rejects invalid download dates before streaming logs", async () => {

@@ -47,11 +47,13 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const path = request.path
     const method = request.method
+    const query = request.query as Record<string, unknown>
     const recordAudit = async (responseBody: unknown, error?: unknown) => {
       const { action, targetType, targetId } = resolveAuditTarget(
         method,
         path,
         request.params as Record<string, string>,
+        query,
         error ?? responseBody,
       )
       if (!action) return
@@ -130,9 +132,10 @@ function resolveAuditTarget(
   method: string,
   path: string,
   params: Record<string, string>,
+  query: Record<string, unknown>,
   responseBody: unknown,
 ): { action: string; targetType: string; targetId: string } {
-  const knownAdminTarget = resolveKnownAdminAuditTarget(method, path, params, responseBody)
+  const knownAdminTarget = resolveKnownAdminAuditTarget(method, path, params, query, responseBody)
   if (knownAdminTarget) return knownAdminTarget
 
   const id = params.id ?? params.filename ?? readId(responseBody)
@@ -150,6 +153,7 @@ function resolveKnownAdminAuditTarget(
   method: string,
   path: string,
   params: Record<string, string>,
+  query: Record<string, unknown>,
   responseBody: unknown,
 ): { action: string; targetType: string; targetId: string } | null {
   if (method === "DELETE" && path === "/api/admin/invitations") {
@@ -180,12 +184,32 @@ function resolveKnownAdminAuditTarget(
     return { action: "logs.recent", targetType: "logs", targetId: "recent" }
   }
   if (method === "GET" && path === "/api/admin/logs/download") {
-    return { action: "logs.download", targetType: "logs", targetId: readId(responseBody) }
+    return { action: "logs.download", targetType: "logs", targetId: readLogDownloadTarget(query, responseBody) }
   }
   if (method === "DELETE" && path === "/api/admin/logs/cleanup") {
-    return { action: "logs.cleanup", targetType: "logs", targetId: readId(responseBody) }
+    return { action: "logs.cleanup", targetType: "logs", targetId: readQueryString(query, "before") ?? readId(responseBody) }
   }
   return null
+}
+
+function readLogDownloadTarget(query: Record<string, unknown>, responseBody: unknown): string {
+  const bodyId = readId(responseBody)
+  if (bodyId !== "unknown") return bodyId
+  const from = readQueryString(query, "from")
+  const to = readQueryString(query, "to")
+  return from || to
+    ? `logs-${from ?? "start"}-${to ?? "now"}.zip`
+    : "logs-all.zip"
+}
+
+function readQueryString(query: Record<string, unknown>, key: string): string | undefined {
+  const value = query[key]
+  if (typeof value === "string" && value.trim()) return value
+  if (Array.isArray(value)) {
+    const first = value.find((item): item is string => typeof item === "string" && item.trim().length > 0)
+    return first
+  }
+  return undefined
 }
 
 function readId(body: unknown): string {

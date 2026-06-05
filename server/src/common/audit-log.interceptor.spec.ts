@@ -7,6 +7,7 @@ function createContext(options: {
   readonly method?: string
   readonly path?: string
   readonly params?: Record<string, string>
+  readonly query?: Record<string, string>
   readonly body?: unknown
   readonly admin?: { id: string; email: string }
 }): ExecutionContext {
@@ -16,6 +17,7 @@ function createContext(options: {
         method: options.method ?? "POST",
         path: options.path ?? "/api/admin/login",
         params: options.params ?? {},
+        query: options.query ?? {},
         body: options.body,
         ip: "127.0.0.1",
         admin: options.admin,
@@ -458,6 +460,56 @@ describe("AuditLogInterceptor", () => {
         action: "logs.recent.failed",
         targetType: "logs",
         targetId: "recent",
+      }))
+    })
+  })
+
+  it("uses cleanup query dates as failed log cleanup audit targets", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "DELETE",
+        path: "/api/admin/logs/cleanup",
+        query: { before: "2026-06-04" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("部分日志清理失败，请检查系统日志。")) },
+    ))).rejects.toThrow("部分日志清理失败，请检查系统日志。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "logs.cleanup.failed",
+        targetType: "logs",
+        targetId: "2026-06-04",
+      }))
+    })
+  })
+
+  it("uses download query ranges as failed log download audit targets", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/logs/download",
+        query: { from: "2026-05-01", to: "2026-05-23" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("zip stream failed")) },
+    ))).rejects.toThrow("zip stream failed")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "logs.download.failed",
+        targetType: "logs",
+        targetId: "logs-2026-05-01-2026-05-23.zip",
       }))
     })
   })

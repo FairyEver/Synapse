@@ -139,12 +139,12 @@ export class LogFileController {
     try {
       result = await this.logFileService.streamZipTo(res, range);
     } catch (error) {
+      if (!res.headersSent) throw error;
       await this.recordLogAudit(request, {
         action: "logs.download.failed",
         targetId: filename,
         detail: logDownloadFailureDetail(range, filename, error),
       });
-      if (!res.headersSent) throw error;
       if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
       return;
     }
@@ -160,16 +160,6 @@ export class LogFileController {
     const cutoffDate = parseCleanupBeforeDate(before);
     const result = await this.logFileService.cleanup(cutoffDate);
     if (result.failures.length > 0) {
-      await this.recordLogAudit(request, {
-        action: "logs.cleanup.failed",
-        targetId: cutoffDate,
-        detail: {
-          before: cutoffDate,
-          deleted: result.deleted,
-          failed: result.failures.length,
-          failures: result.failures,
-        },
-      });
       throw new InternalServerErrorException("部分日志清理失败，请检查系统日志。");
     }
     await this.recordLogAudit(request, {
