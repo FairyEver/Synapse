@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { migration, runMigrations } from "../migrations"
-import { MigrationFailedError, MissingMigrationError } from "../errors"
+import { MigrationDowngradeError, MigrationFailedError, MissingMigrationError } from "../errors"
 
 describe("runMigrations (T2.6)", () => {
   it("returns data unchanged when current === target", async () => {
@@ -74,7 +74,7 @@ describe("runMigrations (T2.6)", () => {
     ).rejects.toBeInstanceOf(MissingMigrationError)
   })
 
-  it("throws MissingMigrationError on attempted down-migration", async () => {
+  it("throws MigrationDowngradeError on attempted down-migration", async () => {
     await expect(
       runMigrations({
         currentVersion: 2,
@@ -83,7 +83,7 @@ describe("runMigrations (T2.6)", () => {
         namespace: "test",
         data: {},
       }),
-    ).rejects.toBeInstanceOf(MissingMigrationError)
+    ).rejects.toBeInstanceOf(MigrationDowngradeError)
   })
 
   it("wraps step errors as MigrationFailedError with from/to", async () => {

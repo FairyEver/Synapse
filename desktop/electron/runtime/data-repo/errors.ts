@@ -43,6 +43,21 @@ export class MigrationFailedError extends DataRepositoryError {
   }
 }
 
+export class MigrationDowngradeError extends DataRepositoryError {
+  readonly namespace: string
+  readonly currentVersion: number
+  readonly targetVersion: number
+  constructor(namespace: string, current: number, target: number) {
+    super(
+      `Migration downgrade is not supported in namespace "${namespace}": currentVersion=${current} > targetVersion=${target}`,
+    )
+    this.name = "MigrationDowngradeError"
+    this.namespace = namespace
+    this.currentVersion = current
+    this.targetVersion = target
+  }
+}
+
 export class MissingMigrationError extends DataRepositoryError {
   readonly namespace: string
   readonly currentVersion: number

@@ -10,10 +10,10 @@
  *   - Picks migrations in order; fails with MissingMigrationError if any gap.
  *   - Each migration may be sync or async.
  *   - Wraps each step's exception in MigrationFailedError(from, to, cause).
- *   - Refuses to run if currentVersion > targetVersion (no down-migration).
+ *   - Refuses to run with MigrationDowngradeError if currentVersion > targetVersion.
  */
 
-import { MigrationFailedError, MissingMigrationError } from "./errors"
+import { MigrationDowngradeError, MigrationFailedError, MissingMigrationError } from "./errors"
 import type { Migration } from "./types"
 
 export interface RunMigrationsArgs<From = unknown, To = unknown> {
@@ -33,7 +33,7 @@ export async function runMigrations<From = unknown, To = unknown>(
     return args.data as unknown as To
   }
   if (currentVersion > targetVersion) {
-    throw new MissingMigrationError(namespace, currentVersion, targetVersion)
+    throw new MigrationDowngradeError(namespace, currentVersion, targetVersion)
   }
 
   const byFromVersion = new Map<number, Migration>()
