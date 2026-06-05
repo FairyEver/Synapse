@@ -21,7 +21,7 @@ import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
 import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
 import { createMainLogger } from "./log-store"
-import { formatGitFailureMessage } from "./git-error-utils"
+import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
 import { repositoryLockManager } from "./repository-lock-manager"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryMaintenanceService } from "./repository-maintenance-service"
@@ -41,16 +41,6 @@ function toGitPath(filePath: string): string {
 
 function toCommitMessage(action: "create" | "update" | "delete" | "restore" | "purge", result: ContentWriteResult): string {
   return `[synapse] ${action} ${result.type} ${result.id.slice(0, 8)}`
-}
-
-function isNonFastForwardError(errorMessage: string): boolean {
-  const loweredMessage = errorMessage.toLowerCase()
-
-  return (
-    loweredMessage.includes("non-fast-forward")
-    || loweredMessage.includes("[rejected]")
-    || loweredMessage.includes("fetch first")
-  )
 }
 
 function createMutationMessage(pushed: boolean, pendingPushCount: number): string {

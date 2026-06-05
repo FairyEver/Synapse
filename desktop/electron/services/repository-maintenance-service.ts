@@ -18,7 +18,7 @@ import {
   resolveContentRootPath,
 } from "./content-history-service"
 import { createMainLogger } from "./log-store"
-import { formatGitFailureMessage } from "./git-error-utils"
+import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
 import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
@@ -128,16 +128,6 @@ function createMaintenanceMessage(
     : `${fragments.join("，")}，等待同步。`
 }
 
-
-function isNonFastForwardError(errorMessage: string): boolean {
-  const loweredMessage = errorMessage.toLowerCase()
-
-  return (
-    loweredMessage.includes("non-fast-forward")
-    || loweredMessage.includes("[rejected]")
-    || loweredMessage.includes("fetch first")
-  )
-}
 
 function createPendingPushTitle(action: "compaction" | "gc"): string {
   return action === "compaction" ? "整理历史记录" : "清理附件池"

@@ -6,7 +6,7 @@ import type {
 } from "../../src/types/repository"
 import { isGitRebaseInProgress, runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
-import { formatGitFailureMessage } from "./git-error-utils"
+import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
 import { repositoryLockManager } from "./repository-lock-manager"
 import { repositoryStore } from "./repository-store"
 
@@ -156,17 +156,6 @@ async function runRepositoryGitCommand(
     timeoutMessage: "仓库同步超时，请检查网络后重试。",
     timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
   })
-}
-
-function isNonFastForwardError(message: string): boolean {
-  const lowered = message.toLowerCase()
-
-  return (
-    lowered.includes("not possible to fast-forward")
-    || lowered.includes("non-fast-forward")
-    || lowered.includes("[rejected]")
-    || lowered.includes("fetch first")
-  )
 }
 
 async function getAheadCount(cwd: string): Promise<number> {

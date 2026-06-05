@@ -19,6 +19,18 @@ function firstUsefulLine(output: string): string | undefined {
     .find((line) => line.length > 0)
 }
 
+export function isNonFastForwardError(output: string): boolean {
+  const loweredOutput = output.toLowerCase()
+
+  return (
+    loweredOutput.includes("not possible to fast-forward")
+    || loweredOutput.includes("non-fast-forward")
+    || loweredOutput.includes("[rejected]")
+    || loweredOutput.includes("fetch first")
+    || loweredOutput.includes("tip of your current branch is behind")
+  )
+}
+
 export function classifyGitFailure(output: string, fallbackMessage: string): GitFailureInfo {
   const normalizedOutput = output.trim()
   const loweredOutput = normalizedOutput.toLowerCase()
@@ -95,10 +107,7 @@ export function classifyGitFailure(output: string, fallbackMessage: string): Git
   }
 
   if (
-    loweredOutput.includes("not possible to fast-forward")
-    || loweredOutput.includes("non-fast-forward")
-    || loweredOutput.includes("[rejected]")
-    || loweredOutput.includes("fetch first")
+    isNonFastForwardError(loweredOutput)
     || loweredOutput.includes("merge conflict")
     || loweredOutput.includes("could not apply")
   ) {

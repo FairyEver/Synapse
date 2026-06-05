@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { classifyGitFailure, formatGitFailureMessage } from "../git-error-utils"
+import { classifyGitFailure, formatGitFailureMessage, isNonFastForwardError } from "../git-error-utils"
 
 describe("git-error-utils", () => {
   it("classifies network failures as recoverable", () => {
@@ -42,5 +42,14 @@ describe("git-error-utils", () => {
   it("keeps formatGitFailureMessage compatible", () => {
     expect(formatGitFailureMessage("fatal: not a git repository", "fallback"))
       .toBe("当前目录不是 Git 仓库。")
+  })
+
+  it.each([
+    "fatal: Not possible to fast-forward, aborting.",
+    "Updates were rejected because the tip of your current branch is behind",
+    "! [rejected] main -> main (fetch first)",
+    "hint: Updates were rejected because of a non-fast-forward update.",
+  ])("detects non-fast-forward git output: %s", (output) => {
+    expect(isNonFastForwardError(output)).toBe(true)
   })
 })
