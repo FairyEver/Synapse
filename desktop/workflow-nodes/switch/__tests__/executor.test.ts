@@ -188,6 +188,8 @@ describe("switchNodeExecutor", () => {
     expect(logger.info).toHaveBeenCalledWith("switch node executing", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "switch1",
       providerId: "test-provider",
       modelTier: "sonnet",
       branchIds: ["yes", "no"],
@@ -232,6 +234,8 @@ describe("switchNodeExecutor", () => {
     expect(logger.info).toHaveBeenCalledWith("switch node branch matched", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "switch1",
       activeBranch: "yes",
       responseLength: matchedResponse.trim().length,
       normalizedResponseLength: "yes".length,
@@ -239,18 +243,24 @@ describe("switchNodeExecutor", () => {
     expect(logger.info).toHaveBeenCalledWith("switch node using default branch (no match)", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "switch1",
       activeBranch: "no",
       responseLength: mismatchResponse.length,
     }))
     expect(logger.warn).toHaveBeenCalledWith("switch node branch match failed — no match and no default", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "switch1",
       responseLength: mismatchResponse.length,
       normalizedResponseLength: mismatchResponse.length,
     }))
     expect(logger.warn).toHaveBeenCalledWith("switch node agent call failed", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "switch1",
       errorName: "agent",
       errorLength: agentError.length,
       sanitizedError: expect.stringContaining("[redacted]"),

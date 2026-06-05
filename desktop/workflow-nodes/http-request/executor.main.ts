@@ -4,6 +4,7 @@ import { interpolatePrompt } from "../../electron/services/workflow/variable-res
 import { createMainLogger } from "../../electron/services/log-store"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 import { sanitizeError } from "../../electron/services/error-sanitize"
+import { workflowNodeLogContext } from "../log-context"
 
 const logger = createMainLogger("workflow.node.http-request-executor")
 
@@ -11,6 +12,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
   async execute(input: NodeExecutionInput<HttpRequestNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
     const { config, context, runtimeDeps, resolvedVariables } = input
+    const logContext = workflowNodeLogContext(context)
 
     if (!runtimeDeps?.sendHttpRequest) {
       return { status: "failed", output: "", error: "HTTP 请求能力不可用", durationMs: Date.now() - start }
@@ -25,7 +27,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
     }
 
     logger.info("http request node executing", {
-      runId: context.runId, method: interpolated.method, urlLength: interpolated.url.length,
+      ...logContext, method: interpolated.method, urlLength: interpolated.url.length,
     })
 
     input.onProgress?.("sending_request", "发送请求…")
@@ -46,7 +48,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
 
       if (response.status >= 400) {
         logger.warn("http request node failed — non-2xx status", {
-          runId: context.runId, method: config.method, status: response.status,
+          ...logContext, method: config.method, status: response.status,
           outputLength: output.length, durationMs,
         })
         return {
@@ -65,7 +67,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
 
       input.onProgress?.("processing_response", "处理响应…")
       logger.info("http request node succeeded", {
-        runId: context.runId, method: config.method, status: response.status,
+        ...logContext, method: config.method, status: response.status,
         outputLength: output.length, durationMs,
       })
 
@@ -85,7 +87,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
       const raw = err instanceof Error ? err.message : String(err)
       const message = sanitizeError(raw)
       logger.warn("http request node failed", {
-        runId: context.runId, method: config.method,
+        ...logContext, method: config.method,
         errorMessage: truncateWithEllipsis(message, 500), durationMs,
       })
       return {

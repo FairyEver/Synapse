@@ -13,7 +13,13 @@ import { httpRequestNodeExecutor } from "../executor.main"
 import type { NodeExecutionInput, NodeRuntimeDeps } from "../../types"
 import type { HttpRequestNodeConfig } from "../schema"
 
-const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
+const ctx = {
+  projectId: "p1",
+  workflowId: "wf1",
+  runId: "r1",
+  nodeId: "http1",
+  abortSignal: new AbortController().signal,
+}
 
 function makeInput(config: Partial<HttpRequestNodeConfig>, runtimeDeps?: NodeRuntimeDeps): NodeExecutionInput<HttpRequestNodeConfig> {
   return {
@@ -189,6 +195,10 @@ describe("httpRequestNodeExecutor", () => {
     const payload = JSON.stringify(logger.info.mock.calls)
     expect(payload).not.toContain("sk-secret")
     expect(logger.info).toHaveBeenCalledWith("http request node executing", expect.objectContaining({
+      projectId: "p1",
+      runId: "r1",
+      workflowId: "wf1",
+      nodeId: "http1",
       method: "GET",
       urlLength: expect.any(Number),
     }))

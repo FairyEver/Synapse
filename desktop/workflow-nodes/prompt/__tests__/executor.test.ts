@@ -208,6 +208,8 @@ describe("promptNodeExecutor", () => {
     expect(logger.info).toHaveBeenCalledWith("prompt node executing", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "node1",
       providerId: "test-provider",
       modelTier: "sonnet",
       promptLength: prompt.length,
@@ -215,6 +217,8 @@ describe("promptNodeExecutor", () => {
     expect(logger.info).toHaveBeenCalledWith("prompt node succeeded", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "node1",
       providerId: "test-provider",
       modelTier: "sonnet",
       outputLength: output.length,
@@ -222,6 +226,8 @@ describe("promptNodeExecutor", () => {
     expect(logger.warn).toHaveBeenCalledWith("prompt node agent call failed", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
+      workflowId: "wf1",
+      nodeId: "node1",
       providerId: "test-provider",
       modelTier: "sonnet",
       errorName: "agent",

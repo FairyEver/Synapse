@@ -4,6 +4,7 @@ import { interpolatePrompt } from "../../electron/services/workflow/variable-res
 import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage, agentProviderFailureFromResponse } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
 import { resolveAgentTimeoutMins } from "../agent-timeout"
+import { workflowNodeLogContext } from "../log-context"
 
 const logger = createMainLogger("workflow.node.switch-executor")
 
@@ -63,6 +64,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
   async execute(input: NodeExecutionInput<SwitchNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
     const { config, resolvedVariables, agentDeps, context } = input
+    const logContext = workflowNodeLogContext(context)
     const ids = config.branches.map((b) => b.id)
     input.onProgress?.("resolving_variables", "解析变量…")
     let basePrompt: string
@@ -80,7 +82,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("switch node executing", {
-      projectId: context.projectId, runId: context.runId, providerId: config.providerId, modelTier: config.modelTier,
+      ...logContext, providerId: config.providerId, modelTier: config.modelTier,
       branchIds: ids,
       branchCount: config.branches.length,
       branchLabelLengths: config.branches.map((b) => b.label.length),
@@ -112,7 +114,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       const diagnostic = agentErrorDiagnostic(agentResult.error)
       const sanitizedError = sanitizeAgentError(agentResult.error)
       logger.warn("switch node agent call failed", {
-        projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
+        ...logContext, ...diagnostic, sanitizedError, durationMs,
       })
       return { status: "failed", output: "", error: agentFailureMessage(agentResult.error), durationMs, usage: agentResult.usage, modelName: agentResult.modelName, costUsd: agentResult.costUsd, costCny: agentResult.costCny, costBreakdownCny: agentResult.costBreakdownCny, costCurrency: agentResult.costCurrency, agentConversation: agentConversation ?? agentResult.agentConversation }
     }
@@ -122,7 +124,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       const diagnostic = agentErrorDiagnostic(providerFailure)
       const sanitizedError = sanitizeAgentError(providerFailure)
       logger.warn("switch node agent call failed", {
-        projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
+        ...logContext, ...diagnostic, sanitizedError, durationMs,
       })
       return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs, usage: agentResult.usage, modelName: agentResult.modelName, costUsd: agentResult.costUsd, costCny: agentResult.costCny, costBreakdownCny: agentResult.costBreakdownCny, costCurrency: agentResult.costCurrency, agentConversation: agentConversation ?? agentResult.agentConversation }
     }
@@ -134,7 +136,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
 
     if (matched) {
       logger.info("switch node branch matched", {
-        projectId: context.projectId, runId: context.runId, activeBranch: matched,
+        ...logContext, activeBranch: matched,
         responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
       return { status: "success", output: matched, activeBranch: matched, durationMs, usage: agentResult.usage, modelName: agentResult.modelName, costUsd: agentResult.costUsd, costCny: agentResult.costCny, costBreakdownCny: agentResult.costBreakdownCny, costCurrency: agentResult.costCurrency, agentConversation: agentConversation ?? agentResult.agentConversation }
@@ -142,14 +144,14 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
 
     if (config.defaultBranch) {
       logger.info("switch node using default branch (no match)", {
-        projectId: context.projectId, runId: context.runId, activeBranch: config.defaultBranch,
+        ...logContext, activeBranch: config.defaultBranch,
         responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
       return { status: "success", output: config.defaultBranch, activeBranch: config.defaultBranch, durationMs, usage: agentResult.usage, modelName: agentResult.modelName, costUsd: agentResult.costUsd, costCny: agentResult.costCny, costBreakdownCny: agentResult.costBreakdownCny, costCurrency: agentResult.costCurrency, agentConversation: agentConversation ?? agentResult.agentConversation }
     }
 
     logger.warn("switch node branch match failed — no match and no default", {
-      projectId: context.projectId, runId: context.runId, responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length,
+      ...logContext, responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length,
       branchIds: ids, durationMs,
     })
     return {

@@ -5,13 +5,16 @@ import { runShellAction } from "../../action-packages/builtin/shell-process.main
 import { createMainLogger } from "../../electron/services/log-store"
 import { sanitizeError } from "../../electron/services/error-sanitize"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
+import { workflowNodeLogContext } from "../log-context"
 
 const logger = createMainLogger("workflow.node.script-executor")
+type ScriptLogContext = ReturnType<typeof workflowNodeLogContext>
 
 export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
   async execute(input: NodeExecutionInput<ScriptNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
     const { config, context, runtimeDeps, resolvedVariables } = input
+    const logContext = workflowNodeLogContext(context)
 
     if (!runtimeDeps?.processRunner) {
       return { status: "failed", output: "", error: "脚本执行能力不可用", durationMs: Date.now() - start }
@@ -19,7 +22,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
 
     input.onProgress?.("preparing", "准备脚本…")
     logger.info("script node executing", {
-      runId: context.runId, shell: config.shell, scriptLength: config.script.length,
+      ...logContext, shell: config.shell, scriptLength: config.script.length,
     })
 
     input.onProgress?.("running_script", "执行脚本…")
@@ -29,7 +32,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
         content: config.script,
         config: {
           shell: config.shell,
-          env: { ...config.env, ...safeResolvedEnv(resolvedVariables, context.runId) },
+          env: { ...config.env, ...safeResolvedEnv(resolvedVariables, logContext) },
           pathStrategy: config.pathStrategy,
           posixLogin: config.posixLogin,
           timeoutMins: config.timeoutMins,
@@ -55,7 +58,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
 
       if (result.status === "success") {
         logger.info("script node succeeded", {
-          runId: context.runId, shell: config.shell,
+          ...logContext, shell: config.shell,
           exitCode, outputLength: stdout.length, durationMs,
         })
         return {
@@ -67,7 +70,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
       }
 
       logger.warn("script node failed", {
-        runId: context.runId, shell: config.shell,
+        ...logContext, shell: config.shell,
         exitCode, errorMessage: truncateWithEllipsis(result.error ?? "", 200), durationMs,
       })
       const errorMsg = result.error
@@ -84,7 +87,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
       const durationMs = Date.now() - start
       const message = err instanceof Error ? err.message : String(err)
       logger.warn("script node threw exception", {
-        runId: context.runId, shell: config.shell,
+        ...logContext, shell: config.shell,
         errorMessage: truncateWithEllipsis(message, 200), durationMs,
       })
       return {
@@ -112,7 +115,7 @@ const PROTECTED_ENV_NAMES = new Set([
   "NODE_ENV",
 ])
 
-function safeResolvedEnv(resolvedVariables: Record<string, string>, runId: string): Record<string, string> {
+function safeResolvedEnv(resolvedVariables: Record<string, string>, logContext: ScriptLogContext): Record<string, string> {
   const env: Record<string, string> = {}
   const skipped: string[] = []
   for (const [key, value] of Object.entries(resolvedVariables)) {
@@ -123,7 +126,7 @@ function safeResolvedEnv(resolvedVariables: Record<string, string>, runId: strin
     env[key] = value
   }
   if (skipped.length > 0) {
-    logger.warn("script node skipped protected resolved variable env names", { runId, skipped })
+    logger.warn("script node skipped protected resolved variable env names", { ...logContext, skipped })
   }
   return env
 }

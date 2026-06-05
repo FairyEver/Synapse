@@ -4,12 +4,14 @@ import { interpolatePrompt } from "../../electron/services/workflow/variable-res
 import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage, agentProviderFailureFromResponse } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
 import { resolveAgentTimeoutMins } from "../agent-timeout"
+import { workflowNodeLogContext } from "../log-context"
 
 const logger = createMainLogger("workflow.node.prompt-executor")
 
 export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
   async execute(input: NodeExecutionInput<PromptNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
+    const logContext = workflowNodeLogContext(input.context)
     input.onProgress?.("resolving_variables", "解析变量…")
     let prompt: string
     try {
@@ -20,7 +22,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("prompt node executing", {
-      projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+      ...logContext, providerId: input.config.providerId, modelTier: input.config.modelTier,
       promptLength: prompt.length,
     })
 
@@ -48,7 +50,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
     if (result.status === "failed") {
       const sanitizedError = sanitizeAgentError(result.error)
       logger.warn("prompt node agent call failed", {
-        projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+        ...logContext, providerId: input.config.providerId, modelTier: input.config.modelTier,
         ...agentErrorDiagnostic(result.error),
         sanitizedError,
         durationMs,
@@ -60,7 +62,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
     if (providerFailure) {
       const sanitizedError = sanitizeAgentError(providerFailure)
       logger.warn("prompt node agent call failed", {
-        projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+        ...logContext, providerId: input.config.providerId, modelTier: input.config.modelTier,
         ...agentErrorDiagnostic(providerFailure),
         sanitizedError,
         durationMs,
@@ -70,7 +72,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
 
     input.onProgress?.("processing_output", "处理输出…")
     logger.info("prompt node succeeded", {
-      projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+      ...logContext, providerId: input.config.providerId, modelTier: input.config.modelTier,
       outputLength: result.response.length, durationMs,
     })
     return { status: "success", output: result.response, durationMs, usage: result.usage, modelName: result.modelName, costUsd: result.costUsd, costCny: result.costCny, costBreakdownCny: result.costBreakdownCny, costCurrency: result.costCurrency, agentConversation: agentConversation ?? result.agentConversation }

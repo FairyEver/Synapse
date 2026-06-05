@@ -13,7 +13,13 @@ import { scriptNodeExecutor } from "../executor.main"
 import type { NodeExecutionInput, NodeRuntimeDeps } from "../../types"
 import type { ScriptNodeConfig } from "../schema"
 
-const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
+const ctx = {
+  projectId: "p1",
+  workflowId: "wf1",
+  runId: "r1",
+  nodeId: "script1",
+  abortSignal: new AbortController().signal,
+}
 
 function makeInput(config: Partial<ScriptNodeConfig>, runtimeDeps?: NodeRuntimeDeps): NodeExecutionInput<ScriptNodeConfig> {
   return {
@@ -120,6 +126,10 @@ describe("scriptNodeExecutor", () => {
     const payload = JSON.stringify(logger.info.mock.calls)
     expect(payload).not.toContain("sk-secret-key")
     expect(logger.info).toHaveBeenCalledWith("script node executing", expect.objectContaining({
+      projectId: "p1",
+      runId: "r1",
+      workflowId: "wf1",
+      nodeId: "script1",
       shell: "posix",
       scriptLength: secretScript.length,
     }))
