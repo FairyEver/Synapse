@@ -83,9 +83,7 @@ export const IPC_CHANNELS = {
   "knowledge-base": {
     "createManaged": "synapse:knowledge-base:create-managed",
     "deleteManaged": "synapse:knowledge-base:delete-managed",
-    "listSources": "synapse:knowledge-base:list-sources",
     "listRawDirectory": "synapse:knowledge-base:list-raw-directory",
-    "uploadSources": "synapse:knowledge-base:upload-sources",
     "uploadRawFiles": "synapse:knowledge-base:upload-raw-files",
     "uploadRawItems": "synapse:knowledge-base:upload-raw-items",
     "createRawFolder": "synapse:knowledge-base:create-raw-folder",
@@ -93,7 +91,6 @@ export const IPC_CHANNELS = {
     "moveRawEntries": "synapse:knowledge-base:move-raw-entries",
     "trashRawEntries": "synapse:knowledge-base:trash-raw-entries",
     "addUrlSource": "synapse:knowledge-base:add-url-source",
-    "selectAndUploadSources": "synapse:knowledge-base:select-and-upload-sources",
     "selectAndUploadRawFiles": "synapse:knowledge-base:select-and-upload-raw-files",
     "selectAndUploadRawDirectory": "synapse:knowledge-base:select-and-upload-raw-directory",
     "exportRawEntries": "synapse:knowledge-base:export-raw-entries",

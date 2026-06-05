@@ -130,7 +130,6 @@ import type {
   SynapseKnowledgeBaseDeleteManagedPayload,
   SynapseKnowledgeBaseDeleteManagedResult,
   SynapseKnowledgeBaseExportRawEntriesPayload,
-  SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseListRawDirectoryPayload,
   SynapseKnowledgeBaseListRawDirectoryResult,
   SynapseKnowledgeBaseMoveRawEntriesPayload,
@@ -142,7 +141,6 @@ import type {
   SynapseKnowledgeBaseTrashRawEntriesPayload,
   SynapseKnowledgeBaseUploadRawFilesPayload,
   SynapseKnowledgeBaseUploadRawItemsPayload,
-  SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "./knowledge-base"
 import type {
@@ -725,13 +723,9 @@ export type SynapseBridge = {
     deleteManaged: (
       payload: SynapseKnowledgeBaseDeleteManagedPayload,
     ) => Promise<SynapseKnowledgeBaseDeleteManagedResult>
-    listSources: (projectId: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
     listRawDirectory: (
       payload: SynapseKnowledgeBaseListRawDirectoryPayload,
     ) => Promise<SynapseKnowledgeBaseListRawDirectoryResult>
-    uploadSources: (
-      payload: SynapseKnowledgeBaseUploadSourcesPayload,
-    ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     uploadRawFiles: (
       payload: SynapseKnowledgeBaseUploadRawFilesPayload,
     ) => Promise<SynapseKnowledgeBaseRawMutationResult>
@@ -753,7 +747,6 @@ export type SynapseBridge = {
     addUrlSource: (
       payload: SynapseKnowledgeBaseAddUrlSourcePayload,
     ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
-    selectAndUploadSources: (projectId: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     selectAndUploadRawFiles: (
       payload: Omit<SynapseKnowledgeBaseUploadRawFilesPayload, "filePaths">,
     ) => Promise<SynapseKnowledgeBaseRawMutationResult>

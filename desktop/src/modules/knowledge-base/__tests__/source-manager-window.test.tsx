@@ -123,7 +123,6 @@ function createBridgeMocks() {
         .mockResolvedValue(emptyMutation),
       uploadRawItems: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; itemPaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
-      uploadSources: vi.fn(),
       addUrlSource: vi.fn<(payload: { projectId: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
         .mockResolvedValue({
           projectId: "project-1",
@@ -143,7 +142,6 @@ function createBridgeMocks() {
         .mockResolvedValue(emptyMutation),
       exportRawEntries: vi.fn<(payload: { projectId: string; relativePaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
-      selectAndUploadSources: vi.fn(),
       createRawFolder: vi.fn<(payload: { projectId: string; parentDirectoryPath: string; name: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
       renameRawEntry: vi.fn<(payload: { projectId: string; relativePath: string; newName: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
@@ -1438,7 +1436,6 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       })
     })
     expect(bridgeMocks.knowledgeBase.uploadRawFiles).not.toHaveBeenCalled()
-    expect(bridgeMocks.knowledgeBase.uploadSources).not.toHaveBeenCalled()
   })
 
   it("keeps the upload hint visible when dragging over children inside the source manager", async () => {
@@ -1517,7 +1514,6 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       projectId: "project-1",
       targetDirectoryPath: "",
     })
-    expect(bridgeMocks.knowledgeBase.selectAndUploadSources).not.toHaveBeenCalled()
   })
 
   it("selects folders for raw upload in the current directory", async () => {

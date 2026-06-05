@@ -37,21 +37,6 @@ const deleteManagedResultSchema = z.object({
   deleted: z.boolean(),
 })
 
-const sourceEntrySchema = z.object({
-  relativePath: z.string(),
-  name: z.string(),
-  size: z.number(),
-  modifiedAt: z.string(),
-  supported: z.boolean(),
-  status: z.enum(["pending", "changed", "imported", "unsupported", "error"]),
-  hash: z.string().optional(),
-})
-
-const listSourcesResultSchema = z.object({
-  projectId: z.string(),
-  sources: z.array(sourceEntrySchema),
-})
-
 const rawEntrySchema = z.object({
   name: z.string(),
   relativePath: z.string(),
@@ -69,11 +54,6 @@ const listRawDirectoryResultSchema = z.object({
   projectId: z.string(),
   directoryPath: z.string(),
   entries: z.array(rawEntrySchema),
-})
-
-const uploadSourcesPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  filePaths: z.array(z.string().min(1)),
 })
 
 const uploadRawFilesPayloadSchema = z.object({
@@ -414,19 +394,6 @@ export const knowledgeBaseIpcModule: IpcModule = {
         run: () => service(ctx).deleteManaged(request),
       }),
     },
-    listSources: {
-      kind: "invoke",
-      channel: "synapse:knowledge-base:list-sources",
-      request: z.object({ projectId: z.string().min(1) }),
-      response: listSourcesResultSchema,
-      handler: (ctx, request: { projectId: string }) => runGuardedKnowledgeBaseOperation({
-        ctx,
-        action: "fs.read.outside-userdata",
-        resource: `managed-knowledge-base:${request.projectId}`,
-        source: "knowledgeBase.listSources",
-        run: () => service(ctx).listSources(request.projectId),
-      }),
-    },
     listRawDirectory: {
       kind: "invoke",
       channel: "synapse:knowledge-base:list-raw-directory",
@@ -438,20 +405,6 @@ export const knowledgeBaseIpcModule: IpcModule = {
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.listRawDirectory",
         run: () => service(ctx).listRawDirectory(request),
-      }),
-    },
-    uploadSources: {
-      kind: "invoke",
-      channel: "synapse:knowledge-base:upload-sources",
-      request: uploadSourcesPayloadSchema,
-      response: uploadSourcesResultSchema,
-      handler: (ctx, request: { projectId: string; filePaths: string[] }) => runGuardedKnowledgeBaseFileUpload({
-        ctx,
-        projectId: request.projectId,
-        filePaths: request.filePaths,
-        readSource: "knowledgeBase.uploadSources.read",
-        writeSource: "knowledgeBase.uploadSources",
-        run: () => service(ctx).uploadSources(request),
       }),
     },
     uploadRawFiles: {
@@ -567,31 +520,6 @@ export const knowledgeBaseIpcModule: IpcModule = {
           resource: `managed-knowledge-base:${request.projectId}`,
           source: "knowledgeBase.addUrlSource",
           run: () => service(ctx).addUrlSource(request),
-        })
-      },
-    },
-    selectAndUploadSources: {
-      kind: "invoke",
-      channel: "synapse:knowledge-base:select-and-upload-sources",
-      request: z.object({ projectId: z.string().min(1) }),
-      response: uploadSourcesResultSchema,
-      handler: async (ctx, request: { projectId: string }) => {
-        const result = await showOpenDialog({
-          properties: ["openFile", "multiSelections"],
-        })
-        if (result.canceled || result.filePaths.length === 0) {
-          return { projectId: request.projectId, uploaded: [], skipped: [] }
-        }
-        return runGuardedKnowledgeBaseFileUpload({
-          ctx,
-          projectId: request.projectId,
-          filePaths: result.filePaths,
-          readSource: "knowledgeBase.selectAndUploadSources.read",
-          writeSource: "knowledgeBase.selectAndUploadSources",
-          run: () => service(ctx).uploadSources({
-            projectId: request.projectId,
-            filePaths: result.filePaths,
-          }),
         })
       },
     },
