@@ -926,6 +926,23 @@ describe("workflowIpcModule", () => {
     expect(JSON.stringify(history)).not.toContain("other-active-run")
   })
 
+  it("rejects unsafe workflow ids before reading run history snapshots", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const snapshots = { list: vi.fn(async () => []) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:run-history", { workflowId: "../escaped-workflow" }))
+      .rejects
+      .toThrow()
+    expect(snapshots.list).not.toHaveBeenCalled()
+  })
+
   it("lists all active workflow runs and excludes terminal in-memory statuses", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     runStatuses.set("active-run", {

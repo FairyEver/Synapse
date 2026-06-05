@@ -18,6 +18,7 @@ import type { SynapseWorkflowPackageV1, WorkflowModelMapping } from "../../../sr
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
+import { isSafeWorkflowId } from "../../services/workflow/workflow-id"
 import { sanitizeNodeResultsForSnapshot } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
@@ -249,8 +250,10 @@ function saveRunSnapshot(
   })
 }
 
+const workflowIdSchema = z.string().refine(isSafeWorkflowId, "Invalid workflow id")
+
 const workflowDefinitionSchema = z.object({
-  id: z.string(), name: z.string(), description: z.string().optional(),
+  id: workflowIdSchema, name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
   defaultProjectId: z.string().optional(),
   defaultProviderId: z.string().optional(),
@@ -300,7 +303,7 @@ const workflowModelMappingSchema = z.object({
 const workflowImportPreviewSchema = z.object({
   packagePath: z.string(),
   workflow: z.object({
-    id: z.string(),
+    id: workflowIdSchema,
     name: z.string(),
     nodeCount: z.number(),
     modelReferenceCount: z.number(),
@@ -616,7 +619,7 @@ export const workflowIpcModule: IpcModule = {
   methods: {
     exportPackage: {
       channel: "synapse:workflow:export-package", kind: "invoke",
-      request: z.object({ workflowId: z.string(), workflowName: z.string().optional() }),
+      request: z.object({ workflowId: workflowIdSchema, workflowName: z.string().optional() }),
       response: z.object({ path: z.string() }).nullable(),
       handler: async (ctx, { workflowId, workflowName }: { workflowId: string; workflowName?: string }) => {
         const pkg = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportPackage(workflowId)
@@ -717,7 +720,7 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:import-package", kind: "invoke",
       request: z.object({ packagePath: z.string(), mappings: z.array(workflowModelMappingSchema) }),
       response: z.union([
-        z.object({ workflowId: z.string(), versionHash: z.string() }),
+        z.object({ workflowId: workflowIdSchema, versionHash: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
       ]),
       handler: async (ctx, { packagePath, mappings }: { packagePath: string; mappings: WorkflowModelMapping[] }) => {
@@ -797,7 +800,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     get: {
-      channel: "synapse:workflow:get", kind: "invoke", request: z.object({ id: z.string() }),
+      channel: "synapse:workflow:get", kind: "invoke", request: z.object({ id: workflowIdSchema }),
       response: workflowDefinitionSchema.nullable(),
       handler: async (ctx, { id }: { id: string }) => {
         logger.info("workflow:get", { id })
@@ -848,7 +851,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     delete: {
-      channel: "synapse:workflow:delete", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),
+      channel: "synapse:workflow:delete", kind: "invoke", request: z.object({ id: workflowIdSchema }), response: z.void(),
       handler: async (ctx, { id }: { id: string }) => {
         logger.info("workflow:delete requested", { id })
         // Mark the workflow as deleted before any cleanup to prevent
@@ -925,7 +928,7 @@ export const workflowIpcModule: IpcModule = {
     },
     run: {
       channel: "synapse:workflow:run", kind: "invoke",
-      request: z.object({ id: z.string(), params: z.record(z.string(), z.unknown()) }),
+      request: z.object({ id: workflowIdSchema, params: z.record(z.string(), z.unknown()) }),
       response: z.union([
         z.object({ runId: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
@@ -1142,7 +1145,7 @@ export const workflowIpcModule: IpcModule = {
     },
     openRunner: {
       channel: "synapse:workflow:open-runner", kind: "invoke",
-      request: z.object({ workflowId: z.string(), runId: z.string() }),
+      request: z.object({ workflowId: workflowIdSchema, runId: z.string() }),
       response: z.void(),
       handler: async (ctx, { workflowId, runId }: { workflowId: string; runId: string }) => {
         logger.info("workflow:openRunner", { workflowId, runId })
@@ -1171,7 +1174,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     runHistory: {
-      channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: z.string() }), response: z.array(workflowRunListItemSchema),
+      channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: workflowIdSchema }), response: z.array(workflowRunListItemSchema),
       handler: async (ctx, { workflowId }: { workflowId: string }) => {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const snapshots = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId)
@@ -1233,7 +1236,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     openEditor: {
-      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string(), runId: z.string().optional() }), response: z.void(),
+      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: workflowIdSchema, runId: z.string().optional() }), response: z.void(),
       handler: async (ctx, { id, runId }: { id: string; runId?: string }) => {
         logger.info("workflow:openEditor", { workflowId: id, runId })
         const baseUrl = rendererBaseUrl()

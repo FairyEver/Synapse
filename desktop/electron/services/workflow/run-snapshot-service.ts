@@ -5,6 +5,7 @@ import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { createMainLogger } from "../log-store"
 import { errorCode } from "./workflow-utils"
 import { sanitizeError } from "../error-sanitize"
+import { assertSafeWorkflowId } from "./workflow-id"
 
 const logger = createMainLogger("service.workflow.snapshots")
 
@@ -12,7 +13,7 @@ const MAX = 20
 
 export class RunSnapshotService {
   constructor(private readonly dataDir: string) {}
-  private dir(wfId: string) { return path.join(this.dataDir, "workflow-runs", wfId) }
+  private dir(wfId: string) { return path.join(this.dataDir, "workflow-runs", assertSafeWorkflowId(wfId)) }
   private snapshotTime(s: WorkflowRunSnapshot): number { return s.startedAt || s.endedAt || 0 }
 
   private async readSnapshotFiles(workflowId: string): Promise<Array<{ file: string; snapshot: WorkflowRunSnapshot }>> {

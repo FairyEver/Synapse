@@ -46,6 +46,29 @@ function snapshot(runId: string, startedAt: number): WorkflowRunSnapshot {
 }
 
 describe("RunSnapshotService", () => {
+  it("rejects unsafe workflow ids before writing snapshots outside workflow-runs", async () => {
+    const root = await tmpDir()
+    const svc = new RunSnapshotService(root)
+    const unsafeSnapshot = {
+      ...snapshot("run-escape", 100),
+      workflowId: "../escaped-workflow",
+    }
+
+    await expect(svc.save(unsafeSnapshot)).rejects.toThrow("Invalid workflow id")
+    await expect(readdir(path.join(root, "escaped-workflow"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("rejects unsafe workflow ids before deleting snapshot directories", async () => {
+    const root = await tmpDir()
+    const escapedDir = path.join(root, "escaped-workflow")
+    await mkdir(escapedDir, { recursive: true })
+    await writeFile(path.join(escapedDir, "keep.txt"), "keep", "utf-8")
+    const svc = new RunSnapshotService(root)
+
+    await expect(svc.deleteWorkflow("../escaped-workflow")).rejects.toThrow("Invalid workflow id")
+    await expect(readdir(escapedDir)).resolves.toEqual(["keep.txt"])
+  })
+
   it("lists snapshots by run start time descending", async () => {
     const svc = new RunSnapshotService(await tmpDir())
     await svc.save(snapshot("older", 100))
