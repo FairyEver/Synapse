@@ -84,6 +84,7 @@ export class AutomationIngressService {
   private readonly deps: AutomationIngressServiceDeps
   private readonly rateLimiter = new Map<string, number[]>()
   private binding: ResolvedNetworkBinding | undefined
+  private runtimeConfigRestartRequired = false
 
   constructor(deps: AutomationIngressServiceDeps) {
     this.deps = deps
@@ -129,6 +130,7 @@ export class AutomationIngressService {
         handleHttp: (request) => this.handleHttp(request),
       }),
     })
+    this.runtimeConfigRestartRequired = false
   }
 
   async stop(): Promise<void> {
@@ -137,7 +139,7 @@ export class AutomationIngressService {
   }
 
   async getStatus(): Promise<WebhookStatus> {
-    return statusFromConfig(await this.getOrCreateConfig(), this.binding)
+    return statusFromConfig(await this.getOrCreateConfig(), this.binding, this.runtimeConfigRestartRequired)
   }
 
   async updateConfig(input: WebhookConfigUpdate): Promise<WebhookConfigUpdateResult> {
@@ -168,8 +170,9 @@ export class AutomationIngressService {
       updatedAt: this.isoNow(),
     }
     await this.deps.configs.upsert(next)
+    this.runtimeConfigRestartRequired = Boolean(this.binding)
     return {
-      status: statusFromConfig(next, this.binding),
+      status: statusFromConfig(next, this.binding, this.runtimeConfigRestartRequired),
       token: input.resetToken ? token : undefined,
     }
   }
@@ -567,6 +570,7 @@ export class AutomationIngressService {
       serviceRestartRequired: false,
       updatedAt: this.isoNow(),
     })
+    this.runtimeConfigRestartRequired = false
   }
 
   private async createRun(input: {
@@ -667,6 +671,7 @@ export class AutomationIngressService {
 function statusFromConfig(
   config: WebhookConfigEntryV1,
   binding: ResolvedNetworkBinding | undefined,
+  runtimeConfigRestartRequired: boolean,
 ): WebhookStatus {
   return {
     enabled: config.enabled && Boolean(binding),
@@ -676,7 +681,7 @@ function statusFromConfig(
     assignedPort: binding?.port ?? config.assignedPort,
     maxBodyBytes: config.maxBodyBytes,
     rateLimitPerMinute: config.rateLimitPerMinute,
-    serviceRestartRequired: binding ? false : config.serviceRestartRequired,
+    serviceRestartRequired: binding ? runtimeConfigRestartRequired : config.serviceRestartRequired,
     lastError: config.lastError,
   }
 }

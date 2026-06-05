@@ -239,6 +239,29 @@ describe("AutomationIngressService", () => {
     expect(JSON.stringify(auditEvents)).not.toContain(result.token ?? "")
   })
 
+  it("reports restart required when runtime-captured webhook limits change while running", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+
+    const result = await service.updateConfig({ maxBodyBytes: 512 * 1024 })
+    const status = await service.getStatus()
+
+    expect(result.status.maxBodyBytes).toBe(512 * 1024)
+    expect(result.status.serviceRestartRequired).toBe(true)
+    expect(status.serviceRestartRequired).toBe(true)
+    await service.stop()
+  })
+
   it("passes webhook messageId into AgentMessage for runtime correlation", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
