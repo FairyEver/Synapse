@@ -334,16 +334,6 @@ async function downloadFile(path: string, filename: string) {
   }
 }
 
-function startNativeDownload(path: string, filename: string) {
-  const link = document.createElement('a')
-  link.href = path
-  link.download = filename
-  link.rel = 'noopener'
-  document.body.append(link)
-  link.click()
-  link.remove()
-}
-
 export function getBackupDownloadUrl(filename: string) {
   return `${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`
 }
@@ -417,7 +407,7 @@ export const adminApi = {
   triggerBackup: () =>
     request<BackupResult>(`${adminApiBasePath}/backup`, { method: 'POST' }),
   downloadBackup: (filename: string) =>
-    startNativeDownload(getBackupDownloadUrl(filename), filename),
+    downloadFile(getBackupDownloadUrl(filename), filename),
   getBackupDownloadUrl,
   deleteBackup: (filename: string) =>
     request<{ ok: true }>(
