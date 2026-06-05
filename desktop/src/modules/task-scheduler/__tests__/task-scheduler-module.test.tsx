@@ -580,6 +580,41 @@ describe("TaskSchedulerModule", () => {
     expect(mocks.notify).toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
   })
 
+  it("refreshes the task list after an accepted manual run", async () => {
+    const refresh = vi.fn()
+    mocks.runTask.mockResolvedValue({ id: "run-1", status: "success" })
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask()],
+      loading: false,
+      error: null,
+      refresh,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    const runButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("运行"))
+    expect(runButton).toBeTruthy()
+
+    await act(async () => {
+      runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(mocks.runTask).toHaveBeenCalledWith("task-1")
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(mocks.notify).toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
+  })
+
   it("starts watching the next Agent session before the manual Agent run finishes", async () => {
     let resolveRun: (value: { id: string; status: "running" }) => void = () => {}
     mocks.runTask.mockReturnValue(new Promise((resolve) => {

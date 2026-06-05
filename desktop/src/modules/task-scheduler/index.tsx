@@ -309,6 +309,7 @@ const [isExporting, setIsExporting] = useState(false)
         runId: run?.id,
         runStatus: run?.status,
       })
+      await refresh()
       notify({ message: "任务已触发", tone: "success" })
     } catch (err) {
       if (agentSessionWatch) {
