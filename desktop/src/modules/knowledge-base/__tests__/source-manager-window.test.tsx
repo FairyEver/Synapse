@@ -217,7 +217,7 @@ function menuItemByText(text: string): HTMLElement {
   return item
 }
 
-function lastSourceUploadSuccessMessage(result: SynapseKnowledgeBaseRawMutationResult): string | null {
+function lastRawMutationSuccessMessage(result: SynapseKnowledgeBaseRawMutationResult): string | null {
   const options = notifications.promise.mock.calls.at(-1)?.[1] as {
     success?: string | null | ((value: SynapseKnowledgeBaseRawMutationResult) => string | null)
   } | undefined
@@ -1525,7 +1525,84 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
         itemPaths: ["/tmp/good.md"],
       })
     })
-    expect(lastSourceUploadSuccessMessage(uploadResult)).toBe("已上传 1 项，跳过 1 项（读取失败 1）")
+    expect(lastRawMutationSuccessMessage(uploadResult)).toBe("已上传 1 项，跳过 1 项（读取失败 1）")
+  })
+
+  it("reports skipped entries in the move success message", async () => {
+    const moveResult: SynapseKnowledgeBaseRawMutationResult = {
+      projectId: "project-1",
+      entries: [{
+        relativePath: "客户/brief.md",
+        name: "brief.md",
+        kind: "file",
+        size: 43008,
+        modifiedAt: "2026-05-23T14:20:00.000Z",
+      }],
+      skipped: [{ path: "locked.md", reason: "collision" }],
+    }
+    bridgeMocks.knowledgeBase.moveRawEntries.mockResolvedValueOnce(moveResult)
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+    await act(async () => {
+      buttonByLabel("移动所选").click()
+    })
+    await act(async () => {
+      buttonByLabel("选择目标文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByLabel("确认移动").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
+      targetDirectoryPath: "客户",
+    })
+    expect(lastRawMutationSuccessMessage(moveResult)).toBe("已移动 1 项，跳过 1 项（目标已存在 1）")
+  })
+
+  it("reports skipped entries in the trash success message", async () => {
+    const trashResult: SynapseKnowledgeBaseRawMutationResult = {
+      projectId: "project-1",
+      entries: [{
+        relativePath: "brief.md",
+        name: "brief.md",
+        kind: "file",
+        size: 43008,
+        modifiedAt: "2026-05-23T14:20:00.000Z",
+      }],
+      skipped: [{ path: "locked.md", reason: "trash-error" }],
+    }
+    bridgeMocks.knowledgeBase.trashRawEntries.mockResolvedValueOnce(trashResult)
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+    await act(async () => {
+      buttonByLabel("移到废纸篓").click()
+    })
+    await act(async () => {
+      buttonByLabel("确认移到废纸篓").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.trashRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
+    })
+    expect(lastRawMutationSuccessMessage(trashResult)).toBe("已移到废纸篓 1 项，跳过 1 项（删除失败 1）")
   })
 
   it("exports one entry from the row menu", async () => {

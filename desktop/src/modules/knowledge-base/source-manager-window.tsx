@@ -179,14 +179,22 @@ function sourceUploadSuccessMessage(
   result: SynapseKnowledgeBaseRawMutationResult,
   emptyMessage: string | null,
 ): string | null {
+  return rawMutationSuccessMessage(result, "已上传", emptyMessage)
+}
+
+function rawMutationSuccessMessage(
+  result: SynapseKnowledgeBaseRawMutationResult,
+  successMessage: string,
+  emptyMessage: string | null,
+): string | null {
   if (result.skipped.length > 0) {
     const skippedSummary = skippedReasonSummary(result.skipped)
     if (result.entries.length > 0) {
-      return `已上传 ${result.entries.length} 项，跳过 ${result.skipped.length} 项${skippedSummary}`
+      return `${successMessage} ${result.entries.length} 项，跳过 ${result.skipped.length} 项${skippedSummary}`
     }
     return `跳过 ${result.skipped.length} 项${skippedSummary}`
   }
-  return result.entries.length > 0 ? "已上传" : emptyMessage
+  return result.entries.length > 0 ? successMessage : emptyMessage
 }
 
 function skippedReasonSummary(result: readonly { reason: string }[]): string {
@@ -1017,7 +1025,7 @@ function KnowledgeBaseSourceManagerWindow() {
       },
       {
         loading: "正在移动",
-        success: "已移动",
+        success: (result) => rawMutationSuccessMessage(result, "已移动", "没有可移动的条目"),
         error: "移动失败",
       },
     )
@@ -1051,7 +1059,7 @@ function KnowledgeBaseSourceManagerWindow() {
       },
       {
         loading: "正在移到废纸篓",
-        success: "已移到废纸篓",
+        success: (result) => rawMutationSuccessMessage(result, "已移到废纸篓", "没有可删除的条目"),
         error: "移动失败",
       },
     )
