@@ -347,7 +347,7 @@ export class SideChannelService implements ReplyTargetRuntime {
 
   private consumeRateLimit(request: LocalHttpRequest, path: string): boolean {
     const limit = this.deps.rateLimitPerMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE
-    if (limit <= 0) return true
+    if (limit <= 0) return false
     const key = `${request.remoteAddress ?? "local"}:${path}`
     const now = Date.now()
     const cutoff = now - 60_000

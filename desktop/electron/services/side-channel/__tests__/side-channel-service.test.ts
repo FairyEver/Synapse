@@ -219,6 +219,38 @@ describe("SideChannelService", () => {
     await service.stop()
   })
 
+  it("rejects authenticated requests when the rate limit is zero", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      rateLimitPerMinute: 0,
+      token: "tok",
+    })
+    await service.start()
+    const env = service.getAgentEnv("project-1", "bridge:s1")
+    const dispatcher = new FakeDispatcher()
+    service.registerDispatcher("bridge", dispatcher)
+    service.rememberReplyTarget(bridgeTarget())
+
+    const response = await fetch(env?.SYNAPSE_SIDE_CHANNEL_URL ?? "", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env?.SYNAPSE_SIDE_CHANNEL_TOKEN ?? ""}`,
+        Connection: "close",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ project: "project-1", sessionKey: "bridge:s1", message: "blocked" }),
+    })
+
+    expect(response.status).toBe(429)
+    await response.text()
+    expect(dispatcher.sideChannelPayloads).toEqual([])
+    await service.stop()
+  })
+
   it("records muted side-channel sends without dispatching externally", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const auditSink = new InMemoryAuditSink()
