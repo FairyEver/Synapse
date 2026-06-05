@@ -1,0 +1,36 @@
+import { sanitizeError } from "@/lib/error-sanitize"
+
+export function sanitizeWorkflowResultText(value: string): string {
+  return sanitizeError(value)
+}
+
+export function sanitizeWorkflowResultValue(
+  value: unknown,
+  seen = new WeakMap<object, unknown>(),
+  key = "",
+): unknown {
+  if (typeof value === "string") {
+    if (isSensitiveWorkflowResultKey(key) && value) return "[redacted]"
+    return sanitizeWorkflowResultText(value)
+  }
+  if (typeof value === "bigint" || value === null || value === undefined) return value
+  if (typeof value !== "object") return value
+  const cached = seen.get(value)
+  if (cached) return cached
+  if (Array.isArray(value)) {
+    const next: unknown[] = []
+    seen.set(value, next)
+    value.forEach((item) => next.push(sanitizeWorkflowResultValue(item, seen)))
+    return next
+  }
+  const next: Record<string, unknown> = {}
+  seen.set(value, next)
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    next[entryKey] = sanitizeWorkflowResultValue(entryValue, seen, entryKey)
+  }
+  return next
+}
+
+function isSensitiveWorkflowResultKey(key: string): boolean {
+  return /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential).*|api[-_]?key|session[-_]?key)$/i.test(key)
+}

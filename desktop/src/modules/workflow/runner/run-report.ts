@@ -1,7 +1,7 @@
 import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunStatus } from "@/types/workflow"
 import { formatTokenUsageValue, tokenUsageFields } from "@/lib/token-usage"
-import { sanitizeError } from "@/lib/error-sanitize"
 import { resolveBranchLabel } from "../lib/branch-label"
+import { sanitizeWorkflowResultText, sanitizeWorkflowResultValue } from "./result-sanitize"
 
 interface WorkflowRunReportInput {
   readonly definition: WorkflowDefinition
@@ -45,10 +45,10 @@ export function formatWorkflowRunReport(input: WorkflowRunReportInput): string {
       `- 开始时间：${formatTimestamp(startedTimes.length > 0 ? Math.min(...startedTimes) : undefined)}`,
       `- 结束时间：${formatTimestamp(endedTimes.length > 0 ? Math.max(...endedTimes) : undefined)}`,
       `- 总耗时：${formatDuration(resolveTotalDuration(input.nodeResults))}`,
-      ...(input.runError ? [`- 错误：${sanitizeError(input.runError)}`] : []),
+      ...(input.runError ? [`- 错误：${sanitizeWorkflowResultText(input.runError)}`] : []),
       "",
       "### 运行参数",
-      codeBlock("json", formatJson(sanitizeReportValue(input.runParams))),
+      codeBlock("json", formatJson(sanitizeWorkflowResultValue(input.runParams))),
     ].join("\n"),
     [
       "## 工作流结构",
@@ -82,16 +82,16 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   const sections = [
     `# 节点运行报告：${node.name}`,
     formatNodeBasicInfo(definition, node, result, input.orderIndex),
-    ["## 设置", codeBlock("json", formatJson(sanitizeReportValue(node.config)))].join("\n"),
+    ["## 设置", codeBlock("json", formatJson(sanitizeWorkflowResultValue(node.config)))].join("\n"),
   ]
 
   const variables = node.config.variables
   if (variables !== undefined) {
-    sections.push(["## 变量绑定", codeBlock("json", formatJson(sanitizeReportValue(variables)))].join("\n"))
+    sections.push(["## 变量绑定", codeBlock("json", formatJson(sanitizeWorkflowResultValue(variables)))].join("\n"))
   }
 
   if (result.input.variables && Object.keys(result.input.variables).length > 0) {
-    sections.push(["## 运行输入变量", codeBlock("json", formatJson(sanitizeReportValue(result.input.variables)))].join("\n"))
+    sections.push(["## 运行输入变量", codeBlock("json", formatJson(sanitizeWorkflowResultValue(result.input.variables)))].join("\n"))
   }
 
   const mainContent = resolveNodeMainContent(node, result)
@@ -105,7 +105,7 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
 
   const structuredOutputs = resolveReportStructuredOutputs(result)
   if (structuredOutputs && Object.keys(structuredOutputs).length > 0) {
-    sections.push(["## 结构化输出", codeBlock("json", formatJson(sanitizeReportValue(structuredOutputs)))].join("\n"))
+    sections.push(["## 结构化输出", codeBlock("json", formatJson(sanitizeWorkflowResultValue(structuredOutputs)))].join("\n"))
   }
 
   const usageFields = tokenUsageFields(result.usage)
@@ -119,7 +119,7 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   }
 
   if (result.error) {
-    sections.push(["## 错误", codeBlock("text", sanitizeError(result.error))].join("\n"))
+    sections.push(["## 错误", codeBlock("text", sanitizeWorkflowResultText(result.error))].join("\n"))
   }
 
   return `${sections.join("\n\n").trimEnd()}\n`
@@ -164,16 +164,16 @@ function formatNodeBasicInfo(definition: WorkflowDefinition, node: WorkflowNode,
 
 function resolveNodeMainContent(node: WorkflowNode, result: NodeRunResult): { title: string; language: string; content: string } | null {
   if ((node.type === "prompt" || node.type === "switch") && result.input.prompt) {
-    return { title: node.type === "switch" ? "判断 Prompt" : "完整 Prompt", language: "text", content: sanitizeError(result.input.prompt) }
+    return { title: node.type === "switch" ? "判断 Prompt" : "完整 Prompt", language: "text", content: sanitizeWorkflowResultText(result.input.prompt) }
   }
   if (node.type === "script" && typeof node.config.script === "string") {
-    return { title: "脚本", language: "text", content: sanitizeError(node.config.script) }
+    return { title: "脚本", language: "text", content: sanitizeWorkflowResultText(node.config.script) }
   }
   if (node.type === "http_request") {
-    return { title: "请求配置", language: "json", content: formatJson(sanitizeReportValue(node.config)) }
+    return { title: "请求配置", language: "json", content: formatJson(sanitizeWorkflowResultValue(node.config)) }
   }
   if (node.type === "end" && typeof node.config.template === "string") {
-    return { title: "返回模板", language: "text", content: sanitizeError(node.config.template) }
+    return { title: "返回模板", language: "text", content: sanitizeWorkflowResultText(node.config.template) }
   }
   return null
 }
@@ -206,7 +206,7 @@ function formatScalar(value: unknown): string {
 function formatTextValue(value: unknown): string {
   if (value === null || value === undefined) return "未记录"
   if (value === "") return "（空）"
-  return sanitizeError(String(value))
+  return sanitizeWorkflowResultText(String(value))
 }
 
 function formatJson(value: unknown): string {
@@ -225,37 +225,10 @@ function createJsonReplacer(): (key: string, value: unknown) => unknown {
   }
 }
 
-function sanitizeReportValue(value: unknown, seen = new WeakMap<object, unknown>(), key = ""): unknown {
-  if (typeof value === "string") {
-    if (isSensitiveKey(key) && value) return "[redacted]"
-    return sanitizeError(value)
-  }
-  if (typeof value === "bigint" || value === null || value === undefined) return value
-  if (typeof value !== "object") return value
-  const cached = seen.get(value)
-  if (cached) return cached
-  if (Array.isArray(value)) {
-    const next: unknown[] = []
-    seen.set(value, next)
-    value.forEach((item) => next.push(sanitizeReportValue(item, seen)))
-    return next
-  }
-  const next: Record<string, unknown> = {}
-  seen.set(value, next)
-  for (const [entryKey, entryValue] of Object.entries(value)) {
-    next[entryKey] = sanitizeReportValue(entryValue, seen, entryKey)
-  }
-  return next
-}
-
 function resolveReportStructuredOutputs(result: NodeRunResult): Record<string, unknown> | undefined {
   if (!result.outputs || Object.keys(result.outputs).length === 0) return undefined
   const entries = Object.entries(result.outputs).filter(([key]) => key !== "agentConversation")
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
-}
-
-function isSensitiveKey(key: string): boolean {
-  return /^(authorization|cookie|.*(?:secret|token|password|credential).*|api[-_]?key|session[-_]?key)$/i.test(key)
 }
 
 function codeBlock(language: string, content: string): string {

@@ -15,6 +15,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
 import { resolveBranchLabel } from "../lib/branch-label"
+import { sanitizeWorkflowResultText, sanitizeWorkflowResultValue } from "./result-sanitize"
 
 const logger = createRendererLogger("workflow.runner")
 type ContentRenderMode = "markdown" | "plain"
@@ -56,6 +57,13 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
     onClose()
   }
   const structuredOutputs = resolveStructuredOutputs(result)
+  const displayInputVariables = sanitizeWorkflowResultValue(result.input.variables) as Record<string, unknown>
+  const displayPrompt = result.input.prompt ? sanitizeWorkflowResultText(result.input.prompt) : undefined
+  const displayOutput = result.output != null ? sanitizeWorkflowResultText(result.output) : undefined
+  const displayError = result.error ? sanitizeWorkflowResultText(result.error) : undefined
+  const displayStructuredOutputs = structuredOutputs
+    ? sanitizeWorkflowResultValue(structuredOutputs) as Record<string, unknown>
+    : undefined
   const agentConversation = agentConversationTargetFromOutputs(result.outputs)
 
   return (
@@ -104,42 +112,45 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
       <ScrollArea className="min-w-0 flex-1 p-3">
         <div className="flex min-w-0 max-w-full flex-col gap-3 text-xs">
           <TokenUsageSummary usage={result.usage} />
-          {Object.keys(result.input.variables).length > 0 && (
+          {Object.keys(displayInputVariables).length > 0 && (
             <ContentSection title="输入变量" trackingName="workflow-runner-input-variables-render-mode">
               {(mode) => (
                 <FieldList>
-                  {Object.entries(result.input.variables).map(([k, v]) => (
-                    <FieldBlock key={k} label={`$${k}`} monoLabel>
-                      <TextContent content={v || "（空）"} mode={mode} empty={!v} />
-                    </FieldBlock>
-                  ))}
+                  {Object.entries(displayInputVariables).map(([k, v]) => {
+                    const content = formatOutputValue(v)
+                    return (
+                      <FieldBlock key={k} label={`$${k}`} monoLabel>
+                        <TextContent content={content || "（空）"} mode={mode} empty={!content} />
+                      </FieldBlock>
+                    )
+                  })}
                 </FieldList>
               )}
             </ContentSection>
           )}
-          {result.input.prompt && (
+          {displayPrompt && (
             <ContentSection title="完整 Prompt" trackingName="workflow-runner-prompt-render-mode">
               {(mode) => (
                 <FieldList>
                   <FieldBlock label="内容">
-                    <TextContent content={result.input.prompt ?? ""} mode={mode} />
+                    <TextContent content={displayPrompt} mode={mode} />
                   </FieldBlock>
                 </FieldList>
               )}
             </ContentSection>
           )}
-          {result.output != null && result.output !== "" && (
+          {displayOutput != null && displayOutput !== "" && (
             <ContentSection title="输出" trackingName="workflow-runner-output-render-mode">
               {(mode) => (
                 <FieldList>
                   <FieldBlock label="结果">
-                    <TextContent content={result.output ?? ""} mode={mode} />
+                    <TextContent content={displayOutput} mode={mode} />
                   </FieldBlock>
                 </FieldList>
               )}
             </ContentSection>
           )}
-          {result.error && (
+          {displayError && (
             <ContentSection
               title="错误"
               titleClassName={result.status === "cancelled" ? "text-muted-foreground" : "text-destructive"}
@@ -149,7 +160,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
                 <FieldList>
                   <FieldBlock label="错误信息" labelClassName={result.status === "cancelled" ? undefined : "text-destructive"}>
                     <TextContent
-                      content={result.error ?? ""}
+                      content={displayError}
                       mode={mode}
                       className={result.status === "cancelled" ? "text-muted-foreground" : "text-destructive"}
                     />
@@ -158,11 +169,11 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
               )}
             </ContentSection>
           )}
-          {structuredOutputs && (
+          {displayStructuredOutputs && (
             <ContentSection title="结构化输出" trackingName="workflow-runner-structured-output-render-mode">
               {(mode) => (
                 <FieldList>
-                  {Object.entries(structuredOutputs).map(([k, v]) => (
+                  {Object.entries(displayStructuredOutputs).map(([k, v]) => (
                     <FieldBlock key={k} label={k} monoLabel>
                       <TextContent content={formatOutputValue(v)} mode={mode} />
                     </FieldBlock>

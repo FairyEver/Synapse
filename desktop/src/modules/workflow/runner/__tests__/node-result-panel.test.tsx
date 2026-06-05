@@ -108,6 +108,58 @@ describe("NodeResultPanel", () => {
     })
   })
 
+  it("redacts sensitive node detail content before rendering", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            input: {
+              variables: {
+                apiKey: "plain-api-key",
+                file: "/Users/liyang/private/source.txt",
+              },
+              prompt: "Authorization: Bearer raw-prompt-token at /Users/liyang/private/prompt.txt",
+            },
+            output: "result token=raw-output-token at /Users/liyang/private/output.txt",
+            error: "failed with cookie=raw-cookie at /Users/liyang/private/error.txt",
+            outputs: {
+              headers: {
+                authorization: "Bearer raw-header-token",
+                "set-cookie": "sid=raw-cookie",
+              },
+              body: {
+                message: "apiKey=raw-body-key",
+              },
+              sourcePath: "/Users/liyang/private/source.docx",
+            },
+          }}
+          nodeName="HTTP node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const renderedText = container.textContent ?? ""
+    expect(renderedText).not.toContain("plain-api-key")
+    expect(renderedText).not.toContain("raw-prompt-token")
+    expect(renderedText).not.toContain("raw-output-token")
+    expect(renderedText).not.toContain("raw-cookie")
+    expect(renderedText).not.toContain("raw-header-token")
+    expect(renderedText).not.toContain("raw-body-key")
+    expect(renderedText).not.toContain("/Users/liyang/private")
+    expect(renderedText).toContain("[redacted]")
+    expect(renderedText).toContain("[path]")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
   it("hides structured markdown output when it duplicates the primary output", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
