@@ -208,6 +208,8 @@ function LogExportPanel() {
         },
       )
       setLogFilePickerState(null)
+    } catch (error) {
+      logger.error("Copy selected log files failed.", error)
     } finally {
       setActiveAction(null)
     }
