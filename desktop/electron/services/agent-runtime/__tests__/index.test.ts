@@ -35,7 +35,7 @@ vi.mock("../../usage-analysis/pricing", () => ({
 }))
 
 vi.mock("../claude-sdk-session", () => ({
-  DEFAULT_CLAUDE_SDK_MAX_TURNS: 80,
+  DEFAULT_CLAUDE_SDK_MAX_TURNS: 200,
   ClaudeSDKSession: class FakeClaudeSdkSession {
     readonly agentType = "claude-sdk"
     private readonly events: AgentEvent[] = [

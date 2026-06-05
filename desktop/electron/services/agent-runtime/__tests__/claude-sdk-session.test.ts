@@ -50,7 +50,7 @@ describe("ClaudeSDKSession", () => {
     createSession(factory)
 
     expect(getOptions()).toMatchObject({
-      maxTurns: 80,
+      maxTurns: 200,
     })
   })
 
@@ -796,7 +796,7 @@ describe("ClaudeSDKSession", () => {
 
     await expect(event).resolves.toMatchObject({
       type: "error",
-      message: "sdk exploded",
+      message: "Agent 执行失败。诊断信息：sdk exploded",
       conversationId: "conversation-1",
       providerId: "claude-sdk",
       timestamp: "2026-05-13T00:00:00.000Z",
@@ -841,7 +841,7 @@ describe("ClaudeSDKSession", () => {
 
     await expect(event).resolves.toMatchObject({
       type: "error",
-      message: "sdk exploded",
+      message: "Agent 执行失败。诊断信息：sdk exploded",
     })
     await waitFor(() => logger.warn.mock.calls.length > 0)
 
@@ -867,7 +867,7 @@ describe("ClaudeSDKSession", () => {
     expect(session.alive()).toBe(true)
     await expect(session.nextEvent()).resolves.toMatchObject({
       type: "error",
-      message: "sdk exploded",
+      message: "Agent 执行失败。诊断信息：sdk exploded",
     })
     expect(session.alive()).toBe(false)
   })
@@ -948,7 +948,7 @@ describe("ClaudeSDKSession", () => {
     expect(query.interrupt).toHaveBeenCalledOnce()
     await expect(resolveSoon(permission)).resolves.toEqual({
       behavior: "deny",
-      message: "Current turn was cancelled before permission was resolved.",
+      message: "本轮执行已停止，未继续等待权限确认。",
     })
   })
 
@@ -974,7 +974,7 @@ describe("ClaudeSDKSession", () => {
       signal: abortController.signal,
     }))).resolves.toEqual({
       behavior: "deny",
-      message: "Permission request was cancelled.",
+      message: "权限请求已取消。",
     })
   })
 })

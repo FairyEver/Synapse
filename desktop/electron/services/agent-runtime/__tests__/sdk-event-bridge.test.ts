@@ -2,6 +2,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolut
 import { describe, expect, it } from "vitest"
 
 import { bridgeSdkMessage } from "../sdk-event-bridge"
+import { DEFAULT_CLAUDE_SDK_MAX_TURNS } from "../turn-limits"
 
 const baseEnvelope = {
   conversationId: "conversation-1",
@@ -49,12 +50,64 @@ describe("SDK event bridge", () => {
       modelUsage: { "claude-sonnet": { inputTokens: 3, outputTokens: 4 } },
     } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
       type: "error",
-      message: "failed",
+      message: "Agent 执行失败。诊断信息：failed",
       sdkSessionId: "sdk-error",
       sdkResultUuid: "result-error",
       usage: { input_tokens: 3, output_tokens: 4 },
       modelUsage: { "claude-sonnet": { inputTokens: 3, outputTokens: 4 } },
       ...baseEnvelope,
+    })
+  })
+
+  it("treats max turn result subtypes without errors as errors", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "error_max_turns",
+      session_id: "sdk-max-turns",
+      uuid: "result-max-turns",
+      total_cost_usd: 0.01,
+      usage: { input_tokens: 3, output_tokens: 4 },
+      modelUsage: { "claude-sonnet": { inputTokens: 3, outputTokens: 4 } },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "已达到本轮执行上限（200），任务尚未完成；发送“继续”可接着执行。",
+      sdkSessionId: "sdk-max-turns",
+      sdkResultUuid: "result-max-turns",
+      usage: { input_tokens: 3, output_tokens: 4 },
+      modelUsage: { "claude-sonnet": { inputTokens: 3, outputTokens: 4 } },
+      ...baseEnvelope,
+    })
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "error_max_turns",
+      session_id: "sdk-max-turns",
+      uuid: "result-max-turns",
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      message: expect.stringContaining(String(DEFAULT_CLAUDE_SDK_MAX_TURNS)),
+    })
+  })
+
+  it("treats SDK budget and unknown error result subtypes as Chinese errors", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "error_max_budget_usd",
+      session_id: "sdk-budget",
+      uuid: "result-budget",
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "已达到本轮费用上限，任务尚未完成；调整预算后可继续执行。",
+      sdkSessionId: "sdk-budget",
+    })
+
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "error_future_limit",
+      session_id: "sdk-future",
+      uuid: "result-future",
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "Agent 已停止，任务尚未完成。诊断信息：error_future_limit",
+      sdkSessionId: "sdk-future",
     })
   })
 

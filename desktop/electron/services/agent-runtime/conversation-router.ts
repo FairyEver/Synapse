@@ -11,6 +11,28 @@ import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService, ReplyTarget } from "../reply-target"
 import type { UsageModelPriceRule } from "../usage-analysis/pricing"
 import { estimateSynapseUsageCostSnapshot } from "../usage-analysis/usage-cost-snapshot"
+import {
+  AGENT_CANCELLED_MESSAGE,
+  AGENT_COMPRESSION_UNSUPPORTED_MESSAGE,
+  AGENT_MESSAGE_BLOCKED_MESSAGE,
+  AGENT_NO_ACTIVE_PROVIDER_MESSAGE,
+  AGENT_PERMISSION_TIMEOUT_MESSAGE,
+  AGENT_QUEUE_FULL_MESSAGE,
+  AGENT_RELAY_BUSY_MESSAGE,
+  AGENT_RELAY_PERMISSION_DENY_MESSAGE,
+  AGENT_RELAY_PERMISSION_ERROR_MESSAGE,
+  AGENT_RELAY_QUESTION_DENY_MESSAGE,
+  AGENT_RELAY_QUESTION_ERROR_MESSAGE,
+  AGENT_RELAY_TIMED_OUT_MESSAGE,
+  AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE,
+  AGENT_SESSION_ENDED_MESSAGE,
+  AGENT_SPAWN_DENIED_MESSAGE,
+  AGENT_SPAWN_PERMISSION_CHECK_FAILED_MESSAGE,
+  AGENT_SESSION_TIMED_OUT_MESSAGE,
+  AGENT_TURN_FAILED_MESSAGE,
+  AGENT_USER_QUESTION_TIMEOUT_MESSAGE,
+  conversationNotFoundMessage,
+} from "./agent-error-messages"
 import type { AgentCommandRouter, AgentCommandRouterResult } from "./command-router"
 import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
@@ -113,7 +135,7 @@ export class ConversationRouter {
     this.assertProject(message)
     const conversation = await this.repository.get(conversationId)
     if (!conversation) {
-      throw new Error(`Conversation "${conversationId}" not found`)
+      throw new Error(conversationNotFoundMessage(conversationId))
     }
     const effectiveConversation = message.modeOverride
       ? await this.repository.savePermissionMode(conversation.id, message.modeOverride)
@@ -160,7 +182,7 @@ export class ConversationRouter {
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
       return {
-        ...this.finishWithError(message, "", governance.reason ?? "Message blocked"),
+        ...this.finishWithError(message, "", governance.reason ?? AGENT_MESSAGE_BLOCKED_MESSAGE),
         timedOut: false,
       }
     }
@@ -184,7 +206,7 @@ export class ConversationRouter {
     const state = this.sessionManager.stateForConversation(conversation.id, message)
     if (state.busy) {
       return {
-        ...this.finishWithError(message, conversation.id, "Relay session is busy"),
+        ...this.finishWithError(message, conversation.id, AGENT_RELAY_BUSY_MESSAGE),
         timedOut: false,
       }
     }
@@ -207,7 +229,7 @@ export class ConversationRouter {
     message: AgentMessage,
     conversation: ConversationEntryV1,
   ): Promise<AgentRuntimeTurnResult> {
-    return this.finishWithError(message, conversation.id, "Compression is unsupported for SDK sessions.")
+    return this.finishWithError(message, conversation.id, AGENT_COMPRESSION_UNSUPPORTED_MESSAGE)
   }
 
   clearCancelState(state: RuntimeSessionState): void {
@@ -232,7 +254,7 @@ export class ConversationRouter {
       conversationId,
       events: [cancelEvent],
       resultText: "",
-      error: "cancelled",
+      error: AGENT_CANCELLED_MESSAGE,
     }
   }
 
@@ -244,7 +266,7 @@ export class ConversationRouter {
     this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
-      return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
+      return this.finishWithError(message, conversation.id, governance.reason ?? AGENT_MESSAGE_BLOCKED_MESSAGE)
     }
 
     const turnId = randomUUID()
@@ -266,7 +288,7 @@ export class ConversationRouter {
 
     const state = this.sessionManager.stateForConversation(conversation.id, message)
     if (state.busy && state.queue.length >= this.queueLimit()) {
-      return this.finishWithError(message, conversation.id, "Session queue is full")
+      return this.finishWithError(message, conversation.id, AGENT_QUEUE_FULL_MESSAGE)
     }
 
     return new Promise<AgentRuntimeTurnResult>((resolve) => {
@@ -445,7 +467,7 @@ export class ConversationRouter {
             "failed",
             tRecv,
             tDone,
-            "Agent turn failed",
+            AGENT_TURN_FAILED_MESSAGE,
           )
         }
         throw error
@@ -493,7 +515,7 @@ export class ConversationRouter {
             policyId: permission.policyId,
           },
         })
-        throw new Error("Agent spawn denied by permission policy.")
+        throw new Error(AGENT_SPAWN_DENIED_MESSAGE)
       }
       this.deps.auditSink?.record({
         action: "agent.spawn",
@@ -503,7 +525,7 @@ export class ConversationRouter {
         metadata,
       })
     } catch (error) {
-      if (error instanceof Error && error.message === "Agent spawn denied by permission policy.") {
+      if (error instanceof Error && error.message === AGENT_SPAWN_DENIED_MESSAGE) {
         throw error
       }
       this.deps.auditSink?.record({
@@ -516,7 +538,7 @@ export class ConversationRouter {
           ...errorMetadata(error),
         },
       })
-      throw new Error("Agent spawn permission check failed.")
+      throw new Error(AGENT_SPAWN_PERMISSION_CHECK_FAILED_MESSAGE)
     }
   }
 
@@ -546,7 +568,7 @@ export class ConversationRouter {
     const accepted = await liveSession.send(message)
     if (!accepted) {
       await this.sessionManager.closeCurrentTurn(conversation.id)
-      error = "Agent session ended before message could be sent."
+      error = AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE
     } else if (nativeSlashPassthrough) {
       const event = nativeSlashPassthroughEvent(nativeSlashPassthrough, liveSession.currentSessionId(), this.isoNow())
       events.push(event)
@@ -559,7 +581,7 @@ export class ConversationRouter {
     while (!error && liveSession.alive()) {
       const event = await nextLiveEventWithTimeout(liveSession, liveEventTimeoutMs)
       if (!event) {
-        error = liveSession.alive() ? "Agent session timed out." : "Agent session ended"
+        error = liveSession.alive() ? AGENT_SESSION_TIMED_OUT_MESSAGE : AGENT_SESSION_ENDED_MESSAGE
         if (liveSession.alive()) {
           await this.sessionManager.closeCurrentTurn(conversation.id)
         }
@@ -747,14 +769,14 @@ export class ConversationRouter {
       const accepted = await liveSession.send(liveMessage)
       if (!accepted) {
         await this.sessionManager.closeCurrentTurn(conversation.id)
-        error = "Agent session ended before message could be sent."
+        error = AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE
       }
       while (!error && liveSession.alive() && !abortSignal.aborted) {
         const event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
         if (!event) {
           const errorEvent: AgentEvent = {
             type: "error",
-            message: "Agent relay timed out.",
+            message: AGENT_RELAY_TIMED_OUT_MESSAGE,
             conversationId: conversation.id,
             providerId: message.providerId ?? conversation.providerId,
             sdkSessionId: liveSession.currentSessionId(),
@@ -850,7 +872,7 @@ export class ConversationRouter {
       if (abortSignal.aborted && !error) {
         const errorEvent: AgentEvent = {
           type: "error",
-          message: "Agent relay timed out.",
+          message: AGENT_RELAY_TIMED_OUT_MESSAGE,
           conversationId: conversation.id,
           providerId: message.providerId ?? conversation.providerId,
           sdkSessionId: liveSession.currentSessionId(),
@@ -943,7 +965,7 @@ export class ConversationRouter {
   private async resolveNewConversationProviderId(message: AgentMessage): Promise<string> {
     if (message.providerId) return message.providerId
     const active = await this.sessionManager.getActiveProviderId()
-    if (!active) throw new Error("No active provider configured")
+    if (!active) throw new Error(AGENT_NO_ACTIVE_PROVIDER_MESSAGE)
     return active
   }
 
@@ -1769,20 +1791,20 @@ function sanitizeErrorText(value: string): string {
 
 function permissionRelayDenyMessage(event: AgentPermissionRequestEvent): string {
   return isAskUserQuestionEvent(event)
-    ? "Relay cannot answer user questions."
-    : "Relay cannot approve tool permissions."
+    ? AGENT_RELAY_QUESTION_DENY_MESSAGE
+    : AGENT_RELAY_PERMISSION_DENY_MESSAGE
 }
 
 function permissionRelayErrorMessage(event: AgentPermissionRequestEvent): string {
   return isAskUserQuestionEvent(event)
-    ? "Relay requested a user answer."
-    : "Relay requested permission."
+    ? AGENT_RELAY_QUESTION_ERROR_MESSAGE
+    : AGENT_RELAY_PERMISSION_ERROR_MESSAGE
 }
 
 function permissionTimeoutMessage(event: AgentPermissionRequestEvent): string {
   return isAskUserQuestionEvent(event)
-    ? "User question timed out waiting for response."
-    : "Permission request timed out waiting for user response."
+    ? AGENT_USER_QUESTION_TIMEOUT_MESSAGE
+    : AGENT_PERMISSION_TIMEOUT_MESSAGE
 }
 
 function isAskUserQuestionEvent(event: AgentPermissionRequestEvent): boolean {

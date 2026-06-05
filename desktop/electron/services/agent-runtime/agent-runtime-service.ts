@@ -25,6 +25,22 @@ import { resolveEffectiveShell, resolveShellCommand } from "../shell-exec"
 import type { ProviderService } from "../provider"
 import type { UsageModelPriceRule } from "../usage-analysis"
 import { AgentCommandRouter } from "./command-router"
+import {
+  AGENT_ABORTED_BEFORE_EXECUTION_MESSAGE,
+  AGENT_ASK_USER_QUESTION_ANSWERS_REQUIRED_MESSAGE,
+  AGENT_ASK_USER_QUESTION_QUESTIONS_REQUIRED_MESSAGE,
+  AGENT_COMMAND_EXEC_BODY_MISSING_MESSAGE,
+  AGENT_COMMAND_EXECUTION_UNAVAILABLE_MESSAGE,
+  AGENT_COMPRESSION_STATE_UNAVAILABLE_MESSAGE,
+  AGENT_PERMISSION_NOT_PENDING_MESSAGE,
+  AGENT_PERMISSION_SESSION_MISMATCH_MESSAGE,
+  AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
+  AGENT_SCHEDULED_SPAWN_DENIED_MESSAGE,
+  commandExecutionStatusMessage,
+  conversationNotFoundMessage,
+  isConversationNotFoundMessage,
+  scheduledTimeoutMessage,
+} from "./agent-error-messages"
 import type {
   RegisteredPromptCommandSource,
 } from "./command-router"
@@ -298,7 +314,7 @@ export class AgentRuntimeService {
         conversationId: "",
         sessionKey,
         status: "error",
-        error: "Aborted before execution",
+        error: AGENT_ABORTED_BEFORE_EXECUTION_MESSAGE,
         durationMs,
       }
       this.logScheduledAgentFailure(input, message, result)
@@ -345,7 +361,7 @@ export class AgentRuntimeService {
             conversationId: "",
             sessionKey,
             status: "error",
-            error: "Agent spawn not permitted for scheduled execution",
+            error: AGENT_SCHEDULED_SPAWN_DENIED_MESSAGE,
             durationMs: Date.now() - startMs,
           }
         }
@@ -389,7 +405,7 @@ export class AgentRuntimeService {
           })
         } catch (resumeError) {
           const isNotFound = resumeError instanceof Error
-            && resumeError.message.includes("not found")
+            && isConversationNotFoundMessage(resumeError.message)
           if (!isNotFound) throw resumeError
           this.logScheduledResumeFallback(input, message, resumeError)
           const name = formatScheduledSessionName(input, this.deps.now?.() ?? new Date())
@@ -410,7 +426,7 @@ export class AgentRuntimeService {
           conversationId: result.conversationId,
           sessionKey: resultSessionKey,
           status: "timeout",
-          error: `Execution exceeded ${timeoutMs ?? 0}ms timeout`,
+          error: scheduledTimeoutMessage(timeoutMs),
           durationMs: Date.now() - startMs,
           usage: result.usage,
           modelName: result.modelName,
@@ -452,7 +468,7 @@ export class AgentRuntimeService {
         sessionKey,
         status: isTimeout ? "timeout" : "error",
         error: isTimeout
-          ? `Execution exceeded ${timeoutMs ?? 0}ms timeout`
+          ? scheduledTimeoutMessage(timeoutMs)
           : sanitizeError(errorMessageText),
         durationMs: Date.now() - startMs,
       }
@@ -693,10 +709,10 @@ export class AgentRuntimeService {
   async respondPermission(request: AgentPermissionResponseRequest): Promise<void> {
     const pending = this.pendingPermissions.get(request.requestId)
     if (!pending) {
-      throw new Error(`Permission request "${request.requestId}" is not pending`)
+      throw new Error(AGENT_PERMISSION_NOT_PENDING_MESSAGE)
     }
     if (request.sessionKey !== undefined && request.sessionKey !== pending.sessionKey) {
-      throw new Error(`Session key mismatch: the request's session does not own this permission`)
+      throw new Error(AGENT_PERMISSION_SESSION_MISMATCH_MESSAGE)
     }
 
     if (isAskUserQuestionTool(pending.toolName)) {
@@ -809,7 +825,7 @@ export class AgentRuntimeService {
   }): Promise<ConversationEntryV1> {
     const conversation = await this.repository.get(input.conversationId)
     if (!conversation) {
-      throw new Error(`Conversation "${input.conversationId}" was not found`)
+      throw new Error(conversationNotFoundMessage(input.conversationId))
     }
 
     // Persist first — if it fails, the live session is never switched.
@@ -940,7 +956,7 @@ export class AgentRuntimeService {
     const parsed = parseReferenceViewOptions(args)
     if (!parsed) return "Use /show <path[:line]>."
     const workDir = this.workDirFor(message)
-    if (!workDir) throw new Error("Project workspace path is required")
+    if (!workDir) throw new Error(AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE)
     const reference = resolveLocalReference(parsed.reference, workDir)
     if (!reference) return "Reference is outside the workspace or invalid."
     const actor: ActorIdentity = { kind: "user", id: message.userId }
@@ -1007,10 +1023,10 @@ export class AgentRuntimeService {
     args: readonly string[],
     message: AgentMessage,
   ): Promise<string> {
-    if (!this.deps.commandRunner) throw new Error("Command execution is unavailable")
-    if (!command.exec?.trim()) throw new Error("Command is missing exec body")
+    if (!this.deps.commandRunner) throw new Error(AGENT_COMMAND_EXECUTION_UNAVAILABLE_MESSAGE)
+    if (!command.exec?.trim()) throw new Error(AGENT_COMMAND_EXEC_BODY_MISSING_MESSAGE)
     const workDir = command.workDir ?? this.workDirFor(message)
-    if (!workDir) throw new Error("Project workspace path is required")
+    if (!workDir) throw new Error(AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE)
     const shellOptions = {
       windowsDefault: "powershell" as const,
       posixLogin: false,
@@ -1046,7 +1062,7 @@ export class AgentRuntimeService {
   private async getOrCreateCompressionState(
     agentType: string,
   ): Promise<AgentCompressStateEntryV1> {
-    if (!this.deps.compressState) throw new Error("Compression state is unavailable")
+    if (!this.deps.compressState) throw new Error(AGENT_COMPRESSION_STATE_UNAVAILABLE_MESSAGE)
     const id = compressionStateId(this.deps.projectId, agentType)
     const existing = await this.deps.compressState.get(id)
     if (existing) return existing
@@ -1238,11 +1254,11 @@ function askUserQuestionUpdatedInput(
   if (request.behavior === "deny") return request.updatedInput
   const answers = recordValue(request.updatedInput?.answers)
   if (!answers || Object.keys(answers).length === 0) {
-    throw new Error("AskUserQuestion requires answers before continuing.")
+    throw new Error(AGENT_ASK_USER_QUESTION_ANSWERS_REQUIRED_MESSAGE)
   }
   const questions = request.updatedInput?.questions ?? pending.questions ?? pending.toolInputRaw?.questions
   if (!Array.isArray(questions)) {
-    throw new Error("AskUserQuestion requires questions before continuing.")
+    throw new Error(AGENT_ASK_USER_QUESTION_QUESTIONS_REQUIRED_MESSAGE)
   }
   return {
     ...request.updatedInput,
@@ -1266,11 +1282,12 @@ function formatCommandResult(name: string, result: ControlledProcessResult): str
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value))
     .join("\n")
-  const status = result.timedOut
-    ? `Command timed out: /${name}`
-    : result.exitCode === 0
-      ? `Command completed: /${name}`
-      : `Command failed: /${name} (${String(result.exitCode ?? result.signal ?? "unknown")})`
+  const status = commandExecutionStatusMessage({
+    name,
+    timedOut: result.timedOut,
+    exitCode: result.exitCode,
+    signal: result.signal,
+  })
   return output ? `${status}\n\n${truncateRunes(output, 4000)}` : status
 }
 

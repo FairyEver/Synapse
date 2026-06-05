@@ -22,6 +22,14 @@ import type {
   AgentSdkPluginSpec,
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
+import {
+  AGENT_INVALID_ASK_USER_QUESTION_INPUT_MESSAGE,
+  AGENT_PERMISSION_CANCELLED_MESSAGE,
+  AGENT_QUERY_FINISHED_PERMISSION_MESSAGE,
+  AGENT_SESSION_CLOSED_MESSAGE,
+  AGENT_TURN_PERMISSION_CANCELLED_MESSAGE,
+  sdkQueryErrorMessage,
+} from "./agent-error-messages"
 import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import type {
@@ -37,6 +45,7 @@ import {
   inspectPackagedClaudeRuntime,
   type PackagedClaudeRuntimeStatus,
 } from "./claude-runtime-binary"
+import { DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./turn-limits"
 
 export interface QueryLike {
   next(): Promise<IteratorResult<SDKMessage, void>>
@@ -92,7 +101,7 @@ export type ClaudeSDKToolPolicy = (
   input: Record<string, unknown>,
 ) => PermissionResult | undefined
 
-export const DEFAULT_CLAUDE_SDK_MAX_TURNS = 80
+export { DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./turn-limits"
 
 class FailedQuery implements QueryLike {
   readonly #error: Error
@@ -233,7 +242,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   async cancelCurrentTurn(): Promise<boolean> {
     if (!this.alive()) return false
-    this.denyPendingPermissions("Current turn was cancelled before permission was resolved.")
+    this.denyPendingPermissions(AGENT_TURN_PERMISSION_CANCELLED_MESSAGE)
     await this.query.interrupt()
     return true
   }
@@ -382,7 +391,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     input: Record<string, unknown>,
     context: CanUseToolContext,
   ): Promise<PermissionResult> {
-    if (this.closed) return { behavior: "deny", message: "Session is closed." }
+    if (this.closed) return { behavior: "deny", message: AGENT_SESSION_CLOSED_MESSAGE }
     if (context.signal.aborted) return permissionCancelledResult()
     if (toolName === ASK_USER_QUESTION_TOOL_NAME) {
       return this.requestUserQuestion(input, context)
@@ -418,7 +427,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   ): Promise<PermissionResult> {
     const questions = parseAskUserQuestions(input)
     if (!questions) {
-      return { behavior: "deny", message: "Invalid AskUserQuestion input." }
+      return { behavior: "deny", message: AGENT_INVALID_ASK_USER_QUESTION_INPUT_MESSAGE }
     }
 
     const requestId = this.nextPermissionRequestId()
@@ -449,7 +458,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     return new Promise<PermissionResult>((resolve) => {
       const abort = (): void => {
         if (!this.permissions.delete(requestId)) return
-        resolve({ behavior: "deny", message: "Permission request was cancelled." })
+        resolve({ behavior: "deny", message: AGENT_PERMISSION_CANCELLED_MESSAGE })
       }
       context.signal.addEventListener("abort", abort, { once: true })
       this.permissions.set(requestId, {
@@ -545,7 +554,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     } finally {
       this.queryFinished = true
       this.inputQueue.close()
-      this.denyPendingPermissions("SDK query finished before permission was resolved.")
+      this.denyPendingPermissions(AGENT_QUERY_FINISHED_PERMISSION_MESSAGE)
       this.abortCleanup?.()
       this.eventQueue.close()
     }
@@ -554,7 +563,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private errorEvent(error: unknown): AgentEvent {
     return {
       type: "error",
-      message: sanitizeDiagnosticText(errorMessage(error)),
+      message: sdkQueryErrorMessage(errorDiagnosticMessage(error)),
       conversationId: this.conversationId,
       providerId: this.providerId,
       sdkSessionId: this.sdkSessionId,
@@ -740,7 +749,7 @@ function toPermissionResult(decision: AgentPermissionDecision): PermissionResult
 }
 
 function permissionCancelledResult(): PermissionResult {
-  return { behavior: "deny", message: "Permission request was cancelled." }
+  return { behavior: "deny", message: AGENT_PERMISSION_CANCELLED_MESSAGE }
 }
 
 function isWriteTool(toolName: string): boolean {
@@ -776,6 +785,12 @@ function allowedWriteRootsMessage(agentType: string, allowedWriteRoots: readonly
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return typeof error === "string" ? error : "SDK query failed"
+}
+
+function errorDiagnosticMessage(error: unknown): string | undefined {
+  if (error instanceof Error) return sanitizeDiagnosticText(error.message)
+  if (typeof error === "string") return sanitizeDiagnosticText(error)
+  return undefined
 }
 
 function errorLogMeta(error: unknown): Record<string, unknown> {

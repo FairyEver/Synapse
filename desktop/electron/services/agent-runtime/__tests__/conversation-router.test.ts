@@ -309,7 +309,7 @@ describe("ConversationRouter", () => {
     const persisted = await agentEvents.list()
     const saved = await conversations.get(result.conversationId)
 
-    expect(result.error).toBe("Agent spawn denied by permission policy.")
+    expect(result.error).toBe("Agent 启动被权限策略拒绝。")
     expect(session.sent).toEqual([])
     expect(persisted.map((entry) => entry.payload)).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ sdkType: "nativeSlashPassthrough" }),
@@ -374,15 +374,15 @@ describe("ConversationRouter", () => {
     const saved = await conversations.get(result.conversationId)
 
     expect(result).toMatchObject({
-      error: "Agent session ended",
-      events: [expect.objectContaining({ type: "error", message: "Agent session ended" })],
+      error: "Agent 会话已结束，任务尚未完成；请重新发送消息继续。",
+      events: [expect.objectContaining({ type: "error", message: "Agent 会话已结束，任务尚未完成；请重新发送消息继续。" })],
     })
     expect(events.filter((event) => event.type === "error")).toEqual([
       expect.objectContaining({
         payload: expect.objectContaining({
           event: expect.objectContaining({
             type: "error",
-            message: "Agent session ended",
+            message: "Agent 会话已结束，任务尚未完成；请重新发送消息继续。",
           }),
         }),
       }),
@@ -393,7 +393,7 @@ describe("ConversationRouter", () => {
         eventType: "error",
         payload: expect.objectContaining({
           type: "error",
-          message: "Agent session ended",
+          message: "Agent 会话已结束，任务尚未完成；请重新发送消息继续。",
           sdkSessionId: "sdk-ended",
         }),
       }),
@@ -402,7 +402,7 @@ describe("ConversationRouter", () => {
       expect.objectContaining({ role: "user", content: "hello" }),
       expect.objectContaining({
         role: "system",
-        content: "Agent session ended",
+        content: "Agent 会话已结束，任务尚未完成；请重新发送消息继续。",
         metadata: expect.objectContaining({
           agentEventType: "error",
           sdkSessionId: "sdk-ended",
@@ -1205,7 +1205,7 @@ describe("ConversationRouter", () => {
           requestId: "permission-1",
           decision: {
             behavior: "deny",
-            message: "Permission request timed out waiting for user response.",
+            message: "等待用户确认超时，已停止本次操作。",
           },
         },
       ])
@@ -1341,7 +1341,7 @@ describe("ConversationRouter", () => {
 
     expect(result).toMatchObject({
       timedOut: true,
-      error: "Agent relay timed out.",
+      error: "Agent 中继执行超时，任务尚未完成；请稍后重试。",
       partialText: "partial",
       resultText: "partial",
     })
@@ -1350,7 +1350,7 @@ describe("ConversationRouter", () => {
         payload: expect.objectContaining({
           event: expect.objectContaining({
             type: "error",
-            message: "Agent relay timed out.",
+            message: "Agent 中继执行超时，任务尚未完成；请稍后重试。",
             sdkSessionId: "sdk-timeout",
           }),
         }),
@@ -1361,7 +1361,7 @@ describe("ConversationRouter", () => {
       expect.objectContaining({ role: "user", content: "relay" }),
       expect.objectContaining({
         role: "system",
-        content: "Agent relay timed out.",
+        content: "Agent 中继执行超时，任务尚未完成；请稍后重试。",
         metadata: expect.objectContaining({
           agentEventType: "error",
           sdkSessionId: "sdk-timeout",
@@ -1442,7 +1442,7 @@ describe("ConversationRouter", () => {
           conversationId: result.conversationId,
           phase: "failed",
           status: "failed",
-          errorMessage: "Agent turn failed",
+          errorMessage: "Agent 本轮执行失败。",
         }),
         scope: { sessionId: result.conversationId },
       }),
@@ -1475,7 +1475,7 @@ describe("ConversationRouter", () => {
     first.emitResult("done")
 
     await expect(firstTurn).resolves.toMatchObject({ resultText: "done" })
-    await expect(secondTurn).resolves.toMatchObject({ error: "cancelled" })
+    await expect(secondTurn).resolves.toMatchObject({ error: "已停止本次执行。" })
     expect(factoryCalls).toHaveLength(1)
     expect(second.sent).toEqual([])
   })
@@ -1641,7 +1641,7 @@ describe("ConversationRouter", () => {
 
     expect(result).toMatchObject({
       timedOut: false,
-      error: "Relay requested permission.",
+      error: "中继会话请求了工具权限，已停止本次操作。",
     })
     expect(result.events.map((event) => event.type)).toEqual(["permissionRequest", "error"])
     expect(events.filter((event) => event.type === "error")).toEqual([
@@ -1649,7 +1649,7 @@ describe("ConversationRouter", () => {
         payload: expect.objectContaining({
           event: expect.objectContaining({
             type: "error",
-            message: "Relay requested permission.",
+            message: "中继会话请求了工具权限，已停止本次操作。",
           }),
         }),
       }),
@@ -1664,7 +1664,7 @@ describe("ConversationRouter", () => {
       }),
       expect.objectContaining({
         role: "system",
-        content: "Relay requested permission.",
+        content: "中继会话请求了工具权限，已停止本次操作。",
         metadata: expect.objectContaining({ agentEventType: "error" }),
       }),
     ])
@@ -1702,11 +1702,11 @@ describe("ConversationRouter", () => {
 
     expect(result).toMatchObject({
       timedOut: false,
-      error: "Relay requested a user answer.",
+      error: "中继会话请求了用户回复，已停止本次操作。",
     })
     expect(persisted.map((entry) => entry.eventType)).toEqual(["permissionRequest", "error"])
     expect(persisted[1]?.payload).toEqual(expect.objectContaining({
-      message: "Relay requested a user answer.",
+      message: "中继会话请求了用户回复，已停止本次操作。",
     }))
   })
 

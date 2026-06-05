@@ -21,6 +21,10 @@ import {
   buildSkillInvocationPrompt,
   type SkillRegistry,
 } from "./skill-registry"
+import {
+  AGENT_COMMAND_EXECUTION_UNAVAILABLE_MESSAGE,
+  AGENT_NO_ACTIVE_PROVIDER_MESSAGE,
+} from "./agent-error-messages"
 
 export interface AgentCommandRouterDeps {
   readonly projectId: string
@@ -157,7 +161,7 @@ export class AgentCommandRouter {
       command.name.toLowerCase() === name)
     if (promptCommand) {
       if (!registeredPromptCommandAllowedOnPlatform(promptCommand, message.platform)) {
-        return commandResult(conversation.id, `Command is not available on ${message.platform}.`, true)
+        return commandResult(conversation.id, `命令在当前入口不可用：${message.platform}。`, true)
       }
       const output = await Promise.resolve(promptCommand.buildPrompt(parsed.args, message, context))
       return registeredPromptCommandResult(conversation, output)
@@ -166,13 +170,13 @@ export class AgentCommandRouter {
     const customCommand = await this.deps.customCommands?.resolve(name)
     if (customCommand) {
       if (!customCommand.enabled) {
-        return commandResult(conversation.id, `Command is disabled: /${name}`, true)
+        return commandResult(conversation.id, `命令已停用：/${name}`, true)
       }
       if (!commandAllowedOnPlatform(customCommand, message.platform)) {
-        return commandResult(conversation.id, `Command is not available on ${message.platform}.`, true)
+        return commandResult(conversation.id, `命令在当前入口不可用：${message.platform}。`, true)
       }
       if (!isMessageAdmin(message) && customCommand.adminOnly) {
-        return commandResult(conversation.id, `Command requires admin: /${name}`, true)
+        return commandResult(conversation.id, `命令需要管理员权限：/${name}`, true)
       }
       if (customCommand.kind === "prompt") {
         return {
@@ -181,7 +185,7 @@ export class AgentCommandRouter {
         }
       }
       if (!this.deps.runCustomCommand) {
-        return commandResult(conversation.id, "Command execution is unavailable.", true)
+        return commandResult(conversation.id, AGENT_COMMAND_EXECUTION_UNAVAILABLE_MESSAGE, true)
       }
       const content = await this.deps.runCustomCommand(customCommand, parsed.args, message)
       return commandResult(conversation.id, content)
@@ -207,7 +211,7 @@ export class AgentCommandRouter {
       return null
     }
 
-    return commandResult(conversation.id, `Unsupported command: ${parsed.name}`, true)
+    return commandResult(conversation.id, `不支持的命令：${parsed.name}`, true)
   }
 
   private async handleModel(
@@ -221,7 +225,7 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, formatModelList(provider?.model, models))
     }
     if (!isMessageAdmin(message)) {
-      return commandResult(conversation.id, "Only admins can change models.", true)
+      return commandResult(conversation.id, "只有管理员可以切换模型。", true)
     }
 
     const targetInput = parseModelSwitchArgs(args)
@@ -232,8 +236,8 @@ export class AgentCommandRouter {
       return commandResult(
         conversation.id,
         conversation.providerId
-          ? `Provider not found: ${conversation.providerId}`
-          : "No active provider configured.",
+          ? `找不到模型供应商：${conversation.providerId}`
+          : AGENT_NO_ACTIVE_PROVIDER_MESSAGE,
         true,
       )
     }
@@ -243,7 +247,7 @@ export class AgentCommandRouter {
     await this.deps.providerService.updateProvider(provider.id, { model: target })
     return commandResult(
       reset?.id ?? conversation.id,
-      `Model changed: ${target}`,
+      `模型已切换：${target}`,
       false,
       reset?.agentSessionId,
     )
@@ -260,7 +264,7 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, formatModeList(conversation.agentConfig?.mode, modes))
     }
     if (!isMessageAdmin(message)) {
-      return commandResult(conversation.id, "Only admins can change permission modes.", true)
+      return commandResult(conversation.id, "只有管理员可以切换权限模式。", true)
     }
 
     const target = resolveModeTarget(args[0] ?? "", modes)
@@ -277,7 +281,7 @@ export class AgentCommandRouter {
     const updated = await this.deps.setPermissionMode(message, conversation, target)
     return commandResult(
       updated.id,
-      `Mode changed: ${target}`,
+      `权限模式已切换：${target}`,
       false,
       updated.agentSessionId,
     )
@@ -290,7 +294,7 @@ export class AgentCommandRouter {
     const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
-      "New session will start on the next message.",
+      "下一条消息将开启新会话。",
       false,
       reset?.agentSessionId,
     )
@@ -300,12 +304,12 @@ export class AgentCommandRouter {
     const agentType = await this.resolveAgentType()
     const provider = await this.currentProviderForConversation(conversation, "/status")
     const lines = [
-      `Agent: ${agentType}`,
-      `Provider: ${provider?.id ?? conversation.providerId ?? "default"}`,
-      `Model: ${provider?.model ?? "default"}`,
-      `Mode: ${conversation.agentConfig?.mode ?? "default"}`,
-      `Conversation: ${conversation.id}`,
-      `Agent session: ${conversation.agentSessionId ?? "none"}`,
+      `Agent：${agentType}`,
+      `供应商：${provider?.id ?? conversation.providerId ?? "default"}`,
+      `模型：${provider?.model ?? "default"}`,
+      `权限模式：${conversation.agentConfig?.mode ?? "default"}`,
+      `会话：${conversation.id}`,
+      `Agent 会话：${conversation.agentSessionId ?? "none"}`,
     ]
     return commandResult(conversation.id, lines.join("\n"), false, conversation.agentSessionId)
   }
@@ -351,28 +355,28 @@ export class AgentCommandRouter {
     }
     if (subCommand === "add") {
       if (!isMessageAdmin(message)) {
-        return commandResult(conversation.id, "Only admins can add commands.", true)
+        return commandResult(conversation.id, "只有管理员可以添加命令。", true)
       }
       const name = args[1]
       const prompt = args.slice(2).join(" ")
-      if (!name || !prompt.trim()) return commandResult(conversation.id, "Use /commands add <name> <prompt>.", true)
+      if (!name || !prompt.trim()) return commandResult(conversation.id, "用法：/commands add <name> <prompt>", true)
       const command = await this.deps.customCommands?.addPrompt({
         name,
         prompt,
         createdBy: message.userId,
       })
-      if (!command) return commandResult(conversation.id, "Command registry is unavailable.", true)
-      return commandResult(conversation.id, `Command saved: /${command.name}`)
+      if (!command) return commandResult(conversation.id, "命令注册表不可用。", true)
+      return commandResult(conversation.id, `命令已保存：/${command.name}`)
     }
     if (subCommand === "addexec") {
       if (!isMessageAdmin(message)) {
-        return commandResult(conversation.id, "Only admins can add exec commands.", true)
+        return commandResult(conversation.id, "只有管理员可以添加执行命令。", true)
       }
       const parsed = parseAddExecArgs(args.slice(1))
       if (!parsed) {
         return commandResult(
           conversation.id,
-          "Use /commands addexec [--shell posix|cmd|powershell] [--work-dir dir] <name> <command>.",
+          "用法：/commands addexec [--shell posix|cmd|powershell] [--work-dir dir] <name> <command>",
           true,
         )
       }
@@ -383,19 +387,19 @@ export class AgentCommandRouter {
         workDir: parsed.workDir,
         createdBy: message.userId,
       })
-      if (!command) return commandResult(conversation.id, "Command registry is unavailable.", true)
-      return commandResult(conversation.id, `Exec command saved: /${command.name}`)
+      if (!command) return commandResult(conversation.id, "命令注册表不可用。", true)
+      return commandResult(conversation.id, `执行命令已保存：/${command.name}`)
     }
     if (["delete", "del", "remove", "rm"].includes(subCommand)) {
       if (!isMessageAdmin(message)) {
-        return commandResult(conversation.id, "Only admins can delete commands.", true)
+        return commandResult(conversation.id, "只有管理员可以删除命令。", true)
       }
       const name = args[1]
-      if (!name) return commandResult(conversation.id, "Use /commands delete <name>.", true)
+      if (!name) return commandResult(conversation.id, "用法：/commands delete <name>", true)
       const removed = await this.deps.customCommands?.remove(name)
-      return commandResult(conversation.id, removed ? `Command deleted: /${normalizeCommandName(name)}` : `Command not found: /${normalizeCommandName(name)}`, !removed)
+      return commandResult(conversation.id, removed ? `命令已删除：/${normalizeCommandName(name)}` : `找不到命令：/${normalizeCommandName(name)}`, !removed)
     }
-    return commandResult(conversation.id, "Use /commands list|add|addexec|delete.", true)
+    return commandResult(conversation.id, "用法：/commands list|add|addexec|delete", true)
   }
 
   private async handleSkills(conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult> {

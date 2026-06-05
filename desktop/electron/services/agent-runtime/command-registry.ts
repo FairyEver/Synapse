@@ -10,6 +10,11 @@ import type { ShellKind } from "../shell-exec"
 import { errorCode } from "../error-utils"
 import type { AgentMessage } from "./types"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
+import {
+  AGENT_COMMAND_EXEC_BODY_MISSING_MESSAGE,
+  AGENT_COMMAND_NAME_REQUIRED_MESSAGE,
+  AGENT_COMMAND_PROMPT_REQUIRED_MESSAGE,
+} from "./agent-error-messages"
 
 export type PublishedCommandSource = "builtin" | "custom" | "skill" | "agent-native"
 export type PublishedCommandKind = "builtin" | "prompt" | "exec" | "skill" | "agent-native"
@@ -96,7 +101,7 @@ export class CustomCommandRegistry {
 
   async addPrompt(input: AddCustomCommandInput): Promise<AgentCommandEntryV1> {
     const prompt = input.prompt?.trim()
-    if (!prompt) throw new Error("Prompt is required")
+    if (!prompt) throw new Error(AGENT_COMMAND_PROMPT_REQUIRED_MESSAGE)
     return this.upsert({
       ...input,
       kind: "prompt",
@@ -108,7 +113,7 @@ export class CustomCommandRegistry {
 
   async addExec(input: AddCustomCommandInput): Promise<AgentCommandEntryV1> {
     const exec = input.exec?.trim()
-    if (!exec) throw new Error("Command is required")
+    if (!exec) throw new Error(AGENT_COMMAND_EXEC_BODY_MISSING_MESSAGE)
     return this.upsert({
       ...input,
       kind: "exec",
@@ -132,7 +137,7 @@ export class CustomCommandRegistry {
     input: AddCustomCommandInput & { readonly kind: "prompt" | "exec" },
   ): Promise<AgentCommandEntryV1> {
     const name = normalizeCommandName(input.name)
-    if (!name) throw new Error("Command name is required")
+    if (!name) throw new Error(AGENT_COMMAND_NAME_REQUIRED_MESSAGE)
     const now = this.isoNow()
     const existing = (await this.deps.commands.list())
       .find((command) => commandMatches(command.name, name))
