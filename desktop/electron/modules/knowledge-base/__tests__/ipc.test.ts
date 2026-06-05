@@ -21,6 +21,11 @@ const electronMock = vi.hoisted(() => ({
     getAppPath: () => process.cwd(),
     getPath: () => path.join(os.tmpdir(), "synapse-kb-userdata"),
   },
+  focusedWindow: { id: "focused-window" },
+  BrowserWindow: {
+    getFocusedWindow: vi.fn(),
+    getAllWindows: vi.fn(),
+  },
   dialog: {
     showOpenDialog: vi.fn(),
   },
@@ -35,6 +40,7 @@ const sourceManagerWindowServiceMock = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({
   app: electronMock.app,
+  BrowserWindow: electronMock.BrowserWindow,
   dialog: electronMock.dialog,
   shell: electronMock.shell,
 }))
@@ -62,6 +68,8 @@ afterEach(async () => {
 describe("knowledgeBaseIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    electronMock.BrowserWindow.getFocusedWindow.mockReturnValue(electronMock.focusedWindow)
+    electronMock.BrowserWindow.getAllWindows.mockReturnValue([])
     electronMock.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ["/tmp/source.md"] })
     sourceManagerWindowServiceMock.open.mockResolvedValue(undefined)
   })
@@ -225,7 +233,7 @@ describe("knowledgeBaseIpcModule", () => {
       projectId: "kb-1",
     }) as { uploaded: unknown[] }
 
-    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(electronMock.focusedWindow, expect.objectContaining({
       properties: ["openFile", "multiSelections"],
     }))
     expect(uploadSources).toHaveBeenCalledWith({
@@ -543,7 +551,7 @@ describe("knowledgeBaseIpcModule", () => {
       targetDirectoryPath: "client-a",
     })
 
-    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(electronMock.focusedWindow, expect.objectContaining({
       properties: ["openFile", "multiSelections"],
     }))
     expect(uploadRawFiles).toHaveBeenCalledWith({

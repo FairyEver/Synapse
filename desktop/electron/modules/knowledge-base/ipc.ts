@@ -1,4 +1,4 @@
-import { dialog } from "electron"
+import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
@@ -213,6 +213,19 @@ function permissionLogMeta(options: {
     resourceLength: options.resource.length,
     ...(projectId ? { projectId } : {}),
   }
+}
+
+function focusedWindow(): Electron.BrowserWindow | undefined {
+  return BrowserWindow.getFocusedWindow()
+    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
+    ?? undefined
+}
+
+async function showOpenDialog(options: Electron.OpenDialogOptions): Promise<Electron.OpenDialogReturnValue> {
+  const parentWindow = focusedWindow()
+  return parentWindow
+    ? dialog.showOpenDialog(parentWindow, options)
+    : dialog.showOpenDialog(options)
 }
 
 async function runGuardedKnowledgeBaseOperation<T>(options: {
@@ -535,7 +548,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       request: z.object({ projectId: z.string().min(1) }),
       response: uploadSourcesResultSchema,
       handler: async (ctx, request: { projectId: string }) => {
-        const result = await dialog.showOpenDialog({
+        const result = await showOpenDialog({
           properties: ["openFile", "multiSelections"],
         })
         if (result.canceled || result.filePaths.length === 0) {
@@ -563,7 +576,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       }),
       response: rawMutationResultSchema,
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
-        const result = await dialog.showOpenDialog({
+        const result = await showOpenDialog({
           properties: ["openFile", "multiSelections"],
         })
         if (result.canceled || result.filePaths.length === 0) {
