@@ -49,12 +49,22 @@ export function attachSecondInstanceFocus(state: MainWindowState): void {
 }
 
 export function registerAuthProtocol(): void {
+  let registered: boolean
+  let hasDevEntrypoint = false
   if (process.defaultApp) {
     const args = process.argv[1] ? [process.argv[1]] : []
-    app.setAsDefaultProtocolClient("synapse", process.execPath, args)
-    return
+    hasDevEntrypoint = args.length > 0
+    registered = app.setAsDefaultProtocolClient("synapse", process.execPath, args)
+  } else {
+    registered = app.setAsDefaultProtocolClient("synapse")
   }
-  app.setAsDefaultProtocolClient("synapse")
+  if (!registered) {
+    logger.warn("Failed to register synapse:// protocol handler.", {
+      defaultApp: Boolean(process.defaultApp),
+      hasDevEntrypoint,
+      hint: "scripts/fix-dev-protocol.sh",
+    })
+  }
 }
 
 export function attachOpenUrlHandler(handleUrl: (url: string) => void): void {
