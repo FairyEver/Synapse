@@ -8,6 +8,8 @@ import {
   DragonScaleOllamaEmbeddingProvider,
   resolveDragonScaleOllamaUrl,
 } from "./ollama-embedding-provider"
+import { createMainLogger } from "../../log-store"
+import { sanitizeError } from "../../error-sanitize"
 import {
   DRAGONSCALE_TILING_DEFAULT_MODEL,
   DRAGONSCALE_TILING_MAX_BODY_BYTES,
@@ -70,6 +72,7 @@ const FRONTMATTER_RE = /^---\n(.*?)\n---\n/s
 const TYPE_RE = /^type:\s*(\S+)/m
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true })
 const vaultLocks = new Map<string, Promise<void>>()
+const logger = createMainLogger("knowledge-base.dragonscale.tiling")
 
 export class DragonScaleTilingService {
   private readonly embeddingProvider: DragonScaleEmbeddingProvider
@@ -227,7 +230,13 @@ export class DragonScaleTilingService {
           cache.embeddings[page.relativePath] = entry
           embeddedPages.push({ path: page.relativePath, embedding })
           recomputed += 1
-        } catch {
+        } catch (error) {
+          logger.warn("DragonScale tiling embed failed", {
+            pagePath: page.relativePath,
+            model,
+            ollamaUrl,
+            ...errorLogMeta(error),
+          })
           skipped.embed_error = (skipped.embed_error ?? 0) + 1
         }
       }
@@ -319,6 +328,13 @@ async function scanPages(root: string, model: string): Promise<PageScanResult> {
     const relativePath = normalizeRelativePath(path.relative(root, filePath))
     const read = await readSmallUtf8(filePath)
     if (!read.ok) {
+      if (read.reason === "read_error") {
+        logger.warn("DragonScale tiling page read failed", {
+          pagePath: relativePath,
+          reason: read.reason,
+          ...errorLogMeta(read.error),
+        })
+      }
       increment(skipped, read.reason)
       continue
     }
@@ -394,7 +410,7 @@ async function collectMarkdownPaths(
 
 async function readSmallUtf8(filePath: string): Promise<
   | { readonly ok: true; readonly content: string }
-  | { readonly ok: false; readonly reason: string }
+  | { readonly ok: false; readonly reason: string; readonly error?: unknown }
 > {
   try {
     const bytes = await readFile(filePath)
@@ -402,8 +418,8 @@ async function readSmallUtf8(filePath: string): Promise<
       return { ok: false, reason: "too_large" }
     }
     return { ok: true, content: UTF8_DECODER.decode(bytes) }
-  } catch {
-    return { ok: false, reason: "read_error" }
+  } catch (error) {
+    return { ok: false, reason: "read_error", error }
   }
 }
 
@@ -489,6 +505,11 @@ async function loadCache(root: string, model: string, rebuild: boolean): Promise
     if (isMissingPathError(error)) {
       return { status: "ok", cache: emptyCache(model) }
     }
+    logger.warn("DragonScale tiling cache corrupt", {
+      cachePath,
+      model,
+      ...errorLogMeta(error),
+    })
     return {
       status: "cache-corrupt",
       cache: emptyCache(model),
@@ -826,4 +847,13 @@ function isMissingPathError(error: unknown): boolean {
     && "code" in error
     && ((error as { readonly code?: unknown }).code === "ENOENT"
       || (error as { readonly code?: unknown }).code === "ENOTDIR")
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
+  const raw = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: raw.length,
+    errorMessage: sanitizeError(raw),
+  }
 }

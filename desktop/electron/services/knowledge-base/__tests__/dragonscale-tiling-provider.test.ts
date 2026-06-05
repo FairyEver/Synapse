@@ -1,6 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+const dragonScaleLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => dragonScaleLogger,
+}))
 
 import {
   DragonScaleOllamaEmbeddingProvider,
@@ -24,6 +34,9 @@ async function withServer(handler: (request: IncomingMessage, response: ServerRe
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()))
+  dragonScaleLogger.info.mockClear()
+  dragonScaleLogger.warn.mockClear()
+  dragonScaleLogger.error.mockClear()
 })
 
 describe("DragonScaleOllamaEmbeddingProvider", () => {
@@ -57,6 +70,35 @@ describe("DragonScaleOllamaEmbeddingProvider", () => {
     await expect(provider.isReachable(baseUrl)).resolves.toBe(true)
     await expect(provider.hasModel(baseUrl, "nomic-embed-text")).resolves.toBe(true)
     await expect(provider.hasModel(baseUrl, "other-model")).resolves.toBe(false)
+  })
+
+  it("logs Ollama reachability and model query failures", async () => {
+    const baseUrl = await withServer((_request, response) => {
+      response.statusCode = 500
+      response.end("{}")
+    })
+    const provider = new DragonScaleOllamaEmbeddingProvider()
+
+    await expect(provider.isReachable(baseUrl)).resolves.toBe(false)
+    await expect(provider.hasModel(baseUrl, "nomic-embed-text")).resolves.toBe(false)
+
+    expect(dragonScaleLogger.warn).toHaveBeenCalledWith(
+      "DragonScale Ollama reachability check failed",
+      expect.objectContaining({
+        url: baseUrl,
+        errorName: "Error",
+        errorMessage: "HTTP 500",
+      }),
+    )
+    expect(dragonScaleLogger.warn).toHaveBeenCalledWith(
+      "DragonScale Ollama model query failed",
+      expect.objectContaining({
+        url: baseUrl,
+        model: "nomic-embed-text",
+        errorName: "Error",
+        errorMessage: "HTTP 500",
+      }),
+    )
   })
 
   it("returns numeric embeddings and rejects malformed responses", async () => {

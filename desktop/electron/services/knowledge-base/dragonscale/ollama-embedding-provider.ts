@@ -3,16 +3,23 @@ import {
   DRAGONSCALE_TILING_MAX_RESPONSE_BYTES,
   type DragonScaleEmbeddingProvider,
 } from "./tiling-types"
+import { createMainLogger } from "../../log-store"
+import { sanitizeError } from "../../error-sanitize"
 
 const OLLAMA_TIMEOUT_MS = 3000
 const EMBED_TIMEOUT_MS = 30000
+const logger = createMainLogger("knowledge-base.dragonscale.ollama")
 
 export class DragonScaleOllamaEmbeddingProvider implements DragonScaleEmbeddingProvider {
   async isReachable(url: string): Promise<boolean> {
     try {
       await getJson(joinUrl(url, "/api/version"), OLLAMA_TIMEOUT_MS)
       return true
-    } catch {
+    } catch (error) {
+      logger.warn("DragonScale Ollama reachability check failed", {
+        url,
+        ...errorLogMeta(error),
+      })
       return false
     }
   }
@@ -25,7 +32,12 @@ export class DragonScaleOllamaEmbeddingProvider implements DragonScaleEmbeddingP
         if (!isRecord(entry) || typeof entry.name !== "string") return false
         return entry.name === model || entry.name.startsWith(`${model}:`)
       })
-    } catch {
+    } catch (error) {
+      logger.warn("DragonScale Ollama model query failed", {
+        url,
+        model,
+        ...errorLogMeta(error),
+      })
       return false
     }
   }
@@ -118,4 +130,13 @@ function joinUrl(base: string, suffix: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
+  const raw = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: raw.length,
+    errorMessage: sanitizeError(raw),
+  }
 }

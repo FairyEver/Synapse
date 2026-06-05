@@ -1,7 +1,17 @@
 import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+const dragonScaleLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => dragonScaleLogger,
+}))
 
 import {
   DragonScaleTilingService,
@@ -63,6 +73,9 @@ async function pathExists(filePath: string): Promise<boolean> {
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  dragonScaleLogger.info.mockClear()
+  dragonScaleLogger.warn.mockClear()
+  dragonScaleLogger.error.mockClear()
 })
 
 describe("DragonScaleTilingService", () => {
@@ -140,6 +153,13 @@ describe("DragonScaleTilingService", () => {
       symlink: 1,
       read_error: 1,
     })
+    expect(dragonScaleLogger.warn).toHaveBeenCalledWith(
+      "DragonScale tiling page read failed",
+      expect.objectContaining({
+        pagePath: "wiki/concepts/Invalid.md",
+        reason: "read_error",
+      }),
+    )
   })
 
   it("uses cache hits for unchanged bodies and ignores frontmatter-only changes", async () => {
@@ -193,6 +213,13 @@ describe("DragonScaleTilingService", () => {
 
     expect(result.status).toBe("cache-corrupt")
     await expect(readFile(path.join(root, ".vault-meta", "tiling-cache.json"), "utf8")).resolves.toBe("{ bad json")
+    expect(dragonScaleLogger.warn).toHaveBeenCalledWith(
+      "DragonScale tiling cache corrupt",
+      expect.objectContaining({
+        cachePath: path.join(root, ".vault-meta", "tiling-cache.json"),
+        errorName: "SyntaxError",
+      }),
+    )
   })
 
   it("rejects a symlinked metadata directory before writing the tiling cache", async () => {
@@ -253,6 +280,15 @@ describe("DragonScaleTilingService", () => {
     const result = await new DragonScaleTilingService({ embeddingProvider: provider }).check(root)
 
     expect(result.skipped).toMatchObject({ embed_error: 1 })
+    expect(dragonScaleLogger.warn).toHaveBeenCalledWith(
+      "DragonScale tiling embed failed",
+      expect.objectContaining({
+        pagePath: "wiki/concepts/Fail.md",
+        model: "nomic-embed-text",
+        errorName: "Error",
+        errorMessage: "fake embed failure",
+      }),
+    )
     expect(result.warnings).toEqual([
       "cosine skip (wiki/concepts/Alpha.md, wiki/concepts/Short.md): dimension mismatch",
     ])
