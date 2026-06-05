@@ -16,6 +16,7 @@ import {
 } from "@/lib/default-agent-workspace"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
+import { track } from "@/lib/ui-tracking"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
 import type {
   SynapseAgentDisplayProfile,
@@ -74,6 +75,39 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
 type AgentModuleProps = {
   pendingAgentSession?: OpenAgentSessionPayload | null
   onPendingAgentSessionConsumed?: () => void
+}
+
+type DirectSendTrackInput = {
+  readonly name: "agent-quick-input-direct-send" | "agent-knowledge-base-command-send"
+  readonly boundary: string
+  readonly content: string
+  readonly target: PendingMessageTarget
+  readonly sending: boolean
+  readonly preserveDraft?: boolean
+  readonly commandName?: string
+}
+
+function trackDirectAgentSend(input: DirectSendTrackInput): void {
+  track({
+    component: "agent",
+    name: input.name,
+    action: "submit",
+    metadata: {
+      boundary: input.boundary,
+      contentLength: input.content.length,
+      ...(input.commandName ? { commandName: input.commandName } : {}),
+      projectId: input.target.projectId,
+      conversationId: input.target.conversationId,
+      sessionKey: input.target.sessionKey,
+      sending: input.sending,
+      ...(input.preserveDraft === undefined ? {} : { preserveDraft: input.preserveDraft }),
+    },
+  })
+}
+
+function slashCommandName(content: string): string {
+  const [commandName] = content.trim().split(/\s+/, 1)
+  return commandName?.startsWith("/") ? commandName : "unknown"
 }
 
 function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: AgentModuleProps) {
@@ -259,9 +293,22 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     ])
   }
 
-  const submitContent = async (content: string, options: { preserveDraft?: boolean } = {}) => {
+  const submitContent = async (
+    content: string,
+    options: { preserveDraft?: boolean; trackSource?: "quick-input-direct" } = {},
+  ) => {
     if (!content || !selectedTarget) return
     const preserveDraft = options.preserveDraft === true
+    if (options.trackSource === "quick-input-direct") {
+      trackDirectAgentSend({
+        name: "agent-quick-input-direct-send",
+        boundary: "renderer.agent.quick-input-direct-send",
+        content,
+        target: selectedTarget,
+        sending: chat.sending,
+        preserveDraft,
+      })
+    }
     if (!preserveDraft) {
       setDraft("")
     }
@@ -444,6 +491,14 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const sendComposerCommand = async (commandText: string) => {
     const content = commandText.trim()
     if (!content || !selectedTarget) return
+    trackDirectAgentSend({
+      name: "agent-knowledge-base-command-send",
+      boundary: "renderer.agent.knowledge-base-command-send",
+      content,
+      commandName: slashCommandName(content),
+      target: selectedTarget,
+      sending: chat.sending,
+    })
     stick.forcePin()
     if (chat.sending) {
       queueMessage(content, selectedTarget)
@@ -621,7 +676,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 void chat.createSession(projectId, selectedSession?.providerId, mode)
               }}
               onDraftChange={setDraft}
-              onQuickInputDirectSend={(content) => void submitContent(content, { preserveDraft: true })}
+              onQuickInputDirectSend={(content) =>
+                void submitContent(content, { preserveDraft: true, trackSource: "quick-input-direct" })}
               slashCandidates={slashCandidates}
               knowledgeBaseActions={knowledgeBaseActions}
               onKnowledgeBaseCommand={sendComposerCommand}

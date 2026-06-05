@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => {
       onJumpToBottom?: () => void
       knowledgeBaseActions?: readonly unknown[]
       onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
+      onQuickInputDirectSend?: (content: string) => void | Promise<void>
     } | null,
     timelineProps: null as {
       onOpenReference?: (reference: string) => void
@@ -58,6 +59,7 @@ const mocks = vi.hoisted(() => {
       warn: vi.fn(),
       debug: vi.fn(),
     },
+    track: vi.fn(),
   }
 })
 
@@ -90,6 +92,11 @@ vi.mock("@/app-shell/use-repository-manager", () => ({
 
 vi.mock("@/lib/runtime-platform", () => ({
   getRendererPlatform: () => "darwin",
+}))
+
+vi.mock("@/lib/ui-tracking", () => ({
+  extractLabel: () => "button",
+  track: mocks.track,
 }))
 
 vi.mock("../hooks/use-agent-chat", () => ({
@@ -142,6 +149,7 @@ vi.mock("../components/agent-composer", () => ({
     onJumpToBottom?: () => void
     knowledgeBaseActions?: readonly unknown[]
     onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
+    onQuickInputDirectSend?: (content: string) => void | Promise<void>
   }) => {
     mocks.composerProps = props
     return <form />
@@ -696,7 +704,65 @@ describe("AgentModule pending prompt sessions", () => {
       conversationId: "conversation-1",
       sessionKey: "local:renderer",
     })
+    expect(mocks.track).toHaveBeenCalledWith({
+      component: "agent",
+      name: "agent-knowledge-base-command-send",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.agent.knowledge-base-command-send",
+        contentLength: 10,
+        commandName: "/wiki-lint",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        sending: false,
+      },
+    })
     expect(mocks.toast.error).toHaveBeenCalledWith("发送失败")
+  })
+
+  it("tracks quick input direct sends without recording the snippet body", async () => {
+    const sendMessage = vi.fn().mockResolvedValue(true)
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      sendMessage,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      await mocks.composerProps?.onQuickInputDirectSend?.("snippet token=secret-value")
+    })
+
+    expect(sendMessage).toHaveBeenCalledWith("snippet token=secret-value", {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })
+    expect(mocks.track).toHaveBeenCalledWith({
+      component: "agent",
+      name: "agent-quick-input-direct-send",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.agent.quick-input-direct-send",
+        contentLength: 26,
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        sending: false,
+        preserveDraft: true,
+      },
+    })
+    expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("secret-value")
   })
 
   it("hides knowledge base actions for incomplete managed knowledge base capabilities", async () => {
