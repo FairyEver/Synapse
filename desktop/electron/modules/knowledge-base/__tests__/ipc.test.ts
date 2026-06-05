@@ -91,10 +91,11 @@ describe("knowledgeBaseIpcModule", () => {
     const result = await harness.invoke("synapse:knowledge-base:create-managed", {
       projectId: "kb-1",
       name: "Knowledge",
-    }) as { projectPath: string }
+    }) as { projectPath: string; runtimePath?: string }
 
     expect(createManaged).toHaveBeenCalledWith({ projectId: "kb-1", name: "Knowledge" })
     expect(result.projectPath).toBe("synapse-kb://kb-1")
+    expect(result.runtimePath).toBeUndefined()
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.write",
       actor: { kind: "user" },
@@ -166,7 +167,6 @@ describe("knowledgeBaseIpcModule", () => {
 
     expect(result).toEqual({
       projectId: "kb-1",
-      runtimePath: "/UserData/knowledge-bases/kb-1",
       deleted: true,
     })
     expect(deleteManaged).toHaveBeenCalledWith({ projectId: "kb-1", runtimeId: "kb-1" })

@@ -84,12 +84,10 @@ function createSynapseBridgeMocks() {
       createManaged: vi.fn<(payload: SynapseKnowledgeBaseCreateManagedPayload) => Promise<SynapseKnowledgeBaseCreateManagedResult>>().mockResolvedValue({
         projectId: "new-project-id",
         projectPath: "synapse-kb://new-project-id",
-        runtimePath: "/UserData/knowledge-bases/new-project-id",
         templateVersion: "2026-05-24",
       }),
       deleteManaged: vi.fn<(payload: SynapseKnowledgeBaseDeleteManagedPayload) => Promise<SynapseKnowledgeBaseDeleteManagedResult>>().mockResolvedValue({
         projectId: "project-1",
-        runtimePath: "/UserData/knowledge-bases/project-1",
         deleted: true,
       }),
       openSourceManager: vi.fn<(payload: { projectId: string; projectName: string }) => Promise<void>>().mockResolvedValue(undefined),
@@ -410,7 +408,6 @@ describe("ProjectListEditor knowledge base actions", () => {
       pendingCreate.resolve({
         projectId: "new-project-id",
         projectPath: "synapse-kb://new-project-id",
-        runtimePath: "/UserData/knowledge-bases/new-project-id",
         templateVersion: "2026-05-24",
       })
       await pendingCreate.promise

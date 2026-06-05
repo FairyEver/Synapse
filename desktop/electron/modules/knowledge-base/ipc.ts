@@ -19,7 +19,6 @@ const createManagedPayloadSchema = z.object({
 const createManagedResultSchema = z.object({
   projectId: z.string(),
   projectPath: z.string(),
-  runtimePath: z.string(),
   templateVersion: z.string(),
   templateSource: z.object({
     repo: z.string().optional(),
@@ -35,7 +34,6 @@ const deleteManagedPayloadSchema = z.object({
 
 const deleteManagedResultSchema = z.object({
   projectId: z.string(),
-  runtimePath: z.string(),
   deleted: z.boolean(),
 })
 

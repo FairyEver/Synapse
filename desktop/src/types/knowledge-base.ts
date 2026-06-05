@@ -6,7 +6,6 @@ export type SynapseKnowledgeBaseCreateManagedPayload = {
 export type SynapseKnowledgeBaseCreateManagedResult = {
   projectId: string
   projectPath: string
-  runtimePath: string
   templateVersion: string
   templateSource?: {
     repo?: string
@@ -22,7 +21,6 @@ export type SynapseKnowledgeBaseDeleteManagedPayload = {
 
 export type SynapseKnowledgeBaseDeleteManagedResult = {
   projectId: string
-  runtimePath: string
   deleted: boolean
 }
 

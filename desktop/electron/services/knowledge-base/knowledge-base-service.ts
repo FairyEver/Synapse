@@ -55,6 +55,14 @@ type KnowledgeBaseServiceDeps = {
   trashItem?: (targetPath: string) => Promise<void>
 }
 
+type ManagedKnowledgeBaseCreateResult = SynapseKnowledgeBaseCreateManagedResult & {
+  runtimePath: string
+}
+
+type ManagedKnowledgeBaseDeleteResult = SynapseKnowledgeBaseDeleteManagedResult & {
+  runtimePath: string
+}
+
 export class KnowledgeBaseService {
   private readonly managedTemplateRoot: string
   private readonly userDataPath: string
@@ -79,7 +87,7 @@ export class KnowledgeBaseService {
     this.trashItem = deps.trashItem ?? ((targetPath) => shell.trashItem(targetPath))
   }
 
-  async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
+  async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<ManagedKnowledgeBaseCreateResult> {
     if (this.activeManagedCreates.has(payload.projectId)) {
       logger.warn("Managed Knowledge Base create rejected because project creation is already active.", {
         projectId: payload.projectId,
@@ -94,7 +102,7 @@ export class KnowledgeBaseService {
     }
   }
 
-  private async createManagedUnlocked(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
+  private async createManagedUnlocked(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<ManagedKnowledgeBaseCreateResult> {
     const project: SynapseProjectConfig = {
       id: payload.projectId,
       name: payload.name,
@@ -152,7 +160,7 @@ export class KnowledgeBaseService {
     }
   }
 
-  async deleteManaged(payload: SynapseKnowledgeBaseDeleteManagedPayload): Promise<SynapseKnowledgeBaseDeleteManagedResult> {
+  async deleteManaged(payload: SynapseKnowledgeBaseDeleteManagedPayload): Promise<ManagedKnowledgeBaseDeleteResult> {
     const runtimePath = payload.runtimeId
       ? await this.resolveRuntimePath(payload.runtimeId)
       : await this.resolveProjectPath(payload.projectId)
