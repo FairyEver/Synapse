@@ -1,5 +1,7 @@
 # Managed Knowledge Base Runtime Design
 
+> Template naming update: `docs/superpowers/specs/2026-06-05-synapse-knowledge-base-white-label-design.md` supersedes the `claude-obsidian-template` path and branding in this historical design. Current implementation work should use `synapse-knowledge-base-template` and keep upstream references isolated to sync metadata and attribution.
+
 ## Summary
 
 Synapse will change Knowledge Base from a user-selected visible vault into a Synapse-managed project type.

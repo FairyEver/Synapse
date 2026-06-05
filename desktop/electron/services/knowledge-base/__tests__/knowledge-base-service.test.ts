@@ -98,6 +98,7 @@ describe("KnowledgeBaseService", () => {
     await writeFile(path.join(templateRoot, ".vault-meta", "tiling-thresholds.json"), "{\"version\":1}\n", "utf8")
     await writeFile(path.join(templateRoot, ".claude-plugin", "plugin.json"), "{\"name\":\"kb\"}\n", "utf8")
     await writeFile(path.join(templateRoot, "SOURCE.json"), JSON.stringify({
+      templateName: "synapse-knowledge-base",
       repo: "https://github.com/AgriciDaniel/claude-obsidian",
       commit: "75d3b6feb77b96c6bb16599c4550cc9703553d87",
       syncedAt: "2026-05-24",
@@ -134,6 +135,53 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(result.runtimePath, ".vault-meta", "tiling-thresholds.json"), "utf8")).resolves.toBe("{\"version\":1}\n")
     await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8")).resolves.toContain("kb")
     await expect(readFile(path.join(templateRoot, ".vault-meta", "address-counter.txt"), "utf8")).resolves.toBe("3\n")
+  })
+
+  it("uses the Synapse Knowledge Base template path by default", async () => {
+    const userDataPath = await tempDir()
+    const appRoot = await tempDir()
+    const templateRoot = path.join(appRoot, "resources", "knowledge-base", "synapse-knowledge-base-template")
+    await mkdir(path.join(templateRoot, "wiki"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".raw"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".vault-meta"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".claude-plugin"), { recursive: true })
+    await writeFile(path.join(templateRoot, "wiki", "index.md"), "# Example Index\n", "utf8")
+    await writeFile(path.join(templateRoot, ".claude-plugin", "plugin.json"), "{\"name\":\"synapse-knowledge-base\"}\n", "utf8")
+
+    const service = new KnowledgeBaseService({
+      userDataPath,
+      getAppPathForTest: () => appRoot,
+    })
+
+    const result = await service.createManaged({ projectId: "kb-new-template", name: "Knowledge" })
+
+    await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8"))
+      .resolves.toContain("synapse-knowledge-base")
+  })
+
+  it("falls back to the legacy template path when the new template is absent", async () => {
+    const userDataPath = await tempDir()
+    const appRoot = await tempDir()
+    const legacyTemplateRoot = path.join(appRoot, "resources", "knowledge-base", ["claude", "obsidian", "template"].join("-"))
+    await mkdir(path.join(legacyTemplateRoot, "wiki"), { recursive: true })
+    await mkdir(path.join(legacyTemplateRoot, ".raw"), { recursive: true })
+    await mkdir(path.join(legacyTemplateRoot, ".vault-meta"), { recursive: true })
+    await mkdir(path.join(legacyTemplateRoot, ".claude-plugin"), { recursive: true })
+    await writeFile(path.join(legacyTemplateRoot, "wiki", "index.md"), "# Example Index\n", "utf8")
+    await writeFile(path.join(legacyTemplateRoot, ".claude-plugin", "plugin.json"), "{\"name\":\"legacy\"}\n", "utf8")
+
+    const service = new KnowledgeBaseService({
+      userDataPath,
+      getAppPathForTest: () => appRoot,
+    })
+
+    const result = await service.createManaged({ projectId: "kb-legacy-template", name: "Knowledge" })
+
+    await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8"))
+      .resolves.toContain("legacy")
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Managed Knowledge Base template fell back to legacy path.", {
+      legacyTemplateRoot,
+    })
   })
 
   it("rejects concurrent managed knowledge base creation for the same project", async () => {

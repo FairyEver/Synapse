@@ -215,13 +215,13 @@ describe("agent slash menu utilities", () => {
       },
       {
         name: "obsidian-bases",
-        description: "创建或编辑 Obsidian Bases",
+        description: "创建或编辑知识库表格视图",
         kind: "knowledgeBase",
         insertText: "/obsidian-bases ",
       },
       {
         name: "obsidian-markdown",
-        description: "按 Obsidian 语法编写页面",
+        description: "按知识库 Markdown 语法编写页面",
         kind: "knowledgeBase",
         insertText: "/obsidian-markdown ",
       },

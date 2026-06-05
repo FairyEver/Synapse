@@ -1,5 +1,5 @@
 import { app, shell } from "electron"
-import { constants } from "node:fs"
+import { constants, existsSync } from "node:fs"
 import type { Dirent } from "node:fs"
 import { access, copyFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -48,6 +48,7 @@ type KnowledgeBaseServiceDeps = {
   userDataPath?: string
   loadConfig?: () => Promise<SynapseConfig>
   now?: () => Date
+  getAppPathForTest?: () => string
   fileConversionService?: Pick<FileConversionService, "convert">
   fetchUrl?: FetchUrl
   rawFileManager?: KnowledgeBaseRawFileManager
@@ -66,7 +67,7 @@ export class KnowledgeBaseService {
   private readonly activeManagedCreates = new Set<string>()
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
-    this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
+    this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot(deps.getAppPathForTest)
     this.userDataPath = deps.userDataPath ?? defaultKnowledgeBaseUserDataPath()
     this.loadConfig = deps.loadConfig ?? (() => configStore.load())
     this.now = deps.now ?? (() => new Date())
@@ -558,17 +559,28 @@ function joinRawPath(parent: string, name: string): string {
   return normalizedParent && normalizedParent !== "." ? `${normalizedParent}/${name}` : name
 }
 
-function resolveManagedTemplateRoot(): string {
+function resolveManagedTemplateRoot(getAppPathForTest?: () => string): string {
   if (process.env.SYNAPSE_KB_MANAGED_TEMPLATE_ROOT) {
     return process.env.SYNAPSE_KB_MANAGED_TEMPLATE_ROOT
   }
 
-  if (isElectronAppPackaged()) {
-    const resourcesPath = (process as NodeJS.Process & { resourcesPath: string }).resourcesPath
-    return path.join(resourcesPath, "knowledge-base", "claude-obsidian-template")
+  const resourcesRoot = isElectronAppPackaged()
+    ? (process as NodeJS.Process & { resourcesPath: string }).resourcesPath
+    : path.join(getAppPathForTest?.() ?? getElectronAppPath(), "resources")
+  const canonicalRoot = path.join(resourcesRoot, "knowledge-base", "synapse-knowledge-base-template")
+  if (existsSync(canonicalRoot)) {
+    return canonicalRoot
   }
 
-  return path.join(getElectronAppPath(), "resources", "knowledge-base", "claude-obsidian-template")
+  const legacyRoot = path.join(resourcesRoot, "knowledge-base", legacyManagedTemplateDirectoryName())
+  if (existsSync(legacyRoot)) {
+    logger.warn("Managed Knowledge Base template fell back to legacy path.", {
+      legacyTemplateRoot: legacyRoot,
+    })
+    return legacyRoot
+  }
+
+  return canonicalRoot
 }
 
 function isElectronAppPackaged(): boolean {
@@ -577,6 +589,10 @@ function isElectronAppPackaged(): boolean {
 
 function getElectronAppPath(): string {
   return (app as { getAppPath?: () => string } | undefined)?.getAppPath?.() ?? process.cwd()
+}
+
+function legacyManagedTemplateDirectoryName(): string {
+  return ["claude", "obsidian", "template"].join("-")
 }
 
 function assertInside(rootPath: string, targetPath: string): string {

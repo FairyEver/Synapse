@@ -1,0 +1,30 @@
+{
+  "name": "synapse-knowledge-base",
+  "owner": {
+    "name": "AgriciDaniel",
+    "url": "https://github.com/AgriciDaniel"
+  },
+  "metadata": {
+    "description": "Synapse Knowledge Base: Synapse Knowledge Base knowledge companion by AgriciDaniel",
+    "version": "1.6.0"
+  },
+  "plugins": [
+    {
+      "name": "Synapse Knowledge Base",
+      "source": {
+        "source": "github",
+        "repo": "AgriciDaniel/Synapse Knowledge Base",
+        "ref": "main"
+      },
+      "description": "Synapse Knowledge Base knowledge companion. Sets up a persistent, compounding wiki vault. Covers memory management, session notetaking, knowledge organization, and agent context across projects. Optional DragonScale Memory extension adds hierarchical log folds, deterministic page addresses, embedding-based semantic tiling lint, and boundary-first autoresearch topic selection.",
+      "version": "1.6.0",
+      "author": {
+        "name": "AgriciDaniel",
+        "url": "https://github.com/AgriciDaniel"
+      },
+      "homepage": "https://github.com/AgriciDaniel/Synapse Knowledge Base",
+      "repository": "https://github.com/AgriciDaniel/Synapse Knowledge Base",
+      "license": "MIT"
+    }
+  ]
+}

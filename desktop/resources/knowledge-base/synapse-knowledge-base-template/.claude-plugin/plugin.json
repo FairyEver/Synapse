@@ -1,0 +1,16 @@
+{
+  "name": "synapse-knowledge-base",
+  "version": "1.6.0",
+  "description": "Synapse Knowledge Base managed runtime. Provides wiki, source ingestion, query, save, lint, research, canvas, and maintenance skills for Synapse-managed knowledge bases.",
+  "author": {
+    "name": "AgriciDaniel",
+    "url": "https://github.com/AgriciDaniel"
+  },
+  "license": "MIT",
+  "keywords": [
+    "knowledge-base",
+    "wiki",
+    "markdown",
+    "synapse"
+  ]
+}

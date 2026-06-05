@@ -4,7 +4,7 @@
 
 Knowledge Base is a Synapse-managed project subtype. Users create it from project settings by entering a name; Synapse creates the real backing directory under app-managed storage and registers the project with a virtual `synapse-kb://<id>` path.
 
-The backing directory is initialized from `desktop/resources/knowledge-base/claude-obsidian-template/`, which is synced from `AgriciDaniel/claude-obsidian`. It may contain Claude Code plugin, command, hook, skill, script, prompt, and wiki files because it is Synapse-owned runtime state, not a user-selected visible folder.
+The backing directory is initialized from `desktop/resources/knowledge-base/synapse-knowledge-base-template/`. That template is Synapse-branded runtime state synced from an upstream developer source by `pnpm run kb:sync-template`. It may contain Claude Code plugin, command, hook, skill, script, prompt, and wiki files because it is Synapse-owned runtime state, not a user-selected visible folder.
 
 ## Canonical Design
 
@@ -46,7 +46,7 @@ Older visible-vault docs are superseded for new knowledge bases.
 
 ## Implementation Notes
 
-- `pnpm run kb:sync-template` refreshes the developer template from `AgriciDaniel/claude-obsidian`.
+- `pnpm run kb:sync-template` refreshes the developer template from the upstream runtime source and applies Synapse Knowledge Base branding before committing the template.
 - Project config stores `capabilities.knowledgeBase.managed: true` and `runtimeId`.
 - Renderer project lists show the Knowledge Base name, not its real path.
 - Agent conversations resolve managed Knowledge Base projects to their backing directory before launching the session.

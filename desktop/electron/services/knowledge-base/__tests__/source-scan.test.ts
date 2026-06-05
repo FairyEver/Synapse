@@ -88,7 +88,7 @@ describe("knowledge base source scan", () => {
     ])
   })
 
-  it("preserves claude-obsidian manifest metadata and raw-relative source entries", async () => {
+  it("preserves knowledge base manifest metadata and raw-relative source entries", async () => {
     const root = await tempDir()
     await mkdir(path.join(root, ".raw"), { recursive: true })
     await writeFile(path.join(root, ".raw", "a.md"), "alpha\n")

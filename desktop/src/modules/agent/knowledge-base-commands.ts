@@ -22,8 +22,8 @@ export const KNOWLEDGE_BASE_AGENT_CAPABILITIES: readonly KnowledgeBaseAgentCapab
   }]),
   knowledgeBaseCapability("canvas", "创建或更新知识库画布"),
   knowledgeBaseCapability("defuddle", "清理网页正文后用于入库"),
-  knowledgeBaseCapability("obsidian-bases", "创建或编辑 Obsidian Bases"),
-  knowledgeBaseCapability("obsidian-markdown", "按 Obsidian 语法编写页面"),
+  knowledgeBaseCapability("obsidian-bases", "创建或编辑知识库表格视图"),
+  knowledgeBaseCapability("obsidian-markdown", "按知识库 Markdown 语法编写页面"),
   knowledgeBaseCapability("save", "保存当前对话或关键结论", [{
     label: "保存对话",
     action: "insert",

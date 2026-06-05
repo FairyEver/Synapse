@@ -51,8 +51,8 @@
 ### 模块硬边界摘要
 
 - Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 app-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。
-- Knowledge Base 托管运行目录可以包含来自内置 `claude-obsidian` 模板的 Claude Code plugin、skill、command、hook、脚本、提示词和 `CLAUDE.md`，因为它不是用户选择的可见项目目录。
-- Knowledge Base 不再通过临时 SDK 注入把资源拼装到用户可见 vault；但托管知识库会话可以、且应当把自身 backing directory 作为 Claude Code SDK local plugin 加载，以激活内置 `claude-obsidian` 的 plugin、skill、command 与允许的 hook。Agent 会话仍必须把托管知识库项目解析到其 backing directory，普通项目不得加载知识库 runtime 行为。
+- Knowledge Base 托管运行目录可以包含来自内置 Synapse Knowledge Base 模板的 Claude Code plugin、skill、command、hook、脚本、提示词和 `CLAUDE.md`，因为它不是用户选择的可见项目目录。
+- Knowledge Base 不再通过临时 SDK 注入把资源拼装到用户可见 vault；但托管知识库会话可以、且应当把自身 backing directory 作为 Claude Code SDK local plugin 加载，以激活内置 Synapse Knowledge Base runtime 的 plugin、skill、command 与允许的 hook。Agent 会话仍必须把托管知识库项目解析到其 backing directory，普通项目不得加载知识库 runtime 行为。
 - Knowledge Base 专用逻辑必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 和最小 renderer 项目能力 UI。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Agent 会话创建只能基于已配置项目；新会话必须绑定 `agentType`；运行时状态按 conversation 隔离，不要让同项目多会话共享队列、busy 状态或 live session。
 - Agent composer slash menu 只负责插入 `/<name>`，不得立即执行或发送；不得改成通用命令面板；不得新增 renderer 侧目录扫描器或改变后端 command/skill 解析语义。
@@ -65,7 +65,7 @@
 
 ## 知识库相关
 
-本节记录 Knowledge Base 的长期边界。后续 agent 修改知识库、Agent Runtime、Claude Code SDK 参数、MCP 注册诊断或 `claude-obsidian` 模板时，必须先读本节。
+本节记录 Knowledge Base 的长期边界。后续 agent 修改知识库、Agent Runtime、Claude Code SDK 参数、MCP 注册诊断或 Synapse Knowledge Base 模板时，必须先读本节。
 
 ### 产品与运行边界
 
@@ -91,7 +91,7 @@
 
 ### 新建 runtime 初始化
 
-- `desktop/resources/knowledge-base/claude-obsidian-template/` 可以完整同步上游 runtime 资源；新建 Knowledge Base 的数据净化发生在 runtime 创建阶段，不靠手工删模板来保证用户新库干净。
+- `desktop/resources/knowledge-base/synapse-knowledge-base-template/` 可以完整同步上游 runtime 资源，并在同步后完成 Synapse Knowledge Base 白标转换；新建 Knowledge Base 的数据净化发生在 runtime 创建阶段，不靠手工删模板来保证用户新库干净。
 - 新建 Knowledge Base 可以先复制模板，但必须重置数据层，不能继承上游 demo `wiki/` 页面、`.raw/` source 或示例 manifest。
 - 新建 runtime 的最小 wiki 骨架必须包含：`wiki/index.md`、`wiki/hot.md`、`wiki/log.md`、`wiki/overview.md`、`wiki/sources/_index.md`、`wiki/concepts/_index.md`、`wiki/entities/_index.md`、`wiki/questions/_index.md` 和空的 `wiki/meta/`。
 - 新建 runtime 的 `.raw/` 必须重置为 `.raw/.gitkeep` 和空 `.raw/.manifest.json`；manifest 结构必须保留 `version`、`sources` 和 `address_map`，其中 `sources` 与 `address_map` 初始为空对象。
@@ -100,10 +100,10 @@
 - `createManaged()` 复制模板或净化失败时，必须删除本次新建的 runtime 目录并抛出原错误；清理失败只能结构化 warn，不能留下半初始化的托管知识库目录。
 - 修改新建 runtime 初始化逻辑时，测试必须覆盖：demo wiki/raw 不被继承、最小骨架存在、manifest 为空、runtime 资产保留、address counter 重置、非语义 `.vault-meta` 配置保留、失败回滚。
 
-### `claude-obsidian` 模板更新约定
+### Synapse Knowledge Base 模板更新约定
 
-- 模板里不得把 `~/Desktop/claude-obsidian`、开发机绝对路径或上游作者本地路径写进新知识库默认 wiki/hot/log 内容。需要路径时基于当前 cwd/backing directory。
-- `/save`、`save` skill 和“记录到知识库”默认语义是保存当前对话、结论或洞察为结构化 wiki note；不要把它们改成一律创建 `.raw/` 原始资料文件。这个语义应尽量跟随上游 `claude-obsidian`。
+- 模板里不得把开发机绝对路径、旧上游作者本地路径或其它不可移植路径写进新知识库默认 wiki/hot/log 内容。需要路径时基于当前 cwd/backing directory。
+- `/save`、`save` skill 和“记录到知识库”默认语义是保存当前对话、结论或洞察为结构化 wiki note；不要把它们改成一律创建 `.raw/` 原始资料文件。这个语义应尽量跟随上游 runtime 行为。
 - “保存笔记”和“资料摄入”必须保持产品语义区分：只有用户明确要求摄入资料、处理 source、导入文件、写入 `.raw/`，或通过资料管理 UI 添加材料时，才把内容作为 raw source 落到 `.raw/`。
 - 如果新增“作为资料摄入”类入口，必须先通过 Knowledge Base raw file manager 写入 `.raw/` 中真实 source，再由 `/wiki-ingest` 处理；不要让资料管理上传入口自动做 source staging，也不要让 agent 凭空把已生成的 wiki 页面倒填为 source。
 - `/wiki-ingest` 只能处理 `.raw/` 中真实存在的新/变更 source。不要让 agent 凭空手写 source manifest；manifest 更新应保留既有 `sources` 和 `address_map`，代码侧优先使用既有 Knowledge Base manifest 写入能力。
@@ -113,7 +113,7 @@
 
 - 不自动迁移、删除或重写已有用户知识库内容。需要清理旧知识库或迁移已有内容时，必须提供显式入口和用户确认。
 - Agent 会话启动、SessionStart 前置处理或后台 hygiene 流程不得为了清理模板残留而改写已有知识库的 `wiki/hot.md`、`wiki/`、`.raw/`、manifest、log 或 `.vault-meta/`。模板 hook 可以在会话中读取 `wiki/hot.md` 恢复上下文，但 Synapse 启动代码不得把读取变成自动修复写入。
-- 旧知识库若包含上游 `claude-obsidian` 本地路径，只能在用户明确触发迁移/清理时窄范围处理明确的旧 `Repo Locations`/`~/Desktop/claude-obsidian` 提示。不得为修复路径误导而重建、清空或批量重写用户内容。
+- 旧知识库若包含上游本地路径，只能在用户明确触发迁移/清理时窄范围处理明确的旧路径提示。不得为修复路径误导而重建、清空或批量重写用户内容。
 
 ### MCP、权限、诊断和日志
 
