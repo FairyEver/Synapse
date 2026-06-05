@@ -270,7 +270,8 @@ describe("UserAuthService", () => {
       expiresAt: new Date("2999-01-01T00:00:00.000Z"),
       user: { id: "user-1", email: "desktop@example.com", status: "active" },
     })
-    const service = createService(prisma)
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
 
     await expect(service.exchangeDesktopLoginToken({
       code: "desktop-code",
@@ -281,6 +282,76 @@ describe("UserAuthService", () => {
       .rejects
       .toThrow("登录凭证无效或已过期。")
     expect(prisma.desktopLoginCode.updateMany).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "desktop@example.com",
+      action: "user.desktop_login.exchange.failure",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { reason: "code_already_used" },
+      ipAddress: "127.0.0.1",
+    })
+  })
+
+  it("records the desktop login exchange failure reason when the code is missing", async () => {
+    const prisma = createPrismaMock()
+    prisma.desktopLoginCode.findUnique.mockResolvedValue(null)
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.exchangeDesktopLoginToken({
+      code: "missing-code",
+      state: "state-1234567890",
+      codeVerifier: "desktop-code-verifier-1234567890",
+      ipAddress: "127.0.0.2",
+    }))
+      .rejects
+      .toThrow("登录凭证无效或已过期。")
+    expect(prisma.desktopLoginCode.updateMany).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "unknown",
+      action: "user.desktop_login.exchange.failure",
+      targetType: "user",
+      targetId: "unknown",
+      detail: { reason: "code_not_found" },
+      ipAddress: "127.0.0.2",
+    })
+  })
+
+  it("records the desktop login exchange failure reason for concurrent claims", async () => {
+    const prisma = createPrismaMock()
+    prisma.desktopLoginCode.findUnique.mockResolvedValue({
+      id: "code-1",
+      userId: "user-1",
+      codeHash: "hash",
+      clientId: "synapse-desktop",
+      redirectUri: "synapse://auth/desktop/callback",
+      state: "state-1234567890",
+      codeChallenge: pkceChallenge("desktop-code-verifier-1234567890"),
+      codeChallengeMethod: "S256",
+      usedAt: null,
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      user: { id: "user-1", email: "desktop@example.com", status: "active" },
+    })
+    prisma.__tx.desktopLoginCode.updateMany.mockResolvedValue({ count: 0 })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.exchangeDesktopLoginToken({
+      code: "desktop-code",
+      state: "state-1234567890",
+      codeVerifier: "desktop-code-verifier-1234567890",
+      ipAddress: "127.0.0.3",
+    }))
+      .rejects
+      .toThrow("登录凭证无效或已过期。")
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "desktop@example.com",
+      action: "user.desktop_login.exchange.failure",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { reason: "concurrent_race" },
+      ipAddress: "127.0.0.3",
+    })
   })
 
   it("rejects desktop login token requests when PKCE verification fails", async () => {

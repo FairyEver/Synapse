@@ -62,6 +62,29 @@ const desktopClientId = "synapse-desktop"
 const desktopRedirectUri = "synapse://auth/desktop/callback"
 const pkceS256Method = "S256"
 
+type DesktopLoginExchangeFailureReason =
+  | "code_not_found"
+  | "code_already_used"
+  | "code_expired"
+  | "invalid_client"
+  | "invalid_redirect_uri"
+  | "invalid_code_challenge_method"
+  | "state_mismatch"
+  | "pkce_mismatch"
+  | "user_disabled"
+  | "concurrent_race"
+
+type DesktopLoginExchangeRecord = {
+  readonly clientId: string
+  readonly redirectUri: string
+  readonly state: string
+  readonly codeChallenge: string
+  readonly codeChallengeMethod: string
+  readonly usedAt: Date | null
+  readonly expiresAt: Date
+  readonly user: Pick<User, "id" | "email" | "status">
+}
+
 function buildDesktopDeepLink(code: string, state: string): string {
   const query = new URLSearchParams({ code, state })
   return `${desktopRedirectUri}?${query.toString()}`
@@ -81,6 +104,24 @@ function timingSafeEqualText(left: string, right: string): boolean {
 
 function createPkceS256Challenge(codeVerifier: string): string {
   return createHash("sha256").update(codeVerifier).digest("base64url")
+}
+
+function desktopLoginExchangeFailureReason(
+  record: DesktopLoginExchangeRecord | null,
+  now: Date,
+  state: string,
+  codeVerifier: string,
+): DesktopLoginExchangeFailureReason | null {
+  if (!record) return "code_not_found"
+  if (record.usedAt) return "code_already_used"
+  if (record.expiresAt <= now) return "code_expired"
+  if (record.clientId !== desktopClientId) return "invalid_client"
+  if (record.redirectUri !== desktopRedirectUri) return "invalid_redirect_uri"
+  if (record.codeChallengeMethod !== pkceS256Method) return "invalid_code_challenge_method"
+  if (!timingSafeEqualText(record.state, state)) return "state_mismatch"
+  if (!timingSafeEqualText(record.codeChallenge, createPkceS256Challenge(codeVerifier))) return "pkce_mismatch"
+  if (record.user.status !== "active") return "user_disabled"
+  return null
 }
 
 function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, passwordChangedAt?: Date | null): boolean {
@@ -401,18 +442,9 @@ export class UserAuthService {
       include: { user: true },
     })
     const now = new Date()
-    if (
-      !record ||
-      record.usedAt ||
-      record.expiresAt <= now ||
-      record.clientId !== desktopClientId ||
-      record.redirectUri !== desktopRedirectUri ||
-      record.codeChallengeMethod !== pkceS256Method ||
-      !timingSafeEqualText(record.state, state) ||
-      !timingSafeEqualText(record.codeChallenge, createPkceS256Challenge(codeVerifier)) ||
-      record.user.status !== "active"
-    ) {
-      await this.recordDesktopLoginExchangeFailure(record, input.ipAddress)
+    const failureReason = desktopLoginExchangeFailureReason(record, now, state, codeVerifier)
+    if (failureReason || !record) {
+      await this.recordDesktopLoginExchangeFailure(record, input.ipAddress, failureReason ?? "code_not_found")
       throw new UnauthorizedException("登录凭证无效或已过期。")
     }
 
@@ -430,7 +462,7 @@ export class UserAuthService {
       })
     } catch (error) {
       if (error instanceof UnauthorizedException) {
-        await this.recordDesktopLoginExchangeFailure(record, input.ipAddress)
+        await this.recordDesktopLoginExchangeFailure(record, input.ipAddress, "concurrent_race")
       }
       throw error
     }
@@ -705,12 +737,14 @@ export class UserAuthService {
   private async recordDesktopLoginExchangeFailure(
     record: { user?: Pick<User, "id" | "email"> } | null,
     ipAddress: string,
+    reason: DesktopLoginExchangeFailureReason,
   ): Promise<void> {
     await this.auditLog?.record({
       adminEmail: record?.user?.email ?? "unknown",
       action: "user.desktop_login.exchange.failure",
       targetType: "user",
       targetId: record?.user?.id ?? "unknown",
+      detail: { reason },
       ipAddress,
     })
   }
