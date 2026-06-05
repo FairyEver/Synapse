@@ -248,6 +248,45 @@ describe("variable capability dispatcher", () => {
     }))
   })
 
+  it("authorizes and audits variable renames against the new variable name", async () => {
+    const { auditEvents, dispatcher, permissionGuard } = createHarness(baseConfig)
+
+    await expect(
+      dispatcher.dispatch(
+        "variable.item.update",
+        { name: "TOKEN", newName: "RENAMED_TOKEN" },
+        { source: "mcp-http" },
+      ),
+    ).resolves.toMatchObject({
+      data: {
+        variable: { name: "RENAMED_TOKEN", hasValue: true },
+        updated: true,
+      },
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "secret.write",
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+      resource: "variable:user:RENAMED_TOKEN",
+      context: {
+        source: "mcp-http",
+        variableAction: "variable.item.update",
+        variableName: "RENAMED_TOKEN",
+        includeValue: false,
+      },
+    })
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
+      resource: "variable:user:RENAMED_TOKEN",
+      metadata: expect.objectContaining({ variableName: "RENAMED_TOKEN" }),
+    }))
+    expect(auditEvents).not.toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      resource: "variable:user:TOKEN",
+    }))
+  })
+
   it("rejects invalid scopes names duplicates and missing creation values", async () => {
     const { dispatcher } = createHarness(baseConfig)
 

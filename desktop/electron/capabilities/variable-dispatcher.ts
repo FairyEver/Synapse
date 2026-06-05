@@ -342,7 +342,7 @@ async function updateVariable(
       ...(description ? { description } : undefined),
     }
     variables[index] = updated
-    const audit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
+    const audit = await authorizeSecret(deps, "secret.write", action, context, updated.name, false)
     await persistVariablesWithAudit(deps, variables, audit)
     return { ok: true, data: { ...variableResponse(updated), updated: true } }
   })
