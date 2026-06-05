@@ -251,6 +251,35 @@ describe("ReactiveScheduler", () => {
     expect(cb.readyOrder).toEqual(["switch", "a", "c", "d"])
   })
 
+  it("does not start a node when the final skipped dependency arrives after a failed upstream", async () => {
+    const edges = [
+      { from: "fail", to: "z" },
+      { from: "active", to: "z" },
+      { from: "switch", to: "z" },
+    ]
+    const cb = makeCallbacks(edges)
+    cb.resolveActivatedDownstream = (nodeId) => {
+      if (nodeId === "switch") return []
+      return edges.filter((e) => e.from === nodeId).map((e) => e.to)
+    }
+    const s = new ReactiveScheduler()
+    const results = await s.execute(
+      ["fail", "active", "switch", "z"], edges,
+      (id) => ({
+        nodeId: id,
+        execute: () => {
+          if (id === "fail") return Promise.resolve(fail(id))
+          if (id === "switch") return delayed(5, ok(id))
+          return Promise.resolve(ok(id))
+        },
+      }),
+      cb, new AbortController().signal,
+    )
+
+    expect(cb.readyOrder).not.toContain("z")
+    expect(results.get("z")).toMatchObject({ status: "skipped", error: "upstream failed" })
+  })
+
   it("emits done callbacks for nodes skipped through inactive branch propagation", async () => {
     const edges = [{ from: "switch", to: "inactive" }]
     const done: NodeExecOutcome[] = []

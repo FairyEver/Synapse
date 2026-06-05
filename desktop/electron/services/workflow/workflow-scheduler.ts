@@ -104,7 +104,8 @@ export class ReactiveScheduler {
     const releaseSkippedDependency = (nodeId: string) => {
       const updated = decrementPending(nodeId)
       if (updated !== 0) return
-      if ((activeSignals.get(nodeId) ?? 0) > 0) tryStart(nodeId)
+      if (failedUpstream.has(nodeId)) skipNodeAndPropagate(nodeId, "upstream failed")
+      else if ((activeSignals.get(nodeId) ?? 0) > 0) tryStart(nodeId)
       else skipNodeAndPropagate(nodeId)
     }
     const releaseFailedDependency = (nodeId: string) => {
