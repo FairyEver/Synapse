@@ -84,4 +84,59 @@ describe("createKnowledgeBaseSourceManagerWindowService", () => {
     expect(loadWindow).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
+
+  it("cleans up tracking state when loading the source manager window fails", async () => {
+    const firstWindow = createMockWindow()
+    const secondWindow = createMockWindow()
+    const windows = [firstWindow, secondWindow]
+    const health = { attach: vi.fn(), detach: vi.fn() }
+    const createWindow = vi.fn(() => windows.shift() as never)
+    const loadError = new Error("load failed")
+    const loadWindow = vi.fn()
+      .mockRejectedValueOnce(loadError)
+      .mockResolvedValueOnce(undefined)
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const service = createKnowledgeBaseSourceManagerWindowService({
+      createWindow,
+      createHealthService: vi.fn(() => health),
+      getAppPath: () => "/app",
+      getIconPath: () => null,
+      getPreloadPath: () => "/preload.js",
+      logger,
+      loadWindow,
+    })
+
+    await expect(service.open({
+      projectId: "project-1",
+      projectName: "知识库001",
+    })).rejects.toThrow(loadError)
+    await expect(service.open({
+      projectId: "project-1",
+      projectName: "知识库001",
+    })).resolves.toBeUndefined()
+
+    expect(createWindow).toHaveBeenCalledTimes(2)
+    expect(loadWindow).toHaveBeenCalledTimes(2)
+    expect(health.detach).toHaveBeenCalledTimes(1)
+    expect(firstWindow.focus).not.toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith(
+      "Failed to load knowledge base source manager window.",
+      { error: loadError, projectId: "project-1" },
+    )
+  })
 })
+
+function createMockWindow() {
+  return {
+    webContents: {
+      on: vi.fn(),
+    },
+    close: vi.fn(),
+    focus: vi.fn(),
+    isDestroyed: vi.fn(() => false),
+    isMinimized: vi.fn(() => false),
+    once: vi.fn(),
+    on: vi.fn(),
+    show: vi.fn(),
+  }
+}

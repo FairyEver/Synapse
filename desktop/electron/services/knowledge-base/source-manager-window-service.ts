@@ -118,6 +118,15 @@ function createKnowledgeBaseSourceManagerWindowService(deps: SourceManagerWindow
       const health = deps.createHealthService(payload)
       health.attach(window.webContents)
       sourceManagerWindowHealthServices.set(window, health)
+      let cleanedUp = false
+      const cleanupWindowTracking = () => {
+        if (cleanedUp) return
+        cleanedUp = true
+        health.detach()
+        sourceManagerWindowHealthServices.delete(window)
+        sourceManagerWindows.delete(window)
+        windowsByKey.delete(key)
+      }
 
       window.webContents.on("preload-error", (_event, _preloadPath, error) => {
         deps.logger.error("Knowledge base source manager preload script failed.", { error })
@@ -128,13 +137,22 @@ function createKnowledgeBaseSourceManagerWindowService(deps: SourceManagerWindow
       })
 
       window.on("closed", () => {
-        health.detach()
-        sourceManagerWindowHealthServices.delete(window)
-        sourceManagerWindows.delete(window)
-        windowsByKey.delete(key)
+        cleanupWindowTracking()
       })
 
-      await (deps.loadWindow ?? loadSourceManagerWindow)(window, payload)
+      try {
+        await (deps.loadWindow ?? loadSourceManagerWindow)(window, payload)
+      } catch (error) {
+        cleanupWindowTracking()
+        deps.logger.error("Failed to load knowledge base source manager window.", {
+          error,
+          ...createWindowLogMetadata(payload),
+        })
+        if (!window.isDestroyed()) {
+          window.close()
+        }
+        throw error
+      }
     },
   }
 }
