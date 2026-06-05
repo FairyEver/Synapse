@@ -299,7 +299,16 @@ class RepositoryGitService {
       }
 
       if (pullSucceeded) {
-        const aheadCount = await getAheadCount(repository.localPath)
+        let aheadCount = 0
+
+        try {
+          aheadCount = await getAheadCount(repository.localPath)
+        } catch (error) {
+          logger.warn("Failed to determine ahead count after pull.", {
+            repositoryUuid: repository.uuid,
+            error,
+          })
+        }
 
         if (aheadCount > 0) {
           logger.info("Local branch is ahead after pull. Pushing automatically.", {
