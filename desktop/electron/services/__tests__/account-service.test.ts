@@ -537,6 +537,97 @@ describe("AccountService", () => {
     expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
   })
 
+  it("lists account webhooks with the authenticated desktop token", async () => {
+    const calls: string[] = []
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        calls.push(String(url))
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        if (String(url).endsWith("/dashboard/webhooks")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse([{
+            id: "webhook-1",
+            publicId: "wh_123",
+            name: "GitHub",
+            enabled: true,
+            maskedUrl: "https://synapse.test/webhooks/wh_123/***",
+            createdAt: "2026-06-06T10:00:00.000Z",
+            updatedAt: "2026-06-06T10:00:00.000Z",
+          }])
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+    await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
+
+    const webhooks = await service.listWebhooks()
+
+    expect(webhooks).toEqual([expect.objectContaining({ publicId: "wh_123", name: "GitHub" })])
+    expect(calls).toEqual([
+      "http://localhost:3000/api/auth/desktop/token",
+      "http://localhost:3000/api/auth/me",
+      "http://localhost:3000/api/dashboard/webhooks",
+    ])
+  })
+
+  it("refreshes and retries account webhook list when the access token expires", async () => {
+    const calls: string[] = []
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        calls.push(String(url))
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ accessToken: "access-old", refreshToken: "refresh-old" })
+        }
+        if (String(url).endsWith("/auth/me") && calls.filter((item) => item.endsWith("/auth/me")).length === 1) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        if (String(url).endsWith("/dashboard/webhooks") && calls.filter((item) => item.endsWith("/dashboard/webhooks")).length === 1) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
+          return jsonResponse({ error: "stale access" }, 401)
+        }
+        if (String(url).endsWith("/auth/refresh")) {
+          expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+          return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        if (String(url).endsWith("/dashboard/webhooks")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+          return jsonResponse([])
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+    await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
+
+    await expect(service.listWebhooks()).resolves.toEqual([])
+
+    expect(calls).toEqual([
+      "http://localhost:3000/api/auth/desktop/token",
+      "http://localhost:3000/api/auth/me",
+      "http://localhost:3000/api/dashboard/webhooks",
+      "http://localhost:3000/api/auth/refresh",
+      "http://localhost:3000/api/auth/me",
+      "http://localhost:3000/api/dashboard/webhooks",
+    ])
+    expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
+  })
+
   it("keeps stored credentials and enters offline when refresh has a network error", async () => {
     const { namespace, service } = await createTestAccountService({
       fetch: vi.fn(async () => {

@@ -245,7 +245,7 @@ describe("LiveConnectionService", () => {
     service.handleAccountState(authenticatedState)
     await flushPromises()
     socket.emit("message", JSON.stringify({
-      type: "webhook.delivery.received",
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
       id: "msg-webhook",
       sentAt: "2026-06-06T10:00:01.000Z",
       payload: {

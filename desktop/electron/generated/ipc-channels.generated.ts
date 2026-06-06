@@ -12,6 +12,7 @@ export const IPC_CHANNELS = {
     "startLogin": "synapse:account:start-login",
     "refresh": "synapse:account:refresh",
     "logout": "synapse:account:logout",
+    "listWebhooks": "synapse:account:webhooks:list",
     "stateChanged": "synapse:events:account",
   },
   "live": {

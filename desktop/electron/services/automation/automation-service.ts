@@ -340,7 +340,7 @@ export class AutomationService {
         continue
       }
       try {
-        const accepted = trigger.runtime.shouldAcceptEvent({ config: parsedConfig.data, event })
+        const accepted = await trigger.runtime.shouldAcceptEvent({ config: parsedConfig.data, event })
         if (!accepted) continue
         matchedCount += 1
       } catch (error) {

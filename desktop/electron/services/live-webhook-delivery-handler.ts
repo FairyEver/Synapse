@@ -3,6 +3,8 @@ import type { AutomationTriggerEvent } from "./automation/types"
 import type { AutomationService } from "./automation"
 import { createMainLogger } from "./log-store"
 
+const liveProtocolPromise = import("@synapse/shared")
+
 type LiveWebhookDeliveryLogger = Pick<ReturnType<typeof createMainLogger>, "info" | "warn">
 
 export interface LiveWebhookDeliveryHandlerDeps {
@@ -20,7 +22,7 @@ export class LiveWebhookDeliveryHandler {
   }
 
   async handle(payload: WebhookDeliveryReceivedPayload): Promise<void> {
-    const event = createWebhookAutomationEvent(payload)
+    const event = await createWebhookAutomationEvent(payload)
     try {
       const runs = await this.automation.acceptEvent(event)
       this.logger.info("Live webhook delivery accepted.", {
@@ -44,12 +46,13 @@ export class LiveWebhookDeliveryHandler {
   }
 }
 
-export function createWebhookAutomationEvent(
+export async function createWebhookAutomationEvent(
   payload: WebhookDeliveryReceivedPayload,
-): AutomationTriggerEvent {
+): Promise<AutomationTriggerEvent> {
+  const { LIVE_MESSAGE_TYPES } = await liveProtocolPromise
   return {
     source: "webhook",
-    type: "webhook.delivery.received",
+    type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
     receivedAt: payload.request.receivedAt,
     payload: {
       deliveryId: payload.deliveryId,

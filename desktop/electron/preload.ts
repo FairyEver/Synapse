@@ -295,6 +295,7 @@ const IPC_CHANNELS = {
     "startLogin": "synapse:account:start-login",
     "refresh": "synapse:account:refresh",
     "logout": "synapse:account:logout",
+    "listWebhooks": "synapse:account:webhooks:list",
     "stateChanged": "synapse:events:account",
   },
   "live": {
@@ -508,6 +509,7 @@ const synapseBridge: SynapseBridge = {
     startLogin: invoke(IPC_CHANNELS.account.startLogin),
     refresh: invoke(IPC_CHANNELS.account.refresh),
     logout: invoke(IPC_CHANNELS.account.logout),
+    listWebhooks: invoke(IPC_CHANNELS.account.listWebhooks),
     onStateChanged: createDomainEventPayloadSubscription<SynapseAccountStateChangedEvent>(
       subscribe,
       "account",

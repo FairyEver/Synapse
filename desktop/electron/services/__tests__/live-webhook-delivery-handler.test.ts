@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 import { LiveWebhookDeliveryHandler, createWebhookAutomationEvent } from "../live-webhook-delivery-handler"
 
 vi.mock("../log-store", () => ({
@@ -25,10 +26,10 @@ const payload = {
 } as const
 
 describe("LiveWebhookDeliveryHandler", () => {
-  it("maps shared webhook payloads to automation trigger events", () => {
-    expect(createWebhookAutomationEvent(payload)).toEqual({
+  it("maps shared webhook payloads to automation trigger events", async () => {
+    await expect(createWebhookAutomationEvent(payload)).resolves.toEqual({
       source: "webhook",
-      type: "webhook.delivery.received",
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
       receivedAt: "2026-06-06T10:00:00.000Z",
       payload: {
         deliveryId: "delivery-1",
@@ -58,7 +59,7 @@ describe("LiveWebhookDeliveryHandler", () => {
 
     await handler.handle(payload)
 
-    expect(automation.acceptEvent).toHaveBeenCalledWith(createWebhookAutomationEvent(payload))
+    await expect(createWebhookAutomationEvent(payload)).resolves.toEqual(automation.acceptEvent.mock.calls[0]?.[0])
     expect(logger.info).toHaveBeenCalledWith("Live webhook delivery accepted.", {
       source: "live-webhook",
       deliveryId: "delivery-1",
@@ -96,4 +97,3 @@ describe("LiveWebhookDeliveryHandler", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("body payload")
   })
 })
-

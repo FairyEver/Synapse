@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http"
 import { Socket } from "node:net"
 import { Logger } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
+import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 import {
   createLiveDesktopGatewayForTest,
   LiveDesktopGateway,
@@ -386,7 +387,7 @@ describe("LiveDesktopGateway", () => {
     other.emit("message", JSON.stringify(helloFor("client-c")))
 
     const result = gateway.broadcastToUser("user-1", {
-      type: "webhook.delivery.received",
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
       id: "delivery-msg-1",
       sentAt: "2026-06-06T10:00:02.000Z",
       payload: webhookDeliveryPayload(),
@@ -397,9 +398,9 @@ describe("LiveDesktopGateway", () => {
       sentClientCount: 2,
       failedClientCount: 0,
     })
-    expect(first.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(true)
-    expect(second.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(true)
-    expect(other.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(false)
+    expect(first.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(true)
+    expect(second.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(true)
+    expect(other.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(false)
   })
 
   it("counts closed online sockets as failed broadcasts", () => {
@@ -419,7 +420,7 @@ describe("LiveDesktopGateway", () => {
     socket.readyState = 3
 
     const result = gateway.broadcastToUser("user-1", {
-      type: "webhook.delivery.received",
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
       id: "delivery-msg-1",
       sentAt: "2026-06-06T10:00:02.000Z",
       payload: webhookDeliveryPayload(),
@@ -430,7 +431,7 @@ describe("LiveDesktopGateway", () => {
       sentClientCount: 0,
       failedClientCount: 1,
     })
-    expect(socket.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(false)
+    expect(socket.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(false)
   })
 
   it("counts send failures without logging raw delivery payload", () => {
@@ -451,7 +452,7 @@ describe("LiveDesktopGateway", () => {
     socket.shouldThrowOnSend = true
 
     const result = gateway.broadcastToUser("user-1", {
-      type: "webhook.delivery.received",
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
       id: "delivery-msg-1",
       sentAt: "2026-06-06T10:00:02.000Z",
       payload: webhookDeliveryPayload(),
@@ -466,7 +467,7 @@ describe("LiveDesktopGateway", () => {
     expect(logged).toContain("Live user broadcast failed")
     expect(logged).not.toContain("secret-token-123")
     expect(logged).not.toContain("bodyText")
-    expect(logged).not.toContain("webhook.delivery.received")
+    expect(logged).not.toContain(LIVE_MESSAGE_TYPES.webhookDeliveryReceived)
     warn.mockRestore()
   })
 
