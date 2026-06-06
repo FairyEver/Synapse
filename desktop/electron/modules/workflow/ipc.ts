@@ -318,6 +318,23 @@ const workflowImportPreviewSchema = z.object({
   suggestedMappings: z.array(workflowModelMappingSchema),
 })
 
+const workflowUsageCostBreakdownCnySchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cacheRead: z.number(),
+  cacheWrite: z.number(),
+  reasoning: z.number(),
+})
+
+const workflowNodeUsageCostSchema = z.object({
+  modelName: z.string().optional(),
+  costCny: z.number().optional(),
+  costBreakdownCny: workflowUsageCostBreakdownCnySchema.optional(),
+  costCurrency: z.literal("CNY").optional(),
+  priceKnown: z.boolean().optional(),
+  estimatedCost: z.boolean().optional(),
+})
+
 const nodeRunResultSchema: z.ZodType<NodeRunResult> = z.object({
   nodeId: z.string(),
   status: z.enum(["pending", "running", "success", "failed", "cancelled", "skipped"]),
@@ -337,6 +354,7 @@ const nodeRunResultSchema: z.ZodType<NodeRunResult> = z.object({
   costUsd: z.number().optional(),
   costCny: z.number().optional(),
   costCurrency: z.literal("CNY").optional(),
+  usageCost: workflowNodeUsageCostSchema.optional(),
 })
 
 const workflowRunStatusSchema: z.ZodType<WorkflowRunStatus> = z.object({

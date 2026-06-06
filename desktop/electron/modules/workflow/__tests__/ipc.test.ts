@@ -851,6 +851,20 @@ describe("workflowIpcModule", () => {
       cache_read_input_tokens: 30,
       cache_creation_input_tokens: 4,
     }
+    const usageCost = {
+      modelName: "claude-sonnet-4",
+      costCny: 0.08,
+      costBreakdownCny: {
+        input: 0.01,
+        output: 0.02,
+        cacheRead: 0.03,
+        cacheWrite: 0.01,
+        reasoning: 0.01,
+      },
+      costCurrency: "CNY" as const,
+      priceKnown: true,
+      estimatedCost: true,
+    }
     const runStatuses = new Map<string, WorkflowRunStatus>()
     runStatuses.set("run-usage", {
       runId: "run-usage",
@@ -863,6 +877,7 @@ describe("workflowIpcModule", () => {
           input: { variables: {} },
           output: "done",
           usage,
+          usageCost,
           costUsd: 0.01,
         },
       },
@@ -882,7 +897,7 @@ describe("workflowIpcModule", () => {
 
     expect(status).toEqual(expect.objectContaining({
       nodeResults: {
-        "node-1": expect.objectContaining({ usage, costUsd: 0.01 }),
+        "node-1": expect.objectContaining({ usage, usageCost, costUsd: 0.01 }),
       },
     }))
     expect(logStoreMock.logger.info).toHaveBeenCalledWith("run-status served from memory", {
