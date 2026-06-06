@@ -66,6 +66,25 @@ export type AdminUserRow = {
   updatedAt: string
 }
 
+export type LiveClientRow = {
+  userId?: string
+  clientInstanceId: string
+  status: 'online' | 'stale' | 'offline'
+  appVersion: string
+  platform: string
+  deviceName: string
+  connectedAt: string | null
+  lastSeenAt: string | null
+  disconnectedAt?: string
+  disconnectReason?: string
+}
+
+export type LiveClientChangedEvent = {
+  type: 'live.client.changed'
+  client: LiveClientRow
+  occurredAt: string
+}
+
 export type AdminTeamRow = {
   id: string
   name: string
@@ -309,6 +328,30 @@ function dateQueryValue(value: Date) {
   return value.toISOString().slice(0, 10)
 }
 
+function subscribeServerEvents<TEvent>(
+  path: string,
+  eventType: string,
+  onEvent: (event: TEvent) => void,
+  onError?: () => void
+) {
+  const source = new EventSource(path, { withCredentials: true })
+
+  source.addEventListener(eventType, (message) => {
+    try {
+      onEvent(JSON.parse((message as MessageEvent<string>).data) as TEvent)
+    } catch {
+      onError?.()
+    }
+  })
+  source.onerror = () => {
+    onError?.()
+  }
+
+  return () => {
+    source.close()
+  }
+}
+
 async function downloadFile(path: string, filename: string) {
   const response = await fetch(path, { credentials: 'include' })
 
@@ -353,6 +396,18 @@ export const dashboardApi = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  listLiveClients: () =>
+    request<LiveClientRow[]>(`${dashboardApiBasePath}/live-clients`),
+  subscribeLiveClients: (
+    onEvent: (event: LiveClientChangedEvent) => void,
+    onError?: () => void
+  ) =>
+    subscribeServerEvents<LiveClientChangedEvent>(
+      `${dashboardApiBasePath}/live/stream`,
+      'live.client.changed',
+      onEvent,
+      onError
+    ),
   authorizeDesktopLogin: (input: DesktopAuthorizeInput) =>
     request<DesktopAuthorizationResult>(desktopAuthorizePath, {
       method: 'POST',
@@ -380,6 +435,22 @@ export const adminApi = {
   listUsers: (options: PaginationOptions = {}) =>
     request<PaginatedResponse<AdminUserRow>>(
       `${adminApiBasePath}/users${paginationSuffix(options)}`
+    ),
+  listLiveClients: () =>
+    request<LiveClientRow[]>(`${adminApiBasePath}/live-clients`),
+  listUserLiveClients: (id: string) =>
+    request<LiveClientRow[]>(
+      `${adminApiBasePath}/users/${encodeURIComponent(id)}/live-clients`
+    ),
+  subscribeLiveClients: (
+    onEvent: (event: LiveClientChangedEvent) => void,
+    onError?: () => void
+  ) =>
+    subscribeServerEvents<LiveClientChangedEvent>(
+      `${adminApiBasePath}/live/stream`,
+      'live.client.changed',
+      onEvent,
+      onError
     ),
   updateUserStatus: (id: string, status: 'active' | 'disabled') =>
     request<AdminUserRow>(`${adminApiBasePath}/users/${id}/status`, {

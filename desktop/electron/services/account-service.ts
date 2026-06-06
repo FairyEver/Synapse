@@ -69,6 +69,10 @@ function apiBaseUrl(isPackaged: boolean): string {
   return isPackaged ? PROD_API_BASE_URL : DEV_API_BASE_URL
 }
 
+export function getAccountApiBaseUrl(isPackaged: boolean): string {
+  return apiBaseUrl(isPackaged)
+}
+
 function apiMode(isPackaged: boolean): "production" | "development" {
   return isPackaged ? "production" : "development"
 }
@@ -149,6 +153,14 @@ export class AccountService {
 
   getState(): SynapseAccountState {
     return this.state
+  }
+
+  getAccessTokenForLive(): string | null {
+    return this.accessToken
+  }
+
+  getApiBaseUrlForLive(): string {
+    return apiBaseUrl(this.isPackaged)
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {

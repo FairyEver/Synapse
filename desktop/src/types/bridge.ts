@@ -20,6 +20,10 @@ import type {
   SynapseAccountStateChangedEvent,
 } from "./account"
 import type {
+  SynapseLiveState,
+  SynapseLiveStateChangedEvent,
+} from "./live"
+import type {
   SynapseAgentCancelTurnResult,
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
@@ -609,6 +613,10 @@ export type SynapseBridge = {
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
+  }
+  live: {
+    getState: () => Promise<SynapseLiveState>
+    onStateChanged: (listener: (event: SynapseLiveStateChangedEvent) => void) => () => void
   }
   content: {
     list: <T extends SynapseContentType>(

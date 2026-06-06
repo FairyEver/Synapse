@@ -29,6 +29,7 @@ import { workflowIpcModule } from "../modules/workflow/ipc"
 import { knowledgeBaseIpcModule } from "../modules/knowledge-base/ipc"
 import { toolsIpcModule } from "../modules/tools/ipc"
 import { accountIpcModule } from "../modules/account/ipc"
+import { liveIpcModule } from "../modules/live/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -60,6 +61,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(knowledgeBaseIpcModule, ctx)
   registry.register(toolsIpcModule, ctx)
   registry.register(accountIpcModule, ctx)
+  registry.register(liveIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
 
   return registry
@@ -90,5 +92,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   knowledgeBaseIpcModule,
   toolsIpcModule,
   accountIpcModule,
+  liveIpcModule,
   opsIpcModule,
 ]

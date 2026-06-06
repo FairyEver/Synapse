@@ -41,6 +41,7 @@ const desktopRoot = path.resolve(scriptDir, "../..")
  */
 const MODULE_SOURCES = [
   { id: "account", importPath: "electron/modules/account/ipc.ts" },
+  { id: "live", importPath: "electron/modules/live/ipc.ts" },
   { id: "content", importPath: "electron/modules/content/ipc.ts" },
   { id: "config", importPath: "electron/modules/config/ipc.ts" },
   { id: "identity", importPath: "electron/modules/identity/ipc.ts" },

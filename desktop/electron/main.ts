@@ -8,6 +8,7 @@
 import { app, dialog } from "electron"
 import { createMainLogger } from "./services/log-store"
 import { accountService } from "./services/account-service"
+import { liveConnectionService } from "./services/live-connection-service-instance"
 import { installStatusCacheService } from "./services/install-status-cache-service"
 import { repositoryStore } from "./services/repository-store"
 import type { EventBus } from "./runtime/event-bus"
@@ -148,6 +149,12 @@ if (!gotSingleInstanceLock) {
       logger.info("Service registry started. Creating main window.")
       const eventBus = registry.get<EventBus>("core.event-bus")
       accountService.setEventBus(eventBus)
+      liveConnectionService.setEventBus(eventBus)
+      let lastLiveAccountState: unknown
+      accountService.onStateChanged((state) => {
+        lastLiveAccountState = state
+        liveConnectionService.handleAccountState(state)
+      })
       accountService.setExternalUrlOpener(createAccountExternalUrlOpener({
         auditSink: registry.get<AuditSink>("core.audit-sink"),
         permissionGuard: registry.get<PermissionGuard>("core.permission-guard"),
@@ -168,7 +175,11 @@ if (!gotSingleInstanceLock) {
       canHandleProtocolUrls = true
       const handledProtocolUrls = await drainProtocolUrls()
       if (handledProtocolUrls === 0) {
-        void accountService.refreshFromStorage()
+        void accountService.refreshFromStorage().then((state) => {
+          if (state !== lastLiveAccountState) {
+            liveConnectionService.handleAccountState(state)
+          }
+        })
       }
 
       attachBeforeQuitHandler({

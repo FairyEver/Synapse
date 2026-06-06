@@ -14,6 +14,10 @@ export const IPC_CHANNELS = {
     "logout": "synapse:account:logout",
     "stateChanged": "synapse:events:account",
   },
+  "live": {
+    "getState": "synapse:live:get-state",
+    "stateChanged": "synapse:events:live",
+  },
   "content": {
     "list": "synapse:content:list",
     "getContent": "synapse:content:get-content",

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import { AdminModule } from "./admin/admin.module"
 import { AppModule } from "./app.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
+import { LiveModule } from "./live/live.module"
 
 describe("AppModule", () => {
   it("registers audit logging at the application level", () => {
@@ -13,9 +14,14 @@ describe("AppModule", () => {
     expect(providersOf(AdminModule)).not.toEqual(expect.arrayContaining([
       { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     ]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([LiveModule]))
   })
 })
 
 function providersOf(moduleType: object): unknown[] {
   return Reflect.getMetadata(MODULE_METADATA.PROVIDERS, moduleType) ?? []
+}
+
+function importsOf(moduleType: object): unknown[] {
+  return Reflect.getMetadata(MODULE_METADATA.IMPORTS, moduleType) ?? []
 }

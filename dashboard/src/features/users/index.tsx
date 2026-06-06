@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { adminApi, type AdminUserRow } from '@/lib/api'
+import { adminApi, type AdminUserRow, type LiveClientRow } from '@/lib/api'
 import {
   DataTableColumnHeader,
   ServerDataTable,
@@ -12,7 +12,9 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { getLiveClientSummary, upsertLiveClient } from './live-client-utils'
 import { formatModulePermissionSummary } from './module-permissions'
+import { UserLiveClientsSheet } from './user-live-clients-sheet'
 import { UserModulePermissionsSheet } from './user-module-permissions-sheet'
 import { useUserModulePermissionsEditor } from './use-user-module-permissions-editor'
 import { getUsersTableError, getUsersTableLoading } from './users-page-error'
@@ -27,6 +29,10 @@ export default function UsersPage() {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
+  const [liveClients, setLiveClients] = useState<LiveClientRow[]>([])
+  const [liveClientsUser, setLiveClientsUser] = useState<AdminUserRow | null>(
+    null
+  )
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
   const permissionEditor = useUserModulePermissionsEditor()
@@ -44,6 +50,28 @@ export default function UsersPage() {
     queryKey: ['admin-module-permissions'],
     queryFn: () => adminApi.listModulePermissions(),
   })
+  const { data: liveClientSnapshot } = useQuery({
+    queryKey: ['admin-live-clients'],
+    queryFn: () => adminApi.listLiveClients(),
+  })
+
+  useEffect(() => {
+    if (liveClientSnapshot) {
+      setLiveClients(liveClientSnapshot)
+    }
+  }, [liveClientSnapshot])
+
+  useEffect(() => {
+    return adminApi.subscribeLiveClients(
+      (event) => {
+        setLiveClients((current) => upsertLiveClient(current, event))
+      },
+      () => {
+        void queryClient.invalidateQueries({ queryKey: ['admin-live-clients'] })
+      }
+    )
+  }, [queryClient])
+
   const isTableLoading = getUsersTableLoading({
     isUsersError: isError,
     isUsersLoading: isLoading,
@@ -115,6 +143,27 @@ export default function UsersPage() {
       enableSorting: false,
     },
     {
+      id: 'liveClients',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='客户端' />
+      ),
+      cell: ({ row }) => {
+        const summary = getLiveClientSummary(row.original.id, liveClients)
+
+        return (
+          <div className='flex flex-wrap items-center gap-2'>
+            <Badge variant={summary.onlineCount > 0 ? 'default' : 'outline'}>
+              {summary.label}
+            </Badge>
+            {summary.hasStale ? (
+              <Badge variant='secondary'>不稳定</Badge>
+            ) : null}
+          </div>
+        )
+      },
+      enableSorting: false,
+    },
+    {
       accessorKey: 'createdAt',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='创建时间' />
@@ -126,6 +175,13 @@ export default function UsersPage() {
       id: 'actions',
       cell: ({ row }) => (
         <div className='flex justify-end gap-2'>
+          <Button
+            variant='ghost'
+            className='h-8 px-2'
+            onClick={() => setLiveClientsUser(row.original)}
+          >
+            客户端
+          </Button>
           <Button
             variant='ghost'
             className='h-8 px-2'
@@ -150,6 +206,9 @@ export default function UsersPage() {
       enableHiding: false,
     },
   ]
+  const selectedUserLiveClients = liveClientsUser
+    ? liveClients.filter((client) => client.userId === liveClientsUser.id)
+    : []
 
   return (
     <>
@@ -190,6 +249,12 @@ export default function UsersPage() {
           onRetry={permissionEditor.retry}
           onSave={() => void permissionEditor.save()}
           onToggle={permissionEditor.toggle}
+        />
+        <UserLiveClientsSheet
+          open={Boolean(liveClientsUser)}
+          user={liveClientsUser}
+          clients={selectedUserLiveClients}
+          onClose={() => setLiveClientsUser(null)}
         />
       </Main>
     </>

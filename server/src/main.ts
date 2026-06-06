@@ -6,6 +6,7 @@ import { Logger, PinoLogger } from "nestjs-pino"
 import { AppModule } from "./app.module"
 import { AllExceptionsFilter } from "./common/all-exceptions.filter"
 import { loadEnv } from "./config/env"
+import { LiveDesktopGateway } from "./live/live-desktop.gateway"
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv(process.env)
@@ -23,6 +24,7 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   })
   app.enableShutdownHooks()
+  app.get(LiveDesktopGateway).attach(app.getHttpServer())
   await app.listen(env.port)
 }
 

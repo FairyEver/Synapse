@@ -9,6 +9,7 @@ import type { SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
 import type { OpenAgentSessionPayload } from "../src/types/agent-navigation"
 import type { SynapseAccountStateChangedEvent } from "../src/types/account"
+import type { SynapseLiveStateChangedEvent } from "../src/types/live"
 import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
 import type { InstallStatusChangedEvent } from "../src/types/install-status"
@@ -296,6 +297,10 @@ const IPC_CHANNELS = {
     "logout": "synapse:account:logout",
     "stateChanged": "synapse:events:account",
   },
+  "live": {
+    "getState": "synapse:live:get-state",
+    "stateChanged": "synapse:events:live",
+  },
 } as const satisfies IpcChannelMap
 
 // Legacy event channels that are not declared by IpcModule descriptors yet.
@@ -507,6 +512,14 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       "account",
       "account.stateChanged",
+    ),
+  },
+  live: {
+    getState: invoke(IPC_CHANNELS.live.getState),
+    onStateChanged: createDomainEventPayloadSubscription<SynapseLiveStateChangedEvent>(
+      subscribe,
+      "live",
+      "live.stateChanged",
     ),
   },
   content: {

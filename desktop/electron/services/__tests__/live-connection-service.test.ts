@@ -1,0 +1,306 @@
+import { EventEmitter } from "node:events"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { SynapseAccountState } from "../../../src/types/account"
+import { LiveConnectionService } from "../live-connection-service"
+
+vi.mock("electron", () => ({
+  app: {
+    getVersion: () => "0.2.253",
+  },
+}))
+
+vi.mock("node:os", () => ({
+  default: {
+    hostname: () => "MacBook",
+  },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => ({
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+  }),
+}))
+
+class FakeSocket extends EventEmitter {
+  readonly sent: string[] = []
+  readonly close = vi.fn()
+  readyState = 1
+
+  send(payload: string): void {
+    this.sent.push(payload)
+  }
+}
+
+const authenticatedState: SynapseAccountState = {
+  status: "authenticated",
+  profile: {
+    user: { id: "user-1", email: "u@example.com", displayName: null, status: "active" },
+    teams: [],
+    syncedAt: "2026-06-06T10:00:00.000Z",
+  },
+}
+
+function createAccountService(input: {
+  readonly token?: string | null
+  readonly apiBaseUrl?: string
+  readonly refreshFromStorage?: () => Promise<unknown>
+} = {}) {
+  const token = Object.prototype.hasOwnProperty.call(input, "token") ? input.token : "access-token"
+
+  return {
+    getAccessTokenForLive: vi.fn().mockReturnValue(token),
+    getApiBaseUrlForLive: vi.fn().mockReturnValue(input.apiBaseUrl ?? "http://localhost:3000/api"),
+    refreshFromStorage: vi.fn(input.refreshFromStorage ?? (async () => ({ status: "unauthenticated" }))),
+  }
+}
+
+function createTimerFns() {
+  const timers: Array<{ readonly delay: number; readonly callback: () => void }> = []
+  return {
+    timers,
+    setTimeout: vi.fn((callback: () => void, delay: number) => {
+      timers.push({ delay, callback })
+      return { delay } as unknown as NodeJS.Timeout
+    }),
+    clearTimeout: vi.fn(),
+  }
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
+describe("LiveConnectionService", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("creates socket with bearer header and waits for welcome before connected", async () => {
+    const socket = new FakeSocket()
+    const accountService = createAccountService()
+    const createSocket = vi.fn(() => socket as never)
+    const eventBus = { emit: vi.fn() }
+    const service = new LiveConnectionService({
+      accountService: accountService as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+      now: () => new Date("2026-06-06T10:00:00.000Z"),
+    })
+    service.setEventBus(eventBus as never)
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("open")
+
+    expect(createSocket).toHaveBeenCalledWith("ws://localhost:3000/api/live/desktop", {
+      headers: { Authorization: "Bearer access-token" },
+    })
+    expect(JSON.parse(socket.sent[0] ?? "{}")).toEqual({
+      type: "hello",
+      clientInstanceId: "client-a",
+      appVersion: "0.2.253",
+      platform: `${process.platform}-${process.arch}`,
+      deviceName: "MacBook",
+    })
+    expect(service.getState()).toMatchObject({ status: "reconnecting", clientInstanceId: "client-a" })
+
+    socket.emit("message", JSON.stringify({
+      type: "welcome",
+      connectionId: "conn-a",
+      serverTime: "2026-06-06T10:00:01.000Z",
+      heartbeatIntervalMs: 20_000,
+      heartbeatTimeoutMs: 45_000,
+    }))
+
+    expect(service.getState()).toMatchObject({
+      status: "connected",
+      clientInstanceId: "client-a",
+      connectedAt: "2026-06-06T10:00:00.000Z",
+      lastSeenAt: "2026-06-06T10:00:00.000Z",
+    })
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "live",
+      type: "live.stateChanged",
+    }))
+  })
+
+  it("updates last seen when pong arrives", async () => {
+    const socket = new FakeSocket()
+    const times = [
+      new Date("2026-06-06T10:00:00.000Z"),
+      new Date("2026-06-06T10:00:05.000Z"),
+    ]
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      now: () => times.shift() ?? new Date("2026-06-06T10:00:05.000Z"),
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("open")
+    socket.emit("message", JSON.stringify({
+      type: "welcome",
+      connectionId: "conn-a",
+      serverTime: "2026-06-06T10:00:01.000Z",
+      heartbeatIntervalMs: 20_000,
+      heartbeatTimeoutMs: 45_000,
+    }))
+    socket.emit("message", JSON.stringify({
+      type: "pong",
+      serverTime: "2026-06-06T10:00:05.000Z",
+    }))
+
+    expect(service.getState().lastSeenAt).toBe("2026-06-06T10:00:05.000Z")
+  })
+
+  it("closes the socket when account becomes unauthenticated", async () => {
+    const socket = new FakeSocket()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    service.handleAccountState({ status: "unauthenticated" })
+
+    expect(socket.close).toHaveBeenCalled()
+    expect(service.getState().status).toBe("unauthenticated")
+  })
+
+  it("cancels pending socket creation when account logs out during connect", async () => {
+    let resolveClientId: (clientInstanceId: string) => void = () => {}
+    const clientIdPromise = new Promise<string>((resolve) => {
+      resolveClientId = resolve
+    })
+    const createSocket = vi.fn()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockReturnValue(clientIdPromise) } as never,
+      createSocket,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    service.handleAccountState({ status: "unauthenticated" })
+    resolveClientId("client-a")
+    await flushPromises()
+
+    expect(createSocket).not.toHaveBeenCalled()
+    expect(service.getState().status).toBe("unauthenticated")
+  })
+
+  it("refreshes the token after websocket auth failure and reconnects with the new token", async () => {
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    let token: string | null = "expired-token"
+    const accountService = {
+      getAccessTokenForLive: vi.fn(() => token),
+      getApiBaseUrlForLive: vi.fn().mockReturnValue("http://localhost:3000/api"),
+      refreshFromStorage: vi.fn(async () => {
+        token = "fresh-token"
+        return { status: "authenticated" }
+      }),
+    }
+    const createSocket = vi.fn()
+      .mockReturnValueOnce(firstSocket as never)
+      .mockReturnValueOnce(secondSocket as never)
+    const service = new LiveConnectionService({
+      accountService: accountService as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    firstSocket.emit("error", new Error("Unexpected server response: 401"))
+    await flushPromises()
+
+    expect(accountService.refreshFromStorage).toHaveBeenCalledTimes(1)
+    expect(createSocket).toHaveBeenNthCalledWith(1, "ws://localhost:3000/api/live/desktop", {
+      headers: { Authorization: "Bearer expired-token" },
+    })
+    expect(createSocket).toHaveBeenNthCalledWith(2, "ws://localhost:3000/api/live/desktop", {
+      headers: { Authorization: "Bearer fresh-token" },
+    })
+  })
+
+  it("schedules reconnect on close without an immediate tight loop", async () => {
+    const socket = new FakeSocket()
+    const timers = createTimerFns()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay: () => 2_000,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("close")
+
+    expect(service.getState()).toMatchObject({
+      status: "reconnecting",
+      lastError: "连接已断开",
+    })
+    expect(timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 2_000)
+    expect(timers.timers).toHaveLength(1)
+  })
+
+  it("does not reset reconnect attempts before welcome", async () => {
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    const timers = createTimerFns()
+    const reconnectDelay = vi.fn((attempt: number) => 2_000 + attempt)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn()
+        .mockReturnValueOnce(firstSocket as never)
+        .mockReturnValueOnce(secondSocket as never),
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    firstSocket.emit("open")
+    firstSocket.emit("close")
+    timers.timers[0]?.callback()
+    await flushPromises()
+    secondSocket.emit("open")
+    secondSocket.emit("close")
+
+    expect(reconnectDelay).toHaveBeenNthCalledWith(1, 0)
+    expect(reconnectDelay).toHaveBeenNthCalledWith(2, 1)
+  })
+
+  it("refreshes once for a missing token and does not connect when still missing", async () => {
+    const accountService = createAccountService({ token: null })
+    const createSocket = vi.fn()
+    const service = new LiveConnectionService({
+      accountService: accountService as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+    })
+
+    await service.connect()
+
+    expect(accountService.refreshFromStorage).toHaveBeenCalledTimes(1)
+    expect(createSocket).not.toHaveBeenCalled()
+    expect(service.getState()).toMatchObject({
+      status: "unauthenticated",
+      lastError: "账号未登录",
+    })
+  })
+})
