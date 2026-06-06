@@ -72,6 +72,20 @@ describe("webhook sanitize", () => {
     expect(summary.bodyPreview?.length).toBeLessThan(2050)
   })
 
+  it("redacts inline text bearer, cookie, and token fragments", () => {
+    const summary = summarizeWebhookBody(
+      Buffer.from("Deploy with Authorization: Bearer bearer-secret and Cookie: sid=cookie-secret plus token=plain-secret."),
+      "text/plain",
+    )
+
+    expect(summary.bodyText).not.toContain("bearer-secret")
+    expect(summary.bodyText).not.toContain("cookie-secret")
+    expect(summary.bodyText).not.toContain("plain-secret")
+    expect(summary.bodyPreview).not.toContain("bearer-secret")
+    expect(summary.bodyPreview).not.toContain("cookie-secret")
+    expect(summary.bodyPreview).not.toContain("plain-secret")
+  })
+
   it("rejects unsupported content types", () => {
     expect(() => summarizeWebhookBody(Buffer.from([0, 1, 2]), "application/octet-stream"))
       .toThrow(UnsupportedMediaTypeException)

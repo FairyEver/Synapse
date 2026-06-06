@@ -93,11 +93,25 @@ function readHttpLikeError(exception: unknown): {
   message: string
 } | null {
   if (!exception || typeof exception !== "object") return null
-  const record = exception as { readonly status?: unknown; readonly statusCode?: unknown; readonly error?: unknown; readonly message?: unknown }
+  const record = exception as {
+    readonly status?: unknown
+    readonly statusCode?: unknown
+    readonly expose?: unknown
+    readonly error?: unknown
+    readonly message?: unknown
+  }
   const statusCode = typeof record.statusCode === "number"
     ? record.statusCode
     : typeof record.status === "number" ? record.status : undefined
   if (!statusCode || statusCode < 400 || statusCode > 599) return null
+  if (statusCode >= 500) {
+    return {
+      statusCode,
+      error: "Internal Server Error",
+      message: process.env.NODE_ENV === "production" ? "服务器内部错误。" : "服务器内部错误。",
+    }
+  }
+  if (record.expose !== true) return null
   return {
     statusCode,
     error: typeof record.error === "string" ? record.error : HttpStatus[statusCode] ?? "Error",

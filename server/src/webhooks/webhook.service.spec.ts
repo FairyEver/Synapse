@@ -1,4 +1,4 @@
-import { NotFoundException, PayloadTooLargeException } from "@nestjs/common"
+import { BadRequestException, Logger, NotFoundException, PayloadTooLargeException } from "@nestjs/common"
 import { LIVE_MESSAGE_TYPES, WEBHOOK_DELIVERY_STATUS } from "@synapse/shared"
 import { describe, expect, it, vi } from "vitest"
 import { hashWebhookSecret, verifyWebhookSecret } from "./webhook-token"
@@ -619,10 +619,70 @@ describe("WebhookService", () => {
     expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
     expect(harness.deliveries).toHaveLength(0)
   })
+
+  it("rejects invalid JSON bodies without broadcasting or accepting delivery", async () => {
+    const harness = createWebhookReceiveHarness()
+
+    await expect(harness.receive({ body: Buffer.from("{\"broken\"") }))
+      .rejects.toThrow(BadRequestException)
+    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it("records broadcast_failed and returns accepted response when live broadcast throws", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const harness = createWebhookReceiveHarness({ broadcastError: new Error("socket send exploded") })
+
+    try {
+      await expect(harness.receive()).resolves.toMatchObject({
+        response: { ok: true, deliveryId: "delivery-1" },
+      })
+    } finally {
+      warnSpy.mockRestore()
+    }
+
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({
+        onlineClientCount: 0,
+        sentClientCount: 0,
+        failedClientCount: 0,
+        status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
+        error: "broadcast_failed",
+      }),
+    ])
+  })
+
+  it("leaves a conservative failed marker and returns accepted response when delivery status update fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const harness = createWebhookReceiveHarness({
+      updateError: new Error("database update failed"),
+      broadcastResult: { onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0 },
+    })
+
+    try {
+      await expect(harness.receive()).resolves.toMatchObject({
+        response: { ok: true, deliveryId: "delivery-1" },
+      })
+    } finally {
+      warnSpy.mockRestore()
+    }
+
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({
+        onlineClientCount: 0,
+        sentClientCount: 0,
+        failedClientCount: 0,
+        status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
+        error: "broadcast_pending",
+      }),
+    ])
+  })
 })
 
 function createWebhookReceiveHarness(input: {
   readonly enabled?: boolean
+  readonly broadcastError?: Error
+  readonly updateError?: Error
   readonly broadcastResult?: {
     readonly onlineClientCount: number
     readonly sentClientCount: number
@@ -637,11 +697,15 @@ function createWebhookReceiveHarness(input: {
     secretHash: hashWebhookSecret("whsec_secret"),
   }
   const live = {
-    broadcastToUser: vi.fn().mockReturnValue(input.broadcastResult ?? {
-      onlineClientCount: 0,
-      sentClientCount: 0,
-      failedClientCount: 0,
-    }),
+    broadcastToUser: input.broadcastError
+      ? vi.fn().mockImplementation(() => {
+        throw input.broadcastError
+      })
+      : vi.fn().mockReturnValue(input.broadcastResult ?? {
+        onlineClientCount: 0,
+        sentClientCount: 0,
+        failedClientCount: 0,
+      }),
   }
   prisma.userWebhook.findFirst.mockImplementation(({ where }) => {
     if (where.publicId === webhook.publicId) {
@@ -660,6 +724,7 @@ function createWebhookReceiveHarness(input: {
     return Promise.resolve(delivery)
   })
   prisma.webhookDelivery.update.mockImplementation(({ where, data }) => {
+    if (input.updateError) return Promise.reject(input.updateError)
     const index = deliveries.findIndex((delivery) => delivery.id === where.id)
     if (index >= 0) {
       deliveries[index] = { ...deliveries[index], ...data }

@@ -288,7 +288,8 @@ export class WebhookService {
         onlineClientCount: 0,
         sentClientCount: 0,
         failedClientCount: 0,
-        status: WEBHOOK_DELIVERY_STATUS.accepted,
+        status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
+        error: "broadcast_pending",
       },
     })
 
@@ -315,24 +316,17 @@ export class WebhookService {
       sentAt: receivedAtIso,
     }) satisfies LiveDesktopServerMessage
 
-    const broadcastResult = this.liveDesktopGateway?.broadcastToUser(webhook.userId, message) ?? {
-      onlineClientCount: 0,
-      sentClientCount: 0,
-      failedClientCount: 0,
-    }
-    const status = broadcastResult.failedClientCount > 0
+    const broadcastResult = this.broadcastDelivery(webhook.userId, delivery.id, webhook.publicId, message)
+    const status = broadcastResult.failedClientCount > 0 || broadcastResult.error
       ? WEBHOOK_DELIVERY_STATUS.broadcastFailed
       : WEBHOOK_DELIVERY_STATUS.accepted
 
-    await this.prisma.webhookDelivery.update({
-      where: { id: delivery.id },
-      data: {
-        onlineClientCount: broadcastResult.onlineClientCount,
-        sentClientCount: broadcastResult.sentClientCount,
-        failedClientCount: broadcastResult.failedClientCount,
-        status,
-        error: status === WEBHOOK_DELIVERY_STATUS.broadcastFailed ? "broadcast_failed" : null,
-      },
+    await this.updateDeliveryBroadcastStatus({
+      deliveryId: delivery.id,
+      webhookId: webhook.id,
+      webhookPublicId: webhook.publicId,
+      broadcastResult,
+      status,
     })
     await this.pruneOldDeliveries(webhook.id)
 
@@ -342,6 +336,91 @@ export class WebhookService {
         deliveryId: delivery.id,
         acceptedAt: receivedAtIso,
       },
+    }
+  }
+
+  private broadcastDelivery(
+    userId: string,
+    deliveryId: string,
+    webhookPublicId: string,
+    message: LiveDesktopServerMessage,
+  ): {
+    readonly onlineClientCount: number
+    readonly sentClientCount: number
+    readonly failedClientCount: number
+    readonly error?: string
+  } {
+    try {
+      return this.liveDesktopGateway?.broadcastToUser(userId, message) ?? {
+        onlineClientCount: 0,
+        sentClientCount: 0,
+        failedClientCount: 0,
+      }
+    } catch (error) {
+      this.logger.warn({
+        deliveryId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        webhookPublicId,
+      }, "Webhook delivery broadcast failed")
+      return {
+        onlineClientCount: 0,
+        sentClientCount: 0,
+        failedClientCount: 0,
+        error: "broadcast_failed",
+      }
+    }
+  }
+
+  private async updateDeliveryBroadcastStatus(input: {
+    readonly deliveryId: string
+    readonly webhookId: string
+    readonly webhookPublicId: string
+    readonly broadcastResult: {
+      readonly onlineClientCount: number
+      readonly sentClientCount: number
+      readonly failedClientCount: number
+      readonly error?: string
+    }
+    readonly status: WebhookDeliveryStatus
+  }): Promise<void> {
+    try {
+      await this.prisma.webhookDelivery.update({
+        where: { id: input.deliveryId },
+        data: {
+          onlineClientCount: input.broadcastResult.onlineClientCount,
+          sentClientCount: input.broadcastResult.sentClientCount,
+          failedClientCount: input.broadcastResult.failedClientCount,
+          status: input.status,
+          error: input.status === WEBHOOK_DELIVERY_STATUS.broadcastFailed
+            ? input.broadcastResult.error ?? "broadcast_failed"
+            : null,
+        },
+      })
+      return
+    } catch (error) {
+      this.logger.warn({
+        deliveryId: input.deliveryId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        webhookId: input.webhookId,
+        webhookPublicId: input.webhookPublicId,
+      }, "Webhook delivery broadcast status update failed")
+    }
+
+    try {
+      await this.prisma.webhookDelivery.update({
+        where: { id: input.deliveryId },
+        data: {
+          status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
+          error: "broadcast_status_update_failed",
+        },
+      })
+    } catch (error) {
+      this.logger.warn({
+        deliveryId: input.deliveryId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        webhookId: input.webhookId,
+        webhookPublicId: input.webhookPublicId,
+      }, "Webhook delivery failed-status fallback update failed")
     }
   }
 

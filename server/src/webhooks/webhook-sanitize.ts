@@ -1,7 +1,10 @@
-import { UnsupportedMediaTypeException } from "@nestjs/common"
+import { BadRequestException, UnsupportedMediaTypeException } from "@nestjs/common"
 
 const sensitiveKeyPattern = /authorization|cookie|token|secret|password|credential|api[-_]?key/i
 const sensitiveTextLinePattern = /^([^=\s:]+)\s*[:=]\s*(.+)$/u
+const bearerPattern = /\bbearer\s+[^,\s;]+/giu
+const cookieFragmentPattern = /\bcookie\s*[:=]\s*[^,\n;]+/giu
+const sensitiveAssignmentPattern = /\b(authorization|token|secret|password|credential|api[-_]?key)\s*[:=]\s*[^,\s;]+/giu
 const maxPreviewChars = 2_000
 
 export interface WebhookBodySummary {
@@ -47,7 +50,7 @@ export function summarizeWebhookBody(body: Buffer, contentType = ""): WebhookBod
   }
 
   if (normalizedContentType === "application/json" || normalizedContentType.endsWith("+json")) {
-    const parsed = JSON.parse(body.toString("utf8"))
+    const parsed = parseJsonBody(body)
     const redacted = redactValue(parsed)
     return {
       bodyKind: "json",
@@ -107,12 +110,16 @@ function redactValue(value: unknown): unknown {
 }
 
 function redactText(value: string): string {
-  return value.split(/\r?\n/u).map((line) => {
+  const lineRedacted = value.split(/\r?\n/u).map((line) => {
     const match = sensitiveTextLinePattern.exec(line)
     if (!match) return line
     const [, key] = match
     return key && isSensitiveKey(key) ? `${key}=[redacted]` : line
   }).join("\n")
+  return lineRedacted
+    .replace(bearerPattern, "Bearer [redacted]")
+    .replace(cookieFragmentPattern, "Cookie: [redacted]")
+    .replace(sensitiveAssignmentPattern, (_match, key: string) => `${key}=[redacted]`)
 }
 
 function preview(value: string): string {
@@ -123,4 +130,12 @@ function preview(value: string): string {
 
 function isSensitiveKey(key: string): boolean {
   return sensitiveKeyPattern.test(key)
+}
+
+function parseJsonBody(body: Buffer): unknown {
+  try {
+    return JSON.parse(body.toString("utf8"))
+  } catch {
+    throw new BadRequestException("Webhook JSON body is invalid")
+  }
 }

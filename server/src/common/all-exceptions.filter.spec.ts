@@ -92,4 +92,49 @@ describe("AllExceptionsFilter", () => {
 
     expect(statusFn).toHaveBeenCalledWith(500)
   })
+
+  it("maps exposed http-errors style payload too large errors to 413", () => {
+    const filter = new AllExceptionsFilter(mockLogger)
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const host = createMockHost(statusFn, jsonFn)
+
+    filter.catch({
+      status: 413,
+      statusCode: 413,
+      expose: true,
+      type: "entity.too.large",
+      message: "request entity too large",
+    }, host)
+
+    expect(statusFn).toHaveBeenCalledWith(413)
+    expect(jsonFn).toHaveBeenCalledWith({
+      statusCode: 413,
+      error: HttpStatus[413],
+      message: "request entity too large",
+    })
+  })
+
+  it("does not expose arbitrary 500 object messages in production", () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+    const filter = new AllExceptionsFilter(mockLogger)
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const host = createMockHost(statusFn, jsonFn)
+
+    try {
+      filter.catch({ statusCode: 500, message: "secret" }, host)
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv
+    }
+
+    expect(statusFn).toHaveBeenCalledWith(500)
+    expect(jsonFn).toHaveBeenCalledWith({
+      statusCode: 500,
+      error: "Internal Server Error",
+      message: "服务器内部错误。",
+    })
+    expect(JSON.stringify(jsonFn.mock.calls)).not.toContain("secret")
+  })
 })
