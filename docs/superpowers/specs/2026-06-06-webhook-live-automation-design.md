@@ -65,7 +65,9 @@ End-to-end flow:
 
 ## Shared Live Protocol
 
-Live messages should use a single event envelope for new downlink messages:
+Live messages must use a single shared protocol model. `@synapse/shared` owns the `type` constants, payload DTOs, and the complete client/server Live message discriminated unions. Server and desktop must import those definitions instead of declaring local string literals or parallel message types.
+
+All Live messages use this envelope shape:
 
 ```ts
 export type LiveEnvelope<TType extends string, TPayload> = {
@@ -76,7 +78,7 @@ export type LiveEnvelope<TType extends string, TPayload> = {
 }
 ```
 
-`@synapse/shared` should export stable type constants:
+`@synapse/shared` exports stable type constants:
 
 ```ts
 export const LIVE_MESSAGE_TYPES = {
@@ -88,7 +90,22 @@ export const LIVE_MESSAGE_TYPES = {
 } as const
 ```
 
-To keep this feature scoped, keep the existing heartbeat handshake wire shape for `hello`, `welcome`, `ping`, and `pong` in this implementation, but move their event names and DTOs into `@synapse/shared`. New downlink messages, including Webhook deliveries, use the `LiveEnvelope` shape. A later protocol cleanup may migrate heartbeat messages to the envelope, but it is not part of this feature.
+This feature migrates the existing `hello`, `welcome`, `ping`, and `pong` wire messages to the same shared envelope model instead of keeping a second protocol shape. The migration belongs in the same implementation because the user-facing Webhook feature depends on a Live channel that can support multiple event types cleanly.
+
+Shared unions:
+
+```ts
+export type LiveDesktopClientMessage =
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.hello, LiveDesktopHelloPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.ping, LiveDesktopPingPayload>
+
+export type LiveDesktopServerMessage =
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.pong, LiveDesktopPongPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.webhookDeliveryReceived, WebhookDeliveryReceivedPayload>
+```
+
+The parser on both ends should reject malformed envelopes and unknown required payload fields. Unknown future message types are ignored with structured diagnostics that record only the message type and do not log payload content.
 
 Webhook downlink payload:
 
@@ -469,6 +486,7 @@ Server:
 Shared/Live:
 
 - Server and desktop use shared message constants for `webhook.delivery.received`.
+- Existing `hello`, `welcome`, `ping`, and `pong` use the same shared envelope protocol and shared DTO definitions.
 - Unknown Live messages do not trigger Automation.
 - Malformed Webhook delivery messages do not trigger Automation.
 
@@ -490,10 +508,10 @@ Deployment:
 
 ## Implementation Order
 
-1. Add `@synapse/shared` and move shared Live/Webhook type constants into it.
+1. Add `@synapse/shared` and move shared Live/Webhook message constants and DTOs into it.
 2. Add server Prisma migration and `WebhookModule` management APIs.
 3. Add public `/webhooks/:publicId/:secret` receive endpoint and delivery retention.
-4. Extend Live server registry/gateway with user broadcast.
+4. Migrate Live `hello`, `welcome`, `ping`, and `pong` to the shared envelope protocol, then extend Live server registry/gateway with user broadcast.
 5. Update Nginx, deploy checks, restart checks, and server README.
 6. Add dashboard API types, route, navigation, management UI, and delivery records UI.
 7. Add desktop Live downlink handler that calls `AutomationService.acceptEvent`.
@@ -510,5 +528,5 @@ Deployment:
 - Webhook query, headers, body, method, delivery id, and Webhook metadata are available as trigger variables.
 - The dashboard shows recent receive/broadcast records, capped to the most recent 100 per Webhook.
 - `/webhooks/` works through production Nginx and is not redirected to `/dashboard/`.
-- Shared protocol strings and DTOs are defined once in `@synapse/shared`.
+- Shared protocol strings and DTOs, including existing Live heartbeat messages and new Webhook delivery messages, are defined once in `@synapse/shared`.
 - Full URL secrets are not stored or displayed in logs, delivery records, audit records, or normal dashboard list responses.
