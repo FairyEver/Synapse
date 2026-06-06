@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { downloadBackupWithFeedback } from './backup-download'
 import { getBackupListErrorMessage } from './backup-error'
 
 function formatSize(bytes: number) {
@@ -101,14 +102,13 @@ export default function BackupPage() {
                       {new Date(backup.createdAt).toLocaleString('zh-CN')}
                     </TableCell>
                     <TableCell className='flex gap-1'>
-                      <Button variant='ghost' size='icon' asChild>
-                        <a
-                          href={adminApi.getBackupDownloadUrl(backup.filename)}
-                          download={backup.filename}
-                          aria-label={`下载 ${backup.filename}`}
-                        >
-                          <Download className='h-4 w-4' />
-                        </a>
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        aria-label={`下载 ${backup.filename}`}
+                        onClick={() => void downloadBackupWithFeedback(backup.filename)}
+                      >
+                        <Download className='h-4 w-4' />
                       </Button>
                       <Button variant='ghost' size='icon' onClick={() => deleteBackup.mutate(backup.filename)}>
                         <Trash2 className='h-4 w-4' />
