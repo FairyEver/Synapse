@@ -6,6 +6,8 @@ export const WEBHOOK_DELIVERY_STATUS = {
   broadcastFailed: "broadcast_failed",
 } as const
 
+export type WebhookDeliveryStatus = typeof WEBHOOK_DELIVERY_STATUS[keyof typeof WEBHOOK_DELIVERY_STATUS]
+
 export interface WebhookDeliveryReceivedPayload {
   readonly deliveryId: string
   readonly webhook: {
@@ -35,7 +37,7 @@ export interface DashboardWebhookDto {
   readonly createdAt: string
   readonly updatedAt: string
   readonly lastDeliveryAt?: string
-  readonly lastDeliveryStatus?: string
+  readonly lastDeliveryStatus?: WebhookDeliveryStatus
 }
 
 export interface DashboardWebhookSecretResult {
@@ -57,7 +59,7 @@ export interface WebhookDeliveryDto {
   readonly onlineClientCount: number
   readonly sentClientCount: number
   readonly failedClientCount: number
-  readonly status: string
+  readonly status: WebhookDeliveryStatus
   readonly error?: string
 }
 
@@ -69,9 +71,16 @@ export function isWebhookDeliveryReceivedPayload(value: unknown): value is Webho
   if (!isRecord(value.request)) return false
   return nonEmptyString(value.request.method) &&
     nonEmptyString(value.request.url) &&
-    isRecord(value.request.query) &&
+    isWebhookQueryRecord(value.request.query) &&
     isStringRecord(value.request.headers) &&
+    "body" in value.request &&
     nonEmptyString(value.request.receivedAt)
+}
+
+function isWebhookQueryRecord(value: unknown): value is Record<string, string | readonly string[]> {
+  return isRecord(value) && Object.values(value).every((item) =>
+    typeof item === "string" || (Array.isArray(item) && item.every((entry) => typeof entry === "string"))
+  )
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {

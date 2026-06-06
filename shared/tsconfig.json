@@ -6,7 +6,10 @@
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/index.ts", "src/live.ts", "src/webhook.ts"]
 }

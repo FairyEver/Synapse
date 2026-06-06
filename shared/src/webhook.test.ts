@@ -26,4 +26,33 @@ describe("shared webhook protocol", () => {
       },
     })).toBe(true)
   })
+
+  it("rejects delivery payloads without request body", () => {
+    expect(isWebhookDeliveryReceivedPayload({
+      deliveryId: "delivery-1",
+      webhook: { id: "webhook-1", publicId: "wh_abc", name: "A" },
+      request: {
+        method: "POST",
+        url: "https://synapse.test/webhooks/wh_abc/***",
+        query: {},
+        headers: {},
+        receivedAt: "2026-06-06T10:00:00.000Z",
+      },
+    })).toBe(false)
+  })
+
+  it("rejects delivery payloads with invalid query values", () => {
+    expect(isWebhookDeliveryReceivedPayload({
+      deliveryId: "delivery-1",
+      webhook: { id: "webhook-1", publicId: "wh_abc", name: "A" },
+      request: {
+        method: "POST",
+        url: "https://synapse.test/webhooks/wh_abc/***",
+        query: { retry: 1 },
+        headers: {},
+        body: { ok: true },
+        receivedAt: "2026-06-06T10:00:00.000Z",
+      },
+    })).toBe(false)
+  })
 })
