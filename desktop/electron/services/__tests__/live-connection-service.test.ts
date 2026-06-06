@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { LIVE_MESSAGE_TYPES, createLiveEnvelope } from "@synapse/shared"
 import type { SynapseAccountState } from "../../../src/types/account"
 import { LiveConnectionService } from "../live-connection-service"
 
@@ -191,6 +192,70 @@ describe("LiveConnectionService", () => {
     await waitForCondition(() => service.getState().lastSeenAt === "2026-06-06T10:00:05.000Z")
 
     expect(service.getState().lastSeenAt).toBe("2026-06-06T10:00:05.000Z")
+  })
+
+  it("dispatches webhook delivery downlinks to the installed handler", async () => {
+    const socket = new FakeSocket()
+    const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      webhookDeliveryHandler,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("message", JSON.stringify(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+      {
+        deliveryId: "delivery-1",
+        webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+        request: {
+          method: "POST",
+          url: "https://synapse.test/webhooks/wh_public/***",
+          query: { event: "push" },
+          headers: { "x-github-event": "push" },
+          body: { repository: { full_name: "FairyEver/Synapse" } },
+          contentType: "application/json",
+          receivedAt: "2026-06-06T10:00:00.000Z",
+        },
+      },
+      { id: "msg-webhook", sentAt: "2026-06-06T10:00:01.000Z" },
+    )))
+
+    await waitForCondition(() => webhookDeliveryHandler.handle.mock.calls.length > 0)
+
+    expect(webhookDeliveryHandler.handle).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryId: "delivery-1",
+      webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+    }))
+  })
+
+  it("ignores malformed webhook delivery downlinks", async () => {
+    const socket = new FakeSocket()
+    const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      webhookDeliveryHandler,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("message", JSON.stringify({
+      type: "webhook.delivery.received",
+      id: "msg-webhook",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: {
+        deliveryId: "delivery-1",
+        webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+      },
+    }))
+    await flushPromises()
+
+    expect(webhookDeliveryHandler.handle).not.toHaveBeenCalled()
   })
 
   it("sends heartbeat ping envelopes", async () => {

@@ -5,6 +5,7 @@ import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseLiveState } from "../../src/types/live"
 import type { EventBus } from "../runtime/event-bus"
 import type { AccountService } from "./account-service"
+import type { LiveWebhookDeliveryHandler } from "./live-webhook-delivery-handler"
 import { LiveClientIdStore } from "./live-client-id-store"
 import { createLiveReconnectDelay } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
@@ -26,6 +27,7 @@ type LiveConnectionServiceDeps = {
   readonly appVersion?: () => string
   readonly platform?: () => string
   readonly deviceName?: () => string
+  readonly webhookDeliveryHandler?: Pick<LiveWebhookDeliveryHandler, "handle">
 }
 
 export class LiveConnectionService {
@@ -39,6 +41,7 @@ export class LiveConnectionService {
   private readonly appVersion: () => string
   private readonly platform: () => string
   private readonly deviceName: () => string
+  private webhookDeliveryHandler: Pick<LiveWebhookDeliveryHandler, "handle"> | null
   private eventBus: EventBus | null = null
   private socket: LiveSocket | null = null
   private reconnectTimer: NodeJS.Timeout | null = null
@@ -65,10 +68,15 @@ export class LiveConnectionService {
     this.appVersion = deps.appVersion ?? (() => app.getVersion())
     this.platform = deps.platform ?? (() => `${process.platform}-${process.arch}`)
     this.deviceName = deps.deviceName ?? (() => os.hostname())
+    this.webhookDeliveryHandler = deps.webhookDeliveryHandler ?? null
   }
 
   setEventBus(eventBus: EventBus): void {
     this.eventBus = eventBus
+  }
+
+  setWebhookDeliveryHandler(handler: Pick<LiveWebhookDeliveryHandler, "handle">): void {
+    this.webhookDeliveryHandler = handler
   }
 
   getState(): SynapseLiveState {
@@ -214,6 +222,23 @@ export class LiveConnectionService {
         status: "connected",
         lastSeenAt: this.now().toISOString(),
         lastError: null,
+      })
+      return
+    }
+
+    if (parsed.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived) {
+      if (!this.webhookDeliveryHandler) {
+        logger.warn("Live webhook delivery ignored.", {
+          messageType: parsed.type,
+          reason: "missing_handler",
+        })
+        return
+      }
+      void this.webhookDeliveryHandler.handle(parsed.payload).catch((error: unknown) => {
+        logger.warn("Live webhook delivery handler failed.", {
+          messageType: parsed.type,
+          ...this.liveErrorMetadata(error),
+        })
       })
     }
   }
@@ -369,8 +394,16 @@ export class LiveConnectionService {
 
   private logLiveMessageError(error: unknown): void {
     logger.warn("Live socket message handling failed.", {
-      errorName: error instanceof Error ? error.name : typeof error,
+      ...this.liveErrorMetadata(error),
     })
+  }
+
+  private liveErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: message.length,
+    }
   }
 }
 
