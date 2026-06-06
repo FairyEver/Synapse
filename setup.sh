@@ -5,6 +5,52 @@ set -e
 
 cd "$(dirname "$0")/server"
 
+run_local_health_check() {
+  set +e
+
+  local failed=0
+  local body_file
+  local error_file
+  local http_code
+  local curl_status
+
+  body_file=$(mktemp)
+  error_file=$(mktemp)
+  http_code=$(curl -sS -o "$body_file" -w "%{http_code}" http://127.0.0.1:3000/healthz 2>"$error_file")
+  curl_status=$?
+
+  if [ "$curl_status" -eq 0 ] && [[ "$http_code" == 2* ]] && grep -q '"status":"ok"' "$body_file"; then
+    echo "healthz ok (HTTP $http_code)"
+  else
+    echo "healthz FAILED (HTTP $http_code)"
+    if [ -s "$error_file" ]; then
+      sed -n '1,4p' "$error_file"
+    fi
+    if [ -s "$body_file" ]; then
+      sed -n '1,8p' "$body_file"
+    else
+      echo "(empty response)"
+    fi
+    failed=1
+  fi
+
+  rm -f "$body_file" "$error_file"
+
+  if [ "$failed" -ne 0 ]; then
+    echo ""
+    echo "docker compose status:"
+    docker compose --env-file .env ps || true
+    echo ""
+    echo "recent server logs:"
+    docker compose --env-file .env logs --tail=80 server || true
+    set -e
+    return 1
+  fi
+
+  set -e
+  return 0
+}
+
 echo "========================================="
 echo "  Synapse Server"
 echo "========================================="
@@ -33,7 +79,7 @@ if [ -f .env ]; then
       echo ""
       echo ">>> 等待服务启动..."
       sleep 8
-      curl -sf http://127.0.0.1:3000/healthz && echo " ✅ 服务正常" || echo " ❌ 服务未就绪，查看日志: docker compose logs server"
+      run_local_health_check && echo " ✅ 服务正常" || exit 1
       exit 0
       ;;
     2)
@@ -143,7 +189,7 @@ docker compose --env-file .env up -d --build
 echo ""
 echo ">>> 等待服务启动..."
 sleep 8
-curl -sf http://127.0.0.1:3000/healthz && echo " ✅ 服务正常" || echo " ❌ 服务未就绪，查看日志: docker compose logs server"
+run_local_health_check && echo " ✅ 服务正常" || exit 1
 
 echo ""
 echo "========================================="
