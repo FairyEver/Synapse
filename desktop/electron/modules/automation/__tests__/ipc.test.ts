@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const logStoreMock = vi.hoisted(() => ({
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
   },
+}))
+
+const automationWindowServiceMock = vi.hoisted(() => ({
+  openCreate: vi.fn(async () => undefined),
+  openEdit: vi.fn(async () => undefined),
 }))
 
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
@@ -14,7 +19,15 @@ vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
 
+vi.mock("../../../services/automation-window-service", () => ({
+  automationWindowService: automationWindowServiceMock,
+}))
+
 describe("automationIpcModule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it("declares automation editor window methods", () => {
     expect(automationIpcModule.methods.openCreateEditorWindow.channel).toBe("synapse:automation:editor:open-create")
     expect(automationIpcModule.methods.openCreateEditorWindow.request?.safeParse(undefined).success).toBe(true)
@@ -22,6 +35,26 @@ describe("automationIpcModule", () => {
     expect(automationIpcModule.methods.openEditorWindow.request?.parse({ automationId: "automation:1" })).toEqual({
       automationId: "automation:1",
     })
+  })
+
+  it("logs automation editor window IPC requests", async () => {
+    const harness = createInMemoryHarness()
+    harness.registry.register(automationIpcModule, { moduleId: "automation", resolve: (() => undefined) as IpcHandlerContext["resolve"] })
+
+    await harness.invoke("synapse:automation:editor:open-create", undefined)
+    await harness.invoke("synapse:automation:editor:open-edit", { automationId: "automation:1" })
+
+    expect(automationWindowServiceMock.openCreate).toHaveBeenCalledTimes(1)
+    expect(automationWindowServiceMock.openEdit).toHaveBeenCalledWith("automation:1")
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Automation IPC request.", expect.objectContaining({
+      boundary: "automation.ipc.open-create-editor-window",
+      channel: "synapse:automation:editor:open-create",
+    }))
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Automation IPC request.", expect.objectContaining({
+      automationId: "automation:1",
+      boundary: "automation.ipc.open-editor-window",
+      channel: "synapse:automation:editor:open-edit",
+    }))
   })
 
   it("declares an automation changed event", () => {

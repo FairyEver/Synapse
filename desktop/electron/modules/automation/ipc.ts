@@ -180,18 +180,24 @@ export const automationIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.void(),
-      handler: async () => {
-        await automationWindowService.openCreate()
-      },
+      handler: async () => loggedAutomationIpc(
+        "synapse:automation:editor:open-create",
+        "automation.ipc.open-create-editor-window",
+        {},
+        () => automationWindowService.openCreate(),
+      ),
     },
     openEditorWindow: {
       channel: "synapse:automation:editor:open-edit",
       kind: "invoke",
       request: automationIdRequestSchema,
       response: z.void(),
-      handler: async (_ctx, request: AutomationIdRequest) => {
-        await automationWindowService.openEdit(request.automationId)
-      },
+      handler: async (_ctx, request: AutomationIdRequest) => loggedAutomationIpc(
+        "synapse:automation:editor:open-edit",
+        "automation.ipc.open-editor-window",
+        { automationId: request.automationId },
+        () => automationWindowService.openEdit(request.automationId),
+      ),
     },
     listItems: {
       channel: "synapse:automation:items:list",
