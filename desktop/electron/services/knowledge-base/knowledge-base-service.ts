@@ -161,6 +161,9 @@ export class KnowledgeBaseService {
   }
 
   async deleteManaged(payload: SynapseKnowledgeBaseDeleteManagedPayload): Promise<ManagedKnowledgeBaseDeleteResult> {
+    if (payload.runtimeId && payload.runtimeId !== payload.projectId) {
+      throw new Error("Managed Knowledge Base runtimeId must match projectId.")
+    }
     const runtimePath = payload.runtimeId
       ? await this.resolveRuntimePath(payload.runtimeId)
       : await this.resolveProjectPath(payload.projectId)

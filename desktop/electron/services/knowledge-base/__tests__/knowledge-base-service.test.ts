@@ -308,6 +308,21 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(projectPath, "CLAUDE.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("rejects managed runtime deletion when runtime id differs from project id", async () => {
+    const trashItem = vi.fn()
+    const { projectId, projectPath, service } = await managedFixture({ trashItem })
+    const victimPath = path.join(path.dirname(projectPath), "kb-victim")
+    await mkdir(victimPath, { recursive: true })
+    await writeFile(path.join(victimPath, "CLAUDE.md"), "# Victim\n", "utf8")
+
+    await expect(service.deleteManaged({ projectId, runtimeId: "kb-victim" })).rejects.toThrow(
+      "Managed Knowledge Base runtimeId must match projectId.",
+    )
+
+    expect(trashItem).not.toHaveBeenCalled()
+    await expect(readFile(path.join(victimPath, "CLAUDE.md"), "utf8")).resolves.toBe("# Victim\n")
+  })
+
   it("lists raw source files with user-facing import statuses", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })

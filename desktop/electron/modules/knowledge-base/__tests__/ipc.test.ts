@@ -185,6 +185,35 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("checks delete permission against the requested runtime target", async () => {
+    const deleteManaged = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      runtimePath: "/UserData/knowledge-bases/kb-victim",
+      deleted: true,
+    })
+    const { auditSink, harness, permissionGuard } = createHarness({ service: { deleteManaged } })
+
+    await harness.invoke("synapse:knowledge-base:delete-managed", {
+      projectId: "project-1",
+      runtimeId: "kb-victim",
+    })
+
+    expect(deleteManaged).toHaveBeenCalledWith({ projectId: "project-1", runtimeId: "kb-victim" })
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-victim",
+      context: { source: "knowledgeBase.deleteManaged" },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-victim",
+      outcome: "allowed",
+      metadata: { source: "knowledgeBase.deleteManaged" },
+    })
+  })
+
   it("adds a URL source through guarded network and write permissions", async () => {
     const addUrlSource = vi.fn().mockResolvedValue({
       projectId: "kb-1",

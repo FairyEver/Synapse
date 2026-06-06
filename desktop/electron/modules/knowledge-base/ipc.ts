@@ -389,7 +389,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       handler: (ctx, request: { projectId: string; runtimeId?: string }) => runGuardedKnowledgeBaseOperation({
         ctx,
         action: "fs.write",
-        resource: `managed-knowledge-base:${request.projectId}`,
+        resource: `managed-knowledge-base:${request.runtimeId ?? request.projectId}`,
         source: "knowledgeBase.deleteManaged",
         run: () => service(ctx).deleteManaged(request),
       }),
