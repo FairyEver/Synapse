@@ -45,14 +45,27 @@ describe("server deployment configuration", () => {
 
   it("uses stable deployment health checks with actionable diagnostics", () => {
     const deployScript = readRepoFile("deploy.sh")
+    const restartScript = readRepoFile("restart.sh")
 
     expect(deployScript).not.toContain("<title>Synapse</title>")
     expect(deployScript).toContain("run_remote_health_check")
     expect(deployScript).toContain("http://127.0.0.1:3000/healthz")
     expect(deployScript).toContain("http://127.0.0.1:3000/dashboard/")
+    expect(deployScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
     expect(deployScript).toContain("Location: /dashboard/")
+    expect(deployScript).toContain("webhook route")
     expect(deployScript).toContain('<div id="root">')
     expect(deployScript).toContain("docker compose --env-file .env ps")
     expect(deployScript).toContain("docker compose --env-file .env logs --tail=80 server")
+
+    expect(restartScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
+    expect(restartScript).toContain("webhook route")
+  })
+
+  it("routes public webhooks through nginx instead of dashboard redirects", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location /webhooks/")
+    expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })
 })

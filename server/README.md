@@ -281,7 +281,7 @@ bash deploy.sh
 
 `deploy.sh` 会先在服务器 `/www/wwwroot/synapse/backups/` 生成一份完整数据库备份，再同步 `server/`、`dashboard/` 和 workspace 构建文件。备份失败会中止部署；数据库迁移会在新容器启动时自动执行。
 
-部署完成前会检查 `/healthz`、`/dashboard/` 静态入口和 `/dashboard` 到 `/dashboard/` 的重定向。失败时脚本会直接输出失败检查项、HTTP 状态、响应摘要、容器状态和最近 server 日志。
+部署完成前会检查 `/healthz`、`/dashboard/` 静态入口、`/dashboard` 到 `/dashboard/` 的重定向，以及 `/webhooks/not-found/test` 公共 Webhook 路由不会被导向管理后台。失败时脚本会直接输出失败检查项、HTTP 状态、响应摘要、容器状态和最近 server 日志。
 
 如果是在服务器上手动更新，也必须先备份，再构建启动：
 
