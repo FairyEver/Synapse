@@ -51,11 +51,6 @@ export type SynapseKnowledgeBaseListSourcesResult = {
   sources: SynapseKnowledgeBaseSourceEntry[]
 }
 
-export type SynapseKnowledgeBaseUploadSourcesPayload = {
-  projectId: string
-  filePaths: string[]
-}
-
 export type SynapseKnowledgeBaseAddUrlSourcePayload = {
   projectId: string
   url: string

@@ -4,7 +4,6 @@ import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseService } from "../knowledge-base-service"
 import { KnowledgeBaseRawFileManager } from "../raw-file-manager"
-import type { FileConversionResult } from "../../file-conversion"
 
 const mocks = vi.hoisted(() => ({
   logger: {
@@ -372,30 +371,6 @@ describe("KnowledgeBaseService", () => {
     await expect(access(path.join(projectPath, ".raw"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("uploads source files into a date folder with collision-safe names", async () => {
-    const sourcePath = path.join(await tempDir(), "note.md")
-    await writeFile(sourcePath, "alpha\n")
-    const { projectId, projectPath, service } = await managedFixture({
-      now: () => new Date("2026-05-23T10:20:30.000Z"),
-    })
-
-    const first = await service.uploadSources({ projectId, filePaths: [sourcePath] })
-    const second = await service.uploadSources({ projectId, filePaths: [sourcePath] })
-
-    expect(first.uploaded).toEqual([expect.objectContaining({
-      originalPath: sourcePath,
-      relativePath: ".raw/2026/05/23/note.md",
-    })])
-    expect(second.uploaded).toEqual([expect.objectContaining({
-      originalPath: sourcePath,
-      relativePath: ".raw/2026/05/23/note-2.md",
-    })])
-    await expect(readFile(path.join(projectPath, ".raw", "2026", "05", "23", "note.md"), "utf8"))
-      .resolves.toBe("alpha\n")
-    await expect(readFile(path.join(projectPath, ".raw", "2026", "05", "23", "note-2.md"), "utf8"))
-      .resolves.toBe("alpha\n")
-  })
-
   it("adds a URL source through the injected fetch boundary", async () => {
     const { projectId, projectPath, service } = await managedFixture({
       now: () => new Date("2026-05-24T10:20:30.000Z"),
@@ -497,19 +472,7 @@ describe("KnowledgeBaseService", () => {
     const folder = path.join(sourceRoot, "会议资料")
     await mkdir(folder, { recursive: true })
     await writeFile(path.join(folder, "01.pdf"), "pdf\n", "utf8")
-    const convert = vi.fn(async (): Promise<FileConversionResult> => ({
-      sourcePath: path.join(folder, "01.pdf"),
-      format: "pdf",
-      kind: "document",
-      title: "01.pdf",
-      markdown: "# 01\n",
-      text: "01",
-      metadata: {},
-      warnings: [],
-    }))
-    const { projectId, projectPath, service } = await managedFixture({
-      fileConversionService: { convert },
-    })
+    const { projectId, projectPath, service } = await managedFixture()
 
     const result = await service.uploadRawItems({
       projectId,
@@ -519,7 +482,6 @@ describe("KnowledgeBaseService", () => {
 
     expect(result.projectId).toBe(projectId)
     expect(result.entries.map((entry) => entry.relativePath)).toContain("会议资料/01.pdf")
-    expect(convert).not.toHaveBeenCalled()
     await expect(readFile(path.join(projectPath, ".raw", "会议资料", "01.pdf"), "utf8"))
       .resolves.toBe("pdf\n")
   })
@@ -748,33 +710,4 @@ describe("KnowledgeBaseService", () => {
     })).rejects.toThrow("目标路径不在资料目录中。")
   })
 
-  it("uploads convertible files as generated markdown sources", async () => {
-    const sourcePath = path.join(await tempDir(), "report.docx")
-    await writeFile(sourcePath, "binary")
-    const { projectId, projectPath, service } = await managedFixture({
-      now: () => new Date("2026-05-23T10:20:30.000Z"),
-      fileConversionService: {
-        convert: async (): Promise<FileConversionResult> => ({
-          sourcePath,
-          format: "docx",
-          kind: "document",
-          title: "report.docx",
-          markdown: "# report.docx\n\nBody\n",
-          text: "Body",
-          metadata: {},
-          warnings: [],
-        }),
-      },
-    })
-
-    const result = await service.uploadSources({ projectId, filePaths: [sourcePath] })
-
-    expect(result.uploaded).toEqual([expect.objectContaining({
-      originalPath: sourcePath,
-      relativePath: ".raw/documents/2026/05/23/report.md",
-      originalRelativePath: "_attachments/originals/2026/05/23/report.docx",
-    })])
-    await expect(readFile(path.join(projectPath, ".raw", "documents", "2026", "05", "23", "report.md"), "utf8"))
-      .resolves.toContain('source_format: "docx"')
-  })
 })

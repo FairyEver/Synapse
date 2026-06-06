@@ -21,13 +21,11 @@ import type {
   SynapseKnowledgeBaseUploadRawItemsPayload,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseSourceEntry,
-  SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
 import type { SynapseConfig, SynapseProjectConfig } from "../../../src/types/config"
-import { createDefaultFileConversionService, type FileConversionService } from "../file-conversion"
 import { scanKnowledgeBaseSources } from "./source-scan"
-import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "./source-staging"
+import { stageKnowledgeBaseUrlSource } from "./source-staging"
 import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
 import type { FetchUrl } from "../source-acquisition/url-source"
 import { configStore } from "../config-store"
@@ -49,7 +47,6 @@ type KnowledgeBaseServiceDeps = {
   loadConfig?: () => Promise<SynapseConfig>
   now?: () => Date
   getAppPathForTest?: () => string
-  fileConversionService?: Pick<FileConversionService, "convert">
   fetchUrl?: FetchUrl
   rawFileManager?: KnowledgeBaseRawFileManager
   trashItem?: (targetPath: string) => Promise<void>
@@ -68,7 +65,6 @@ export class KnowledgeBaseService {
   private readonly userDataPath: string
   private readonly loadConfig: () => Promise<SynapseConfig>
   private readonly now: () => Date
-  private readonly fileConversionService: Pick<FileConversionService, "convert">
   private readonly fetchUrl: FetchUrl
   private readonly rawFileManager: KnowledgeBaseRawFileManager
   private readonly trashItem: (targetPath: string) => Promise<void>
@@ -79,7 +75,6 @@ export class KnowledgeBaseService {
     this.userDataPath = deps.userDataPath ?? defaultKnowledgeBaseUserDataPath()
     this.loadConfig = deps.loadConfig ?? (() => configStore.load())
     this.now = deps.now ?? (() => new Date())
-    this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
     this.fetchUrl = deps.fetchUrl ?? createGuardedFetchUrl()
     this.rawFileManager = deps.rawFileManager ?? new KnowledgeBaseRawFileManager({
       trashItem: (targetPath) => shell.trashItem(targetPath),
@@ -212,25 +207,6 @@ export class KnowledgeBaseService {
       projectId,
       sources: sortedSources,
     }
-  }
-
-  async uploadSources(payload: SynapseKnowledgeBaseUploadSourcesPayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
-    const projectId = payload.projectId
-    const projectPath = await this.resolveProjectPath(projectId)
-    const result = await stageKnowledgeBaseSources({
-      projectPath,
-      filePaths: payload.filePaths,
-      now: this.now,
-      converter: this.fileConversionService,
-    })
-    logger.info("Knowledge Base source upload completed.", {
-      projectId,
-      requestedCount: payload.filePaths.length,
-      uploadedCount: result.uploaded.length,
-      skippedCount: result.skipped.length,
-      skippedReasons: skippedReasonCounts(result.skipped),
-    })
-    return { projectId, uploaded: result.uploaded, skipped: result.skipped }
   }
 
   async addUrlSource(payload: SynapseKnowledgeBaseAddUrlSourcePayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
