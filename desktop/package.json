@@ -44,6 +44,7 @@
     "url": "git+https://github.com/FairyEver/Synapse.git"
   },
   "dependencies": {
+    "@synapse/shared": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.138",
     "@codemirror/autocomplete": "^6.20.2",
     "@codemirror/lang-json": "^6.0.2",
