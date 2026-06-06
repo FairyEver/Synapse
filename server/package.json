@@ -6,12 +6,12 @@
   "scripts": {
     "dev": "prisma migrate deploy && prisma generate && APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000} PORT=${SYNAPSE_SERVER_API_PORT:-3001} pnpm run dev:api",
     "dev:api": "nest start --watch",
-    "build": "pnpm build:api",
+    "build": "pnpm --filter @synapse/shared run build && pnpm build:api",
     "build:api": "nest build",
     "start": "node dist/main.js",
-    "test": "vitest run",
+    "test": "pnpm --filter @synapse/shared run build && vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm --filter @synapse/shared run build && tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:dev": "prisma migrate dev"

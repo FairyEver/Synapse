@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events"
 import type { IncomingMessage } from "node:http"
 import { Socket } from "node:net"
+import { Logger } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import {
   createLiveDesktopGatewayForTest,
@@ -16,8 +17,12 @@ class FakeSocket extends EventEmitter {
   readonly sent: string[] = []
   readonly closeCalls: Array<{ readonly code: number; readonly reason: string }> = []
   readyState = 1
+  shouldThrowOnSend = false
 
   send(payload: string): void {
+    if (this.shouldThrowOnSend) {
+      throw new Error("send failed with secret-token-123")
+    }
     this.sent.push(payload)
   }
 
@@ -103,7 +108,7 @@ function webhookDeliveryPayload() {
       query: {},
       headers: { "content-type": "application/json" },
       body: { ok: true },
-      bodyText: "{\"ok\":true}",
+      bodyText: "{\"secret\":\"secret-token-123\"}",
       contentType: "application/json",
       receivedAt: "2026-06-06T10:00:02.000Z",
       remoteAddress: "127.0.0.1",
@@ -395,6 +400,74 @@ describe("LiveDesktopGateway", () => {
     expect(first.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(true)
     expect(second.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(true)
     expect(other.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(false)
+  })
+
+  it("counts closed online sockets as failed broadcasts", () => {
+    const socket = new FakeSocket()
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish: vi.fn() } as unknown as LiveStreamService,
+      clock: {
+        randomId: () => "connection-1",
+        now: () => new Date("2026-06-06T10:00:00.000Z"),
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.readyState = 3
+
+    const result = gateway.broadcastToUser("user-1", {
+      type: "webhook.delivery.received",
+      id: "delivery-msg-1",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: webhookDeliveryPayload(),
+    })
+
+    expect(result).toEqual({
+      onlineClientCount: 1,
+      sentClientCount: 0,
+      failedClientCount: 1,
+    })
+    expect(socket.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(false)
+  })
+
+  it("counts send failures without logging raw delivery payload", () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const socket = new FakeSocket()
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish: vi.fn() } as unknown as LiveStreamService,
+      clock: {
+        randomId: () => "connection-1",
+        now: () => new Date("2026-06-06T10:00:00.000Z"),
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.shouldThrowOnSend = true
+
+    const result = gateway.broadcastToUser("user-1", {
+      type: "webhook.delivery.received",
+      id: "delivery-msg-1",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: webhookDeliveryPayload(),
+    })
+
+    expect(result).toEqual({
+      onlineClientCount: 1,
+      sentClientCount: 0,
+      failedClientCount: 1,
+    })
+    const logged = JSON.stringify(warn.mock.calls)
+    expect(logged).toContain("Live user broadcast failed")
+    expect(logged).not.toContain("secret-token-123")
+    expect(logged).not.toContain("bodyText")
+    expect(logged).not.toContain("webhook.delivery.received")
+    warn.mockRestore()
   })
 
   it("authenticates upgrade requests and binds accepted sockets", async () => {
