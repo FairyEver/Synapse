@@ -354,11 +354,18 @@ describe("AutomationService", () => {
   })
 
   it("accepts events through trigger runtime matching", async () => {
-    const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
+    const logger = structuredLogger()
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry(), logger })
     const item = await harness.service.automationCreate({
       name: "Event automation",
       scope: { type: "global" },
       trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+    await harness.service.automationCreate({
+      name: "Unmatched event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.deleted" } },
       executor: { type: "builtin.test", config: { message: "ok" } },
     })
 
@@ -375,6 +382,24 @@ describe("AutomationService", () => {
       status: "success",
       triggeredBy: "trigger",
     }))
+    expect(logger.info).toHaveBeenCalledWith("Automation event received.", {
+      source: "automation",
+      eventSource: "test",
+      eventType: "demo.created",
+      receivedAt: "2026-06-03T00:00:00.000Z",
+      boundary: "automation-event-trigger",
+    })
+    expect(logger.info).toHaveBeenCalledWith("Automation event processing complete.", {
+      source: "automation",
+      eventSource: "test",
+      eventType: "demo.created",
+      receivedAt: "2026-06-03T00:00:00.000Z",
+      checkedCount: 2,
+      matchedCount: 1,
+      acceptedCount: 1,
+      durationMs: expect.any(Number),
+      boundary: "automation-event-trigger",
+    })
   })
 
   it("ignores events that trigger runtime rejects", async () => {

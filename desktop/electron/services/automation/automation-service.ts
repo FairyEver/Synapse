@@ -313,8 +313,17 @@ export class AutomationService {
   }
 
   async acceptEvent(event: AutomationTriggerEvent): Promise<AutomationRun[]> {
+    const startedAt = Date.now()
+    this.deps.logger?.info("Automation event received.", {
+      source: "automation",
+      eventSource: event.source,
+      eventType: event.type,
+      receivedAt: event.receivedAt,
+      boundary: "automation-event-trigger",
+    })
     const items = await this.deps.items.list()
     const acceptedRuns: AutomationRun[] = []
+    let matchedCount = 0
     for (const item of items) {
       if (!item.enabled) continue
       if (!this.isItemValid(item)) {
@@ -332,6 +341,7 @@ export class AutomationService {
       try {
         const accepted = trigger.runtime.shouldAcceptEvent({ config: parsedConfig.data, event })
         if (!accepted) continue
+        matchedCount += 1
       } catch (error) {
         this.deps.logger?.warn("Automation event trigger failed, skipping item.", {
           automationId: item.id,
@@ -353,6 +363,17 @@ export class AutomationService {
         })
       }
     }
+    this.deps.logger?.info("Automation event processing complete.", {
+      source: "automation",
+      eventSource: event.source,
+      eventType: event.type,
+      receivedAt: event.receivedAt,
+      checkedCount: items.length,
+      matchedCount,
+      acceptedCount: acceptedRuns.length,
+      durationMs: Date.now() - startedAt,
+      boundary: "automation-event-trigger",
+    })
     return acceptedRuns
   }
 
