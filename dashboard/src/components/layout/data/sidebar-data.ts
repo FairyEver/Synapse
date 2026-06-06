@@ -8,6 +8,7 @@ import {
   ScrollText,
   Settings,
   Command,
+  Webhook,
 } from 'lucide-react'
 import type { AuthUser } from '@/stores/auth-store'
 import { type SidebarData } from '../types'
@@ -56,6 +57,11 @@ const adminNavGroup = {
 const userAccountNavGroup = {
   title: '账户',
   items: [
+    {
+      title: 'Webhooks',
+      url: '/webhooks',
+      icon: Webhook,
+    },
     {
       title: '设置',
       url: '/settings',

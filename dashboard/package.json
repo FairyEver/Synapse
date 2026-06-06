@@ -5,10 +5,10 @@
   "type": "module",
   "description": "Synapse admin dashboard",
   "scripts": {
-    "dev": "vite --port 3000 --host 0.0.0.0 --open /dashboard/",
-    "build": "tsc -b && vite build",
+    "dev": "pnpm --filter @synapse/shared run build && vite --port 3000 --host 0.0.0.0 --open /dashboard/",
+    "build": "pnpm --filter @synapse/shared run build && tsc -b && vite build",
     "preview": "vite preview --port 3000",
-    "tsc": "tsc --noEmit"
+    "tsc": "pnpm --filter @synapse/shared run build && tsc --noEmit"
   },
   "dependencies": {
     "@synapse/shared": "workspace:*",

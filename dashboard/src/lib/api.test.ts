@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, subscribeAuthExpired } from './api'
 
 describe('adminApi.cleanupLogs', () => {
   afterEach(() => {
@@ -66,5 +66,56 @@ describe('adminApi.downloadBackup', () => {
     } finally {
       unsubscribe()
     }
+  })
+})
+
+describe('dashboardApi.webhooks', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function mockJsonResponse(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+  }
+
+  it('uses dashboard webhook management endpoints', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await dashboardApi.updateWebhook('hook/id', { name: 'Deploy', enabled: false })
+    await dashboardApi.resetWebhookSecret('hook/id')
+    await dashboardApi.listWebhookDeliveries('hook/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/dashboard/webhooks/hook%2Fid',
+      expect.objectContaining({
+        body: JSON.stringify({ name: 'Deploy', enabled: false }),
+        credentials: 'include',
+        method: 'PATCH',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/dashboard/webhooks/hook%2Fid/reset-secret',
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/dashboard/webhooks/hook%2Fid/deliveries',
+      expect.objectContaining({
+        credentials: 'include',
+      })
+    )
   })
 })
