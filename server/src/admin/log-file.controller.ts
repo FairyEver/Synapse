@@ -1,4 +1,4 @@
-import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException, InternalServerErrorException, Logger } from "@nestjs/common";
+import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException, Logger } from "@nestjs/common";
 import type { Response } from "express";
 import { LogFileService } from "./log-file.service";
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard";
@@ -160,7 +160,12 @@ export class LogFileController {
     const cutoffDate = parseCleanupBeforeDate(before);
     const result = await this.logFileService.cleanup(cutoffDate);
     if (result.failures.length > 0) {
-      throw new InternalServerErrorException("部分日志清理失败，请检查系统日志。");
+      await this.recordLogAudit(request, {
+        action: "logs.cleanup.failed",
+        targetId: cutoffDate,
+        detail: { before: cutoffDate, deleted: result.deleted, failures: result.failures },
+      });
+      return { deleted: result.deleted, failures: result.failures.length };
     }
     await this.recordLogAudit(request, {
       action: "logs.cleanup",

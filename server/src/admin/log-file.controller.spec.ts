@@ -175,7 +175,7 @@ describe("LogFileController", () => {
     }));
   });
 
-  it("leaves partial cleanup failure audits to the interceptor", async () => {
+  it("returns partial cleanup results and records failed cleanup audits", async () => {
     const { controller, auditLog, service } = createController();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     service.cleanup.mockResolvedValueOnce({
@@ -186,11 +186,20 @@ describe("LogFileController", () => {
     await expect(controller.cleanup(cutoff, {
       admin: { email: "admin@example.com" },
       ip: "203.0.113.10",
-    } as never))
-      .rejects
-      .toThrow("部分日志清理失败，请检查系统日志。");
+    } as never)).resolves.toEqual({ deleted: 1, failures: 1 });
 
-    expect(auditLog.record).not.toHaveBeenCalled();
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "logs.cleanup.failed",
+      targetType: "logs",
+      targetId: cutoff,
+      detail: {
+        before: cutoff,
+        deleted: 1,
+        failures: [{ name: "server.2026-05-01.log", errorName: "Error" }],
+      },
+      ipAddress: "203.0.113.10",
+    });
   });
 
   it("records audit logs for downloads", async () => {

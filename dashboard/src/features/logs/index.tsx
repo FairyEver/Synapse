@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { getCleanupBeforeDate } from './cleanup-date'
+import { getCleanupResultMessage } from './cleanup-result'
 import { getLogsQueryErrorMessage } from './logs-error'
 
 const allLogLevelsValue = 'all'
@@ -51,7 +52,7 @@ export default function LogsPage() {
     const before = getCleanupBeforeDate()
     try {
       const result = await adminApi.cleanupLogs(before)
-      toast.success(`已清理 ${result.deleted} 个日志文件`)
+      toast.success(getCleanupResultMessage(result))
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : '清理失败')
     }

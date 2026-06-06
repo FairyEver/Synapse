@@ -448,7 +448,7 @@ export const adminApi = {
       'logs.zip'
     ),
   cleanupLogs: (before: Date) =>
-    request<{ deleted: number }>(
+    request<{ deleted: number; failures?: number }>(
       `${adminApiBasePath}/logs/cleanup?${new URLSearchParams({ before: dateQueryValue(before) }).toString()}`,
       { method: 'DELETE' }
     ),
