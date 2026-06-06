@@ -280,6 +280,37 @@ describe("TaskSchedulerService", () => {
     }
   })
 
+  it("cancels pending timers before manual runs can overlap", async () => {
+    vi.useFakeTimers()
+    try {
+      const harness = createHarness({ action: longRunningAction() })
+      await harness.taskItems.upsert(createTask({
+        id: "task:1",
+        nextRunAt: "2026-04-29T10:01:00.000Z",
+      }))
+      await harness.service.start()
+
+      const runPromise = harness.service.runNow("task:1")
+      await flushPromises()
+      expect(harness.service.schedulerRuntimeInspect().runningTaskIds).toContain("task:1")
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      await flushPromises()
+
+      const runs = await harness.runs.listByTask("task:1")
+      expect(runs).toHaveLength(1)
+      expect(runs).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ status: "skipped", error: "task is already running" }),
+      ]))
+
+      await harness.service.stopRun(runs[0].id)
+      await runPromise
+      await harness.service.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("stops active runs when the scheduler service stops", async () => {
     const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))
@@ -661,6 +692,11 @@ async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 1))
   }
   throw new Error("condition was not met")
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
 }
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

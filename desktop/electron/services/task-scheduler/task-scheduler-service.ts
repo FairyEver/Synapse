@@ -296,6 +296,7 @@ export class TaskSchedulerService {
     if (!this.isTaskValid(task)) {
       throw new Error(NEEDS_UPDATE_MESSAGE)
     }
+    this.cancel(id)
     try {
       const run = await this.executeOrSkip(task, "manual")
       this.deps.logger?.info("Scheduled task manual run requested.", {
