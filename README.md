@@ -82,6 +82,48 @@ bash scripts/manual/fix-dev-protocol.sh
 
 - 管理面板：<https://synapse.d2.pub/dashboard>
 
+### 线上访问链路
+
+当前 `synapse.d2.pub` 部署在腾讯云服务器的宝塔面板中，外网入口由宝塔 Nginx 接收，再反向代理到服务器本机的 Docker 服务端口。
+
+```text
+用户浏览器
+  -> https://synapse.d2.pub:443
+  -> 腾讯云服务器 / 宝塔 Nginx
+  -> 反向代理 / 到 http://127.0.0.1:3000
+  -> Docker: server-server-1  127.0.0.1:3000 -> 3000/tcp
+  -> 容器内 Nginx
+       /dashboard/  管理后台静态文件
+       /api/        NestJS API http://127.0.0.1:3001
+       /healthz     NestJS health check
+  -> Docker 内网
+  -> Docker: server-postgres-1  postgres:5432
+```
+
+宝塔中的站点配置：
+
+- 站点：`synapse.d2.pub`
+- 类型：反向代理
+- 代理目录：`/`
+- 目标 URL：`http://127.0.0.1:3000`
+- 发送域名：`$http_host`
+- WebSocket 支持：开启
+- HTTPS：站点监听 `443 ssl`，证书由宝塔站点 SSL 配置管理
+
+Docker 容器分工：
+
+- `server-server-1`：Synapse 服务容器，镜像形如 `synapse-server:deploy-<时间戳>`；容器内 Nginx 监听 `3000`，NestJS API 监听 `3001`。
+- `server-postgres-1`：PostgreSQL 16 数据库容器；服务容器通过 Docker 内网地址 `postgres:5432` 访问它。
+
+端口绑定都在 `127.0.0.1` 上，表示 Docker 服务只暴露给服务器本机。公网用户不会直接访问容器端口，而是先访问域名，再由宝塔 Nginx 转发。
+
+常用只读验证：
+
+```bash
+curl http://127.0.0.1:3000/healthz
+curl https://synapse.d2.pub/healthz
+```
+
 ## 下载
 
 - 官网：<https://usesynapse.netlify.app>
