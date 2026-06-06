@@ -1,7 +1,10 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
-const devStatePath = path.resolve("node_modules/.cache/synapse/dev-processes.json")
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(scriptDir, "../..")
+const devStatePath = path.join(repoRoot, "node_modules/.cache/synapse/dev-processes.json")
 let writeSerial = 0
 
 function normalizeDevProcessEntries(entries) {

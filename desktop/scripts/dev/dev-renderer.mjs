@@ -4,7 +4,11 @@
  * 它只做前端 dev server 启动和退出信号转发，不负责 Electron 主进程。
  */
 import { spawn } from "node:child_process"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const desktopRoot = path.resolve(scriptDir, "../..")
 const port = process.env.SYNAPSE_DEV_PORT ?? "19731"
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 let isStopping = false
@@ -13,6 +17,7 @@ const child = spawn(
   pnpmCommand,
   ["exec", "vite", "--host", "127.0.0.1", "--port", port, "--strictPort"],
   {
+    cwd: desktopRoot,
     stdio: "inherit",
     env: process.env,
   },

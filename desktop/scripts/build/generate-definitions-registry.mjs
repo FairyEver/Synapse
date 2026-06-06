@@ -3,7 +3,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
-const packageRoot = path.resolve(scriptDir, "..")
+const packageRoot = path.resolve(scriptDir, "../..")
 const definitionsRoot = path.join(packageRoot, "src", "definitions")
 const editorDefinitionsRoot = path.join(definitionsRoot, "editor")
 const agentDefinitionsRoot = path.join(definitionsRoot, "agent")

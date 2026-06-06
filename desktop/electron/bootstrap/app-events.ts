@@ -57,7 +57,7 @@ export function registerAuthProtocol(): void {
     logger.warn("Failed to register synapse:// protocol handler.", {
       defaultApp: Boolean(process.defaultApp),
       hasDevEntrypoint,
-      hint: "scripts/fix-dev-protocol.sh",
+      hint: "scripts/manual/fix-dev-protocol.sh",
     })
   }
 }

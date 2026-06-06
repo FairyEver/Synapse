@@ -7,7 +7,7 @@ import { clearDevProcessState, readDevProcessState, writeDevProcessState } from 
 
 const execFileAsync = promisify(execFile)
 const currentFilePath = fileURLToPath(import.meta.url)
-const defaultWorkspaceRoot = path.resolve(path.dirname(currentFilePath), "..")
+const defaultWorkspaceRoot = path.resolve(path.dirname(currentFilePath), "../..")
 const DEV_SCRIPT_NAMES = ["dev:website", "dev:desktop", "dev:server"]
 const DEV_PORTS_BY_SCRIPT = {
   "dev:website": [19773],
@@ -17,8 +17,8 @@ const DEV_PORTS_BY_SCRIPT = {
 const DEV_PORTS = Object.values(DEV_PORTS_BY_SCRIPT).flat()
 
 const RELATIVE_DEV_COMMAND_MATCHERS = [
-  /scripts[/\\]dev\.mjs/u,
-  /scripts[/\\]run-with-server-env\.mjs.*run dev/u,
+  /scripts[/\\]dev[/\\]dev\.mjs/u,
+  /scripts[/\\]dev[/\\]run-server-with-env\.mjs.*run dev/u,
   /dev-renderer/u,
   /dev-electron-app/u,
   /tsc.*tsconfig\.electron\.json.*--watch/u,
@@ -46,7 +46,7 @@ const DEV_COMMAND_MATCHERS_BY_SCRIPT = {
     /pnpm(?:\.cjs)?.*\bdev:website\b/u,
   ],
   "dev:desktop": [
-    /scripts[/\\]dev\.mjs/u,
+    /scripts[/\\]dev[/\\]dev\.mjs/u,
     /dev-renderer/u,
     /dev-electron-app/u,
     /tsc.*tsconfig\.electron\.json.*--watch/u,
@@ -59,7 +59,7 @@ const DEV_COMMAND_MATCHERS_BY_SCRIPT = {
     /pnpm(?:\.cjs)?.*\bdev:(?:renderer|electron:build|electron:app)\b/u,
   ],
   "dev:server": [
-    /scripts[/\\]run-with-server-env\.mjs.*run dev/u,
+    /scripts[/\\]dev[/\\]run-server-with-env\.mjs.*run dev/u,
     /nest.*start.*--watch/u,
     /admin[/\\]vite\.config\.ts/u,
     /max.*dev.*--port 3000/u,

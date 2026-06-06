@@ -1,8 +1,11 @@
 import { readFile } from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { runPnpm } from "./process-utils.mjs"
 
-const envPath = path.resolve("server/.env")
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(scriptDir, "../..")
+const envPath = path.join(repoRoot, "server/.env")
 
 function parseEnvFile(raw) {
   const env = {}
@@ -55,12 +58,13 @@ async function loadServerEnv() {
 
 const args = process.argv.slice(2)
 if (args.length === 0) {
-  console.error("[run-with-server-env] Missing pnpm arguments.")
+  console.error("[run-server-with-env] Missing pnpm arguments.")
   process.exit(1)
 }
 
 try {
   const result = await runPnpm(args, {
+    cwd: repoRoot,
     env: {
       ...process.env,
       ...await loadServerEnv(),
@@ -69,6 +73,6 @@ try {
   if (result.signal) process.exit(1)
   process.exit(result.code)
 } catch (error) {
-  console.error("[run-with-server-env] Failed to start pnpm.", error)
+  console.error("[run-server-with-env] Failed to start pnpm.", error)
   process.exit(1)
 }

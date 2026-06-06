@@ -7,7 +7,7 @@
 - 相关代码：
   - `desktop/electron/database/service.ts`
   - `desktop/electron/database/__tests__/service.test.ts`
-  - `desktop/scripts/import-legacy-database.mjs`
+  - `desktop/scripts/migrations/import-legacy-database.mjs`
 
 ### 背景
 
@@ -40,7 +40,7 @@ Synapse Database 的列元数据从旧的 `_meta_columns.enum_values` schema 升
   - `desktop/electron/database/mcp-installer.ts`
   - `desktop/database/shared/server-identity.ts`
   - `desktop/electron/modules/config/ipc.ts`
-  - `desktop/scripts/import-legacy-database.mjs`
+  - `desktop/scripts/migrations/import-legacy-database.mjs`
   - `desktop/electron/database/__tests__/service.test.ts`
 
 ### 起因

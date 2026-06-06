@@ -17,12 +17,12 @@ import { fileURLToPath } from "node:url"
 
 const execFile = promisify(execFileCb)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const desktopRoot = path.resolve(__dirname, "..")
+const desktopRoot = path.resolve(__dirname, "../..")
 
 const GENERATED_FILE = "electron/generated/ipc-channels.generated.ts"
 
 async function run() {
-  await execFile(process.execPath, ["scripts/generate-ipc.mjs"], { cwd: desktopRoot })
+  await execFile(process.execPath, ["scripts/build/generate-ipc.mjs"], { cwd: desktopRoot })
   try {
     await execFile("git", ["diff", "--quiet", "--", GENERATED_FILE], { cwd: desktopRoot })
   } catch (err) {

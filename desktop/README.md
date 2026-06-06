@@ -177,7 +177,7 @@ desktop/src/definitions/editor/<editor-id>/
 生成入口：
 
 ```text
-desktop/scripts/generate-definitions-registry.mjs
+desktop/scripts/build/generate-definitions-registry.mjs
 desktop/src/definitions/generated/renderer-registry.ts
 desktop/electron/services/definitions/generated/main-registry.ts
 ```

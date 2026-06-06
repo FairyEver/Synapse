@@ -21,10 +21,11 @@ describe("server dev scripts", () => {
     expect(scripts["dev:admin"]).toBeUndefined()
   })
 
-  it("does not expose a combined workspace dev command", () => {
+  it("keeps one combined workspace dev command", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
-    expect(workspacePackage.scripts?.dev).toBeUndefined()
+    expect(workspacePackage.scripts?.dev).toContain("pnpm run dev:server")
+    expect(workspacePackage.scripts?.dev).toContain("pnpm run dev:desktop")
   })
 
   it("keeps one workspace server dev entrypoint for the backend stack", () => {
@@ -47,7 +48,7 @@ describe("server dev scripts", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
     expect(workspacePackage.scripts?.["quit:server"]).toContain(
-      "node scripts/quit-processes.mjs dev:server",
+      "node scripts/dev/quit-processes.mjs dev:server",
     )
     expect(workspacePackage.scripts?.["quit:server"]).toContain(
       "docker compose --env-file server/.env -f server/compose.yml down",

@@ -1,6 +1,6 @@
 /**
  * AUTO-GENERATED FILE — DO NOT EDIT.
- * Source: scripts/generate-ipc.mjs
+ * Source: scripts/build/generate-ipc.mjs
  * Run `pnpm --filter @synapse/desktop run generate:ipc` to regenerate.
  */
 

@@ -73,7 +73,7 @@ pnpm quit                    # 停止本地开发环境
 **解决**：在仓库根目录执行：
 
 ```bash
-bash scripts/fix-dev-protocol.sh
+bash scripts/manual/fix-dev-protocol.sh
 ```
 
 该脚本会向开发模式 `Electron.app` 的 `Info.plist` 添加 `synapse://` URL scheme 并注册到 Launch Services。执行一次即可，`pnpm install` 或 Electron 版本更新后需重新执行。

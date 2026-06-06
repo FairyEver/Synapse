@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 
 const execFileAsync = promisify(execFile)
 const desktopRoot = path.resolve(__dirname, "../..")
-const scriptPath = path.join(desktopRoot, "scripts/prepare-cdn-release-artifacts.mjs")
+const scriptPath = path.join(desktopRoot, "scripts/release/prepare-cdn-release-artifacts.mjs")
 const packageJsonPath = path.join(desktopRoot, "package.json")
 
 async function writeFixtureArtifacts(dir: string): Promise<void> {

@@ -225,7 +225,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
 
       const result = await execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
       ])
 
@@ -246,7 +246,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
 
       await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("Claude SDK native binary is missing"),
@@ -268,7 +268,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
 
       await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("packaged Claude runtime guard"),
@@ -287,7 +287,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
 
       await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("builtin-tool-worker-bootstrap.js"),
@@ -328,7 +328,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
 
       await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("builtin-tool-worker.js must stay packed"),
@@ -357,7 +357,7 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
 
       await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/verify-packaged-asar.mjs"),
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("dist-electron/electron/services/file-conversion/index.js"),

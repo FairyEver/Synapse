@@ -2,17 +2,20 @@ import { existsSync } from "node:fs"
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
 import {
   SYNAPSE_KB_TEMPLATE_DIR,
   SYNAPSE_KB_TEMPLATE_NAME,
   rewriteTemplateFiles,
   validateTemplateBranding,
-} from "./lib/synapse-knowledge-base-template-branding.mjs"
+} from "./template-branding.mjs"
 
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(scriptDir, "../..")
 const repoUrl = "https://github.com/AgriciDaniel/claude-obsidian.git"
 const sourceRepoUrl = "https://github.com/AgriciDaniel/claude-obsidian"
-const templateDir = path.resolve(SYNAPSE_KB_TEMPLATE_DIR)
+const templateDir = path.resolve(repoRoot, SYNAPSE_KB_TEMPLATE_DIR)
 const preservedFiles = new Set(["SOURCE.json"])
 
 function run(command, args, options = {}) {

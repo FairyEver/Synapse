@@ -31,36 +31,37 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const desktopRoot = path.resolve(scriptDir, "../..")
 
 /**
- * Add lines like { id: "content", importPath: "../electron/modules/content/ipc.ts" }
+ * Add lines like { id: "content", importPath: "electron/modules/content/ipc.ts" }
  * once a module is migrated. The codegen accepts the source file (or a manifest
  * value) and pulls IpcModule from a default export named identically.
  */
 const MODULE_SOURCES = [
-  { id: "account", importPath: "../electron/modules/account/ipc.ts" },
-  { id: "content", importPath: "../electron/modules/content/ipc.ts" },
-  { id: "config", importPath: "../electron/modules/config/ipc.ts" },
-  { id: "identity", importPath: "../electron/modules/identity/ipc.ts" },
-  { id: "user-profile", importPath: "../electron/modules/user-profile/ipc.ts" },
-  { id: "log", importPath: "../electron/modules/log/ipc.ts" },
-  { id: "editor-scan", importPath: "../electron/modules/editor-scan/ipc.ts" },
-  { id: "editor-copy", importPath: "../electron/modules/editor-copy/ipc.ts" },
-  { id: "editor-install-status", importPath: "../electron/modules/editor-install-status/ipc.ts" },
-  { id: "install-status", importPath: "../electron/modules/install-status/ipc.ts" },
-  { id: "knowledge-base", importPath: "../electron/modules/knowledge-base/ipc.ts" },
-  { id: "editor", importPath: "../electron/modules/editor/ipc.ts" },
-  { id: "shell", importPath: "../electron/modules/shell/ipc.ts" },
-  { id: "repository", importPath: "../electron/modules/repository/ipc.ts" },
-  { id: "update", importPath: "../electron/modules/update/ipc.ts" },
-  { id: "cheat-code", importPath: "../electron/modules/cheat-code/ipc.ts" },
-  { id: "agent", importPath: "../electron/modules/agent/ipc.ts" },
-  { id: "task-scheduler", importPath: "../electron/modules/task-scheduler/ipc.ts" },
-  { id: "automation", importPath: "../electron/modules/automation/ipc.ts" },
-  { id: "ops", importPath: "../electron/modules/ops/ipc.ts" },
-  { id: "workflow", importPath: "../electron/modules/workflow/ipc.ts" },
-  { id: "tools", importPath: "../electron/modules/tools/ipc.ts" },
+  { id: "account", importPath: "electron/modules/account/ipc.ts" },
+  { id: "content", importPath: "electron/modules/content/ipc.ts" },
+  { id: "config", importPath: "electron/modules/config/ipc.ts" },
+  { id: "identity", importPath: "electron/modules/identity/ipc.ts" },
+  { id: "user-profile", importPath: "electron/modules/user-profile/ipc.ts" },
+  { id: "log", importPath: "electron/modules/log/ipc.ts" },
+  { id: "editor-scan", importPath: "electron/modules/editor-scan/ipc.ts" },
+  { id: "editor-copy", importPath: "electron/modules/editor-copy/ipc.ts" },
+  { id: "editor-install-status", importPath: "electron/modules/editor-install-status/ipc.ts" },
+  { id: "install-status", importPath: "electron/modules/install-status/ipc.ts" },
+  { id: "knowledge-base", importPath: "electron/modules/knowledge-base/ipc.ts" },
+  { id: "editor", importPath: "electron/modules/editor/ipc.ts" },
+  { id: "shell", importPath: "electron/modules/shell/ipc.ts" },
+  { id: "repository", importPath: "electron/modules/repository/ipc.ts" },
+  { id: "update", importPath: "electron/modules/update/ipc.ts" },
+  { id: "cheat-code", importPath: "electron/modules/cheat-code/ipc.ts" },
+  { id: "agent", importPath: "electron/modules/agent/ipc.ts" },
+  { id: "task-scheduler", importPath: "electron/modules/task-scheduler/ipc.ts" },
+  { id: "automation", importPath: "electron/modules/automation/ipc.ts" },
+  { id: "ops", importPath: "electron/modules/ops/ipc.ts" },
+  { id: "workflow", importPath: "electron/modules/workflow/ipc.ts" },
+  { id: "tools", importPath: "electron/modules/tools/ipc.ts" },
 ]
 
 /**
@@ -69,19 +70,18 @@ const MODULE_SOURCES = [
  * whose values are channel strings.
  */
 const EXTRA_CHANNEL_SOURCES = [
-  { id: "usage-analysis", importPath: "../electron/usage-analysis/channels.ts", exportName: "USAGE_ANALYSIS_CHANNELS" },
+  { id: "usage-analysis", importPath: "electron/usage-analysis/channels.ts", exportName: "USAGE_ANALYSIS_CHANNELS" },
 ]
 
 const OUTPUT_PATH = path.resolve(
-  __dirname,
-  "..",
+  desktopRoot,
   "electron",
   "generated",
   "ipc-channels.generated.ts",
 )
 
 async function loadModuleDescriptor(importPath) {
-  const resolved = path.resolve(__dirname, importPath)
+  const resolved = path.resolve(desktopRoot, importPath)
   const source = await readFile(resolved, "utf8")
   const sourceFile = ts.createSourceFile(
     resolved,
@@ -263,7 +263,7 @@ function getPropertyName(name, sourceFile) {
 }
 
 async function loadExtraChannels(entry) {
-  const resolved = path.resolve(__dirname, entry.importPath)
+  const resolved = path.resolve(desktopRoot, entry.importPath)
   const source = await readFile(resolved, "utf8")
   const sourceFile = ts.createSourceFile(resolved, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 
@@ -320,7 +320,7 @@ async function generate() {
   const out = []
   out.push("/**")
   out.push(" * AUTO-GENERATED FILE — DO NOT EDIT.")
-  out.push(" * Source: scripts/generate-ipc.mjs")
+  out.push(" * Source: scripts/build/generate-ipc.mjs")
   out.push(" * Run `pnpm --filter @synapse/desktop run generate:ipc` to regenerate.")
   out.push(" */")
   out.push("")

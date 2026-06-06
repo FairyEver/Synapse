@@ -5,7 +5,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import path from "node:path"
 
 function usage() {
-  console.error("Usage: node scripts/verify-packaged-asar.mjs <release-dir-or-app-path>")
+  console.error("Usage: node scripts/checks/verify-packaged-asar.mjs <release-dir-or-app-path>")
 }
 
 function readAsarHeader(buffer) {

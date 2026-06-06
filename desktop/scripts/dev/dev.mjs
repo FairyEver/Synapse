@@ -5,7 +5,11 @@
  */
 import { spawn } from "node:child_process"
 import { createServer } from "node:net"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const desktopRoot = path.resolve(scriptDir, "../..")
 const host = "127.0.0.1"
 const requestedPort = process.env.SYNAPSE_DEV_PORT
 const defaultPort = 19731
@@ -74,6 +78,7 @@ const child = spawn(
     "pnpm dev:electron:app",
   ],
   {
+    cwd: desktopRoot,
     stdio: "inherit",
     env: {
       ...process.env,

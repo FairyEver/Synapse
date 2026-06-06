@@ -6,7 +6,7 @@ import {
   brandTemplateText,
   findDisallowedBrandHits,
   rewritePluginManifest,
-} from "../lib/synapse-knowledge-base-template-branding.mjs"
+} from "../knowledge-base/template-branding.mjs"
 
 test("rewritePluginManifest gives the runtime a Synapse identity", () => {
   const rewritten = rewritePluginManifest({

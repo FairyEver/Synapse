@@ -2,7 +2,7 @@
  * Phase 0.6 — ESLint configuration (Flat Config).
  * SPEC §9.
  *
- * Migrates the 6 hard constraints from check-hard-constraints.mjs to ESLint rules,
+ * Migrates the 6 hard constraints from scripts/checks/check-hard-constraints.mjs to ESLint rules,
  * plus adds no-restricted-imports for modules/ directory boundaries.
  */
 

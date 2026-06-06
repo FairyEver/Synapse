@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 
 const execFileAsync = promisify(execFile)
 const desktopRoot = path.resolve(__dirname, "../..")
-const scriptPath = path.join(desktopRoot, "scripts/publish-mac-release.mjs")
+const scriptPath = path.join(desktopRoot, "scripts/release/publish-mac-release.mjs")
 
 async function writeMacArtifacts(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true })

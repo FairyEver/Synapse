@@ -6,7 +6,7 @@ import {
   filterRemainingDevProcessState,
   matchesSynapseDevProcess,
   parsePsRows,
-} from "../quit-processes.mjs"
+} from "../dev/quit-processes.mjs"
 
 const workspaceRoot = "/Users/liyang/Documents/code/github/Synapse"
 const desktopRoot = `${workspaceRoot}/desktop`
@@ -31,21 +31,21 @@ test("matchesSynapseDevProcess requires workspace cwd for relative dev scripts",
   assert.equal(matchesSynapseDevProcess({
     pid: 201,
     pgid: 201,
-    commandLine: "node scripts/dev.mjs",
+    commandLine: "node scripts/dev/dev.mjs",
     cwd: desktopRoot,
   }, { workspaceRoot }), true)
 
   assert.equal(matchesSynapseDevProcess({
     pid: 202,
     pgid: 202,
-    commandLine: "node scripts/dev.mjs",
+    commandLine: "node scripts/dev/dev.mjs",
     cwd: "/tmp/other-project",
   }, { workspaceRoot }), false)
 
   assert.equal(matchesSynapseDevProcess({
     pid: 203,
     pgid: 203,
-    commandLine: "node scripts/quit-processes.mjs",
+    commandLine: "node scripts/dev/quit-processes.mjs",
     cwd: workspaceRoot,
   }, { workspaceRoot }), false)
 
@@ -82,14 +82,14 @@ test("matchesSynapseDevProcess filters by requested dev script", () => {
   assert.equal(matchesSynapseDevProcess({
     pid: 304,
     pgid: 304,
-    commandLine: "node scripts/dev-renderer.mjs",
+    commandLine: "node scripts/dev/dev-renderer.mjs",
     cwd: `${workspaceRoot}/desktop`,
   }, { workspaceRoot, targetScripts: ["dev:desktop"] }), true)
 
   assert.equal(matchesSynapseDevProcess({
     pid: 305,
     pgid: 305,
-    commandLine: "node scripts/run-with-server-env.mjs --filter @synapse/server run dev",
+    commandLine: "node scripts/dev/run-server-with-env.mjs --filter @synapse/server run dev",
     cwd: workspaceRoot,
   }, { workspaceRoot, targetScripts: ["dev:server"] }), true)
 })
@@ -109,8 +109,8 @@ test("buildTerminationTargets keeps tracked process groups and scanned pids", ()
   assert.deepEqual(buildTerminationTargets([
     { pid: 10, processGroupPid: -10, scriptName: "dev:desktop" },
   ], [
-    { pid: 20, pgid: 20, commandLine: "node scripts/dev.mjs", cwd: desktopRoot },
-    { pid: process.pid, pgid: 30, commandLine: "node scripts/quit-processes.mjs", cwd: workspaceRoot },
+    { pid: 20, pgid: 20, commandLine: "node scripts/dev/dev.mjs", cwd: desktopRoot },
+    { pid: process.pid, pgid: 30, commandLine: "node scripts/dev/quit-processes.mjs", cwd: workspaceRoot },
   ]), [-10, 20])
 })
 

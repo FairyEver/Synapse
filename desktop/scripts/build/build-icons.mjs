@@ -9,7 +9,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
-const rootDir = resolve(scriptDir, "..")
+const rootDir = resolve(scriptDir, "../..")
 const inputPath = resolve(rootDir, "source/icon.png")
 const outputDir = resolve(rootDir, "build")
 const outputBasePath = resolve(outputDir, "icon")

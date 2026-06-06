@@ -65,7 +65,7 @@ describe("app event bootstrap", () => {
     expect(loggerMock.warn).toHaveBeenCalledWith("Failed to register synapse:// protocol handler.", {
       defaultApp: true,
       hasDevEntrypoint: true,
-      hint: "scripts/fix-dev-protocol.sh",
+      hint: "scripts/manual/fix-dev-protocol.sh",
     })
   })
 })

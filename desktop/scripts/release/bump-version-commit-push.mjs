@@ -5,7 +5,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
-const packageRoot = path.resolve(scriptDir, "..")
+const packageRoot = path.resolve(scriptDir, "../..")
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {

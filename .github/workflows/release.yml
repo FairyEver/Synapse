@@ -169,7 +169,7 @@ jobs:
           CDN_BASE_URL: https://${{ env.TENCENT_CLOUD_CDN_DOMAIN }}/
         run: |
           cd desktop
-          pnpm exec node scripts/prepare-cdn-release-artifacts.mjs \
+          pnpm exec node scripts/release/prepare-cdn-release-artifacts.mjs \
             --artifacts-dir ../release-artifacts \
             --out-dir ../cdn-release \
             --version "$VERSION" \

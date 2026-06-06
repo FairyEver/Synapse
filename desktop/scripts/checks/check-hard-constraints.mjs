@@ -17,7 +17,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const desktopRoot = path.resolve(__dirname, "..")
+const desktopRoot = path.resolve(__dirname, "../..")
 
 const checks = [
   {

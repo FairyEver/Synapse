@@ -8,7 +8,7 @@ import {
   clearDevProcessState,
   readDevProcessState,
   writeDevProcessState,
-} from "../dev-state.mjs"
+} from "../dev/dev-state.mjs"
 
 test("writeDevProcessState writes an atomic valid session file", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-dev-state-"))

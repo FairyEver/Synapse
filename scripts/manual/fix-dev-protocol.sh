@@ -6,7 +6,7 @@
 # 其 Info.plist 不含 CFBundleURLTypes，macOS Launch Services 无法
 # 识别 synapse:// 协议处理器。
 #
-# 使用方式：在仓库根目录执行 bash scripts/fix-dev-protocol.sh
+# 使用方式：在仓库根目录执行 bash scripts/manual/fix-dev-protocol.sh
 
 set -euo pipefail
 

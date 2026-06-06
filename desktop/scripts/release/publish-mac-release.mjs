@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import { prepareReleaseArtifacts } from "./prepare-cdn-release-artifacts.mjs"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
-const packageRoot = path.resolve(scriptDir, "..")
+const packageRoot = path.resolve(scriptDir, "../..")
 const repoRoot = path.resolve(packageRoot, "..")
 const DEFAULT_CDN_BASE_URL = "https://desktop.release.synapse.d2.pub/"
 const DEFAULT_COS_BUCKET = "synapse-desktop-release-1252371654"

@@ -6,11 +6,14 @@
 import { spawn } from "node:child_process"
 import { rm } from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const desktopRoot = path.resolve(scriptDir, "../..")
 const port = process.env.SYNAPSE_DEV_PORT ?? "19731"
 const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? `http://127.0.0.1:${port}`
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
-const electronBuildDir = path.resolve("dist-electron")
+const electronBuildDir = path.join(desktopRoot, "dist-electron")
 const electronEntryFiles = [
   "main.js",
   "preload.js",
@@ -33,6 +36,7 @@ function stopChild(signal) {
 function runPnpm(args, env = process.env) {
   return new Promise((resolve, reject) => {
     const child = spawn(pnpmCommand, args, {
+      cwd: desktopRoot,
       stdio: "inherit",
       env,
     })
@@ -89,6 +93,7 @@ if (isStopping) {
 }
 
 const nodemon = spawn(pnpmCommand, ["exec", "nodemon"], {
+  cwd: desktopRoot,
   stdio: "inherit",
   env: {
     ...process.env,
