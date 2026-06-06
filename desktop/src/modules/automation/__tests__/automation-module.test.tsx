@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AutomationModule } from "../index"
 import { AutomationList } from "../components/automation-list"
 import { AutomationListRow } from "../components/automation-list-row"
+import { AutomationRunsDialog } from "../components/automation-runs-dialog"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { AutomationItem } from "@/types/automation"
 
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   notificationError: vi.fn(),
   runAutomation: vi.fn(),
   stopAutomationRun: vi.fn(),
+  listAutomationRuns: vi.fn(),
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -101,6 +103,7 @@ vi.mock("../hooks/use-automation", async () => {
     return {
       ...actual,
       useAutomationItems: mocks.useAutomationItems,
+      listAutomationRuns: mocks.listAutomationRuns,
       runAutomation: mocks.runAutomation,
       stopAutomationRun: mocks.stopAutomationRun,
     }
@@ -177,6 +180,43 @@ describe("AutomationModule", () => {
 
     expect(html).toContain('data-slot="scroll-area"')
     expect(html).toContain("min-h-full")
+  })
+
+  it("shows a retry action without the empty state when run history loading fails", async () => {
+    mocks.listAutomationRuns
+      .mockRejectedValueOnce(new Error("network failed"))
+      .mockResolvedValueOnce([])
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(
+        <AutomationRunsDialog
+          busy={false}
+          item={createItem()}
+          open
+          onOpenChange={vi.fn()}
+          onStopRun={vi.fn()}
+        />,
+      )
+    })
+    await flushPromises()
+
+    expect(document.body.textContent).toContain("读取历史失败")
+    expect(document.body.textContent).toContain("重试")
+    expect(document.body.textContent).not.toContain("暂无运行记录")
+
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((button) => button.textContent === "重试")
+        ?.click()
+    })
+    await flushPromises()
+
+    expect(mocks.listAutomationRuns).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).not.toContain("读取历史失败")
+    expect(document.body.textContent).toContain("暂无运行记录")
   })
 
   it("opens the create editor window from the header action", async () => {
@@ -504,4 +544,11 @@ function createItem(overrides: Partial<AutomationItem> = {}): AutomationItem {
     configVersion: 0,
     ...overrides,
   }
+}
+
+async function flushPromises() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
 }

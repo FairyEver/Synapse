@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import { Clock, Play, RotateCcw, Square } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { Clock, Play, RefreshCw, RotateCcw, Square } from "lucide-react"
 
 import { ActionResultView } from "@/action-runtime/action-result-view"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
@@ -41,37 +41,49 @@ function AutomationRunsDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const loadRuns = useCallback(async (options?: { readonly isCancelled?: () => boolean }) => {
+    if (!item) return
+    setLoading(true)
+    setRuns([])
+    setError(null)
+    try {
+      const nextRuns = await listAutomationRuns(item.id)
+      if (!options?.isCancelled?.()) {
+        setRuns(nextRuns)
+        setError(null)
+      }
+    } catch (loadError) {
+      if (!options?.isCancelled?.()) {
+        logger.warn("Automation run history load failed.", {
+          automationId: item.id,
+          executorType: item.executor.type,
+          boundary: "renderer.automation.runs.list",
+          ...errorDiagnostic(loadError),
+        })
+        setError("读取历史失败")
+      }
+    } finally {
+      if (!options?.isCancelled?.()) {
+        setLoading(false)
+      }
+    }
+  }, [item])
+
   useEffect(() => {
     if (!open || !item) return
     let cancelled = false
-    setLoading(true)
-    setRuns([])
-    listAutomationRuns(item.id)
-      .then((nextRuns) => {
-        if (!cancelled) {
-          setRuns(nextRuns)
-          setError(null)
-        }
-      })
-      .catch((loadError) => {
-        if (!cancelled) {
-          logger.warn("Automation run history load failed.", {
-            automationId: item.id,
-            executorType: item.executor.type,
-            boundary: "renderer.automation.runs.list",
-            ...errorDiagnostic(loadError),
-          })
-          setError("读取历史失败")
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+    void loadRuns({
+      isCancelled: () => cancelled,
+    })
 
     return () => {
       cancelled = true
     }
-  }, [open, item])
+  }, [open, item, loadRuns])
+
+  function handleRetry() {
+    void loadRuns()
+  }
 
   async function handleStop(run: AutomationRun) {
     if (!item) return
@@ -101,9 +113,17 @@ function AutomationRunsDialog({
 
         <ScrollArea className="min-h-0">
           <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-2 pr-3">
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? (
+              <div className="flex items-center gap-2 text-sm">
+                <p className="text-destructive">{error}</p>
+                <Button size="sm" variant="outline" onClick={handleRetry}>
+                  <RefreshCw />
+                  重试
+                </Button>
+              </div>
+            ) : null}
             {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
-            {!loading && runs.length === 0 ? (
+            {!loading && !error && runs.length === 0 ? (
               <p className="text-sm text-muted-foreground">暂无运行记录</p>
             ) : null}
             {!loading && runs.map((run) => (
