@@ -6,12 +6,20 @@ export type DispatchContext = {
   readonly source?: SynapseActionSource
 }
 
-export type DispatchResult = {
-  readonly ok: true
-  readonly data?: unknown
-  readonly affected?: number
-  readonly total?: number
-}
+export type DispatchResult =
+  | {
+    readonly ok: true
+    readonly data?: unknown
+    readonly affected?: number
+    readonly total?: number
+  }
+  | {
+    readonly ok: false
+    readonly error?: string
+    readonly errors?: readonly unknown[]
+    readonly data?: unknown
+    readonly code?: string
+  }
 
 export type McpToolDefinition = {
   readonly name: string

@@ -160,6 +160,8 @@ describe("content capability dispatcher", () => {
 
     const result = await dispatcher.dispatch("content.rule.list", { includeDeleted: true }, { source: "api" })
 
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error("content.rule.list should succeed")
     expect(result.total).toBe(2)
     expect(deps.contentReader.listContent).toHaveBeenCalledWith("rule")
     expect(deps.contentReader.listDeletedContent).toHaveBeenCalledWith("rule")

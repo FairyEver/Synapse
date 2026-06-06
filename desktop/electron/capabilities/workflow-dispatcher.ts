@@ -304,7 +304,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const workflowId = requireString(params, "workflowId")
     const runParams = (params.params as Record<string, unknown>) ?? {}
     const result = await deps.runWorkflow(workflowId, runParams)
-    if ("errors" in result) throw new Error(`Execute failed: ${result.errors.map((e) => e.message).join("; ")}`)
+    if ("errors" in result) return { ok: false, errors: result.errors }
     return { ok: true, data: result }
   },
 
@@ -457,10 +457,26 @@ function dispatchCorrelation(params: Record<string, unknown>): Record<string, un
 
 function dispatchResultCorrelation(action: string, result: DispatchResult): Record<string, unknown> {
   if (action !== "workflow.run.execute") return {}
+  if (!result.ok) return dispatchFailureCorrelation(result)
   const data = result.data
   if (!data || typeof data !== "object" || Array.isArray(data)) return {}
   const runId = (data as Record<string, unknown>).runId
   return typeof runId === "string" && runId ? { runId } : {}
+}
+
+function dispatchFailureCorrelation(result: DispatchResult): Record<string, unknown> {
+  if (result.ok || !Array.isArray(result.errors)) return {}
+  const errorTypes = [...new Set(result.errors
+    .map((error) => {
+      if (!error || typeof error !== "object" || Array.isArray(error)) return undefined
+      const type = (error as Record<string, unknown>).type
+      return typeof type === "string" && type ? type : undefined
+    })
+    .filter((type): type is string => Boolean(type)))]
+  return {
+    errorCount: result.errors.length,
+    ...(errorTypes.length > 0 ? { errorTypes } : {}),
+  }
 }
 
 function dispatchErrorDiagnostic(error: unknown): {
@@ -492,14 +508,18 @@ export function createWorkflowDispatcher(deps: WorkflowDispatchDeps) {
             action: "workflow.mutate",
             actor: security.actor,
             resource: security.resource,
-            outcome: "allowed",
+            outcome: result.ok ? "allowed" : "failed",
             metadata: {
               ...security.metadata,
               ...resultCorrelation,
             },
           })
         }
-        logger.info("workflow mcp dispatch succeeded", { action, ...dispatchCorrelation(params), ...resultCorrelation })
+        if (result.ok) {
+          logger.info("workflow mcp dispatch succeeded", { action, ...dispatchCorrelation(params), ...resultCorrelation })
+        } else {
+          logger.warn("workflow mcp dispatch failed", { action, ...dispatchCorrelation(params), ...resultCorrelation })
+        }
         return result
       } catch (error) {
         if (security) {

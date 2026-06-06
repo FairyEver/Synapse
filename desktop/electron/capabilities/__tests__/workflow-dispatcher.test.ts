@@ -475,6 +475,75 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" })
   })
 
+  it("workflow.run.execute returns structured run validation errors", async () => {
+    const errors = [
+      { type: "invalid_config" as const, message: "Workflow not found" },
+      { type: "missing_param" as const, nodeId: "prompt-1", message: "topic is required" },
+    ]
+    const deps = makeDeps({
+      runWorkflow: vi.fn(async () => ({ errors })),
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch(
+      "workflow.run.execute",
+      { workflowId: "wf-missing", params: { topic: "" } },
+      { source: "api" },
+    )
+
+    expect(result).toEqual({ ok: false, errors })
+  })
+
+  it("audits structured workflow.run.execute errors as failed mutations", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const deps = makeDeps({
+      auditSink,
+      permissionGuard,
+      runWorkflow: vi.fn(async () => ({
+        errors: [
+          { type: "invalid_config" as const, message: "已有运行中的实例，请稍后再试。" },
+        ],
+      })),
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch(
+      "workflow.run.execute",
+      { workflowId: "wf-1", params: { key: "val" } },
+      { source: "mcp-http" },
+    )
+
+    expect(result.ok).toBe(false)
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      resource: "workflow:wf-1",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.run.execute",
+        workflowId: "wf-1",
+        hasRunParams: true,
+        errorCount: 1,
+        errorTypes: ["invalid_config"],
+      }),
+    }))
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith("workflow mcp dispatch failed", expect.objectContaining({
+      action: "workflow.run.execute",
+      workflowId: "wf-1",
+      hasRunParams: true,
+      errorCount: 1,
+      errorTypes: ["invalid_config"],
+    }))
+  })
+
   it("audits and logs the returned runId for successful workflow.run.execute mutations", async () => {
     const auditSink = {
       record: vi.fn(),
