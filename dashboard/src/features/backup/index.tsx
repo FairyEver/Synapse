@@ -4,6 +4,11 @@ import { toast } from 'sonner'
 import { adminApi } from '@/lib/api'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -13,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { getBackupListErrorMessage } from './backup-error'
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -23,7 +29,7 @@ function formatSize(bytes: number) {
 export default function BackupPage() {
   const queryClient = useQueryClient()
 
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-backups'],
     queryFn: adminApi.listBackups,
   })
@@ -60,6 +66,21 @@ export default function BackupPage() {
         </div>
         {isLoading ? (
           <div className='text-muted-foreground'>加载中...</div>
+        ) : isError ? (
+          <Alert variant='destructive'>
+            <AlertTitle>加载失败</AlertTitle>
+            <AlertDescription>
+              <p>{getBackupListErrorMessage(error)}</p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() => void refetch()}
+              >
+                重试
+              </Button>
+            </AlertDescription>
+          </Alert>
         ) : (
           <div className='rounded-md border'>
             <Table>
