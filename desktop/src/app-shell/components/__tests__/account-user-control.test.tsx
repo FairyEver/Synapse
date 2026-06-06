@@ -8,6 +8,7 @@ import type { SynapseAccountState } from "@/types/account"
 const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
   current: {
     status: "authenticated",
+    connectivity: "online",
     profile: {
       user: {
         id: "user-1",
@@ -86,6 +87,7 @@ describe("AccountUserControl", () => {
   it("falls back to email when display name is empty", () => {
     accountState.current = {
       status: "authenticated",
+      connectivity: "online",
       profile: {
         user: {
           id: "user-1",
@@ -101,6 +103,31 @@ describe("AccountUserControl", () => {
     const container = renderControl("panel")
 
     expect(container.textContent).toContain("user@example.com")
+  })
+
+  it("shows offline account identity and keeps sync available", () => {
+    accountState.current = {
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: "server_unavailable",
+      profile: {
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          status: "active",
+          displayName: "Ada",
+        },
+        teams: [],
+        syncedAt: "2026-06-01T00:00:00.000Z",
+      },
+    }
+
+    const panel = renderControl("panel")
+
+    expect(panel.textContent).toContain("Ada")
+    expect(panel.textContent).toContain("离线")
+    expect(panel.textContent).toContain("同步")
+    expect(panel.textContent).toContain("退出")
   })
 
   it("disables login controls while waiting for browser authentication", () => {

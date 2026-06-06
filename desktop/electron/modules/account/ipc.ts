@@ -23,10 +23,27 @@ const accountProfileSchema = z.object({
   syncedAt: z.string(),
 })
 
+const accountOfflineReasonSchema = z.enum([
+  "network_error",
+  "server_unavailable",
+  "profile_sync_failed",
+])
+
+const accountRetryStateSchema = z.object({
+  attempt: z.number().int().nonnegative(),
+  nextRetryAt: z.string().optional(),
+})
+
 const accountStateSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("unauthenticated") }),
   z.object({ status: z.literal("authenticating"), loginUrl: z.string().optional() }),
-  z.object({ status: z.literal("authenticated"), profile: accountProfileSchema }),
+  z.object({
+    status: z.literal("authenticated"),
+    connectivity: z.enum(["online", "offline"]),
+    profile: accountProfileSchema,
+    offlineReason: accountOfflineReasonSchema.optional(),
+    retry: accountRetryStateSchema.optional(),
+  }),
   z.object({ status: z.literal("error"), message: z.string(), profile: accountProfileSchema.optional() }),
 ])
 

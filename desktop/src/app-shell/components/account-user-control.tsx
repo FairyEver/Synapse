@@ -30,10 +30,15 @@ function getAccountTitle(state: SynapseAccountState): string {
 }
 
 function getAccountDetail(state: SynapseAccountState): string {
+  if (state.status === "authenticated" && state.connectivity === "offline") return "离线"
   if (state.status === "authenticated") return state.profile.user.email
   if (state.status === "authenticating") return "正在等待浏览器登录"
   if (state.status === "error") return state.message
   return "可选"
+}
+
+function isAccountOffline(state: SynapseAccountState): boolean {
+  return state.status === "authenticated" && state.connectivity === "offline"
 }
 
 function AccountUserControl({
@@ -134,6 +139,9 @@ function AccountUserControl({
         <Button variant="ghost" size="sm" className="max-w-48">
           <CircleUserRound data-icon="inline-start" />
           <span className="truncate">{getAccountTitle(state)}</span>
+          {isAccountOffline(state) ? (
+            <span className="text-muted-foreground">离线</span>
+          ) : null}
           <ChevronDown data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>

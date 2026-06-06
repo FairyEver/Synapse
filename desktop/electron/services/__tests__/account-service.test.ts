@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const accountLogger = vi.hoisted(() => {
   const logger = {
@@ -107,6 +107,10 @@ describe("AccountService", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     accountLogger.child.mockReturnValue(accountLogger)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it("starts login by persisting an attempt and opening the browser", async () => {
@@ -533,6 +537,161 @@ describe("AccountService", () => {
     expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
   })
 
+  it("keeps stored credentials and enters offline when refresh has a network error", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async () => {
+        throw new Error("connect ECONNREFUSED")
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: "network_error",
+      profile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-old",
+      lastProfile: storedProfile,
+    })
+  })
+
+  it("keeps stored credentials and enters offline when refresh returns 503", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) return jsonResponse({ error: "deploying" }, 503)
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: "server_unavailable",
+      profile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-old",
+      lastProfile: storedProfile,
+    })
+  })
+
+  it("clears stored credentials when refresh returns 401", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) return jsonResponse({ message: "expired" }, 401)
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state).toEqual({ status: "unauthenticated" })
+    expect(await namespace.getSingleton()).not.toHaveProperty("refreshToken")
+    expect(await namespace.getSingleton()).not.toHaveProperty("lastProfile")
+  })
+
+  it("automatically retries offline refresh and returns online when the server recovers", async () => {
+    vi.useFakeTimers()
+    const calls: string[] = []
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url, init) => {
+        calls.push(String(url))
+        if (String(url).endsWith("/auth/refresh") && calls.length === 1) {
+          return jsonResponse({ error: "deploying" }, 503)
+        }
+        if (String(url).endsWith("/auth/refresh")) {
+          expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+          return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const offline = await service.refreshFromStorage()
+    expect(offline).toMatchObject({ status: "authenticated", connectivity: "offline" })
+
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    await vi.waitFor(() => {
+      expect(service.getState()).toMatchObject({ status: "authenticated", connectivity: "online" })
+    })
+    expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
+  })
+
+  it("clears credentials when offline retry receives an auth failure", async () => {
+    vi.useFakeTimers()
+    let refreshCount = 0
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) {
+          refreshCount += 1
+          return refreshCount === 1
+            ? jsonResponse({ error: "deploying" }, 503)
+            : jsonResponse({ message: "expired" }, 401)
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    await service.refreshFromStorage()
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    await vi.waitFor(() => {
+      expect(service.getState()).toEqual({ status: "unauthenticated" })
+    })
+    expect(await namespace.getSingleton()).not.toHaveProperty("refreshToken")
+    expect(await namespace.getSingleton()).not.toHaveProperty("lastProfile")
+  })
+
+  it("backs off consecutive temporary offline retry failures", async () => {
+    vi.useFakeTimers()
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) return jsonResponse({ error: "deploying" }, 503)
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const first = await service.refreshFromStorage()
+    expect(first).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      retry: { attempt: 0 },
+    })
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(service.getState()).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      retry: { attempt: 1 },
+    })
+
+    await vi.advanceTimersByTimeAsync(29_999)
+    expect((service.getState() as { retry?: { attempt: number } }).retry?.attempt).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(service.getState()).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      retry: { attempt: 2 },
+    })
+  })
+
   it("logs refresh and logout success without leaking tokens", async () => {
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url) => {
@@ -626,9 +785,9 @@ describe("AccountService", () => {
     const persisted = await namespace.getSingleton()
     expect(persisted).toMatchObject({
       activeAttempt: { state: attempt!.state },
+      refreshToken: "refresh-old",
       lastProfile: storedProfile,
     })
-    expect(persisted).not.toHaveProperty("refreshToken")
   })
 
   it("keeps newer login state after an expired callback and queued new login overlap", async () => {

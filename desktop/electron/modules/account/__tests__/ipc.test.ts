@@ -39,6 +39,7 @@ describe("accountIpcModule", () => {
       payload: {
         state: {
           status: "authenticated",
+          connectivity: "online",
           profile: {
             user: { id: "u1", email: "u@example.com", displayName: "Ada", status: "active" },
             teams: [],
@@ -58,6 +59,37 @@ describe("accountIpcModule", () => {
               displayName: "Ada",
             },
           },
+        },
+      },
+    })
+  })
+
+  it("validates offline authenticated account events", () => {
+    const parsed = accountIpcModule.events.stateChanged.payload.parse({
+      domain: "account",
+      type: "account.stateChanged",
+      payload: {
+        state: {
+          status: "authenticated",
+          connectivity: "offline",
+          offlineReason: "server_unavailable",
+          retry: { attempt: 1, nextRetryAt: "2026-06-06T00:00:10.000Z" },
+          profile: {
+            user: { id: "u1", email: "u@example.com", displayName: "Ada", status: "active" },
+            teams: [],
+            syncedAt: "2026-06-06T00:00:00.000Z",
+          },
+        },
+      },
+      timestamp: "2026-06-06T00:00:00.000Z",
+    })
+
+    expect(parsed).toMatchObject({
+      payload: {
+        state: {
+          status: "authenticated",
+          connectivity: "offline",
+          offlineReason: "server_unavailable",
         },
       },
     })

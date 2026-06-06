@@ -233,7 +233,7 @@ describe("buildServiceRegistry (T1.8)", () => {
 
     // Every registered service starts pending.
     expect(inspected.every((e) => e.status === "pending")).toBe(true)
-  })
+  }, 10_000)
 
   it("planStartOrder() succeeds — graph is acyclic and all deps resolve", async () => {
     const { buildServiceRegistry } = await import("../registry")

@@ -159,7 +159,10 @@ if (!gotSingleInstanceLock) {
         isAppQuitting: () => allowAppQuit,
       })
 
-      attachActivateHandler(focusOrCreateMainWindow)
+      attachActivateHandler(() => {
+        focusOrCreateMainWindow()
+        void accountService.retryOfflineNow()
+      })
 
       // Phase 0.4: Use EventBus for cross-window repository update notifications.
       canHandleProtocolUrls = true

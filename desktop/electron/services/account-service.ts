@@ -2,7 +2,11 @@ import { createHash, randomBytes } from "node:crypto"
 import path from "node:path"
 import { app, safeStorage } from "electron"
 
-import type { SynapseAccountProfile, SynapseAccountState } from "../../src/types/account"
+import type {
+  SynapseAccountOfflineReason,
+  SynapseAccountProfile,
+  SynapseAccountState,
+} from "../../src/types/account"
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
 import { createMainLogger } from "./log-store"
@@ -10,6 +14,7 @@ import { createMainLogger } from "./log-store"
 const logger = createMainLogger("service.account")
 const CORE_ACCOUNT_NAMESPACE = "core.account"
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
+const ACCOUNT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000, 120_000, 300_000] as const
 const PROD_API_BASE_URL = "https://synapse.d2.pub/api"
 const DEV_API_BASE_URL = "http://localhost:3000/api"
 const DESKTOP_CLIENT_ID = "synapse-desktop"
@@ -29,6 +34,14 @@ type PersistedAccount = Record<string, unknown> & {
     createdAt: string
     expiresAt: string
   }
+}
+
+type AccountHttpFailureKind = "temporary" | "auth" | "other"
+
+type AccountHttpError = Error & {
+  status: number
+  url?: string
+  method?: string
 }
 
 type AccountExternalUrlOpener = (url: string) => Promise<void>
@@ -80,6 +93,10 @@ function authCallbackErrorMessage(errorCode: string): string {
   return "登录失败，请重试。"
 }
 
+function retryDelayMs(attempt: number): number {
+  return ACCOUNT_RETRY_DELAYS_MS[Math.min(attempt, ACCOUNT_RETRY_DELAYS_MS.length - 1)] ?? 300_000
+}
+
 function createNamespace(): EncryptedJsonNamespace<PersistedAccount> {
   return new EncryptedJsonNamespace<PersistedAccount>({
     name: CORE_ACCOUNT_NAMESPACE,
@@ -105,6 +122,8 @@ export class AccountService {
   private listeners = new Set<(state: SynapseAccountState) => void>()
   private authRevision = 0
   private storageMutationQueue: Promise<void> = Promise.resolve()
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryAttempt = 0
 
   constructor(deps: AccountServiceDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
@@ -133,6 +152,7 @@ export class AccountService {
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
+    this.cancelOfflineRetry()
     const baseUrl = apiBaseUrl(this.isPackaged)
     const state = createState()
     const codeVerifier = createCodeVerifier()
@@ -272,7 +292,8 @@ export class AccountService {
             return this.state
           }
           if (committed.activeAttempt) return this.state
-          this.setState({ status: "authenticated", profile: refreshed.profile })
+          this.cancelOfflineRetry()
+          this.setState({ status: "authenticated", connectivity: "online", profile: refreshed.profile })
           logger.info("Desktop account authenticated after callback exchange recovery.", authenticatedLogMeta(
             "handleAuthCallback",
             refreshed.profile,
@@ -312,7 +333,8 @@ export class AccountService {
         this.accessToken = null
         return this.state
       }
-      this.setState({ status: "authenticated", profile })
+      this.cancelOfflineRetry()
+      this.setState({ status: "authenticated", connectivity: "online", profile })
       logger.info("Desktop account authenticated.", authenticatedLogMeta("handleAuthCallback", profile))
     } catch (error) {
       logger.warn("Desktop account profile load failed after exchange; retrying refresh.", { error })
@@ -340,7 +362,8 @@ export class AccountService {
           return this.state
         }
         if (committed.activeAttempt) return this.state
-        this.setState({ status: "authenticated", profile: refreshed.profile })
+        this.cancelOfflineRetry()
+        this.setState({ status: "authenticated", connectivity: "online", profile: refreshed.profile })
         logger.info("Desktop account authenticated after refresh recovery.", authenticatedLogMeta(
           "handleAuthCallback",
           refreshed.profile,
@@ -366,7 +389,13 @@ export class AccountService {
     return this.state
   }
 
-  async refreshFromStorage(): Promise<SynapseAccountState> {
+  async refreshFromStorage(options: { resetRetryBackoff?: boolean } = {}): Promise<SynapseAccountState> {
+    const resetRetryBackoff = options.resetRetryBackoff ?? true
+    if (resetRetryBackoff) {
+      this.cancelOfflineRetry()
+    } else {
+      this.clearOfflineRetryTimer()
+    }
     let attemptedRefreshToken: string | undefined
     try {
       const persisted = await this.namespace.getSingleton()
@@ -415,23 +444,39 @@ export class AccountService {
         return this.state
       }
       if (committed.activeAttempt) return this.state
-      this.setState({ status: "authenticated", profile })
+      this.cancelOfflineRetry()
+      this.setState({ status: "authenticated", connectivity: "online", profile })
       logger.info("Desktop account refreshed from storage.", authenticatedLogMeta("refreshFromStorage", profile))
     } catch (error) {
       logger.warn("Account refresh failed.", { error })
       this.accessToken = null
-      await this.clearStoredRefreshTokenIfCurrent(attemptedRefreshToken)
       const latest = await this.readPersisted("Failed to read stored account after account refresh failed.")
       if (latest?.activeAttempt) return this.state
+      const failureKind = classifyAccountRefreshFailure(error)
+      const lastProfile = latest?.lastProfile
+      if (failureKind === "temporary" && latest?.refreshToken === attemptedRefreshToken && lastProfile) {
+        this.scheduleOfflineRetry(offlineReasonForFailure(error), lastProfile)
+        return this.state
+      }
+      await this.clearStoredCredentialsIfRefreshTokenCurrent(attemptedRefreshToken)
       this.setState({ status: "unauthenticated" })
     }
 
     return this.state
   }
 
+  async retryOfflineNow(): Promise<SynapseAccountState> {
+    if (this.state.status !== "authenticated" || this.state.connectivity !== "offline") {
+      return this.state
+    }
+    this.cancelOfflineRetry()
+    return this.refreshFromStorage()
+  }
+
   async logout(): Promise<SynapseAccountState> {
     const persisted = await this.readPersisted("Failed to read stored account before logout.")
     this.bumpAuthRevision()
+    this.cancelOfflineRetry()
     this.accessToken = null
     if (persisted?.refreshToken) {
       await this.postJson(`${apiBaseUrl(this.isPackaged)}/auth/logout`, {
@@ -575,6 +620,51 @@ export class AccountService {
     })
   }
 
+  private async clearStoredCredentialsIfRefreshTokenCurrent(expectedRefreshToken: string | undefined): Promise<void> {
+    if (!expectedRefreshToken) return
+    await this.runStorageMutation(async () => {
+      const persisted = await this.readPersisted("Failed to read stored account before clearing credentials.")
+      if (persisted?.refreshToken !== expectedRefreshToken) return
+      const nextPersisted: PersistedAccount = { ...persisted }
+      delete nextPersisted.refreshToken
+      delete nextPersisted.lastProfile
+      await this.namespace.setSingleton(nextPersisted)
+    }).catch((error) => {
+      logger.warn("Failed to clear stored account credentials.", { error })
+    })
+  }
+
+  private clearOfflineRetryTimer(): void {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
+  }
+
+  private scheduleOfflineRetry(reason: SynapseAccountOfflineReason, profile: SynapseAccountProfile): void {
+    if (this.retryTimer) return
+    const delayMs = retryDelayMs(this.retryAttempt)
+    const nextRetryAt = new Date(Date.now() + delayMs).toISOString()
+    this.setState({
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: reason,
+      profile,
+      retry: { attempt: this.retryAttempt, nextRetryAt },
+    })
+    this.retryTimer = setTimeout(async () => {
+      this.retryTimer = null
+      this.retryAttempt += 1
+      await this.refreshFromStorage({ resetRetryBackoff: false })
+    }, delayMs)
+    this.retryTimer.unref?.()
+  }
+
+  private cancelOfflineRetry(): void {
+    this.clearOfflineRetryTimer()
+    this.retryAttempt = 0
+  }
+
   private bumpAuthRevision(): number {
     this.authRevision += 1
     return this.authRevision
@@ -634,10 +724,21 @@ function authenticatedLogMeta(
   }
 }
 
-async function createHttpError(method: string, url: string, response: Response, fallbackMessage: string): Promise<Error> {
+async function createHttpError(
+  method: string,
+  url: string,
+  response: Response,
+  fallbackMessage: string,
+): Promise<AccountHttpError> {
   const detail = await formatHttpFailureBody(response)
   const detailText = detail ? `: ${detail}` : ""
-  return new Error(`${fallbackMessage} (${method} ${endpointPath(url)} HTTP ${response.status})${detailText}`)
+  const error = new Error(
+    `${fallbackMessage} (${method} ${endpointPath(url)} HTTP ${response.status})${detailText}`,
+  ) as AccountHttpError
+  error.status = response.status
+  error.url = url
+  error.method = method
+  return error
 }
 
 async function formatHttpFailureBody(response: Response): Promise<string> {
@@ -673,6 +774,24 @@ function endpointPath(url: string): string {
   } catch {
     return url.split("?")[0] ?? url
   }
+}
+
+function classifyAccountRefreshFailure(error: unknown): AccountHttpFailureKind {
+  if (isAccountHttpError(error)) {
+    if (error.status === 401 || error.status === 403) return "auth"
+    if (error.status >= 500) return "temporary"
+    return "other"
+  }
+  return "temporary"
+}
+
+function offlineReasonForFailure(error: unknown): SynapseAccountOfflineReason {
+  if (isAccountHttpError(error) && error.status >= 500) return "server_unavailable"
+  return "network_error"
+}
+
+function isAccountHttpError(error: unknown): error is AccountHttpError {
+  return error instanceof Error && typeof (error as AccountHttpError).status === "number"
 }
 
 export const accountService = new AccountService()
