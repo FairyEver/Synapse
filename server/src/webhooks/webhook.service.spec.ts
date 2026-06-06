@@ -599,6 +599,18 @@ describe("WebhookService", () => {
     ])
   })
 
+  it.each(["GET", "POST", "PUT", "PATCH", "DELETE"])("accepts %s public webhook requests", async (method) => {
+    const harness = createWebhookReceiveHarness()
+
+    await expect(harness.receive({ method })).resolves.toMatchObject({
+      response: { ok: true, deliveryId: expect.any(String) },
+    })
+    expect(harness.live.broadcastToUser).toHaveBeenCalledTimes(1)
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({ method, status: WEBHOOK_DELIVERY_STATUS.accepted }),
+    ])
+  })
+
   it("rejects oversized webhook bodies before broadcasting", async () => {
     const harness = createWebhookReceiveHarness()
 

@@ -39,6 +39,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
+    const httpLikeError = readHttpLikeError(exception)
+    if (httpLikeError) return httpLikeError
+
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       return this.resolvePrismaError(exception)
     }
@@ -82,4 +85,22 @@ function readMessage(body: unknown): string {
     if (Array.isArray(value)) return value.join("；")
   }
   return "请求失败。"
+}
+
+function readHttpLikeError(exception: unknown): {
+  statusCode: number
+  error: string
+  message: string
+} | null {
+  if (!exception || typeof exception !== "object") return null
+  const record = exception as { readonly status?: unknown; readonly statusCode?: unknown; readonly error?: unknown; readonly message?: unknown }
+  const statusCode = typeof record.statusCode === "number"
+    ? record.statusCode
+    : typeof record.status === "number" ? record.status : undefined
+  if (!statusCode || statusCode < 400 || statusCode > 599) return null
+  return {
+    statusCode,
+    error: typeof record.error === "string" ? record.error : HttpStatus[statusCode] ?? "Error",
+    message: typeof record.message === "string" ? record.message : "请求失败。",
+  }
 }
