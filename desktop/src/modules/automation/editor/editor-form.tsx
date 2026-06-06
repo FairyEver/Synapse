@@ -223,7 +223,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
       if (mode.mode === "edit" && item) {
         const updated = await automationBridge.updateItem({
           id: item.id,
-          patch: buildAutomationUpdateInputFromDraft(draft, enabled),
+          patch: buildAutomationUpdateInputFromDraft(draft, enableAfterSave ? true : undefined),
         })
         setLoadState({ status: "ready", item: updated, draft: createAutomationDraftFromItem(updated) })
       } else {

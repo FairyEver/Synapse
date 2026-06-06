@@ -72,9 +72,19 @@ function buildAutomationCreateInputFromDraft(
 
 function buildAutomationUpdateInputFromDraft(
   draft: AutomationEditorDraft,
-  enabled: boolean,
+  enabled?: boolean,
 ): AutomationUpdateInput {
-  return buildAutomationPayloadFromDraft(draft, enabled)
+  const payload = buildAutomationPayloadFromDraft(draft, enabled ?? false)
+  if (enabled !== undefined) return payload
+  return {
+    name: payload.name,
+    description: payload.description,
+    scope: payload.scope,
+    cwd: payload.cwd,
+    trigger: payload.trigger,
+    executor: payload.executor,
+    policy: payload.policy,
+  }
 }
 
 function buildAutomationPayloadFromDraft(

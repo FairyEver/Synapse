@@ -154,6 +154,41 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).not.toContain("旧配置")
   })
 
+  it("does not send cached enabled state when saving edit changes without enabling", async () => {
+    getItem.mockResolvedValue(buildAutomationItem({ enabled: true, name: "旧名称" }))
+    updateItem.mockResolvedValue(buildAutomationItem({ enabled: false, name: "新名称" }))
+    vi.spyOn(window, "close").mockImplementation(() => undefined)
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("旧名称"))?.click()
+    })
+    const nameInput = document.querySelector<HTMLInputElement>("#automation-editor-rename-name")
+    await act(async () => {
+      if (!nameInput) return
+      changeInput(nameInput, "新名称")
+    })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "确认")?.click()
+    })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "仅保存")?.click()
+      await Promise.resolve()
+    })
+
+    expect(updateItem).toHaveBeenCalledWith({
+      id: "automation:1",
+      patch: expect.not.objectContaining({ enabled: expect.any(Boolean) }),
+    })
+  })
+
   it("generates a different create-mode name when the first random suffix already exists", async () => {
     listItems.mockResolvedValue([{ name: "自动化 #0000" }])
     vi.spyOn(Math, "random")
