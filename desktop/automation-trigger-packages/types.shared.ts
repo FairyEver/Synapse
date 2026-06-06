@@ -61,7 +61,7 @@ export type AutomationTriggerRuntime<
 > = {
   computeNextRunAt?(input: AutomationScheduleInput<TConfig>): Date | null
   shouldRunNow?(input: AutomationScheduleGuardInput<TConfig>): boolean
-  shouldAcceptEvent?(input: AutomationEventInput<TConfig>): boolean
+  shouldAcceptEvent?(input: AutomationEventInput<TConfig>): boolean | Promise<boolean>
   getReschedulePolicy?(config: TConfig): AutomationReschedulePolicy
 }
 

@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { LIVE_MESSAGE_TYPES, createLiveEnvelope } from "@synapse/shared"
 import type { SynapseAccountState } from "../../../src/types/account"
 import { LiveConnectionService } from "../live-connection-service"
 
@@ -36,6 +37,7 @@ class FakeSocket extends EventEmitter {
 
 const authenticatedState: SynapseAccountState = {
   status: "authenticated",
+  connectivity: "online",
   profile: {
     user: { id: "user-1", email: "u@example.com", displayName: null, status: "active" },
     teams: [],
@@ -72,6 +74,22 @@ function createTimerFns() {
 async function flushPromises(): Promise<void> {
   await Promise.resolve()
   await Promise.resolve()
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve)
+  })
+}
+
+async function waitForCondition(condition: () => boolean): Promise<void> {
+  for (let index = 0; index < 50; index += 1) {
+    await flushPromises()
+    if (condition()) {
+      return
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 5)
+    })
+  }
+  throw new Error("Timed out waiting for condition")
 }
 
 describe("LiveConnectionService", () => {
@@ -95,26 +113,34 @@ describe("LiveConnectionService", () => {
     service.handleAccountState(authenticatedState)
     await flushPromises()
     socket.emit("open")
+    await waitForCondition(() => socket.sent.length > 0)
 
     expect(createSocket).toHaveBeenCalledWith("ws://localhost:3000/api/live/desktop", {
       headers: { Authorization: "Bearer access-token" },
     })
-    expect(JSON.parse(socket.sent[0] ?? "{}")).toEqual({
-      type: "hello",
-      clientInstanceId: "client-a",
-      appVersion: "0.2.253",
-      platform: `${process.platform}-${process.arch}`,
-      deviceName: "MacBook",
+    expect(JSON.parse(socket.sent[0] ?? "{}")).toMatchObject({
+      type: "live.hello",
+      payload: {
+        clientInstanceId: "client-a",
+        appVersion: "0.2.253",
+        platform: `${process.platform}-${process.arch}`,
+        deviceName: "MacBook",
+      },
     })
     expect(service.getState()).toMatchObject({ status: "reconnecting", clientInstanceId: "client-a" })
 
     socket.emit("message", JSON.stringify({
-      type: "welcome",
-      connectionId: "conn-a",
-      serverTime: "2026-06-06T10:00:01.000Z",
-      heartbeatIntervalMs: 20_000,
-      heartbeatTimeoutMs: 45_000,
+      type: "live.welcome",
+      id: "msg-welcome",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: {
+        connectionId: "conn-a",
+        serverTime: "2026-06-06T10:00:01.000Z",
+        heartbeatIntervalMs: 20_000,
+        heartbeatTimeoutMs: 45_000,
+      },
     }))
+    await waitForCondition(() => service.getState().status === "connected")
 
     expect(service.getState()).toMatchObject({
       status: "connected",
@@ -144,19 +170,134 @@ describe("LiveConnectionService", () => {
     service.handleAccountState(authenticatedState)
     await flushPromises()
     socket.emit("open")
+    await waitForCondition(() => socket.sent.length > 0)
     socket.emit("message", JSON.stringify({
-      type: "welcome",
-      connectionId: "conn-a",
-      serverTime: "2026-06-06T10:00:01.000Z",
-      heartbeatIntervalMs: 20_000,
-      heartbeatTimeoutMs: 45_000,
+      type: "live.welcome",
+      id: "msg-welcome",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: {
+        connectionId: "conn-a",
+        serverTime: "2026-06-06T10:00:01.000Z",
+        heartbeatIntervalMs: 20_000,
+        heartbeatTimeoutMs: 45_000,
+      },
     }))
+    await waitForCondition(() => service.getState().status === "connected")
     socket.emit("message", JSON.stringify({
-      type: "pong",
-      serverTime: "2026-06-06T10:00:05.000Z",
+      type: "live.pong",
+      id: "msg-pong",
+      sentAt: "2026-06-06T10:00:05.000Z",
+      payload: { serverTime: "2026-06-06T10:00:05.000Z" },
     }))
+    await waitForCondition(() => service.getState().lastSeenAt === "2026-06-06T10:00:05.000Z")
 
     expect(service.getState().lastSeenAt).toBe("2026-06-06T10:00:05.000Z")
+  })
+
+  it("dispatches webhook delivery downlinks to the installed handler", async () => {
+    const socket = new FakeSocket()
+    const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      webhookDeliveryHandler,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("message", JSON.stringify(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+      {
+        deliveryId: "delivery-1",
+        webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+        request: {
+          method: "POST",
+          url: "https://synapse.test/webhooks/wh_public/***",
+          query: { event: "push" },
+          headers: { "x-github-event": "push" },
+          body: { repository: { full_name: "FairyEver/Synapse" } },
+          contentType: "application/json",
+          receivedAt: "2026-06-06T10:00:00.000Z",
+        },
+      },
+      { id: "msg-webhook", sentAt: "2026-06-06T10:00:01.000Z" },
+    )))
+
+    await waitForCondition(() => webhookDeliveryHandler.handle.mock.calls.length > 0)
+
+    expect(webhookDeliveryHandler.handle).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryId: "delivery-1",
+      webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+    }))
+  })
+
+  it("ignores malformed webhook delivery downlinks", async () => {
+    const socket = new FakeSocket()
+    const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      webhookDeliveryHandler,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+      id: "msg-webhook",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: {
+        deliveryId: "delivery-1",
+        webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+      },
+    }))
+    await flushPromises()
+
+    expect(webhookDeliveryHandler.handle).not.toHaveBeenCalled()
+  })
+
+  it("sends heartbeat ping envelopes", async () => {
+    const socket = new FakeSocket()
+    const timers = createTimerFns()
+    const times = [
+      new Date("2026-06-06T10:00:00.000Z"),
+      new Date("2026-06-06T10:00:05.000Z"),
+    ]
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      now: () => times.shift() ?? new Date("2026-06-06T10:00:05.000Z"),
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("open")
+    await waitForCondition(() => socket.sent.length > 0)
+    socket.emit("message", JSON.stringify({
+      type: "live.welcome",
+      id: "msg-welcome",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: {
+        connectionId: "conn-a",
+        serverTime: "2026-06-06T10:00:01.000Z",
+        heartbeatIntervalMs: 20_000,
+        heartbeatTimeoutMs: 45_000,
+      },
+    }))
+    await waitForCondition(() => timers.timers.length > 0)
+    timers.timers[0]?.callback()
+    await waitForCondition(() => socket.sent.length > 1)
+
+    expect(timers.setTimeout).toHaveBeenCalledWith(expect.any(Function), 20_000)
+    expect(JSON.parse(socket.sent[1] ?? "{}")).toMatchObject({
+      type: "live.ping",
+      payload: { sentAt: "2026-06-06T10:00:05.000Z" },
+    })
   })
 
   it("closes the socket when account becomes unauthenticated", async () => {

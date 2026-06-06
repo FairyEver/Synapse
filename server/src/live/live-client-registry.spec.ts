@@ -41,6 +41,52 @@ describe("LiveClientRegistry", () => {
     expect(registry.listByUser("user-1").every((client) => client.status === "online")).toBe(true)
   })
 
+  it("lists online clients for one user with active connections", () => {
+    const registry = new LiveClientRegistry()
+    const now = new Date("2026-06-06T10:00:00.000Z")
+
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      connectionId: "conn-a",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+      now,
+    })
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-b",
+      connectionId: "conn-b",
+      appVersion: "0.2.253",
+      platform: "win32-x64",
+      deviceName: "Workstation",
+      now,
+    })
+    registry.register({
+      userId: "user-2",
+      clientInstanceId: "client-c",
+      connectionId: "conn-c",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+      now,
+    })
+    registry.markDisconnected({
+      connectionId: "conn-b",
+      now: new Date("2026-06-06T10:00:05.000Z"),
+      reason: "socket_close",
+    })
+
+    expect(registry.listOnlineByUser("user-1")).toEqual([
+      expect.objectContaining({
+        clientInstanceId: "client-a",
+        connectionId: "conn-a",
+        status: "online",
+      }),
+    ])
+  })
+
   it("supersedes the old connection for the same client instance", () => {
     const registry = new LiveClientRegistry()
     const onSupersede = vi.fn()

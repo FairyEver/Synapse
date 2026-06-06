@@ -30,6 +30,30 @@ describe("accountIpcModule", () => {
     expect(accountIpcModule.methods.startLogin.channel).toBe("synapse:account:start-login")
     expect(accountIpcModule.methods.refresh.channel).toBe("synapse:account:refresh")
     expect(accountIpcModule.methods.logout.channel).toBe("synapse:account:logout")
+    expect(accountIpcModule.methods.listWebhooks.channel).toBe("synapse:account:webhooks:list")
+  })
+
+  it("validates account webhook responses", () => {
+    const responseSchema = accountIpcModule.methods.listWebhooks.response
+    expect(responseSchema).toBeDefined()
+    if (!responseSchema) throw new Error("expected webhook list response schema")
+
+    expect(responseSchema.parse([{
+      id: "webhook-1",
+      publicId: "wh_public",
+      name: "GitHub",
+      enabled: true,
+      maskedUrl: "https://synapse.test/webhooks/wh_public/***",
+      createdAt: "2026-06-06T10:00:00.000Z",
+      updatedAt: "2026-06-06T10:00:00.000Z",
+      lastDeliveryAt: "2026-06-06T10:01:00.000Z",
+      lastDeliveryStatus: "accepted",
+    }])).toEqual([
+      expect.objectContaining({
+        publicId: "wh_public",
+        maskedUrl: "https://synapse.test/webhooks/wh_public/***",
+      }),
+    ])
   })
 
   it("validates state changed domain events", () => {

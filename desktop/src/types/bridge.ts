@@ -19,6 +19,7 @@ import type {
   SynapseAccountState,
   SynapseAccountStateChangedEvent,
 } from "./account"
+import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   SynapseLiveState,
   SynapseLiveStateChangedEvent,
@@ -612,6 +613,7 @@ export type SynapseBridge = {
     startLogin: () => Promise<SynapseAccountState>
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
+    listWebhooks: () => Promise<DashboardWebhookDto[]>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
   }
   live: {

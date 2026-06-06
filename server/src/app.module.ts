@@ -16,6 +16,7 @@ import { PermissionsModule } from "./permissions/permissions.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { TeamsModule } from "./teams/teams.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
+import { WebhookModule } from "./webhooks/webhook.module"
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { AuditLogInterceptor } from "./common/audit-log.interceptor"
     UserAuthModule,
     LiveModule,
     TeamsModule,
+    WebhookModule,
     AdminAuthModule,
     DashboardModule,
     AdminModule,

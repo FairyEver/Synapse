@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 
 import {
   buildAutomationTemplateVariables,
@@ -75,6 +76,47 @@ describe("action template variables", () => {
       "trigger.payload.issue.title": "Bug",
       "trigger.payload.issue.number": "12",
       "trigger.payload.labels.0": "bug",
+    }))
+  })
+
+  it("builds direct webhook request variables", () => {
+    expect(buildAutomationTemplateVariables({
+      triggerType: "builtin.webhook",
+      triggerConfig: { webhookPublicId: "wh_public", webhookName: "GitHub" },
+      triggeredBy: "trigger",
+      triggeredAt: "2026-06-06T01:00:00.000Z",
+      scheduledAt: "2026-06-06T01:00:00.000Z",
+      automationId: "automation:1",
+      automationName: "Webhook",
+      event: {
+        source: "webhook",
+        type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+        receivedAt: "2026-06-06T01:00:01.000Z",
+        payload: {
+          deliveryId: "delivery-1",
+          webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+          request: {
+            method: "POST",
+            contentType: "application/json",
+            query: { event: "push" },
+            headers: { "x-github-event": "push" },
+            body: { repository: { full_name: "FairyEver/Synapse" } },
+            bodyText: "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
+          },
+        },
+      },
+    })).toEqual(expect.objectContaining({
+      "trigger.deliveryId": "delivery-1",
+      "trigger.webhook.id": "webhook-1",
+      "trigger.webhook.publicId": "wh_public",
+      "trigger.webhook.name": "GitHub",
+      "trigger.request.method": "POST",
+      "trigger.request.contentType": "application/json",
+      "trigger.request.query.event": "push",
+      "trigger.request.headers.x-github-event": "push",
+      "trigger.request.body": "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
+      "trigger.request.bodyText": "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
+      "trigger.payload.request.body.repository.full_name": "FairyEver/Synapse",
     }))
   })
 })

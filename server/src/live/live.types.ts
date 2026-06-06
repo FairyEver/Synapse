@@ -34,34 +34,14 @@ export interface LiveClientPublicDto {
   readonly disconnectReason?: LiveClientDisconnectReason
 }
 
-export interface LiveDesktopHello {
-  readonly type: "hello"
-  readonly clientInstanceId: string
-  readonly appVersion: string
-  readonly platform: string
-  readonly deviceName: string
-}
-
-export interface LiveDesktopWelcome {
-  readonly type: "welcome"
-  readonly connectionId: string
-  readonly serverTime: string
-  readonly heartbeatIntervalMs: number
-  readonly heartbeatTimeoutMs: number
-}
-
-export interface LiveDesktopPing {
-  readonly type: "ping"
-  readonly sentAt: string
-}
-
-export interface LiveDesktopPong {
-  readonly type: "pong"
-  readonly serverTime: string
-}
-
-export type LiveDesktopClientMessage = LiveDesktopHello | LiveDesktopPing
-export type LiveDesktopServerMessage = LiveDesktopWelcome | LiveDesktopPong
+export type {
+  LiveDesktopClientMessage,
+  LiveDesktopHelloPayload as LiveDesktopHello,
+  LiveDesktopPingPayload as LiveDesktopPing,
+  LiveDesktopPongPayload as LiveDesktopPong,
+  LiveDesktopServerMessage,
+  LiveDesktopWelcomePayload as LiveDesktopWelcome,
+} from "@synapse/shared"
 
 export interface LiveClientChangedEvent {
   readonly type: "live.client.changed"

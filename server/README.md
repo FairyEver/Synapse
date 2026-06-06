@@ -283,7 +283,7 @@ bash deploy.sh
 
 部署会生成两份完整数据库备份：一份在线备份用于临时数据库预演，一份在停旧服务后生成的最终切换前备份。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。
 
-真正切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/dashboard/` 静态入口和 `/dashboard` 到 `/dashboard/` 的重定向。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印最终备份路径和人工恢复命令。
+真正切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/dashboard/` 静态入口、`/dashboard` 到 `/dashboard/` 的重定向，以及 `/webhooks/not-found/test` 公共 Webhook 路由不会被导向管理后台。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近 server 日志、最终备份路径和人工恢复命令。
 
 如果是在服务器上手动更新，也必须先备份，再构建启动：
 

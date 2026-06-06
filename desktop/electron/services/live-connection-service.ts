@@ -5,12 +5,14 @@ import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseLiveState } from "../../src/types/live"
 import type { EventBus } from "../runtime/event-bus"
 import type { AccountService } from "./account-service"
+import type { LiveWebhookDeliveryHandler } from "./live-webhook-delivery-handler"
 import { LiveClientIdStore } from "./live-client-id-store"
 import { createLiveReconnectDelay } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.live")
 const defaultHeartbeatIntervalMs = 20_000
+const liveProtocolPromise = import("@synapse/shared")
 
 type LiveSocket = Pick<WebSocket, "on" | "send" | "close" | "readyState">
 
@@ -25,6 +27,7 @@ type LiveConnectionServiceDeps = {
   readonly appVersion?: () => string
   readonly platform?: () => string
   readonly deviceName?: () => string
+  readonly webhookDeliveryHandler?: Pick<LiveWebhookDeliveryHandler, "handle">
 }
 
 export class LiveConnectionService {
@@ -38,6 +41,7 @@ export class LiveConnectionService {
   private readonly appVersion: () => string
   private readonly platform: () => string
   private readonly deviceName: () => string
+  private webhookDeliveryHandler: Pick<LiveWebhookDeliveryHandler, "handle"> | null
   private eventBus: EventBus | null = null
   private socket: LiveSocket | null = null
   private reconnectTimer: NodeJS.Timeout | null = null
@@ -64,10 +68,15 @@ export class LiveConnectionService {
     this.appVersion = deps.appVersion ?? (() => app.getVersion())
     this.platform = deps.platform ?? (() => `${process.platform}-${process.arch}`)
     this.deviceName = deps.deviceName ?? (() => os.hostname())
+    this.webhookDeliveryHandler = deps.webhookDeliveryHandler ?? null
   }
 
   setEventBus(eventBus: EventBus): void {
     this.eventBus = eventBus
+  }
+
+  setWebhookDeliveryHandler(handler: Pick<LiveWebhookDeliveryHandler, "handle">): void {
+    this.webhookDeliveryHandler = handler
   }
 
   getState(): SynapseLiveState {
@@ -129,17 +138,15 @@ export class LiveConnectionService {
     this.socket = socket
 
     socket.on("open", () => {
-      socket.send(JSON.stringify({
-        type: "hello",
-        clientInstanceId,
-        appVersion: this.appVersion(),
-        platform: this.platform(),
-        deviceName: this.deviceName(),
-      }))
+      void this.sendHello(socket, clientInstanceId).catch((error: unknown) => {
+        this.logLiveMessageError(error)
+      })
     })
 
     socket.on("message", (payload: unknown) => {
-      this.handleMessage(String(payload), clientInstanceId)
+      void this.handleMessage(String(payload), clientInstanceId).catch((error: unknown) => {
+        this.logLiveMessageError(error)
+      })
     })
 
     socket.on("close", () => {
@@ -171,23 +178,31 @@ export class LiveConnectionService {
     })
   }
 
-  private handleMessage(payload: string, clientInstanceId: string): void {
+  private async handleMessage(payload: string, clientInstanceId: string): Promise<void> {
     let parsed: unknown
     try {
       parsed = JSON.parse(payload)
     } catch {
+      logger.warn("Live socket message ignored.", { messageType: "invalid_json" })
       return
     }
 
-    if (!parsed || typeof parsed !== "object") {
+    const { LIVE_MESSAGE_TYPES, isLiveDesktopServerMessage } = await liveProtocolPromise
+    if (!isLiveDesktopServerMessage(parsed)) {
+      const messageType = parsed && typeof parsed === "object" && "type" in parsed
+        ? (parsed as { readonly type?: unknown }).type
+        : typeof parsed
+      logger.warn("Live socket message ignored.", {
+        messageType: typeof messageType === "string" ? messageType : "malformed",
+      })
       return
     }
 
-    const record = parsed as Record<string, unknown>
-    if (record.type === "welcome") {
+    if (parsed.type === LIVE_MESSAGE_TYPES.welcome) {
+      const welcome = parsed.payload
       const seenAt = this.now().toISOString()
-      const intervalMs = typeof record.heartbeatIntervalMs === "number" && record.heartbeatIntervalMs > 0
-        ? record.heartbeatIntervalMs
+      const intervalMs = welcome.heartbeatIntervalMs > 0
+        ? welcome.heartbeatIntervalMs
         : defaultHeartbeatIntervalMs
       this.reconnectAttempt = 0
       this.startHeartbeat(intervalMs)
@@ -201,12 +216,29 @@ export class LiveConnectionService {
       return
     }
 
-    if (record.type === "pong") {
+    if (parsed.type === LIVE_MESSAGE_TYPES.pong) {
       this.setState({
         ...this.state,
         status: "connected",
         lastSeenAt: this.now().toISOString(),
         lastError: null,
+      })
+      return
+    }
+
+    if (parsed.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived) {
+      if (!this.webhookDeliveryHandler) {
+        logger.warn("Live webhook delivery ignored.", {
+          messageType: parsed.type,
+          reason: "missing_handler",
+        })
+        return
+      }
+      void this.webhookDeliveryHandler.handle(parsed.payload).catch((error: unknown) => {
+        logger.warn("Live webhook delivery handler failed.", {
+          messageType: parsed.type,
+          ...this.liveErrorMetadata(error),
+        })
       })
     }
   }
@@ -215,14 +247,42 @@ export class LiveConnectionService {
     this.clearHeartbeat()
     this.heartbeatTimer = this.setTimer(() => {
       this.heartbeatTimer = null
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({
-          type: "ping",
-          sentAt: this.now().toISOString(),
-        }))
-        this.startHeartbeat(intervalMs)
-      }
+      void this.sendHeartbeat(intervalMs).catch((error: unknown) => {
+        this.logLiveMessageError(error)
+      })
     }, intervalMs)
+  }
+
+  private async sendHello(socket: LiveSocket, clientInstanceId: string): Promise<void> {
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await liveProtocolPromise
+    if (this.socket !== socket) {
+      return
+    }
+
+    const sentAt = this.now().toISOString()
+    socket.send(JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.hello, {
+      clientInstanceId,
+      appVersion: this.appVersion(),
+      platform: this.platform(),
+      deviceName: this.deviceName(),
+    }, { id: this.createMessageId(), sentAt })))
+  }
+
+  private async sendHeartbeat(intervalMs: number): Promise<void> {
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      return
+    }
+
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await liveProtocolPromise
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      return
+    }
+
+    const sentAt = this.now().toISOString()
+    this.socket.send(JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.ping, {
+      sentAt,
+    }, { id: this.createMessageId(), sentAt })))
+    this.startHeartbeat(intervalMs)
   }
 
   private scheduleReconnect(error: string): void {
@@ -326,6 +386,24 @@ export class LiveConnectionService {
 
   private isCurrentGeneration(generation: number): boolean {
     return this.connectionGeneration === generation
+  }
+
+  private createMessageId(): string {
+    return `live_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  }
+
+  private logLiveMessageError(error: unknown): void {
+    logger.warn("Live socket message handling failed.", {
+      ...this.liveErrorMetadata(error),
+    })
+  }
+
+  private liveErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: message.length,
+    }
   }
 }
 

@@ -211,6 +211,17 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps account webhook list to the account IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.account.listWebhooks()
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:webhooks:list",
+      undefined,
+    )
+  })
+
   it("subscribes content change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

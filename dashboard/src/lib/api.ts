@@ -1,3 +1,9 @@
+import type {
+  DashboardWebhookDto,
+  DashboardWebhookSecretResult,
+  WebhookDeliveryDto,
+} from '@synapse/shared'
+
 export type AdminSession = {
   email: string
   displayName: string | null
@@ -398,6 +404,38 @@ export const dashboardApi = {
     }),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${dashboardApiBasePath}/live-clients`),
+  listWebhooks: () =>
+    request<DashboardWebhookDto[]>(`${dashboardApiBasePath}/webhooks`),
+  createWebhook: (input: { name: string }) =>
+    request<DashboardWebhookSecretResult>(`${dashboardApiBasePath}/webhooks`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateWebhook: (
+    id: string,
+    input: { name?: string; enabled?: boolean }
+  ) =>
+    request<DashboardWebhookDto>(
+      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    ),
+  deleteWebhook: (id: string) =>
+    request<{ ok: true }>(
+      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    ),
+  resetWebhookSecret: (id: string) =>
+    request<DashboardWebhookSecretResult>(
+      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}/reset-secret`,
+      { method: 'POST' }
+    ),
+  listWebhookDeliveries: (id: string) =>
+    request<WebhookDeliveryDto[]>(
+      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}/deliveries`
+    ),
   subscribeLiveClients: (
     onEvent: (event: LiveClientChangedEvent) => void,
     onError?: () => void

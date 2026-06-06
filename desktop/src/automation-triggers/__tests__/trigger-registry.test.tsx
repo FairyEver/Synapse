@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 
 import { cronRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/cron/index.renderer"
 import { intervalRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/interval/index.renderer"
+import { webhookRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/webhook/index.renderer"
 import { rendererAutomationTriggerRegistry } from "../builtin-triggers"
 
 describe("rendererAutomationTriggerRegistry", () => {
@@ -13,6 +14,7 @@ describe("rendererAutomationTriggerRegistry", () => {
     }))).toEqual([
       { id: "builtin.cron", kind: "schedule" },
       { id: "builtin.interval", kind: "schedule" },
+      { id: "builtin.webhook", kind: "event" },
     ])
   })
 
@@ -78,5 +80,8 @@ describe("rendererAutomationTriggerRegistry", () => {
 
     expect(intervalRendererTriggerDefinition.manifest.id).toBe("builtin.interval")
     expect(intervalRendererTriggerDefinition.ConfigForm).toBeTypeOf("function")
+
+    expect(webhookRendererTriggerDefinition.manifest.id).toBe("builtin.webhook")
+    expect(webhookRendererTriggerDefinition.ConfigForm).toBeTypeOf("function")
   })
 })

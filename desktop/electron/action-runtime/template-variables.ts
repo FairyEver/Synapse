@@ -74,10 +74,65 @@ export function buildAutomationTemplateVariables(
     variables["trigger.source"] = input.event.source
     variables["trigger.eventType"] = input.event.type
     variables["trigger.receivedAt"] = input.event.receivedAt
+    appendWebhookEventVariables(input.event.payload, variables)
     flattenValue("trigger.payload", input.event.payload, variables)
   }
 
   return variables
+}
+
+function appendWebhookEventVariables(
+  payload: Record<string, unknown>,
+  variables: Record<string, string>,
+): void {
+  const webhook = asRecord(payload.webhook)
+  if (webhook) {
+    assignStringVariable(variables, "trigger.webhook.id", webhook.id)
+    assignStringVariable(variables, "trigger.webhook.publicId", webhook.publicId)
+    assignStringVariable(variables, "trigger.webhook.name", webhook.name)
+  }
+
+  assignStringVariable(variables, "trigger.deliveryId", payload.deliveryId)
+
+  const request = asRecord(payload.request)
+  if (!request) return
+  assignStringVariable(variables, "trigger.request.method", request.method)
+  assignStringVariable(variables, "trigger.request.contentType", request.contentType)
+  assignStringVariable(variables, "trigger.request.bodyText", request.bodyText)
+  assignStringVariable(variables, "trigger.request.remoteAddress", request.remoteAddress)
+  if ("body" in request) {
+    variables["trigger.request.body"] = stringifyTemplateValue(request.body)
+  }
+  if ("query" in request) {
+    flattenValue("trigger.request.query", request.query, variables)
+  }
+  if ("headers" in request) {
+    flattenValue("trigger.request.headers", request.headers, variables)
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function assignStringVariable(
+  variables: Record<string, string>,
+  key: string,
+  value: unknown,
+): void {
+  if (typeof value === "string") variables[key] = value
+}
+
+function stringifyTemplateValue(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value)
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
 }
 
 function flattenValue(

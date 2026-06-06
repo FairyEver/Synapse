@@ -7,6 +7,7 @@ import type {
   SynapseAccountProfile,
   SynapseAccountState,
 } from "../../src/types/account"
+import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
 import { createMainLogger } from "./log-store"
@@ -161,6 +162,13 @@ export class AccountService {
 
   getApiBaseUrlForLive(): string {
     return apiBaseUrl(this.isPackaged)
+  }
+
+  async listWebhooks(): Promise<DashboardWebhookDto[]> {
+    return this.getAuthenticatedJson<DashboardWebhookDto[]>(
+      `${apiBaseUrl(this.isPackaged)}/dashboard/webhooks`,
+      "Webhook 列表加载失败。",
+    )
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
@@ -525,6 +533,31 @@ export class AccountService {
     if (!response.ok) throw await createHttpError("GET", url, response, "账号信息同步失败。")
     const payload = await response.json() as Omit<SynapseAccountProfile, "syncedAt">
     return { ...payload, syncedAt: new Date().toISOString() }
+  }
+
+  private async getAuthenticatedJson<T>(url: string, errorMessage: string): Promise<T> {
+    let token = this.accessToken
+    if (!token) {
+      await this.refreshFromStorage()
+      token = this.accessToken
+    }
+    if (!token) throw new Error("账号未登录。")
+
+    let response = await this.fetchImpl(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (response.status === 401 || response.status === 403) {
+      await this.refreshFromStorage()
+      token = this.accessToken
+      if (token) {
+        response = await this.fetchImpl(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      }
+    }
+    if (!response.ok) throw await createHttpError("GET", url, response, errorMessage)
+    const text = await response.text()
+    return (text ? JSON.parse(text) : undefined) as T
   }
 
   private async refreshWithToken(

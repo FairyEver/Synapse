@@ -9,8 +9,10 @@ import { app, dialog } from "electron"
 import { createMainLogger } from "./services/log-store"
 import { accountService } from "./services/account-service"
 import { liveConnectionService } from "./services/live-connection-service-instance"
+import { LiveWebhookDeliveryHandler } from "./services/live-webhook-delivery-handler"
 import { installStatusCacheService } from "./services/install-status-cache-service"
 import { repositoryStore } from "./services/repository-store"
+import type { AutomationService } from "./services/automation"
 import type { EventBus } from "./runtime/event-bus"
 import type { IpcHandlerContext } from "./runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "./runtime/security"
@@ -150,6 +152,15 @@ if (!gotSingleInstanceLock) {
       const eventBus = registry.get<EventBus>("core.event-bus")
       accountService.setEventBus(eventBus)
       liveConnectionService.setEventBus(eventBus)
+      try {
+        liveConnectionService.setWebhookDeliveryHandler(new LiveWebhookDeliveryHandler({
+          automation: registry.get<AutomationService>("core.automation"),
+        }))
+      } catch (error) {
+        logger.warn("Live webhook delivery handler not installed.", {
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      }
       let lastLiveAccountState: unknown
       accountService.onStateChanged((state) => {
         lastLiveAccountState = state

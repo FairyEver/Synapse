@@ -34,6 +34,18 @@ const accountRetryStateSchema = z.object({
   nextRetryAt: z.string().optional(),
 })
 
+const dashboardWebhookSchema = z.object({
+  id: z.string(),
+  publicId: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+  maskedUrl: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastDeliveryAt: z.string().optional(),
+  lastDeliveryStatus: z.enum(["accepted", "rejected", "broadcast_failed"]).optional(),
+})
+
 const accountStateSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("unauthenticated") }),
   z.object({ status: z.literal("authenticating"), loginUrl: z.string().optional() }),
@@ -84,6 +96,13 @@ export const accountIpcModule: IpcModule = {
       request: z.void(),
       response: accountStateSchema,
       handler: async () => accountService.logout(),
+    },
+    listWebhooks: {
+      kind: "invoke",
+      channel: "synapse:account:webhooks:list",
+      request: z.void(),
+      response: z.array(dashboardWebhookSchema),
+      handler: async () => accountService.listWebhooks(),
     },
   },
   events: {

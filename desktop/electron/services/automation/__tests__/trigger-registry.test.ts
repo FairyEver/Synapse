@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
+import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 
 import { cronTriggerDefinition } from "../../../../automation-trigger-packages/builtin/cron/index.main"
 import { intervalTriggerDefinition } from "../../../../automation-trigger-packages/builtin/interval/index.main"
+import { webhookTriggerDefinition } from "../../../../automation-trigger-packages/builtin/webhook/index.main"
 import { AutomationTriggerRegistry } from "../trigger-registry"
 
 const testTrigger = {
@@ -86,15 +88,45 @@ describe("AutomationTriggerRegistry", () => {
       anchor: "last_completed_at",
       activeDays: [0, 1, 2, 3, 4, 5, 6],
     })).toEqual({ mode: "after_completion" })
+
+    expect(webhookTriggerDefinition.manifest.id).toBe("builtin.webhook")
+    expect(webhookTriggerDefinition.manifest.kind).toBe("event")
+    expect(webhookTriggerDefinition.runtime.shouldAcceptEvent).toBeTypeOf("function")
+  })
+
+  it("matches webhook events by selected public id", async () => {
+    const event = {
+      source: "webhook",
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+      receivedAt: "2026-06-06T10:00:00.000Z",
+      payload: {
+        webhook: { publicId: "wh_public" },
+      },
+    }
+
+    await expect(webhookTriggerDefinition.runtime.shouldAcceptEvent?.({
+      config: { webhookPublicId: "wh_public" },
+      event,
+    })).resolves.toBe(true)
+    await expect(webhookTriggerDefinition.runtime.shouldAcceptEvent?.({
+      config: { webhookPublicId: "wh_other" },
+      event,
+    })).resolves.toBe(false)
+    await expect(webhookTriggerDefinition.runtime.shouldAcceptEvent?.({
+      config: { webhookPublicId: "wh_public" },
+      event: { ...event, source: "test" },
+    })).resolves.toBe(false)
   })
 
   it("exposes builtin trigger variables", () => {
     const registry = new AutomationTriggerRegistry()
     registry.register(cronTriggerDefinition)
     registry.register(intervalTriggerDefinition)
+    registry.register(webhookTriggerDefinition)
 
     const cron = registry.get("builtin.cron")
     const interval = registry.get("builtin.interval")
+    const webhook = registry.get("builtin.webhook")
 
     expect(cron.manifest.variables?.map((variable) => variable.key)).toEqual([
       "trigger.type",
@@ -116,5 +148,13 @@ describe("AutomationTriggerRegistry", () => {
       "trigger.everyMinutes",
       "trigger.anchor",
     ])
+    expect(webhook.manifest.variables?.map((variable) => variable.key)).toEqual(expect.arrayContaining([
+      "trigger.deliveryId",
+      "trigger.webhook.publicId",
+      "trigger.request.method",
+      "trigger.request.body",
+      "trigger.request.query",
+      "trigger.request.headers",
+    ]))
   })
 })

@@ -292,12 +292,45 @@ check_redirect() {
   rm -f "$header_file" "$error_file"
 }
 
+check_not_redirect_to_dashboard() {
+  local name=$1
+  local url=$2
+  local header_file
+  local body_file
+  local error_file
+  local http_code
+  local curl_status
+
+  header_file=$(mktemp)
+  body_file=$(mktemp)
+  error_file=$(mktemp)
+  http_code=$(curl -sS -o "$body_file" -D "$header_file" -w "%{http_code}" "$url" 2>"$error_file")
+  curl_status=$?
+
+  if [ "$curl_status" -eq 0 ] && ! grep -qi "^Location: /dashboard/" "$header_file"; then
+    printf "%s ok (HTTP %s)\n" "$name" "$http_code"
+  else
+    printf "%s FAILED (HTTP %s, should not redirect to /dashboard/)\n" "$name" "$http_code"
+    if [ -s "$error_file" ]; then
+      sed -n '1,4p' "$error_file"
+    fi
+    echo "headers:"
+    print_file_preview "$header_file"
+    echo "body:"
+    print_file_preview "$body_file"
+    record_failure
+  fi
+
+  rm -f "$header_file" "$body_file" "$error_file"
+}
+
 run_checks_once() {
   failed=0
   check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
   check_body_contains "dashboard" "http://127.0.0.1:3000/dashboard/" '<div id="root">'
   # Expected redirect header: Location: /dashboard/
   check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/dashboard/"
+  check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found/test"
   return "$failed"
 }
 
