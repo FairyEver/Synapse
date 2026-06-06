@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "commonjs",
   "scripts": {
-    "dev": "prisma migrate deploy && prisma generate && APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000} PORT=${SYNAPSE_SERVER_API_PORT:-3001} pnpm run dev:api",
-    "dev:api": "nest start --watch",
+    "dev": "pnpm --filter @synapse/shared run build && prisma migrate deploy && prisma generate && APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000} PORT=${SYNAPSE_SERVER_API_PORT:-3001} pnpm run dev:api",
+    "dev:api": "pnpm --filter @synapse/shared run build && nest start --watch",
     "build": "pnpm --filter @synapse/shared run build && pnpm build:api",
     "build:api": "nest build",
     "start": "node dist/main.js",

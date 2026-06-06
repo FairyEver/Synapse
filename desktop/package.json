@@ -9,9 +9,9 @@
   "main": "dist-electron/electron/main.js",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "node scripts/build/generate-definitions-registry.mjs && node scripts/dev/dev.mjs",
-    "dev:renderer": "node scripts/build/generate-definitions-registry.mjs && node scripts/dev/dev-renderer.mjs",
-    "dev:electron:build": "node scripts/build/generate-definitions-registry.mjs && node scripts/build/generate-ipc.mjs && tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
+    "dev": "pnpm --filter @synapse/shared run build && node scripts/build/generate-definitions-registry.mjs && node scripts/dev/dev.mjs",
+    "dev:renderer": "pnpm --filter @synapse/shared run build && node scripts/build/generate-definitions-registry.mjs && node scripts/dev/dev-renderer.mjs",
+    "dev:electron:build": "pnpm --filter @synapse/shared run build && node scripts/build/generate-definitions-registry.mjs && node scripts/build/generate-ipc.mjs && tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:electron:app": "node scripts/dev/dev-electron-app.mjs",
     "icons": "node scripts/build/build-icons.mjs",
     "build": "pnpm --filter @synapse/shared run build && pnpm generate:definitions-registry && pnpm build:renderer && pnpm build:electron && pnpm build:database",
