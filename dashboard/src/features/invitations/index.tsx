@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { getInvitationTeamsErrorMessage } from './invitation-teams-error'
 
 export default function InvitationsPage() {
   const [page, setPage] = useState(1)
@@ -47,7 +48,13 @@ export default function InvitationsPage() {
     queryFn: () => adminApi.listInvitations({ page, pageSize, ...sortQuery }),
   })
 
-  const { data: teams } = useQuery({
+  const {
+    data: teams,
+    error: teamsError,
+    isError: isTeamsError,
+    isLoading: isTeamsLoading,
+    refetch: refetchTeams,
+  } = useQuery({
     queryKey: ['admin-teams', 'invitation-create'],
     queryFn: () => adminApi.listTeams({ page: 1, pageSize: 100, sortBy: 'name', sortOrder: 'asc' }),
   })
@@ -207,9 +214,13 @@ export default function InvitationsPage() {
           <div className='space-y-4'>
             <div className='space-y-2'>
               <Label htmlFor='team-id'>团队</Label>
-              <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+              <Select
+                value={selectedTeamId}
+                onValueChange={setSelectedTeamId}
+                disabled={isTeamsLoading || isTeamsError}
+              >
                 <SelectTrigger id='team-id' className='w-full'>
-                  <SelectValue placeholder='选择团队' />
+                  <SelectValue placeholder={isTeamsLoading ? '加载中' : '选择团队'} />
                 </SelectTrigger>
                 <SelectContent>
                   {(teams?.data ?? []).map((team) => (
@@ -219,6 +230,21 @@ export default function InvitationsPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {isTeamsError ? (
+                <div className='flex items-center justify-between gap-2 text-sm'>
+                  <span className='text-destructive'>
+                    {getInvitationTeamsErrorMessage(teamsError)}
+                  </span>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() => void refetchTeams()}
+                  >
+                    重试
+                  </Button>
+                </div>
+              ) : null}
             </div>
             {createdInviteUrl ? (
               <div className='space-y-2'>
