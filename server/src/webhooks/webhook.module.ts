@@ -1,13 +1,14 @@
 import { Module } from "@nestjs/common"
 import { UserAuthModule } from "../auth/user-auth.module"
 import { AuditLogService } from "../common/audit-log.service"
+import { LiveModule } from "../live/live.module"
 import { PrismaModule } from "../prisma/prisma.module"
-import { WebhookDashboardController } from "./webhook.controller"
+import { WebhookDashboardController, WebhookPublicController } from "./webhook.controller"
 import { WebhookService } from "./webhook.service"
 
 @Module({
-  imports: [UserAuthModule, PrismaModule],
-  controllers: [WebhookDashboardController],
+  imports: [UserAuthModule, PrismaModule, LiveModule],
+  controllers: [WebhookDashboardController, WebhookPublicController],
   providers: [WebhookService, AuditLogService],
   exports: [WebhookService],
 })

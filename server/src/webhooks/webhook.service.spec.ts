@@ -1,5 +1,5 @@
-import { NotFoundException } from "@nestjs/common"
-import { WEBHOOK_DELIVERY_STATUS } from "@synapse/shared"
+import { NotFoundException, PayloadTooLargeException } from "@nestjs/common"
+import { LIVE_MESSAGE_TYPES, WEBHOOK_DELIVERY_STATUS } from "@synapse/shared"
 import { describe, expect, it, vi } from "vitest"
 import { hashWebhookSecret, verifyWebhookSecret } from "./webhook-token"
 import { WebhookService } from "./webhook.service"
@@ -31,7 +31,10 @@ function createPrismaMock() {
       findUnique: vi.fn(),
     },
     webhookDelivery: {
+      create: vi.fn(),
       findMany: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn(),
     },
     $transaction: vi.fn((callback) => callback({
       userWebhook: {
@@ -483,4 +486,219 @@ describe("WebhookService", () => {
       expect.objectContaining({ status: WEBHOOK_DELIVERY_STATUS.rejected }),
     ])
   })
+
+  it("accepts a webhook request, broadcasts to online clients, and stores delivery counts", async () => {
+    const harness = createWebhookReceiveHarness({
+      broadcastResult: { onlineClientCount: 2, sentClientCount: 2, failedClientCount: 0 },
+    })
+
+    const result = await harness.receive({
+      method: "POST",
+      query: { event: "push", secret: "query-secret" },
+      headers: {
+        "x-github-event": "push",
+        authorization: "Bearer raw-secret",
+      },
+      body: Buffer.from(JSON.stringify({
+        repository: { full_name: "FairyEver/Synapse" },
+        token: "body-secret",
+      })),
+      contentType: "application/json",
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(result.response).toMatchObject({ ok: true, deliveryId: expect.any(String) })
+    expect(harness.live.broadcastToUser).toHaveBeenCalledWith("user-1", expect.objectContaining({
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+    }))
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({
+        onlineClientCount: 2,
+        sentClientCount: 2,
+        failedClientCount: 0,
+        status: WEBHOOK_DELIVERY_STATUS.accepted,
+      }),
+    ])
+    const message = harness.live.broadcastToUser.mock.calls[0]?.[1]
+    expect(message.payload).toMatchObject({
+      deliveryId: "delivery-1",
+      webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+      request: {
+        method: "POST",
+        url: "https://synapse.test/webhooks/wh_public/***",
+        query: { event: "push", secret: "[redacted]" },
+        headers: { "x-github-event": "push", authorization: "[redacted]" },
+        body: {
+          repository: { full_name: "FairyEver/Synapse" },
+          token: "[redacted]",
+        },
+        contentType: "application/json",
+        remoteAddress: "127.0.0.1",
+      },
+    })
+    const serializedPayload = JSON.stringify(message.payload)
+    expect(serializedPayload).not.toContain("whsec_secret")
+    expect(serializedPayload).not.toContain("raw-secret")
+    expect(serializedPayload).not.toContain("query-secret")
+    expect(serializedPayload).not.toContain("body-secret")
+  })
+
+  it("keeps only the most recent 100 deliveries for each webhook", async () => {
+    const harness = createWebhookReceiveHarness()
+
+    for (let index = 0; index < 105; index += 1) {
+      await harness.receive({
+        body: Buffer.from(JSON.stringify({ marker: index })),
+      })
+    }
+
+    expect(harness.deliveries).toHaveLength(100)
+    expect(harness.deliveries[0]?.bodyPreview).toContain("\"marker\":5")
+    const deletedIds = harness.prisma.webhookDelivery.deleteMany.mock.calls.flatMap((call) => call[0].where.id.in)
+    expect(deletedIds).toEqual(["delivery-1", "delivery-2", "delivery-3", "delivery-4", "delivery-5"])
+  })
+
+  it("rejects invalid secrets without broadcasting", async () => {
+    const harness = createWebhookReceiveHarness()
+
+    await expect(harness.receive({ secret: "wrong" })).rejects.toThrow("Webhook not found")
+    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it("rejects disabled webhooks without broadcasting", async () => {
+    const harness = createWebhookReceiveHarness({ enabled: false })
+
+    await expect(harness.receive()).rejects.toThrow("Webhook not found")
+    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it("rejects unsupported methods without broadcasting", async () => {
+    const harness = createWebhookReceiveHarness()
+
+    await expect(harness.receive({ method: "OPTIONS" })).rejects.toThrow("Webhook not found")
+    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it("records broadcast_failed status when live broadcast partially fails", async () => {
+    const harness = createWebhookReceiveHarness({
+      broadcastResult: { onlineClientCount: 2, sentClientCount: 1, failedClientCount: 1 },
+    })
+
+    await harness.receive()
+
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({
+        onlineClientCount: 2,
+        sentClientCount: 1,
+        failedClientCount: 1,
+        status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
+      }),
+    ])
+  })
+
+  it("rejects oversized webhook bodies before broadcasting", async () => {
+    const harness = createWebhookReceiveHarness()
+
+    await expect(harness.receive({ body: Buffer.alloc(256 * 1024 + 1) }))
+      .rejects.toThrow(PayloadTooLargeException)
+    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
+    expect(harness.deliveries).toHaveLength(0)
+  })
 })
+
+function createWebhookReceiveHarness(input: {
+  readonly enabled?: boolean
+  readonly broadcastResult?: {
+    readonly onlineClientCount: number
+    readonly sentClientCount: number
+    readonly failedClientCount: number
+  }
+} = {}) {
+  const deliveries: Array<Record<string, unknown>> = []
+  const prisma = createPrismaMock()
+  const webhook = {
+    ...baseWebhook,
+    enabled: input.enabled ?? true,
+    secretHash: hashWebhookSecret("whsec_secret"),
+  }
+  const live = {
+    broadcastToUser: vi.fn().mockReturnValue(input.broadcastResult ?? {
+      onlineClientCount: 0,
+      sentClientCount: 0,
+      failedClientCount: 0,
+    }),
+  }
+  prisma.userWebhook.findFirst.mockImplementation(({ where }) => {
+    if (where.publicId === webhook.publicId) {
+      return Promise.resolve(webhook)
+    }
+    return Promise.resolve(null)
+  })
+  prisma.webhookDelivery.create.mockImplementation(({ data }) => {
+    const receivedAt = new Date(Date.parse("2026-06-06T12:00:00.000Z") + deliveries.length)
+    const delivery = {
+      id: `delivery-${deliveries.length + 1}`,
+      ...data,
+      receivedAt,
+    }
+    deliveries.push(delivery)
+    return Promise.resolve(delivery)
+  })
+  prisma.webhookDelivery.update.mockImplementation(({ where, data }) => {
+    const index = deliveries.findIndex((delivery) => delivery.id === where.id)
+    if (index >= 0) {
+      deliveries[index] = { ...deliveries[index], ...data }
+      return Promise.resolve(deliveries[index])
+    }
+    return Promise.resolve(null)
+  })
+  prisma.webhookDelivery.findMany.mockImplementation(({ skip = 0, take }: { skip?: number; take?: number }) => {
+    const sorted = [...deliveries].sort((left, right) => {
+      const leftTime = left.receivedAt instanceof Date ? left.receivedAt.getTime() : 0
+      const rightTime = right.receivedAt instanceof Date ? right.receivedAt.getTime() : 0
+      return rightTime - leftTime
+    })
+    return Promise.resolve(sorted.slice(skip, take === undefined ? undefined : skip + take).map((delivery) => ({ id: delivery.id })))
+  })
+  prisma.webhookDelivery.deleteMany.mockImplementation(({ where }) => {
+    const ids = new Set(where.id.in)
+    for (let index = deliveries.length - 1; index >= 0; index -= 1) {
+      if (ids.has(deliveries[index]?.id)) deliveries.splice(index, 1)
+    }
+    return Promise.resolve({ count: ids.size })
+  })
+
+  const service = new WebhookService(prisma as never, {}, undefined, live as never)
+
+  return {
+    prisma,
+    live,
+    deliveries,
+    receive: (overrides: {
+      readonly publicId?: string
+      readonly secret?: string
+      readonly method?: string
+      readonly path?: string
+      readonly query?: Record<string, string | readonly string[]>
+      readonly headers?: Record<string, string | readonly string[]>
+      readonly body?: Buffer
+      readonly contentType?: string
+      readonly remoteAddress?: string
+      readonly publicAppUrl?: string
+    } = {}) => service.receivePublicWebhook({
+      publicId: overrides.publicId ?? "wh_public",
+      secret: overrides.secret ?? "whsec_secret",
+      method: overrides.method ?? "POST",
+      path: overrides.path ?? "/webhooks/wh_public/whsec_secret",
+      query: overrides.query ?? {},
+      headers: overrides.headers ?? {},
+      body: overrides.body ?? Buffer.from(JSON.stringify({ ok: true })),
+      contentType: overrides.contentType ?? "application/json",
+      remoteAddress: overrides.remoteAddress,
+      publicAppUrl: overrides.publicAppUrl ?? "https://synapse.test",
+    }),
+  }
+}

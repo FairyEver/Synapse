@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { WebhookDashboardController } from "./webhook.controller"
+import { WebhookDashboardController, WebhookPublicController } from "./webhook.controller"
 import type { WebhookService } from "./webhook.service"
 
 function createRequest() {
@@ -107,5 +107,44 @@ describe("WebhookDashboardController", () => {
     await expect(controller.listDeliveries("webhook-1", createRequest() as never)).resolves.toEqual([])
     expect(service.deleteForUser).toHaveBeenCalledWith("user-1", "webhook-1", "203.0.113.20")
     expect(service.listDeliveriesForUser).toHaveBeenCalledWith("user-1", "webhook-1")
+  })
+})
+
+describe("WebhookPublicController", () => {
+  it("maps public webhook requests to the receive service without auth guard metadata", async () => {
+    const service = {
+      receivePublicWebhook: vi.fn().mockResolvedValue({
+        response: { ok: true, deliveryId: "delivery-1", acceptedAt: "2026-06-06T12:00:00.000Z" },
+      }),
+    }
+    const controller = new WebhookPublicController(service as unknown as WebhookService)
+    const request = {
+      method: "POST",
+      path: "/webhooks/wh_public/whsec_secret",
+      query: { event: "push" },
+      headers: { "content-type": "application/json" },
+      body: Buffer.from("{\"ok\":true}"),
+      ip: "203.0.113.30",
+      protocol: "http",
+      get: (name: string) => name.toLowerCase() === "host" ? "synapse.test" : undefined,
+    }
+
+    await expect(controller.receive("wh_public", "whsec_secret", request as never))
+      .resolves
+      .toEqual({ ok: true, deliveryId: "delivery-1", acceptedAt: "2026-06-06T12:00:00.000Z" })
+
+    expect(service.receivePublicWebhook).toHaveBeenCalledWith(expect.objectContaining({
+      publicId: "wh_public",
+      secret: "whsec_secret",
+      method: "POST",
+      path: "/webhooks/wh_public/whsec_secret",
+      query: { event: "push" },
+      body: Buffer.from("{\"ok\":true}"),
+      contentType: "application/json",
+      remoteAddress: "203.0.113.30",
+      publicAppUrl: "http://synapse.test",
+    }))
+    expect(Reflect.getMetadata("__guards__", WebhookPublicController)).toBeUndefined()
+    expect(Reflect.getMetadata("__httpCode__", controller.receive)).toBe(202)
   })
 })

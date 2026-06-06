@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common"
+import { All, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from "@nestjs/common"
+import type { Request } from "express"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { resolvePublicAppUrl } from "../common/public-app-url"
@@ -63,6 +64,36 @@ export class WebhookDashboardController {
   }
 }
 
+@Controller()
+export class WebhookPublicController {
+  constructor(private readonly webhooks: WebhookService) {}
+
+  @All("/webhooks/:publicId/:secret")
+  @HttpCode(202)
+  async receive(
+    @Param("publicId") publicId: string,
+    @Param("secret") secret: string,
+    @Req() request: Request,
+  ) {
+    const result = await this.webhooks.receivePublicWebhook({
+      publicId,
+      secret,
+      method: request.method,
+      path: request.path,
+      query: normalizeRequestQuery(request.query),
+      headers: request.headers,
+      body: toRequestBodyBuffer(request.body),
+      contentType: request.headers["content-type"],
+      remoteAddress: request.ip,
+      publicAppUrl: resolvePublicAppUrl({
+        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
+        request,
+      }),
+    })
+    return result.response
+  }
+}
+
 function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: string): z.infer<T> {
   const result = schema.safeParse(body)
   if (!result.success) throw badRequestFromZodError(result.error, message)
@@ -74,4 +105,23 @@ function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
     configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
     request,
   })
+}
+
+function toRequestBodyBuffer(body: unknown): Buffer {
+  if (Buffer.isBuffer(body)) return body
+  if (typeof body === "string") return Buffer.from(body, "utf8")
+  if (body === undefined || body === null) return Buffer.alloc(0)
+  return Buffer.from(JSON.stringify(body), "utf8")
+}
+
+function normalizeRequestQuery(query: Request["query"]): Record<string, string | readonly string[]> {
+  const result: Record<string, string | readonly string[]> = {}
+  for (const [key, value] of Object.entries(query)) {
+    if (Array.isArray(value)) {
+      result[key] = value.map(String)
+    } else if (value !== undefined && typeof value !== "object") {
+      result[key] = String(value)
+    }
+  }
+  return result
 }
