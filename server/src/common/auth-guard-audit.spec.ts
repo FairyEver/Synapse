@@ -44,4 +44,30 @@ describe("recordAuthGuardFailure", () => {
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("victim@example.com")
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("user-victim")
   })
+
+  it("does not propagate audit write failures to auth guards", async () => {
+    const auditError = new Error("audit database unavailable")
+    const auditLog = { record: vi.fn().mockRejectedValue(auditError) }
+    const logger = { warn: vi.fn() }
+
+    await expect(recordAuthGuardFailure({
+      action: "admin.auth.verify.failed",
+      auditLog: auditLog as never,
+      logger: logger as never,
+      request: {
+        method: "GET",
+        path: "/api/admin/system",
+        ip: "203.0.113.44",
+      },
+      token: "invalid-token",
+    })).resolves.toBeUndefined()
+
+    expect(logger.warn).toHaveBeenCalledWith({
+      err: auditError,
+      action: "admin.auth.verify.failed",
+      method: "GET",
+      path: "/api/admin/system",
+      tokenPresent: true,
+    }, "Failed to record auth guard audit log")
+  })
 })

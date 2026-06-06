@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import type { Request } from "express"
+import { PinoLogger } from "nestjs-pino"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { UserAuthService } from "../auth/user-auth.service"
 import { AuditLogService } from "../common/audit-log.service"
@@ -15,6 +16,7 @@ export class TeamsAuthGuard implements CanActivate {
     private readonly userAuth: UserAuthService,
     private readonly dashboardAuth: AdminAuthService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly logger?: PinoLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -36,6 +38,7 @@ export class TeamsAuthGuard implements CanActivate {
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "teams.auth.verify.failed",
+        logger: this.logger,
         request,
         token: cookieToken,
       })
@@ -45,6 +48,7 @@ export class TeamsAuthGuard implements CanActivate {
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "teams.auth.forbidden",
+        logger: this.logger,
         request,
         token: cookieToken,
       })
@@ -61,6 +65,7 @@ export class TeamsAuthGuard implements CanActivate {
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "teams.auth.verify.failed",
+        logger: this.logger,
         request,
         token,
       })

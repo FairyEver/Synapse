@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import type { Request } from "express"
+import { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { recordAuthGuardFailure } from "../common/auth-guard-audit"
 import { AdminAuthService } from "./admin-auth.service"
@@ -13,6 +14,7 @@ export class AdminAuthGuard implements CanActivate {
   constructor(
     private readonly auth: AdminAuthService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly logger?: PinoLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -23,6 +25,7 @@ export class AdminAuthGuard implements CanActivate {
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "admin.auth.verify.failed",
+        logger: this.logger,
         request,
         token,
       })
@@ -32,6 +35,7 @@ export class AdminAuthGuard implements CanActivate {
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "admin.auth.forbidden",
+        logger: this.logger,
         request,
         token,
       })
