@@ -91,6 +91,99 @@ sync_remote_code() {
     ./ "$SERVER:$REMOTE_DIR/"
 }
 
+run_remote_health_check() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT'
+set -uo pipefail
+
+failed=0
+
+print_file_preview() {
+  local path=$1
+
+  if [ -s "$path" ]; then
+    sed -n '1,8p' "$path"
+  else
+    echo "(empty response)"
+  fi
+}
+
+record_failure() {
+  failed=1
+}
+
+check_body_contains() {
+  local name=$1
+  local url=$2
+  local expected=$3
+  local body_file
+  local error_file
+  local http_code
+  local curl_status
+
+  body_file=$(mktemp)
+  error_file=$(mktemp)
+  http_code=$(curl -sS -o "$body_file" -w "%{http_code}" "$url" 2>"$error_file")
+  curl_status=$?
+
+  if [ "$curl_status" -eq 0 ] && [[ "$http_code" == 2* ]] && grep -q "$expected" "$body_file"; then
+    printf "%s ok (HTTP %s)\n" "$name" "$http_code"
+  else
+    printf "%s FAILED (HTTP %s)\n" "$name" "$http_code"
+    if [ -s "$error_file" ]; then
+      sed -n '1,4p' "$error_file"
+    fi
+    print_file_preview "$body_file"
+    record_failure
+  fi
+
+  rm -f "$body_file" "$error_file"
+}
+
+check_redirect() {
+  local name=$1
+  local url=$2
+  local expected_location=$3
+  local header_file
+  local error_file
+  local http_code
+  local curl_status
+
+  header_file=$(mktemp)
+  error_file=$(mktemp)
+  http_code=$(curl -sS -o /dev/null -D "$header_file" -w "%{http_code}" "$url" 2>"$error_file")
+  curl_status=$?
+
+  if [ "$curl_status" -eq 0 ] && { [ "$http_code" = "301" ] || [ "$http_code" = "302" ]; } && grep -qi "^Location: ${expected_location}" "$header_file"; then
+    printf "%s ok (HTTP %s, Location: %s)\n" "$name" "$http_code" "$expected_location"
+  else
+    printf "%s FAILED (HTTP %s, expected Location: %s)\n" "$name" "$http_code" "$expected_location"
+    if [ -s "$error_file" ]; then
+      sed -n '1,4p' "$error_file"
+    fi
+    print_file_preview "$header_file"
+    record_failure
+  fi
+
+  rm -f "$header_file" "$error_file"
+}
+
+check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
+check_body_contains "dashboard" "http://127.0.0.1:3000/dashboard/" '<div id="root">'
+# Expected redirect header: Location: /dashboard/
+check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/dashboard/"
+
+if [ "$failed" -ne 0 ]; then
+  echo ""
+  echo "docker compose status:"
+  docker compose --env-file .env ps || true
+  echo ""
+  echo "recent server logs:"
+  docker compose --env-file .env logs --tail=80 server || true
+  exit 1
+fi
+REMOTE_SCRIPT
+}
+
 echo ""
 
 # [1/9] 确保远程目录存在
@@ -138,13 +231,11 @@ step 8 "等待服务就绪" \
   sleep 5
 
 # [9/9] 健康检查
-if ssh "$SERVER" "curl -sf http://127.0.0.1:3000/healthz > /dev/null && curl -sf http://127.0.0.1:3000/dashboard/ | grep -q '<title>Synapse</title>' && curl -sSI http://127.0.0.1:3000/dashboard | grep -q 'Location: /dashboard/'" > /dev/null 2>&1; then
-  printf "[%d/%d] 健康检查 .......... passed\n" 9 "$TOTAL_STEPS"
+printf "\n[%d/%d] 健康检查\n" 9 "$TOTAL_STEPS"
+if run_remote_health_check 2>&1 | sed 's/^/  /'; then
+  printf "[%d/%d] done\n" 9 "$TOTAL_STEPS"
 else
   printf "[%d/%d] 健康检查 .......... FAILED\n" 9 "$TOTAL_STEPS"
-  echo ""
-  echo "  服务未就绪，查看日志:"
-  echo "  ssh $SERVER \"cd $REMOTE_DIR/server && docker compose logs server\""
   exit 1
 fi
 

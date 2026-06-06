@@ -42,4 +42,17 @@ describe("server deployment configuration", () => {
     expect(readme).toContain("bash deploy.sh")
     expect(readme).toContain("/www/wwwroot/synapse/backups")
   })
+
+  it("uses stable deployment health checks with actionable diagnostics", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).not.toContain("<title>Synapse</title>")
+    expect(deployScript).toContain("run_remote_health_check")
+    expect(deployScript).toContain("http://127.0.0.1:3000/healthz")
+    expect(deployScript).toContain("http://127.0.0.1:3000/dashboard/")
+    expect(deployScript).toContain("Location: /dashboard/")
+    expect(deployScript).toContain('<div id="root">')
+    expect(deployScript).toContain("docker compose --env-file .env ps")
+    expect(deployScript).toContain("docker compose --env-file .env logs --tail=80 server")
+  })
 })
