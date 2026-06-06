@@ -27,6 +27,11 @@ describe("webhook-token", () => {
     expect(verifyWebhookSecret("whsec_secret", "not-a-valid-hex-hash")).toBe(false)
   })
 
+  it("returns false for hashes with trailing non-hex data", () => {
+    const secret = "whsec_secret"
+    expect(verifyWebhookSecret(secret, `${hashWebhookSecret(secret)}zz`)).toBe(false)
+  })
+
   it("builds encoded webhook URLs", () => {
     expect(buildWebhookUrl("https://synapse.test/", "wh_public/id", "whsec_secret/value"))
       .toBe("https://synapse.test/webhooks/wh_public%2Fid/whsec_secret%2Fvalue")

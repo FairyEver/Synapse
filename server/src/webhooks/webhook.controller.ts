@@ -12,7 +12,9 @@ const createWebhookSchema = z.object({
 const updateWebhookSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   enabled: z.boolean().optional(),
-}).strict()
+}).strict().refine((value) => value.name !== undefined || value.enabled !== undefined, {
+  message: "At least one field is required.",
+})
 
 @UseGuards(UserAuthGuard)
 @Controller("/api/dashboard/webhooks")
@@ -30,6 +32,7 @@ export class WebhookDashboardController {
       request.user!.id,
       parseBody(createWebhookSchema, body, "Webhook create request is invalid."),
       resolveRequestPublicAppUrl(request),
+      request.ip,
     )
   }
 
@@ -40,17 +43,18 @@ export class WebhookDashboardController {
       id,
       parseBody(updateWebhookSchema, body, "Webhook update request is invalid."),
       resolveRequestPublicAppUrl(request),
+      request.ip,
     )
   }
 
   @Delete("/:id")
   delete(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.webhooks.deleteForUser(request.user!.id, id)
+    return this.webhooks.deleteForUser(request.user!.id, id, request.ip)
   }
 
   @Post("/:id/reset-secret")
   resetSecret(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.webhooks.resetSecret(request.user!.id, id, resolveRequestPublicAppUrl(request))
+    return this.webhooks.resetSecret(request.user!.id, id, resolveRequestPublicAppUrl(request), request.ip)
   }
 
   @Get("/:id/deliveries")

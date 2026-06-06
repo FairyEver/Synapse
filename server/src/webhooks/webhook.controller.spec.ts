@@ -11,6 +11,7 @@ function createRequest() {
       "x-forwarded-proto": "https",
     },
     protocol: "http",
+    ip: "203.0.113.20",
     get: (name: string) => name.toLowerCase() === "host" ? "synapse.test" : undefined,
   }
 }
@@ -39,6 +40,7 @@ describe("WebhookDashboardController", () => {
       "user-1",
       { name: "GitHub" },
       "https://synapse.test",
+      "203.0.113.20",
     )
   })
 
@@ -67,7 +69,19 @@ describe("WebhookDashboardController", () => {
       "webhook-1",
       { name: "Deploy", enabled: false },
       "https://synapse.test",
+      "203.0.113.20",
     )
+  })
+
+  it("rejects empty update bodies", () => {
+    const service = {
+      updateForUser: vi.fn(),
+    }
+    const controller = new WebhookDashboardController(service as unknown as WebhookService)
+
+    expect(() => controller.update("webhook-1", {}, createRequest() as never))
+      .toThrow("Webhook update request is invalid")
+    expect(service.updateForUser).not.toHaveBeenCalled()
   })
 
   it("resets webhook secrets with request-resolved public URLs", async () => {
@@ -79,7 +93,7 @@ describe("WebhookDashboardController", () => {
     await expect(controller.resetSecret("webhook-1", createRequest() as never))
       .resolves
       .toEqual({ url: "https://synapse.test/webhooks/wh_id/whsec_new" })
-    expect(service.resetSecret).toHaveBeenCalledWith("user-1", "webhook-1", "https://synapse.test")
+    expect(service.resetSecret).toHaveBeenCalledWith("user-1", "webhook-1", "https://synapse.test", "203.0.113.20")
   })
 
   it("deletes and lists deliveries for the current user", async () => {
@@ -91,7 +105,7 @@ describe("WebhookDashboardController", () => {
 
     await expect(controller.delete("webhook-1", createRequest() as never)).resolves.toEqual({ ok: true })
     await expect(controller.listDeliveries("webhook-1", createRequest() as never)).resolves.toEqual([])
-    expect(service.deleteForUser).toHaveBeenCalledWith("user-1", "webhook-1")
+    expect(service.deleteForUser).toHaveBeenCalledWith("user-1", "webhook-1", "203.0.113.20")
     expect(service.listDeliveriesForUser).toHaveBeenCalledWith("user-1", "webhook-1")
   })
 })

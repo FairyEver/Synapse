@@ -15,6 +15,7 @@ export function hashWebhookSecret(secret: string): string {
 }
 
 export function verifyWebhookSecret(secret: string, hash: string): boolean {
+  if (!/^[a-f0-9]{64}$/iu.test(hash)) return false
   try {
     const expected = Buffer.from(hashWebhookSecret(secret), "hex")
     const stored = Buffer.from(hash, "hex")

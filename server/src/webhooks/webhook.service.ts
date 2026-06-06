@@ -1,10 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import {
+  WEBHOOK_DELIVERY_STATUS,
   type DashboardWebhookDto,
   type DashboardWebhookSecretResult,
   type WebhookDeliveryDto,
   type WebhookDeliveryStatus,
 } from "@synapse/shared"
+import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
 import {
   buildWebhookUrl,
@@ -18,6 +20,8 @@ type WebhookTokenFactory = {
   readonly createPublicId?: () => string
   readonly createSecret?: () => string
 }
+
+export const webhookTokenFactoryToken = Symbol("webhookTokenFactory")
 
 type DeliverySummaryRecord = {
   readonly receivedAt: Date
@@ -63,11 +67,14 @@ const webhookWithLatestDelivery = {
   },
 }
 
+const webhookStatusValues = new Set<string>(Object.values(WEBHOOK_DELIVERY_STATUS))
+
 @Injectable()
 export class WebhookService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly tokens: WebhookTokenFactory = {},
+    @Optional() @Inject(webhookTokenFactoryToken) private readonly tokens: WebhookTokenFactory = {},
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   async listForUser(userId: string, publicAppUrl = ""): Promise<DashboardWebhookDto[]> {
@@ -83,6 +90,7 @@ export class WebhookService {
     userId: string,
     input: { readonly name: string },
     publicAppUrl: string,
+    ipAddress = "system",
   ): Promise<DashboardWebhookSecretResult> {
     const name = normalizeWebhookName(input.name)
     const publicId = this.tokens.createPublicId?.() ?? createWebhookPublicId()
@@ -96,6 +104,13 @@ export class WebhookService {
       },
       include: webhookWithLatestDelivery,
     })
+    await this.recordWebhookAudit({
+      actorUserId: userId,
+      action: "webhook.create",
+      webhook,
+      detail: { publicId: webhook.publicId, name: webhook.name, enabled: webhook.enabled },
+      ipAddress,
+    })
     return {
       webhook: this.toDashboardWebhookDto(webhook, publicAppUrl),
       url: buildWebhookUrl(publicAppUrl, publicId, secret),
@@ -107,33 +122,82 @@ export class WebhookService {
     id: string,
     input: { readonly name?: string; readonly enabled?: boolean },
     publicAppUrl = "",
+    ipAddress = "system",
   ): Promise<DashboardWebhookDto> {
-    await this.requireOwnedWebhook(userId, id)
+    const changedFields = readChangedFields(input)
+    if (changedFields.length === 0) {
+      throw new BadRequestException("Webhook update must include at least one field.")
+    }
     const data: { name?: string; enabled?: boolean } = {}
     if (input.name !== undefined) data.name = normalizeWebhookName(input.name)
     if (input.enabled !== undefined) data.enabled = input.enabled
 
-    const webhook = await this.prisma.userWebhook.update({
-      where: { id },
-      data,
-      include: webhookWithLatestDelivery,
+    const webhook = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.userWebhook.updateMany({
+        where: { id, userId },
+        data,
+      })
+      if (result.count === 0) throw new NotFoundException("Webhook not found")
+      const updated = await tx.userWebhook.findFirst({
+        where: { id, userId },
+        include: webhookWithLatestDelivery,
+      })
+      if (!updated) throw new NotFoundException("Webhook not found")
+      return updated
+    })
+    await this.recordWebhookAudit({
+      actorUserId: userId,
+      action: "webhook.update",
+      webhook,
+      detail: {
+        publicId: webhook.publicId,
+        name: webhook.name,
+        enabled: webhook.enabled,
+        changedFields,
+      },
+      ipAddress,
     })
     return this.toDashboardWebhookDto(webhook, publicAppUrl)
   }
 
-  async deleteForUser(userId: string, id: string): Promise<{ readonly ok: true }> {
-    await this.requireOwnedWebhook(userId, id)
-    await this.prisma.userWebhook.delete({ where: { id } })
+  async deleteForUser(userId: string, id: string, ipAddress = "system"): Promise<{ readonly ok: true }> {
+    const webhook = await this.prisma.userWebhook.findFirst({
+      where: { id, userId },
+      select: { id: true, publicId: true, name: true, enabled: true },
+    })
+    const result = await this.prisma.userWebhook.deleteMany({ where: { id, userId } })
+    if (result.count === 0 || !webhook) throw new NotFoundException("Webhook not found")
+    await this.recordWebhookAudit({
+      actorUserId: userId,
+      action: "webhook.delete",
+      webhook,
+      detail: { publicId: webhook.publicId, name: webhook.name, enabled: webhook.enabled },
+      ipAddress,
+    })
     return { ok: true }
   }
 
-  async resetSecret(userId: string, id: string, publicAppUrl: string): Promise<DashboardWebhookSecretResult> {
-    await this.requireOwnedWebhook(userId, id)
+  async resetSecret(userId: string, id: string, publicAppUrl: string, ipAddress = "system"): Promise<DashboardWebhookSecretResult> {
     const secret = this.tokens.createSecret?.() ?? createWebhookSecret()
-    const webhook = await this.prisma.userWebhook.update({
-      where: { id },
-      data: { secretHash: hashWebhookSecret(secret) },
-      include: webhookWithLatestDelivery,
+    const webhook = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.userWebhook.updateMany({
+        where: { id, userId },
+        data: { secretHash: hashWebhookSecret(secret) },
+      })
+      if (result.count === 0) throw new NotFoundException("Webhook not found")
+      const updated = await tx.userWebhook.findFirst({
+        where: { id, userId },
+        include: webhookWithLatestDelivery,
+      })
+      if (!updated) throw new NotFoundException("Webhook not found")
+      return updated
+    })
+    await this.recordWebhookAudit({
+      actorUserId: userId,
+      action: "webhook.reset_secret",
+      webhook,
+      detail: { publicId: webhook.publicId, name: webhook.name, enabled: webhook.enabled },
+      ipAddress,
     })
     return {
       webhook: this.toDashboardWebhookDto(webhook, publicAppUrl),
@@ -161,7 +225,8 @@ export class WebhookService {
 
   private toDashboardWebhookDto(webhook: WebhookRecord, publicAppUrl: string): DashboardWebhookDto {
     const latestDelivery = webhook.deliveries?.[0]
-    return {
+    const lastDeliveryStatus = normalizeWebhookDeliveryStatus(latestDelivery?.status)
+    const dto: DashboardWebhookDto = {
       id: webhook.id,
       publicId: webhook.publicId,
       name: webhook.name,
@@ -169,9 +234,46 @@ export class WebhookService {
       maskedUrl: maskWebhookUrl(buildWebhookUrl(publicAppUrl, webhook.publicId, "secret")),
       createdAt: webhook.createdAt.toISOString(),
       updatedAt: webhook.updatedAt.toISOString(),
-      lastDeliveryAt: latestDelivery?.receivedAt.toISOString(),
-      lastDeliveryStatus: latestDelivery?.status as WebhookDeliveryStatus | undefined,
     }
+    if (latestDelivery) {
+      return {
+        ...dto,
+        lastDeliveryAt: latestDelivery.receivedAt.toISOString(),
+        ...(lastDeliveryStatus ? { lastDeliveryStatus } : {}),
+      }
+    }
+    return dto
+  }
+
+  private async getAuditActorEmail(userId: string): Promise<string> {
+    if (!this.auditLog) return userId
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      })
+      return user?.email ?? userId
+    } catch {
+      return userId
+    }
+  }
+
+  private async recordWebhookAudit(input: {
+    readonly actorUserId: string
+    readonly action: "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.reset_secret"
+    readonly webhook: Pick<WebhookRecord, "id" | "publicId" | "name" | "enabled">
+    readonly detail: Record<string, unknown>
+    readonly ipAddress: string
+  }): Promise<void> {
+    const actorEmail = await this.getAuditActorEmail(input.actorUserId)
+    await this.auditLog?.record({
+      adminEmail: actorEmail,
+      action: input.action,
+      targetType: "webhook",
+      targetId: input.webhook.id,
+      detail: input.detail,
+      ipAddress: input.ipAddress,
+    })
   }
 }
 
@@ -198,7 +300,18 @@ function toWebhookDeliveryDto(delivery: DeliveryRecord): WebhookDeliveryDto {
     onlineClientCount: delivery.onlineClientCount,
     sentClientCount: delivery.sentClientCount,
     failedClientCount: delivery.failedClientCount,
-    status: delivery.status as WebhookDeliveryStatus,
+    status: normalizeWebhookDeliveryStatus(delivery.status) ?? WEBHOOK_DELIVERY_STATUS.rejected,
     error: delivery.error ?? undefined,
   }
+}
+
+function readChangedFields(input: { readonly name?: string; readonly enabled?: boolean }): string[] {
+  return [
+    ...(input.name !== undefined ? ["name"] : []),
+    ...(input.enabled !== undefined ? ["enabled"] : []),
+  ]
+}
+
+function normalizeWebhookDeliveryStatus(status: string | undefined): WebhookDeliveryStatus | undefined {
+  return status && webhookStatusValues.has(status) ? status as WebhookDeliveryStatus : undefined
 }
