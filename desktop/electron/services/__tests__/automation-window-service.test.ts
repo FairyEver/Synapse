@@ -33,7 +33,7 @@ function createLoggerMock() {
 }
 
 describe("createAutomationWindowService", () => {
-  it("reuses the create draft window", async () => {
+  it("reuses and reloads the create draft window", async () => {
     const window = createWindowMock()
     const createWindow = vi.fn(() => window as never)
     const service = createAutomationWindowService({ createWindow, baseUrl: () => "app://-" })
@@ -42,6 +42,7 @@ describe("createAutomationWindowService", () => {
     await service.openCreate()
 
     expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(window.loadURL).toHaveBeenCalledTimes(2)
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
 

@@ -54,8 +54,24 @@ export function createAutomationWindowService(deps: AutomationWindowServiceDeps)
 
   async function openWindow(key: string, params: URLSearchParams): Promise<BrowserWindow> {
     const metadata = automationWindowMetadata(key)
+    const baseUrl = deps.baseUrl()
+    const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
     const existing = key === "create" ? createWindow : editWindows.get(key)
     if (existing && !existing.isDestroyed()) {
+      if (key === "create") {
+        try {
+          await existing.loadURL(url)
+          logger.info("Reloaded existing automation editor window.", metadata)
+        } catch (error) {
+          createWindow = null
+          logger.warn("Failed to reload automation editor window.", {
+            ...metadata,
+            ...errorDiagnostic(error),
+          })
+          if (!existing.isDestroyed()) existing.destroy()
+          throw error
+        }
+      }
       focusWindow(existing)
       logger.info("Focused existing automation editor window.", metadata)
       return existing
@@ -71,8 +87,6 @@ export function createAutomationWindowService(deps: AutomationWindowServiceDeps)
         sandbox: false,
       },
     })
-    const baseUrl = deps.baseUrl()
-    const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
 
     if (key === "create") {
       createWindow = window
