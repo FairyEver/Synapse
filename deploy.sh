@@ -5,8 +5,20 @@ set -euo pipefail
 SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse"
 DEFAULT_APP_PUBLIC_URL="https://synapse.d2.pub"
-TOTAL_STEPS=9
+DEPLOY_ID=$(date +%Y%m%d_%H%M%S)
+NEW_IMAGE_TAG="deploy-${DEPLOY_ID}"
+ROLLBACK_IMAGE_TAG="rollback-${DEPLOY_ID}"
+ONLINE_BACKUP_FILE="$REMOTE_DIR/backups/synapse-online-before-deploy-${DEPLOY_ID}.sql"
+FINAL_BACKUP_FILE="$REMOTE_DIR/backups/synapse-final-before-switch-${DEPLOY_ID}.sql"
+APPLIED_MIGRATIONS_FILE=$(mktemp)
+TOTAL_STEPS=13
 TOTAL_START=$(date +%s)
+
+cleanup() {
+  rm -f "$APPLIED_MIGRATIONS_FILE"
+}
+
+trap cleanup EXIT
 
 step() {
   local num=$1 desc=$2
@@ -53,19 +65,57 @@ docker compose --env-file .env config >/dev/null
 REMOTE_SCRIPT
 }
 
-backup_remote_database() {
-  ssh "$SERVER" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE_SCRIPT'
+fetch_applied_migrations() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" > "$APPLIED_MIGRATIONS_FILE" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-backup_file="$REMOTE_DIR/backups/synapse-before-deploy-$(date +%Y%m%d_%H%M%S).sql"
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -At <<'SQL'
+SELECT to_regclass('public._prisma_migrations');
+SQL
+REMOTE_SCRIPT
+
+  if ! grep -q "_prisma_migrations" "$APPLIED_MIGRATIONS_FILE"; then
+    : > "$APPLIED_MIGRATIONS_FILE"
+    printf "applied migrations: 0\n"
+    return
+  fi
+
+  ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" > "$APPLIED_MIGRATIONS_FILE" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -At <<'SQL'
+SELECT migration_name
+FROM public._prisma_migrations
+WHERE finished_at IS NOT NULL
+ORDER BY migration_name;
+SQL
+REMOTE_SCRIPT
+
+  local count
+  count=$(wc -l < "$APPLIED_MIGRATIONS_FILE" | tr -d ' ')
+  printf "applied migrations: %s\n" "$count"
+}
+
+scan_pending_migrations() {
+  env ALLOW_RISKY_MIGRATIONS="${ALLOW_RISKY_MIGRATIONS:-}" \
+    node scripts/deploy/check-prisma-migration-risk.mjs \
+      --migrations-dir server/prisma/migrations \
+      --applied-file "$APPLIED_MIGRATIONS_FILE"
+}
+
+backup_remote_database() {
+  local backup_file=$1
+
+  ssh "$SERVER" "REMOTE_DIR='$REMOTE_DIR' BACKUP_FILE='$backup_file' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
 
 mkdir -p "$REMOTE_DIR/backups"
 cd "$REMOTE_DIR/server"
 
-docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > "$backup_file"
-test -s "$backup_file"
+docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > "$BACKUP_FILE"
+test -s "$BACKUP_FILE"
 
-printf "backup saved: %s\n" "$backup_file"
+printf "backup saved: %s\n" "$BACKUP_FILE"
 REMOTE_SCRIPT
 }
 
@@ -89,6 +139,81 @@ sync_remote_code() {
     --include='/package.json' \
     --exclude='*' \
     ./ "$SERVER:$REMOTE_DIR/"
+}
+
+build_remote_image() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env build server"
+}
+
+tag_remote_rollback_image() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+container_id=$(docker compose --env-file .env ps -q server || true)
+if [ -z "$container_id" ]; then
+  echo "server container is not running; cannot create rollback image"
+  exit 1
+fi
+
+image_id=$(docker inspect -f '{{.Image}}' "$container_id")
+docker tag "$image_id" "synapse-server:${ROLLBACK_IMAGE_TAG}"
+printf "rollback image tagged: synapse-server:%s\n" "$ROLLBACK_IMAGE_TAG"
+REMOTE_SCRIPT
+}
+
+preflight_remote_migrations() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && DEPLOY_ID='$DEPLOY_ID' NEW_IMAGE_TAG='$NEW_IMAGE_TAG' ONLINE_BACKUP_FILE='$ONLINE_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+preflight_db="synapse_preflight_${DEPLOY_ID}"
+postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
+postgres_password=${postgres_password:-synapse}
+
+cleanup_preflight_database() {
+  docker compose --env-file .env exec -T postgres psql -U synapse -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${preflight_db}';" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres dropdb -U synapse --if-exists "$preflight_db" >/dev/null 2>&1 || true
+}
+
+trap cleanup_preflight_database EXIT
+
+cleanup_preflight_database
+docker compose --env-file .env exec -T postgres createdb -U synapse "$preflight_db"
+docker compose --env-file .env exec -T postgres psql -U synapse -d "$preflight_db" < "$ONLINE_BACKUP_FILE"
+
+database_url="postgresql://synapse:${postgres_password}@postgres:5432/${preflight_db}"
+SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps -e DATABASE_URL="$database_url" server sh -c "cd server && npx prisma migrate deploy"
+
+printf "preflight migration ok: %s\n" "$preflight_db"
+REMOTE_SCRIPT
+}
+
+stop_remote_server() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env stop server"
+}
+
+start_new_remote_server() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env up -d --no-build server"
+}
+
+rollback_remote_service() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' docker compose --env-file .env up -d --no-build server"
+}
+
+print_manual_database_restore_instructions() {
+  cat <<EOF
+
+数据库没有自动恢复。若确认需要回到部署前数据库，请人工执行：
+
+  ssh $SERVER
+  cd $REMOTE_DIR/server
+  docker compose --env-file .env stop server
+  docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+  docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < $FINAL_BACKUP_FILE
+  SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build server
+
+最终切换前备份：$FINAL_BACKUP_FILE
+回滚服务镜像：synapse-server:$ROLLBACK_IMAGE_TAG
+EOF
 }
 
 run_remote_health_check() {
@@ -167,32 +292,49 @@ check_redirect() {
   rm -f "$header_file" "$error_file"
 }
 
-check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
-check_body_contains "dashboard" "http://127.0.0.1:3000/dashboard/" '<div id="root">'
-# Expected redirect header: Location: /dashboard/
-check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/dashboard/"
+run_checks_once() {
+  failed=0
+  check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
+  check_body_contains "dashboard" "http://127.0.0.1:3000/dashboard/" '<div id="root">'
+  # Expected redirect header: Location: /dashboard/
+  check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/dashboard/"
+  return "$failed"
+}
 
-if [ "$failed" -ne 0 ]; then
-  echo ""
-  echo "docker compose status:"
-  docker compose --env-file .env ps || true
-  echo ""
-  echo "recent server logs:"
-  docker compose --env-file .env logs --tail=80 server || true
-  exit 1
-fi
+deadline=$((SECONDS + 90))
+attempt=1
+
+while true; do
+  echo "health check attempt ${attempt}"
+  if run_checks_once; then
+    exit 0
+  fi
+
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    echo ""
+    echo "docker compose status:"
+    docker compose --env-file .env ps || true
+    echo ""
+    echo "recent server logs:"
+    docker compose --env-file .env logs --tail=80 server || true
+    exit 1
+  fi
+
+  attempt=$((attempt + 1))
+  sleep 3
+done
 REMOTE_SCRIPT
 }
 
 echo ""
 
-# [1/9] 确保远程目录存在
+# [1/13] 确保远程目录存在
 step 1 "确保远程目录存在" \
   ssh "$SERVER" "mkdir -p $REMOTE_DIR"
 
 # 检查是否首次部署
 if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
-  # [2/9] 首次部署同步代码（只传后端需要的文件）
+  # [2/13] 首次部署同步代码（只传服务端需要的文件）
   step 2 "同步代码到服务器" \
     sync_remote_code
 
@@ -202,40 +344,64 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   exit 0
 fi
 
-# [2/9] 检查并补齐旧环境变量
+# [2/13] 检查并补齐旧环境变量
 step 2 "检查远程环境变量" \
   ensure_remote_env
 
-# [3/9] 升级前备份远程数据库
-step 3 "备份远程数据库" \
-  backup_remote_database
+# [3/13] 获取远程已应用迁移
+step 3 "获取远程已应用迁移" \
+  fetch_applied_migrations
 
-# [4/9] 同步代码（只传后端需要的文件）
-step 4 "同步代码到服务器" \
+# [4/13] 扫描待发布迁移风险
+step 4 "扫描待发布迁移风险" \
+  scan_pending_migrations
+
+# [5/13] 在线备份远程数据库
+step 5 "在线备份远程数据库" \
+  backup_remote_database "$ONLINE_BACKUP_FILE"
+
+# [6/13] 同步代码（只传服务端需要的文件）
+step 6 "同步代码到服务器" \
   sync_remote_code
 
-# [5/9] 构建 Docker 镜像
-step 5 "构建 Docker 镜像" \
-  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env build"
+# [7/13] 构建新 Docker 镜像
+step 7 "构建 Docker 镜像" \
+  build_remote_image
 
-# [6/9] 停止旧服务
-step 6 "停止旧服务" \
-  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env down"
+# [8/13] 标记当前服务镜像，供失败时回滚
+step 8 "标记回滚镜像" \
+  tag_remote_rollback_image
 
-# [7/9] 启动新服务
-step 7 "启动新服务" \
-  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env up -d"
+# [9/13] 用在线备份恢复临时库并预演迁移
+step 9 "临时数据库预演迁移" \
+  preflight_remote_migrations
 
-# [8/9] 等待服务就绪
-step 8 "等待服务就绪" \
-  sleep 5
+# [10/13] 停止旧服务，保留数据库
+step 10 "停止旧服务" \
+  stop_remote_server
 
-# [9/9] 健康检查
-printf "\n[%d/%d] 健康检查\n" 9 "$TOTAL_STEPS"
+# [11/13] 停服后最终备份远程数据库
+step 11 "最终备份远程数据库" \
+  backup_remote_database "$FINAL_BACKUP_FILE"
+
+# [12/13] 启动新服务
+step 12 "启动新服务" \
+  start_new_remote_server
+
+# [13/13] 健康检查
+printf "\n[%d/%d] 健康检查\n" 13 "$TOTAL_STEPS"
 if run_remote_health_check 2>&1 | sed 's/^/  /'; then
-  printf "[%d/%d] done\n" 9 "$TOTAL_STEPS"
+  printf "[%d/%d] done\n" 13 "$TOTAL_STEPS"
 else
-  printf "[%d/%d] 健康检查 .......... FAILED\n" 9 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... FAILED\n" 13 "$TOTAL_STEPS"
+  echo ""
+  echo "正在回滚到上一版服务镜像，不自动恢复数据库..."
+  if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check 2>&1 | sed 's/^/  /'; then
+    echo "服务镜像已回滚。"
+  else
+    echo "服务镜像回滚后健康检查仍失败，请立即查看日志。"
+  fi
+  print_manual_database_restore_instructions
   exit 1
 fi
 
@@ -243,3 +409,5 @@ TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 echo ""
 echo "部署完成 (${TOTAL_ELAPSED}s)"
 echo "管理面板: https://synapse.d2.pub/dashboard"
+echo "在线预演备份: $ONLINE_BACKUP_FILE"
+echo "最终切换前备份: $FINAL_BACKUP_FILE"

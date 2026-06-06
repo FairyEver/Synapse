@@ -279,17 +279,23 @@ cd /Users/liyang/.codex/worktrees/f240/Synapse
 bash deploy.sh
 ```
 
-`deploy.sh` 会先在服务器 `/www/wwwroot/synapse/backups/` 生成一份完整数据库备份，再同步 `server/`、`dashboard/` 和 workspace 构建文件。备份失败会中止部署；数据库迁移会在新容器启动时自动执行。
+`deploy.sh` 会先读取线上已应用的 Prisma migration，扫描本次待发布 migration 中的危险 SQL。遇到删表、删列、删行、唯一索引或危险 `NOT NULL` 变更时会停止；确认无误后可用 `ALLOW_RISKY_MIGRATIONS=1 bash deploy.sh` 显式继续。
 
-部署完成前会检查 `/healthz`、`/dashboard/` 静态入口和 `/dashboard` 到 `/dashboard/` 的重定向。失败时脚本会直接输出失败检查项、HTTP 状态、响应摘要、容器状态和最近 server 日志。
+部署会生成两份完整数据库备份：一份在线备份用于临时数据库预演，一份在停旧服务后生成的最终切换前备份。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。
+
+真正切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/dashboard/` 静态入口和 `/dashboard` 到 `/dashboard/` 的重定向。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印最终备份路径和人工恢复命令。
 
 如果是在服务器上手动更新，也必须先备份，再构建启动：
 
 ```bash
 cd /www/wwwroot/synapse/server
 mkdir -p ../backups
+MANUAL_IMAGE_TAG=manual-$(date +%Y%m%d_%H%M%S)
 docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
-docker compose --env-file .env up -d --build
+SYNAPSE_SERVER_IMAGE_TAG=$MANUAL_IMAGE_TAG docker compose --env-file .env build server
+docker compose --env-file .env stop server
+docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-final-before-manual-switch_$(date +%Y%m%d_%H%M%S).sql
+SYNAPSE_SERVER_IMAGE_TAG=$MANUAL_IMAGE_TAG docker compose --env-file .env up -d --no-build server
 ```
 
 ### 重启服务（不重新构建）
@@ -313,7 +319,7 @@ docker compose down -v
 
 ### 数据库备份
 
-`deploy.sh` 的升级前自动备份会保存在 `/www/wwwroot/synapse/backups/`，文件名形如 `synapse-before-deploy-20260606_121500.sql`。
+`deploy.sh` 的自动备份会保存在 `/www/wwwroot/synapse/backups/`。在线预演备份文件名形如 `synapse-online-before-deploy-20260606_121500.sql`，最终切换前备份文件名形如 `synapse-final-before-switch-20260606_121500.sql`。
 
 也可以手动备份：
 
@@ -336,8 +342,8 @@ cd /www/wwwroot/synapse/server
 
 docker compose --env-file .env stop server
 docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../backups/synapse-before-deploy-20260606_121500.sql
-docker compose --env-file .env up -d server
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../backups/synapse-final-before-switch-20260606_121500.sql
+SYNAPSE_SERVER_IMAGE_TAG=rollback-20260606_121500 docker compose --env-file .env up -d --no-build server
 ```
 
 ### 查看磁盘占用

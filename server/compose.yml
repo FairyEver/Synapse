@@ -18,6 +18,7 @@ services:
 
   server:
     restart: unless-stopped
+    image: synapse-server:${SYNAPSE_SERVER_IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: server/Dockerfile
@@ -43,7 +44,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "cd server && npx prisma migrate deploy && cd .. && node server/dist/main.js & nginx -g 'daemon off;'"
 
 volumes:
   synapse-postgres:

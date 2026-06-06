@@ -27,8 +27,9 @@ COPY --from=build /app/server/node_modules ./server/node_modules
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/dashboard/dist ./dashboard/dist
 COPY server/prisma ./server/prisma
+COPY server/docker-entrypoint.sh ./server/docker-entrypoint.sh
 COPY server/package.json ./server/package.json
 COPY server/nginx.conf /etc/nginx/http.d/default.conf
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 EXPOSE 3000
-CMD ["sh", "-c", "cd server && npx prisma migrate deploy && cd .. && node server/dist/main.js & nginx -g 'daemon off;'"]
+CMD ["sh", "server/docker-entrypoint.sh"]

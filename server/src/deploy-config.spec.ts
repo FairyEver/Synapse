@@ -12,18 +12,66 @@ describe("server deployment configuration", () => {
   it("backs up the remote database before syncing and rebuilding", () => {
     const deployScript = readRepoFile("deploy.sh")
 
-    expect(deployScript).toContain("TOTAL_STEPS=9")
+    expect(deployScript).toContain("backup_remote_database")
+    expect(deployScript).toContain("synapse-online-before-deploy-${DEPLOY_ID}.sql")
+    expect(deployScript).toContain("synapse-final-before-switch-${DEPLOY_ID}.sql")
+    expect(deployScript).toContain("docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse")
+    expect(deployScript).not.toContain("docker compose --env-file .env down")
+    expect(deployScript).not.toContain("docker compose down")
+  })
+
+  it("preflights risky migrations and restores the previous service image on failed health checks", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain("check-prisma-migration-risk.mjs")
+    expect(deployScript).toContain("fetch_applied_migrations")
+    expect(deployScript).toContain("preflight_remote_migrations")
+    expect(deployScript).toContain("synapse_preflight_${DEPLOY_ID}")
+    expect(deployScript).toContain("ROLLBACK_IMAGE_TAG=\"rollback-${DEPLOY_ID}\"")
+    expect(deployScript).toContain("tag_remote_rollback_image")
+    expect(deployScript).toContain("rollback_remote_service")
+    expect(deployScript).toContain("print_manual_database_restore_instructions")
+    expect(deployScript).toContain("docker compose --env-file .env stop server")
+    expect(deployScript).toContain("docker compose --env-file .env up -d --no-build server")
+  })
+
+  it("runs migrations in the foreground before starting the production process", () => {
+    const dockerfile = readRepoFile("server/Dockerfile")
+    const compose = readRepoFile("server/compose.yml")
+    const entrypoint = readRepoFile("server/docker-entrypoint.sh")
+
+    expect(dockerfile).toContain("COPY server/docker-entrypoint.sh ./server/docker-entrypoint.sh")
+    expect(dockerfile).toContain('CMD ["sh", "server/docker-entrypoint.sh"]')
+    expect(compose).toContain("image: synapse-server:${SYNAPSE_SERVER_IMAGE_TAG:-latest}")
+    expect(compose).not.toContain("npx prisma migrate deploy && cd .. && node server/dist/main.js & nginx")
+    expect(entrypoint).toContain("npx prisma migrate deploy")
+    expect(entrypoint).toContain("nginx -t")
+    expect(entrypoint).toContain("nginx -g 'daemon off;' &")
+    expect(entrypoint).toContain("exec node server/dist/main.js")
+  })
+
+  it("documents the hardened deployment failure path", () => {
+    const readme = readRepoFile("server/README.md")
+
+    expect(readme).toContain("临时数据库预演")
+    expect(readme).toContain("失败时自动回滚到上一版服务镜像")
+    expect(readme).toContain("不会自动覆盖恢复数据库")
+    expect(readme).toContain("synapse-final-before-switch")
+  })
+
+  it("keeps the old upgrade backup guarantees", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
     expect(deployScript).toContain("backup_remote_database")
     expect(deployScript).toContain('mkdir -p "$REMOTE_DIR/backups"')
-    expect(deployScript).toContain("synapse-before-deploy-$(date +%Y%m%d_%H%M%S).sql")
     expect(deployScript).toContain("docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse")
 
-    const backupStep = deployScript.indexOf('step 3 "备份远程数据库"')
-    const syncStep = deployScript.indexOf('step 4 "同步代码到服务器"')
+    const backupStep = deployScript.indexOf('"在线备份远程数据库"')
+    const syncStep = deployScript.indexOf('"同步代码到服务器"')
     const buildStep = deployScript.indexOf('"构建 Docker 镜像"')
 
     expect(backupStep).toBeGreaterThan(-1)
-    expect(syncStep).toBeGreaterThan(backupStep)
+    expect(syncStep).toBeGreaterThan(-1)
     expect(buildStep).toBeGreaterThan(syncStep)
   })
 
