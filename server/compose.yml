@@ -38,6 +38,8 @@ services:
       PORT: "3001"
     ports:
       - "127.0.0.1:3000:3000"
+    volumes:
+      - ./logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy

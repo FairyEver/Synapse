@@ -258,7 +258,7 @@ curl http://127.0.0.1:3000/healthz
 ```bash
 cd /www/wwwroot/synapse/server
 
-# 查看 API 实时日志（Ctrl+C 退出）
+# 查看容器实时日志（Ctrl+C 退出）
 docker compose logs -f server
 
 # 查看数据库日志
@@ -268,22 +268,33 @@ docker compose logs -f postgres
 docker compose logs --tail 100 server
 ```
 
+服务端文件日志写入仓库部署目录下的 `server/logs/`，并通过 Docker Compose 挂载到容器内 `/app/logs`。重建或替换 `server` 容器不会删除这些文件；管理后台的日志页面读取的也是这个目录。
+
 ### 更新代码并重新部署
 
+推荐在本机仓库根目录运行部署脚本：
+
 ```bash
-cd /www/wwwroot/synapse
-git pull
-cd server
-docker compose --env-file .env up -d --build
+cd /Users/liyang/.codex/worktrees/f240/Synapse
+bash deploy.sh
 ```
 
-数据库迁移会在启动时自动执行。
+`deploy.sh` 会先在服务器 `/www/wwwroot/synapse/backups/` 生成一份完整数据库备份，再同步 `server/`、`dashboard/` 和 workspace 构建文件。备份失败会中止部署；数据库迁移会在新容器启动时自动执行。
+
+如果是在服务器上手动更新，也必须先备份，再构建启动：
+
+```bash
+cd /www/wwwroot/synapse/server
+mkdir -p ../backups
+docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
+docker compose --env-file .env up -d --build
+```
 
 ### 重启服务（不重新构建）
 
 ```bash
 cd /www/wwwroot/synapse/server
-docker compose restart server
+docker compose --env-file .env restart server
 ```
 
 ### 停止服务
@@ -300,23 +311,31 @@ docker compose down -v
 
 ### 数据库备份
 
+`deploy.sh` 的升级前自动备份会保存在 `/www/wwwroot/synapse/backups/`，文件名形如 `synapse-before-deploy-20260606_121500.sql`。
+
+也可以手动备份：
+
 ```bash
 cd /www/wwwroot/synapse/server
 
-# 备份到当前目录
-docker compose exec postgres pg_dump -U synapse synapse > backup_$(date +%Y%m%d).sql
+mkdir -p ../backups
+docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-manual_$(date +%Y%m%d_%H%M%S).sql
 
 # 查看备份文件
-ls -la backup_*.sql
+ls -la ../backups/*.sql
 ```
 
 ### 从备份恢复数据库
 
+恢复会覆盖当前数据库内容。执行前请确认目标备份文件正确，并确保当前服务可以短暂停机。
+
 ```bash
 cd /www/wwwroot/synapse/server
 
-# 恢复（把文件名换成你的备份文件）
-docker compose exec -T postgres psql -U synapse synapse < backup_20260505.sql
+docker compose --env-file .env stop server
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../backups/synapse-before-deploy-20260606_121500.sql
+docker compose --env-file .env up -d server
 ```
 
 ### 查看磁盘占用
@@ -331,48 +350,52 @@ docker image prune -f
 
 ### 本地与服务器数据库同步
 
-本地开发环境和生产服务器使用相同的数据库 schema，数据可以双向同步。
+本地开发环境和生产服务器使用相同的 Prisma 迁移体系，但不要把 `--data-only` 当成常规同步方式推生产。需要同步时使用完整 dump/restore，并先确认目标库可以被覆盖。
 
-#### 本地 → 服务器（把本地数据推到生产）
-
-```bash
-# 1. 在本地电脑导出数据库（本地 Postgres 跑在 Docker 里）
-cd /Users/liyang/Documents/code/github/Synapse/server
-docker compose exec postgres pg_dump -U synapse --data-only synapse > local_data.sql
-
-# 2. 把文件传到服务器
-scp local_data.sql root@你的服务器IP:/www/wwwroot/synapse/server/
-
-# 3. SSH 登录服务器，导入数据
-ssh root@你的服务器IP
-cd /www/wwwroot/synapse/server
-docker compose exec -T postgres psql -U synapse synapse < local_data.sql
-```
-
-#### 服务器 → 本地（把生产数据拉到本地）
+#### 服务器 → 本地（推荐排查问题时使用）
 
 ```bash
-# 1. 从服务器导出
+# 1. 在服务器导出完整备份
 ssh root@你的服务器IP
 cd /www/wwwroot/synapse/server
-docker compose exec postgres pg_dump -U synapse --data-only synapse > server_data.sql
+mkdir -p ../backups
+docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-server_$(date +%Y%m%d_%H%M%S).sql
 exit
 
-# 2. 把文件拉到本地
-scp root@你的服务器IP:/www/wwwroot/synapse/server/server_data.sql ./
+# 2. 拉回本地
+scp root@你的服务器IP:/www/wwwroot/synapse/backups/synapse-server_YYYYmmdd_HHMMSS.sql ./synapse-server.sql
 
-# 3. 在本地导入（先清空本地数据再导入，避免主键冲突）
-cd /Users/liyang/Documents/code/github/Synapse/server
-docker compose exec -T postgres psql -U synapse synapse -c 'TRUNCATE "AuditLog", "AdminUser" CASCADE;'
-docker compose exec -T postgres psql -U synapse synapse < server_data.sql
+# 3. 覆盖本地开发数据库
+cd /Users/liyang/.codex/worktrees/f240/Synapse/server
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../synapse-server.sql
+```
+
+#### 本地 → 服务器（只在明确要覆盖生产时使用）
+
+```bash
+# 1. 在本地导出完整备份
+cd /Users/liyang/.codex/worktrees/f240/Synapse/server
+docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > synapse-local.sql
+
+# 2. 上传到服务器备份目录
+scp synapse-local.sql root@你的服务器IP:/www/wwwroot/synapse/backups/synapse-local.sql
+
+# 3. SSH 登录服务器，覆盖生产数据库
+ssh root@你的服务器IP
+cd /www/wwwroot/synapse/server
+docker compose --env-file .env stop server
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../backups/synapse-local.sql
+docker compose --env-file .env up -d server
 ```
 
 #### 注意事项
 
-- `--data-only` 只导出数据，不导出表结构（两边 schema 通过 prisma migrate 保持一致）
-- 导入前确保两边的数据库 schema 版本一致（都跑过最新的 migration）
-- 如果遇到主键冲突，加 `TRUNCATE ... CASCADE` 先清空目标表
-- 密码类字段（如 admin 密码）是 bcrypt 哈希，同步过去可以直接用
+- 完整 dump 包含 schema 和数据，适合恢复到确定状态。
+- 覆盖生产前必须保留一份当前生产备份。
+- 不要只清空部分表导入生产；当前服务涉及管理员、用户、团队、邀请、会话、权限、审计和备份记录等多张关联表。
+- 密码类字段是 bcrypt 哈希，同步后可以直接使用原密码登录。
 
 ---
 
@@ -432,11 +455,12 @@ docker compose exec postgres psql -U synapse synapse
 ## 目录结构
 
 ```
-server/
-├── src/              # NestJS API 源码
+server/               # NestJS API、Prisma、Docker 和 Nginx 配置
+├── src/              # API、认证、审计、备份、日志等服务端源码
 ├── prisma/           # 数据库 Schema 和迁移文件
-├── admin/            # Admin 管理后台前端源码
 ├── compose.yml       # Docker Compose 编排文件
 ├── Dockerfile        # Docker 多阶段构建文件
 └── .env.example      # 环境变量模板
+
+dashboard/            # React + Vite 管理后台源码，生产构建后由 server 容器的 Nginx 服务到 /dashboard/
 ```
