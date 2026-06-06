@@ -7,10 +7,3 @@ export function requireDashboardAdmin() {
     throw redirect({ to: '/settings', replace: true })
   }
 }
-
-export function requireDashboardUser() {
-  const { auth } = useAuthStore.getState()
-  if (auth.user?.role !== 'user') {
-    throw redirect({ to: '/system', replace: true })
-  }
-}
