@@ -3,7 +3,7 @@ import { BadRequestException, UnsupportedMediaTypeException } from "@nestjs/comm
 const sensitiveKeyPattern = /authorization|cookie|token|secret|password|credential|api[-_]?key/i
 const sensitiveTextLinePattern = /^([^=\s:]+)\s*[:=]\s*(.+)$/u
 const bearerPattern = /\bbearer\s+[^,\s;]+/giu
-const cookieFragmentPattern = /\bcookie\s*[:=]\s*[^,\n;]+/giu
+const cookieFragmentPattern = /\bcookie\s*[:=]\s*.+?(?=(?:\s+(?:and|plus|with)\s+\b(?:authorization|bearer|token|secret|password|credential|api[-_]?key)\b)|[,\n]|$)/giu
 const sensitiveAssignmentPattern = /\b(authorization|token|secret|password|credential|api[-_]?key)\s*[:=]\s*[^,\s;]+/giu
 const maxPreviewChars = 2_000
 

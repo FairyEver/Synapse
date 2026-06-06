@@ -86,6 +86,19 @@ describe("webhook sanitize", () => {
     expect(summary.bodyPreview).not.toContain("plain-secret")
   })
 
+  it("redacts semicolon-separated cookie text values", () => {
+    const summary = summarizeWebhookBody(
+      Buffer.from("Incoming Cookie: sid=secret-a; refresh=secret-b\nNext sentence remains."),
+      "text/plain",
+    )
+
+    expect(summary.bodyText).not.toContain("secret-a")
+    expect(summary.bodyText).not.toContain("secret-b")
+    expect(summary.bodyText).toContain("Next sentence remains.")
+    expect(summary.bodyPreview).not.toContain("secret-a")
+    expect(summary.bodyPreview).not.toContain("secret-b")
+  })
+
   it("rejects unsupported content types", () => {
     expect(() => summarizeWebhookBody(Buffer.from([0, 1, 2]), "application/octet-stream"))
       .toThrow(UnsupportedMediaTypeException)
