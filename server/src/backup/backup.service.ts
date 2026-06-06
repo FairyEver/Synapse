@@ -11,6 +11,7 @@ import { createGzip } from "node:zlib"
 import * as tar from "tar"
 import type COS from "cos-nodejs-sdk-v5"
 import { AuditLogService } from "../common/audit-log.service"
+import { formatAuditError } from "../common/audit-error"
 import { isBackupConfigured, loadEnv, type ServerEnv } from "../config/env"
 
 const execFileAsync = promisify(execFile)
@@ -336,6 +337,7 @@ export class BackupService {
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
+          const auditError = formatAuditError(error)
           await this.recordBackupCleanupAudit({
             action: "backup.cleanup.failed",
             targetId: item.filename,
@@ -343,7 +345,7 @@ export class BackupService {
               filename: item.filename,
               createdAt: item.createdAt,
               size: item.size,
-              error: message,
+              error: auditError,
             },
           })
           this.logger.warn({ error: message, filename: item.filename }, "Failed to delete expired backup")
@@ -355,10 +357,11 @@ export class BackupService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      const auditError = formatAuditError(error)
       await this.recordBackupCleanupAudit({
         action: "backup.cleanup.failed",
         targetId: "expired-scan",
-        detail: { error: message },
+        detail: { error: auditError },
       })
       this.logger.error({ error: message }, "Failed to clean expired backups")
     }

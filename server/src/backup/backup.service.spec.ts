@@ -98,7 +98,9 @@ describe("BackupService", () => {
 
   it("continues cleaning expired backups when one delete fails", async () => {
     const deleteObject = vi.fn((options, callback) => {
-      if (options.Key === "backups/expired-a.tar.gz") callback(new Error("delete failed"))
+      if (options.Key === "backups/expired-a.tar.gz") {
+        callback(new Error("delete failed token=secret-token at /Users/liyang/private"))
+      }
       else callback(null)
     })
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
@@ -134,7 +136,7 @@ describe("BackupService", () => {
       expect.any(Function),
     )
     expect(logger.warn).toHaveBeenCalledWith(
-      { error: "delete failed", filename: "expired-a.tar.gz" },
+      { error: "delete failed token=secret-token at /Users/liyang/private", filename: "expired-a.tar.gz" },
       "Failed to delete expired backup",
     )
     expect(auditLog.record).toHaveBeenNthCalledWith(1, {
@@ -146,7 +148,7 @@ describe("BackupService", () => {
         filename: "expired-a.tar.gz",
         createdAt: "2026-04-01T00:00:00.000Z",
         size: 1,
-        error: "delete failed",
+        error: "delete failed token=[REDACTED] at [PATH]",
       },
       ipAddress: "system",
     })
@@ -168,7 +170,7 @@ describe("BackupService", () => {
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const service = createBackupService({
-      getBucket: vi.fn((_options, callback) => callback(new Error("COS unavailable"))),
+      getBucket: vi.fn((_options, callback) => callback(new Error("COS unavailable apiKey=secret-key at /tmp/backup"))),
     }, logger, auditLog)
 
     await (service as unknown as { cleanExpiredBackups(): Promise<void> }).cleanExpiredBackups()
@@ -178,10 +180,13 @@ describe("BackupService", () => {
       action: "backup.cleanup.failed",
       targetType: "backup",
       targetId: "expired-scan",
-      detail: { error: "COS unavailable" },
+      detail: { error: "COS unavailable apiKey=[REDACTED] at [PATH]" },
       ipAddress: "system",
     })
-    expect(logger.error).toHaveBeenCalledWith({ error: "COS unavailable" }, "Failed to clean expired backups")
+    expect(logger.error).toHaveBeenCalledWith(
+      { error: "COS unavailable apiKey=secret-key at /tmp/backup" },
+      "Failed to clean expired backups",
+    )
   })
 
   it("records scheduled backup results in audit logs", async () => {
