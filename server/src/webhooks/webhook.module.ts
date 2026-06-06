@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common"
+import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { UserAuthModule } from "../auth/user-auth.module"
 import { AuditLogService } from "../common/audit-log.service"
 import { LiveModule } from "../live/live.module"
@@ -7,7 +8,7 @@ import { WebhookDashboardController, WebhookPublicController } from "./webhook.c
 import { WebhookService } from "./webhook.service"
 
 @Module({
-  imports: [UserAuthModule, PrismaModule, LiveModule],
+  imports: [UserAuthModule, AdminAuthModule, PrismaModule, LiveModule],
   controllers: [WebhookDashboardController, WebhookPublicController],
   providers: [WebhookService, AuditLogService],
   exports: [WebhookService],

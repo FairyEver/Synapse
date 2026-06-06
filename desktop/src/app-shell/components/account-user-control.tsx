@@ -55,7 +55,8 @@ function AccountUserControl({
   } = useAccount()
   const { warning } = useAppNotifications()
   const isAuthenticating = state.status === "authenticating"
-  const isBusy = isLoading || pendingAction !== null || isAuthenticating
+  const isActionPending = isLoading || pendingAction !== null
+  const isBusy = isActionPending || isAuthenticating
 
   const runAndReport = async (action: () => Promise<SynapseAccountState>): Promise<void> => {
     const nextState = await action()
@@ -66,6 +67,10 @@ function AccountUserControl({
 
   const handleLogin = () => {
     void runAndReport(startLogin)
+  }
+
+  const handleCancelLogin = () => {
+    void runAndReport(logout)
   }
 
   const handleRefresh = () => {
@@ -101,13 +106,13 @@ function AccountUserControl({
               </Button>
             </>
           ) : (
-            <Button size="sm" disabled={isBusy} onClick={handleLogin}>
+            <Button size="sm" disabled={isActionPending} onClick={isAuthenticating ? handleCancelLogin : handleLogin}>
               {isAuthenticating ? (
                 <LoaderCircle data-icon="inline-start" className="animate-spin" />
               ) : (
                 <CircleUserRound data-icon="inline-start" />
               )}
-              {isAuthenticating ? "登录中" : "登录"}
+              {isAuthenticating ? "取消" : "登录"}
             </Button>
           )}
         </div>
@@ -120,15 +125,15 @@ function AccountUserControl({
       <Button
         variant="ghost"
         size="sm"
-        disabled={isBusy}
-        onClick={handleLogin}
+        disabled={isActionPending}
+        onClick={isAuthenticating ? handleCancelLogin : handleLogin}
       >
         {isAuthenticating ? (
           <LoaderCircle data-icon="inline-start" className="animate-spin" />
         ) : (
           <CircleUserRound data-icon="inline-start" />
         )}
-        {isAuthenticating ? "登录中" : "登录"}
+        {isAuthenticating ? "取消" : "登录"}
       </Button>
     )
   }

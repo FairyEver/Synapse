@@ -841,6 +841,35 @@ describe("AccountService", () => {
     expect(accountLogger.info).not.toHaveBeenCalledWith("Desktop account logged out.", expect.anything())
   })
 
+  it("clears an active login attempt when logout cancels browser authentication", async () => {
+    const { namespace, service } = await createTestAccountService()
+
+    const started = await service.startLogin()
+    expect(started.state.status).toBe("authenticating")
+    expect((await namespace.getSingleton())?.activeAttempt).toBeTruthy()
+
+    const state = await service.logout()
+
+    expect(state).toEqual({ status: "unauthenticated" })
+    expect(await namespace.getSingleton()).toBeNull()
+  })
+
+  it("ignores callbacks for a login attempt cancelled by logout", async () => {
+    const fetch = vi.fn()
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+    await service.logout()
+
+    const state = await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
+
+    expect(state).toEqual({ status: "unauthenticated" })
+    expect(service.getState()).toEqual({ status: "unauthenticated" })
+    expect(await namespace.getSingleton()).toBeNull()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it("keeps active login state when refresh finds an attempt without a token", async () => {
     const { service } = await createTestAccountService()
 

@@ -2,8 +2,25 @@
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseAccountState } from "@/types/account"
+
+function createAuthenticatedState(): SynapseAccountState {
+  return {
+    status: "authenticated",
+    connectivity: "online",
+    profile: {
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        status: "active",
+        displayName: "Ada",
+      },
+      teams: [],
+      syncedAt: "2026-06-01T00:00:00.000Z",
+    },
+  }
+}
 
 const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
   current: {
@@ -22,14 +39,20 @@ const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
   },
 }))
 
+const accountActions = vi.hoisted(() => ({
+  logout: vi.fn(),
+  refresh: vi.fn(),
+  startLogin: vi.fn(),
+}))
+
 vi.mock("@/app-shell/account", () => ({
   useAccount: () => ({
     state: accountState.current,
     isLoading: false,
     pendingAction: null,
-    startLogin: vi.fn(),
-    refresh: vi.fn(),
-    logout: vi.fn(),
+    startLogin: accountActions.startLogin,
+    refresh: accountActions.refresh,
+    logout: accountActions.logout,
   }),
 }))
 
@@ -43,6 +66,13 @@ import { AppShellActions } from "../app-shell-actions"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let roots: Root[] = []
+
+beforeEach(() => {
+  accountState.current = createAuthenticatedState()
+  accountActions.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://example.com/login" })
+  accountActions.refresh.mockResolvedValue(accountState.current)
+  accountActions.logout.mockResolvedValue({ status: "unauthenticated" })
+})
 
 afterEach(() => {
   for (const root of roots) {
@@ -130,17 +160,30 @@ describe("AccountUserControl", () => {
     expect(panel.textContent).toContain("退出")
   })
 
-  it("disables login controls while waiting for browser authentication", () => {
+  it("shows cancel controls while waiting for browser authentication", async () => {
     accountState.current = { status: "authenticating", loginUrl: "https://example.com/login" }
 
     const toolbar = renderControl("toolbar")
     const panel = renderControl("panel")
 
-    expect(toolbar.textContent).toContain("登录")
-    expect(toolbar.querySelector("button")?.disabled).toBe(true)
+    expect(toolbar.textContent).toContain("取消")
+    expect(toolbar.querySelector("button")?.disabled).toBe(false)
     expect(panel.textContent).toContain("登录中")
     expect(panel.textContent).toContain("正在等待浏览器登录")
-    expect(panel.querySelector("button")?.disabled).toBe(true)
+    expect(panel.textContent).toContain("取消")
+    expect(panel.querySelector("button")?.disabled).toBe(false)
+
+    await act(async () => {
+      toolbar.querySelector("button")?.click()
+      await Promise.resolve()
+    })
+    expect(accountActions.logout).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      panel.querySelector("button")?.click()
+      await Promise.resolve()
+    })
+    expect(accountActions.logout).toHaveBeenCalledTimes(2)
   })
 
   it("does not render the top bar account control in packaged builds", () => {

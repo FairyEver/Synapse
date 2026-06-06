@@ -237,6 +237,14 @@ export class AccountService {
     const persisted = await this.readPersisted("Failed to read stored account for auth callback.")
     const attempt = persisted?.activeAttempt
 
+    if (!attempt && callbackState && this.state.status === "unauthenticated") {
+      logger.info("Ignored account auth callback without an active login attempt.", {
+        operation: "handleAuthCallback",
+        status: "no-active-attempt",
+      })
+      return this.state
+    }
+
     if (callbackError && callbackState && attempt?.state === callbackState) {
       const keepActiveAttempt = callbackError === "unsupported_account"
       if (!keepActiveAttempt) {
