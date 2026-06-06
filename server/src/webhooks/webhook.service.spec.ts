@@ -35,8 +35,13 @@ function createPrismaMock() {
     },
     $transaction: vi.fn((callback) => callback({
       userWebhook: {
+        create: vi.fn(),
         findFirst: vi.fn(),
         updateMany: vi.fn(),
+        deleteMany: vi.fn(),
+      },
+      auditLog: {
+        create: vi.fn(),
       },
     })),
   }
@@ -45,14 +50,22 @@ function createPrismaMock() {
 describe("WebhookService", () => {
   it("creates a webhook for the current user and returns the full URL once", async () => {
     const prisma = createPrismaMock()
-    prisma.userWebhook.create.mockImplementation(({ data }) => Promise.resolve({
-      ...baseWebhook,
-      ...data,
-      id: "webhook-1",
-      createdAt: baseWebhook.createdAt,
-      updatedAt: baseWebhook.updatedAt,
-      deliveries: [],
-    }))
+    const tx = {
+      userWebhook: {
+        create: vi.fn().mockImplementation(({ data }) => Promise.resolve({
+          ...baseWebhook,
+          ...data,
+          id: "webhook-1",
+          createdAt: baseWebhook.createdAt,
+          updatedAt: baseWebhook.updatedAt,
+          deliveries: [],
+        })),
+      },
+      auditLog: {
+        create: vi.fn(),
+      },
+    }
+    prisma.$transaction.mockImplementation((callback) => callback(tx))
     const service = new WebhookService(prisma as never, {
       createPublicId: () => "wh_public",
       createSecret: () => "whsec_secret",
@@ -62,31 +75,35 @@ describe("WebhookService", () => {
     const result = await service.createForUser("user-1", { name: " GitHub " }, "https://synapse.test", "203.0.113.10")
 
     expect(result.url).toBe("https://synapse.test/webhooks/wh_public/whsec_secret")
-    expect(result.webhook).toMatchObject({
+    expect(result.webhook.publicId).toBe("wh_public")
+    expect(result.webhook.name).toBe("GitHub")
+    expect(result.webhook.enabled).toBe(true)
+    expect(result.webhook.maskedUrl).toBe("https://synapse.test/webhooks/wh_public/***")
+    expect(JSON.stringify(tx.userWebhook.create.mock.calls)).not.toContain("whsec_secret")
+    expect(tx.userWebhook.create.mock.calls[0]?.[0]?.data).toMatchObject({
+      userId: "user-1",
       publicId: "wh_public",
       name: "GitHub",
-      enabled: true,
-      maskedUrl: "https://synapse.test/webhooks/wh_public/***",
     })
-    expect(JSON.stringify(prisma.userWebhook.create.mock.calls)).not.toContain("whsec_secret")
-    expect(prisma.userWebhook.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        userId: "user-1",
-        publicId: "wh_public",
-        name: "GitHub",
-      }),
-    }))
   })
 
   it("audits webhook creation without secret material", async () => {
     const prisma = createPrismaMock()
-    const auditLog = { record: vi.fn() }
+    const auditLog = {}
+    const tx = {
+      userWebhook: {
+        create: vi.fn().mockResolvedValue({
+          ...baseWebhook,
+          secretHash: hashWebhookSecret("whsec_secret"),
+          deliveries: [],
+        }),
+      },
+      auditLog: {
+        create: vi.fn(),
+      },
+    }
     prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
-    prisma.userWebhook.create.mockResolvedValue({
-      ...baseWebhook,
-      secretHash: hashWebhookSecret("whsec_secret"),
-      deliveries: [],
-    })
+    prisma.$transaction.mockImplementation((callback) => callback(tx))
     const service = new WebhookService(prisma as never, {
       createPublicId: () => "wh_public",
       createSecret: () => "whsec_secret",
@@ -94,18 +111,64 @@ describe("WebhookService", () => {
 
     await service.createForUser("user-1", { name: "GitHub" }, "https://synapse.test", "203.0.113.10")
 
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "user@example.com",
-      action: "webhook.create",
-      targetType: "webhook",
-      targetId: "webhook-1",
-      detail: { publicId: "wh_public", name: "GitHub", enabled: true },
-      ipAddress: "203.0.113.10",
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        adminEmail: "user@example.com",
+        action: "webhook.create",
+        targetType: "webhook",
+        targetId: "webhook-1",
+        detail: { publicId: "wh_public", name: "GitHub", enabled: true },
+        ipAddress: "203.0.113.10",
+      },
     })
-    const serializedAudit = JSON.stringify(auditLog.record.mock.calls)
+    const serializedAudit = JSON.stringify(tx.auditLog.create.mock.calls)
     expect(serializedAudit).not.toContain("whsec_")
     expect(serializedAudit).not.toContain("secretHash")
     expect(serializedAudit).not.toContain("https://synapse.test/webhooks/wh_public/whsec_secret")
+  })
+
+  it("rolls back webhook creation when audit insert fails before returning the one-time URL", async () => {
+    const prisma = createPrismaMock()
+    const persistedWebhooks: unknown[] = []
+    const tx = {
+      userWebhook: {
+        create: vi.fn().mockImplementation(({ data }) => {
+          const webhook = {
+            ...baseWebhook,
+            ...data,
+            id: "webhook-1",
+            createdAt: baseWebhook.createdAt,
+            updatedAt: baseWebhook.updatedAt,
+            deliveries: [],
+          }
+          persistedWebhooks.push(webhook)
+          return Promise.resolve(webhook)
+        }),
+      },
+      auditLog: {
+        create: vi.fn().mockRejectedValue(new Error("audit failed")),
+      },
+    }
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    prisma.$transaction.mockImplementation(async (callback) => {
+      const snapshot = [...persistedWebhooks]
+      try {
+        return await callback(tx)
+      } catch (error) {
+        persistedWebhooks.splice(0, persistedWebhooks.length, ...snapshot)
+        throw error
+      }
+    })
+    const service = new WebhookService(prisma as never, {
+      createPublicId: () => "wh_public",
+      createSecret: () => "whsec_secret",
+    }, {} as never)
+
+    await expect(service.createForUser("user-1", { name: "GitHub" }, "https://synapse.test", "203.0.113.10"))
+      .rejects.toThrow("audit failed")
+
+    expect(persistedWebhooks).toHaveLength(0)
+    expect(tx.auditLog.create).toHaveBeenCalled()
   })
 
   it("lists webhooks for one user with latest delivery metadata", async () => {
@@ -132,15 +195,10 @@ describe("WebhookService", () => {
       lastDeliveryAt: "2026-06-06T11:00:00.000Z",
       lastDeliveryStatus: WEBHOOK_DELIVERY_STATUS.accepted,
     }])
-    expect(prisma.userWebhook.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { userId: "user-1" },
-      include: expect.objectContaining({
-        deliveries: expect.objectContaining({
-          orderBy: { receivedAt: "desc" },
-          take: 1,
-        }),
-      }),
-    }))
+    const findManyArgs = prisma.userWebhook.findMany.mock.calls[0]?.[0]
+    expect(findManyArgs.where).toEqual({ userId: "user-1" })
+    expect(findManyArgs.include.deliveries.orderBy).toEqual({ receivedAt: "desc" })
+    expect(findManyArgs.include.deliveries.take).toBe(1)
   })
 
   it("resets secret and invalidates the old secret hash", async () => {
@@ -149,6 +207,9 @@ describe("WebhookService", () => {
       userWebhook: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findFirst: vi.fn(),
+      },
+      auditLog: {
+        create: vi.fn(),
       },
     }
     const oldHash = hashWebhookSecret("whsec_old")
@@ -180,12 +241,16 @@ describe("WebhookService", () => {
 
   it("audits update, reset, and delete without secret material", async () => {
     const prisma = createPrismaMock()
-    const auditLog = { record: vi.fn() }
+    const auditLog = {}
     prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
     const tx = {
       userWebhook: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findFirst: vi.fn().mockResolvedValue({ ...baseWebhook, name: "Deploy", enabled: false, deliveries: [] }),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      auditLog: {
+        create: vi.fn(),
       },
     }
     prisma.$transaction.mockImplementation((callback) => callback(tx))
@@ -200,25 +265,70 @@ describe("WebhookService", () => {
     await service.resetSecret("user-1", "webhook-1", "https://synapse.test", "203.0.113.12")
     await service.deleteForUser("user-1", "webhook-1", "203.0.113.13")
 
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "webhook.update",
-      detail: { publicId: "wh_public", name: "Deploy", enabled: false, changedFields: ["name", "enabled"] },
-      ipAddress: "203.0.113.11",
-    }))
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "webhook.reset_secret",
-      detail: { publicId: "wh_public", name: "Deploy", enabled: false },
-      ipAddress: "203.0.113.12",
-    }))
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "webhook.delete",
-      detail: { publicId: "wh_public", name: "Deploy", enabled: false },
-      ipAddress: "203.0.113.13",
-    }))
-    const serializedAudit = JSON.stringify(auditLog.record.mock.calls)
+    const auditRecords = tx.auditLog.create.mock.calls.map((call) => call[0].data)
+    expect(auditRecords).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "webhook.update",
+        detail: { publicId: "wh_public", name: "Deploy", enabled: false, changedFields: ["name", "enabled"] },
+        ipAddress: "203.0.113.11",
+      }),
+      expect.objectContaining({
+        action: "webhook.reset_secret",
+        detail: { publicId: "wh_public", name: "Deploy", enabled: false },
+        ipAddress: "203.0.113.12",
+      }),
+      expect.objectContaining({
+        action: "webhook.delete",
+        detail: { publicId: "wh_public", name: "Deploy", enabled: false },
+        ipAddress: "203.0.113.13",
+      }),
+    ]))
+    const serializedAudit = JSON.stringify(tx.auditLog.create.mock.calls)
     expect(serializedAudit).not.toContain("whsec_")
     expect(serializedAudit).not.toContain("secretHash")
     expect(serializedAudit).not.toContain("https://synapse.test/webhooks/wh_public/whsec_new")
+  })
+
+  it("rolls back secret reset when audit insert fails before returning the one-time URL", async () => {
+    const prisma = createPrismaMock()
+    const oldHash = hashWebhookSecret("whsec_old")
+    let storedHash = oldHash
+    const tx = {
+      userWebhook: {
+        updateMany: vi.fn().mockImplementation(({ data }) => {
+          storedHash = data.secretHash
+          return Promise.resolve({ count: 1 })
+        }),
+        findFirst: vi.fn().mockImplementation(() => Promise.resolve({
+          ...baseWebhook,
+          secretHash: storedHash,
+          deliveries: [],
+        })),
+      },
+      auditLog: {
+        create: vi.fn().mockRejectedValue(new Error("audit failed")),
+      },
+    }
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    prisma.$transaction.mockImplementation(async (callback) => {
+      const snapshot = storedHash
+      try {
+        return await callback(tx)
+      } catch (error) {
+        storedHash = snapshot
+        throw error
+      }
+    })
+    const service = new WebhookService(prisma as never, {
+      createSecret: () => "whsec_new",
+    }, {} as never)
+
+    await expect(service.resetSecret("user-1", "webhook-1", "https://synapse.test", "203.0.113.12"))
+      .rejects.toThrow("audit failed")
+
+    expect(verifyWebhookSecret("whsec_old", storedHash)).toBe(true)
+    expect(verifyWebhookSecret("whsec_new", storedHash)).toBe(false)
+    expect(tx.auditLog.create).toHaveBeenCalled()
   })
 
   it("keeps users isolated when listing and mutating webhooks", async () => {
@@ -228,6 +338,9 @@ describe("WebhookService", () => {
       userWebhook: {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         findFirst: vi.fn(),
+      },
+      auditLog: {
+        create: vi.fn(),
       },
     }
     prisma.$transaction.mockImplementation((callback) => callback(tx))
@@ -247,6 +360,10 @@ describe("WebhookService", () => {
       userWebhook: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findFirst: vi.fn().mockResolvedValue({ ...baseWebhook, name: "Deploy", deliveries: [] }),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      auditLog: {
+        create: vi.fn(),
       },
     }
     prisma.$transaction.mockImplementation((callback) => callback(tx))
@@ -260,7 +377,7 @@ describe("WebhookService", () => {
     expect(tx.userWebhook.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "webhook-1", userId: "user-1" },
     }))
-    expect(prisma.userWebhook.deleteMany).toHaveBeenCalledWith({
+    expect(tx.userWebhook.deleteMany).toHaveBeenCalledWith({
       where: { id: "webhook-1", userId: "user-1" },
     })
   })
