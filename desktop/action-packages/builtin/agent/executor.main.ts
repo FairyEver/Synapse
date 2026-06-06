@@ -1,4 +1,5 @@
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
+import { renderActionTemplate } from "../../../electron/action-runtime/template-variables"
 import type { AgentRuntimeService } from "../../../electron/services/agent-runtime/agent-runtime-service"
 import { sanitizeError } from "../../../electron/services/error-sanitize"
 import { createMainLogger } from "../../../electron/services/log-store"
@@ -57,11 +58,12 @@ export function createAgentAction(deps: {
       if (input.context.taskName) userMeta.taskName = input.context.taskName
 
       try {
+        const prompt = renderActionTemplate(input.config.prompt, input.context.templateVariables)
         const result = await runtime.sendScheduled({
           projectId: input.config.projectId,
           agentType: input.config.agentType,
           mode: input.config.mode,
-          prompt: input.config.prompt,
+          prompt,
           sessionPolicy: input.config.sessionPolicy,
           timeoutMs: scheduledTimeoutMs(input.config.timeoutMins),
           lastConversationId: configChanged ? undefined : lastConversationId,

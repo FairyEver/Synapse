@@ -11,6 +11,7 @@ import type {
   AutomationItem,
   AutomationRun,
   AutomationRunTrigger,
+  AutomationTriggerRuntimeContext,
   AutomationUpdateInput,
   AutomationValidation,
 } from "./types"
@@ -352,7 +353,12 @@ export class AutomationService {
         continue
       }
       try {
-        acceptedRuns.push(await this.executeOrSkip(item, "trigger"))
+        acceptedRuns.push(await this.executeOrSkip(item, "trigger", {
+          triggeredBy: "trigger",
+          triggeredAt: event.receivedAt,
+          scheduledAt: event.receivedAt,
+          event,
+        }))
       } catch (error) {
         this.deps.logger?.warn("Automation event execution failed, skipping item.", {
           automationId: item.id,
@@ -605,21 +611,27 @@ export class AutomationService {
   private async executeOrSkip(
     item: AutomationItem,
     triggeredBy: AutomationRunTrigger,
+    triggerContext?: AutomationTriggerRuntimeContext,
   ): Promise<AutomationRun> {
     if (this.runningItemIds.has(item.id)) {
       return this.recordSkipped(item, triggeredBy, "automation is already running")
     }
     this.runningItemIds.add(item.id)
     try {
-      const run = await this.deps.execution.runItem(item, triggeredBy, {
-        onRunStarted: (startedRun) => {
-          this.emitAutomationChanged({
-            automationId: item.id,
-            runId: startedRun.id,
-            reason: "run-started",
-          })
+      const run = await this.deps.execution.runItem(
+        item,
+        triggeredBy,
+        {
+          onRunStarted: (startedRun) => {
+            this.emitAutomationChanged({
+              automationId: item.id,
+              runId: startedRun.id,
+              reason: "run-started",
+            })
+          },
         },
-      })
+        triggerContext,
+      )
       this.emitAutomationChanged({ automationId: item.id, runId: run.id, reason: "run-finished" })
       return run
     } finally {

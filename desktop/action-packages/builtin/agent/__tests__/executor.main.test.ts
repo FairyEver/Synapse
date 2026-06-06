@@ -535,4 +535,41 @@ describe("builtin agent action executor", () => {
     expect(result.status).toBe("failed")
     expect(result.error).toContain("供应商")
   })
+
+  it("renders prompt templates from action context variables", async () => {
+    const runtime = {
+      sendScheduled: vi.fn(async () => ({
+        conversationId: "conversation-1",
+        status: "success" as const,
+        summary: "done",
+        durationMs: 12,
+      })),
+    } as unknown as AgentRuntimeService
+    const action = createAgentAction({ getAgentRuntime: async () => runtime })
+
+    await action.execute({
+      config: {
+        projectId: "project-1",
+        agentType: "claude-code",
+        providerId: "anthropic",
+        modelTier: "sonnet",
+        mode: "default",
+        prompt: "Summarize {{trigger.automationName}}",
+        sessionPolicy: "fresh",
+      },
+      context: {
+        taskId: "task-1",
+        runId: "run-1",
+        triggeredBy: "schedule",
+        cwd: "/repo",
+        actor: { kind: "user", id: "automation" },
+        abortSignal: new AbortController().signal,
+        templateVariables: { "trigger.automationName": "Daily" },
+      },
+    })
+
+    expect(runtime.sendScheduled).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "Summarize Daily",
+    }))
+  })
 })

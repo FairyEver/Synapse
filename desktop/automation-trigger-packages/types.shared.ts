@@ -12,6 +12,15 @@ export type AutomationReschedulePolicy =
   | { readonly mode: "after_completion" }
   | { readonly mode: "none" }
 
+export type AutomationTriggerVariableDescriptor = {
+  readonly key: string
+  readonly label: string
+  readonly description?: string
+  readonly example?: string
+  readonly group?: "trigger" | "config" | "event"
+  readonly dynamic?: boolean
+}
+
 export type AutomationTriggerManifest<
   TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
 > = {
@@ -20,6 +29,7 @@ export type AutomationTriggerManifest<
   readonly kind: AutomationTriggerKind
   readonly defaultConfig: TConfig
   readonly configSchema: z.ZodType<TConfig>
+  readonly variables?: readonly AutomationTriggerVariableDescriptor[]
 }
 
 export type AutomationScheduleInput<TConfig extends AutomationTriggerConfig> = {

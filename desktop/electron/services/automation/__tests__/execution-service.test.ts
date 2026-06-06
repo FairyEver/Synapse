@@ -73,6 +73,35 @@ describe("AutomationExecutionService", () => {
     ])
   })
 
+  it("passes trigger template variables to executors", async () => {
+    let observedVariables: Record<string, string> | undefined
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async ({ context }) => {
+          observedVariables = context.templateVariables
+          return { status: "success", summary: "ok" }
+        },
+      },
+    })
+
+    await harness.service.runItem(harness.item, "trigger", {}, {
+      triggeredBy: "trigger",
+      triggeredAt: "2026-06-06T01:00:00.000Z",
+      scheduledAt: "2026-06-06T01:00:00.000Z",
+    })
+
+    expect(observedVariables).toEqual(expect.objectContaining({
+      "trigger.type": "builtin.cron",
+      "trigger.triggeredBy": "trigger",
+      "trigger.triggeredAt": "2026-06-06T01:00:00.000Z",
+      "trigger.scheduledAt": "2026-06-06T01:00:00.000Z",
+      "trigger.automationId": "automation:1",
+      "trigger.automationName": "Daily report",
+      "trigger.cron": "0 9 * * *",
+    }))
+  })
+
   it("persists denied permission as a failed run", async () => {
     const harness = await createExecutionHarness({
       permissionGuard: permissionGuard({ allowed: false, reason: "denied by test" }),

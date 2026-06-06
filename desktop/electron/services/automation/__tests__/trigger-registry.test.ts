@@ -87,4 +87,34 @@ describe("AutomationTriggerRegistry", () => {
       activeDays: [0, 1, 2, 3, 4, 5, 6],
     })).toEqual({ mode: "after_completion" })
   })
+
+  it("exposes builtin trigger variables", () => {
+    const registry = new AutomationTriggerRegistry()
+    registry.register(cronTriggerDefinition)
+    registry.register(intervalTriggerDefinition)
+
+    const cron = registry.get("builtin.cron")
+    const interval = registry.get("builtin.interval")
+
+    expect(cron.manifest.variables?.map((variable) => variable.key)).toEqual([
+      "trigger.type",
+      "trigger.triggeredBy",
+      "trigger.triggeredAt",
+      "trigger.scheduledAt",
+      "trigger.automationId",
+      "trigger.automationName",
+      "trigger.cron",
+      "trigger.timezone",
+    ])
+    expect(interval.manifest.variables?.map((variable) => variable.key)).toEqual([
+      "trigger.type",
+      "trigger.triggeredBy",
+      "trigger.triggeredAt",
+      "trigger.scheduledAt",
+      "trigger.automationId",
+      "trigger.automationName",
+      "trigger.everyMinutes",
+      "trigger.anchor",
+    ])
+  })
 })

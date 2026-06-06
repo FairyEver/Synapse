@@ -1,4 +1,5 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
+import { buildAutomationTemplateVariables } from "../../action-runtime/template-variables"
 import { ControlledProcessPermissionError } from "../../runtime/process"
 import type { AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
 import { sanitizeError } from "../error-sanitize"
@@ -10,6 +11,7 @@ import type {
   AutomationRun,
   AutomationRunFinishInput,
   AutomationRunTrigger,
+  AutomationTriggerRuntimeContext,
 } from "./types"
 
 export interface AutomationExecutionServiceDeps {
@@ -45,6 +47,7 @@ export class AutomationExecutionService {
     item: AutomationItem,
     triggeredBy: AutomationRunTrigger,
     options: AutomationRunItemOptions = {},
+    triggerContext?: AutomationTriggerRuntimeContext,
   ): Promise<AutomationRun> {
     const run = await this.deps.runs.start(item.id, triggeredBy, {
       triggerType: item.trigger.type,
@@ -76,6 +79,22 @@ export class AutomationExecutionService {
       options.onRunStarted?.(run)
       const executor = this.deps.actions.get(item.executor.type)
       const config = executor.manifest.configSchema.parse(item.executor.config)
+      const nowIso = new Date().toISOString()
+      const effectiveTriggerContext = triggerContext ?? {
+        triggeredBy,
+        triggeredAt: nowIso,
+        scheduledAt: nowIso,
+      }
+      const templateVariables = buildAutomationTemplateVariables({
+        triggerType: item.trigger.type,
+        triggerConfig: item.trigger.config,
+        triggeredBy: effectiveTriggerContext.triggeredBy,
+        triggeredAt: effectiveTriggerContext.triggeredAt,
+        scheduledAt: effectiveTriggerContext.scheduledAt,
+        automationId: item.id,
+        automationName: item.name,
+        event: effectiveTriggerContext.event,
+      })
       const context = {
         taskId: item.id,
         taskName: item.name,
@@ -85,6 +104,7 @@ export class AutomationExecutionService {
         actor: { kind: "user", id: "automation", display: "Automation" } as const,
         abortSignal: controller.signal,
         configVersion: item.configVersion ?? 0,
+        templateVariables,
       }
       permissionRequest = executor.buildPermissionRequest({ config, context })
       const permission = await this.deps.permissionGuard.check(permissionRequest)

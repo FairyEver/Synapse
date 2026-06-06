@@ -114,6 +114,35 @@ describe("AutomationEditorApp", () => {
       .toContain("GET · 未设置 URL")
   })
 
+  it("shows trigger variables and copies a template from the trigger panel", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("变量")?.click()
+    })
+
+    expect(document.body.textContent).toContain("触发时间")
+    expect(document.body.textContent).toContain("{{trigger.triggeredAt}}")
+
+    await act(async () => {
+      findButtonContaining("{{trigger.triggeredAt}}")?.click()
+    })
+
+    expect(writeText).toHaveBeenCalledWith("{{trigger.triggeredAt}}")
+    expect(document.body.textContent).toContain("已复制")
+  })
+
   it("shows a generated automation name in create mode instead of an empty title input", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0)
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")

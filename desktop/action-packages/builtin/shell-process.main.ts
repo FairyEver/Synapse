@@ -1,4 +1,8 @@
 import type { ControlledProcessRunner, PathStrategy } from "../../electron/runtime/process"
+import {
+  renderActionTemplate,
+  renderStringRecordTemplates,
+} from "../../electron/action-runtime/template-variables"
 import { resolveShellCommand } from "../../electron/services/shell-exec"
 import type { ActionRunResult } from "../types"
 import type { ActionRuntimeContext } from "../../electron/action-runtime/action-registry"
@@ -22,7 +26,9 @@ export async function runShellAction(input: {
   readonly auditActionType?: string
 }): Promise<ActionRunResult> {
   const platform = input.platform ?? process.platform
-  const shell = resolveShellCommand(input.config.shell, input.content, {
+  const content = renderActionTemplate(input.content, input.context.templateVariables)
+  const env = renderStringRecordTemplates(input.config.env, input.context.templateVariables)
+  const shell = resolveShellCommand(input.config.shell, content, {
     platform,
     posixLogin: input.config.posixLogin,
     windowsDefault: "cmd",
@@ -36,8 +42,8 @@ export async function runShellAction(input: {
     command: shell.command,
     args: [...shell.args],
     cwd: input.context.cwd,
-    env: input.config.env,
-    envAllowlist: input.config.env ? Object.keys(input.config.env) : undefined,
+    env,
+    envAllowlist: env ? Object.keys(env) : undefined,
     pathStrategy: input.config.pathStrategy,
     timeoutMs,
     abortSignal: input.context.abortSignal,

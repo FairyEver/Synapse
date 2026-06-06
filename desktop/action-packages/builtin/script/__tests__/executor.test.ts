@@ -145,4 +145,38 @@ describe("builtin.script executor", () => {
       expect.objectContaining({ args: ["-lc", "echo ok"] }),
     )
   })
+
+  it("renders script and env templates from action context variables", async () => {
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: "",
+      stderr: "",
+      timedOut: false,
+      durationMs: 1,
+    }))
+    const action = createScriptAction({ processRunner: { run }, platform: "darwin" })
+
+    await action.execute({
+      config: {
+        script: "echo {{trigger.automationName}}",
+        shell: "posix",
+        env: { RUN_NAME: "{{trigger.automationName}}" },
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "schedule",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "automation" },
+        abortSignal: new AbortController().signal,
+        templateVariables: { "trigger.automationName": "Daily" },
+      },
+    })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["-lc", "echo Daily"],
+      env: { RUN_NAME: "Daily" },
+    }))
+  })
 })

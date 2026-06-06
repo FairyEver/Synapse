@@ -257,4 +257,104 @@ describe("builtin.http-request executor", () => {
 
     expect(sendRequest).not.toHaveBeenCalled()
   })
+
+  it("renders HTTP templates for url, query, headers, body, and auth", async () => {
+    const sendRequest = vi.fn(async () => ({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      body: "",
+    }))
+    const action = createHttpRequestAction({ sendRequest })
+
+    await action.execute({
+      config: {
+        method: "POST",
+        url: "https://example.com/{{trigger.payload.team}}",
+        query: { "{{trigger.payload.queryKey}}": "{{trigger.payload.queryValue}}" },
+        headers: { "X-{{trigger.payload.headerKey}}": "{{trigger.payload.headerValue}}" },
+        bodyType: "text",
+        body: "issue={{trigger.payload.issue}}",
+        auth: { type: "bearer", bearerToken: "{{trigger.payload.token}}" },
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "schedule",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "automation" },
+        abortSignal: new AbortController().signal,
+        templateVariables: {
+          "trigger.payload.team": "ops",
+          "trigger.payload.queryKey": "id",
+          "trigger.payload.queryValue": "42",
+          "trigger.payload.headerKey": "Trace",
+          "trigger.payload.headerValue": "abc",
+          "trigger.payload.issue": "Bug",
+          "trigger.payload.token": "secret-token",
+        },
+      },
+    })
+
+    expect(sendRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://example.com/ops?id=42",
+      headers: {
+        "X-Trace": "abc",
+        Authorization: "Bearer secret-token",
+      },
+      body: "issue=Bug",
+    }))
+  })
+
+  it("reports unknown HTTP template variables before sending", async () => {
+    const sendRequest = vi.fn()
+    const action = createHttpRequestAction({ sendRequest })
+
+    const result = await action.execute({
+      config: {
+        method: "GET",
+        url: "https://example.com/{{trigger.payload.missing}}",
+        bodyType: "none",
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "schedule",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "automation" },
+        abortSignal: new AbortController().signal,
+        templateVariables: {},
+      },
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      status: "failed",
+      error: "未知变量：trigger.payload.missing",
+    }))
+    expect(sendRequest).not.toHaveBeenCalled()
+  })
+
+  it("does not expose rendered HTTP auth values in permission request", () => {
+    const action = createHttpRequestAction({ sendRequest: vi.fn() })
+    const request = action.buildPermissionRequest({
+      config: {
+        method: "GET",
+        url: "https://example.com/api",
+        bodyType: "none",
+        auth: { type: "bearer", bearerToken: "{{trigger.payload.token}}" },
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "schedule",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "automation" },
+        abortSignal: new AbortController().signal,
+        templateVariables: { "trigger.payload.token": "secret-token" },
+      },
+    })
+
+    expect(JSON.stringify(request)).not.toContain("secret-token")
+    expect(request.context).toEqual(expect.objectContaining({ authType: "bearer" }))
+  })
 })

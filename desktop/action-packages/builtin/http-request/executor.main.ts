@@ -4,6 +4,10 @@ import type {
 } from "../../../electron/runtime/network"
 import { sendOutboundHttpRequest } from "../../../electron/runtime/network"
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
+import {
+  renderActionTemplate,
+  renderStringRecordTemplates,
+} from "../../../electron/action-runtime/template-variables"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { httpRequestActionManifest } from "./manifest"
 import {
@@ -50,32 +54,42 @@ export function createHttpRequestAction(deps: {
   return {
     manifest: httpRequestActionManifest,
     buildPermissionRequest: ({ config, context }) => {
-      const authType = getPermissionAuthType(config)
+      const renderedConfig = renderHttpConfig(config, context.templateVariables)
+      const authType = getPermissionAuthType(renderedConfig)
 
       return {
         action: "network.connect",
         actor: context.actor,
-        resource: sanitizeUrl(config.url),
+        resource: sanitizeUrl(renderedConfig.url),
         context: {
           source: "task-scheduler",
           actionType: httpRequestActionManifest.id,
           taskId: context.taskId,
           runId: context.runId,
           triggeredBy: context.triggeredBy,
-          method: config.method,
-          url: sanitizeUrl(config.url),
-          headerKeys: buildPermissionHeaderKeys(config, authType),
+          method: renderedConfig.method,
+          url: sanitizeUrl(renderedConfig.url),
+          headerKeys: buildPermissionHeaderKeys(renderedConfig, authType),
           authType: authType ?? undefined,
-          timeoutMins: config.timeoutMins,
+          timeoutMins: renderedConfig.timeoutMins,
         },
       }
     },
     execute: async ({ config, context }) => {
       const startMs = Date.now()
       let url: string
+      let renderedConfig: HttpRequestActionConfig
       try {
-        url = buildHttpRequestUrl(config)
-      } catch {
+        renderedConfig = renderHttpConfig(config, context.templateVariables)
+        url = buildHttpRequestUrl(renderedConfig)
+      } catch (err) {
+        if (isTemplateVariableError(err)) {
+          return {
+            status: "failed",
+            error: err.message,
+            metrics: { durationMs: Date.now() - startMs },
+          }
+        }
         return {
           status: "failed",
           error: `无效的 URL：${config.url || "(空)"}`,
@@ -84,7 +98,7 @@ export function createHttpRequestAction(deps: {
       }
 
       try {
-        const response = await sendRequest(buildOutboundHttpRequest(config, {
+        const response = await sendRequest(buildOutboundHttpRequest(renderedConfig, {
           url,
           abortSignal: context.abortSignal,
         }))
@@ -118,5 +132,34 @@ export function createHttpRequestAction(deps: {
         }
       }
     },
+  }
+}
+
+function isTemplateVariableError(err: unknown): err is Error {
+  return err instanceof Error && err.message.startsWith("未知变量：")
+}
+
+function renderHttpConfig(
+  config: HttpRequestActionConfig,
+  variables: Record<string, string> | undefined,
+): HttpRequestActionConfig {
+  return {
+    ...config,
+    url: renderActionTemplate(config.url, variables),
+    query: renderStringRecordTemplates(config.query, variables),
+    headers: renderStringRecordTemplates(config.headers, variables),
+    body: config.body === undefined ? undefined : renderActionTemplate(config.body, variables),
+    auth: config.auth ? {
+      ...config.auth,
+      bearerToken: config.auth.bearerToken === undefined
+        ? undefined
+        : renderActionTemplate(config.auth.bearerToken, variables),
+      basicUsername: config.auth.basicUsername === undefined
+        ? undefined
+        : renderActionTemplate(config.auth.basicUsername, variables),
+      basicPassword: config.auth.basicPassword === undefined
+        ? undefined
+        : renderActionTemplate(config.auth.basicPassword, variables),
+    } : undefined,
   }
 }

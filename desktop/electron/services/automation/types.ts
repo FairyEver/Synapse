@@ -2,6 +2,7 @@ import type {
   ActionRunResult,
   ActionStoredConfigValidation,
 } from "../../../action-packages/types"
+import type { AutomationTriggerEvent } from "../../../automation-trigger-packages/types.shared"
 
 export type {
   AutomationTriggerEvent,
@@ -33,6 +34,13 @@ export type AutomationRunStatus =
 export type AutomationActiveRunStatus = "running" | AutomationRunStatus
 export type AutomationRunTrigger = "trigger" | "manual" | "missed_run"
 export type AutomationValidation = ActionStoredConfigValidation
+
+export interface AutomationTriggerRuntimeContext {
+  readonly triggeredBy: AutomationRunTrigger
+  readonly triggeredAt: string
+  readonly scheduledAt: string
+  readonly event?: AutomationTriggerEvent
+}
 
 export type AutomationPolicy = {
   readonly missedRunPolicy: "skip" | "run_once"
