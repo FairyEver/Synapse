@@ -10,8 +10,19 @@ const electronMock = vi.hoisted(() => ({
   },
 }))
 
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}))
+
 vi.mock("electron", () => ({
   dialog: electronMock.dialog,
+}))
+
+vi.mock("../../../services/log-store", () => ({
+  createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
 
 describe("toolsIpcModule", () => {
@@ -44,6 +55,36 @@ describe("toolsIpcModule", () => {
     await harness.invoke("synapse:tools:open", { toolId: "docx-to-markdown" })
 
     expect(windowService.open).toHaveBeenCalledWith("docx-to-markdown")
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Tools IPC request.", expect.objectContaining({
+      boundary: "tools.open",
+      channel: "synapse:tools:open",
+      toolId: "docx-to-markdown",
+    }))
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Tools IPC completed.", expect.objectContaining({
+      boundary: "tools.open",
+      channel: "synapse:tools:open",
+      durationMs: expect.any(Number),
+      toolId: "docx-to-markdown",
+    }))
+  })
+
+  it("logs failed tool window opens without error text", async () => {
+    const openError = new Error("open failed token=secret-token")
+    const windowService = { open: vi.fn(async () => { throw openError }) }
+    const { harness } = createHarness({ windowService })
+
+    await expect(harness.invoke("synapse:tools:open", { toolId: "docx-to-markdown" }))
+      .rejects.toThrow("open failed token=secret-token")
+
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith("Tools IPC failed.", expect.objectContaining({
+      boundary: "tools.open",
+      channel: "synapse:tools:open",
+      durationMs: expect.any(Number),
+      errorLength: openError.message.length,
+      errorName: "Error",
+      toolId: "docx-to-markdown",
+    }))
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("secret-token")
   })
 
   it("returns a renderer-safe descriptor", async () => {
@@ -103,6 +144,14 @@ describe("toolsIpcModule", () => {
       properties: ["openDirectory"],
       defaultPath: "/Users/test/Downloads",
     })
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Tools IPC completed.", expect.objectContaining({
+      boundary: "tools.select-directory",
+      channel: "synapse:tools:select-directory",
+      fieldId: "outputDirectory",
+      hasDefaultPath: true,
+      toolId: "docx-to-markdown",
+    }))
+    expect(JSON.stringify(logStoreMock.logger.info.mock.calls)).not.toContain("/Users/test/Downloads")
   })
 
   it("runs a builtin tool through the runner service", async () => {

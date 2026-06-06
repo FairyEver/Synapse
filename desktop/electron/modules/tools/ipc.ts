@@ -5,7 +5,10 @@ import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { getBuiltinToolDescriptor, listRendererBuiltinToolDescriptors, projectBuiltinToolDescriptor } from "../../services/builtin-tools/registry"
 import { runBuiltinTool } from "../../services/builtin-tools/runner"
+import { createMainLogger } from "../../services/log-store"
 import type { ToolWindowService } from "../../services/tools/tool-window-service"
+
+const logger = createMainLogger("tools.ipc")
 
 const toolIdSchema = z.enum([
   "docx-to-markdown",
@@ -137,6 +140,50 @@ function requireTool(toolId: string) {
   return descriptor
 }
 
+function errorDiagnostic(rawError: unknown): Record<string, unknown> {
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  const errorLike = rawError as { readonly code?: unknown } | null
+  const code = typeof errorLike?.code === "string" ? errorLike.code : undefined
+  return {
+    errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+    errorLength: message.length,
+    ...(code ? { errorCode: code } : {}),
+  }
+}
+
+async function loggedToolsIpc<T>(
+  channel: string,
+  boundary: string,
+  metadata: Record<string, unknown>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now()
+  logger.info("Tools IPC request.", {
+    boundary,
+    channel,
+    ...metadata,
+  })
+  try {
+    const result = await run()
+    logger.info("Tools IPC completed.", {
+      boundary,
+      channel,
+      durationMs: Date.now() - startedAt,
+      ...metadata,
+    })
+    return result
+  } catch (rawError) {
+    logger.warn("Tools IPC failed.", {
+      boundary,
+      channel,
+      durationMs: Date.now() - startedAt,
+      ...metadata,
+      ...errorDiagnostic(rawError),
+    })
+    throw rawError
+  }
+}
+
 export const toolsIpcModule: IpcModule = {
   id: "tools",
   methods: {
@@ -145,78 +192,113 @@ export const toolsIpcModule: IpcModule = {
       channel: "synapse:tools:list",
       request: z.object({}),
       response: listToolsResultSchema,
-      handler: () => ({ tools: listRendererBuiltinToolDescriptors() }),
+      handler: () => loggedToolsIpc(
+        "synapse:tools:list",
+        "tools.list",
+        {},
+        async () => ({ tools: listRendererBuiltinToolDescriptors() }),
+      ),
     },
     openTool: {
       kind: "invoke",
       channel: "synapse:tools:open",
       request: z.object({ toolId: toolIdSchema }),
       response: z.object({}),
-      handler: async (ctx, request: { toolId: string }) => {
-        requireTool(request.toolId)
-        await windowService(ctx).open(request.toolId)
-        return {}
-      },
+      handler: (ctx, request: { toolId: string }) => loggedToolsIpc(
+        "synapse:tools:open",
+        "tools.open",
+        { toolId: request.toolId },
+        async () => {
+          requireTool(request.toolId)
+          await windowService(ctx).open(request.toolId)
+          return {}
+        },
+      ),
     },
     getToolDescriptor: {
       kind: "invoke",
       channel: "synapse:tools:descriptor",
       request: z.object({ toolId: toolIdSchema }),
       response: toolDefinitionSchema,
-      handler: (_ctx, request: { toolId: string }) => projectBuiltinToolDescriptor(requireTool(request.toolId)),
+      handler: (_ctx, request: { toolId: string }) => loggedToolsIpc(
+        "synapse:tools:descriptor",
+        "tools.descriptor",
+        { toolId: request.toolId },
+        async () => projectBuiltinToolDescriptor(requireTool(request.toolId)),
+      ),
     },
     runTool: {
       kind: "invoke",
       channel: "synapse:tools:run",
       request: runToolRequestSchema,
       response: runToolResultSchema,
-      handler: async (ctx, request: { toolId: string; input: Record<string, unknown> }) => {
-        const runTool = ctx.resolve<typeof runBuiltinTool>("tools.builtin-tool-runner")
-        return runTool({
-          toolId: request.toolId,
-          input: request.input,
-          context: { entryPoint: "tools", actor: { kind: "user" } },
-          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
-          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-        })
-      },
+      handler: (ctx, request: { toolId: string; input: Record<string, unknown> }) => loggedToolsIpc(
+        "synapse:tools:run",
+        "tools.run",
+        { inputKeys: Object.keys(request.input), toolId: request.toolId },
+        async () => {
+          const runTool = ctx.resolve<typeof runBuiltinTool>("tools.builtin-tool-runner")
+          return runTool({
+            toolId: request.toolId,
+            input: request.input,
+            context: { entryPoint: "tools", actor: { kind: "user" } },
+            permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+            auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          })
+        },
+      ),
     },
     selectFile: {
       kind: "invoke",
       channel: "synapse:tools:select-file",
       request: fieldSelectionSchema,
       response: z.object({ filePath: z.string().nullable() }),
-      handler: async (_ctx, request: { toolId: string; fieldId: string }) => {
-        const descriptor = requireTool(request.toolId)
-        const field = descriptor.ui.fields.find((item) => item.id === request.fieldId)
-        if (!field || field.kind !== "file") {
-          throw new Error(`Unknown file field: ${request.fieldId}`)
-        }
-        const extensions = (field.extensions ?? descriptor.input.extensions).map((extension) => extension.replace(/^\./, ""))
-        const result = await dialog.showOpenDialog({
-          properties: ["openFile"],
-          filters: [{ name: "支持的文件", extensions }],
-        })
-        return { filePath: result.canceled ? null : result.filePaths[0] ?? null }
-      },
+      handler: async (_ctx, request: { toolId: string; fieldId: string }) => loggedToolsIpc(
+        "synapse:tools:select-file",
+        "tools.select-file",
+        { fieldId: request.fieldId, toolId: request.toolId },
+        async () => {
+          const descriptor = requireTool(request.toolId)
+          const field = descriptor.ui.fields.find((item) => item.id === request.fieldId)
+          if (!field || field.kind !== "file") {
+            throw new Error(`Unknown file field: ${request.fieldId}`)
+          }
+          const extensions = (field.extensions ?? descriptor.input.extensions)
+            .map((extension) => extension.replace(/^\./, ""))
+          const result = await dialog.showOpenDialog({
+            properties: ["openFile"],
+            filters: [{ name: "支持的文件", extensions }],
+          })
+          return { filePath: result.canceled ? null : result.filePaths[0] ?? null }
+        },
+      ),
     },
     selectDirectory: {
       kind: "invoke",
       channel: "synapse:tools:select-directory",
       request: directorySelectionSchema,
       response: z.object({ directoryPath: z.string().nullable() }),
-      handler: async (_ctx, request: { toolId: string; fieldId: string; defaultPath?: string }) => {
-        const descriptor = requireTool(request.toolId)
-        const field = descriptor.ui.fields.find((item) => item.id === request.fieldId)
-        if (!field || field.kind !== "directory") {
-          throw new Error(`Unknown directory field: ${request.fieldId}`)
-        }
-        const result = await dialog.showOpenDialog({
-          properties: ["openDirectory"],
-          ...(request.defaultPath ? { defaultPath: request.defaultPath } : {}),
-        })
-        return { directoryPath: result.canceled ? null : result.filePaths[0] ?? null }
-      },
+      handler: async (_ctx, request: { toolId: string; fieldId: string; defaultPath?: string }) => loggedToolsIpc(
+        "synapse:tools:select-directory",
+        "tools.select-directory",
+        {
+          fieldId: request.fieldId,
+          hasDefaultPath: Boolean(request.defaultPath),
+          toolId: request.toolId,
+        },
+        async () => {
+          const descriptor = requireTool(request.toolId)
+          const field = descriptor.ui.fields.find((item) => item.id === request.fieldId)
+          if (!field || field.kind !== "directory") {
+            throw new Error(`Unknown directory field: ${request.fieldId}`)
+          }
+          const result = await dialog.showOpenDialog({
+            properties: ["openDirectory"],
+            ...(request.defaultPath ? { defaultPath: request.defaultPath } : {}),
+          })
+          return { directoryPath: result.canceled ? null : result.filePaths[0] ?? null }
+        },
+      ),
     },
   },
   events: {},
