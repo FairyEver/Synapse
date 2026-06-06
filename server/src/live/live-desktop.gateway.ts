@@ -1,17 +1,19 @@
 import { randomUUID } from "node:crypto"
 import type { Server as HttpServer, IncomingMessage } from "node:http"
 import { Injectable, Logger } from "@nestjs/common"
+import {
+  LIVE_MESSAGE_TYPES,
+  createLiveEnvelope,
+  isLiveDesktopClientMessage,
+  type LiveDesktopClientMessage,
+  type LiveDesktopServerMessage,
+} from "@synapse/shared"
 import { RawData, WebSocket, WebSocketServer } from "ws"
 import { UserAuthService } from "../auth/user-auth.service"
 import { LiveClientRegistry } from "./live-client-registry"
 import { toPublicDto } from "./live-query.service"
 import { LiveStreamService } from "./live-stream.service"
-import type {
-  LiveClientInstance,
-  LiveDesktopClientMessage,
-  LiveDesktopHello,
-  LiveDesktopServerMessage,
-} from "./live.types"
+import type { LiveClientInstance } from "./live.types"
 
 interface LiveDesktopGatewayClock {
   readonly randomId: () => string
@@ -106,19 +108,20 @@ export class LiveDesktopGateway {
         return
       }
 
-      if (message.type === "hello") {
+      if (message.type === LIVE_MESSAGE_TYPES.hello) {
         if (registered) {
           socket.close(1008, "hello_already_received")
           return
         }
 
+        const hello = message.payload
         const client = this.registry.register({
           userId: auth.userId,
-          clientInstanceId: message.clientInstanceId,
+          clientInstanceId: hello.clientInstanceId,
           connectionId,
-          appVersion: message.appVersion,
-          platform: message.platform,
-          deviceName: message.deviceName,
+          appVersion: hello.appVersion,
+          platform: hello.platform,
+          deviceName: hello.deviceName,
           now: this.clock.now(),
           onSupersede: (oldConnectionId) => {
             this.socketsByConnectionId.get(oldConnectionId)?.close(1000, "superseded")
@@ -127,13 +130,13 @@ export class LiveDesktopGateway {
         })
         registered = true
         this.publish(client)
-        sendJson(socket, {
-          type: "welcome",
+        const serverTime = this.clock.now().toISOString()
+        sendJson(socket, createLiveEnvelope(LIVE_MESSAGE_TYPES.welcome, {
           connectionId,
-          serverTime: this.clock.now().toISOString(),
+          serverTime,
           heartbeatIntervalMs,
           heartbeatTimeoutMs,
-        })
+        }, { id: connectionId, sentAt: serverTime }))
         return
       }
 
@@ -146,7 +149,10 @@ export class LiveDesktopGateway {
       if (client) {
         this.publish(client)
       }
-      sendJson(socket, { type: "pong", serverTime: this.clock.now().toISOString() })
+      const serverTime = this.clock.now().toISOString()
+      sendJson(socket, createLiveEnvelope(LIVE_MESSAGE_TYPES.pong, {
+        serverTime,
+      }, { id: message.id, sentAt: serverTime }))
     })
 
     socket.on("close", () => {
@@ -177,6 +183,43 @@ export class LiveDesktopGateway {
   sweepStaleClients(): void {
     for (const client of this.registry.markStaleClients(this.clock.now())) {
       this.publish(client)
+    }
+  }
+
+  broadcastToUser(userId: string, message: LiveDesktopServerMessage): {
+    readonly onlineClientCount: number
+    readonly sentClientCount: number
+    readonly failedClientCount: number
+  } {
+    const clients = this.registry.listOnlineByUser(userId)
+    let sentClientCount = 0
+    let failedClientCount = 0
+
+    for (const client of clients) {
+      if (!client.connectionId) continue
+      const socket = this.socketsByConnectionId.get(client.connectionId)
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        failedClientCount += 1
+        continue
+      }
+
+      try {
+        sendJson(socket, message)
+        sentClientCount += 1
+      } catch (error) {
+        failedClientCount += 1
+        this.logger.warn({
+          connectionId: client.connectionId,
+          errorName: error instanceof Error ? error.name : typeof error,
+          userId,
+        }, "Live user broadcast failed")
+      }
+    }
+
+    return {
+      onlineClientCount: clients.length,
+      sentClientCount,
+      failedClientCount,
     }
   }
 
@@ -217,24 +260,7 @@ export function parseLiveDesktopMessage(payload: RawData | string): LiveDesktopC
     return null
   }
 
-  const record = parsed as Record<string, unknown>
-  if (record.type === "ping" && typeof record.sentAt === "string" && record.sentAt.trim()) {
-    return { type: "ping", sentAt: record.sentAt }
-  }
-
-  if (record.type !== "hello") {
-    return null
-  }
-
-  const hello = {
-    type: "hello",
-    clientInstanceId: stringField(record.clientInstanceId),
-    appVersion: stringField(record.appVersion),
-    platform: stringField(record.platform),
-    deviceName: stringField(record.deviceName),
-  } satisfies LiveDesktopHello
-
-  return hello.clientInstanceId && hello.appVersion && hello.platform && hello.deviceName ? hello : null
+  return isLiveDesktopClientMessage(parsed) ? parsed : null
 }
 
 function sendJson(socket: WebSocket, message: LiveDesktopServerMessage): void {
@@ -255,10 +281,6 @@ function rawDataToText(payload: RawData | string): string {
   }
 
   return payload.toString("utf8")
-}
-
-function stringField(value: unknown): string {
-  return typeof value === "string" ? value.trim() : ""
 }
 
 function readBearerToken(header: string | string[] | undefined): string | null {

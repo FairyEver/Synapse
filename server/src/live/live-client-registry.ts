@@ -136,6 +136,10 @@ export class LiveClientRegistry {
     return this.listAll().filter((client) => client.userId === userId)
   }
 
+  listOnlineByUser(userId: string): LiveClientInstance[] {
+    return this.listByUser(userId).filter((client) => client.status === "online" && Boolean(client.connectionId))
+  }
+
   private markOffline(
     key: string,
     client: LiveClientInstance,

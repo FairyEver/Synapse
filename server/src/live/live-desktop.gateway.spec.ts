@@ -7,7 +7,7 @@ import {
   LiveDesktopGateway,
   parseLiveDesktopMessage,
 } from "./live-desktop.gateway"
-import type { LiveClientRegistry } from "./live-client-registry"
+import { LiveClientRegistry } from "./live-client-registry"
 import type { LiveStreamService } from "./live-stream.service"
 import type { LiveClientInstance } from "./live.types"
 import type { UserAuthService } from "../auth/user-auth.service"
@@ -15,6 +15,7 @@ import type { UserAuthService } from "../auth/user-auth.service"
 class FakeSocket extends EventEmitter {
   readonly sent: string[] = []
   readonly closeCalls: Array<{ readonly code: number; readonly reason: string }> = []
+  readyState = 1
 
   send(payload: string): void {
     this.sent.push(payload)
@@ -74,6 +75,42 @@ function createClient(overrides: Partial<LiveClientInstance> = {}): LiveClientIn
   }
 }
 
+function helloFor(clientInstanceId: string) {
+  return {
+    type: "live.hello",
+    id: `msg-hello-${clientInstanceId}`,
+    sentAt: "2026-06-06T10:00:00.000Z",
+    payload: {
+      clientInstanceId,
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+    },
+  }
+}
+
+function webhookDeliveryPayload() {
+  return {
+    deliveryId: "delivery-1",
+    webhook: {
+      id: "webhook-1",
+      publicId: "wh_public_1",
+      name: "Deploy",
+    },
+    request: {
+      method: "POST",
+      url: "https://example.com/webhooks/wh_public_1",
+      query: {},
+      headers: { "content-type": "application/json" },
+      body: { ok: true },
+      bodyText: "{\"ok\":true}",
+      contentType: "application/json",
+      receivedAt: "2026-06-06T10:00:02.000Z",
+      remoteAddress: "127.0.0.1",
+    },
+  }
+}
+
 function createGateway(input: {
   readonly verifyAccessToken?: UserAuthService["verifyAccessToken"]
   readonly registry?: Partial<LiveClientRegistry>
@@ -105,27 +142,31 @@ function createGateway(input: {
 
 describe("parseLiveDesktopMessage", () => {
   it("accepts valid hello and ping messages", () => {
+    expect(parseLiveDesktopMessage(JSON.stringify(helloFor("client-a")))).toMatchObject({
+      type: "live.hello",
+      payload: { clientInstanceId: "client-a" },
+    })
     expect(parseLiveDesktopMessage(JSON.stringify({
-      type: "hello",
-      clientInstanceId: "client-a",
-      appVersion: "0.2.253",
-      platform: "darwin-arm64",
-      deviceName: "MacBook",
-    }))).toMatchObject({ type: "hello", clientInstanceId: "client-a" })
-    expect(parseLiveDesktopMessage(JSON.stringify({
-      type: "ping",
+      type: "live.ping",
+      id: "msg-ping",
       sentAt: "2026-06-06T10:00:01.000Z",
-    }))).toEqual({ type: "ping", sentAt: "2026-06-06T10:00:01.000Z" })
+      payload: { sentAt: "2026-06-06T10:00:01.000Z" },
+    }))).toMatchObject({
+      type: "live.ping",
+      payload: { sentAt: "2026-06-06T10:00:01.000Z" },
+    })
   })
 
   it("rejects invalid JSON, empty hello fields, and unknown types", () => {
     expect(parseLiveDesktopMessage("{")).toBeNull()
     expect(parseLiveDesktopMessage(JSON.stringify({
-      type: "hello",
-      clientInstanceId: "",
-      appVersion: "0.2.253",
-      platform: "darwin-arm64",
-      deviceName: "MacBook",
+      ...helloFor("client-a"),
+      payload: {
+        clientInstanceId: "",
+        appVersion: "0.2.253",
+        platform: "darwin-arm64",
+        deviceName: "MacBook",
+      },
     }))).toBeNull()
     expect(parseLiveDesktopMessage(JSON.stringify({ type: "unknown" }))).toBeNull()
   })
@@ -140,29 +181,51 @@ describe("LiveDesktopGateway", () => {
     const gateway = createGateway({
       registry: { register, touch },
       streams: { publish },
+      randomId: () => "connection-1",
+      now: vi.fn()
+        .mockReturnValueOnce(new Date("2026-06-06T10:00:00.000Z"))
+        .mockReturnValue(new Date("2026-06-06T10:00:01.000Z")),
     })
 
     gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
     socket.emit("message", JSON.stringify({
-      type: "hello",
-      clientInstanceId: "client-a",
-      appVersion: "0.2.253",
-      platform: "darwin-arm64",
-      deviceName: "MacBook",
+      type: "live.hello",
+      id: "msg-hello",
+      sentAt: "2026-06-06T10:00:00.000Z",
+      payload: {
+        clientInstanceId: "client-a",
+        appVersion: "0.2.253",
+        platform: "darwin-arm64",
+        deviceName: "MacBook",
+      },
     }))
-    socket.emit("message", JSON.stringify({ type: "ping", sentAt: "2026-06-06T10:00:01.000Z" }))
+    socket.emit("message", JSON.stringify({
+      type: "live.ping",
+      id: "msg-ping",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: { sentAt: "2026-06-06T10:00:01.000Z" },
+    }))
 
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       userId: "user-1",
       clientInstanceId: "client-a",
-      connectionId: "conn-test",
+      connectionId: "connection-1",
     }))
-    expect(touch).toHaveBeenCalledWith("conn-test", expect.any(Date))
-    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["welcome", "pong"])
+    expect(touch).toHaveBeenCalledWith("connection-1", expect.any(Date))
+    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome", "live.pong"])
     expect(JSON.parse(socket.sent[0] ?? "{}")).toMatchObject({
-      connectionId: "conn-test",
-      heartbeatIntervalMs: 20_000,
-      heartbeatTimeoutMs: 45_000,
+      type: "live.welcome",
+      payload: {
+        connectionId: "connection-1",
+        heartbeatIntervalMs: 20_000,
+        heartbeatTimeoutMs: 45_000,
+      },
+    })
+    expect(JSON.parse(socket.sent[1] ?? "{}")).toMatchObject({
+      type: "live.pong",
+      payload: {
+        serverTime: "2026-06-06T10:00:01.000Z",
+      },
     })
     expect(publish).toHaveBeenCalledTimes(2)
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({
@@ -176,7 +239,12 @@ describe("LiveDesktopGateway", () => {
     const gateway = createGateway()
 
     gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
-    socket.emit("message", JSON.stringify({ type: "ping", sentAt: "2026-06-06T10:00:01.000Z" }))
+    socket.emit("message", JSON.stringify({
+      type: "live.ping",
+      id: "msg-ping",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: { sentAt: "2026-06-06T10:00:01.000Z" },
+    }))
 
     expect(socket.closeCalls).toEqual([{ code: 1008, reason: "hello_required" }])
   })
@@ -197,19 +265,15 @@ describe("LiveDesktopGateway", () => {
     const gateway = createGateway({ registry: { register } })
 
     gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
     socket.emit("message", JSON.stringify({
-      type: "hello",
-      clientInstanceId: "client-a",
-      appVersion: "0.2.253",
-      platform: "darwin-arm64",
-      deviceName: "MacBook",
-    }))
-    socket.emit("message", JSON.stringify({
-      type: "hello",
-      clientInstanceId: "client-b",
-      appVersion: "0.2.253",
-      platform: "win32-x64",
-      deviceName: "Workstation",
+      ...helloFor("client-b"),
+      payload: {
+        clientInstanceId: "client-b",
+        appVersion: "0.2.253",
+        platform: "win32-x64",
+        deviceName: "Workstation",
+      },
     }))
 
     expect(register).toHaveBeenCalledTimes(1)
@@ -275,24 +339,62 @@ describe("LiveDesktopGateway", () => {
     })
 
     gateway.bindAuthenticatedSocket(oldSocket as never, { userId: "user-1" })
-    oldSocket.emit("message", JSON.stringify({
-      type: "hello",
-      clientInstanceId: "client-a",
-      appVersion: "0.2.253",
-      platform: "darwin-arm64",
-      deviceName: "MacBook",
-    }))
+    oldSocket.emit("message", JSON.stringify(helloFor("client-a")))
     gateway.bindAuthenticatedSocket(newSocket as never, { userId: "user-1" })
     newSocket.emit("message", JSON.stringify({
-      type: "hello",
-      clientInstanceId: "client-a",
-      appVersion: "0.2.254",
-      platform: "darwin-arm64",
-      deviceName: "MacBook Pro",
+      ...helloFor("client-a"),
+      payload: {
+        clientInstanceId: "client-a",
+        appVersion: "0.2.254",
+        platform: "darwin-arm64",
+        deviceName: "MacBook Pro",
+      },
     }))
     supersede?.("conn-old")
 
     expect(oldSocket.closeCalls).toEqual([{ code: 1000, reason: "superseded" }])
+  })
+
+  it("broadcasts a server message to every online socket for one user", () => {
+    const first = new FakeSocket()
+    const second = new FakeSocket()
+    const other = new FakeSocket()
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish: vi.fn() } as unknown as LiveStreamService,
+      clock: {
+        randomId: vi.fn()
+          .mockReturnValueOnce("connection-1")
+          .mockReturnValueOnce("connection-2")
+          .mockReturnValueOnce("connection-3"),
+        now: () => new Date("2026-06-06T10:00:00.000Z"),
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(first as never, { userId: "user-1" })
+    gateway.bindAuthenticatedSocket(second as never, { userId: "user-1" })
+    gateway.bindAuthenticatedSocket(other as never, { userId: "user-2" })
+
+    first.emit("message", JSON.stringify(helloFor("client-a")))
+    second.emit("message", JSON.stringify(helloFor("client-b")))
+    other.emit("message", JSON.stringify(helloFor("client-c")))
+
+    const result = gateway.broadcastToUser("user-1", {
+      type: "webhook.delivery.received",
+      id: "delivery-msg-1",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: webhookDeliveryPayload(),
+    })
+
+    expect(result).toEqual({
+      onlineClientCount: 2,
+      sentClientCount: 2,
+      failedClientCount: 0,
+    })
+    expect(first.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(true)
+    expect(second.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(true)
+    expect(other.sent.some((item) => JSON.parse(item).type === "webhook.delivery.received")).toBe(false)
   })
 
   it("authenticates upgrade requests and binds accepted sockets", async () => {
