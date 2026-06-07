@@ -7,6 +7,7 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
     automationDispatch: vi.fn(),
     contentDispatch: vi.fn(),
     databaseDispatch: vi.fn(),
+    driveDispatch: vi.fn(),
     modelPriceDispatch: vi.fn(),
     repositoryDispatch: vi.fn(),
     schedulerDispatch: vi.fn(),
@@ -188,6 +189,28 @@ describe("createSynapseActionRouter", () => {
     expect(contentDispatch).toHaveBeenCalledWith("content.skill.list", {}, { source: "api" })
     expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
+    expect(deps.schedulerDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
+    expect(deps.workflowDispatch).not.toHaveBeenCalled()
+  })
+
+  it("routes Drive actions to the Drive dispatcher", async () => {
+    const driveDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
+    const deps = createRouterDeps({
+      driveDispatch,
+    })
+    const router = createSynapseActionRouter(deps)
+
+    await expect(router.dispatch("drive.item.list", {}, { source: "api" })).resolves.toEqual({
+      ok: true,
+      data: [],
+    })
+    expect(driveDispatch).toHaveBeenCalledWith("drive.item.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
+    expect(deps.contentDispatch).not.toHaveBeenCalled()
+    expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.modelPriceDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
     expect(deps.variableDispatch).not.toHaveBeenCalled()

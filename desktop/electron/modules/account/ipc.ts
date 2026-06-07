@@ -54,6 +54,81 @@ const dashboardWebhookSchema = z.object({
   ]).optional(),
 })
 
+const driveItemSchema = z.object({
+  id: z.string(),
+  parentId: z.string().nullable(),
+  type: z.enum(["file", "folder"]),
+  name: z.string(),
+  size: z.string(),
+  mimeType: z.string().nullable(),
+  storageStatus: z.enum(["pending", "active", "delete_pending", "deleted", "failed"]),
+  shared: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+const driveUploadInstructionSchema = z.object({
+  method: z.literal("PUT"),
+  url: z.string(),
+  expiresAt: z.string(),
+  headers: z.record(z.string(), z.string()),
+})
+
+const driveUploadPrepareResultSchema = z.object({
+  sessionId: z.string(),
+  item: driveItemSchema,
+  upload: driveUploadInstructionSchema,
+})
+
+const driveFolderUploadPrepareResultSchema = z.object({
+  root: driveItemSchema,
+  entries: z.array(z.object({
+    relativePath: z.string(),
+    sessionId: z.string(),
+    item: driveItemSchema,
+    upload: driveUploadInstructionSchema,
+  })),
+})
+
+const driveShareSchema = z.object({
+  id: z.string(),
+  shareId: z.string(),
+  itemId: z.string(),
+  enabled: z.boolean(),
+  url: z.string(),
+  createdAt: z.string(),
+})
+
+const driveUsageSchema = z.object({
+  usedBytes: z.string(),
+  reservedBytes: z.string(),
+  quotaBytes: z.string(),
+})
+
+const driveParentSchema = z.object({ parentId: z.string().nullable().optional() })
+const drivePrepareUploadSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  name: z.string(),
+  size: z.string(),
+  mimeType: z.string().nullable().optional(),
+})
+const drivePrepareFolderUploadSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  folderName: z.string(),
+  files: z.array(z.object({
+    relativePath: z.string(),
+    size: z.string(),
+    mimeType: z.string().nullable().optional(),
+  })),
+})
+const driveSessionSchema = z.object({ sessionId: z.string() })
+const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optional(), name: z.string() })
+const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
+const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
+const driveItemIdSchema = z.object({ itemId: z.string() })
+const driveShareIdSchema = z.object({ shareId: z.string() })
+const okSchema = z.object({ ok: z.literal(true) })
+
 const accountStateSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("unauthenticated") }),
   z.object({ status: z.literal("authenticating"), loginUrl: z.string().optional() }),
@@ -111,6 +186,99 @@ export const accountIpcModule: IpcModule = {
       request: z.void(),
       response: z.array(dashboardWebhookSchema),
       handler: async () => accountService.listWebhooks(),
+    },
+    listDriveItems: {
+      kind: "invoke",
+      channel: "synapse:account:drive:items:list",
+      request: driveParentSchema,
+      response: z.array(driveItemSchema),
+      handler: async (_ctx, input) => {
+        const parsed = driveParentSchema.parse(input)
+        return accountService.listDriveItems(parsed.parentId ?? null)
+      },
+    },
+    prepareDriveUpload: {
+      kind: "invoke",
+      channel: "synapse:account:drive:uploads:prepare",
+      request: drivePrepareUploadSchema,
+      response: driveUploadPrepareResultSchema,
+      handler: async (_ctx, input) => accountService.prepareDriveUpload(drivePrepareUploadSchema.parse(input)),
+    },
+    prepareDriveFolderUpload: {
+      kind: "invoke",
+      channel: "synapse:account:drive:uploads:folder:prepare",
+      request: drivePrepareFolderUploadSchema,
+      response: driveFolderUploadPrepareResultSchema,
+      handler: async (_ctx, input) => accountService.prepareDriveFolderUpload(drivePrepareFolderUploadSchema.parse(input)),
+    },
+    completeDriveUpload: {
+      kind: "invoke",
+      channel: "synapse:account:drive:uploads:complete",
+      request: driveSessionSchema,
+      response: driveItemSchema,
+      handler: async (_ctx, input) => accountService.completeDriveUpload(driveSessionSchema.parse(input).sessionId),
+    },
+    cancelDriveUpload: {
+      kind: "invoke",
+      channel: "synapse:account:drive:uploads:cancel",
+      request: driveSessionSchema,
+      response: okSchema,
+      handler: async (_ctx, input) => accountService.cancelDriveUpload(driveSessionSchema.parse(input).sessionId),
+    },
+    createDriveFolder: {
+      kind: "invoke",
+      channel: "synapse:account:drive:folders:create",
+      request: driveFolderCreateSchema,
+      response: driveItemSchema,
+      handler: async (_ctx, input) => accountService.createDriveFolder(driveFolderCreateSchema.parse(input)),
+    },
+    renameDriveItem: {
+      kind: "invoke",
+      channel: "synapse:account:drive:items:rename",
+      request: driveRenameSchema,
+      response: driveItemSchema,
+      handler: async (_ctx, input) => {
+        const parsed = driveRenameSchema.parse(input)
+        return accountService.renameDriveItem(parsed.itemId, parsed.name)
+      },
+    },
+    moveDriveItem: {
+      kind: "invoke",
+      channel: "synapse:account:drive:items:move",
+      request: driveMoveSchema,
+      response: driveItemSchema,
+      handler: async (_ctx, input) => {
+        const parsed = driveMoveSchema.parse(input)
+        return accountService.moveDriveItem(parsed.itemId, parsed.parentId)
+      },
+    },
+    deleteDriveItem: {
+      kind: "invoke",
+      channel: "synapse:account:drive:items:delete",
+      request: driveItemIdSchema,
+      response: okSchema,
+      handler: async (_ctx, input) => accountService.deleteDriveItem(driveItemIdSchema.parse(input).itemId),
+    },
+    shareDriveItem: {
+      kind: "invoke",
+      channel: "synapse:account:drive:items:share",
+      request: driveItemIdSchema,
+      response: driveShareSchema,
+      handler: async (_ctx, input) => accountService.shareDriveItem(driveItemIdSchema.parse(input).itemId),
+    },
+    disableDriveShare: {
+      kind: "invoke",
+      channel: "synapse:account:drive:shares:disable",
+      request: driveShareIdSchema,
+      response: okSchema,
+      handler: async (_ctx, input) => accountService.disableDriveShare(driveShareIdSchema.parse(input).shareId),
+    },
+    getDriveUsage: {
+      kind: "invoke",
+      channel: "synapse:account:drive:usage:get",
+      request: z.void(),
+      response: driveUsageSchema,
+      handler: async () => accountService.getDriveUsage(),
     },
   },
   events: {

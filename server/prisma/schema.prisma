@@ -63,6 +63,9 @@ model User {
   modulePermissions   UserModulePermission[]
   webhooks            UserWebhook[]
   devices             UserDevice[]
+  driveItems          DriveItem[]
+  driveUsage          DriveUsage?
+  driveUploadSessions DriveUploadSession[]
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 }
@@ -256,6 +259,81 @@ model WebhookDeliveryReceipt {
 
   @@unique([deliveryId, clientInstanceId])
   @@index([deliveryId, sentAt])
+}
+
+model DriveItem {
+  id                   String               @id @default(cuid())
+  userId               String
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId             String?
+  parent               DriveItem?           @relation("DriveTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children             DriveItem[]          @relation("DriveTree")
+  type                 String               @db.VarChar(16)
+  name                 String               @db.VarChar(255)
+  size                 BigInt               @default(0)
+  mimeType             String?              @db.VarChar(255)
+  storageKey           String?              @unique
+  storageStatus        String               @db.VarChar(32)
+  uploadStatus         String               @db.VarChar(32)
+  storageDeletePending Boolean              @default(false)
+  deletedAt            DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  shares               DriveShare[]
+  uploadSessions       DriveUploadSession[]
+
+  @@index([userId, parentId, deletedAt, createdAt])
+  @@index([userId, deletedAt, updatedAt])
+  @@index([storageStatus])
+}
+
+model DriveShare {
+  id              String    @id @default(cuid())
+  shareId         String    @unique
+  itemId          String
+  item            DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  userId          String
+  type            String    @db.VarChar(16)
+  enabled         Boolean   @default(true)
+  passwordEnabled Boolean   @default(false)
+  passwordHash    String?
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  disabledAt      DateTime?
+
+  @@index([itemId, enabled])
+  @@index([userId, createdAt])
+}
+
+model DriveUsage {
+  userId        String   @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedBytes     BigInt   @default(0)
+  reservedBytes BigInt   @default(0)
+  quotaBytes    BigInt
+  updatedAt     DateTime @updatedAt
+}
+
+model DriveUploadSession {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId         String
+  item           DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  storageKey     String
+  expectedName   String    @db.VarChar(255)
+  expectedSize   BigInt
+  expectedMime   String?   @db.VarChar(255)
+  status         String    @db.VarChar(32)
+  credentialKind String    @db.VarChar(32)
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+  failedAt       DateTime?
+
+  @@index([userId, status, createdAt])
+  @@index([expiresAt, status])
+  @@index([itemId])
 }
 
 model AuditLog {

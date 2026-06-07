@@ -222,6 +222,37 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps account drive methods to account IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.account.listDriveItems({ parentId: null })
+    await bridge.account.prepareDriveUpload({ parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" })
+    await bridge.account.completeDriveUpload({ sessionId: "session-1" })
+    await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
+    await bridge.account.shareDriveItem({ itemId: "item-1" })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:items:list",
+      { parentId: null },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:uploads:prepare",
+      { parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:uploads:complete",
+      { sessionId: "session-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:folders:create",
+      { parentId: null, name: "交接材料" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:items:share",
+      { itemId: "item-1" },
+    )
+  })
+
   it("subscribes content change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

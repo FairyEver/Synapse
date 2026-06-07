@@ -61,6 +61,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | `scheduler` | 定时任务、运行记录、运行时状态检查和 action type 查询 | `desktop/synapse-capabilities/shared/scheduler-domain.ts` |
 | `workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
 | `content` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
+| `drive` | 云盘文件、文件夹、分享链接和用量管理 | `desktop/synapse-capabilities/shared/drive-domain.ts` |
 
 领域边界必须清晰。跨领域暴露通过 shared registry 和 action router 完成。
 
@@ -74,6 +75,7 @@ MCP 是外部 Agent 和自动化的公开入口。工具名称由规范能力 ID
 database.table.list -> database_table_list
 scheduler.run.list -> scheduler_run_list
 content.skill.create -> content_skill_create
+drive.file.upload -> drive_file_upload
 ```
 
 工具参数使用与 HTTP action 参数一致的公开 JSON 字段名。
@@ -116,6 +118,10 @@ scheduler.action_type.list -> schedulerActionTypeList
 Content MCP 暴露 Rule、Skill 和 Prompt 的发布与维护能力。创建或更新前应先调用 `content_type_describe` 获取当前分类、图标、背景色和限制。
 
 Content MCP 的更新和删除只允许修改当前仓库身份创建的资源。它不负责安装内容到编辑器。
+
+## Drive MCP
+
+Drive MCP 暴露云盘文件、文件夹和分享能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证或预签名上传 URL。
 
 ## Repository And Variable MCP
 

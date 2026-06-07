@@ -123,6 +123,7 @@ vi.mock("@/modules/settings", () => ({ SettingsModule: () => <div>设置模块</
 vi.mock("@/modules/database", () => ({ DatabaseModule: () => <div>数据模块</div> }))
 vi.mock("@/modules/editor-scan", () => ({ EditorScanModule: () => <div>本机模块</div> }))
 vi.mock("@/modules/agent", () => ({ AgentModule: () => <div>对话模块</div> }))
+vi.mock("@/modules/drive", () => ({ DriveModule: () => <div>云盘模块</div> }))
 vi.mock("@/modules/task-scheduler", () => ({ TaskSchedulerModule: () => <div>定时模块</div> }))
 vi.mock("@/modules/automation", () => ({ AutomationModule: () => <div>自动化模块</div> }))
 vi.mock("@/modules/tools", () => ({ ToolsModule: () => <div>工具模块</div> }))

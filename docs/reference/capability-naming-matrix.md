@@ -98,5 +98,14 @@ Canonical capability ids use `<domain>.<resource>.<action>`. The local HTTP API 
 | `content.prompt.create` | `content_prompt_create` | `content.prompt.create` | `contentPromptCreate` |
 | `content.prompt.update` | `content_prompt_update` | `content.prompt.update` | `contentPromptUpdate` |
 | `content.prompt.delete` | `content_prompt_delete` | `content.prompt.delete` | `contentPromptDelete` |
+| `drive.item.list` | `drive_item_list` | `drive.item.list` | `driveItemList` |
+| `drive.file.upload` | `drive_file_upload` | `drive.file.upload` | `driveFileUpload` |
+| `drive.folder.upload` | `drive_folder_upload` | `drive.folder.upload` | `driveFolderUpload` |
+| `drive.folder.create` | `drive_folder_create` | `drive.folder.create` | `driveFolderCreate` |
+| `drive.item.move` | `drive_item_move` | `drive.item.move` | `driveItemMove` |
+| `drive.item.delete` | `drive_item_delete` | `drive.item.delete` | `driveItemDelete` |
+| `drive.share.create` | `drive_share_create` | `drive.share.create` | `driveShareCreate` |
+| `drive.share.disable` | `drive_share_disable` | `drive.share.disable` | `driveShareDisable` |
+| `drive.usage.get` | `drive_usage_get` | `drive.usage.get` | `driveUsageGet` |
 
 Legacy public names are intentionally not aliases; only the canonical names in this matrix are supported.

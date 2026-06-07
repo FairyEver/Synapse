@@ -9,6 +9,7 @@ import { AdminAuthModule } from "./admin-auth/admin-auth.module"
 import { UserAuthModule } from "./auth/user-auth.module"
 import { BackupModule } from "./backup/backup.module"
 import { DashboardModule } from "./dashboard/dashboard.module"
+import { DriveModule } from "./drive/drive.module"
 import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
 import { LiveModule } from "./live/live.module"
@@ -66,6 +67,7 @@ type RequestLogObject = {
     WebhookModule,
     AdminAuthModule,
     DashboardModule,
+    DriveModule,
     AdminModule,
     BackupModule,
     HealthModule,

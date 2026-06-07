@@ -223,6 +223,23 @@ export type DesktopAuthorizationResult = {
   expiresAt: string
 }
 
+export type AdminDriveItemRow = {
+  id: string
+  parentId: string | null
+  type: 'file' | 'folder'
+  name: string
+  size: string
+  mimeType: string | null
+  storageStatus: 'pending' | 'active' | 'delete_pending' | 'deleted' | 'failed'
+  shared: boolean
+  activeShareId?: string | null
+  createdAt: string
+  updatedAt: string
+  userId: string
+  userEmail?: string | null
+  storageDeletePending: boolean
+}
+
 type RequestOptions = RequestInit
 
 const dashboardApiBasePath = '/api/dashboard'
@@ -612,6 +629,15 @@ export const adminApi = {
   cleanupLogs: (before: Date) =>
     request<{ deleted: number; failures?: number }>(
       `${adminApiBasePath}/logs/cleanup?${new URLSearchParams({ before: dateQueryValue(before) }).toString()}`,
+      { method: 'DELETE' }
+    ),
+  listDriveItems: (options: PaginationOptions = {}) =>
+    request<PaginatedResponse<AdminDriveItemRow>>(
+      `${adminApiBasePath}/drive/items${paginationSuffix(options)}`
+    ),
+  deleteDriveItem: (id: string) =>
+    request<{ ok: true }>(
+      `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}`,
       { method: 'DELETE' }
     ),
 }

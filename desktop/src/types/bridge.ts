@@ -19,7 +19,14 @@ import type {
   SynapseAccountState,
   SynapseAccountStateChangedEvent,
 } from "./account"
-import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
+import type {
+  DashboardWebhookDto,
+  DriveFolderUploadPrepareResult,
+  DriveItemDto,
+  DriveShareDto,
+  DriveUploadPrepareResult,
+  DriveUsageDto,
+} from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   SynapseLiveState,
   SynapseLiveStateChangedEvent,
@@ -614,6 +621,18 @@ export type SynapseBridge = {
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>
+    listDriveItems: (input: { parentId?: string | null }) => Promise<DriveItemDto[]>
+    prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }) => Promise<DriveUploadPrepareResult>
+    prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
+    completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>
+    cancelDriveUpload: (input: { sessionId: string }) => Promise<{ ok: true }>
+    createDriveFolder: (input: { parentId?: string | null; name: string }) => Promise<DriveItemDto>
+    renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
+    moveDriveItem: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
+    deleteDriveItem: (input: { itemId: string }) => Promise<{ ok: true }>
+    shareDriveItem: (input: { itemId: string }) => Promise<DriveShareDto>
+    disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
+    getDriveUsage: () => Promise<DriveUsageDto>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
   }
   live: {
