@@ -18,7 +18,6 @@ import {
   upsertLiveClient,
 } from './live-client-utils'
 import { formatModulePermissionSummary } from './module-permissions'
-import { UserLiveClientsSheet } from './user-live-clients-sheet'
 import { UserModulePermissionsSheet } from './user-module-permissions-sheet'
 import { useUserModulePermissionsEditor } from './use-user-module-permissions-editor'
 import { getUsersTableError, getUsersTableLoading } from './users-page-error'
@@ -34,9 +33,6 @@ export default function UsersPage() {
     { id: 'createdAt', desc: true },
   ])
   const [liveClients, setLiveClients] = useState<LiveClientRow[]>([])
-  const [liveClientsUser, setLiveClientsUser] = useState<AdminUserRow | null>(
-    null
-  )
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
   const permissionEditor = useUserModulePermissionsEditor()
@@ -191,13 +187,6 @@ export default function UsersPage() {
           <Button
             variant='ghost'
             className='h-8 px-2'
-            onClick={() => setLiveClientsUser(row.original)}
-          >
-            客户端
-          </Button>
-          <Button
-            variant='ghost'
-            className='h-8 px-2'
             onClick={() => void permissionEditor.open(row.original)}
           >
             模块权限
@@ -219,9 +208,6 @@ export default function UsersPage() {
       enableHiding: false,
     },
   ]
-  const selectedUserLiveClients = liveClientsUser
-    ? liveClients.filter((client) => client.userId === liveClientsUser.id)
-    : []
 
   return (
     <>
@@ -262,12 +248,6 @@ export default function UsersPage() {
           onRetry={permissionEditor.retry}
           onSave={() => void permissionEditor.save()}
           onToggle={permissionEditor.toggle}
-        />
-        <UserLiveClientsSheet
-          open={Boolean(liveClientsUser)}
-          user={liveClientsUser}
-          clients={selectedUserLiveClients}
-          onClose={() => setLiveClientsUser(null)}
         />
       </Main>
     </>
