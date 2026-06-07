@@ -9,6 +9,7 @@ import {
   Settings,
   Command,
   Webhook,
+  MonitorSmartphone,
 } from 'lucide-react'
 import type { AuthUser } from '@/stores/auth-store'
 import { type SidebarData } from '../types'
@@ -25,6 +26,11 @@ const adminNavGroup = {
       title: '用户管理',
       url: '/users',
       icon: Users,
+    },
+    {
+      title: '设备',
+      url: '/devices',
+      icon: MonitorSmartphone,
     },
     {
       title: '团队管理',
@@ -61,6 +67,11 @@ const userAccountNavGroup = {
       title: 'Webhooks',
       url: '/webhooks',
       icon: Webhook,
+    },
+    {
+      title: '我的设备',
+      url: '/my-devices',
+      icon: MonitorSmartphone,
     },
     {
       title: '设置',

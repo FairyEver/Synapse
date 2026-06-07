@@ -8,13 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import type { LiveClientRow } from '@/lib/api'
-import {
-  liveClientStatusLabels,
-  liveClientStatusVariants,
-  mergeOwnLiveClientSnapshot,
-  upsertOwnLiveClient,
-} from '@/features/users/live-client-utils'
 
 const maxDisplayNameLength = 40
 
@@ -22,18 +15,10 @@ export function ProfileSettings() {
   const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
   const setAuthUser = useAuthStore((state) => state.auth.setUser)
-  const liveClientsSessionId =
-    authUser?.role === 'user' ? authUser.sessionId : 'anonymous'
   const [displayName, setDisplayName] = useState('')
-  const [liveClients, setLiveClients] = useState<LiveClientRow[]>([])
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['dashboard-me'],
     queryFn: dashboardApi.getMe,
-    enabled: authUser?.role === 'user',
-  })
-  const { data: liveClientSnapshot, isLoading: isLiveClientsLoading } = useQuery({
-    queryKey: ['dashboard-live-clients', liveClientsSessionId],
-    queryFn: dashboardApi.listLiveClients,
     enabled: authUser?.role === 'user',
   })
   const updateProfile = useMutation({
@@ -55,31 +40,6 @@ export function ProfileSettings() {
   useEffect(() => {
     if (data) setDisplayName(data.user.displayName ?? '')
   }, [data])
-
-  useEffect(() => {
-    setLiveClients([])
-  }, [authUser?.role, authUser?.sessionId])
-
-  useEffect(() => {
-    if (liveClientSnapshot) {
-      setLiveClients((current) =>
-        mergeOwnLiveClientSnapshot(current, liveClientSnapshot)
-      )
-    }
-  }, [liveClientSnapshot])
-
-  useEffect(() => {
-    if (authUser?.role !== 'user') return undefined
-
-    return dashboardApi.subscribeLiveClients(
-      (event) => setLiveClients((current) => upsertOwnLiveClient(current, event)),
-      () => {
-        void queryClient.invalidateQueries({
-          queryKey: ['dashboard-live-clients', liveClientsSessionId],
-        })
-      }
-    )
-  }, [authUser?.role, liveClientsSessionId, queryClient])
 
   if (authUser?.role !== 'user') {
     return <div className='text-sm text-muted-foreground'>暂无可配置项</div>
@@ -161,35 +121,6 @@ export function ProfileSettings() {
               保存
             </Button>
           </form>
-
-          <div className='space-y-3'>
-            <h3 className='text-lg font-medium'>客户端</h3>
-            {isLiveClientsLoading ? (
-              <div className='text-sm text-muted-foreground'>加载中...</div>
-            ) : null}
-            {!isLiveClientsLoading && liveClients.length === 0 ? (
-              <div className='text-sm text-muted-foreground'>暂无客户端</div>
-            ) : null}
-            {liveClients.map((client) => (
-              <div
-                key={client.clientInstanceId}
-                className='grid gap-2 border-b pb-3 text-sm last:border-b-0'
-              >
-                <div className='flex items-center justify-between gap-3'>
-                  <span className='min-w-0 truncate font-medium'>
-                    {client.deviceName}
-                  </span>
-                  <Badge variant={liveClientStatusVariants[client.status]}>
-                    {liveClientStatusLabels[client.status]}
-                  </Badge>
-                </div>
-                <div className='flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground'>
-                  <span>{client.platform}</span>
-                  <span>{client.appVersion}</span>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </section>

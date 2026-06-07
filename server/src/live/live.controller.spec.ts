@@ -1,12 +1,26 @@
 import { firstValueFrom, of } from "rxjs"
 import { describe, expect, it, vi } from "vitest"
 import { LiveController } from "./live.controller"
+import type { LiveDeviceService } from "./live-device.service"
 import type { LiveQueryService } from "./live-query.service"
 import type { LiveStreamService } from "./live-stream.service"
 import type { LiveClientChangedEvent } from "./live.types"
 
-function createController(query: Partial<LiveQueryService> = {}, stream: Partial<LiveStreamService> = {}) {
-  return new LiveController(query as LiveQueryService, stream as LiveStreamService)
+function createController(
+  query: Partial<LiveQueryService> = {},
+  stream: Partial<LiveStreamService> = {},
+  devices: Partial<LiveDeviceService> = {},
+) {
+  const ControllerCtor = LiveController as new (
+    query: LiveQueryService,
+    stream: LiveStreamService,
+    devices: LiveDeviceService,
+  ) => LiveController
+  return new ControllerCtor(
+    query as LiveQueryService,
+    stream as LiveStreamService,
+    devices as LiveDeviceService,
+  )
 }
 
 function createEvent(userId = "user-1"): LiveClientChangedEvent {
@@ -51,6 +65,40 @@ describe("LiveController", () => {
       { clientInstanceId: "client-a" },
     ])
     expect(listUserClients).toHaveBeenCalledWith("user-1")
+  })
+
+  it("returns only current user's devices for dashboard users", async () => {
+    const listUserDevices = vi.fn().mockResolvedValue([{ clientInstanceId: "client-a", displayName: "工作电脑" }])
+    const controller = createController({}, {}, { listUserDevices })
+
+    await expect(controller.listDashboardDevices({ user: { id: "user-1" } } as never)).resolves.toEqual([
+      { clientInstanceId: "client-a", displayName: "工作电脑" },
+    ])
+    expect(listUserDevices).toHaveBeenCalledWith("user-1")
+  })
+
+  it("renames only the current user's device", async () => {
+    const renameUserDevice = vi.fn().mockResolvedValue({ clientInstanceId: "client-a", displayName: "Studio Mac" })
+    const controller = createController({}, {}, { renameUserDevice })
+
+    await expect(
+      controller.renameDashboardDevice(
+        "client-a",
+        { displayName: " Studio Mac " },
+        { user: { id: "user-1" } } as never,
+      ),
+    ).resolves.toEqual({ clientInstanceId: "client-a", displayName: "Studio Mac" })
+    expect(renameUserDevice).toHaveBeenCalledWith("user-1", "client-a", "Studio Mac")
+  })
+
+  it("rejects invalid dashboard device rename payloads", () => {
+    const renameUserDevice = vi.fn()
+    const controller = createController({}, {}, { renameUserDevice })
+
+    expect(() =>
+      controller.renameDashboardDevice("client-a", { displayName: "" }, { user: { id: "user-1" } } as never),
+    ).toThrow("设备名称无效")
+    expect(renameUserDevice).not.toHaveBeenCalled()
   })
 
   it("maps admin stream events to SSE messages", async () => {

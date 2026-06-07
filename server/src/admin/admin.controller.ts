@@ -7,6 +7,7 @@ import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
+import { LiveDeviceService } from "../live/live-device.service"
 import { isActiveModulePermissionKey } from "../permissions/permission-registry"
 import { AdminService } from "./admin.service"
 
@@ -33,6 +34,7 @@ const userModulePermissionsSchema = z.object({
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
 const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
+const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(AdminAuthGuard)
@@ -43,6 +45,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly auditLog: AuditLogService,
+    private readonly devices: LiveDeviceService,
   ) {}
 
   @Get("/audit-logs")
@@ -123,6 +126,19 @@ export class AdminController {
     await this.recordAdminRead(request, {
       action: "admin.users.list",
       targetType: "user",
+      targetId: "list",
+      detail: { page: pagination.page, pageSize: pagination.pageSize },
+    })
+    return result
+  }
+
+  @Get("/devices")
+  async listDevices(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: deviceSortFields })
+    const result = await this.devices.listAdminDevices(pagination)
+    await this.recordAdminRead(request, {
+      action: "admin.devices.list",
+      targetType: "device",
       targetId: "list",
       detail: { page: pagination.page, pageSize: pagination.pageSize },
     })

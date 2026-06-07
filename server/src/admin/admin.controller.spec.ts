@@ -2,14 +2,22 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AdminController } from "./admin.controller"
 import type { AdminService } from "./admin.service"
 import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.service"
+import type { LiveDeviceService } from "../live/live-device.service"
 
 function createController(
   service: Partial<AdminService>,
   auditLog: Partial<AuditLogService> = {},
+  devices: Partial<LiveDeviceService> = {},
 ) {
-  return new AdminController(
+  const ControllerCtor = AdminController as new (
+    service: AdminService,
+    auditLog: AuditLogService,
+    devices: LiveDeviceService,
+  ) => AdminController
+  return new ControllerCtor(
     service as AdminService,
     { record: vi.fn().mockResolvedValue(undefined), ...auditLog } as AuditLogService,
+    devices as LiveDeviceService,
   )
 }
 
@@ -138,6 +146,32 @@ describe("AdminController", () => {
       action: "admin.user_module_permissions.list",
       targetType: "user",
       targetId: "user-1",
+    }))
+  })
+
+  it("lists devices for administrators and records audit metadata", async () => {
+    const listAdminDevices = vi.fn().mockResolvedValue({ data: [], total: 0, page: 2, pageSize: 10 })
+    const record = vi.fn().mockResolvedValue(undefined)
+    const controller = createController({}, { record }, { listAdminDevices })
+
+    await expect(controller.listDevices(
+      { page: "2", pageSize: "10", sortBy: "lastSeenAt", sortOrder: "desc" },
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.10" } as never,
+    )).resolves.toEqual({ data: [], total: 0, page: 2, pageSize: 10 })
+
+    expect(listAdminDevices).toHaveBeenCalledWith({
+      page: 2,
+      pageSize: 10,
+      sortBy: "lastSeenAt",
+      sortOrder: "desc",
+    })
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.devices.list",
+      targetType: "device",
+      targetId: "list",
+      detail: { page: 2, pageSize: 10 },
+      ipAddress: "203.0.113.10",
     }))
   })
 
