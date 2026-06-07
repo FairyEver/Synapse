@@ -42,13 +42,14 @@ import { EditorScanModule } from "@/modules/editor-scan"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import { AutomationModule } from "@/modules/automation"
+import { DriveModule } from "@/modules/drive"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import { ToolsModule } from "@/modules/tools"
 import type { SynapseContentType } from "@/types/content"
 
-type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "automation" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "tools" | "settings"
+type AppTabId = SynapseContentType | "agent" | "drive" | "database" | "task-scheduler" | "automation" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "tools" | "settings"
 type AppTabChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 type DialogKind = "install"
 type ContentDialogState = Record<DialogKind, boolean>
@@ -190,6 +191,7 @@ function MainApp() {
         label: CONTENT_TAB_LABELS[contentType],
       })),
       { id: "agent" as const, label: "对话" },
+      { id: "drive" as const, label: "云盘" },
       { id: "database" as const, label: "数据" },
       { id: "task-scheduler" as const, label: "定时" },
       { id: "automation" as const, label: "自动化" },
@@ -371,6 +373,11 @@ function MainApp() {
               />
             </ErrorBoundary>
           </div>
+          {activeTab === "drive" ? (
+            <ErrorBoundary fallbackTitle="云盘模块出现问题">
+              <DriveModule />
+            </ErrorBoundary>
+          ) : null}
           {activeTab === "database" ? (
             <ErrorBoundary fallbackTitle="数据库模块出现问题">
               <DatabaseModule />

@@ -7,7 +7,14 @@ import type {
   SynapseAccountProfile,
   SynapseAccountState,
 } from "../../src/types/account"
-import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
+import type {
+  DashboardWebhookDto,
+  DriveFolderUploadPrepareResult,
+  DriveItemDto,
+  DriveShareDto,
+  DriveUploadPrepareResult,
+  DriveUsageDto,
+} from "@synapse/shared" with { "resolution-mode": "import" }
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
@@ -165,6 +172,75 @@ export class AccountService {
       `${apiBaseUrl()}/dashboard/webhooks`,
       "Webhook 列表加载失败。",
     )
+  }
+
+  async listDriveItems(parentId: string | null): Promise<DriveItemDto[]> {
+    const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""
+    return this.getAuthenticatedJson<DriveItemDto[]>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
+  }
+
+  async prepareDriveUpload(input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }): Promise<DriveUploadPrepareResult> {
+    return this.requestAuthenticatedJson<DriveUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/prepare`, {
+      parentId: input.parentId ?? null,
+      name: input.name,
+      size: input.size,
+      mimeType: input.mimeType ?? null,
+    }, "上传准备失败。")
+  }
+
+  async prepareDriveFolderUpload(input: {
+    parentId?: string | null
+    folderName: string
+    files: Array<{ relativePath: string; size: string; mimeType?: string | null }>
+  }): Promise<DriveFolderUploadPrepareResult> {
+    return this.requestAuthenticatedJson<DriveFolderUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/folder/prepare`, {
+      parentId: input.parentId ?? null,
+      folderName: input.folderName,
+      files: input.files.map((file) => ({
+        relativePath: file.relativePath,
+        size: file.size,
+        mimeType: file.mimeType ?? null,
+      })),
+    }, "文件夹上传准备失败。")
+  }
+
+  async completeDriveUpload(sessionId: string): Promise<DriveItemDto> {
+    return this.requestAuthenticatedJson<DriveItemDto>("POST", `${apiBaseUrl()}/drive/uploads/${encodeURIComponent(sessionId)}/complete`, undefined, "上传确认失败。")
+  }
+
+  async cancelDriveUpload(sessionId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>("POST", `${apiBaseUrl()}/drive/uploads/${encodeURIComponent(sessionId)}/cancel`, undefined, "上传取消失败。")
+  }
+
+  async createDriveFolder(input: { parentId?: string | null; name: string }): Promise<DriveItemDto> {
+    return this.requestAuthenticatedJson<DriveItemDto>("POST", `${apiBaseUrl()}/drive/folders`, {
+      parentId: input.parentId ?? null,
+      name: input.name,
+    }, "文件夹创建失败。")
+  }
+
+  async renameDriveItem(itemId: string, name: string): Promise<DriveItemDto> {
+    return this.requestAuthenticatedJson<DriveItemDto>("PATCH", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, { name }, "重命名失败。")
+  }
+
+  async moveDriveItem(itemId: string, parentId: string | null): Promise<DriveItemDto> {
+    return this.requestAuthenticatedJson<DriveItemDto>("PATCH", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, { parentId }, "移动失败。")
+  }
+
+  async deleteDriveItem(itemId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, undefined, "删除失败。")
+  }
+
+  async shareDriveItem(itemId: string): Promise<DriveShareDto> {
+    return this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, undefined, "分享失败。")
+  }
+
+  async disableDriveShare(shareId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/shares/${encodeURIComponent(shareId)}`, undefined, "取消分享失败。")
+  }
+
+  async getDriveUsage(): Promise<DriveUsageDto> {
+    return this.getAuthenticatedJson<DriveUsageDto>(`${apiBaseUrl()}/drive/usage`, "云盘用量加载失败。")
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
@@ -563,6 +639,10 @@ export class AccountService {
   }
 
   private async getAuthenticatedJson<T>(url: string, errorMessage: string): Promise<T> {
+    return this.requestAuthenticatedJson<T>("GET", url, undefined, errorMessage)
+  }
+
+  private async requestAuthenticatedJson<T>(method: string, url: string, body: unknown, errorMessage: string): Promise<T> {
     let token = this.accessToken
     if (!token) {
       await this.refreshFromStorage()
@@ -570,19 +650,24 @@ export class AccountService {
     }
     if (!token) throw new Error("账号未登录。")
 
-    let response = await this.fetchImpl(url, {
-      headers: { Authorization: `Bearer ${token}` },
+    const request = () => this.fetchImpl(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
     })
+
+    let response = await request()
     if (response.status === 401 || response.status === 403) {
       await this.refreshFromStorage()
       token = this.accessToken
       if (token) {
-        response = await this.fetchImpl(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
+        response = await request()
       }
     }
-    if (!response.ok) throw await createHttpError("GET", url, response, errorMessage)
+    if (!response.ok) throw await createHttpError(method, url, response, errorMessage)
     const text = await response.text()
     return (text ? JSON.parse(text) : undefined) as T
   }
