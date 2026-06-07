@@ -24,6 +24,7 @@ export type PermissionAction =
   | "secret.read"
   | "secret.write"
   | "scheduler.mutate"
+  | "automation.mutate"
   | "workflow.mutate"
   | "content.mutate"
 
