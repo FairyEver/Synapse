@@ -23,6 +23,7 @@ describe('getSidebarData', () => {
     expect(data.user.profileUrl).toBeUndefined()
     expect(data.user.name).toBe('Ada Lovelace')
     expect(collectUrls(data)).toContain('/webhooks')
+    expect(collectUrls(data)).toContain('/webhook-deliveries')
     expect(collectUrls(data)).toContain('/settings')
     expect(collectUrls(data)).not.toContain('/me')
   })
@@ -38,6 +39,7 @@ describe('getSidebarData', () => {
 
     expect(data.user.profileUrl).toBeUndefined()
     expect(data.user.name).toBe('admin@example.com')
+    expect(collectUrls(data)).toContain('/webhook-deliveries')
     expect(collectUrls(data)).not.toContain('/webhooks')
     expect(collectUrls(data)).not.toContain('/me')
   })

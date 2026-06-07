@@ -5,6 +5,7 @@ import {
   Mail,
   FileText,
   HardDrive,
+  History,
   ScrollText,
   Settings,
   Command,
@@ -42,6 +43,11 @@ const adminNavGroup = {
       icon: FileText,
     },
     {
+      title: 'Webhook 历史',
+      url: '/webhook-deliveries',
+      icon: History,
+    },
+    {
       title: '备份',
       url: '/backup',
       icon: HardDrive,
@@ -61,6 +67,11 @@ const userAccountNavGroup = {
       title: 'Webhooks',
       url: '/webhooks',
       icon: Webhook,
+    },
+    {
+      title: 'Webhook 历史',
+      url: '/webhook-deliveries',
+      icon: History,
     },
     {
       title: '设置',

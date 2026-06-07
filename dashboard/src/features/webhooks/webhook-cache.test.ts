@@ -1,7 +1,7 @@
 import type { DashboardWebhookDto } from '@synapse/shared'
 import { describe, expect, it } from 'vitest'
 
-import { removeDeletedWebhookFromCache } from './index'
+import { getWebhookDeliveriesHref, removeDeletedWebhookFromCache } from './index'
 
 function webhook(id: string): DashboardWebhookDto {
   return {
@@ -16,6 +16,15 @@ function webhook(id: string): DashboardWebhookDto {
 }
 
 describe('removeDeletedWebhookFromCache', () => {
+  it('builds a filtered history href for a webhook', () => {
+    expect(getWebhookDeliveriesHref('webhook-1')).toBe(
+      '/webhook-deliveries?webhookId=webhook-1'
+    )
+    expect(getWebhookDeliveriesHref('webhook/with space')).toBe(
+      '/webhook-deliveries?webhookId=webhook%2Fwith+space'
+    )
+  })
+
   it('removes the webhook id supplied by the delete mutation variables', () => {
     expect(removeDeletedWebhookFromCache([webhook('keep'), webhook('delete')], 'delete'))
       .toEqual([webhook('keep')])
