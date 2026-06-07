@@ -109,6 +109,30 @@ describe("AutomationService", () => {
     await runPromise
   })
 
+  it("clears runtime running markers when stop times out waiting for active runs", async () => {
+    const controlled = manuallyResolvedAction()
+    const harness = createHarness({ action: controlled.action })
+    const item = await harness.service.automationCreate(createAutomationInput())
+    const runPromise = harness.service.runNow(item.id)
+    await waitFor(async () => harness.service.automationRuntimeInspect().runningItemIds.includes(item.id))
+
+    vi.useFakeTimers()
+    try {
+      const stopPromise = harness.service.stop()
+      await vi.advanceTimersByTimeAsync(3_000)
+      await stopPromise
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(harness.service.automationRuntimeInspect().runningItemIds).toEqual([])
+    const [listed] = await harness.service.automationList()
+    expect(listed?.activeRun).toBeUndefined()
+
+    controlled.resolve()
+    await runPromise
+  })
+
   it("emits automation change events when a run finishes", async () => {
     const emit = vi.fn()
     const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
@@ -695,6 +719,29 @@ function longRunningAction(): MainActionDefinition<TestActionConfig> {
         resolve({ status: "cancelled", summary: "已停止" })
       }, { once: true })
     }),
+  }
+}
+
+function manuallyResolvedAction(): {
+  readonly action: MainActionDefinition<TestActionConfig>
+  readonly resolve: () => void
+} {
+  type ActionResult = Awaited<ReturnType<MainActionDefinition<TestActionConfig>["execute"]>>
+  let resolveRun: ((value: ActionResult) => void) | undefined
+  return {
+    action: {
+      ...testAction,
+      execute: async () => new Promise<ActionResult>((resolve) => {
+        resolveRun = resolve
+      }),
+    },
+    resolve: () => {
+      resolveRun?.({
+        status: "success",
+        summary: "ok",
+        outputs: { stdout: "ok" },
+      })
+    },
   }
 }
 

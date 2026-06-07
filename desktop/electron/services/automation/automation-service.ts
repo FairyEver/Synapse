@@ -131,8 +131,12 @@ export class AutomationService {
       clearTimeout(timer)
     }
     this.timers.clear()
-    await this.stopActiveRuns()
-    this.started = false
+    try {
+      await this.stopActiveRuns()
+    } finally {
+      this.runningItemIds.clear()
+      this.started = false
+    }
   }
 
   async automationList(): Promise<AutomationItem[]> {
