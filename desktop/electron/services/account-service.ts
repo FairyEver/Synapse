@@ -194,8 +194,16 @@ export class AccountService {
         const current = await this.namespace.getSingleton()
         await this.namespace.setSingleton({ ...(current ?? {}), activeAttempt: attempt })
       })
-      if (this.authRevision !== revision) return { state: this.state, loginUrl }
-      this.setState({ status: "authenticating", loginUrl })
+    } catch (error) {
+      logger.warn("Failed to start desktop account login.", { error })
+      this.setState({ status: "error", message: "无法保存登录状态。" })
+      return { state: this.state, loginUrl }
+    }
+
+    if (this.authRevision !== revision) return { state: this.state, loginUrl }
+    this.setState({ status: "authenticating", loginUrl })
+
+    try {
       await this.openExternal(loginUrl)
       logger.info("Desktop account login started.", {
         operation: "startLogin",
@@ -203,8 +211,8 @@ export class AccountService {
         apiMode: apiMode(this.isPackaged),
       })
     } catch (error) {
-      logger.warn("Failed to start desktop account login.", { error })
-      this.setState({ status: "error", message: "无法保存登录状态。" })
+      logger.warn("Failed to open desktop account login URL.", { error })
+      this.setState({ status: "error", message: "无法打开浏览器，请检查默认浏览器设置后重试。" })
     }
 
     return { state: this.state, loginUrl }

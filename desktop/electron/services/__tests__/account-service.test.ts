@@ -136,6 +136,25 @@ describe("AccountService", () => {
     })
   })
 
+  it("reports browser open failures without blaming account storage", async () => {
+    const { namespace, openExternal, service } = await createTestAccountService()
+    openExternal.mockRejectedValueOnce(new Error("browser unavailable"))
+
+    const result = await service.startLogin()
+
+    expect(result.state).toEqual({
+      status: "error",
+      message: "无法打开浏览器，请检查默认浏览器设置后重试。",
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      activeAttempt: {
+        state: expect.any(String),
+        codeVerifier: expect.any(String),
+        apiBaseUrl: "http://localhost:3000/api",
+      },
+    })
+  })
+
   it("logs login start success without leaking the login state", async () => {
     const { service } = await createTestAccountService()
 
