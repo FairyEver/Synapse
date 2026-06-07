@@ -59,6 +59,11 @@ const adminNavGroup = {
       icon: HardDrive,
     },
     {
+      title: '云盘',
+      url: '/drive',
+      icon: HardDrive,
+    },
+    {
       title: '系统日志',
       url: '/logs',
       icon: ScrollText,

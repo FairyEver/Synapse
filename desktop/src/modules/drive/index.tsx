@@ -145,6 +145,17 @@ function DriveModule() {
     }
   }, [loadItems])
 
+  const handleDisableShare = useCallback(async (item: DriveItemDto) => {
+    if (!item.activeShareId) return
+    try {
+      await requireSynapseBridge().account.disableDriveShare({ shareId: item.activeShareId })
+      toast("已取消分享")
+      await loadItems()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "取消分享失败"))
+    }
+  }, [loadItems])
+
   return (
     <section className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
@@ -217,6 +228,7 @@ function DriveModule() {
                         onMove={handleMove}
                         onDelete={handleDelete}
                         onShare={handleShare}
+                        onDisableShare={handleDisableShare}
                       />
                     </TableCell>
                   </TableRow>
@@ -241,12 +253,14 @@ function DriveItemMenu({
   onMove,
   onDelete,
   onShare,
+  onDisableShare,
 }: {
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
+  readonly onDisableShare: (item: DriveItemDto) => void
 }) {
   return (
     <DropdownMenu>
@@ -261,6 +275,9 @@ function DriveItemMenu({
             <Share2 data-icon="inline-start" />
             分享
           </DropdownMenuItem>
+          {item.activeShareId ? (
+            <DropdownMenuItem onClick={() => onDisableShare(item)}>取消分享</DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onDelete(item)}>

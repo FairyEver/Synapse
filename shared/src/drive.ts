@@ -13,6 +13,7 @@ export interface DriveItemDto {
   readonly mimeType: string | null
   readonly storageStatus: DriveStorageStatus
   readonly shared: boolean
+  readonly activeShareId?: string | null
   readonly createdAt: string
   readonly updatedAt: string
 }

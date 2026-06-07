@@ -33,6 +33,7 @@ import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
 import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
+import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
 import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
 import { createRepositoryCapabilityDispatcher } from "../capabilities/repository-dispatcher"
 import { createVariableCapabilityDispatcher } from "../capabilities/variable-dispatcher"
@@ -77,6 +78,7 @@ import { prepareContentIconImageBytes } from "../services/content-icon-image-ser
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
+import { accountService } from "../services/account-service"
 import {
   ScheduledTaskRepository,
   ScheduledTaskRunRepository,
@@ -537,10 +539,16 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       permissionGuard,
       auditSink,
     })
+    const driveDispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      permissionGuard,
+      auditSink,
+    })
 
     const actionRouter = createSynapseActionRouter({
       automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
+      driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(

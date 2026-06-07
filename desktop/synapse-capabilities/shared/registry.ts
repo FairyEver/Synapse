@@ -35,6 +35,11 @@ import {
   CONTENT_MCP_TOOL_ACTIONS,
   buildContentTools,
 } from "./content-domain"
+import {
+  DRIVE_DOMAIN,
+  DRIVE_MCP_TOOL_ACTIONS,
+  buildDriveTools,
+} from "./drive-domain"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
@@ -46,6 +51,7 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   VARIABLE_DOMAIN,
   WORKFLOW_DOMAIN,
   CONTENT_DOMAIN,
+  DRIVE_DOMAIN,
 ]
 
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
@@ -57,6 +63,7 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...VARIABLE_MCP_TOOL_ACTIONS,
   ...WORKFLOW_MCP_TOOL_ACTIONS,
   ...CONTENT_MCP_TOOL_ACTIONS,
+  ...DRIVE_MCP_TOOL_ACTIONS,
 }
 
 export function buildAllMcpTools(): McpToolDefinition[] {
@@ -69,6 +76,7 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildVariableTools(),
     ...buildWorkflowTools(),
     ...buildContentTools(),
+    ...buildDriveTools(),
   ]
 }
 

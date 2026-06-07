@@ -43,7 +43,7 @@ export type DriveItemRecord = {
   readonly storageStatus: string
   readonly createdAt: Date
   readonly updatedAt: Date
-  readonly shares?: readonly { readonly enabled: boolean }[]
+  readonly shares?: readonly { readonly id?: string; readonly enabled: boolean }[]
 }
 
 export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
@@ -56,6 +56,7 @@ export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
     mimeType: item.mimeType,
     storageStatus: item.storageStatus as DriveStorageStatus,
     shared: item.shares?.some((share) => share.enabled) ?? false,
+    activeShareId: item.shares?.find((share) => share.enabled)?.id ?? null,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   }

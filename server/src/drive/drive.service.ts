@@ -34,7 +34,7 @@ type DrivePrismaClient = PrismaService | Prisma.TransactionClient
 const driveItemWithShares = {
   shares: {
     where: { enabled: true },
-    select: { enabled: true },
+    select: { id: true, enabled: true },
   },
 } as const
 
