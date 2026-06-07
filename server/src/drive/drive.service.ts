@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Optional } 
 import { Prisma } from "@prisma/client"
 import {
   buildDriveShareUrl,
+  type DriveFolderUploadPrepareResult,
   type DriveItemDto,
   type DriveShareDto,
   type DriveUploadPrepareResult,
@@ -24,6 +25,7 @@ import {
   toDriveItemDto,
   type DriveAdminFilters,
   type DriveAdminItemDto,
+  type DrivePrepareFolderUploadInput,
   type DrivePrepareUploadInput,
 } from "./drive.types"
 
@@ -121,6 +123,43 @@ export class DriveService {
         headers: upload.headers,
       },
     }
+  }
+
+  async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput): Promise<DriveFolderUploadPrepareResult> {
+    if (input.files.length === 0) throw new BadRequestException("文件夹不能为空。")
+    const root = await this.createFolder(userId, { parentId: input.parentId, name: input.folderName })
+    const folderIdsByPath = new Map<string, string>([["", root.id]])
+    const entries: DriveFolderUploadPrepareResult["entries"] = []
+
+    for (const file of input.files) {
+      const parts = normalizeRelativePath(file.relativePath)
+      const fileName = parts.at(-1)
+      if (!fileName) throw new BadRequestException("文件路径无效。")
+      const folderParts = parts.slice(0, -1)
+      let parentId = root.id
+      let currentPath = ""
+      for (const folderName of folderParts) {
+        currentPath = currentPath ? `${currentPath}/${folderName}` : folderName
+        const existingId = folderIdsByPath.get(currentPath)
+        if (existingId) {
+          parentId = existingId
+          continue
+        }
+        const folder = await this.createFolder(userId, { parentId, name: folderName })
+        folderIdsByPath.set(currentPath, folder.id)
+        parentId = folder.id
+      }
+      const prepared = await this.prepareUpload(userId, {
+        parentId,
+        name: fileName,
+        size: file.size,
+        mimeType: file.mimeType ?? null,
+        publicAppUrl: input.publicAppUrl,
+      })
+      entries.push({ relativePath: parts.join("/"), ...prepared })
+    }
+
+    return { root, entries }
   }
 
   async completeUpload(userId: string, sessionId: string): Promise<DriveItemDto> {
@@ -263,7 +302,7 @@ export class DriveService {
     }
   }
 
-  async resolvePublicShare(shareId: string): Promise<{ readonly item: DriveItemDto; readonly storageKey: string | null; readonly type: "file" | "folder" }> {
+  async resolvePublicShare(shareId: string): Promise<{ readonly item: DriveItemDto; readonly ownerId: string; readonly storageKey: string | null; readonly type: "file" | "folder" }> {
     const share = await this.prisma.driveShare.findFirst({
       where: { shareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       include: { item: { include: driveItemWithShares } },
@@ -273,6 +312,7 @@ export class DriveService {
     }
     return {
       item: toDriveItemDto(share.item),
+      ownerId: share.item.userId,
       storageKey: share.item.storageKey,
       type: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
     }
@@ -283,6 +323,65 @@ export class DriveService {
     if (share.type !== "file" || !share.storageKey) throw new NotFoundException("文件未找到")
     const download = await this.storage.createDownloadUrl({ key: share.storageKey, filename: share.item.name })
     return { url: download.url }
+  }
+
+  async listPublicFolderChildren(shareId: string): Promise<{ readonly item: DriveItemDto; readonly children: DriveItemDto[] }> {
+    const share = await this.resolvePublicShare(shareId)
+    if (share.type !== "folder") throw new NotFoundException("文件未找到")
+    const children = await this.prisma.driveItem.findMany({
+      where: { userId: share.ownerId, parentId: share.item.id, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      include: driveItemWithShares,
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+    })
+    return { item: share.item, children: children.map(toDriveItemDto) }
+  }
+
+  async createDownloadUrlForShareChild(shareId: string, itemId: string): Promise<{ readonly url: string }> {
+    const share = await this.resolvePublicShare(shareId)
+    if (share.type !== "folder") throw new NotFoundException("文件未找到")
+    const child = await this.prisma.driveItem.findFirst({
+      where: {
+        id: itemId,
+        userId: share.ownerId,
+        type: DRIVE_ITEM_TYPE.file,
+        storageStatus: DRIVE_STORAGE_STATUS.active,
+        deletedAt: null,
+      },
+      include: driveItemWithShares,
+    })
+    if (!child || !child.storageKey || !await this.isDescendantOf(child.id, share.item.id)) {
+      throw new NotFoundException("文件未找到")
+    }
+    const download = await this.storage.createDownloadUrl({ key: child.storageKey, filename: child.name })
+    return { url: download.url }
+  }
+
+  async createFolderZipEntriesForShare(shareId: string): Promise<Array<{ readonly path: string; readonly url: string }>> {
+    const share = await this.resolvePublicShare(shareId)
+    if (share.type !== "folder") throw new NotFoundException("文件未找到")
+    const entries: Array<{ readonly path: string; readonly url: string }> = []
+    const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: share.item.id, prefix: "" }]
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const children = await this.prisma.driveItem.findMany({
+        where: { userId: share.ownerId, parentId: current.parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+        include: driveItemWithShares,
+        orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+      })
+      for (const child of children) {
+        const childPath = current.prefix ? `${current.prefix}/${child.name}` : child.name
+        if (child.type === DRIVE_ITEM_TYPE.folder) {
+          queue.push({ parentId: child.id, prefix: childPath })
+          continue
+        }
+        if (!child.storageKey) continue
+        const download = await this.storage.createDownloadUrl({ key: child.storageKey, filename: child.name })
+        entries.push({ path: childPath, url: download.url })
+      }
+    }
+
+    return entries
   }
 
   async listAdminItems(options: { pagination: PaginationQuery; filters: DriveAdminFilters }): Promise<PaginatedResponse<DriveAdminItemDto>> {
@@ -349,6 +448,21 @@ export class DriveService {
       })
       currentParentId = parent?.parentId ?? null
     }
+  }
+
+  private async isDescendantOf(itemId: string, ancestorId: string): Promise<boolean> {
+    let current = await this.prisma.driveItem.findUnique({
+      where: { id: itemId },
+      select: { parentId: true },
+    })
+    while (current?.parentId) {
+      if (current.parentId === ancestorId) return true
+      current = await this.prisma.driveItem.findUnique({
+        where: { id: current.parentId },
+        select: { parentId: true },
+      })
+    }
+    return false
   }
 
   private async failUploadSession(
@@ -489,6 +603,16 @@ function parseRequestedSize(value: string): bigint {
   const size = BigInt(value)
   if (size <= 0n) throw new BadRequestException("文件大小无效。")
   return size
+}
+
+function normalizeRelativePath(value: string): string[] {
+  const parts = value
+    .split(/[\\/]+/u)
+    .map((part) => normalizeDriveName(part))
+  if (parts.length === 0 || parts.some((part) => part === "." || part === "..")) {
+    throw new BadRequestException("文件路径无效。")
+  }
+  return parts
 }
 
 function toDriveShareDto(share: { id: string; shareId: string; itemId: string; enabled: boolean; createdAt: Date }, publicAppUrl: string): DriveShareDto {

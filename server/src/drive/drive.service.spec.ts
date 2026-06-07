@@ -94,6 +94,71 @@ describe("DriveService", () => {
     await expect(service.resolvePublicShare(share.shareId)).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it("prepares folder upload manifests with nested folders and file sessions", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const result = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      files: [
+        { relativePath: "brief.txt", size: "11", mimeType: "text/plain" },
+        { relativePath: "docs/spec.txt", size: "11", mimeType: "text/plain" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })
+
+    expect(result.root.name).toBe("交接材料")
+    expect(result.entries).toHaveLength(2)
+    expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual(["brief.txt", "docs/spec.txt"])
+    expect(result.entries.every((entry) => entry.upload.method === "PUT")).toBe(true)
+    const rootChildren = await service.listItems("user-1", result.root.id)
+    expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
+  })
+
+  it("lists public folder share children and keeps file share downloads scoped", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "交接材料" })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: folder.id,
+      name: "brief.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const share = await service.createShare("user-1", folder.id, "https://synapse.test")
+
+    const publicFolder = await service.listPublicFolderChildren(share.shareId)
+
+    expect(publicFolder.item.name).toBe("交接材料")
+    expect(publicFolder.children).toHaveLength(1)
+    expect(publicFolder.children[0]?.name).toBe("brief.txt")
+    const download = await service.createDownloadUrlForShareChild(share.shareId, prepared.item.id)
+    expect(download.url).toBe("https://cos.example/download")
+  })
+
+  it("builds public folder archive entries with relative paths", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      files: [{ relativePath: "docs/spec.txt", size: "11", mimeType: "text/plain" }],
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.entries[0]!.sessionId)
+    const share = await service.createShare("user-1", prepared.root.id, "https://synapse.test")
+
+    const entries = await service.createFolderZipEntriesForShare(share.shareId)
+
+    expect(entries).toEqual([{ path: "docs/spec.txt", url: "https://cos.example/download" }])
+  })
+
   it("expires pending sessions and releases reserved quota", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

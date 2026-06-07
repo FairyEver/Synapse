@@ -28,6 +28,22 @@ export interface DriveUploadPrepareResult {
   }
 }
 
+export interface DriveFolderUploadPrepareFileInput {
+  readonly relativePath: string
+  readonly size: string
+  readonly mimeType?: string | null
+}
+
+export interface DriveFolderUploadPrepareResult {
+  readonly root: DriveItemDto
+  readonly entries: Array<{
+    readonly relativePath: string
+    readonly sessionId: string
+    readonly item: DriveItemDto
+    readonly upload: DriveUploadPrepareResult["upload"]
+  }>
+}
+
 export interface DriveShareDto {
   readonly id: string
   readonly shareId: string

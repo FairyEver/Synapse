@@ -1,4 +1,5 @@
 import type {
+  DriveFolderUploadPrepareFileInput,
   DriveItemDto,
   DriveStorageStatus,
 } from "@synapse/shared"
@@ -8,6 +9,13 @@ export type DrivePrepareUploadInput = {
   readonly name: string
   readonly size: string
   readonly mimeType?: string | null
+  readonly publicAppUrl: string
+}
+
+export type DrivePrepareFolderUploadInput = {
+  readonly parentId: string | null
+  readonly folderName: string
+  readonly files: readonly DriveFolderUploadPrepareFileInput[]
   readonly publicAppUrl: string
 }
 
