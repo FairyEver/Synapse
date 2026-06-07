@@ -114,6 +114,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.config",
       "core.event-bus",
       "core.task-scheduler",
+      "core.automation",
       "core.action-runtime",
       "core.workflow",
       "core.workflow.snapshots",

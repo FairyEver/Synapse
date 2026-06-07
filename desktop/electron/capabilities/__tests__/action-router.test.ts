@@ -4,6 +4,7 @@ import { createSynapseActionRouter } from "../action-router"
 
 function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActionRouter>[0]> = {}) {
   return {
+    automationDispatch: vi.fn(),
     contentDispatch: vi.fn(),
     databaseDispatch: vi.fn(),
     modelPriceDispatch: vi.fn(),
@@ -28,6 +29,7 @@ describe("createSynapseActionRouter", () => {
       data: ["tables"],
     })
     expect(databaseDispatch).toHaveBeenCalledWith("database.table.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
@@ -47,6 +49,7 @@ describe("createSynapseActionRouter", () => {
       data: [],
     })
     expect(modelPriceDispatch).toHaveBeenCalledWith("model_price.rule.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
@@ -67,6 +70,7 @@ describe("createSynapseActionRouter", () => {
       data: [],
     })
     expect(repositoryDispatch).toHaveBeenCalledWith("repository.item.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
@@ -86,6 +90,7 @@ describe("createSynapseActionRouter", () => {
       data: [],
     })
     expect(schedulerDispatch).toHaveBeenCalledWith("scheduler.task.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
@@ -103,9 +108,28 @@ describe("createSynapseActionRouter", () => {
     await expect(router.dispatch("scheduler.run.list", { taskId: "task:1" }, { source: "api" }))
       .resolves.toEqual({ ok: true, data: [] })
     expect(schedulerDispatch).toHaveBeenCalledWith("scheduler.run.list", { taskId: "task:1" }, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
+    expect(deps.workflowDispatch).not.toHaveBeenCalled()
+  })
+
+  it("routes Automation actions to the Automation dispatcher", async () => {
+    const automationDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
+    const deps = createRouterDeps({ automationDispatch })
+    const router = createSynapseActionRouter(deps)
+
+    await expect(router.dispatch("automation.item.list", {}, { source: "api" })).resolves.toEqual({
+      ok: true,
+      data: [],
+    })
+    expect(automationDispatch).toHaveBeenCalledWith("automation.item.list", {}, { source: "api" })
+    expect(deps.contentDispatch).not.toHaveBeenCalled()
+    expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
+    expect(deps.schedulerDispatch).not.toHaveBeenCalled()
     expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
@@ -122,6 +146,7 @@ describe("createSynapseActionRouter", () => {
       data: [],
     })
     expect(variableDispatch).toHaveBeenCalledWith("variable.item.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
@@ -141,6 +166,7 @@ describe("createSynapseActionRouter", () => {
       data: [],
     })
     expect(workflowDispatch).toHaveBeenCalledWith("workflow.definition.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
@@ -160,6 +186,7 @@ describe("createSynapseActionRouter", () => {
       data: [],
     })
     expect(contentDispatch).toHaveBeenCalledWith("content.skill.list", {}, { source: "api" })
+    expect(deps.automationDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()

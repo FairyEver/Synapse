@@ -18,8 +18,10 @@ function postJson(port: number, payload: unknown): Promise<{ status: number; bod
       hostname: "127.0.0.1",
       port,
       path: "/mcp",
+      agent: false,
       headers: {
         "Content-Type": "application/json; charset=utf-8",
+        "Connection": "close",
         "Content-Length": body.length,
       },
     }, (res) => {
@@ -69,5 +71,48 @@ describe("MCP HTTP server", () => {
         serverInfo: { name: "synapse-mcp" },
       },
     })
+  })
+
+  it("lists Automation MCP tools", async () => {
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({
+      dispatch: vi.fn(),
+    })
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+    })
+
+    expect(response.status).toBe(200)
+    const payload = JSON.parse(response.body)
+    expect(payload.result.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([
+      "automation_item_list",
+      "automation_item_create",
+      "automation_run_execute",
+      "automation_trigger_type_list",
+      "automation_executor_type_list",
+    ]))
+  })
+
+  it("calls Automation tools through the action router", async () => {
+    const dispatch = vi.fn(async () => ({ ok: true, data: [{ id: "automation:1" }] }))
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({ dispatch })
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "automation_item_list",
+        arguments: { enabled: true },
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(dispatch).toHaveBeenCalledWith("automation.item.list", { enabled: true }, { source: "mcp-http" })
+    expect(JSON.parse(response.body).result.content[0].text).toBe(JSON.stringify([{ id: "automation:1" }], null, 2))
   })
 })

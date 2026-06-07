@@ -1,0 +1,193 @@
+# Synapse Automation MCP API Reference
+
+All tools are accessed through the `synapse-mcp` MCP server. Each tool maps to the same canonical Synapse API action.
+
+## Discovery
+
+### automation_trigger_type_list
+
+Input:
+
+```json
+{}
+```
+
+Returns trigger descriptors with `type`, `title`, `kind`, `defaultConfig`, `configSchema`, and optional `variables`.
+
+### automation_executor_type_list
+
+Input:
+
+```json
+{}
+```
+
+Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig`, and `configFields`.
+
+## Items
+
+### automation_item_list
+
+Input:
+
+```json
+{
+  "enabled": true,
+  "limit": 20,
+  "scope": { "type": "project", "projectId": "project-id" }
+}
+```
+
+All fields are optional. Returns public item summaries.
+
+### automation_item_get
+
+Input:
+
+```json
+{ "automationId": "automation:..." }
+```
+
+Returns one public item summary or `null`.
+
+### automation_item_create
+
+Input:
+
+```json
+{
+  "name": "Daily summary",
+  "description": "Optional description",
+  "enabled": true,
+  "scope": { "type": "global" },
+  "cwd": "/Users/example/project",
+  "trigger": {
+    "type": "builtin.interval",
+    "config": { "everyMinutes": 60, "anchor": "created_at", "activeDays": [1, 2, 3, 4, 5] }
+  },
+  "executor": {
+    "type": "builtin.command",
+    "config": { "command": "date", "shell": "posix", "timeoutMins": 30 }
+  },
+  "policy": { "missedRunPolicy": "skip", "overlapPolicy": "skip" }
+}
+```
+
+Returns a public item summary.
+
+### automation_item_update
+
+Input:
+
+```json
+{
+  "automationId": "automation:...",
+  "patch": {
+    "name": "New name",
+    "trigger": {
+      "type": "builtin.interval",
+      "config": { "everyMinutes": 30, "anchor": "last_completed_at", "activeDays": [1, 2, 3, 4, 5] }
+    }
+  }
+}
+```
+
+Returns a public item summary. `trigger` and `executor` patches replace the corresponding stored refs.
+
+### automation_item_delete
+
+Input:
+
+```json
+{ "automationId": "automation:..." }
+```
+
+Returns:
+
+```json
+{ "deleted": true }
+```
+
+### automation_item_enable
+
+Input:
+
+```json
+{ "automationId": "automation:..." }
+```
+
+Returns a public item summary.
+
+### automation_item_disable
+
+Input:
+
+```json
+{ "automationId": "automation:..." }
+```
+
+Returns a public item summary.
+
+## Runs
+
+### automation_run_execute
+
+Input:
+
+```json
+{ "automationId": "automation:..." }
+```
+
+Returns a safe run summary or `null`.
+
+### automation_run_disable
+
+Input:
+
+```json
+{ "runId": "automation-run:..." }
+```
+
+Returns:
+
+```json
+{ "stopped": true }
+```
+
+If the run already finished, the result can include:
+
+```json
+{ "stopped": false, "alreadyFinished": true }
+```
+
+### automation_run_list
+
+Input:
+
+```json
+{ "automationId": "automation:...", "limit": 20 }
+```
+
+Returns recent safe run summaries. `limit` defaults to 20 and caps at 100.
+
+## Runtime
+
+### automation_runtime_inspect
+
+Input:
+
+```json
+{ "automationId": "automation:..." }
+```
+
+`automationId` is optional. Returns running item ids, scheduled item ids, and compact runtime state.
+
+## Public Summary Boundary
+
+Item summaries include trigger type, trigger summary, executor type, executor title, status, timestamps, and validation issues.
+
+Item summaries do not include `trigger.config` or `executor.config`.
+
+Run summaries include id, status, trigger/executor type, timestamps, result summary, and non-secret metrics.
+
+Run summaries do not include logs, raw outputs, Agent prompts, shell command text, scripts, HTTP bodies, Authorization values, Bearer tokens, Basic passwords, cookies, API keys, environment variable values, or raw event payloads.
