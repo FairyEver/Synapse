@@ -75,6 +75,33 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("marks sessions failed and releases quota when upload instruction creation fails", async () => {
+    const prisma = createPrismaMemory()
+    const failingStorage: DriveStoragePort = {
+      ...storageMock,
+      createUploadInstruction: vi.fn(async () => {
+        throw new Error("storage unavailable")
+      }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, failingStorage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    await expect(service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })).rejects.toThrow("storage unavailable")
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+    const [item] = await prisma.driveItem.findMany()
+    expect(item.storageStatus).toBe("failed")
+    const [session] = await prisma.driveUploadSession.findMany()
+    expect(session.status).toBe("failed")
+  })
+
   it("creates revocable share links", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

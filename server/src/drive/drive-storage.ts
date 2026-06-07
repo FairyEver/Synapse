@@ -1,6 +1,12 @@
-import { Injectable } from "@nestjs/common"
+import { Inject, Injectable, Optional } from "@nestjs/common"
+import { randomUUID } from "node:crypto"
+import { createReadStream, createWriteStream } from "node:fs"
+import { mkdir, rm, stat } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { pipeline } from "node:stream/promises"
 import COS from "cos-nodejs-sdk-v5"
-import { loadEnv } from "../config/env"
+import { loadEnv, isBackupConfigured } from "../config/env"
 import { driveDownloadUrlTtlSeconds, driveUploadUrlTtlSeconds } from "./drive.constants"
 
 export interface DriveStorageObjectInfo {
@@ -21,6 +27,98 @@ export interface DriveStoragePort {
   createDownloadUrl(input: { readonly key: string; readonly filename: string }): Promise<{ readonly url: string; readonly expiresAt: Date }>
   headObject(key: string): Promise<DriveStorageObjectInfo | null>
   deleteObject(key: string): Promise<void>
+}
+
+type LocalStorageToken = {
+  readonly key: string
+  readonly filename?: string
+  readonly expiresAt: Date
+}
+
+export const LOCAL_DRIVE_STORAGE_OPTIONS = Symbol("LOCAL_DRIVE_STORAGE_OPTIONS")
+
+export type LocalDriveStorageOptions = {
+  readonly publicAppUrl?: string
+  readonly root?: string
+}
+
+@Injectable()
+export class LocalDriveStorage implements DriveStoragePort {
+  private readonly uploadTokens = new Map<string, LocalStorageToken>()
+  private readonly downloadTokens = new Map<string, LocalStorageToken>()
+  private readonly publicAppUrl: string
+  private readonly root: string
+
+  constructor(@Optional() @Inject(LOCAL_DRIVE_STORAGE_OPTIONS) options?: LocalDriveStorageOptions) {
+    const env = options?.publicAppUrl ? undefined : loadEnv(process.env)
+    this.publicAppUrl = options?.publicAppUrl ?? env?.appPublicUrl ?? `http://localhost:${env?.port ?? 3000}`
+    this.root = options?.root ?? process.env.SYNAPSE_DRIVE_LOCAL_ROOT ?? path.join(os.tmpdir(), "synapse-drive-storage")
+  }
+
+  async createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction> {
+    const expiresAt = new Date(Date.now() + driveUploadUrlTtlSeconds * 1000)
+    const token = randomUUID()
+    this.uploadTokens.set(token, { key: input.key, expiresAt })
+    return {
+      method: "PUT",
+      url: `${this.publicAppUrl.replace(/\/+$/u, "")}/api/drive/local-upload/${encodeURIComponent(token)}`,
+      expiresAt,
+      headers: input.contentType ? { "Content-Type": input.contentType } : {},
+    }
+  }
+
+  async createDownloadUrl(input: { readonly key: string; readonly filename: string }): Promise<{ readonly url: string; readonly expiresAt: Date }> {
+    const expiresAt = new Date(Date.now() + driveDownloadUrlTtlSeconds * 1000)
+    const token = randomUUID()
+    this.downloadTokens.set(token, { key: input.key, filename: input.filename, expiresAt })
+    return {
+      url: `${this.publicAppUrl.replace(/\/+$/u, "")}/api/drive/local-download/${encodeURIComponent(token)}`,
+      expiresAt,
+    }
+  }
+
+  async headObject(key: string): Promise<DriveStorageObjectInfo | null> {
+    try {
+      const objectPath = this.pathForKey(key)
+      const info = await stat(objectPath)
+      return { key, size: BigInt(info.size) }
+    } catch (error) {
+      if (error instanceof Error && "code" in error && (error as { readonly code?: string }).code === "ENOENT") return null
+      throw error
+    }
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    await rm(this.pathForKey(key), { force: true })
+  }
+
+  async acceptUpload(token: string, stream: NodeJS.ReadableStream): Promise<void> {
+    const entry = this.consumeToken(this.uploadTokens, token)
+    const objectPath = this.pathForKey(entry.key)
+    await mkdir(path.dirname(objectPath), { recursive: true })
+    await pipeline(stream, createWriteStream(objectPath))
+  }
+
+  resolveDownload(token: string): { readonly stream: NodeJS.ReadableStream; readonly filename: string } {
+    const entry = this.consumeToken(this.downloadTokens, token)
+    return { stream: createReadStream(this.pathForKey(entry.key)), filename: entry.filename ?? "download" }
+  }
+
+  private consumeToken(tokens: Map<string, LocalStorageToken>, token: string): LocalStorageToken {
+    const entry = tokens.get(token)
+    tokens.delete(token)
+    if (!entry || entry.expiresAt.getTime() <= Date.now()) throw new Error("Drive storage token expired.")
+    return entry
+  }
+
+  private pathForKey(key: string): string {
+    const objectPath = path.resolve(this.root, key)
+    const rootPath = path.resolve(this.root)
+    if (objectPath !== rootPath && !objectPath.startsWith(`${rootPath}${path.sep}`)) {
+      throw new Error("Invalid drive storage key.")
+    }
+    return objectPath
+  }
 }
 
 @Injectable()
@@ -118,6 +216,10 @@ export class CosDriveStorage implements DriveStoragePort {
     }
     return this.client
   }
+}
+
+export function shouldUseCosDriveStorage(source: NodeJS.ProcessEnv = process.env): boolean {
+  return isBackupConfigured(loadEnv(source))
 }
 
 function isCosNotFound(error: unknown): boolean {

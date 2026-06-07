@@ -625,6 +625,7 @@ export type SynapseBridge = {
     prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }) => Promise<DriveUploadPrepareResult>
     prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
     completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>
+    uploadDrivePreparedFile: (input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }) => Promise<{ ok: true }>
     cancelDriveUpload: (input: { sessionId: string }) => Promise<{ ok: true }>
     createDriveFolder: (input: { parentId?: string | null; name: string }) => Promise<DriveItemDto>
     renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>

@@ -63,6 +63,7 @@ const driveItemSchema = z.object({
   mimeType: z.string().nullable(),
   storageStatus: z.enum(["pending", "active", "delete_pending", "deleted", "failed"]),
   shared: z.boolean(),
+  activeShareId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -122,6 +123,12 @@ const drivePrepareFolderUploadSchema = z.object({
   })),
 })
 const driveSessionSchema = z.object({ sessionId: z.string() })
+const drivePreparedFileUploadSchema = z.object({
+  method: z.literal("PUT"),
+  url: z.string(),
+  headers: z.record(z.string(), z.string()),
+  body: z.custom<ArrayBuffer>(isArrayBufferLike, "body must be an ArrayBuffer"),
+})
 const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optional(), name: z.string() })
 const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
 const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
@@ -148,6 +155,10 @@ const accountStateChangedDomainEventSchema = z.object({
   payload: z.object({ state: accountStateSchema }),
   timestamp: z.string(),
 })
+
+function isArrayBufferLike(value: unknown): value is ArrayBuffer {
+  return Object.prototype.toString.call(value) === "[object ArrayBuffer]"
+}
 
 export const accountIpcModule: IpcModule = {
   id: "account",
@@ -217,6 +228,13 @@ export const accountIpcModule: IpcModule = {
       request: driveSessionSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => accountService.completeDriveUpload(driveSessionSchema.parse(input).sessionId),
+    },
+    uploadDrivePreparedFile: {
+      kind: "invoke",
+      channel: "synapse:account:drive:uploads:put",
+      request: drivePreparedFileUploadSchema,
+      response: okSchema,
+      handler: async (_ctx, input) => accountService.uploadDrivePreparedFile(drivePreparedFileUploadSchema.parse(input)),
     },
     cancelDriveUpload: {
       kind: "invoke",

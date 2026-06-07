@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { vi } from "vitest"
 import os from "node:os"
 import path from "node:path"
+import vm from "node:vm"
 
 vi.mock("electron", () => ({
   app: {
@@ -88,6 +89,49 @@ describe("accountIpcModule", () => {
         },
       },
     })
+  })
+
+  it("accepts cross-realm ArrayBuffer upload payloads", () => {
+    const requestSchema = accountIpcModule.methods.uploadDrivePreparedFile.request
+    expect(requestSchema).toBeDefined()
+    if (!requestSchema) throw new Error("expected upload request schema")
+
+    const body = vm.runInNewContext("new ArrayBuffer(3)") as ArrayBuffer
+
+    expect(requestSchema.parse({
+      body,
+      headers: {},
+      method: "PUT",
+      url: "https://upload.example.test/object",
+    })).toMatchObject({
+      body,
+      method: "PUT",
+    })
+  })
+
+  it("preserves active drive share ids in item responses", () => {
+    const responseSchema = accountIpcModule.methods.listDriveItems.response
+    expect(responseSchema).toBeDefined()
+    if (!responseSchema) throw new Error("expected drive item list response schema")
+
+    expect(responseSchema.parse([{
+      id: "item-1",
+      parentId: null,
+      type: "file",
+      name: "shared.txt",
+      size: "12",
+      mimeType: "text/plain",
+      storageStatus: "active",
+      shared: true,
+      activeShareId: "share-1",
+      createdAt: "2026-06-07T12:00:00.000Z",
+      updatedAt: "2026-06-07T12:00:00.000Z",
+    }])).toEqual([
+      expect.objectContaining({
+        activeShareId: "share-1",
+        shared: true,
+      }),
+    ])
   })
 
   it("validates offline authenticated account events", () => {

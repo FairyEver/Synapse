@@ -22,6 +22,7 @@ describe("DriveController", () => {
     resolvePublicShare: vi.fn(),
     listPublicFolderChildren: vi.fn(),
     createDownloadUrlForShare: vi.fn(),
+    createDownloadUrlForShareChild: vi.fn(),
   }
 
   beforeEach(async () => {
@@ -30,6 +31,7 @@ describe("DriveController", () => {
     drive.resolvePublicShare.mockReset()
     drive.listPublicFolderChildren.mockReset()
     drive.createDownloadUrlForShare.mockReset()
+    drive.createDownloadUrlForShareChild.mockReset()
     drive.resolvePublicShare.mockRejectedValue(new NotFoundException("文件未找到"))
     const moduleRef = await Test.createTestingModule({
       controllers: [DriveUserController, DrivePublicController],
@@ -93,14 +95,32 @@ describe("DriveController", () => {
     })
     drive.listPublicFolderChildren.mockResolvedValue({
       item: { id: "folder-1", name: "交接材料" },
-      children: [{ id: "file-1", type: "file", name: "brief.txt" }],
+      children: [{
+        id: "file-1",
+        type: "file",
+        name: "brief.txt",
+        size: "11",
+        updatedAt: "2026-06-07T08:15:00.000Z",
+      }],
     })
     drive.createDownloadUrlForShare.mockResolvedValue({ url: "https://cos.example/download" })
+    drive.createDownloadUrlForShareChild.mockResolvedValue({ url: "https://cos.example/child-download" })
 
     const folder = await request(app!.getHttpServer()).get("/files/shr_folder").expect(200)
+    expect(folder.text).toContain("drive-share-shell")
+    expect(folder.text).toContain("全部文件")
     expect(folder.text).toContain("交接材料")
+    expect(folder.text).toContain("drive-share-list")
+    expect(folder.text).not.toContain("搜索云盘内文件")
+    expect(folder.text).not.toContain("公开分享")
+    expect(folder.text).not.toContain("下载全部")
+    expect(folder.text).not.toContain("drive-share-grid")
     expect(folder.text).toContain("brief.txt")
+    expect(folder.text).toContain("2026/06/07 16:15")
+    expect(folder.text).toContain("./shr_folder/file-1/download")
     const download = await request(app!.getHttpServer()).get("/files/shr_folder/download").expect(302)
     expect(download.headers.location).toBe("https://cos.example/download")
+    const childDownload = await request(app!.getHttpServer()).get("/files/shr_folder/file-1/download").expect(302)
+    expect(childDownload.headers.location).toBe("https://cos.example/child-download")
   })
 })

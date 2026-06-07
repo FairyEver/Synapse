@@ -208,6 +208,16 @@ export class AccountService {
     return this.requestAuthenticatedJson<DriveItemDto>("POST", `${apiBaseUrl()}/drive/uploads/${encodeURIComponent(sessionId)}/complete`, undefined, "上传确认失败。")
   }
 
+  async uploadDrivePreparedFile(input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }): Promise<{ ok: true }> {
+    const response = await this.fetchImpl(input.url, {
+      method: input.method,
+      headers: input.headers,
+      body: Buffer.from(input.body),
+    })
+    if (!response.ok) throw await createHttpError(input.method, input.url, response, "上传失败。")
+    return { ok: true }
+  }
+
   async cancelDriveUpload(sessionId: string): Promise<{ ok: true }> {
     return this.requestAuthenticatedJson<{ ok: true }>("POST", `${apiBaseUrl()}/drive/uploads/${encodeURIComponent(sessionId)}/cancel`, undefined, "上传取消失败。")
   }

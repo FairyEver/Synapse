@@ -1,10 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import { toast } from "sonner"
-import { FolderPlus, MoreHorizontal, RefreshCw, Share2, Trash2, Upload } from "lucide-react"
+import { ChevronRight, FileText, Folder, FolderPlus, MoreHorizontal, RefreshCw, Upload } from "lucide-react"
 import type { DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { FormDialog } from "@/components/form-dialog"
+import { cn } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,19 +25,38 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+} from "@/components/ui/item"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type DrivePathEntry = {
   readonly id: string | null
   readonly name: string
+}
+
+type NameDialogState =
+  | { readonly mode: "create"; readonly item: null; readonly value: string }
+  | { readonly mode: "rename"; readonly item: DriveItemDto; readonly value: string }
+
+type DriveMoveTreeBranch = {
+  readonly error: string | null
+  readonly folders: readonly DriveItemDto[]
+  readonly loaded: boolean
+  readonly loading: boolean
+}
+
+const DRIVE_ROOT_PARENT_VALUE = "root"
+
+function driveMoveTreeKey(parentId: string | null): string {
+  return parentId ?? DRIVE_ROOT_PARENT_VALUE
 }
 
 function DriveModule() {
@@ -33,11 +65,15 @@ function DriveModule() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
+  const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
+  const [moveTarget, setMoveTarget] = useState<DriveItemDto | null>(null)
+  const [moveParentId, setMoveParentId] = useState<string>("root")
+  const [deleteTarget, setDeleteTarget] = useState<DriveItemDto | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
   const parentId = path.at(-1)?.id ?? null
-
   const loadItems = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -75,7 +111,7 @@ function DriveModule() {
     event.currentTarget.value = ""
     if (files.length === 0) return
     const results = await uploadFiles(files, parentId)
-    toast(results.failed === 0 ? `已上传 ${results.completed} 个文件` : `上传完成 ${results.completed} 个，失败 ${results.failed} 个`)
+    toast(uploadResultMessage(results))
     await loadItems()
   }, [loadItems, parentId])
 
@@ -84,55 +120,83 @@ function DriveModule() {
     event.currentTarget.value = ""
     if (files.length === 0) return
     const results = await uploadFolder(files, parentId)
-    toast(results.failed === 0 ? `已上传 ${results.completed} 个文件` : `上传完成 ${results.completed} 个，失败 ${results.failed} 个`)
+    toast(uploadResultMessage(results))
     await loadItems()
   }, [loadItems, parentId])
 
   const handleCreateFolder = useCallback(async () => {
-    const name = window.prompt("文件夹名称")?.trim()
+    setNameDialog({ mode: "create", item: null, value: "" })
+  }, [])
+
+  const handleNameSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!nameDialog) return
+    const name = nameDialog.value.trim()
     if (!name) return
+    setSubmitting(true)
     try {
-      await requireSynapseBridge().account.createDriveFolder({ parentId, name })
-      toast("文件夹已创建")
+      if (nameDialog.mode === "create") {
+        await requireSynapseBridge().account.createDriveFolder({ parentId, name })
+        toast("文件夹已创建")
+      } else {
+        await requireSynapseBridge().account.renameDriveItem({ itemId: nameDialog.item.id, name })
+        toast("已重命名")
+      }
+      setNameDialog(null)
       await loadItems()
     } catch (rawError) {
-      toast(errorMessage(rawError, "创建失败"))
+      toast(errorMessage(rawError, nameDialog.mode === "create" ? "创建失败" : "重命名失败"))
+    } finally {
+      setSubmitting(false)
     }
-  }, [loadItems, parentId])
+  }, [loadItems, nameDialog, parentId])
 
   const handleRename = useCallback(async (item: DriveItemDto) => {
-    const name = window.prompt("新名称", item.name)?.trim()
-    if (!name || name === item.name) return
-    try {
-      await requireSynapseBridge().account.renameDriveItem({ itemId: item.id, name })
-      toast("已重命名")
-      await loadItems()
-    } catch (rawError) {
-      toast(errorMessage(rawError, "重命名失败"))
-    }
-  }, [loadItems])
+    setNameDialog({ mode: "rename", item, value: item.name })
+  }, [])
 
   const handleMove = useCallback(async (item: DriveItemDto) => {
-    const target = window.prompt("目标文件夹 ID，留空移到根目录", "")?.trim() ?? ""
+    setMoveTarget(item)
+    setMoveParentId("root")
+  }, [])
+
+  const handleMoveSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!moveTarget) return
+    setSubmitting(true)
     try {
-      await requireSynapseBridge().account.moveDriveItem({ itemId: item.id, parentId: target || null })
+      await requireSynapseBridge().account.moveDriveItem({
+        itemId: moveTarget.id,
+        parentId: moveParentId === "root" ? null : moveParentId,
+      })
       toast("已移动")
+      setMoveTarget(null)
       await loadItems()
     } catch (rawError) {
       toast(errorMessage(rawError, "移动失败"))
+    } finally {
+      setSubmitting(false)
     }
-  }, [loadItems])
+  }, [loadItems, moveParentId, moveTarget])
 
   const handleDelete = useCallback(async (item: DriveItemDto) => {
-    if (!window.confirm(`删除「${item.name}」？`)) return
+    setDeleteTarget(item)
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return
+    setSubmitting(true)
     try {
-      await requireSynapseBridge().account.deleteDriveItem({ itemId: item.id })
+      await requireSynapseBridge().account.deleteDriveItem({ itemId: deleteTarget.id })
       toast("已删除")
+      setDeleteTarget(null)
       await loadItems()
     } catch (rawError) {
       toast(errorMessage(rawError, "删除失败"))
+    } finally {
+      setSubmitting(false)
     }
-  }, [loadItems])
+  }, [deleteTarget, loadItems])
 
   const handleShare = useCallback(async (item: DriveItemDto) => {
     try {
@@ -156,106 +220,432 @@ function DriveModule() {
     }
   }, [loadItems])
 
+  const content = (() => {
+    if (loading) {
+      return (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          加载中
+        </div>
+      )
+    }
+    if (error) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+          <p>{error}</p>
+          <Button size="sm" variant="outline" onClick={() => { void loadItems() }}>
+            <RefreshCw data-icon="inline-start" />
+            重试
+          </Button>
+        </div>
+      )
+    }
+    return (
+      <DriveFileList
+        items={visibleItems}
+        path={path}
+        query={query}
+        onQueryChange={setQuery}
+        onJumpToPath={jumpToPath}
+        onOpenFolder={openFolder}
+        onRename={handleRename}
+        onMove={handleMove}
+        onDelete={handleDelete}
+        onShare={handleShare}
+        onDisableShare={handleDisableShare}
+      />
+    )
+  })()
+
   return (
-    <section className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">云盘</h1>
-          <nav className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground" aria-label="当前位置">
-            {path.map((entry, index) => (
-              <Button key={`${entry.id ?? "root"}-${index}`} variant="ghost" size="sm" onClick={() => jumpToPath(index)}>
-                {entry.name}
-              </Button>
-            ))}
-          </nav>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
-          <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-            <Upload data-icon="inline-start" />
-            上传文件
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()}>
-            <Upload data-icon="inline-start" />
-            上传文件夹
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleCreateFolder}>
-            <FolderPlus data-icon="inline-start" />
-            新建文件夹
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => void loadItems()} aria-label="刷新">
-            <RefreshCw />
-          </Button>
-        </div>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索"
-        />
-        {error ? <div className="text-sm text-destructive">{error}</div> : null}
-        {loading ? <div className="text-sm text-muted-foreground">加载中...</div> : (
-          <div className="min-h-0 overflow-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead className="text-right">大小</TableHead>
-                  <TableHead>更新时间</TableHead>
-                  <TableHead className="w-12" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="min-w-0">
-                      <Button variant="link" className="h-auto max-w-full px-0" onClick={() => openFolder(item)}>
-                        <span className="truncate">{item.name}</span>
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={item.shared ? "secondary" : "outline"}>{item.shared ? "已分享" : item.type === "folder" ? "文件夹" : "文件"}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{item.type === "folder" ? "-" : formatBytes(item.size)}</TableCell>
-                    <TableCell>{new Date(item.updatedAt).toLocaleString("zh-CN")}</TableCell>
-                    <TableCell>
-                      <DriveItemMenu
-                        item={item}
-                        onRename={handleRename}
-                        onMove={handleMove}
-                        onDelete={handleDelete}
-                        onShare={handleShare}
-                        onDisableShare={handleDisableShare}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {visibleItems.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">暂无文件</TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
+    <TooltipProvider>
+      <section className="flex h-full min-h-0 flex-col bg-surface">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
+          <h2 className="text-sm font-semibold">云盘</h2>
+          <div className="flex items-center gap-2">
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
+            <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" disabled={loading} onClick={() => void loadItems()}>
+                  <RefreshCw />
+                  <span className="sr-only">刷新</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>刷新</TooltipContent>
+            </Tooltip>
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+              <Upload data-icon="inline-start" />
+              上传文件
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()}>
+              <Upload data-icon="inline-start" />
+              上传文件夹
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCreateFolder}>
+              <FolderPlus data-icon="inline-start" />
+              新建文件夹
+            </Button>
           </div>
-        )}
-      </div>
-    </section>
+        </div>
+
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="min-h-full px-3 pb-2 pt-1">{content}</div>
+        </ScrollArea>
+      <Dialog open={nameDialog !== null} onOpenChange={(open) => {
+        if (!open) setNameDialog(null)
+      }}>
+        {nameDialog ? (
+          <FormDialog
+            title={nameDialog.mode === "create" ? "新建文件夹" : "重命名"}
+            onSubmit={handleNameSubmit}
+            footer={(
+              <>
+                <Button type="button" variant="outline" disabled={submitting} onClick={() => setNameDialog(null)}>取消</Button>
+                <Button type="submit" disabled={submitting || nameDialog.value.trim().length === 0}>确认</Button>
+              </>
+            )}
+          >
+            <div className="grid gap-2">
+              <Label htmlFor="drive-item-name">
+                {nameDialog.mode === "create" ? "文件夹名称" : "名称"}
+              </Label>
+              <Input
+                id="drive-item-name"
+                aria-label={nameDialog.mode === "create" ? "文件夹名称" : "名称"}
+                value={nameDialog.value}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setNameDialog((current) => current ? { ...current, value } : current)
+                }}
+                autoFocus
+              />
+            </div>
+          </FormDialog>
+        ) : null}
+      </Dialog>
+      <Dialog open={moveTarget !== null} onOpenChange={(open) => {
+        if (!open) setMoveTarget(null)
+      }}>
+        {moveTarget ? (
+          <FormDialog
+            title="移动"
+            onSubmit={handleMoveSubmit}
+            footer={(
+              <>
+                <Button type="button" variant="outline" disabled={submitting} onClick={() => setMoveTarget(null)}>取消</Button>
+                <Button type="submit" disabled={submitting}>确认</Button>
+              </>
+            )}
+          >
+            <div className="grid gap-2">
+              <Label>目标位置</Label>
+              <DriveMoveTargetTree
+                disabledFolderId={moveTarget.type === "folder" ? moveTarget.id : null}
+                selectedParentId={moveParentId}
+                onSelect={setMoveParentId}
+              />
+            </div>
+          </FormDialog>
+        ) : null}
+      </Dialog>
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
+        if (!open) setDeleteTarget(null)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              删除后无法在云盘中继续访问「{deleteTarget?.name}」。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>取消</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={submitting} onClick={() => { void confirmDelete() }}>删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      </section>
+    </TooltipProvider>
   )
 }
 
-function DriveItemMenu({
-  item,
+function DriveMoveTargetTree({
+  disabledFolderId,
+  selectedParentId,
+  onSelect,
+}: {
+  readonly disabledFolderId: string | null
+  readonly selectedParentId: string
+  readonly onSelect: (parentId: string) => void
+}) {
+  const [branches, setBranches] = useState<Record<string, DriveMoveTreeBranch>>({})
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set())
+
+  const loadFolders = useCallback(async (parentId: string | null, force = false) => {
+    const key = driveMoveTreeKey(parentId)
+    const existing = branches[key]
+    if (!force && (existing?.loaded || existing?.loading)) return
+
+    setBranches((current) => ({
+      ...current,
+      [key]: {
+        error: null,
+        folders: current[key]?.folders ?? [],
+        loaded: false,
+        loading: true,
+      },
+    }))
+
+    try {
+      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId })
+      setBranches((current) => ({
+        ...current,
+        [key]: {
+          error: null,
+          folders: nextItems.filter((item) => item.type === "folder"),
+          loaded: true,
+          loading: false,
+        },
+      }))
+    } catch (rawError) {
+      setBranches((current) => ({
+        ...current,
+        [key]: {
+          error: errorMessage(rawError, "加载失败"),
+          folders: current[key]?.folders ?? [],
+          loaded: false,
+          loading: false,
+        },
+      }))
+    }
+  }, [branches])
+
+  useEffect(() => {
+    void loadFolders(null)
+  }, [loadFolders])
+
+  const toggleFolder = useCallback((folder: DriveItemDto) => {
+    if (folder.id === disabledFolderId) return
+    setExpandedIds((current) => {
+      const next = new Set(current)
+      const shouldOpen = !next.has(folder.id)
+      if (shouldOpen) {
+        next.add(folder.id)
+        void loadFolders(folder.id)
+      } else {
+        next.delete(folder.id)
+      }
+      return next
+    })
+  }, [disabledFolderId, loadFolders])
+
+  const rootBranch = branches[DRIVE_ROOT_PARENT_VALUE]
+
+  return (
+    <div className="rounded-lg border bg-background" role="tree" aria-label="目标位置">
+      <DriveMoveTreeSelectButton
+        label="根目录"
+        selected={selectedParentId === DRIVE_ROOT_PARENT_VALUE}
+        onSelect={() => onSelect(DRIVE_ROOT_PARENT_VALUE)}
+      />
+      <div className="border-t">
+        <DriveMoveTreeChildren
+          branch={rootBranch}
+          branches={branches}
+          disabledFolderId={disabledFolderId}
+          expandedIds={expandedIds}
+          loadFolders={loadFolders}
+          onRetry={() => { void loadFolders(null, true) }}
+          onSelect={onSelect}
+          onToggle={toggleFolder}
+          parentName="根目录"
+          selectedParentId={selectedParentId}
+        />
+      </div>
+    </div>
+  )
+}
+
+function DriveMoveTreeChildren({
+  branch,
+  branches,
+  disabledFolderId,
+  expandedIds,
+  loadFolders,
+  onRetry,
+  onSelect,
+  onToggle,
+  parentName,
+  selectedParentId,
+}: {
+  readonly branch: DriveMoveTreeBranch | undefined
+  readonly branches: Record<string, DriveMoveTreeBranch>
+  readonly disabledFolderId: string | null
+  readonly expandedIds: ReadonlySet<string>
+  readonly loadFolders: (parentId: string | null, force?: boolean) => Promise<void>
+  readonly onRetry: () => void
+  readonly onSelect: (parentId: string) => void
+  readonly onToggle: (folder: DriveItemDto) => void
+  readonly parentName: string
+  readonly selectedParentId: string
+}) {
+  if (branch?.loading) {
+    return (
+      <div className="px-3 py-2 text-sm text-muted-foreground">
+        加载中
+      </div>
+    )
+  }
+
+  if (branch?.error) {
+    return (
+      <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-muted-foreground">
+        <span>加载失败</span>
+        <Button type="button" variant="ghost" size="xs" aria-label={`重试 ${parentName}`} onClick={onRetry}>
+          重试
+        </Button>
+      </div>
+    )
+  }
+
+  const folders = branch?.folders ?? []
+  if (folders.length === 0) {
+    return (
+      <div className="px-3 py-2 text-sm text-muted-foreground">
+        暂无文件夹
+      </div>
+    )
+  }
+
+  return (
+    <div className="py-1">
+      {folders.map((folder) => (
+        <DriveMoveTreeFolder
+          key={folder.id}
+          branches={branches}
+          disabledFolderId={disabledFolderId}
+          expandedIds={expandedIds}
+          folder={folder}
+          loadFolders={loadFolders}
+          onSelect={onSelect}
+          onToggle={onToggle}
+          selectedParentId={selectedParentId}
+        />
+      ))}
+    </div>
+  )
+}
+
+function DriveMoveTreeFolder({
+  branches,
+  disabledFolderId,
+  expandedIds,
+  folder,
+  loadFolders,
+  onSelect,
+  onToggle,
+  selectedParentId,
+}: {
+  readonly branches: Record<string, DriveMoveTreeBranch>
+  readonly disabledFolderId: string | null
+  readonly expandedIds: ReadonlySet<string>
+  readonly folder: DriveItemDto
+  readonly loadFolders: (parentId: string | null, force?: boolean) => Promise<void>
+  readonly onSelect: (parentId: string) => void
+  readonly onToggle: (folder: DriveItemDto) => void
+  readonly selectedParentId: string
+}) {
+  const disabled = folder.id === disabledFolderId
+  const expanded = expandedIds.has(folder.id)
+  const childBranch = branches[folder.id]
+
+  return (
+    <div role="treeitem" aria-expanded={disabled ? undefined : expanded}>
+      <div className="flex items-center gap-1 px-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`${expanded ? "收起" : "展开"} ${folder.name}`}
+          disabled={disabled}
+          onClick={() => onToggle(folder)}
+        >
+          <ChevronRight className={cn("size-4", expanded ? "rotate-90" : "")} aria-hidden="true" />
+        </Button>
+        <DriveMoveTreeSelectButton
+          disabled={disabled}
+          label={folder.name}
+          selected={selectedParentId === folder.id}
+          onSelect={() => onSelect(folder.id)}
+        />
+      </div>
+      {expanded ? (
+        <div className="ml-5 border-l pl-2">
+          <DriveMoveTreeChildren
+            branch={childBranch}
+            branches={branches}
+            disabledFolderId={disabledFolderId}
+            expandedIds={expandedIds}
+            loadFolders={loadFolders}
+            onRetry={() => { void loadFolders(folder.id, true) }}
+            onSelect={onSelect}
+            onToggle={onToggle}
+            parentName={folder.name}
+            selectedParentId={selectedParentId}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function DriveMoveTreeSelectButton({
+  disabled = false,
+  label,
+  selected,
+  onSelect,
+}: {
+  readonly disabled?: boolean
+  readonly label: string
+  readonly selected: boolean
+  readonly onSelect: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant={selected ? "secondary" : "ghost"}
+      size="sm"
+      className="min-w-0 flex-1 justify-start"
+      aria-label={`选择 ${label}`}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onSelect}
+    >
+      <Folder data-icon="inline-start" />
+      <span className="truncate">{label}</span>
+    </Button>
+  )
+}
+
+function DriveFileList({
+  items,
+  path,
+  query,
+  onQueryChange,
+  onJumpToPath,
+  onOpenFolder,
   onRename,
   onMove,
   onDelete,
   onShare,
   onDisableShare,
 }: {
-  readonly item: DriveItemDto
+  readonly items: readonly DriveItemDto[]
+  readonly path: readonly DrivePathEntry[]
+  readonly query: string
+  readonly onQueryChange: (value: string) => void
+  readonly onJumpToPath: (index: number) => void
+  readonly onOpenFolder: (item: DriveItemDto) => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
@@ -263,36 +653,214 @@ function DriveItemMenu({
   readonly onDisableShare: (item: DriveItemDto) => void
 }) {
   return (
+    <div className="flex min-h-full flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
+        <div className="w-40">
+          <Input
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="搜索"
+            aria-label="搜索"
+            className="h-7 rounded-md px-2 text-sm"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-12 items-center gap-3 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+        <span className="col-span-4">名称</span>
+        <span className="col-span-1">状态</span>
+        <span className="col-span-2 text-right">大小</span>
+        <span className="col-span-2 text-right">更新时间</span>
+        <span className="col-span-3 sr-only">操作</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="flex min-h-64 items-center justify-center text-sm text-muted-foreground">
+          暂无文件
+        </div>
+      ) : (
+        <ItemGroup>
+          {items.map((item) => (
+            <DriveFileListRow
+              key={item.id}
+              item={item}
+              onOpenFolder={onOpenFolder}
+              onRename={onRename}
+              onMove={onMove}
+              onDelete={onDelete}
+              onShare={onShare}
+              onDisableShare={onDisableShare}
+            />
+          ))}
+        </ItemGroup>
+      )}
+    </div>
+  )
+}
+
+function DriveBreadcrumbs({
+  path,
+  onJumpToPath,
+}: {
+  readonly path: readonly DrivePathEntry[]
+  readonly onJumpToPath: (index: number) => void
+}) {
+  return (
+    <nav
+      className="h-7 min-w-0 max-w-full overflow-x-auto rounded-md border bg-background px-1"
+      aria-label="当前位置"
+    >
+      <ol className="flex h-full min-w-max items-center gap-0.5 text-sm text-muted-foreground">
+        {path.map((entry, index) => {
+          const isCurrent = index === path.length - 1
+          return (
+            <li key={`${entry.id ?? "root"}-${index}`} className="flex items-center gap-0.5">
+              {index > 0 ? <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" /> : null}
+              {isCurrent ? (
+                <span
+                  className="flex h-5 max-w-40 items-center truncate rounded-sm px-1.5 font-medium text-foreground"
+                  aria-current="page"
+                >
+                  {entry.name}
+                </span>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="h-5 max-w-40 rounded-sm px-1.5 text-sm"
+                  onClick={() => onJumpToPath(index)}
+                >
+                  <span className="truncate">{entry.name}</span>
+                </Button>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    </nav>
+  )
+}
+
+function DriveFileListRow({
+  item,
+  onOpenFolder,
+  onRename,
+  onMove,
+  onDelete,
+  onShare,
+  onDisableShare,
+}: {
+  readonly item: DriveItemDto
+  readonly onOpenFolder: (item: DriveItemDto) => void
+  readonly onRename: (item: DriveItemDto) => void
+  readonly onMove: (item: DriveItemDto) => void
+  readonly onDelete: (item: DriveItemDto) => void
+  readonly onShare: (item: DriveItemDto) => void
+  readonly onDisableShare: (item: DriveItemDto) => void
+}) {
+  const status = driveStatusLabel(item)
+  const isFolder = item.type === "folder"
+
+  return (
+    <Item
+      size="sm"
+      className="grid grid-cols-12 items-center gap-3 bg-card"
+      role="listitem"
+    >
+      <ItemContent className="col-span-4 min-w-0">
+        <ItemTitle className="w-full min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            {isFolder ? (
+              <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            ) : (
+              <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            )}
+            {isFolder ? (
+              <button
+                type="button"
+                className="min-w-0 truncate text-left underline-offset-4 hover:underline"
+                aria-label={`打开文件夹 ${item.name}`}
+                onClick={() => onOpenFolder(item)}
+              >
+                {item.name}
+              </button>
+            ) : (
+              <span className="min-w-0 truncate">
+                <span className="sr-only">文件 </span>
+                {item.name}
+              </span>
+            )}
+          </div>
+        </ItemTitle>
+      </ItemContent>
+      <div className="col-span-1 min-w-0">
+        {status ? <Badge variant={item.shared ? "secondary" : "outline"}>{status}</Badge> : null}
+      </div>
+      <span className="col-span-2 justify-self-end text-right text-sm text-muted-foreground">
+        {isFolder ? "-" : formatBytes(item.size)}
+      </span>
+      <span className="col-span-2 justify-self-end truncate text-right text-sm text-muted-foreground">
+        {formatDriveDateTime(item.updatedAt)}
+      </span>
+      <ItemActions className="col-span-3 justify-end gap-1">
+        <Button type="button" variant="ghost" size="sm" onClick={() => onShare(item)}>
+          分享
+        </Button>
+        <Button type="button" variant="destructive" size="sm" onClick={() => onDelete(item)}>
+          删除
+        </Button>
+        <DriveItemMenu
+          item={item}
+          onRename={onRename}
+          onMove={onMove}
+          onDisableShare={onDisableShare}
+        />
+      </ItemActions>
+    </Item>
+  )
+}
+
+function DriveItemMenu({
+  item,
+  onRename,
+  onMove,
+  onDisableShare,
+}: {
+  readonly item: DriveItemDto
+  readonly onRename: (item: DriveItemDto) => void
+  readonly onMove: (item: DriveItemDto) => void
+  readonly onDisableShare: (item: DriveItemDto) => void
+}) {
+  return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="更多">
+        <Button variant="ghost" size="icon-sm" aria-label="更多">
           <MoreHorizontal />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => onShare(item)}>
-            <Share2 data-icon="inline-start" />
-            分享
-          </DropdownMenuItem>
           {item.activeShareId ? (
             <DropdownMenuItem onClick={() => onDisableShare(item)}>取消分享</DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDelete(item)}>
-            <Trash2 data-icon="inline-start" />
-            删除
-          </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
-async function uploadFiles(files: readonly File[], parentId: string | null): Promise<{ completed: number; failed: number }> {
+type UploadResult = {
+  readonly completed: number
+  readonly failed: number
+  readonly error?: string
+}
+
+async function uploadFiles(files: readonly File[], parentId: string | null): Promise<UploadResult> {
   let completed = 0
   let failed = 0
+  let error: string | undefined
   for (const file of files) {
     try {
       const prepared = await requireSynapseBridge().account.prepareDriveUpload({
@@ -304,14 +872,15 @@ async function uploadFiles(files: readonly File[], parentId: string | null): Pro
       await uploadPreparedFile(prepared, file)
       await requireSynapseBridge().account.completeDriveUpload({ sessionId: prepared.sessionId })
       completed += 1
-    } catch {
+    } catch (rawError) {
+      error ??= errorMessage(rawError, "上传失败")
       failed += 1
     }
   }
-  return { completed, failed }
+  return { completed, error, failed }
 }
 
-async function uploadFolder(files: readonly File[], parentId: string | null): Promise<{ completed: number; failed: number }> {
+async function uploadFolder(files: readonly File[], parentId: string | null): Promise<UploadResult> {
   const withPaths = files.map((file) => ({ file, path: readRelativeFilePath(file) }))
   const firstPath = withPaths[0]?.path ?? "上传文件夹"
   const folderName = firstPath.split("/")[0] || "上传文件夹"
@@ -327,10 +896,12 @@ async function uploadFolder(files: readonly File[], parentId: string | null): Pr
   const entriesByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
   let completed = 0
   let failed = 0
+  let error: string | undefined
   for (const { file, path } of withPaths) {
     const relativePath = path.split("/").slice(1).join("/") || file.name
     const entry = entriesByPath.get(relativePath)
     if (!entry) {
+      error ??= "上传文件不存在"
       failed += 1
       continue
     }
@@ -338,20 +909,21 @@ async function uploadFolder(files: readonly File[], parentId: string | null): Pr
       await uploadPreparedFile(entry, file)
       await requireSynapseBridge().account.completeDriveUpload({ sessionId: entry.sessionId })
       completed += 1
-    } catch {
+    } catch (rawError) {
+      error ??= errorMessage(rawError, "上传失败")
       failed += 1
     }
   }
-  return { completed, failed }
+  return { completed, error, failed }
 }
 
 async function uploadPreparedFile(prepared: Pick<DriveUploadPrepareResult, "upload">, file: File): Promise<void> {
-  const response = await fetch(prepared.upload.url, {
+  await requireSynapseBridge().account.uploadDrivePreparedFile({
+    body: await file.arrayBuffer(),
     method: prepared.upload.method,
+    url: prepared.upload.url,
     headers: prepared.upload.headers,
-    body: file,
   })
-  if (!response.ok) throw new Error("上传失败")
 }
 
 function readRelativeFilePath(file: File): string {
@@ -366,6 +938,27 @@ function formatBytes(value: string): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
   return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+}
+
+function driveStatusLabel(item: DriveItemDto): string {
+  if (item.shared) return "已分享"
+  if (item.storageStatus === "pending") return "上传中"
+  if (item.storageStatus === "failed") return "上传失败"
+  if (item.storageStatus === "delete_pending") return "删除中"
+  return ""
+}
+
+function formatDriveDateTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return date.toLocaleString("zh-CN")
+}
+
+function uploadResultMessage(result: UploadResult): string {
+  if (result.failed === 0) return `已上传 ${result.completed} 个文件`
+  return result.error
+    ? `上传完成 ${result.completed} 个，失败 ${result.failed} 个：${result.error}`
+    : `上传完成 ${result.completed} 个，失败 ${result.failed} 个`
 }
 
 function errorMessage(error: unknown, fallback: string): string {

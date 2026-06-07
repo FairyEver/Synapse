@@ -21,4 +21,14 @@ describe("dashboard Vite dev proxy", () => {
       changeOrigin: true,
     }))
   })
+
+  it("proxies public drive share endpoints through /files", () => {
+    const proxy = config.server?.proxy
+    const filesProxy = proxy && !Array.isArray(proxy) ? proxy["/files"] : undefined
+
+    expect(filesProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
+  })
 })

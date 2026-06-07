@@ -136,6 +136,25 @@ describe("AccountService", () => {
     })
   })
 
+  it("uploads prepared drive files through the injected fetch implementation", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 200 }))
+    const { service } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    const body = new TextEncoder().encode("hello").buffer
+
+    await expect(service.uploadDrivePreparedFile({
+      body,
+      headers: { "Content-Type": "text/plain" },
+      method: "PUT",
+      url: "http://localhost:3000/api/drive/local-upload/token",
+    })).resolves.toEqual({ ok: true })
+
+    expect(fetch).toHaveBeenCalledWith("http://localhost:3000/api/drive/local-upload/token", expect.objectContaining({
+      body: Buffer.from(body),
+      headers: { "Content-Type": "text/plain" },
+      method: "PUT",
+    }))
+  })
+
   it("uses the generated API base URL instead of switching by package mode", async () => {
     const { namespace, service } = await createTestAccountService({ isPackaged: true })
 

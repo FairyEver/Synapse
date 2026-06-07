@@ -228,6 +228,12 @@ describe("preload bridge", () => {
     await bridge.account.listDriveItems({ parentId: null })
     await bridge.account.prepareDriveUpload({ parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" })
     await bridge.account.completeDriveUpload({ sessionId: "session-1" })
+    await bridge.account.uploadDrivePreparedFile({
+      body: new ArrayBuffer(11),
+      headers: { "Content-Type": "text/plain" },
+      method: "PUT",
+      url: "https://upload.example.test/object",
+    })
     await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
     await bridge.account.shareDriveItem({ itemId: "item-1" })
 
@@ -242,6 +248,15 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:uploads:complete",
       { sessionId: "session-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:uploads:put",
+      {
+        body: expect.any(ArrayBuffer),
+        headers: { "Content-Type": "text/plain" },
+        method: "PUT",
+        url: "https://upload.example.test/object",
+      },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:folders:create",

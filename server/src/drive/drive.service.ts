@@ -109,10 +109,16 @@ export class DriveService {
       return { item: updatedItem, session }
     })
 
-    const upload = await this.storage.createUploadInstruction({
-      key: result.session.storageKey,
-      contentType: input.mimeType ?? undefined,
-    })
+    let upload: Awaited<ReturnType<DriveStoragePort["createUploadInstruction"]>>
+    try {
+      upload = await this.storage.createUploadInstruction({
+        key: result.session.storageKey,
+        contentType: input.mimeType ?? undefined,
+      })
+    } catch (error) {
+      await this.failUploadSession(userId, result.session.id, result.session.itemId, result.session.expectedSize, DRIVE_UPLOAD_STATUS.failed)
+      throw error
+    }
     return {
       sessionId: result.session.id,
       item: toDriveItemDto(result.item),

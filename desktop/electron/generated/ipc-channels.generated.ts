@@ -17,6 +17,7 @@ export const IPC_CHANNELS = {
     "prepareDriveUpload": "synapse:account:drive:uploads:prepare",
     "prepareDriveFolderUpload": "synapse:account:drive:uploads:folder:prepare",
     "completeDriveUpload": "synapse:account:drive:uploads:complete",
+    "uploadDrivePreparedFile": "synapse:account:drive:uploads:put",
     "cancelDriveUpload": "synapse:account:drive:uploads:cancel",
     "createDriveFolder": "synapse:account:drive:folders:create",
     "renameDriveItem": "synapse:account:drive:items:rename",

@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-07T15:25:39Z",
+  "title": "Design System: Synapse",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "Canvas",
+        "canonical": "oklch(1 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.38 0 0)", "oklch(0.52 0 0)", "oklch(0.68 0 0)", "oklch(0.82 0 0)", "oklch(0.94 0 0)", "oklch(1 0 0)"]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Primary Text",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": ["oklch(0.145 0 0)", "oklch(0.25 0 0)", "oklch(0.38 0 0)", "oklch(0.52 0 0)", "oklch(0.68 0 0)", "oklch(0.82 0 0)", "oklch(0.94 0 0)", "oklch(0.985 0 0)"]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Workbench Ink",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.205 0 0)", "oklch(0.32 0 0)", "oklch(0.46 0 0)", "oklch(0.62 0 0)", "oklch(0.78 0 0)", "oklch(0.92 0 0)", "oklch(0.985 0 0)"]
+      },
+      "secondary": {
+        "role": "secondary",
+        "displayName": "Quiet Control Surface",
+        "canonical": "oklch(0.97 0 0)",
+        "tonalRamp": ["oklch(0.16 0 0)", "oklch(0.28 0 0)", "oklch(0.42 0 0)", "oklch(0.58 0 0)", "oklch(0.74 0 0)", "oklch(0.88 0 0)", "oklch(0.97 0 0)", "oklch(0.99 0 0)"]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Muted Text",
+        "canonical": "oklch(0.556 0 0)",
+        "tonalRamp": ["oklch(0.18 0 0)", "oklch(0.3 0 0)", "oklch(0.44 0 0)", "oklch(0.556 0 0)", "oklch(0.68 0 0)", "oklch(0.8 0 0)", "oklch(0.9 0 0)", "oklch(0.97 0 0)"]
+      },
+      "destructive": {
+        "role": "state",
+        "displayName": "Destructive Red",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "tonalRamp": ["oklch(0.2 0.09 27.325)", "oklch(0.3 0.13 27.325)", "oklch(0.42 0.18 27.325)", "oklch(0.577 0.245 27.325)", "oklch(0.68 0.2 27.325)", "oklch(0.78 0.15 27.325)", "oklch(0.88 0.09 27.325)", "oklch(0.96 0.04 27.325)"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Rare page-level heading or major empty-state heading."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section-level heading for module anchors."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles, dialog titles, compact panel headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default product UI text and table content."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Buttons, field labels, tabs, menus, and sidebar rows."
+      }
+    },
+    "shadows": [
+      {
+        "name": "tab-lift",
+        "value": "shadow-sm",
+        "purpose": "Subtle active segmented tab affordance."
+      },
+      {
+        "name": "structural-ring",
+        "value": "ring-1 ring-foreground/10",
+        "purpose": "Default structural layer for cards, dialogs, and contained surfaces."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-fast",
+        "value": "150ms ease-in",
+        "purpose": "Close or de-emphasis transitions."
+      },
+      {
+        "name": "state-standard",
+        "value": "200ms ease-out",
+        "purpose": "Open, reveal, and interactive state transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Default high-emphasis action button.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 2rem; gap: 0.375rem; border: 1px solid transparent; border-radius: var(--radius); background: var(--primary); color: var(--primary-foreground); padding: 0 0.625rem; font-family: var(--font-sans); font-size: 0.875rem; font-weight: 500; line-height: 1.25; white-space: nowrap; transition: background-color 150ms ease, transform 150ms ease, box-shadow 150ms ease; } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary) 80%, transparent); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action button for toolbars and dialogs.",
+      "html": "<button class=\"ds-btn-outline\">Cancel</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 2rem; gap: 0.375rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); color: var(--foreground); padding: 0 0.625rem; font-family: var(--font-sans); font-size: 0.875rem; font-weight: 500; line-height: 1.25; white-space: nowrap; transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease; } .ds-btn-outline:hover { background: var(--muted); color: var(--foreground); } .ds-btn-outline:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Compact field for forms, filters, and toolbar search.",
+      "html": "<input class=\"ds-input\" placeholder=\"Search\" />",
+      "css": ".ds-input { width: 100%; min-width: 0; height: 2rem; border: 1px solid var(--input); border-radius: var(--radius); background: transparent; color: var(--foreground); padding: 0.25rem 0.625rem; font-family: var(--font-sans); font-size: 0.875rem; line-height: 1.5; transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease; } .ds-input::placeholder { color: var(--muted-foreground); } .ds-input:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); } .ds-input:disabled { cursor: not-allowed; opacity: 0.5; background: color-mix(in oklch, var(--input) 50%, transparent); }"
+    },
+    {
+      "name": "Structured Card",
+      "kind": "card",
+      "refersTo": "card-default",
+      "description": "Flat content container with structural ring and compact padding.",
+      "html": "<section class=\"ds-card\"><h3 class=\"ds-card-title\">Provider</h3><p class=\"ds-card-description\">Model routing and runtime defaults.</p></section>",
+      "css": ".ds-card { display: flex; flex-direction: column; gap: 0.5rem; overflow: hidden; border-radius: var(--radius); background: var(--card); color: var(--card-foreground); padding: 1rem; font-family: var(--font-sans); font-size: 0.875rem; box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent); } .ds-card-title { margin: 0; font-size: 1rem; line-height: 1.375; font-weight: 500; } .ds-card-description { margin: 0; color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.5; }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge-secondary",
+      "description": "Compact state or metadata marker.",
+      "html": "<span class=\"ds-badge\">Enabled</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; justify-content: center; width: fit-content; height: 1.25rem; gap: 0.25rem; border: 1px solid transparent; border-radius: 9999px; background: var(--secondary); color: var(--secondary-foreground); padding: 0 0.5rem; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 500; line-height: 1; white-space: nowrap; } .ds-badge:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Sidebar Item",
+      "kind": "nav",
+      "refersTo": "navigation-item",
+      "description": "Dense module navigation item with active and hover states.",
+      "html": "<button class=\"ds-sidebar-item\" aria-current=\"page\"><span>Skills</span></button>",
+      "css": ".ds-sidebar-item { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: flex-start; height: 2rem; gap: 0.5rem; border: 0; border-radius: var(--radius); background: var(--secondary); color: var(--secondary-foreground); padding: 0 0.75rem; font-family: var(--font-sans); font-size: 0.875rem; font-weight: 500; text-align: left; transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease; } .ds-sidebar-item:hover { background: var(--muted); color: var(--foreground); } .ds-sidebar-item:focus-visible { outline: none; box-shadow: inset 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent); } .ds-sidebar-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Precision Workbench",
+    "overview": "Synapse is a dense product interface for people managing local AI capabilities, editor integrations, Agent sessions, workflows, data, diagnostics, and usage. The system should feel like a precise workbench: organized surfaces, obvious controls, visible state, and no unnecessary spectacle.",
+    "keyCharacteristics": [
+      "Compact product density with 32px default controls.",
+      "Neutral surfaces, semantic state color, and chart color only where data needs it.",
+      "Familiar shadcn/Radix controls with consistent interactive states.",
+      "Layering through token backgrounds, 1px rings, separators, and focused state.",
+      "Short operational copy written for users who are already in a task."
+    ],
+    "rules": [
+      {
+        "name": "The Token-Only Rule",
+        "body": "Use theme tokens and shadcn variant classes. Do not introduce hex, rgb, hsl, Tailwind arbitrary colors, or one-off page palettes.",
+        "section": "colors"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "A surface at rest uses a token background plus a 1px ring or border.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Fixed Scale Rule",
+        "body": "Do not use viewport-scaled type in product UI.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do start with existing shadcn/Radix primitives.",
+      "Do use token classes such as bg-background, text-foreground, bg-card, border-border, text-muted-foreground, and ring-ring/50.",
+      "Do keep product density compact.",
+      "Do write short operational copy."
+    ],
+    "donts": [
+      "Don't make Synapse look like a marketing landing page inside the app.",
+      "Don't use generic AI gradients, decorative glow, emoji headings, over-rounded showpiece cards, or ornamental motion.",
+      "Don't introduce hex, rgb, hsl, Tailwind arbitrary colors, custom page palettes, styled components, or one-off CSS modules for ordinary UI.",
+      "Don't nest cards inside cards or stack repeated dividers to create hierarchy."
+    ]
+  }
+}
