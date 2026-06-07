@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import type { ZodType } from "zod"
 import type { ActorIdentity } from "../electron/runtime/security"
 import type { SynapseAgentConversationTarget } from "../src/types/agent-navigation"
-import type { WorkflowNodeUsageCostSnapshot } from "../src/types/workflow"
+import type { WorkflowDefinition, WorkflowRunResult, WorkflowNodeUsageCostSnapshot } from "../src/types/workflow"
 
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
@@ -34,6 +34,7 @@ export interface WorkflowRuntimeContext {
   nodeName?: string
   abortSignal: AbortSignal
   actor?: ActorIdentity
+  workflowCallStack?: readonly WorkflowCallStackEntry[]
 }
 
 export interface AgentSendDeps {
@@ -76,6 +77,36 @@ export interface NodeRuntimeDeps {
     run: (request: import("../electron/runtime/process").ControlledProcessRunRequest) => Promise<import("../electron/runtime/process").ControlledProcessResult>
   }
   sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
+  workflowCall?: WorkflowCallRuntimeDeps
+}
+
+export interface WorkflowCallStackEntry {
+  workflowId: string
+  workflowName?: string
+}
+
+export interface WorkflowCallRunInput {
+  definition: WorkflowDefinition
+  params: Record<string, unknown>
+  projectId?: string
+  triggerSource: string
+  abortSignal: AbortSignal
+  actor?: ActorIdentity
+  parentWorkflowId?: string
+  parentRunId: string
+  parentNodeId?: string
+  parentNodeName?: string
+  callStack: readonly WorkflowCallStackEntry[]
+}
+
+export interface WorkflowCallRunOutput {
+  runId: string
+  result: WorkflowRunResult
+}
+
+export interface WorkflowCallRuntimeDeps {
+  getWorkflowDefinition: (id: string) => Promise<WorkflowDefinition | null>
+  runWorkflow: (input: WorkflowCallRunInput) => Promise<WorkflowCallRunOutput>
 }
 
 export interface NodeExecutionInput<TConfig> {
