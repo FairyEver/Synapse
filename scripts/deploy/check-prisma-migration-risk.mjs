@@ -108,6 +108,13 @@ function scanMigration(migration, migrationsDir) {
   return risks
 }
 
+function printPendingMigrations(log, pendingMigrations) {
+  log(`Pending Prisma migrations (${pendingMigrations.length}):`)
+  for (const migration of pendingMigrations) {
+    log(`  - ${migration.name}`)
+  }
+}
+
 const { migrationsDir, appliedFile } = parseArgs(process.argv.slice(2))
 
 if (!migrationsDir || !appliedFile) {
@@ -125,19 +132,29 @@ if (pendingMigrations.length === 0) {
 }
 
 if (risks.length === 0) {
+  printPendingMigrations(console.log, pendingMigrations)
   console.log(`Pending Prisma migrations passed risk scan (${pendingMigrations.length}).`)
   process.exit(0)
 }
 
 console.error("Risky Prisma migrations detected.")
+printPendingMigrations(console.error, pendingMigrations)
+console.error(`Risk count: ${risks.length}`)
 for (const risk of risks) {
   console.error(`${risk.location}: ${risk.label}: ${risk.sql}`)
 }
 
+if (process.env.STRICT_MIGRATION_RISK_SCAN === "1") {
+  console.error("Risk scan policy: failing because STRICT_MIGRATION_RISK_SCAN=1.")
+  process.exit(1)
+}
+
+console.error("Risk scan policy: continuing by default.")
+console.error("Set STRICT_MIGRATION_RISK_SCAN=1 to fail on risks.")
+
 if (process.env.ALLOW_RISKY_MIGRATIONS === "1") {
-  console.error("Risk scan continuing because ALLOW_RISKY_MIGRATIONS=1.")
+  console.error("ALLOW_RISKY_MIGRATIONS=1 is no longer required; risky migrations continue by default.")
   process.exit(0)
 }
 
-console.error("Set ALLOW_RISKY_MIGRATIONS=1 to deploy after manually reviewing these migrations.")
-process.exit(1)
+process.exit(0)

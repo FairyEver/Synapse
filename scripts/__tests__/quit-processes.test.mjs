@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   buildTerminationTargets,
   filterRemainingDevProcessState,
+  filterSynapseDevProcessRows,
   matchesSynapseDevProcess,
   parsePsRows,
 } from "../dev/quit-processes.mjs"
@@ -92,6 +93,35 @@ test("matchesSynapseDevProcess filters by requested dev script", () => {
     commandLine: "node scripts/dev/run-server-with-env.mjs --filter @synapse/server run dev",
     cwd: workspaceRoot,
   }, { workspaceRoot, targetScripts: ["dev:server"] }), true)
+})
+
+test("filterSynapseDevProcessRows applies requested dev script targets", () => {
+  const rows = [
+    {
+      pid: 401,
+      pgid: 401,
+      commandLine: "node scripts/dev/run-server-with-env.mjs --filter @synapse/server run dev",
+      cwd: workspaceRoot,
+    },
+    {
+      pid: 402,
+      pgid: 402,
+      commandLine: "node scripts/dev/dev-renderer.mjs",
+      cwd: `${workspaceRoot}/desktop`,
+    },
+    {
+      pid: 403,
+      pgid: 403,
+      commandLine: "vitepress dev --port 19773",
+      cwd: `${workspaceRoot}/website`,
+    },
+  ]
+
+  assert.deepEqual(
+    filterSynapseDevProcessRows(rows, { workspaceRoot, targetScripts: ["dev:server"] })
+      .map((row) => row.pid),
+    [401],
+  )
 })
 
 test("parsePsRows preserves commands with spaces", () => {

@@ -54,6 +54,8 @@ describe("server deployment configuration", () => {
     const dockerfile = readRepoFile("server/Dockerfile")
 
     expect(dockerfile).toContain("COPY shared/package.json shared/package.json")
+    expect(dockerfile).toContain("--filter @synapse/shared")
+    expect(dockerfile).toContain("COPY --from=deps /app/shared/node_modules ./shared/node_modules")
     expect(dockerfile).toContain("COPY shared/ shared/")
     expect(dockerfile).toContain("COPY --from=build /app/shared ./shared")
   })

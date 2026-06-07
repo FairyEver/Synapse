@@ -98,6 +98,7 @@ REMOTE_SCRIPT
 
 scan_pending_migrations() {
   env ALLOW_RISKY_MIGRATIONS="${ALLOW_RISKY_MIGRATIONS:-}" \
+    STRICT_MIGRATION_RISK_SCAN="${STRICT_MIGRATION_RISK_SCAN:-}" \
     node scripts/deploy/check-prisma-migration-risk.mjs \
       --migrations-dir server/prisma/migrations \
       --applied-file "$APPLIED_MIGRATIONS_FILE"
@@ -128,12 +129,15 @@ sync_remote_code() {
     --exclude='server/logs' \
     --exclude='dashboard/node_modules' \
     --exclude='dashboard/dist' \
+    --exclude='shared/node_modules' \
+    --exclude='shared/dist' \
     --include='/.dockerignore' \
     --include='/setup.sh' \
     --include='/restart.sh' \
     --include='/cos.sh' \
     --include='/server/***' \
     --include='/dashboard/***' \
+    --include='/shared/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \
     --include='/package.json' \

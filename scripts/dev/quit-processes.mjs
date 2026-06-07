@@ -138,6 +138,14 @@ function matchesSynapseDevProcess(processInfo, options = {}) {
   return false
 }
 
+function filterSynapseDevProcessRows(rows, options = {}) {
+  const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot
+  return rows.filter((row) => matchesSynapseDevProcess(row, {
+    ...options,
+    workspaceRoot,
+  }))
+}
+
 async function findMatchingProcesses(options = {}) {
   const tracked = await findTrackedProcesses(options)
   const scanned = await findScannedProcesses(options)
@@ -174,7 +182,6 @@ async function findTrackedProcesses(options = {}) {
 }
 
 async function findWindowsProcesses(options = {}) {
-  const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot
   const script = [
     "Get-CimInstance Win32_Process",
     "Select-Object ProcessId,CommandLine",
@@ -190,13 +197,12 @@ async function findWindowsProcesses(options = {}) {
   const parsed = stdout.trim() ? JSON.parse(stdout) : []
   const rows = Array.isArray(parsed) ? parsed : [parsed]
 
-  return rows
+  return filterSynapseDevProcessRows(rows
     .map((row) => ({
       pid: Number(row.ProcessId),
       pgid: Number(row.ProcessId),
       commandLine: typeof row.CommandLine === "string" ? row.CommandLine : "",
-    }))
-    .filter((row) => matchesSynapseDevProcess(row, { workspaceRoot }))
+    })), options)
 }
 
 async function findLinuxProcesses(options = {}) {
@@ -222,7 +228,7 @@ async function findLinuxProcesses(options = {}) {
       }
 
       const row = { pid, pgid: pid, commandLine, cwd }
-      if (matchesSynapseDevProcess(row, { workspaceRoot })) {
+      if (matchesSynapseDevProcess(row, { ...options, workspaceRoot })) {
         rows.push(row)
       }
     } catch {
@@ -273,7 +279,7 @@ async function findMacProcesses(options = {}) {
       ? row
       : { ...row, cwd: await readProcessCwd(row.pid) }
 
-    if (matchesSynapseDevProcess(processInfo, { workspaceRoot })) {
+    if (matchesSynapseDevProcess(processInfo, { ...options, workspaceRoot })) {
       matched.push(processInfo)
     }
   }
@@ -412,6 +418,7 @@ export {
   commandMatchesDevScripts,
   commandLooksLikeDevProcess,
   filterRemainingDevProcessState,
+  filterSynapseDevProcessRows,
   findMatchingProcesses,
   matchesSynapseDevProcess,
   parsePsRows,

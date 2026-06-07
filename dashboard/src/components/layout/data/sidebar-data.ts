@@ -115,13 +115,11 @@ export function getSidebarData(user: Pick<AuthUser, 'displayName' | 'email' | 'r
       avatar: '',
       profileUrl: undefined,
     },
-    teams: [
-      {
-        name: isAdmin ? 'Synapse Admin' : 'Synapse',
-        logo: Command,
-        plan: isAdmin ? '管理后台' : '用户后台',
-      },
-    ],
+    appTitle: {
+      name: isAdmin ? 'Synapse Admin' : 'Synapse',
+      logo: Command,
+      description: isAdmin ? '管理后台' : '用户后台',
+    },
     navGroups: isAdmin ? [adminNavGroup, adminAccountNavGroup] : [userAccountNavGroup],
   }
 }

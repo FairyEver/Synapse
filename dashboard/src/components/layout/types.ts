@@ -7,10 +7,10 @@ type User = {
   profileUrl?: LinkProps['to']
 }
 
-type Team = {
+type AppTitle = {
   name: string
   logo: React.ElementType
-  plan: string
+  description: string
 }
 
 type BaseNavItem = {
@@ -38,7 +38,7 @@ type NavGroup = {
 
 type SidebarData = {
   user: User
-  teams: Team[]
+  appTitle: AppTitle
   navGroups: NavGroup[]
 }
 

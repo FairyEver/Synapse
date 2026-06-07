@@ -129,7 +129,7 @@ describe("action template variables", () => {
   })
 
   it("exposes whole webhook request json and empty defaults for body-less deliveries", () => {
-    expect(buildAutomationTemplateVariables({
+    const variables = buildAutomationTemplateVariables({
       triggerType: "builtin.webhook",
       triggerConfig: { webhookPublicId: "wh_public", webhookName: "Ping" },
       triggeredBy: "trigger",
@@ -151,7 +151,9 @@ describe("action template variables", () => {
           },
         },
       },
-    })).toEqual(expect.objectContaining({
+    })
+
+    expect(variables).toEqual(expect.objectContaining({
       "trigger.request": "{\"method\":\"GET\",\"query\":{\"run\":\"e2e\"},\"headers\":{\"x-codex-e2e\":\"marker\"}}",
       "trigger.request.method": "GET",
       "trigger.request.contentType": "",
@@ -160,5 +162,43 @@ describe("action template variables", () => {
       "trigger.request.query.run": "e2e",
       "trigger.request.headers.x-codex-e2e": "marker",
     }))
+    expect(renderActionTemplate(
+      "nested={{trigger.payload.request.body.nested.hello}}",
+      variables,
+    )).toBe("nested=")
+  })
+
+  it("renders missing webhook dynamic request fields as empty strings", () => {
+    const variables = buildAutomationTemplateVariables({
+      triggerType: "builtin.webhook",
+      triggerConfig: { webhookPublicId: "wh_public", webhookName: "Plain Text" },
+      triggeredBy: "trigger",
+      triggeredAt: "2026-06-06T01:00:00.000Z",
+      scheduledAt: "2026-06-06T01:00:00.000Z",
+      automationId: "automation:1",
+      automationName: "Webhook",
+      event: {
+        source: "webhook",
+        type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+        receivedAt: "2026-06-06T01:00:01.000Z",
+        payload: {
+          deliveryId: "delivery-text",
+          webhook: { id: "webhook-1", publicId: "wh_public", name: "Plain Text" },
+          request: {
+            method: "POST",
+            contentType: "text/plain",
+            query: {},
+            headers: {},
+            body: { text: "hello" },
+            bodyText: "hello",
+          },
+        },
+      },
+    })
+
+    expect(renderActionTemplate(
+      "nested={{trigger.request.body.nested.hello}} source={{trigger.request.query.source}} header={{trigger.request.headers.x-codex-e2e}}",
+      variables,
+    )).toBe("nested= source= header=")
   })
 })

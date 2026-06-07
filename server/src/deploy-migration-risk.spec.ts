@@ -69,7 +69,7 @@ describe("Prisma migration deployment risk scanner", () => {
     expect(result.output).toContain("Pending Prisma migrations passed risk scan")
   })
 
-  it("blocks destructive pending migrations by default with file and line details", () => {
+  it("records risky pending migrations by default with file and line details", () => {
     const { migrationsDir, appliedFile } = makeWorkspace()
     writeMigration(migrationsDir, "20260601000000_drop_old_table", [
       'ALTER TABLE "User" ADD COLUMN "nickname" TEXT;',
@@ -78,14 +78,18 @@ describe("Prisma migration deployment risk scanner", () => {
 
     const result = runRiskScan(migrationsDir, appliedFile)
 
-    expect(result.status).toBe(1)
+    expect(result.status).toBe(0)
     expect(result.output).toContain("Risky Prisma migrations detected")
+    expect(result.output).toContain("Pending Prisma migrations (1)")
+    expect(result.output).toContain("20260601000000_drop_old_table")
+    expect(result.output).toContain("Risk count: 1")
     expect(result.output).toContain("20260601000000_drop_old_table/migration.sql:2")
     expect(result.output).toContain("DROP TABLE")
-    expect(result.output).toContain("ALLOW_RISKY_MIGRATIONS=1")
+    expect(result.output).toContain("Risk scan policy: continuing by default")
+    expect(result.output).toContain("Set STRICT_MIGRATION_RISK_SCAN=1 to fail on risks")
   })
 
-  it("blocks risky not-null column additions that span multiple lines", () => {
+  it("records risky not-null column additions that span multiple lines", () => {
     const { migrationsDir, appliedFile } = makeWorkspace()
     writeMigration(migrationsDir, "20260601000000_add_required_name", [
       'ALTER TABLE "User"',
@@ -95,12 +99,25 @@ describe("Prisma migration deployment risk scanner", () => {
 
     const result = runRiskScan(migrationsDir, appliedFile)
 
-    expect(result.status).toBe(1)
+    expect(result.status).toBe(0)
     expect(result.output).toContain("20260601000000_add_required_name/migration.sql:1")
     expect(result.output).toContain("ADD NOT NULL COLUMN")
   })
 
-  it("allows explicitly approved risky migrations while keeping the warning output", () => {
+  it("fails risky pending migrations in strict mode", () => {
+    const { migrationsDir, appliedFile } = makeWorkspace()
+    writeMigration(migrationsDir, "20260601000000_unique_email", 'CREATE UNIQUE INDEX "User_email_key" ON "User"("email");')
+
+    const result = runRiskScan(migrationsDir, appliedFile, { STRICT_MIGRATION_RISK_SCAN: "1" })
+
+    expect(result.status).toBe(1)
+    expect(result.output).toContain("Risky Prisma migrations detected")
+    expect(result.output).toContain("Risk count: 1")
+    expect(result.output).toContain("CREATE UNIQUE INDEX")
+    expect(result.output).toContain("Risk scan policy: failing because STRICT_MIGRATION_RISK_SCAN=1")
+  })
+
+  it("keeps legacy risky migration approval env compatible without requiring it", () => {
     const { migrationsDir, appliedFile } = makeWorkspace()
     writeMigration(migrationsDir, "20260601000000_unique_email", 'CREATE UNIQUE INDEX "User_email_key" ON "User"("email");')
 
@@ -108,6 +125,7 @@ describe("Prisma migration deployment risk scanner", () => {
 
     expect(result.status).toBe(0)
     expect(result.output).toContain("Risky Prisma migrations detected")
-    expect(result.output).toContain("continuing because ALLOW_RISKY_MIGRATIONS=1")
+    expect(result.output).toContain("Risk scan policy: continuing by default")
+    expect(result.output).toContain("ALLOW_RISKY_MIGRATIONS=1 is no longer required")
   })
 })

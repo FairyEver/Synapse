@@ -1,6 +1,14 @@
 const TEMPLATE_VARIABLE_RE = /\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu
 const MAX_FLATTEN_DEPTH = 8
 const MAX_FLATTEN_KEYS = 200
+const OPTIONAL_WEBHOOK_REQUEST_VARIABLE_PREFIXES = [
+  "trigger.request.body.",
+  "trigger.request.query.",
+  "trigger.request.headers.",
+  "trigger.payload.request.body.",
+  "trigger.payload.request.query.",
+  "trigger.payload.request.headers.",
+]
 
 export type AutomationTemplateVariableInput = {
   readonly triggerType: string
@@ -25,6 +33,7 @@ export function renderActionTemplate(
   const source = variables ?? {}
   return template.replace(TEMPLATE_VARIABLE_RE, (_match, name: string) => {
     if (!(name in source)) {
+      if (isOptionalWebhookRequestVariable(name)) return ""
       throw new Error(`未知变量：${name}`)
     }
     return source[name]
@@ -115,6 +124,10 @@ function appendWebhookEventVariables(
   if ("headers" in request) {
     flattenValue("trigger.request.headers", request.headers, variables)
   }
+}
+
+function isOptionalWebhookRequestVariable(name: string): boolean {
+  return OPTIONAL_WEBHOOK_REQUEST_VARIABLE_PREFIXES.some((prefix) => name.startsWith(prefix))
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

@@ -7,10 +7,11 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY dashboard/package.json dashboard/package.json
-RUN pnpm install --frozen-lockfile --filter @synapse/server... --filter @synapse/dashboard...
+RUN pnpm install --frozen-lockfile --filter @synapse/shared --filter @synapse/server... --filter @synapse/dashboard...
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/server/node_modules ./server/node_modules
 COPY --from=deps /app/dashboard/node_modules ./dashboard/node_modules
 COPY server/ server/

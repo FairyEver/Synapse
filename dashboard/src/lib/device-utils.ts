@@ -118,7 +118,7 @@ function deviceFromLiveEvent(
 }
 
 function sortDevicesByObservedAt(devices: DashboardDeviceRow[]) {
-  return devices.toSorted((left, right) => getDeviceObservedAt(right) - getDeviceObservedAt(left))
+  return [...devices].sort((left, right) => getDeviceObservedAt(right) - getDeviceObservedAt(left))
 }
 
 function getLiveEventKey(event: LiveClientChangedEvent, options: DeviceScope) {

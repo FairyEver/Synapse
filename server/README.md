@@ -279,7 +279,7 @@ cd /Users/liyang/.codex/worktrees/f240/Synapse
 bash deploy.sh
 ```
 
-`deploy.sh` 会先读取线上已应用的 Prisma migration，扫描本次待发布 migration 中的危险 SQL。遇到删表、删列、删行、唯一索引或危险 `NOT NULL` 变更时会停止；确认无误后可用 `ALLOW_RISKY_MIGRATIONS=1 bash deploy.sh` 显式继续。
+`deploy.sh` 会先读取线上已应用的 Prisma migration，扫描本次待发布 migration 中的危险 SQL。遇到删表、删列、删行、唯一索引或危险 `NOT NULL` 变更时，默认会把待发布 migration、风险数量、文件行号和 SQL 明细写入日志并继续部署；如果需要让风险扫描恢复为阻断部署，可用 `STRICT_MIGRATION_RISK_SCAN=1 bash deploy.sh`。
 
 部署会生成两份完整数据库备份：一份在线备份用于临时数据库预演，一份在停旧服务后生成的最终切换前备份。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。
 
