@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import type { Server as HttpServer, IncomingMessage } from "node:http"
-import { Injectable, Logger } from "@nestjs/common"
+import { Injectable, Logger, Optional } from "@nestjs/common"
 import {
   WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS,
   LIVE_MESSAGE_TYPES,
@@ -12,6 +12,7 @@ import {
 import { RawData, WebSocket, WebSocketServer } from "ws"
 import { UserAuthService } from "../auth/user-auth.service"
 import { LiveClientRegistry } from "./live-client-registry"
+import { LiveDeviceService } from "./live-device.service"
 import { toPublicDto } from "./live-query.service"
 import { LiveStreamService } from "./live-stream.service"
 import type { LiveClientInstance } from "./live.types"
@@ -26,6 +27,7 @@ interface LiveDesktopGatewayTestInput {
   readonly registry: LiveClientRegistry
   readonly streams: LiveStreamService
   readonly clock: LiveDesktopGatewayClock
+  readonly devices?: LiveDeviceService
   readonly webhookDeliveryAckHandler?: WebhookDeliveryAckHandler
 }
 
@@ -67,10 +69,11 @@ export class LiveDesktopGateway {
     private readonly auth: UserAuthService,
     private readonly registry: LiveClientRegistry,
     private readonly streams: LiveStreamService,
+    @Optional() private readonly devices?: LiveDeviceService,
   ) {}
 
   static createForTest(input: LiveDesktopGatewayTestInput): LiveDesktopGateway {
-    const gateway = new LiveDesktopGateway(input.auth, input.registry, input.streams)
+    const gateway = new LiveDesktopGateway(input.auth, input.registry, input.streams, input.devices)
     gateway.clock = input.clock
     gateway.webhookDeliveryAckHandler = input.webhookDeliveryAckHandler ?? null
     return gateway
@@ -149,6 +152,7 @@ export class LiveDesktopGateway {
         }
 
         const hello = message.payload
+        const seenAt = this.clock.now()
         const client = this.registry.register({
           userId: auth.userId,
           clientInstanceId: hello.clientInstanceId,
@@ -156,7 +160,7 @@ export class LiveDesktopGateway {
           appVersion: hello.appVersion,
           platform: hello.platform,
           deviceName: hello.deviceName,
-          now: this.clock.now(),
+          now: seenAt,
           onSupersede: (oldConnectionId) => {
             this.socketsByConnectionId.get(oldConnectionId)?.close(1000, "superseded")
             this.socketsByConnectionId.delete(oldConnectionId)
@@ -178,6 +182,7 @@ export class LiveDesktopGateway {
           platform: client.platform,
           userId: auth.userId,
         }, "Live desktop client registered")
+        this.upsertDeviceMetadata(client, seenAt)
         this.publish(client)
         const serverTime = this.clock.now().toISOString()
         sendJson(socket, createLiveEnvelope(LIVE_MESSAGE_TYPES.welcome, {
@@ -402,6 +407,23 @@ export class LiveDesktopGateway {
         userId: client.userId,
       }, "Live stale socket close failed")
     }
+  }
+
+  private upsertDeviceMetadata(client: LiveClientInstance, seenAt: Date): void {
+    void this.devices?.upsertFromHello({
+      userId: client.userId,
+      clientInstanceId: client.clientInstanceId,
+      deviceName: client.deviceName,
+      platform: client.platform,
+      appVersion: client.appVersion,
+      seenAt,
+    }).catch((error: unknown) => {
+      this.logger.warn({
+        clientInstanceId: client.clientInstanceId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        userId: client.userId,
+      }, "Live desktop device metadata upsert failed")
+    })
   }
 }
 

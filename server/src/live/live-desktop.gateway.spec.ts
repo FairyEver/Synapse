@@ -10,6 +10,7 @@ import {
   parseLiveDesktopMessage,
 } from "./live-desktop.gateway"
 import { LiveClientRegistry } from "./live-client-registry"
+import type { LiveDeviceService } from "./live-device.service"
 import type { LiveStreamService } from "./live-stream.service"
 import type { LiveClientInstance } from "./live.types"
 import type { UserAuthService } from "../auth/user-auth.service"
@@ -124,6 +125,7 @@ function createGateway(input: {
   readonly randomId?: () => string
   readonly now?: () => Date
   readonly webhookDeliveryAckHandler?: Parameters<typeof createLiveDesktopGatewayForTest>[0]["webhookDeliveryAckHandler"]
+  readonly devices?: Partial<LiveDeviceService>
 } = {}): LiveDesktopGateway {
   return createLiveDesktopGatewayForTest({
     auth: {
@@ -146,7 +148,8 @@ function createGateway(input: {
       now: input.now ?? (() => new Date("2026-06-06T10:00:00.000Z")),
     },
     webhookDeliveryAckHandler: input.webhookDeliveryAckHandler,
-  })
+    devices: input.devices as LiveDeviceService | undefined,
+  } as never)
 }
 
 describe("parseLiveDesktopMessage", () => {
@@ -250,6 +253,37 @@ describe("LiveDesktopGateway", () => {
       type: "live.client.changed",
       client: expect.objectContaining({ userId: "user-1" }),
     }))
+  })
+
+  it("upserts device metadata after hello without blocking the welcome message", async () => {
+    const socket = new FakeSocket()
+    const upsertFromHello = vi.fn().mockRejectedValue(new Error("database unavailable"))
+    const gateway = createGateway({
+      randomId: () => "connection-1",
+      devices: { upsertFromHello },
+    })
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(upsertFromHello).toHaveBeenCalledWith({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      appVersion: "0.2.253",
+      seenAt: new Date("2026-06-06T10:00:00.000Z"),
+    })
+    expect(JSON.parse(socket.sent[0] ?? "{}")).toMatchObject({ type: "live.welcome" })
+    expect(socket.closeCalls).toEqual([])
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({
+      clientInstanceId: "client-a",
+      errorName: "Error",
+      userId: "user-1",
+    }), "Live desktop device metadata upsert failed")
+    warn.mockRestore()
   })
 
   it("logs authenticated websocket lifecycle transitions without raw payloads", () => {
