@@ -80,6 +80,7 @@ Array<{
   title: string
   kind: "schedule" | "event" | "manual"
   defaultConfig: Record<string, unknown>
+  configSchema: object
   variables?: Array<{
     key: string
     label: string
