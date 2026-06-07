@@ -1,0 +1,1 @@
+export const DEFAULT_DASHBOARD_PAGE_SIZE = 10

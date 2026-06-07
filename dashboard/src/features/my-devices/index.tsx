@@ -11,6 +11,7 @@ import {
 } from '@/lib/device-utils'
 import {
   DataTableColumnHeader,
+  DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
@@ -28,7 +29,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth-store'
 
-const initialPageSize = 20
 const maxDeviceNameLength = 120
 
 export default function MyDevicesPage() {
@@ -37,7 +37,7 @@ export default function MyDevicesPage() {
   const sessionId = authUser?.role === 'user' ? authUser.sessionId : 'anonymous'
   const [devices, setDevices] = useState<DashboardDeviceRow[]>([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'lastSeenAt', desc: true },
   ])

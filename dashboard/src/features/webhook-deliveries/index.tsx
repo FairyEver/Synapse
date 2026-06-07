@@ -8,7 +8,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearch } from '@tanstack/react-router'
 import { type SortingState } from '@tanstack/react-table'
 import { adminApi, dashboardApi } from '@/lib/api'
-import { ServerDataTable } from '@/components/data-table'
+import {
+  DEFAULT_DASHBOARD_PAGE_SIZE,
+  ServerDataTable,
+} from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Input } from '@/components/ui/input'
@@ -26,7 +29,6 @@ import { buildWebhookDeliveryHistoryColumns } from './webhook-delivery-history-c
 import { WebhookDeliveryHistoryDetailSheet } from './webhook-delivery-history-detail-sheet'
 import { buildWebhookDeliveryHistoryQuery } from './webhook-delivery-history-display'
 
-const initialPageSize = 20
 const allStatusesValue = 'all'
 
 const webhookDeliveryStatusOptions: WebhookDeliveryStatus[] = [
@@ -43,7 +45,9 @@ export default function WebhookDeliveriesPage() {
   const role = useAuthStore((state) => state.auth.user?.role)
   const mode = role === 'admin' ? 'admin' : 'user'
   const [page, setPage] = useState(search.page ?? 1)
-  const [pageSize, setPageSize] = useState(search.pageSize ?? initialPageSize)
+  const [pageSize, setPageSize] = useState(
+    search.pageSize ?? DEFAULT_DASHBOARD_PAGE_SIZE
+  )
   const [sorting, setSorting] = useState<SortingState>([
     { id: search.sortBy ?? 'receivedAt', desc: search.sortOrder !== 'asc' },
   ])

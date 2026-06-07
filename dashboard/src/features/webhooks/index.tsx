@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { getPageNumbers } from '@/lib/utils'
 import { dashboardApi } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { DEFAULT_DASHBOARD_PAGE_SIZE } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
@@ -60,8 +61,6 @@ import {
 import { getWebhookErrorMessage } from './webhook-error'
 import { WebhookUrlDialog } from './webhook-url-dialog'
 
-const initialPageSize = 20
-
 type WebhookFormState = {
   mode: 'create' | 'edit'
   webhook: DashboardWebhookDto | null
@@ -75,7 +74,7 @@ type OneTimeUrlState = {
 
 export default function WebhooksPage() {
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [form, setForm] = useState<WebhookFormState | null>(null)
   const [oneTimeUrl, setOneTimeUrl] = useState<OneTimeUrlState | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DashboardWebhookDto | null>(

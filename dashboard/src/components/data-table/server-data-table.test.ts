@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
+import * as dataTableExports from './index'
 import { getServerDataTableErrorMessage } from './server-data-table'
+
+describe('data table defaults', () => {
+  it('exports the dashboard list default page size', () => {
+    expect(
+      (dataTableExports as Record<string, unknown>).DEFAULT_DASHBOARD_PAGE_SIZE
+    ).toBe(10)
+  })
+})
 
 describe('getServerDataTableErrorMessage', () => {
   it('uses useful error messages', () => {

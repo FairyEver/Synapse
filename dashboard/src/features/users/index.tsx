@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { adminApi, type AdminUserRow, type LiveClientRow } from '@/lib/api'
 import {
   DataTableColumnHeader,
+  DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
@@ -22,13 +23,9 @@ import { UserModulePermissionsSheet } from './user-module-permissions-sheet'
 import { useUserModulePermissionsEditor } from './use-user-module-permissions-editor'
 import { getUsersTableError, getUsersTableLoading } from './users-page-error'
 
-const pageSizeOptions = {
-  initial: 20,
-}
-
 export default function UsersPage() {
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(pageSizeOptions.initial)
+  const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])

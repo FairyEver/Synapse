@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { adminApi, type AuditLog } from '@/lib/api'
 import {
   DataTableColumnHeader,
+  DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
@@ -59,7 +60,7 @@ const columns: ColumnDef<AuditLog>[] = [
 
 export default function AuditLogsPage() {
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [action, setAction] = useState('')
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },

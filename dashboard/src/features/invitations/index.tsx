@@ -6,6 +6,7 @@ import { Copy, Loader2, Plus, Trash2 } from 'lucide-react'
 import { adminApi, type AdminInvitationRow } from '@/lib/api'
 import {
   DataTableColumnHeader,
+  DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
@@ -33,7 +34,7 @@ import { getInvitationTeamsErrorMessage } from './invitation-teams-error'
 
 export default function InvitationsPage() {
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [createdInviteUrl, setCreatedInviteUrl] = useState('')

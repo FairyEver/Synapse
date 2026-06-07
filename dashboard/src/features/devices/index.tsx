@@ -9,6 +9,7 @@ import {
 } from '@/lib/device-utils'
 import {
   DataTableColumnHeader,
+  DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
@@ -16,12 +17,10 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 
-const initialPageSize = 20
-
 export default function DevicesPage() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'lastSeenAt', desc: true },
   ])

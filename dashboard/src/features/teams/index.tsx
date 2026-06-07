@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { adminApi, type AdminTeamRow } from '@/lib/api'
 import {
   DataTableColumnHeader,
+  DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
@@ -55,7 +56,7 @@ const columns: ColumnDef<AdminTeamRow>[] = [
 
 export default function TeamsPage() {
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
