@@ -107,6 +107,7 @@ export class LiveConnectionService {
       if (!this.isCurrentGeneration(generation)) return
       token = this.accountService.getAccessTokenForLive()
       if (!token) {
+        if (this.keepReconnectingForOfflineAccount()) return
         this.closeSocket("unauthenticated")
         this.setState({
           ...this.state,
@@ -338,6 +339,7 @@ export class LiveConnectionService {
       .then(() => {
         if (!this.isCurrentGeneration(generation)) return
         if (!this.accountService.getAccessTokenForLive()) {
+          if (this.keepReconnectingForOfflineAccount()) return
           this.closeSocket("unauthenticated")
           this.setState({
             ...this.state,
@@ -353,6 +355,7 @@ export class LiveConnectionService {
           errorName: error instanceof Error ? error.name : typeof error,
         })
         if (!this.isCurrentGeneration(generation)) return
+        if (this.keepReconnectingForOfflineAccount()) return
         this.closeSocket("unauthenticated")
         this.setState({
           ...this.state,
@@ -360,6 +363,23 @@ export class LiveConnectionService {
           lastError: "账号未登录",
         })
       })
+  }
+
+  private keepReconnectingForOfflineAccount(): boolean {
+    const accountState = this.accountService.getState()
+    if (
+      accountState.status !== "authenticated" ||
+      accountState.connectivity !== "offline"
+    ) {
+      return false
+    }
+
+    this.setState({
+      ...this.state,
+      status: "reconnecting",
+      lastError: "网络不可用，正在重试",
+    })
+    return true
   }
 
   private clearHeartbeat(): void {
