@@ -25,13 +25,11 @@ export interface DriveStoragePort {
 
 @Injectable()
 export class CosDriveStorage implements DriveStoragePort {
-  private readonly env = loadEnv(process.env)
-  private readonly cos = new COS({
-    SecretId: this.requireConfig(this.env.cosSecretId, "COS_SECRET_ID"),
-    SecretKey: this.requireConfig(this.env.cosSecretKey, "COS_SECRET_KEY"),
-  })
-  private readonly bucket = this.requireConfig(this.env.cosBucket, "COS_BUCKET")
-  private readonly region = this.requireConfig(this.env.cosRegion, "COS_REGION")
+  private client: {
+    readonly cos: COS
+    readonly bucket: string
+    readonly region: string
+  } | null = null
 
   async createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction> {
     const expiresAt = new Date(Date.now() + driveUploadUrlTtlSeconds * 1000)
@@ -67,7 +65,8 @@ export class CosDriveStorage implements DriveStoragePort {
 
   async deleteObject(key: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this.cos.deleteObject({ Bucket: this.bucket, Region: this.region, Key: key }, (error) => {
+      const client = this.getClient()
+      client.cos.deleteObject({ Bucket: client.bucket, Region: client.region, Key: key }, (error) => {
         if (error) reject(error)
         else resolve()
       })
@@ -76,9 +75,10 @@ export class CosDriveStorage implements DriveStoragePort {
 
   private getSignedUrl(input: { readonly key: string; readonly method: "put" | "get"; readonly expires: number }): Promise<string> {
     return new Promise((resolve, reject) => {
-      this.cos.getObjectUrl({
-        Bucket: this.bucket,
-        Region: this.region,
+      const client = this.getClient()
+      client.cos.getObjectUrl({
+        Bucket: client.bucket,
+        Region: client.region,
         Key: input.key,
         Sign: true,
         Method: input.method,
@@ -92,7 +92,8 @@ export class CosDriveStorage implements DriveStoragePort {
 
   private headObjectRaw(key: string): Promise<{ readonly headers?: Record<string, string> }> {
     return new Promise((resolve, reject) => {
-      this.cos.headObject({ Bucket: this.bucket, Region: this.region, Key: key }, (error, data) => {
+      const client = this.getClient()
+      client.cos.headObject({ Bucket: client.bucket, Region: client.region, Key: key }, (error, data) => {
         if (error) reject(error)
         else resolve(data)
       })
@@ -102,6 +103,20 @@ export class CosDriveStorage implements DriveStoragePort {
   private requireConfig(value: string | undefined, key: string): string {
     if (!value) throw new Error(`${key} is required for Synapse Drive storage.`)
     return value
+  }
+
+  private getClient(): { readonly cos: COS; readonly bucket: string; readonly region: string } {
+    if (this.client) return this.client
+    const env = loadEnv(process.env)
+    this.client = {
+      cos: new COS({
+        SecretId: this.requireConfig(env.cosSecretId, "COS_SECRET_ID"),
+        SecretKey: this.requireConfig(env.cosSecretKey, "COS_SECRET_KEY"),
+      }),
+      bucket: this.requireConfig(env.cosBucket, "COS_BUCKET"),
+      region: this.requireConfig(env.cosRegion, "COS_REGION"),
+    }
+    return this.client
   }
 }
 
