@@ -20,6 +20,7 @@ The first version is a complete drive MVP, not only a file-link MVP.
 - Default quota is 10 GB per user and 1 GB per file.
 - Tencent Cloud COS stores file bytes. COS object keys use internal item ids, not filenames or folder paths.
 - The database owns user ownership, folder path, filename, size, mime type, share state, quota, and storage metadata.
+- Uploads use a server-issued upload session and short-lived COS upload credential. The desktop client uploads bytes directly to COS; Synapse server never exposes permanent AK/SK.
 - Public link shape is:
 
   ```text
@@ -40,6 +41,7 @@ The first version is a complete drive MVP, not only a file-link MVP.
 - Do not expose Tencent Cloud AK/SK to desktop, dashboard, renderer, MCP responses, or logs.
 - Do not use filenames or user folder paths as COS object keys.
 - Do not make every uploaded item publicly accessible by default.
+- Do not implement user file upload in the dashboard web UI in the first version. User upload and file organization live in the desktop client.
 - Do not let admins reorganize a user's personal drive in the first version.
 - Do not expose owner identity or deletion status on public error pages.
 - Do not create a parallel dashboard component system or custom visual style for the management UI.
@@ -144,18 +146,50 @@ Suggested fields:
 
 ```prisma
 model DriveUsage {
-  userId      String   @id
-  usedBytes   BigInt   @default(0)
-  quotaBytes  BigInt
-  updatedAt   DateTime @updatedAt
+  userId        String   @id
+  usedBytes     BigInt   @default(0)
+  reservedBytes BigInt  @default(0)
+  quotaBytes    BigInt
+  updatedAt     DateTime @updatedAt
 }
 ```
 
-Default `quotaBytes` is 10 GB. Upload mutations must check and reserve quota transactionally so concurrent uploads cannot exceed quota.
+Default `quotaBytes` is 10 GB. Upload preparation must reserve quota transactionally by increasing `reservedBytes`; upload completion moves reserved bytes into `usedBytes`; cancellation, expiry, or failed verification releases the reservation. The server must enforce `usedBytes + reservedBytes + requestedBytes <= quotaBytes` so concurrent uploads cannot exceed quota.
 
-## Storage Model
+### DriveUploadSession
 
-Tencent Cloud COS is the byte store. Synapse server is the only component that uses AK/SK.
+Represents a pending direct-to-COS upload.
+
+Suggested fields:
+
+```prisma
+model DriveUploadSession {
+  id             String   @id @default(cuid())
+  userId         String
+  itemId         String
+  storageKey     String
+  expectedName   String
+  expectedSize   BigInt
+  expectedMime   String?
+  status         String
+  credentialKind String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+  failedAt       DateTime?
+
+  @@index([userId, status, createdAt])
+  @@index([expiresAt, status])
+}
+```
+
+Upload credentials are not stored in this table. It stores only the server-created upload intent, expected object key, expected size, status, and expiry.
+
+## Storage And Credential Model
+
+Tencent Cloud COS is the byte store. Permanent Tencent Cloud AK/SK live only in the server deployment secret layer, such as environment variables, Docker/Kubernetes secrets, or a cloud secret manager. They must not be stored in PostgreSQL, sent to desktop, sent to dashboard, included in MCP output, or written to logs. Dashboard diagnostics may show only whether COS is configured, never the credential value.
+
+The permanent credential should belong to a least-privilege CAM identity that can issue scoped upload credentials and operate only the configured bucket/prefix needed by Synapse Drive. Credential rotation should be possible by replacing deployment secrets and restarting or reloading the server.
 
 COS rules:
 
@@ -164,7 +198,17 @@ COS rules:
 - File names are not used in COS keys.
 - Metadata needed for download names, folder listings, and ownership is stored in PostgreSQL.
 
-Upload should go through Synapse server in the first version instead of issuing client-side COS credentials. This keeps credentials and permission checks centralized. Future versions can add direct-to-COS upload with short-lived credentials if needed.
+Uploads use direct-to-COS transfer with a server-issued upload session:
+
+- The server, not the client, creates `DriveItem.id` and `storageKey`.
+- The client never chooses the COS object key or random object filename.
+- The server returns either a short-lived STS credential scoped to the exact object key and upload actions, or a short-lived pre-signed upload URL for the exact object key.
+- The credential must expire quickly and must not allow listing, reading, deleting, or writing arbitrary keys.
+- The client uploads bytes directly to COS.
+- The client then calls the server completion endpoint.
+- The server verifies the COS object exists and that size/key match the upload session before marking the item active and charging usage.
+
+If the client uploads to the wrong key, it is outside the issued permission scope and should fail. If the client uploads wrong bytes or size to the right key, completion verification fails, the object is deleted or marked for cleanup, and reserved quota is released.
 
 Deletion should mark database state first, then delete COS objects. If COS deletion fails, keep `storageDeletePending=true` and expose retry diagnostics to admin operations or a future maintenance task. A failed COS delete must not resurrect the user-visible file.
 
@@ -174,17 +218,20 @@ Single file upload:
 
 1. Client or MCP sends target `parentId`, file name, file size, and mime type.
 2. Server verifies the authenticated user, parent folder ownership, single-file limit, and remaining quota.
-3. Server creates an uploading `DriveItem` and reserves quota transactionally.
-4. Server uploads bytes to COS under `drive/<driveItemId>`.
-5. On COS success, server marks the item active and returns item metadata.
-6. On failure, server releases reserved quota and marks or removes the uploading record.
+3. Server creates an uploading `DriveItem`, creates a `DriveUploadSession`, reserves quota transactionally, and generates `storageKey=drive/<driveItemId>`.
+4. Server returns upload instructions with short-lived STS credentials or a pre-signed upload URL scoped to that exact `storageKey`.
+5. Desktop client uploads bytes directly to COS.
+6. Client calls the upload completion endpoint with the upload session id and COS upload metadata such as ETag when available.
+7. Server checks the upload session, verifies the object in COS by key and size, marks the item active, moves reserved quota into used quota, and returns item metadata.
+8. On upload failure, cancellation, timeout, or verification mismatch, server releases reserved quota and marks or removes the uploading record. Any uploaded object for the failed session is deleted or marked for cleanup.
 
 Folder upload:
 
 1. Client sends a relative path manifest.
 2. Server creates missing folder nodes in the target parent.
-3. Server uploads each file through the same quota and COS path.
-4. Response returns successful items and skipped or failed entries.
+3. Server prepares one upload session per file, each with its own server-generated `DriveItem.id` and `storageKey`.
+4. Desktop client uploads file bytes directly to COS, then completes each session.
+5. Response returns successful items and skipped or failed entries.
 
 Partial success is allowed for folder upload. The UI and MCP result must make partial failures explicit.
 
@@ -235,6 +282,8 @@ The share dialog stays minimal:
 - It should not show disabled password or expiry controls in the first version.
 
 UI copy should stay operational and short. No feature-introduction paragraphs or marketing text.
+
+The first version does not add user upload or user file organization pages to the dashboard web UI. Dashboard remains for admin management only.
 
 ## Admin Dashboard
 
@@ -294,18 +343,20 @@ Add a built-in skill template named `synapse-drive-mcp`. The skill should guide 
 
 ## API Surface
 
-Recommended authenticated dashboard/user API groups:
+Recommended authenticated user API group:
 
 ```text
-GET    /api/dashboard/drive/items
-GET    /api/dashboard/drive/items/:id
-POST   /api/dashboard/drive/upload
-POST   /api/dashboard/drive/folders
-PATCH  /api/dashboard/drive/items/:id
-DELETE /api/dashboard/drive/items/:id
-POST   /api/dashboard/drive/items/:id/share
-DELETE /api/dashboard/drive/shares/:id
-GET    /api/dashboard/drive/usage
+GET    /api/drive/items
+GET    /api/drive/items/:id
+POST   /api/drive/uploads/prepare
+POST   /api/drive/uploads/:sessionId/complete
+POST   /api/drive/uploads/:sessionId/cancel
+POST   /api/drive/folders
+PATCH  /api/drive/items/:id
+DELETE /api/drive/items/:id
+POST   /api/drive/items/:id/share
+DELETE /api/drive/shares/:id
+GET    /api/drive/usage
 ```
 
 Recommended admin API group:
@@ -315,7 +366,7 @@ GET    /api/admin/drive/items
 DELETE /api/admin/drive/items/:id
 ```
 
-The final route names can follow the current server controller naming conventions, but authenticated routes must stay under `/api/*`; public share routes stay under `/files/*`.
+The final route names can follow the current server controller naming conventions, but authenticated user routes must stay under `/api/drive/*`; admin routes stay under `/api/admin/drive/*`; public share routes stay under `/files/*`.
 
 ## Error Handling
 
@@ -333,15 +384,19 @@ Authenticated API errors:
 Storage errors:
 
 - Upload failures release quota reservations.
+- Upload session expiry releases reserved quota and schedules any partial COS object for cleanup.
+- Upload completion verifies COS object key and size before making the item active.
 - COS delete failures mark delete-pending state and log structured diagnostics.
 - COS credentials and signed URLs must be redacted from logs and MCP output.
 
 ## Security And Privacy
 
 - AK/SK live only in server configuration.
+- Desktop clients receive only short-lived, scoped upload credentials or pre-signed upload URLs for server-generated object keys.
 - Public visitors cannot infer owner identity from share pages or errors.
 - Shares are explicit and revocable.
 - Share ids must be non-guessable and unique.
+- COS object keys are generated by the server from `DriveItem.id`; clients never generate storage object names.
 - All user operations check item ownership server-side.
 - Agent/MCP mutating operations follow permission and audit patterns.
 - Quota checks are enforced server-side for UI, API, and MCP.
@@ -349,7 +404,7 @@ Storage errors:
 
 ## Implementation Phases
 
-1. Server foundation: Prisma models, quota service, COS adapter, upload, delete, public file download, and public error page.
+1. Server foundation: Prisma models, quota service, COS adapter, upload-session preparation and completion, delete, public file download, and public error page.
 2. User drive UI: desktop top entry, file manager, upload file/folder, folder operations, sharing, and quota display.
 3. Admin dashboard: global drive table, filters, and admin delete.
 4. MCP and skill: `drive` capability domain, dispatcher, tool docs, `synapse-drive-mcp` template, and capability naming matrix updates.
@@ -365,7 +420,9 @@ Server tests:
 - Disabled or deleted shares return the public not-found page.
 - Upload enforces 1 GB single-file limit and 10 GB user quota.
 - Concurrent uploads cannot exceed quota.
-- COS upload failure releases quota.
+- Upload prepare returns only scoped temporary upload credentials or pre-signed URLs.
+- Upload completion rejects wrong key, wrong size, expired sessions, and missing COS objects.
+- Upload failure, cancellation, and session expiry release reserved quota.
 - COS delete failure leaves delete-pending state.
 
 Dashboard and desktop tests:
@@ -375,11 +432,13 @@ Dashboard and desktop tests:
 - Share dialog creates, copies, and disables share links.
 - Admin table uses server-side pagination and delete confirmation.
 - Public folder page lists only shared subtree contents.
+- Dashboard does not expose user upload or user file organization in the first version.
 
 MCP tests:
 
 - `drive_item_list`, `drive_item_get`, and `drive_usage_get` return safe summaries.
 - Upload defaults to root when no parent is supplied.
+- Upload uses prepare/complete semantics and does not expose permanent COS credentials.
 - Share create returns `/files/<shareId>`.
 - Delete and move route through permission and audit handling.
 - MCP responses never include COS credentials or password hashes.
@@ -388,6 +447,6 @@ MCP tests:
 
 These notes guide implementation without changing the confirmed product scope:
 
-- Exact COS SDK package and server streaming API depend on existing server dependency policy.
+- Exact COS SDK package and upload credential mode depend on existing server dependency policy.
+- Upload credentials should use Tencent Cloud COS STS or pre-signed upload URLs, selected during implementation based on SDK fit and multipart upload support.
 - Zip async threshold should be set during implementation after checking server limits.
-- Direct-to-COS upload can be revisited after the server-mediated MVP works.
