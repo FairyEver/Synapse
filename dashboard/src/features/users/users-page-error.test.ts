@@ -3,12 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { getUsersTableError, getUsersTableLoading } from './users-page-error'
 
 describe('getUsersTableError', () => {
-  it('uses only the users query error for the table error state', () => {
+  it('uses users query errors first and surfaces module permission definition failures', () => {
     const usersError = new Error('用户列表失败')
     const modulePermissionsError = new Error('模块权限失败')
 
-    expect(getUsersTableError(true, usersError)).toBe(usersError)
-    expect(getUsersTableError(false, modulePermissionsError)).toBeNull()
+    expect(
+      getUsersTableError(true, usersError, true, modulePermissionsError)
+    ).toBe(usersError)
+    expect(
+      getUsersTableError(false, null, true, modulePermissionsError)
+    ).toBe(modulePermissionsError)
   })
 })
 

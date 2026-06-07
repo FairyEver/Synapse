@@ -44,6 +44,8 @@ export default function UsersPage() {
 
   const {
     data: modulePermissionDefinitions = [],
+    error: modulePermissionDefinitionsError,
+    isError: isModulePermissionDefinitionsError,
     isLoading: isModulePermissionDefinitionsLoading,
     refetch: refetchModulePermissionDefinitions,
   } = useQuery({
@@ -77,7 +79,12 @@ export default function UsersPage() {
     isUsersLoading: isLoading,
     isModulePermissionDefinitionsLoading,
   })
-  const tableError = getUsersTableError(isError, error)
+  const tableError = getUsersTableError(
+    isError,
+    error,
+    isModulePermissionDefinitionsError,
+    modulePermissionDefinitionsError
+  )
   const retryTable = () => {
     void refetch()
     void refetchModulePermissionDefinitions()
