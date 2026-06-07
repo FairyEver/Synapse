@@ -15,6 +15,7 @@ export type SynapseActionRouter = {
 }
 
 export type SynapseActionRouterDeps = {
+  readonly automationDispatch: DomainDispatch
   readonly contentDispatch: DomainDispatch
   readonly databaseDispatch: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
@@ -28,6 +29,7 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
   return {
     async dispatch(action, params, context) {
       const domainId = getActionDomainId(action)
+      if (domainId === "automation") return deps.automationDispatch(action, params, context)
       if (domainId === "content") return deps.contentDispatch(action, params, context)
       if (domainId === "database") return deps.databaseDispatch(action, params, context)
       if (domainId === "model_price") return deps.modelPriceDispatch(action, params, context)
