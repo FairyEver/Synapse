@@ -285,6 +285,37 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(containers.open).not.toHaveBeenCalled()
   })
 
+  it("coreWorkflowEngineDescriptor injects workflow call runtime dependency", async () => {
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const workflowService = { get: vi.fn().mockResolvedValue(null) }
+    const containers = { open: vi.fn() }
+    const permissionGuard = { check: vi.fn() }
+    const auditSink = { record: vi.fn() }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((serviceId: string) => {
+          if (serviceId === "core.workflow") return workflowService
+          if (serviceId === "core.project-containers") return containers
+          if (serviceId === "core.permission-guard") return permissionGuard
+          if (serviceId === "core.audit-sink") return auditSink
+          throw new Error(`Unexpected service id: ${serviceId}`)
+        }),
+      },
+    }
+
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      runtimeDeps: {
+        workflowCall?: {
+          getWorkflowDefinition: (id: string) => Promise<unknown>
+        }
+      }
+    }
+
+    await expect(engine.runtimeDeps.workflowCall?.getWorkflowDefinition("child-1")).resolves.toBeNull()
+    expect(workflowService.get).toHaveBeenCalledWith("child-1")
+  })
+
   it("workflow Agent dependency converts node timeout minutes to milliseconds", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {

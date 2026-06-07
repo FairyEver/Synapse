@@ -95,6 +95,51 @@ describe("WorkflowEngine", () => {
     expect(result.output).toBe("result: done")
   })
 
+  it("passes workflow call stack into node execution context", async () => {
+    const seenStacks: unknown[] = []
+    nodeTypeRegistry.register({
+      type: "stack_probe",
+      title: "Stack Probe",
+      icon: promptNodeManifest.icon,
+      color: "bg-primary/10",
+      defaultConfig: {},
+      ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
+      cardSummary: () => ({ title: "Stack Probe", subtitle: "" }),
+      configFields: [],
+      configSchema: { parse: (value: unknown) => value, safeParse: (value: unknown) => ({ success: true, data: value }) } as never,
+    }, {
+      async execute(input) {
+        seenStacks.push(input.context.workflowCallStack)
+        return { status: "success", output: "probe", durationMs: 1 }
+      },
+    })
+
+    const def: WorkflowDefinition = {
+      id: "wf-stack",
+      name: "Stack WF",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [],
+      nodes: [
+        { id: "probe", name: "Probe", type: "stack_probe", position: { x: 0, y: 0 }, config: {} },
+        nodeEnd,
+      ],
+      edges: [{ id: "e1", from: "probe", to: "end" }],
+    }
+
+    const engine = new WorkflowEngine(fakeAgent("unused"))
+    await engine.run(def, {}, "run-stack", () => {}, undefined, undefined, "test", undefined, [
+      { workflowId: "parent", workflowName: "Parent" },
+      { workflowId: "wf-stack", workflowName: "Stack WF" },
+    ])
+
+    expect(seenStacks).toEqual([[
+      { workflowId: "parent", workflowName: "Parent" },
+      { workflowId: "wf-stack", workflowName: "Stack WF" },
+    ]])
+  })
+
   it("stores workflow usage cost snapshots from Agent Runtime local cost metadata", async () => {
     const def: WorkflowDefinition = {
       id: "wf-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],

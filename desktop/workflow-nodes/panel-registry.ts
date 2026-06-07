@@ -7,6 +7,7 @@ import { SwitchNodePanel } from "./switch/panel"
 import { EndNodePanel } from "./end/panel"
 import { HttpRequestNodePanel } from "./http-request/panel"
 import { ScriptNodePanel } from "./script/panel"
+import { WorkflowCallNodePanel } from "./workflow-call/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -19,6 +20,7 @@ export interface NodePanelProps {
   defaultModelTier?: string
   defaultNodeTimeoutMins?: number
   validationItems?: readonly WorkflowValidationDisplayItem[]
+  currentWorkflowId?: string
 }
 
 type PanelComponent = ComponentType<NodePanelProps>
@@ -32,6 +34,7 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["end", EndNodePanel as unknown as PanelComponent],
   ["http_request", HttpRequestNodePanel as unknown as PanelComponent],
   ["script", ScriptNodePanel as unknown as PanelComponent],
+  ["workflow_call", WorkflowCallNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {

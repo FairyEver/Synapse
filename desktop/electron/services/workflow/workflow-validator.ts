@@ -3,6 +3,7 @@ import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
 import { agentTimeoutMinsToMs, resolveAgentTimeoutMins } from "../../../workflow-nodes/agent-timeout"
+import { extractWorkflowCallTemplateVariables } from "../../../workflow-nodes/workflow-call/params"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -242,6 +243,40 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
           continue
         }
         seenVar.add(vname)
+      }
+    }
+
+    if (node.type === "workflow_call") {
+      const cfg = node.config as Record<string, unknown>
+      const childWorkflowId = typeof cfg.workflowId === "string" ? cfg.workflowId.trim() : ""
+      if (!childWorkflowId) {
+        errors.push({ type: "invalid_config", nodeId: node.id, nodeName: node.name, field: "workflowId", message: `节点「${node.name}」请选择要调用的工作流` })
+      } else if (childWorkflowId === def.id) {
+        errors.push({ type: "invalid_config", nodeId: node.id, nodeName: node.name, field: "workflowId", message: `节点「${node.name}」不能调用当前工作流` })
+      }
+
+      const templates = cfg.paramTemplates
+      const templateValues = templates && typeof templates === "object" && !Array.isArray(templates)
+        ? Object.values(templates as Record<string, unknown>)
+        : []
+      const boundNames = new Set(
+        (Array.isArray(vars) ? vars : [])
+          .map((variable) => (variable as Record<string, unknown>).name as string)
+          .filter(Boolean),
+      )
+      for (const value of templateValues) {
+        if (typeof value !== "string") continue
+        for (const placeholder of extractWorkflowCallTemplateVariables(value)) {
+          if (!boundNames.has(placeholder)) {
+            errors.push({
+              type: "invalid_config",
+              nodeId: node.id,
+              nodeName: node.name,
+              field: "paramTemplates",
+              message: `节点「${node.name}」的模板变量「${placeholder}」未绑定，请在节点变量中添加绑定`,
+            })
+          }
+        }
       }
     }
 

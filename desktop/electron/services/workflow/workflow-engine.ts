@@ -1,6 +1,6 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult, WorkflowNodeUsageCostSnapshot } from "../../../src/types/workflow"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
-import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps } from "../../../workflow-nodes/types"
+import type { AgentSendDeps, NodeExecutionResult, NodeRuntimeDeps, WorkflowCallStackEntry } from "../../../workflow-nodes/types"
 import type { ActorIdentity } from "../../runtime/security"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { DEFAULT_AGENT_TIMEOUT_MINS } from "../../../workflow-nodes/agent-timeout"
@@ -92,6 +92,7 @@ export class WorkflowEngine {
     projectId?: string,
     triggerSource?: string,
     actor?: ActorIdentity,
+    callStack?: readonly WorkflowCallStackEntry[],
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
@@ -115,6 +116,9 @@ export class WorkflowEngine {
 
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
+    const workflowCallStack: readonly WorkflowCallStackEntry[] = callStack && callStack.length > 0
+      ? callStack
+      : [{ workflowId: def.id, workflowName: def.name }]
 
     // --- Reachability pruning (includes side-effect branches) ---
     let executionSet: ReturnType<typeof computeFullExecutionSet>
@@ -244,6 +248,7 @@ export class WorkflowEngine {
               nodeName: node.name,
               abortSignal: effectiveAbortSignal,
               actor,
+              workflowCallStack,
             },
             agentDeps: this.agentDeps,
             runtimeDeps: this.runtimeDeps,

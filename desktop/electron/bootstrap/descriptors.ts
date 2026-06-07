@@ -1377,7 +1377,7 @@ export const coreWorkflowRunStatusesDescriptor: ServiceDescriptor<Map<string, Wo
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   id: "core.workflow.engine",
   criticality: "degraded",
-  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink"],
+  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink", "core.workflow"],
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
@@ -1463,11 +1463,31 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     }
     const permissionGuard = registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = registry.get<AuditSink>("core.audit-sink")
+    let workflowEngine: WorkflowEngine
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
+      workflowCall: {
+        getWorkflowDefinition: (id) => registry.get<WorkflowService>("core.workflow").get(id),
+        runWorkflow: async (input) => {
+          const runId = randomUUID()
+          const result = await workflowEngine.run(
+            input.definition,
+            input.params,
+            runId,
+            () => undefined,
+            input.abortSignal,
+            input.projectId,
+            input.triggerSource,
+            input.actor,
+            input.callStack,
+          )
+          return { runId, result }
+        },
+      },
     }
-    return new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
+    workflowEngine = new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
+    return workflowEngine
   },
 }
 
