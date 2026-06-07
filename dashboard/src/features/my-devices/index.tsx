@@ -199,7 +199,7 @@ export default function MyDevicesPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>我的设备</h1>
       </Header>
       <Main>

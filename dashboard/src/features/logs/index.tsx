@@ -68,7 +68,7 @@ export default function LogsPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>系统日志</h1>
       </Header>
       <Main>

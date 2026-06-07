@@ -51,7 +51,7 @@ export default function SystemPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>系统概览</h1>
       </Header>
       <Main>

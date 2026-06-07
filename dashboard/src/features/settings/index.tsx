@@ -27,7 +27,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>设置</h1>
       </Header>
 

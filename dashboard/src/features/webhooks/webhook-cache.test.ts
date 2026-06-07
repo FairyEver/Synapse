@@ -1,7 +1,11 @@
 import type { DashboardWebhookDto } from '@synapse/shared'
 import { describe, expect, it } from 'vitest'
 
-import { getWebhookDeliveriesHref, removeDeletedWebhookFromCache } from './index'
+import {
+  getWebhookDeliveriesHref,
+  getWebhookDetailHref,
+  removeDeletedWebhookFromCache,
+} from './index'
 
 function webhook(id: string): DashboardWebhookDto {
   return {
@@ -16,6 +20,13 @@ function webhook(id: string): DashboardWebhookDto {
 }
 
 describe('removeDeletedWebhookFromCache', () => {
+  it('builds a detail href for a webhook', () => {
+    expect(getWebhookDetailHref('webhook-1')).toBe('/webhooks/webhook-1')
+    expect(getWebhookDetailHref('webhook/with space')).toBe(
+      '/webhooks/webhook%2Fwith%20space'
+    )
+  })
+
   it('builds a filtered history href for a webhook', () => {
     expect(getWebhookDeliveriesHref('webhook-1')).toBe(
       '/webhook-deliveries?webhookId=webhook-1'

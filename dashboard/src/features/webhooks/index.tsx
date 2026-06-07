@@ -7,7 +7,7 @@ import {
 } from 'react'
 import type { DashboardWebhookDto } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { ChevronLeft, ChevronRight, MoreHorizontal, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { getPageNumbers } from '@/lib/utils'
@@ -54,14 +54,14 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   formatOptionalWebhookDateTime,
+  getCompactWebhookCardFieldLabels,
   getWebhookCardPageState,
   getWebhookDeliveryStatusLabel,
-  getWebhookUrlDisplayState,
 } from './webhook-display'
 import { getWebhookErrorMessage } from './webhook-error'
 import { WebhookUrlDialog } from './webhook-url-dialog'
 
-type WebhookFormState = {
+export type WebhookFormState = {
   mode: 'create' | 'edit'
   webhook: DashboardWebhookDto | null
   name: string
@@ -186,7 +186,7 @@ export default function WebhooksPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>Webhooks</h1>
       </Header>
       <Main className='flex flex-col gap-4'>
@@ -374,10 +374,10 @@ function WebhookCard({
   onOpenDeliveries: (webhook: DashboardWebhookDto) => void
   onDelete: (webhook: DashboardWebhookDto) => void
 }) {
-  const urlState = getWebhookUrlDisplayState(webhook)
+  const [lastDeliveryLabel, statusLabel] = getCompactWebhookCardFieldLabels()
 
   return (
-    <Card className='h-full gap-4'>
+    <Card className='h-full gap-3'>
       <CardHeader>
         <CardTitle className='flex min-w-0 items-center gap-2 text-base'>
           <span className='truncate'>{webhook.name}</span>
@@ -394,6 +394,9 @@ function WebhookCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
               <DropdownMenuGroup>
+                <DropdownMenuItem onClick={() => onOpenDeliveries(webhook)}>
+                  记录
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onEdit(webhook)}>
                   重命名
                 </DropdownMenuItem>
@@ -414,23 +417,12 @@ function WebhookCard({
           </DropdownMenu>
         </CardAction>
       </CardHeader>
-      <CardContent className='flex flex-col gap-4'>
-        <WebhookCardField label='Public ID'>
-          <span className='break-all font-mono'>{webhook.publicId}</span>
-        </WebhookCardField>
-        <WebhookCardField label='URL'>
-          <span className='break-all font-mono text-muted-foreground'>
-            {urlState.label}
-          </span>
-        </WebhookCardField>
-        <div className='grid gap-3 sm:grid-cols-2'>
-          <WebhookCardField label='创建时间'>
-            {formatOptionalWebhookDateTime(webhook.createdAt)}
-          </WebhookCardField>
-          <WebhookCardField label='最近触发'>
+      <CardContent className='flex flex-col gap-3'>
+        <div className='grid gap-3 md:grid-cols-2'>
+          <WebhookCardField label={lastDeliveryLabel}>
             {formatOptionalWebhookDateTime(webhook.lastDeliveryAt)}
           </WebhookCardField>
-          <WebhookCardField label='触发状态'>
+          <WebhookCardField label={statusLabel}>
             {webhook.lastDeliveryStatus ? (
               <Badge variant='outline'>
                 {getWebhookDeliveryStatusLabel(webhook.lastDeliveryStatus)}
@@ -441,7 +433,7 @@ function WebhookCard({
           </WebhookCardField>
         </div>
       </CardContent>
-      <CardFooter className='gap-2'>
+      <CardFooter className='justify-end gap-2'>
         <Button
           variant={webhook.enabled ? 'outline' : 'default'}
           size='sm'
@@ -449,12 +441,13 @@ function WebhookCard({
         >
           {webhook.enabled ? '停用' : '启用'}
         </Button>
-        <Button
-          variant='outline'
-          size='sm'
-          onClick={() => onOpenDeliveries(webhook)}
-        >
-          记录
+        <Button asChild variant='outline' size='sm'>
+          <Link
+            to='/webhooks/$webhookId'
+            params={{ webhookId: webhook.id }}
+          >
+            详情
+          </Link>
         </Button>
       </CardFooter>
     </Card>
@@ -589,7 +582,7 @@ function WebhookCardListSkeleton() {
   )
 }
 
-function WebhookFormDialog({
+export function WebhookFormDialog({
   form,
   isSaving,
   onFormChange,
@@ -656,4 +649,8 @@ export function removeDeletedWebhookFromCache(
 export function getWebhookDeliveriesHref(webhookId: string) {
   const query = new URLSearchParams({ webhookId })
   return `/webhook-deliveries?${query.toString()}`
+}
+
+export function getWebhookDetailHref(webhookId: string) {
+  return `/webhooks/${encodeURIComponent(webhookId)}`
 }

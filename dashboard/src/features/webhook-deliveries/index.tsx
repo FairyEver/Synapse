@@ -85,7 +85,7 @@ export default function WebhookDeliveriesPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>Webhook 历史</h1>
       </Header>
       <Main>

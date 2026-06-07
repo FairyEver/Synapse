@@ -69,7 +69,7 @@ export default function TeamsPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>团队管理</h1>
       </Header>
       <Main>

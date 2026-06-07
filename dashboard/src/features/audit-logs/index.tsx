@@ -89,7 +89,7 @@ export default function AuditLogsPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>审计日志</h1>
       </Header>
       <Main>

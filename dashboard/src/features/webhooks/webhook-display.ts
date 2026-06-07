@@ -2,6 +2,22 @@ import type { DashboardWebhookDto, WebhookDeliveryClientReceiptStatus, WebhookDe
 
 type WebhookUrlLike = Pick<DashboardWebhookDto, 'url' | 'maskedUrl'>
 
+const compactWebhookCardFieldLabels = [
+  '最近触发',
+  '触发状态',
+] as const
+
+export function getCompactWebhookCardFieldLabels() {
+  return compactWebhookCardFieldLabels
+}
+
+export function findWebhookById<T extends { readonly id: string }>(
+  webhooks: readonly T[],
+  webhookId: string
+): T | null {
+  return webhooks.find((webhook) => webhook.id === webhookId) ?? null
+}
+
 export function getWebhookUrlDisplayState(webhook: WebhookUrlLike) {
   return {
     kind: 'masked' as const,

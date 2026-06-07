@@ -179,7 +179,7 @@ export default function InvitationsPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <div className='flex flex-1 items-center justify-between gap-3'>
           <h1 className='text-lg font-semibold'>邀请管理</h1>
           <Button onClick={() => setIsCreateOpen(true)}>

@@ -208,7 +208,7 @@ export default function UsersPage() {
 
   return (
     <>
-      <Header>
+      <Header fixed>
         <h1 className='text-lg font-semibold'>用户管理</h1>
       </Header>
       <Main>

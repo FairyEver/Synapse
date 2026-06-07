@@ -29,6 +29,7 @@ import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_aut
 import { Route as AuthenticatedDevicesIndexRouteImport } from './routes/_authenticated/devices/index'
 import { Route as AuthenticatedBackupIndexRouteImport } from './routes/_authenticated/backup/index'
 import { Route as AuthenticatedAuditLogsIndexRouteImport } from './routes/_authenticated/audit-logs/index'
+import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -140,6 +141,12 @@ const AuthenticatedAuditLogsIndexRoute =
     path: '/audit-logs/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedWebhooksWebhookIdRoute =
+  AuthenticatedWebhooksWebhookIdRouteImport.update({
+    id: '/webhooks/$webhookId',
+    path: '/webhooks/$webhookId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
   id: '/(auth)/auth/desktop',
   path: '/auth/desktop',
@@ -155,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof authSignUpRoute
   '/team-invite': typeof authTeamInviteRoute
   '/auth/desktop': typeof authAuthDesktopRoute
+  '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/backup/': typeof AuthenticatedBackupIndexRoute
   '/devices/': typeof AuthenticatedDevicesIndexRoute
@@ -176,6 +184,7 @@ export interface FileRoutesByTo {
   '/team-invite': typeof authTeamInviteRoute
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
+  '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
   '/backup': typeof AuthenticatedBackupIndexRoute
   '/devices': typeof AuthenticatedDevicesIndexRoute
@@ -200,6 +209,7 @@ export interface FileRoutesById {
   '/(auth)/team-invite': typeof authTeamInviteRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
+  '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/_authenticated/backup/': typeof AuthenticatedBackupIndexRoute
   '/_authenticated/devices/': typeof AuthenticatedDevicesIndexRoute
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/team-invite'
     | '/auth/desktop'
+    | '/webhooks/$webhookId'
     | '/audit-logs/'
     | '/backup/'
     | '/devices/'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/team-invite'
     | '/'
     | '/auth/desktop'
+    | '/webhooks/$webhookId'
     | '/audit-logs'
     | '/backup'
     | '/devices'
@@ -268,6 +280,7 @@ export interface FileRouteTypes {
     | '/(auth)/team-invite'
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
+    | '/_authenticated/webhooks/$webhookId'
     | '/_authenticated/audit-logs/'
     | '/_authenticated/backup/'
     | '/_authenticated/devices/'
@@ -434,6 +447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuditLogsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/webhooks/$webhookId': {
+      id: '/_authenticated/webhooks/$webhookId'
+      path: '/webhooks/$webhookId'
+      fullPath: '/webhooks/$webhookId'
+      preLoaderRoute: typeof AuthenticatedWebhooksWebhookIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/(auth)/auth/desktop': {
       id: '/(auth)/auth/desktop'
       path: '/auth/desktop'
@@ -461,6 +481,7 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
   AuthenticatedAuditLogsIndexRoute: typeof AuthenticatedAuditLogsIndexRoute
   AuthenticatedBackupIndexRoute: typeof AuthenticatedBackupIndexRoute
   AuthenticatedDevicesIndexRoute: typeof AuthenticatedDevicesIndexRoute
@@ -477,6 +498,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
   AuthenticatedAuditLogsIndexRoute: AuthenticatedAuditLogsIndexRoute,
   AuthenticatedBackupIndexRoute: AuthenticatedBackupIndexRoute,
   AuthenticatedDevicesIndexRoute: AuthenticatedDevicesIndexRoute,

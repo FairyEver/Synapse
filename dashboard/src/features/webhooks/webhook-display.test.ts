@@ -1,7 +1,9 @@
 import { WEBHOOK_DELIVERY_STATUS } from '@synapse/shared'
 import { describe, expect, it } from 'vitest'
 import {
+  findWebhookById,
   formatOptionalWebhookDateTime,
+  getCompactWebhookCardFieldLabels,
   getWebhookCardPageState,
   getWebhookDeliveryStatusLabel,
   getWebhookReceiptStatusLabel,
@@ -9,6 +11,29 @@ import {
 } from './webhook-display'
 
 describe('webhook display helpers', () => {
+  it('keeps compact cards focused on high-signal fields', () => {
+    expect(getCompactWebhookCardFieldLabels()).toEqual([
+      '最近触发',
+      '触发状态',
+    ])
+    expect(getCompactWebhookCardFieldLabels()).not.toContain('Public ID')
+    expect(getCompactWebhookCardFieldLabels()).not.toContain('URL')
+    expect(getCompactWebhookCardFieldLabels()).not.toContain('创建时间')
+  })
+
+  it('finds a webhook for detail pages by id', () => {
+    const webhooks = [
+      { id: 'webhook-1', name: 'A' },
+      { id: 'webhook-2', name: 'B' },
+    ]
+
+    expect(findWebhookById(webhooks, 'webhook-2')).toEqual({
+      id: 'webhook-2',
+      name: 'B',
+    })
+    expect(findWebhookById(webhooks, 'missing')).toBeNull()
+  })
+
   it('always masks webhook URLs in the list', () => {
     expect(getWebhookUrlDisplayState({
       url: 'https://synapse.test/webhooks/wh_public/whsec_secret',
