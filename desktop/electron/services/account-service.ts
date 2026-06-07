@@ -245,6 +245,14 @@ export class AccountService {
     const persisted = await this.readPersisted("Failed to read stored account for auth callback.")
     const attempt = persisted?.activeAttempt
 
+    if (!attempt && callbackState && this.state.status === "authenticated") {
+      logger.info("Ignored stale account auth callback while already authenticated.", {
+        operation: "handleAuthCallback",
+        status: "already-authenticated",
+      })
+      return this.state
+    }
+
     if (!attempt && callbackState && this.state.status === "unauthenticated") {
       logger.info("Ignored account auth callback without an active login attempt.", {
         operation: "handleAuthCallback",

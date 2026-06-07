@@ -203,6 +203,45 @@ describe("AccountService", () => {
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
   })
 
+  it("ignores stale auth callbacks after the user is already authenticated", async () => {
+    const fetchMock = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/desktop/token")) {
+        expect(init?.method).toBe("POST")
+        return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    }) as typeof fetch
+    const { namespace, service } = await createTestAccountService({ fetch: fetchMock })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+    const authenticatedState = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`,
+    )
+    expect(authenticatedState.status).toBe("authenticated")
+    expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+
+    const staleState = await service.handleAuthCallback(
+      "synapse://auth/desktop/callback?code=old-code&state=old-state",
+    )
+
+    expect(staleState).toEqual(authenticatedState)
+    expect(service.getState()).toEqual(authenticatedState)
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-1",
+      lastProfile: { user: { email: "u@example.com" } },
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(accountLogger.info).toHaveBeenCalledWith("Ignored stale account auth callback while already authenticated.", {
+      operation: "handleAuthCallback",
+      status: "already-authenticated",
+    })
+  })
+
   it("logs successful callback exchange and authentication without leaking credentials", async () => {
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url, init) => {
