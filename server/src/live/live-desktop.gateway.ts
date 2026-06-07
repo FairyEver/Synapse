@@ -186,6 +186,39 @@ export class LiveDesktopGateway {
     }
   }
 
+  disconnectUser(userId: string): void {
+    const clients = this.registry.listOnlineByUser(userId)
+
+    for (const client of clients) {
+      if (!client.connectionId) continue
+
+      const connectionId = client.connectionId
+      const socket = this.socketsByConnectionId.get(connectionId)
+      this.socketsByConnectionId.delete(connectionId)
+
+      const disconnected = this.registry.markDisconnected({
+        connectionId,
+        now: this.clock.now(),
+        reason: "user_disabled",
+      })
+      if (disconnected) {
+        this.publish(disconnected)
+      }
+
+      if (!socket) continue
+
+      try {
+        socket.close(1008, "user_disabled")
+      } catch (error) {
+        this.logger.warn({
+          connectionId,
+          errorName: error instanceof Error ? error.name : typeof error,
+          userId,
+        }, "Live user disconnect failed")
+      }
+    }
+  }
+
   broadcastToUser(userId: string, message: LiveDesktopServerMessage): {
     readonly onlineClientCount: number
     readonly sentClientCount: number

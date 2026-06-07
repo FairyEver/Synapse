@@ -6,6 +6,7 @@ export type LiveClientDisconnectReason =
   | "heartbeat_timeout"
   | "superseded"
   | "auth_failed"
+  | "user_disabled"
 
 export interface LiveClientInstance {
   readonly userId: string
