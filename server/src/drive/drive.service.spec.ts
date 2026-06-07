@@ -93,6 +93,48 @@ describe("DriveService", () => {
     await service.disableShare("user-1", share.id)
     await expect(service.resolvePublicShare(share.shareId)).rejects.toBeInstanceOf(NotFoundException)
   })
+
+  it("expires pending sessions and releases reserved quota", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "stale.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await prisma.driveUploadSession.update({
+      where: { id: prepared.sessionId },
+      data: { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
+    })
+
+    const result = await service.expirePendingUploadSessions(new Date("2026-06-07T00:00:00.000Z"))
+    expect(result.expired).toBe(1)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
+  it("admin delete disables shares and hides the file", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const share = await service.createShare("user-1", prepared.item.id, "https://synapse.test")
+
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+    await expect(service.getItem("user-1", prepared.item.id)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.resolvePublicShare(share.shareId)).rejects.toBeInstanceOf(NotFoundException)
+  })
 })
 
 function createPrismaMemory() {
@@ -242,6 +284,9 @@ function matchesWhere(row: any, where: any): boolean {
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not
     if (value && typeof value === "object" && "gt" in value) return row[key] > value.gt
+    if (value && typeof value === "object" && "gte" in value) return row[key] >= value.gte
+    if (value && typeof value === "object" && "lt" in value) return row[key] < value.lt
+    if (value && typeof value === "object" && "lte" in value) return row[key] <= value.lte
     if (value && typeof value === "object" && "contains" in value) return String(row[key]).toLowerCase().includes(String(value.contains).toLowerCase())
     return row[key] === value
   })
