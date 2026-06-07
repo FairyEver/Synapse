@@ -183,6 +183,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
                       defaultModelTier={definition.defaultModelTier}
                       defaultNodeTimeoutMins={definition.defaultNodeTimeoutMins}
                       validationItems={validationItems}
+                      currentWorkflowId={definition.id}
                     />
                   </>
                 )
