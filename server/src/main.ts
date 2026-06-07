@@ -12,6 +12,7 @@ import { LiveDesktopGateway } from "./live/live-desktop.gateway"
 async function bootstrap(): Promise<void> {
   const env = loadEnv(process.env)
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, bodyParser: false })
+  app.set("trust proxy", true)
   app.useLogger(app.get(Logger))
   app.useGlobalFilters(new AllExceptionsFilter(await app.resolve(PinoLogger)))
   app.useBodyParser("raw", { type: webhookRawBodyType, limit: "256kb" })

@@ -9,6 +9,7 @@ const envSchema = z
     USER_ACCESS_JWT_SECRET: z.string().min(32),
     USER_ACCESS_TOKEN_MINUTES: z.coerce.number().int().positive().default(15),
     USER_REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().default(30),
+    NODE_ENV: z.string().optional(),
     APP_PUBLIC_URL: z.string().url().optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
     PORT: z.coerce.number().int().positive().default(3000),
@@ -20,6 +21,14 @@ const envSchema = z
   .refine((env) => env.USER_ACCESS_JWT_SECRET !== env.ADMIN_JWT_SECRET, {
     path: ["USER_ACCESS_JWT_SECRET"],
     message: "USER_ACCESS_JWT_SECRET must be different from ADMIN_JWT_SECRET",
+  })
+  .refine((env) => env.NODE_ENV !== "production" || !!env.APP_PUBLIC_URL, {
+    path: ["APP_PUBLIC_URL"],
+    message: "APP_PUBLIC_URL is required in production",
+  })
+  .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
+    path: ["APP_PUBLIC_URL"],
+    message: "APP_PUBLIC_URL must be the public app root, not the /api URL",
   })
 
 export interface ServerEnv {

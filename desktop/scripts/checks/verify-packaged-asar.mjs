@@ -228,6 +228,21 @@ function verifyResources(resourcesPath, label) {
     failures,
     "file conversion service is missing from packed app.asar",
   )
+  verifyPackedTextIncludes(
+    buffer,
+    dataOffset,
+    header,
+    "dist-electron/electron/generated/deployment-config.generated.js",
+    "apiBaseUrl",
+    failures,
+    "desktop deployment config is missing from app.asar",
+  )
+  verifyPackedNode(
+    header,
+    "node_modules/@synapse/shared/dist/index.js",
+    failures,
+    "shared workspace package is missing from packed app.asar",
+  )
   verifyUnpackedNode(
     header,
     unpackedPath,

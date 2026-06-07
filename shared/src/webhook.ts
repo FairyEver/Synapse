@@ -1,4 +1,4 @@
-export const WEBHOOK_PUBLIC_PATH_PREFIX = "/webhooks"
+export { WEBHOOK_PUBLIC_PATH_PREFIX } from "./urls.js"
 
 export const WEBHOOK_DELIVERY_STATUS = {
   received: "received",

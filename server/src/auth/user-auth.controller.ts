@@ -1,5 +1,10 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
+import {
+  DESKTOP_CLIENT_ID,
+  DESKTOP_PKCE_CHALLENGE_METHOD,
+  DESKTOP_REDIRECT_URI,
+} from "@synapse/shared"
 import type { Request } from "express"
 import { z } from "zod"
 import { resolvePublicAppUrl } from "../common/public-app-url"
@@ -31,11 +36,11 @@ const refreshSchema = z.object({
 }).strict()
 
 const desktopAuthorizeSchema = z.object({
-  clientId: z.literal("synapse-desktop"),
-  redirectUri: z.literal("synapse://auth/desktop/callback"),
+  clientId: z.literal(DESKTOP_CLIENT_ID),
+  redirectUri: z.literal(DESKTOP_REDIRECT_URI),
   state: z.string().trim().min(16),
   codeChallenge: z.string().trim().min(16),
-  codeChallengeMethod: z.literal("S256"),
+  codeChallengeMethod: z.literal(DESKTOP_PKCE_CHALLENGE_METHOD),
 }).strict()
 
 const desktopTokenSchema = z.object({

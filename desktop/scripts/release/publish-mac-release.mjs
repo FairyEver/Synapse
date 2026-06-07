@@ -104,7 +104,7 @@ async function loadEnvFile(filePath) {
   }
 }
 
-async function loadReleaseEnv() {
+export async function loadReleaseEnv() {
   const explicitEnvFile = readArg("--env-file")
   const candidates = explicitEnvFile
     ? [path.resolve(explicitEnvFile)]

@@ -8,6 +8,7 @@ import type {
   SynapseAccountState,
 } from "../../src/types/account"
 import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
 import { createMainLogger } from "./log-store"
@@ -16,13 +17,9 @@ const logger = createMainLogger("service.account")
 const CORE_ACCOUNT_NAMESPACE = "core.account"
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
 const ACCOUNT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000, 120_000, 300_000] as const
-const PROD_API_BASE_URL = "https://synapse.d2.pub/api"
-const DEV_API_BASE_URL = "http://localhost:3000/api"
-const DESKTOP_CLIENT_ID = "synapse-desktop"
-const DESKTOP_REDIRECT_URI = "synapse://auth/desktop/callback"
-const PKCE_CHALLENGE_METHOD = "S256"
 const HTTP_ERROR_BODY_MAX_LENGTH = 200
 const SENSITIVE_HTTP_DETAIL_KEY_PATTERN = /password|token|secret|credential|authorization|cookie|apiKey/i
+const sharedUrlsPromise = import("@synapse/shared")
 
 type PersistedAccount = Record<string, unknown> & {
   refreshToken?: string
@@ -66,29 +63,30 @@ function createCodeChallenge(codeVerifier: string): string {
   return createHash("sha256").update(codeVerifier).digest("base64url")
 }
 
-function apiBaseUrl(isPackaged: boolean): string {
-  return isPackaged ? PROD_API_BASE_URL : DEV_API_BASE_URL
+function apiBaseUrl(): string {
+  return SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.apiBaseUrl
 }
 
-export function getAccountApiBaseUrl(isPackaged: boolean): string {
-  return apiBaseUrl(isPackaged)
+export function getAccountApiBaseUrl(): string {
+  return apiBaseUrl()
 }
 
-function apiMode(isPackaged: boolean): "production" | "development" {
-  return isPackaged ? "production" : "development"
+function apiMode(): "production" | "development" {
+  return isLocalApiBaseUrl(apiBaseUrl()) ? "development" : "production"
 }
 
-function dashboardLoginUrl(baseUrl: string, state: string, codeChallenge: string): string {
-  const origin = baseUrl.replace(/\/api\/?$/u, "")
-  const query = new URLSearchParams({
-    client_id: DESKTOP_CLIENT_ID,
-    redirect_uri: DESKTOP_REDIRECT_URI,
-    response_type: "code",
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: PKCE_CHALLENGE_METHOD,
-  })
-  return `${origin}/dashboard/auth/desktop?${query.toString()}`
+async function dashboardLoginUrl(baseUrl: string, state: string, codeChallenge: string): Promise<string> {
+  const { buildDesktopDashboardLoginUrl } = await sharedUrlsPromise
+  return buildDesktopDashboardLoginUrl({ apiBaseUrl: baseUrl, state, codeChallenge })
+}
+
+function isLocalApiBaseUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
+  } catch {
+    return false
+  }
 }
 
 function authCallbackErrorMessage(errorCode: string): string {
@@ -120,7 +118,6 @@ export class AccountService {
   private readonly namespace: EncryptedJsonNamespace<PersistedAccount>
   private readonly fetchImpl: typeof fetch
   private openExternal: AccountExternalUrlOpener
-  private readonly isPackaged: boolean
   private accessToken: string | null = null
   private eventBus: EventBus | null = null
   private state: SynapseAccountState = { status: "unauthenticated" }
@@ -134,7 +131,6 @@ export class AccountService {
     this.namespace = deps.namespace ?? createNamespace()
     this.fetchImpl = deps.fetch ?? globalThis.fetch.bind(globalThis)
     this.openExternal = deps.openExternal ?? unavailableExternalUrlOpener
-    this.isPackaged = deps.isPackaged ?? app.isPackaged
   }
 
   setEventBus(eventBus: EventBus): void {
@@ -161,19 +157,19 @@ export class AccountService {
   }
 
   getApiBaseUrlForLive(): string {
-    return apiBaseUrl(this.isPackaged)
+    return apiBaseUrl()
   }
 
   async listWebhooks(): Promise<DashboardWebhookDto[]> {
     return this.getAuthenticatedJson<DashboardWebhookDto[]>(
-      `${apiBaseUrl(this.isPackaged)}/dashboard/webhooks`,
+      `${apiBaseUrl()}/dashboard/webhooks`,
       "Webhook 列表加载失败。",
     )
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
     this.cancelOfflineRetry()
-    const baseUrl = apiBaseUrl(this.isPackaged)
+    const baseUrl = apiBaseUrl()
     const state = createState()
     const codeVerifier = createCodeVerifier()
     const codeChallenge = createCodeChallenge(codeVerifier)
@@ -185,7 +181,7 @@ export class AccountService {
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + ATTEMPT_TTL_MS).toISOString(),
     }
-    const loginUrl = dashboardLoginUrl(baseUrl, state, codeChallenge)
+    const loginUrl = await dashboardLoginUrl(baseUrl, state, codeChallenge)
     const revision = this.bumpAuthRevision()
 
     try {
@@ -200,7 +196,7 @@ export class AccountService {
       logger.info("Desktop account login started.", {
         operation: "startLogin",
         status: "success",
-        apiMode: apiMode(this.isPackaged),
+        apiMode: apiMode(),
       })
     } catch (error) {
       logger.warn("Failed to start desktop account login.", { error })
@@ -445,7 +441,7 @@ export class AccountService {
       attemptedRefreshToken = persisted.refreshToken
       const revision = this.authRevision
 
-      const baseUrl = apiBaseUrl(this.isPackaged)
+      const baseUrl = apiBaseUrl()
       const tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
         `${baseUrl}/auth/refresh`,
         { refreshToken: persisted.refreshToken },
@@ -507,7 +503,7 @@ export class AccountService {
     this.cancelOfflineRetry()
     this.accessToken = null
     if (persisted?.refreshToken) {
-      await this.postJson(`${apiBaseUrl(this.isPackaged)}/auth/logout`, {
+      await this.postJson(`${apiBaseUrl()}/auth/logout`, {
         refreshToken: persisted.refreshToken,
       }).catch((error) => {
         logger.warn("Remote account logout revoke failed.", { error })

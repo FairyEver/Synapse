@@ -24,6 +24,12 @@ pnpm build
 pnpm package:mac
 ```
 
+桌面端登录、Webhook 和 Live 连接使用的服务地址会在构建前生成到桌面包内。默认开发地址是 `http://localhost:3000`；正式打包或发版前设置公开根地址，例如：
+
+```bash
+SYNAPSE_DESKTOP_PUBLIC_APP_URL=https://synapse.d2.pub pnpm --filter @synapse/desktop run package:mac
+```
+
 ## 版本 / 发布
 
 版本号只写在 `desktop/package.json`。在仓库根目录执行：
@@ -33,6 +39,8 @@ pnpm --filter @synapse/desktop run bump:commit:push    # 递增 desktop 子包 p
 pnpm desktop:release:mac                               # 递增版本号、提交并 push，然后本机打包并只发布 macOS 更新
 ```
 
+`pnpm desktop:release:mac` 会在递增版本号前检查 `SYNAPSE_DESKTOP_PUBLIC_APP_URL`。该变量填写公开根地址，不带 `/api`，例如 `https://synapse.d2.pub`；可以写在仓库根目录 `.env.release.local`，也可以由 shell 环境提供。
+
 `push` 到 `main` 后，`.github/workflows/release.yml` 会自动：
 
 1. 装依赖（`pnpm install --frozen-lockfile`，需要根目录 `pnpm-lock.yaml` 已提交）。
@@ -41,9 +49,11 @@ pnpm desktop:release:mac                               # 递增版本号、提�
 4. 把 `desktop/release/` 下的产物整理为腾讯云 CDN 发布目录：安装包和 blockmap 长期归档到 `https://desktop.release.synapse.d2.pub/v<version>/`，`latest.yml` / `latest-windows.yml` / `latest-mac.yml` 上传到 CDN 根目录供应用内更新检查。
 5. 刷新 CDN 上的 `latest.yml` / `latest-windows.yml` / `latest-mac.yml`，验证 CDN 可访问后，在 `FairyEver/SynapseAppRelease` 创建只包含下载链接和发版说明的 GitHub Release。
 
+GitHub Action 发版会在构建安装包时设置 `SYNAPSE_DESKTOP_PUBLIC_APP_URL=https://synapse.d2.pub`，并强制要求该变量存在，避免正式包写入 CI 测试兜底地址。
+
 本机 macOS 快速发版使用 `pnpm desktop:release:mac`。该命令复用现有版本递增和 macOS 打包流程，只上传 macOS 安装包、blockmap 和 `latest-mac.yml`，不会改动 `latest.yml` 或 `latest-windows.yml`。全量 GitHub Action 发版仍会覆盖三个 updater metadata 文件，让 macOS 和 Windows 重新对齐到同一个版本。
 
-本机发布会自动读取仓库根目录 `.env.release.local`、`.env.local`、`.env`。推荐在 `.env.release.local` 中填写 `TENCENT_CLOUD_SECRET_ID`、`TENCENT_CLOUD_SECRET_KEY`；该文件已被 `.gitignore` 忽略，不会提交。也可以用 `--env-file <path>` 指定其它文件。若 shell 环境已存在同名变量，脚本不会用 env 文件覆盖它。如果没有安装 `tccli`，可先运行 `python -m pip install --user tccli`；COSCLI 会优先使用 `COSCLI_PATH` 或 PATH 中的 `coscli`，缺失时脚本会下载当前平台的 COSCLI 到临时目录。
+本机发布会自动读取仓库根目录 `.env.release.local`、`.env.local`、`.env`。推荐在 `.env.release.local` 中填写 `SYNAPSE_DESKTOP_PUBLIC_APP_URL`、`TENCENT_CLOUD_SECRET_ID`、`TENCENT_CLOUD_SECRET_KEY`；该文件已被 `.gitignore` 忽略，不会提交。也可以用 `--env-file <path>` 指定其它文件。若 shell 环境已存在同名变量，脚本不会用 env 文件覆盖它。如果没有安装 `tccli`，可先运行 `python -m pip install --user tccli`；COSCLI 会优先使用 `COSCLI_PATH` 或 PATH 中的 `coscli`，缺失时脚本会下载当前平台的 COSCLI 到临时目录。
 
 发布前需要在 GitHub Secrets 中配置 `TENCENT_CLOUD_SECRET_ID`、`TENCENT_CLOUD_SECRET_KEY` 和 `RELEASE_REPO_TOKEN`。腾讯云密钥应限制在 `synapse-desktop-release-1252371654` 的发布前缀写入权限，以及 `desktop.release.synapse.d2.pub` 的 CDN URL 刷新权限。
 

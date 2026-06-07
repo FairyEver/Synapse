@@ -50,6 +50,14 @@ describe("server deployment configuration", () => {
     expect(entrypoint).toContain("exec node server/dist/main.js")
   })
 
+  it("includes the shared workspace package in the server Docker image", () => {
+    const dockerfile = readRepoFile("server/Dockerfile")
+
+    expect(dockerfile).toContain("COPY shared/package.json shared/package.json")
+    expect(dockerfile).toContain("COPY shared/ shared/")
+    expect(dockerfile).toContain("COPY --from=build /app/shared ./shared")
+  })
+
   it("documents the hardened deployment failure path", () => {
     const readme = readRepoFile("server/README.md")
 
@@ -115,5 +123,14 @@ describe("server deployment configuration", () => {
 
     expect(nginx).toContain("location /webhooks/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
+  it("forwards public origin and websocket upgrade headers to the api server", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("proxy_set_header X-Forwarded-Host $host")
+    expect(nginx).toContain("proxy_set_header Upgrade $http_upgrade")
+    expect(nginx).toContain("proxy_set_header Connection $connection_upgrade")
+    expect(nginx).toContain("map $http_upgrade $connection_upgrade")
   })
 })

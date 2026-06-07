@@ -1,4 +1,9 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
+import {
+  buildWebhookUrl as buildSharedWebhookUrl,
+} from "@synapse/shared"
+
+export { maskWebhookUrl } from "@synapse/shared"
 
 type RandomBytes = (size: number) => Buffer
 
@@ -27,25 +32,5 @@ export function verifyWebhookSecret(secret: string, hash: string): boolean {
 }
 
 export function buildWebhookUrl(publicAppUrl: string, publicId: string, secret: string): string {
-  const base = publicAppUrl.trim().replace(/\/+$/u, "")
-  return `${base}/webhooks/${encodeURIComponent(publicId)}/${encodeURIComponent(secret)}`
-}
-
-export function maskWebhookUrl(url: string): string {
-  try {
-    const parsed = new URL(url)
-    const parts = parsed.pathname.split("/")
-    if (parts.length >= 4 && parts[1] === "webhooks") {
-      parts[3] = "***"
-      parsed.pathname = parts.join("/")
-      return parsed.toString()
-    }
-  } catch {
-    return maskWebhookPath(url)
-  }
-  return maskWebhookPath(url)
-}
-
-function maskWebhookPath(value: string): string {
-  return value.replace(/\/webhooks\/([^/]+)\/[^/?#]+/u, "/webhooks/$1/***")
+  return buildSharedWebhookUrl({ publicAppUrl, publicId, secret })
 }

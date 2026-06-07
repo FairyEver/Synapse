@@ -10,8 +10,8 @@ The feature is optional. Existing local repositories, Agent workflows, content b
 
 - Use the existing Synapse server auth source.
 - Do not add registration to Desktop in the first version.
-- Development Desktop connects to `http://localhost:3000/api`.
-- Packaged Desktop connects to `https://synapse.d2.pub/api`.
+- Development Desktop defaults to public app root `http://localhost:3000` and derives API base `/api`.
+- Packaged Desktop embeds the public app root from `SYNAPSE_DESKTOP_PUBLIC_APP_URL` at build time and derives API base `/api`.
 - Login uses the system browser, not an Electron embedded login page.
 - Browser callback uses `synapse://auth/desktop/callback`.
 - Browser login starts at the dedicated dashboard authorization route `/dashboard/auth/desktop`, not the ordinary sign-in route.

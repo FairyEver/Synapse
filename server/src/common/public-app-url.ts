@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http"
+import { normalizePublicAppUrl } from "@synapse/shared"
 
 type RequestOriginInput = {
   readonly headers: IncomingHttpHeaders
@@ -9,10 +10,6 @@ type RequestOriginInput = {
 function readHeader(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? ""
   return value ?? ""
-}
-
-function normalizePublicAppUrl(value: string): string {
-  return value.trim().replace(/\/+$/, "")
 }
 
 function resolvePublicAppUrl(input: {

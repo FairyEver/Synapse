@@ -97,8 +97,8 @@ describe("LogFileService", () => {
       writeTestLog("server.2026-04-01.log", [{ time: 1, level: 30, msg: "old" }]);
       writeTestLog("server.2026-05-05.log", [{ time: 2, level: 30, msg: "new" }]);
 
-      const deleted = await service.cleanup("2026-05-01");
-      expect(deleted).toBe(1);
+      const result = await service.cleanup("2026-05-01");
+      expect(result).toEqual({ deleted: 1, failures: [] });
       expect(existsSync(join(TEST_LOG_DIR, "server.2026-04-01.log"))).toBe(false);
       expect(existsSync(join(TEST_LOG_DIR, "server.2026-05-05.log"))).toBe(true);
     });
