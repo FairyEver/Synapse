@@ -12,6 +12,7 @@ const baseWebhook = {
   secret: "whsec_secret",
   name: "GitHub",
   enabled: true,
+  deletedAt: null,
   createdAt: new Date("2026-06-06T10:00:00.000Z"),
   updatedAt: new Date("2026-06-06T10:00:00.000Z"),
   deliveries: [],
@@ -210,7 +211,7 @@ describe("WebhookService", () => {
       lastDeliveryStatus: WEBHOOK_DELIVERY_STATUS.received,
     }])
     const findManyArgs = prisma.userWebhook.findMany.mock.calls[0]?.[0]
-    expect(findManyArgs.where).toEqual({ userId: "user-1" })
+    expect(findManyArgs.where).toEqual({ userId: "user-1", deletedAt: null })
     expect(findManyArgs.include.deliveries.orderBy).toEqual({ receivedAt: "desc" })
     expect(findManyArgs.include.deliveries.take).toBe(1)
   })
@@ -287,7 +288,6 @@ describe("WebhookService", () => {
       userWebhook: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findFirst: vi.fn().mockResolvedValue({ ...baseWebhook, name: "Deploy", enabled: false, deliveries: [] }),
-        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       auditLog: {
         create: vi.fn(),
@@ -295,7 +295,6 @@ describe("WebhookService", () => {
     }
     prisma.$transaction.mockImplementation((callback) => callback(tx))
     prisma.userWebhook.findFirst.mockResolvedValue({ ...baseWebhook, name: "Deploy", enabled: false })
-    prisma.userWebhook.deleteMany.mockResolvedValue({ count: 1 })
     const service = new WebhookService(prisma as never, {
       createPublicId: () => "wh_public",
       createSecret: () => "whsec_new",
@@ -327,6 +326,38 @@ describe("WebhookService", () => {
     expect(serializedAudit).not.toContain("whsec_")
     expect(serializedAudit).not.toContain("secretHash")
     expect(serializedAudit).not.toContain("https://synapse.test/webhooks/wh_public/whsec_new")
+  })
+
+  it("soft-deletes webhooks without deleting delivery history", async () => {
+    const prisma = createPrismaMock()
+    const tx = {
+      userWebhook: {
+        findFirst: vi.fn().mockResolvedValue({ id: "webhook-1", publicId: "wh_public", name: "GitHub", enabled: true }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      auditLog: { create: vi.fn() },
+    }
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    prisma.$transaction.mockImplementation((callback) => callback(tx))
+    const service = new WebhookService(prisma as never, {}, {} as never)
+
+    await expect(service.deleteForUser("user-1", "webhook-1", "203.0.113.13")).resolves.toEqual({ ok: true })
+
+    expect(tx.userWebhook.findFirst).toHaveBeenCalledWith({
+      where: { id: "webhook-1", userId: "user-1", deletedAt: null },
+      select: { id: true, publicId: true, name: true, enabled: true },
+    })
+    expect(tx.userWebhook.updateMany).toHaveBeenCalledWith({
+      where: { id: "webhook-1", userId: "user-1", deletedAt: null },
+      data: {
+        deletedAt: expect.any(Date),
+        enabled: false,
+        secret: null,
+      },
+    })
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "webhook.delete" }),
+    }))
   })
 
   it("rolls back secret reset when audit insert fails before returning the copyable URL", async () => {
@@ -390,7 +421,7 @@ describe("WebhookService", () => {
       .rejects.toThrow(NotFoundException)
     await expect(service.listForUser("user-1", "https://synapse.test")).resolves.toHaveLength(1)
     expect(prisma.userWebhook.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { userId: "user-1" },
+      where: { userId: "user-1", deletedAt: null },
     }))
   })
 
@@ -400,7 +431,6 @@ describe("WebhookService", () => {
       userWebhook: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         findFirst: vi.fn().mockResolvedValue({ ...baseWebhook, name: "Deploy", deliveries: [] }),
-        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       auditLog: {
         create: vi.fn(),
@@ -408,7 +438,6 @@ describe("WebhookService", () => {
     }
     prisma.$transaction.mockImplementation((callback) => callback(tx))
     prisma.userWebhook.findFirst.mockResolvedValue({ ...baseWebhook, name: "Deploy" })
-    prisma.userWebhook.deleteMany.mockResolvedValue({ count: 1 })
     const service = new WebhookService(prisma as never)
 
     await service.updateForUser("user-1", "webhook-1", { name: "Deploy" }, "https://synapse.test")
@@ -417,8 +446,13 @@ describe("WebhookService", () => {
     expect(tx.userWebhook.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "webhook-1", userId: "user-1" },
     }))
-    expect(tx.userWebhook.deleteMany).toHaveBeenCalledWith({
-      where: { id: "webhook-1", userId: "user-1" },
+    expect(tx.userWebhook.updateMany).toHaveBeenCalledWith({
+      where: { id: "webhook-1", userId: "user-1", deletedAt: null },
+      data: {
+        deletedAt: expect.any(Date),
+        enabled: false,
+        secret: null,
+      },
     })
   })
 
@@ -596,6 +630,10 @@ describe("WebhookService", () => {
     }))
     expect(harness.deliveries).toEqual([
       expect.objectContaining({
+        webhookId: "webhook-1",
+        webhookPublicId: "wh_public",
+        webhookName: "GitHub",
+        userId: "user-1",
         onlineClientCount: 2,
         sentClientCount: 2,
         failedClientCount: 0,
@@ -684,6 +722,14 @@ describe("WebhookService", () => {
 
   it("rejects disabled webhooks without broadcasting", async () => {
     const harness = createWebhookReceiveHarness({ enabled: false })
+
+    await expect(harness.receive()).rejects.toThrow("Webhook not found")
+    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it("rejects deleted webhooks without broadcasting", async () => {
+    const harness = createWebhookReceiveHarness({ deletedAt: new Date("2026-06-07T10:00:00.000Z") })
 
     await expect(harness.receive()).rejects.toThrow("Webhook not found")
     expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
@@ -944,6 +990,7 @@ describe("WebhookService", () => {
 
 function createWebhookReceiveHarness(input: {
   readonly enabled?: boolean
+  readonly deletedAt?: Date | null
   readonly broadcastError?: Error
   readonly updateError?: Error
   readonly updateErrorAttempts?: number
@@ -968,6 +1015,7 @@ function createWebhookReceiveHarness(input: {
   const webhook = {
     ...baseWebhook,
     enabled: input.enabled ?? true,
+    deletedAt: input.deletedAt ?? null,
     secretHash: hashWebhookSecret("whsec_secret"),
   }
   const live = {

@@ -52,6 +52,7 @@ type WebhookRecord = {
 type PublicWebhookRecord = Pick<WebhookRecord, "id" | "publicId" | "name" | "enabled"> & {
   readonly userId: string
   readonly secretHash: string
+  readonly deletedAt: Date | null
 }
 
 type DeliveryReceiptRecord = {
@@ -68,6 +69,8 @@ type DeliveryReceiptRecord = {
 type DeliveryRecord = {
   readonly id: string
   readonly webhookId: string
+  readonly webhookPublicId?: string
+  readonly webhookName?: string
   readonly method: string
   readonly path: string
   readonly query: unknown
@@ -118,7 +121,7 @@ export class WebhookService implements OnModuleInit {
 
   async listForUser(userId: string, publicAppUrl = ""): Promise<DashboardWebhookDto[]> {
     const webhooks = await this.prisma.userWebhook.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       include: webhookWithLatestDelivery,
       orderBy: { createdAt: "desc" },
     })
@@ -207,13 +210,18 @@ export class WebhookService implements OnModuleInit {
 
   async deleteForUser(userId: string, id: string, ipAddress = "system"): Promise<{ readonly ok: true }> {
     const actorEmail = await this.getAuditActorEmail(userId)
+    const deletedAt = new Date()
     await this.prisma.$transaction(async (tx) => {
       const webhook = await tx.userWebhook.findFirst({
-        where: { id, userId },
+        where: { id, userId, deletedAt: null },
         select: { id: true, publicId: true, name: true, enabled: true },
       })
-      const result = await tx.userWebhook.deleteMany({ where: { id, userId } })
-      if (result.count === 0 || !webhook) throw new NotFoundException("Webhook not found")
+      if (!webhook) throw new NotFoundException("Webhook not found")
+      const result = await tx.userWebhook.updateMany({
+        where: { id, userId, deletedAt: null },
+        data: { deletedAt, enabled: false, secret: null },
+      })
+      if (result.count === 0) throw new NotFoundException("Webhook not found")
       await this.createWebhookAudit(tx, {
         actorEmail,
         action: "webhook.delete",
@@ -358,6 +366,8 @@ export class WebhookService implements OnModuleInit {
       data: {
         webhookId: webhook.id,
         userId: webhook.userId,
+        webhookPublicId: webhook.publicId,
+        webhookName: webhook.name,
         method,
         path: maskedPath,
         query: sanitizedQuery,
@@ -549,17 +559,18 @@ export class WebhookService implements OnModuleInit {
 
   private async findEnabledPublicWebhook(publicId: string, secret: string): Promise<PublicWebhookRecord> {
     const webhook = await this.prisma.userWebhook.findFirst({
-      where: { publicId },
+      where: { publicId, deletedAt: null },
       select: {
         id: true,
         userId: true,
         publicId: true,
         name: true,
         enabled: true,
+        deletedAt: true,
         secretHash: true,
       },
     })
-    if (!webhook || !webhook.enabled || !verifyWebhookSecret(secret, webhook.secretHash)) {
+    if (!webhook || webhook.deletedAt || !webhook.enabled || !verifyWebhookSecret(secret, webhook.secretHash)) {
       throw new NotFoundException("Webhook not found")
     }
     return webhook
