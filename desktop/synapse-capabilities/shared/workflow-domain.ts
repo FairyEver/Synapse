@@ -47,7 +47,7 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntr
 // MCP tool definitions (JSON Schema input schemas)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in prompt templates with {{variableName}}. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
+const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Available node types include prompt, switch, http_request, script, workflow_call, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps its child params through paramTemplates, and returns the child workflow's End output. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
 const modelTierSchema = {
   type: "string",
@@ -105,13 +105,15 @@ const workflowDefinitionSchema = {
           position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
           config: {
             type: "object",
-            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables.",
+            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
             properties: {
               providerId: { type: "string" },
               modelTier: modelTierSchema,
               projectId: { type: "string" },
               timeoutMins: { type: "number" },
               variables: { type: "array", items: variableBindingSchema },
+              workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
+              paramTemplates: { type: "object", description: "workflow_call only: child parameter name to template string map." },
             },
           },
         },
@@ -148,7 +150,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
       description: "Return the full manifest for a node type including config JSON Schema, port definitions, and field descriptors. For prompt and switch nodes, also returns `availableProviders` — a list of configured providers with their model names per tier.",
       inputSchema: {
         type: "object",
-        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"end\")." } },
+        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"end\")." } },
         required: ["nodeType"],
       },
     },
@@ -265,7 +267,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
             description: "Node specification.",
             properties: {
               name: { type: "string", description: "Display name for the node." },
-              type: { type: "string", description: "Node type (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"end\")." },
+              type: { type: "string", description: "Node type (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"end\")." },
               position: { type: "object", description: "Optional { x, y } position. Auto-calculated if omitted.", properties: { x: { type: "number" }, y: { type: "number" } } },
               config: { type: "object", description: "Node configuration. Use workflow_node_type_describe to see required fields." },
             },

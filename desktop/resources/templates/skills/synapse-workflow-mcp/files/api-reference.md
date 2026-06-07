@@ -8,7 +8,7 @@ All tools are accessed via the `synapse-mcp` MCP server.
 
 ### workflow_node_type_list
 
-List available node types with summaries.
+List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -66,6 +66,16 @@ No provider needed. Config fields:
 - `posixLogin?` (boolean) — run as login shell (posix only)
 - `timeoutMins?` (number) — execution timeout in minutes
 - `variables` (array) — variable bindings
+
+### workflow_call
+
+No provider needed on the call node. It invokes another saved workflow and returns that child workflow's End output.
+
+- `workflowId` (string) — child workflow ID to call. Must not be the current workflow ID.
+- `variables` (array) — variable bindings from parent workflow params, upstream node outputs, or static values
+- `paramTemplates` (object) — child param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
+
+Before configuring `paramTemplates`, call `workflow_definition_get` for the child workflow and read its current `params`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
 
 ### end
 
