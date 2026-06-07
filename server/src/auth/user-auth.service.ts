@@ -1,5 +1,13 @@
 import { createHash, timingSafeEqual } from "node:crypto"
-import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
 import { Prisma, type TeamMembership, type TeamRole, type User } from "@prisma/client"
@@ -168,6 +176,8 @@ function toUserMeResponse(user: {
 
 @Injectable()
 export class UserAuthService {
+  private readonly logger = new Logger(UserAuthService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -681,8 +691,12 @@ export class UserAuthService {
         throw new UnauthorizedException("未登录或登录已过期。")
       }
       return { userId: user.id }
-    } catch {
-      throw new UnauthorizedException("未登录或登录已过期。")
+    } catch (error) {
+      if (isExpectedAccessTokenFailure(error)) {
+        throw new UnauthorizedException("未登录或登录已过期。")
+      }
+      this.logger.warn(safeAuditErrorDetail(error), "User access token verification failed")
+      throw new ServiceUnavailableException("认证服务暂时不可用，请稍后重试。")
     }
   }
 
@@ -777,6 +791,14 @@ export class UserAuthService {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
+function isExpectedAccessTokenFailure(error: unknown): boolean {
+  if (error instanceof UnauthorizedException) return true
+  if (!(error instanceof Error)) return false
+  return error.name === "JsonWebTokenError" ||
+    error.name === "TokenExpiredError" ||
+    error.name === "NotBeforeError"
 }
 
 function safeAuditErrorDetail(error: unknown): { readonly errorName?: string; readonly errorCode?: string } {
