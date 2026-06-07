@@ -31,9 +31,11 @@ function createPrismaMock() {
     },
     user: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
     },
     webhookDelivery: {
       create: vi.fn(),
+      count: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
@@ -580,6 +582,115 @@ describe("WebhookService", () => {
     await expect(service.listDeliveriesForUser("user-1", "webhook-1")).resolves.toEqual([
       expect.objectContaining({ status: WEBHOOK_DELIVERY_STATUS.rejected }),
     ])
+  })
+
+  it("lists current-user delivery history with filters and webhook metadata", async () => {
+    const prisma = createPrismaMock()
+    const deliveries = [{
+      id: "delivery-1",
+      webhookId: "webhook-1",
+      webhookPublicId: "wh_public",
+      webhookName: "GitHub",
+      method: "POST",
+      path: "/webhooks/wh_public/***",
+      query: { event: "push" },
+      headers: { "x-github-event": "push" },
+      bodyKind: "json",
+      bodySize: 12,
+      bodyPreview: "{\"ok\":true}",
+      receivedAt: new Date("2026-06-07T09:00:00.000Z"),
+      onlineClientCount: 2,
+      sentClientCount: 2,
+      failedClientCount: 0,
+      status: WEBHOOK_DELIVERY_STATUS.delivered,
+      error: null,
+      receipts: [],
+      webhook: {
+        id: "webhook-1",
+        publicId: "wh_public",
+        name: "GitHub current",
+        deletedAt: new Date("2026-06-07T10:00:00.000Z"),
+      },
+    }]
+    prisma.webhookDelivery.findMany.mockResolvedValue(deliveries)
+    prisma.webhookDelivery.count.mockResolvedValue(1)
+    prisma.$transaction.mockImplementation((input) => Array.isArray(input) ? Promise.all(input) : input({}))
+    const service = new WebhookService(prisma as never)
+
+    await expect(service.listDeliveryHistoryForUser("user-1", {
+      pagination: { page: 1, pageSize: 20, sortBy: "receivedAt", sortOrder: "desc" },
+      filters: { webhookId: "webhook-1", status: WEBHOOK_DELIVERY_STATUS.delivered, from: "2026-06-07", to: "2026-06-08" },
+    })).resolves.toMatchObject({
+      total: 1,
+      data: [{
+        id: "delivery-1",
+        webhook: {
+          id: "webhook-1",
+          publicId: "wh_public",
+          name: "GitHub",
+          currentName: "GitHub current",
+          deletedAt: "2026-06-07T10:00:00.000Z",
+        },
+      }],
+    })
+    expect(prisma.webhookDelivery.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        userId: "user-1",
+        webhookId: "webhook-1",
+        status: WEBHOOK_DELIVERY_STATUS.delivered,
+      }),
+      include: expect.objectContaining({
+        receipts: { orderBy: { sentAt: "asc" } },
+        webhook: expect.any(Object),
+      }),
+      orderBy: { receivedAt: "desc" },
+      skip: 0,
+      take: 20,
+    }))
+  })
+
+  it("lists admin delivery history across users with user summaries", async () => {
+    const prisma = createPrismaMock()
+    const delivery = {
+      id: "delivery-1",
+      webhookId: "webhook-1",
+      userId: "user-1",
+      webhookPublicId: "wh_public",
+      webhookName: "GitHub",
+      method: "POST",
+      path: "/webhooks/wh_public/***",
+      query: {},
+      headers: {},
+      bodyKind: "json",
+      bodySize: 12,
+      bodyPreview: null,
+      receivedAt: new Date("2026-06-07T09:00:00.000Z"),
+      onlineClientCount: 0,
+      sentClientCount: 0,
+      failedClientCount: 0,
+      status: WEBHOOK_DELIVERY_STATUS.noOnlineClients,
+      error: null,
+      receipts: [],
+      webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub", deletedAt: null },
+    }
+    prisma.user.findMany
+      .mockResolvedValueOnce([{ id: "user-1" }])
+      .mockResolvedValueOnce([{ id: "user-1", email: "user@example.com", displayName: "Ada" }])
+    prisma.webhookDelivery.findMany.mockResolvedValue([delivery])
+    prisma.webhookDelivery.count.mockResolvedValue(1)
+    prisma.$transaction.mockImplementation((input) => Array.isArray(input) ? Promise.all(input) : input({}))
+    const service = new WebhookService(prisma as never)
+
+    await expect(service.listDeliveryHistoryForAdmin({
+      pagination: { page: 1, pageSize: 20, sortBy: "receivedAt", sortOrder: "desc" },
+      filters: { user: "user@example.com" },
+    })).resolves.toMatchObject({
+      data: [{ user: { email: "user@example.com", displayName: "Ada" } }],
+      total: 1,
+    })
+    expect(prisma.webhookDelivery.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: { in: ["user-1"] } },
+    }))
   })
 
   it("accepts a webhook request, broadcasts to online clients, and stores delivery counts", async () => {

@@ -7,6 +7,7 @@ import {
   createLiveEnvelope,
   type DashboardWebhookDto,
   type DashboardWebhookSecretResult,
+  type WebhookDeliveryHistoryDto,
   type LiveDesktopServerMessage,
   type WebhookDeliveryDto,
   type WebhookDeliveryReceivedPayload,
@@ -14,6 +15,7 @@ import {
   type WebhookDeliveryClientReceiptDto,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
+import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { PrismaService } from "../prisma/prisma.service"
 import { sanitizeWebhookHeaders, sanitizeWebhookQuery, summarizeWebhookBody } from "./webhook-sanitize"
@@ -69,6 +71,7 @@ type DeliveryReceiptRecord = {
 type DeliveryRecord = {
   readonly id: string
   readonly webhookId: string
+  readonly userId?: string
   readonly webhookPublicId?: string
   readonly webhookName?: string
   readonly method: string
@@ -85,6 +88,20 @@ type DeliveryRecord = {
   readonly receipts?: readonly DeliveryReceiptRecord[]
   readonly status: string
   readonly error: string | null
+}
+
+type WebhookDeliveryHistoryFilters = {
+  readonly webhookId?: string
+  readonly status?: string
+  readonly from?: string
+  readonly to?: string
+  readonly userId?: string
+  readonly user?: string
+}
+
+type WebhookDeliveryHistoryOptions = {
+  readonly pagination: PaginationQuery
+  readonly filters?: WebhookDeliveryHistoryFilters
 }
 
 const webhookWithLatestDelivery = {
@@ -271,6 +288,79 @@ export class WebhookService implements OnModuleInit {
       take: 100,
     })
     return deliveries.map(toWebhookDeliveryDto)
+  }
+
+  async listDeliveryHistoryForUser(
+    userId: string,
+    options: WebhookDeliveryHistoryOptions,
+  ): Promise<PaginatedResponse<WebhookDeliveryHistoryDto>> {
+    const where = buildDeliveryHistoryWhere(userId, options.filters)
+    const [deliveries, total] = await this.prisma.$transaction([
+      this.prisma.webhookDelivery.findMany({
+        where,
+        ...toPrismaArgs(options.pagination),
+        include: deliveryHistoryInclude(),
+      }),
+      this.prisma.webhookDelivery.count({ where }),
+    ])
+    return {
+      data: deliveries.map((delivery) => toWebhookDeliveryHistoryDto(delivery, new Map())),
+      total,
+      page: options.pagination.page,
+      pageSize: options.pagination.pageSize,
+    }
+  }
+
+  async listDeliveryHistoryForAdmin(
+    options: WebhookDeliveryHistoryOptions,
+  ): Promise<PaginatedResponse<WebhookDeliveryHistoryDto>> {
+    const userFilterIds = await this.resolveAdminHistoryUserFilter(options.filters)
+    const where = buildDeliveryHistoryWhere(null, options.filters, userFilterIds)
+    const [deliveries, total] = await this.prisma.$transaction([
+      this.prisma.webhookDelivery.findMany({
+        where,
+        ...toPrismaArgs(options.pagination),
+        include: deliveryHistoryInclude(),
+      }),
+      this.prisma.webhookDelivery.count({ where }),
+    ])
+    const users = await this.loadHistoryUsers(deliveries)
+    return {
+      data: deliveries.map((delivery) => toWebhookDeliveryHistoryDto(delivery, users)),
+      total,
+      page: options.pagination.page,
+      pageSize: options.pagination.pageSize,
+    }
+  }
+
+  private async resolveAdminHistoryUserFilter(
+    filters: WebhookDeliveryHistoryFilters | undefined,
+  ): Promise<readonly string[] | undefined> {
+    const userSearch = filters?.user?.trim()
+    if (!userSearch) return undefined
+    const users = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { email: { contains: userSearch, mode: "insensitive" } },
+          { displayName: { contains: userSearch, mode: "insensitive" } },
+        ],
+      },
+      select: { id: true },
+      take: 100,
+    })
+    return users.map((user) => user.id)
+  }
+
+  private async loadHistoryUsers(
+    deliveries: ReadonlyArray<{ readonly userId?: string | null }>,
+  ): Promise<Map<string, { readonly id: string; readonly email: string; readonly displayName: string | null }>> {
+    const userIds = [...new Set(deliveries.map((delivery) => delivery.userId).filter((id): id is string => Boolean(id)))]
+    if (userIds.length === 0) return new Map()
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, email: true, displayName: true },
+    })
+    return new Map(users.map((user) => [user.id, user]))
   }
 
   async recordDeliveryAck(input: {
@@ -669,6 +759,55 @@ function normalizeWebhookName(name: string): string {
   return value
 }
 
+function parseDeliveryHistoryDate(value: string): Date {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) throw new BadRequestException("日期参数无效。")
+  return date
+}
+
+function buildDeliveryHistoryWhere(
+  ownerUserId: string | null,
+  filters: WebhookDeliveryHistoryFilters = {},
+  filteredUserIds?: readonly string[],
+): Prisma.WebhookDeliveryWhereInput {
+  const where: Prisma.WebhookDeliveryWhereInput = {}
+  if (ownerUserId) {
+    where.userId = ownerUserId
+  } else if (filters.userId && filteredUserIds) {
+    where.userId = filteredUserIds.includes(filters.userId) ? filters.userId : { in: [] }
+  } else if (filters.userId) {
+    where.userId = filters.userId
+  } else if (filteredUserIds) {
+    where.userId = { in: [...filteredUserIds] }
+  }
+  if (filters.webhookId) where.webhookId = filters.webhookId
+  if (filters.status) {
+    if (!webhookStatusValues.has(filters.status)) throw new BadRequestException("Webhook delivery status is invalid.")
+    where.status = filters.status
+  }
+  if (filters.from || filters.to) {
+    where.receivedAt = {
+      ...(filters.from ? { gte: parseDeliveryHistoryDate(filters.from) } : {}),
+      ...(filters.to ? { lte: parseDeliveryHistoryDate(filters.to) } : {}),
+    }
+  }
+  return where
+}
+
+function deliveryHistoryInclude() {
+  return {
+    receipts: { orderBy: { sentAt: "asc" as const } },
+    webhook: {
+      select: {
+        id: true,
+        publicId: true,
+        name: true,
+        deletedAt: true,
+      },
+    },
+  }
+}
+
 function normalizeWebhookMethod(method: string): string {
   return method.toUpperCase()
 }
@@ -714,6 +853,40 @@ function toWebhookDeliveryClientReceiptDto(receipt: DeliveryReceiptRecord): Webh
     sentAt: receipt.sentAt.toISOString(),
     ...(receipt.acknowledgedAt ? { acknowledgedAt: receipt.acknowledgedAt.toISOString() } : {}),
     status: normalizeWebhookDeliveryReceiptStatus(receipt.status),
+  }
+}
+
+function toWebhookDeliveryHistoryDto(
+  delivery: DeliveryRecord & {
+    readonly webhook?: {
+      readonly id: string
+      readonly publicId: string
+      readonly name: string
+      readonly deletedAt: Date | null
+    } | null
+  },
+  usersById: Map<string, { readonly id: string; readonly email: string; readonly displayName: string | null }>,
+): WebhookDeliveryHistoryDto {
+  const dto = toWebhookDeliveryDto(delivery)
+  const user = delivery.userId ? usersById.get(delivery.userId) : undefined
+  return {
+    ...dto,
+    webhook: {
+      id: delivery.webhook?.id ?? delivery.webhookId,
+      publicId: delivery.webhookPublicId ?? delivery.webhook?.publicId ?? "-",
+      name: delivery.webhookName ?? delivery.webhook?.name ?? "已删除 Webhook",
+      ...(delivery.webhook?.name ? { currentName: delivery.webhook.name } : {}),
+      ...(delivery.webhook?.deletedAt ? { deletedAt: delivery.webhook.deletedAt.toISOString() } : {}),
+    },
+    ...(user
+      ? {
+          user: {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+          },
+        }
+      : {}),
   }
 }
 

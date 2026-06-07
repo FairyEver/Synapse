@@ -6,10 +6,12 @@ import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.s
 function createController(
   service: Partial<AdminService>,
   auditLog: Partial<AuditLogService> = {},
+  webhooks: { listDeliveryHistoryForAdmin?: ReturnType<typeof vi.fn> } = {},
 ) {
   return new AdminController(
     service as AdminService,
     { record: vi.fn().mockResolvedValue(undefined), ...auditLog } as AuditLogService,
+    webhooks as never,
   )
 }
 
@@ -66,6 +68,32 @@ describe("AdminController", () => {
       },
       ipAddress: "203.0.113.10",
     })
+  })
+
+  it("lists admin webhook delivery history and audits the read", async () => {
+    const listDeliveryHistoryForAdmin = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const record = vi.fn().mockResolvedValue(undefined)
+    const controller = createController({}, { record }, { listDeliveryHistoryForAdmin })
+
+    await expect(controller.listWebhookDeliveries({
+      page: "1",
+      pageSize: "20",
+      sortBy: "receivedAt",
+      sortOrder: "desc",
+      user: "user@example.com",
+    }, { admin: { email: "admin@example.com" }, ip: "203.0.113.10" } as never))
+      .resolves
+      .toEqual({ data: [], total: 0, page: 1, pageSize: 20 })
+
+    expect(listDeliveryHistoryForAdmin).toHaveBeenCalledWith({
+      pagination: { page: 1, pageSize: 20, sortBy: "receivedAt", sortOrder: "desc" },
+      filters: { user: "user@example.com" },
+    })
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.webhook_deliveries.list",
+      targetType: "webhook_delivery",
+      targetId: "list",
+    }))
   })
 
   it("keeps admin read responses when audit writes fail", async () => {
