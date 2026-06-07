@@ -133,6 +133,7 @@ function createGateway(input: {
       touch: vi.fn().mockReturnValue(createClient({ lastSeenAt: "2026-06-06T10:00:01.000Z" })),
       markDisconnected: vi.fn(),
       markStaleClients: vi.fn().mockReturnValue([]),
+      listAll: vi.fn().mockReturnValue([]),
       ...input.registry,
     } as unknown as LiveClientRegistry,
     streams: {
@@ -581,6 +582,40 @@ describe("LiveDesktopGateway", () => {
     expect(markStaleClients).toHaveBeenCalledWith(expect.any(Date))
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({
       client: expect.objectContaining({ status: "stale" }),
+    }))
+  })
+
+  it("closes and forgets sockets when stale sweep marks clients offline", () => {
+    const socket = new FakeSocket()
+    const publish = vi.fn()
+    let now = new Date("2026-06-06T10:00:00.000Z")
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish } as unknown as LiveStreamService,
+      clock: {
+        randomId: () => "connection-1",
+        now: () => now,
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    publish.mockClear()
+    now = new Date("2026-06-06T10:01:31.000Z")
+
+    gateway.sweepStaleClients()
+
+    const trackedSockets = (gateway as unknown as {
+      readonly socketsByConnectionId: Map<string, FakeSocket>
+    }).socketsByConnectionId
+    expect(socket.closeCalls).toEqual([{ code: 1000, reason: "heartbeat_timeout" }])
+    expect(trackedSockets.has("connection-1")).toBe(false)
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      client: expect.objectContaining({
+        status: "offline",
+        disconnectReason: "heartbeat_timeout",
+      }),
     }))
   })
 })

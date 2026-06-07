@@ -181,7 +181,20 @@ export class LiveDesktopGateway {
   }
 
   sweepStaleClients(): void {
+    const connectionIdsByClient = new Map<string, string>()
+    for (const client of this.registry.listAll()) {
+      if (client.connectionId) {
+        connectionIdsByClient.set(liveClientKey(client), client.connectionId)
+      }
+    }
+
     for (const client of this.registry.markStaleClients(this.clock.now())) {
+      if (client.status === "offline") {
+        const connectionId = connectionIdsByClient.get(liveClientKey(client))
+        if (connectionId) {
+          this.closeStaleSocket(connectionId, client)
+        }
+      }
       this.publish(client)
     }
   }
@@ -273,6 +286,23 @@ export class LiveDesktopGateway {
       client: toPublicDto(client, { includeUserId: true }),
     })
   }
+
+  private closeStaleSocket(connectionId: string, client: LiveClientInstance): void {
+    const socket = this.socketsByConnectionId.get(connectionId)
+    this.socketsByConnectionId.delete(connectionId)
+    if (!socket) return
+
+    try {
+      socket.close(1000, "heartbeat_timeout")
+    } catch (error) {
+      this.logger.warn({
+        clientInstanceId: client.clientInstanceId,
+        connectionId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        userId: client.userId,
+      }, "Live stale socket close failed")
+    }
+  }
 }
 
 export function createLiveDesktopGatewayForTest(input: LiveDesktopGatewayTestInput): LiveDesktopGateway {
@@ -320,6 +350,10 @@ function readBearerToken(header: string | string[] | undefined): string | null {
   const value = Array.isArray(header) ? header[0] : header
   const [scheme, token] = value?.split(/\s+/, 2) ?? []
   return scheme?.toLowerCase() === "bearer" && token ? token : null
+}
+
+function liveClientKey(client: Pick<LiveClientInstance, "clientInstanceId" | "userId">): string {
+  return `${client.userId}:${client.clientInstanceId}`
 }
 
 function upgradePath(request: IncomingMessage): string {
