@@ -2,6 +2,19 @@ import type { WebhookDeliveryHistoryDto, WebhookDeliveryStatus } from '@synapse/
 
 export type HistoryStatusBadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline'
 
+export type WebhookDeliveryHistoryQueryDraft = {
+  page: number
+  pageSize: number
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
+  webhookId?: string
+  status?: string
+  from?: string
+  to?: string
+  user?: string
+  userId?: string
+}
+
 export function getWebhookHistoryDisplayName(delivery: Pick<WebhookDeliveryHistoryDto, 'webhook'>) {
   return delivery.webhook.name
 }
@@ -29,4 +42,21 @@ export function getWebhookDeliveryHistoryStatusBadgeVariant(
 
 export function formatWebhookDeliveryHistoryDateTime(value: string) {
   return new Date(value).toLocaleString('zh-CN')
+}
+
+export function buildWebhookDeliveryHistoryQuery(
+  input: WebhookDeliveryHistoryQueryDraft
+) {
+  return {
+    page: input.page,
+    pageSize: input.pageSize,
+    sortBy: input.sortBy,
+    sortOrder: input.sortOrder,
+    ...(input.webhookId?.trim() ? { webhookId: input.webhookId.trim() } : {}),
+    ...(input.status?.trim() ? { status: input.status.trim() } : {}),
+    ...(input.from?.trim() ? { from: input.from.trim() } : {}),
+    ...(input.to?.trim() ? { to: input.to.trim() } : {}),
+    ...(input.user?.trim() ? { user: input.user.trim() } : {}),
+    ...(input.userId?.trim() ? { userId: input.userId.trim() } : {}),
+  }
 }

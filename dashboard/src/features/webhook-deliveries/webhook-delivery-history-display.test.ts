@@ -1,6 +1,7 @@
 import { WEBHOOK_DELIVERY_STATUS, type WebhookDeliveryHistoryDto } from '@synapse/shared'
 import { describe, expect, it } from 'vitest'
 import {
+  buildWebhookDeliveryHistoryQuery,
   formatWebhookDeliveryClientSummary,
   formatWebhookDeliveryHistoryBody,
   getWebhookDeliveryHistoryStatusBadgeVariant,
@@ -54,5 +55,27 @@ describe('webhook delivery history display helpers', () => {
     expect(getWebhookDeliveryHistoryStatusBadgeVariant(WEBHOOK_DELIVERY_STATUS.delivered)).toBe('default')
     expect(getWebhookDeliveryHistoryStatusBadgeVariant(WEBHOOK_DELIVERY_STATUS.broadcastFailed)).toBe('destructive')
     expect(getWebhookDeliveryHistoryStatusBadgeVariant(WEBHOOK_DELIVERY_STATUS.noOnlineClients)).toBe('secondary')
+  })
+
+  it('keeps only meaningful history query values', () => {
+    expect(buildWebhookDeliveryHistoryQuery({
+      page: 1,
+      pageSize: 20,
+      sortBy: 'receivedAt',
+      sortOrder: 'desc',
+      webhookId: 'webhook-1',
+      status: '',
+      from: '',
+      to: '2026-06-08',
+      user: ' user@example.com ',
+    })).toEqual({
+      page: 1,
+      pageSize: 20,
+      sortBy: 'receivedAt',
+      sortOrder: 'desc',
+      webhookId: 'webhook-1',
+      to: '2026-06-08',
+      user: 'user@example.com',
+    })
   })
 })
