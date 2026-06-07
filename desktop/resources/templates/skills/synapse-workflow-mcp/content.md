@@ -16,11 +16,12 @@ If a user asks for another Synapse MCP domain while this skill is active, switch
 - **switch** — Evaluates input via AI, returns a branch label. Only the matching branch's downstream nodes execute. Requires a provider.
 - **http_request** — Sends an HTTP request (GET/POST/PUT/PATCH/DELETE) and returns the response. Supports headers, query params, JSON/text body, auth (bearer/basic), and timeout. No provider needed.
 - **script** — Executes a shell script (posix/cmd/powershell) and returns stdout as output. Supports env vars, timeout, and login shell mode. No provider needed.
+- **workflow_call** — Calls another saved workflow, maps parent context into the child workflow params, and returns the child workflow End output. No provider needed on the call node.
 - **end** — Terminal node (every workflow has exactly one). Defines the final output template. Cannot be deleted.
 
 ## Provider / Model Configuration
 
-Only **prompt** and **switch** nodes require a provider (AI service) and an execution project. **http_request** and **script** nodes execute without provider configuration. Configure project/provider/model with these exact field names:
+Only **prompt** and **switch** nodes require a provider (AI service) and an execution project. **http_request**, **script**, and **workflow_call** nodes execute without provider configuration on that node. Child prompt/switch nodes inside a workflow called by **workflow_call** still need their own effective project/provider/model through the child workflow defaults or child node overrides. Configure project/provider/model with these exact field names:
 
 - **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit these unless they override.
 - **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on a node's config.
@@ -43,13 +44,13 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 ## Creating a Workflow (Standard Flow)
 
 1. Call `workflow_node_type_list` to see available node types.
-2. Call `workflow_node_type_describe` with `nodeType: "prompt"` before choosing any AI node config. Use the returned `availableProviders` to choose the exact `providerId` and `modelTier`.
+2. Call `workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node.
 3. Call `workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
 4. If defaults were not set during create, call `workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `workflow_definition_update`.
 5. Call `workflow_param_update` to define input parameters.
-6. Create schema-valid node placeholders with `workflow_node_create`. For prompt/switch placeholders, include minimal valid prompt text and `variables: []`; do not bind `node_output` variables yet. Save every returned `nodeId`.
+6. Create schema-valid node placeholders with `workflow_node_create`. For prompt/switch placeholders, include minimal valid prompt text and `variables: []`; for workflow_call placeholders, include `{ workflowId, variables: [], paramTemplates: {} }`. Do not bind `node_output` variables yet. Save every returned `nodeId`.
 7. Create all structural edges with `workflow_edge_create`. For switch nodes, include a `branch` field matching a branch id.
-8. Update node configs with `workflow_node_update`: add final prompt templates and `variables`, including `node_output` bindings now that upstream edges exist.
+8. Update node configs with `workflow_node_update`: add final prompt templates, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings now that upstream edges exist.
 9. Call `workflow_layout_update` after node/edge changes.
 10. Call `workflow_definition_inspect` and fix errors before executing.
 11. Call `workflow_run_execute` with params to start execution. Returns `{ runId }`.
@@ -66,9 +67,43 @@ Nodes declare a `variables` array. Each binding has:
   - `{ type: "node_output", node: "nodeId" }` — output from an upstream node
   - `{ type: "static", value: "..." }` — hardcoded string
 
-## Prompt Templates
+## Template Fields
 
-Use `{{variableName}}` to interpolate bound variables into prompt text. All referenced variables must be declared in the node's `variables` array.
+Use `{{variableName}}` to interpolate bound variables into prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text. All referenced template variables must be declared in the node's `variables` array.
+
+## Calling Another Workflow
+
+Use a **workflow_call** node when the parent workflow should run another saved workflow.
+
+Config fields:
+- `workflowId` — child workflow ID. Do not set this to the current workflow ID.
+- `variables` — bindings from the parent workflow params, upstream node outputs, or static values.
+- `paramTemplates` — object whose keys are child workflow param names and whose values are template strings using `{{variableName}}`.
+
+Recommended MCP flow:
+1. Call `workflow_definition_list` to find the child workflow ID, then `workflow_definition_get` to read its current `params`.
+2. Create the workflow_call node with minimal valid config:
+   ```json
+   { "workflowId": "child-workflow-id", "variables": [], "paramTemplates": {} }
+   ```
+3. Create edges so upstream nodes exist before using `node_output` bindings.
+4. Update the workflow_call config with variable bindings and `paramTemplates`, for example:
+   ```json
+   {
+     "workflowId": "child-workflow-id",
+     "variables": [
+       { "name": "search_result", "source": { "type": "node_output", "node": "search-node-id" } },
+       { "name": "audience", "source": { "type": "param", "param": "audience" } }
+     ],
+     "paramTemplates": {
+       "topic": "请根据 {{search_result}} 输出摘要",
+       "style": "面向 {{audience}}，语气克制"
+     }
+   }
+   ```
+5. Run `workflow_definition_inspect` after updating. It catches direct self-calls and unbound variables in `paramTemplates`.
+
+At runtime, the call node reads the child workflow's latest saved definition. It returns only the child workflow End output as the workflow_call node output. It does not lock a child version and does not expose arbitrary child node outputs.
 
 ## Switch Branching
 
@@ -86,6 +121,7 @@ Switch branches are mutually exclusive paths:
 - Call `workflow_node_type_describe` with a node type to get its full config JSON Schema and available providers before configuring.
 - Always query available providers before setting `providerId` — do not guess provider IDs.
 - Prefer setting `defaultProjectId`/`defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every node.
+- For workflow_call nodes, configure child workflow params explicitly from the child workflow's current `params`; do not invent param names without reading the child definition.
 - Validate with `workflow_definition_inspect` before executing.
 - Treat `duplicate_switch_branch_targets` warnings as a likely wiring mistake unless the workflow intentionally merges branches immediately.
 - Build incrementally: create nodes → connect edges → configure → auto-layout → validate → run.
