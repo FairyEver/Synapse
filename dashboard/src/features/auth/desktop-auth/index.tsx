@@ -8,7 +8,7 @@ import {
   DESKTOP_REDIRECT_URI,
 } from '@synapse/shared'
 import { useAuthStore } from '@/stores/auth-store'
-import { dashboardApi } from '@/lib/api'
+import { dashboardApi, type DesktopAuthorizeInput } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -61,7 +61,9 @@ function buildDesktopAuthRedirect(search: DesktopAuthSearch) {
   return suffix ? `/auth/desktop?${suffix}` : '/auth/desktop'
 }
 
-function validateDesktopAuthSearch(search: DesktopAuthSearch) {
+function validateDesktopAuthSearch(
+  search: DesktopAuthSearch
+): DesktopAuthorizeInput | null {
   if (
     search.client_id !== DESKTOP_CLIENT_ID ||
     search.redirect_uri !== DESKTOP_REDIRECT_URI ||

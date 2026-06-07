@@ -30,11 +30,11 @@ describe('webhook display helpers', () => {
   })
 
   it('uses precise delivery status labels', () => {
-    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.received)).toBe('已接收')
-    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.noOnlineClients)).toBe('无在线客户端')
-    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.sent)).toBe('已投递')
-    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.delivered)).toBe('客户端已收到')
-    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.broadcastFailed)).toBe('投递失败')
+    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.received)).toBe('服务端已接收')
+    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.noOnlineClients)).toBe('无在线桌面端')
+    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.sent)).toBe('已发送到桌面端')
+    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.delivered)).toBe('桌面端已确认')
+    expect(getWebhookDeliveryStatusLabel(WEBHOOK_DELIVERY_STATUS.broadcastFailed)).toBe('发送失败')
   })
 
   it('labels client receipt statuses', () => {

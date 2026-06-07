@@ -442,7 +442,7 @@ function WebhookCard({
               </Badge>
             ) : (
               '-'
-            }
+            )}
           </WebhookCardField>
         </div>
       </CardContent>

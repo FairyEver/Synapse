@@ -33,15 +33,15 @@ export function getWebhookCardPageState<T>(
 export function getWebhookDeliveryStatusLabel(status: WebhookDeliveryStatus) {
   switch (status) {
     case 'received':
-      return '已接收'
+      return '服务端已接收'
     case 'no_online_clients':
-      return '无在线客户端'
+      return '无在线桌面端'
     case 'sent':
-      return '已投递'
+      return '已发送到桌面端'
     case 'delivered':
-      return '客户端已收到'
+      return '桌面端已确认'
     case 'broadcast_failed':
-      return '投递失败'
+      return '发送失败'
     case 'rejected':
       return '已拒绝'
   }
