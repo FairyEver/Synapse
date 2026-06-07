@@ -2,6 +2,7 @@ import type {
   DashboardWebhookDto,
   DashboardWebhookSecretResult,
   WebhookDeliveryDto,
+  WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
 
 export type AdminSession = {
@@ -326,6 +327,15 @@ type PaginationOptions = {
   sortOrder?: 'asc' | 'desc'
 }
 
+export type WebhookDeliveryHistoryQuery = PaginationOptions & {
+  webhookId?: string
+  status?: string
+  from?: string
+  to?: string
+  userId?: string
+  user?: string
+}
+
 function paginationSuffix(options: PaginationOptions) {
   const query = new URLSearchParams()
   if (options.page) query.set('page', String(options.page))
@@ -463,6 +473,12 @@ export const dashboardApi = {
     request<WebhookDeliveryDto[]>(
       `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}/deliveries`
     ),
+  listWebhookDeliveryHistory: (
+    options: WebhookDeliveryHistoryQuery = {}
+  ) =>
+    request<PaginatedResponse<WebhookDeliveryHistoryDto>>(
+      `${dashboardApiBasePath}/webhook-deliveries${querySuffix(options)}`
+    ),
   subscribeLiveClients: (
     onEvent: (event: LiveClientChangedEvent) => void,
     onError?: () => void
@@ -576,6 +592,12 @@ export const adminApi = {
       'audit-logs.csv'
     ),
   listLogFiles: () => request<LogFileInfo[]>(`${adminApiBasePath}/logs/files`),
+  listWebhookDeliveryHistory: (
+    options: WebhookDeliveryHistoryQuery = {}
+  ) =>
+    request<PaginatedResponse<WebhookDeliveryHistoryDto>>(
+      `${adminApiBasePath}/webhook-deliveries${querySuffix(options)}`
+    ),
   fetchRecentLogs: (
     options: { from?: string; level?: string; limit?: number; to?: string } = {}
   ) =>

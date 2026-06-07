@@ -1,8 +1,9 @@
-import { All, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from "@nestjs/common"
+import { All, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common"
 import type { Request } from "express"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { resolvePublicAppUrl } from "../common/public-app-url"
+import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { WebhookService } from "./webhook.service"
 
@@ -16,6 +17,8 @@ const updateWebhookSchema = z.object({
 }).strict().refine((value) => value.name !== undefined || value.enabled !== undefined, {
   message: "At least one field is required.",
 })
+
+const deliveryHistorySortFields = ["receivedAt", "status", "method"] as const
 
 @UseGuards(UserAuthGuard)
 @Controller("/api/dashboard/webhooks")
@@ -64,6 +67,20 @@ export class WebhookDashboardController {
   }
 }
 
+@UseGuards(UserAuthGuard)
+@Controller("/api/dashboard/webhook-deliveries")
+export class WebhookDeliveryDashboardController {
+  constructor(private readonly webhooks: WebhookService) {}
+
+  @Get()
+  list(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {
+    return this.webhooks.listDeliveryHistoryForUser(request.user!.id, {
+      pagination: parsePagination(query, { allowedSortFields: deliveryHistorySortFields }),
+      filters: readDeliveryHistoryFilters(query),
+    })
+  }
+}
+
 @Controller()
 export class WebhookPublicController {
   constructor(private readonly webhooks: WebhookService) {}
@@ -105,6 +122,15 @@ function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
     configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
     request,
   })
+}
+
+function readDeliveryHistoryFilters(query: Record<string, unknown>) {
+  return {
+    webhookId: typeof query.webhookId === "string" ? query.webhookId : undefined,
+    status: typeof query.status === "string" ? query.status : undefined,
+    from: typeof query.from === "string" ? query.from : undefined,
+    to: typeof query.to === "string" ? query.to : undefined,
+  }
 }
 
 function toRequestBodyBuffer(body: unknown): Buffer {

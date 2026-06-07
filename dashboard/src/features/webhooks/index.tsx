@@ -7,6 +7,7 @@ import {
 } from 'react'
 import type { DashboardWebhookDto } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { ChevronLeft, ChevronRight, MoreHorizontal, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { getPageNumbers } from '@/lib/utils'
@@ -50,7 +51,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { WebhookDeliveriesSheet } from './webhook-deliveries-sheet'
 import {
   formatOptionalWebhookDateTime,
   getWebhookCardPageState,
@@ -78,12 +78,11 @@ export default function WebhooksPage() {
   const [pageSize, setPageSize] = useState(initialPageSize)
   const [form, setForm] = useState<WebhookFormState | null>(null)
   const [oneTimeUrl, setOneTimeUrl] = useState<OneTimeUrlState | null>(null)
-  const [deliveriesWebhook, setDeliveriesWebhook] =
-    useState<DashboardWebhookDto | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DashboardWebhookDto | null>(
     null
   )
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const webhooksQuery = useQuery({
     queryKey: ['dashboard-webhooks'],
@@ -233,7 +232,12 @@ export default function WebhooksPage() {
               })
             }
             onResetSecret={(webhook) => resetSecretMutation.mutate(webhook.id)}
-            onOpenDeliveries={setDeliveriesWebhook}
+            onOpenDeliveries={(webhook) => {
+              void navigate({
+                to: '/webhook-deliveries',
+                search: { webhookId: webhook.id },
+              })
+            }}
             onDelete={setDeleteTarget}
           />
         )}
@@ -250,13 +254,6 @@ export default function WebhooksPage() {
           url={oneTimeUrl?.url ?? ''}
           onOpenChange={(open) => {
             if (!open) setOneTimeUrl(null)
-          }}
-        />
-        <WebhookDeliveriesSheet
-          open={Boolean(deliveriesWebhook)}
-          webhook={deliveriesWebhook}
-          onOpenChange={(open) => {
-            if (!open) setDeliveriesWebhook(null)
           }}
         />
         <ConfirmDialog
@@ -655,4 +652,9 @@ export function removeDeletedWebhookFromCache(
   deletedId: string
 ): DashboardWebhookDto[] {
   return (current ?? []).filter((item) => item.id !== deletedId)
+}
+
+export function getWebhookDeliveriesHref(webhookId: string) {
+  const query = new URLSearchParams({ webhookId })
+  return `/webhook-deliveries?${query.toString()}`
 }

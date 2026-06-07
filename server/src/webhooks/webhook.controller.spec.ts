@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { WebhookDashboardController, WebhookPublicController } from "./webhook.controller"
+import { WebhookDashboardController, WebhookDeliveryDashboardController, WebhookPublicController } from "./webhook.controller"
 import type { WebhookService } from "./webhook.service"
 
 function createRequest() {
@@ -115,6 +115,36 @@ describe("WebhookDashboardController", () => {
     await expect(controller.listDeliveries("webhook-1", createRequest() as never)).resolves.toEqual([])
     expect(service.deleteForUser).toHaveBeenCalledWith("user-1", "webhook-1", "203.0.113.20")
     expect(service.listDeliveriesForUser).toHaveBeenCalledWith("user-1", "webhook-1")
+  })
+})
+
+describe("WebhookDeliveryDashboardController", () => {
+  it("lists current-user delivery history with pagination and filters", async () => {
+    const service = {
+      listDeliveryHistoryForUser: vi.fn().mockResolvedValue({ data: [], total: 0, page: 2, pageSize: 10 }),
+    }
+    const controller = new WebhookDeliveryDashboardController(service as unknown as WebhookService)
+
+    await expect(controller.list({
+      page: "2",
+      pageSize: "10",
+      sortBy: "receivedAt",
+      sortOrder: "desc",
+      webhookId: "webhook-1",
+      status: "delivered",
+      from: "2026-06-07",
+      to: "2026-06-08",
+    }, createRequest() as never)).resolves.toEqual({ data: [], total: 0, page: 2, pageSize: 10 })
+
+    expect(service.listDeliveryHistoryForUser).toHaveBeenCalledWith("user-1", {
+      pagination: { page: 2, pageSize: 10, sortBy: "receivedAt", sortOrder: "desc" },
+      filters: {
+        webhookId: "webhook-1",
+        status: "delivered",
+        from: "2026-06-07",
+        to: "2026-06-08",
+      },
+    })
   })
 })
 

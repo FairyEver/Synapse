@@ -18,6 +18,7 @@ import { Route as authResetPasswordRouteImport } from './routes/(auth)/reset-pas
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
+import { Route as AuthenticatedWebhookDeliveriesIndexRouteImport } from './routes/_authenticated/webhook-deliveries/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authenticated/teams/index'
 import { Route as AuthenticatedSystemIndexRouteImport } from './routes/_authenticated/system/index'
@@ -74,6 +75,12 @@ const AuthenticatedWebhooksIndexRoute =
   AuthenticatedWebhooksIndexRouteImport.update({
     id: '/webhooks/',
     path: '/webhooks/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWebhookDeliveriesIndexRoute =
+  AuthenticatedWebhookDeliveriesIndexRouteImport.update({
+    id: '/webhook-deliveries/',
+    path: '/webhook-deliveries/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
@@ -158,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/system/': typeof AuthenticatedSystemIndexRoute
   '/teams/': typeof AuthenticatedTeamsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
+  '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
 }
 export interface FileRoutesByTo {
@@ -178,6 +186,7 @@ export interface FileRoutesByTo {
   '/system': typeof AuthenticatedSystemIndexRoute
   '/teams': typeof AuthenticatedTeamsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
 }
 export interface FileRoutesById {
@@ -201,6 +210,7 @@ export interface FileRoutesById {
   '/_authenticated/system/': typeof AuthenticatedSystemIndexRoute
   '/_authenticated/teams/': typeof AuthenticatedTeamsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
 }
 export interface FileRouteTypes {
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/system/'
     | '/teams/'
     | '/users/'
+    | '/webhook-deliveries/'
     | '/webhooks/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -244,6 +255,7 @@ export interface FileRouteTypes {
     | '/system'
     | '/teams'
     | '/users'
+    | '/webhook-deliveries'
     | '/webhooks'
   id:
     | '__root__'
@@ -266,6 +278,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system/'
     | '/_authenticated/teams/'
     | '/_authenticated/users/'
+    | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
   fileRoutesById: FileRoutesById
 }
@@ -342,6 +355,13 @@ declare module '@tanstack/react-router' {
       path: '/webhooks'
       fullPath: '/webhooks/'
       preLoaderRoute: typeof AuthenticatedWebhooksIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/webhook-deliveries/': {
+      id: '/_authenticated/webhook-deliveries/'
+      path: '/webhook-deliveries'
+      fullPath: '/webhook-deliveries/'
+      preLoaderRoute: typeof AuthenticatedWebhookDeliveriesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/users/': {
@@ -450,6 +470,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
   AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
 }
 
@@ -465,6 +486,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,
   AuthenticatedTeamsIndexRoute: AuthenticatedTeamsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedWebhookDeliveriesIndexRoute:
+    AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
 }
 

@@ -206,18 +206,22 @@ model UserWebhook {
   secret     String?
   name       String            @db.VarChar(80)
   enabled    Boolean           @default(true)
+  deletedAt  DateTime?
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   deliveries WebhookDelivery[]
 
   @@index([userId, createdAt])
+  @@index([userId, deletedAt, createdAt])
 }
 
 model WebhookDelivery {
   id                String      @id @default(cuid())
   webhookId         String
-  webhook           UserWebhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  webhook           UserWebhook @relation(fields: [webhookId], references: [id], onDelete: Restrict)
   userId            String
+  webhookPublicId   String
+  webhookName       String
   method            String
   path              String
   query             Json
@@ -235,6 +239,7 @@ model WebhookDelivery {
 
   @@index([webhookId, receivedAt])
   @@index([userId, receivedAt])
+  @@index([status, receivedAt])
 }
 
 model WebhookDeliveryReceipt {

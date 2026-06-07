@@ -78,6 +78,25 @@ export interface WebhookDeliveryDto {
   readonly error?: string
 }
 
+export interface WebhookDeliveryHistoryWebhookDto {
+  readonly id: string
+  readonly publicId: string
+  readonly name: string
+  readonly currentName?: string
+  readonly deletedAt?: string
+}
+
+export interface WebhookDeliveryHistoryUserDto {
+  readonly id: string
+  readonly email: string
+  readonly displayName: string | null
+}
+
+export interface WebhookDeliveryHistoryDto extends WebhookDeliveryDto {
+  readonly webhook: WebhookDeliveryHistoryWebhookDto
+  readonly user?: WebhookDeliveryHistoryUserDto
+}
+
 export interface WebhookDeliveryClientReceiptDto {
   readonly id: string
   readonly clientInstanceId: string

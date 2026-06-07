@@ -9,6 +9,7 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { LiveDeviceService } from "../live/live-device.service"
 import { isActiveModulePermissionKey } from "../permissions/permission-registry"
+import { WebhookService } from "../webhooks/webhook.service"
 import { AdminService } from "./admin.service"
 
 const userStatusSchema = z.object({
@@ -35,6 +36,7 @@ const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
 const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
+const webhookDeliverySortFields = ["receivedAt", "status", "method"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(AdminAuthGuard)
@@ -46,6 +48,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly auditLog: AuditLogService,
     private readonly devices: LiveDeviceService,
+    private readonly webhooks: WebhookService,
   ) {}
 
   @Get("/audit-logs")
@@ -88,6 +91,27 @@ export class AdminController {
       targetType: "invitation",
       targetId: "list",
       detail: { page: pagination.page, pageSize: pagination.pageSize },
+    })
+    return result
+  }
+
+  @Get("/webhook-deliveries")
+  async listWebhookDeliveries(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: webhookDeliverySortFields })
+    const filters = {
+      userId: typeof query.userId === "string" ? query.userId : undefined,
+      user: typeof query.user === "string" ? query.user : undefined,
+      webhookId: typeof query.webhookId === "string" ? query.webhookId : undefined,
+      status: typeof query.status === "string" ? query.status : undefined,
+      from: typeof query.from === "string" ? query.from : undefined,
+      to: typeof query.to === "string" ? query.to : undefined,
+    }
+    const result = await this.webhooks.listDeliveryHistoryForAdmin({ pagination, filters })
+    await this.recordAdminRead(request, {
+      action: "admin.webhook_deliveries.list",
+      targetType: "webhook_delivery",
+      targetId: "list",
+      detail: { page: pagination.page, pageSize: pagination.pageSize, filters },
     })
     return result
   }
