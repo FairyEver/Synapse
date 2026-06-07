@@ -199,12 +199,12 @@ export class WebhookService implements OnModuleInit {
     const actorEmail = await this.getAuditActorEmail(userId)
     const webhook = await this.prisma.$transaction(async (tx) => {
       const result = await tx.userWebhook.updateMany({
-        where: { id, userId },
+        where: { id, userId, deletedAt: null },
         data,
       })
       if (result.count === 0) throw new NotFoundException("Webhook not found")
       const updated = await tx.userWebhook.findFirst({
-        where: { id, userId },
+        where: { id, userId, deletedAt: null },
         include: webhookWithLatestDelivery,
       })
       if (!updated) throw new NotFoundException("Webhook not found")
@@ -255,12 +255,12 @@ export class WebhookService implements OnModuleInit {
     const actorEmail = await this.getAuditActorEmail(userId)
     const webhook = await this.prisma.$transaction(async (tx) => {
       const result = await tx.userWebhook.updateMany({
-        where: { id, userId },
+        where: { id, userId, deletedAt: null },
         data: { secretHash: hashWebhookSecret(secret), secret },
       })
       if (result.count === 0) throw new NotFoundException("Webhook not found")
       const updated = await tx.userWebhook.findFirst({
-        where: { id, userId },
+        where: { id, userId, deletedAt: null },
         include: webhookWithLatestDelivery,
       })
       if (!updated) throw new NotFoundException("Webhook not found")
@@ -689,7 +689,7 @@ export class WebhookService implements OnModuleInit {
 
   private async requireOwnedWebhook(userId: string, id: string): Promise<void> {
     const webhook = await this.prisma.userWebhook.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
       select: { id: true },
     })
     if (!webhook) throw new NotFoundException("Webhook not found")

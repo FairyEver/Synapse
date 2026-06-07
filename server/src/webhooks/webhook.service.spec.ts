@@ -274,7 +274,7 @@ describe("WebhookService", () => {
     expect(reset.url).toBe("https://synapse.test/webhooks/wh_public/whsec_new")
     expect(reset.webhook.url).toBeNull()
     expect(tx.userWebhook.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "webhook-1", userId: "user-1" },
+      where: { id: "webhook-1", userId: "user-1", deletedAt: null },
       data: expect.objectContaining({ secret: "whsec_new" }),
     }))
     const savedHash = tx.userWebhook.updateMany.mock.calls[0]?.[0]?.data.secretHash
@@ -445,10 +445,10 @@ describe("WebhookService", () => {
     await service.updateForUser("user-1", "webhook-1", { name: "Deploy" }, "https://synapse.test")
     await service.deleteForUser("user-1", "webhook-1")
 
-    expect(tx.userWebhook.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "webhook-1", userId: "user-1" },
+    expect(tx.userWebhook.updateMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: { id: "webhook-1", userId: "user-1", deletedAt: null },
     }))
-    expect(tx.userWebhook.updateMany).toHaveBeenCalledWith({
+    expect(tx.userWebhook.updateMany).toHaveBeenNthCalledWith(2, {
       where: { id: "webhook-1", userId: "user-1", deletedAt: null },
       data: {
         deletedAt: expect.any(Date),
@@ -552,6 +552,10 @@ describe("WebhookService", () => {
       include: { receipts: { orderBy: { sentAt: "asc" } } },
       orderBy: { receivedAt: "desc" },
       take: 100,
+    })
+    expect(prisma.userWebhook.findFirst).toHaveBeenCalledWith({
+      where: { id: "webhook-1", userId: "user-1", deletedAt: null },
+      select: { id: true },
     })
   })
 
