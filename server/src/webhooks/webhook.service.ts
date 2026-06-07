@@ -383,18 +383,20 @@ export class WebhookService {
     }
     readonly status: WebhookDeliveryStatus
   }): Promise<void> {
+    const deliveryStatusData = {
+      onlineClientCount: input.broadcastResult.onlineClientCount,
+      sentClientCount: input.broadcastResult.sentClientCount,
+      failedClientCount: input.broadcastResult.failedClientCount,
+      status: input.status,
+      error: input.status === WEBHOOK_DELIVERY_STATUS.broadcastFailed
+        ? input.broadcastResult.error ?? "broadcast_failed"
+        : null,
+    }
+
     try {
       await this.prisma.webhookDelivery.update({
         where: { id: input.deliveryId },
-        data: {
-          onlineClientCount: input.broadcastResult.onlineClientCount,
-          sentClientCount: input.broadcastResult.sentClientCount,
-          failedClientCount: input.broadcastResult.failedClientCount,
-          status: input.status,
-          error: input.status === WEBHOOK_DELIVERY_STATUS.broadcastFailed
-            ? input.broadcastResult.error ?? "broadcast_failed"
-            : null,
-        },
+        data: deliveryStatusData,
       })
       return
     } catch (error) {
@@ -409,10 +411,7 @@ export class WebhookService {
     try {
       await this.prisma.webhookDelivery.update({
         where: { id: input.deliveryId },
-        data: {
-          status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
-          error: "broadcast_status_update_failed",
-        },
+        data: deliveryStatusData,
       })
     } catch (error) {
       this.logger.warn({
