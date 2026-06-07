@@ -1,19 +1,29 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import type { DashboardWebhookDto } from '@synapse/shared'
-import { type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, MoreHorizontal, Plus } from 'lucide-react'
-import { toast } from 'sonner'
-import { dashboardApi } from '@/lib/api'
 import {
-  DataTableColumnHeader,
-  ServerDataTable,
-} from '@/components/data-table'
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
+import type { DashboardWebhookDto } from '@synapse/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight, MoreHorizontal, Plus } from 'lucide-react'
+import { toast } from 'sonner'
+import { getPageNumbers } from '@/lib/utils'
+import { dashboardApi } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -24,13 +34,29 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { WebhookDeliveriesSheet } from './webhook-deliveries-sheet'
-import { getWebhookUrlDisplayState } from './webhook-display'
+import {
+  formatOptionalWebhookDateTime,
+  getWebhookCardPageState,
+  getWebhookDeliveryStatusLabel,
+  getWebhookUrlDisplayState,
+} from './webhook-display'
 import { getWebhookErrorMessage } from './webhook-error'
 import { WebhookUrlDialog } from './webhook-url-dialog'
 
@@ -50,9 +76,6 @@ type OneTimeUrlState = {
 export default function WebhooksPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(initialPageSize)
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: 'createdAt', desc: true },
-  ])
   const [form, setForm] = useState<WebhookFormState | null>(null)
   const [oneTimeUrl, setOneTimeUrl] = useState<OneTimeUrlState | null>(null)
   const [deliveriesWebhook, setDeliveriesWebhook] =
@@ -67,12 +90,11 @@ export default function WebhooksPage() {
     queryFn: () => dashboardApi.listWebhooks(),
   })
 
-  const sortedWebhooks = useMemo(
-    () => sortWebhooks(webhooksQuery.data ?? [], sorting),
-    [webhooksQuery.data, sorting]
+  const webhooks = webhooksQuery.data ?? []
+  const { pageCount, pageData } = useMemo(
+    () => getWebhookCardPageState(webhooks, page, pageSize),
+    [webhooks, page, pageSize]
   )
-  const pageCount = Math.max(1, Math.ceil(sortedWebhooks.length / pageSize))
-  const pageData = sortedWebhooks.slice((page - 1) * pageSize, page * pageSize)
 
   useEffect(() => {
     if (page > pageCount) {
@@ -146,155 +168,6 @@ export default function WebhooksPage() {
     onError: (error) => toast.error(getWebhookErrorMessage(error, '重置失败')),
   })
 
-  async function copyWebhookUrl(url: string) {
-    try {
-      await navigator.clipboard.writeText(url)
-      toast.success('已复制')
-    } catch {
-      toast.error('复制失败')
-    }
-  }
-
-  const columns: ColumnDef<DashboardWebhookDto>[] = [
-    {
-      accessorKey: 'name',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='名称' />
-      ),
-      cell: ({ row }) => (
-        <span className='font-medium'>{row.original.name}</span>
-      ),
-    },
-    {
-      accessorKey: 'enabled',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='状态' />
-      ),
-      cell: ({ row }) => (
-        <Badge variant={row.original.enabled ? 'default' : 'secondary'}>
-          {row.original.enabled ? '启用' : '停用'}
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: 'publicId',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='Public ID' />
-      ),
-      cell: ({ row }) => (
-        <span className='font-mono text-sm'>{row.original.publicId}</span>
-      ),
-    },
-    {
-      accessorKey: 'maskedUrl',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='URL' />
-      ),
-      cell: ({ row }) => {
-        const urlState = getWebhookUrlDisplayState(row.original)
-        return (
-          <div className='flex items-center gap-2'>
-            <span className='font-mono text-sm break-all text-muted-foreground'>
-              {urlState.label}
-            </span>
-            {urlState.copyValue ? (
-              <Button
-                variant='ghost'
-                size='icon'
-                aria-label='复制 Webhook URL'
-                onClick={() => void copyWebhookUrl(urlState.copyValue)}
-              >
-                <Copy />
-              </Button>
-            ) : (
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() => resetSecretMutation.mutate(row.original.id)}
-              >
-                重置 secret
-              </Button>
-            )}
-          </div>
-        )
-      },
-      enableSorting: false,
-    },
-    {
-      accessorKey: 'lastDeliveryAt',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='最近触发' />
-      ),
-      cell: ({ row }) => formatOptionalDateTime(row.original.lastDeliveryAt),
-    },
-    {
-      accessorKey: 'createdAt',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='创建时间' />
-      ),
-      cell: ({ row }) => formatOptionalDateTime(row.original.createdAt),
-    },
-    {
-      id: 'actions',
-      cell: ({ row }) => (
-        <div className='flex justify-end'>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant='ghost' size='icon' aria-label='Webhook 操作'>
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align='end'>
-              <DropdownMenuItem
-                onClick={() => {
-                  setForm({
-                    mode: 'edit',
-                    webhook: row.original,
-                    name: row.original.name,
-                  })
-                }}
-              >
-                重命名
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  updateMutation.mutate({
-                    id: row.original.id,
-                    input: { enabled: !row.original.enabled },
-                  })
-                }
-              >
-                {row.original.enabled ? '停用' : '启用'}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => resetSecretMutation.mutate(row.original.id)}
-              >
-                重置 secret
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setDeliveriesWebhook(row.original)}
-              >
-                记录
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant='destructive'
-                onClick={() => setDeleteTarget(row.original)}
-              >
-                删除
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ),
-      meta: {
-        thClassName: 'text-right',
-        tdClassName: 'text-right',
-      },
-      enableSorting: false,
-      enableHiding: false,
-    },
-  ]
-
   function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!form) return
@@ -319,34 +192,50 @@ export default function WebhooksPage() {
       <Header>
         <h1 className='text-lg font-semibold'>Webhooks</h1>
       </Header>
-      <Main>
+      <Main className='flex flex-col gap-4'>
+        <div className='flex justify-end'>
+          <Button
+            onClick={() =>
+              setForm({ mode: 'create', webhook: null, name: '' })
+            }
+          >
+            <Plus data-icon='inline-start' />
+            新建
+          </Button>
+        </div>
+
         {webhooksQuery.isLoading ? (
-          <div className='text-muted-foreground'>加载中...</div>
+          <WebhookCardListSkeleton />
         ) : (
-          <ServerDataTable
-            columns={columns}
-            data={pageData}
+          <WebhookCardList
+            webhooks={pageData}
+            total={webhooks.length}
             page={page}
+            pageCount={pageCount}
             pageSize={pageSize}
-            total={sortedWebhooks.length}
             error={webhooksQuery.isError ? webhooksQuery.error : null}
             onRetry={() => void webhooksQuery.refetch()}
             onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            sorting={sorting}
-            onSortingChange={setSorting}
-            toolbar={
-              <div className='flex justify-end'>
-                <Button
-                  onClick={() =>
-                    setForm({ mode: 'create', webhook: null, name: '' })
-                  }
-                >
-                  <Plus />
-                  新建
-                </Button>
-              </div>
+            onPageSizeChange={(nextPageSize) => {
+              setPageSize(nextPageSize)
+              setPage(1)
+            }}
+            onEdit={(webhook) =>
+              setForm({
+                mode: 'edit',
+                webhook,
+                name: webhook.name,
+              })
             }
+            onToggle={(webhook) =>
+              updateMutation.mutate({
+                id: webhook.id,
+                input: { enabled: !webhook.enabled },
+              })
+            }
+            onResetSecret={(webhook) => resetSecretMutation.mutate(webhook.id)}
+            onOpenDeliveries={setDeliveriesWebhook}
+            onDelete={setDeleteTarget}
           />
         )}
 
@@ -388,6 +277,320 @@ export default function WebhooksPage() {
         />
       </Main>
     </>
+  )
+}
+
+function WebhookCardList({
+  webhooks,
+  total,
+  page,
+  pageCount,
+  pageSize,
+  error,
+  onRetry,
+  onPageChange,
+  onPageSizeChange,
+  onEdit,
+  onToggle,
+  onResetSecret,
+  onOpenDeliveries,
+  onDelete,
+}: {
+  webhooks: DashboardWebhookDto[]
+  total: number
+  page: number
+  pageCount: number
+  pageSize: number
+  error: unknown
+  onRetry: () => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+  onEdit: (webhook: DashboardWebhookDto) => void
+  onToggle: (webhook: DashboardWebhookDto) => void
+  onResetSecret: (webhook: DashboardWebhookDto) => void
+  onOpenDeliveries: (webhook: DashboardWebhookDto) => void
+  onDelete: (webhook: DashboardWebhookDto) => void
+}) {
+  if (error) {
+    return (
+      <Card>
+        <CardContent className='flex flex-col items-start gap-3'>
+          <div className='font-medium'>加载失败</div>
+          <div className='text-sm text-muted-foreground'>
+            {getWebhookErrorMessage(error, '列表加载失败')}
+          </div>
+          <Button variant='outline' size='sm' onClick={onRetry}>
+            重试
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (total === 0) {
+    return (
+      <Card>
+        <CardContent className='text-sm text-muted-foreground'>
+          暂无数据
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className='flex flex-col gap-4'>
+      <ul className='grid gap-4 md:grid-cols-2'>
+        {webhooks.map((webhook) => (
+          <li key={webhook.id}>
+            <WebhookCard
+              webhook={webhook}
+              onEdit={onEdit}
+              onToggle={onToggle}
+              onResetSecret={onResetSecret}
+              onOpenDeliveries={onOpenDeliveries}
+              onDelete={onDelete}
+            />
+          </li>
+        ))}
+      </ul>
+      <WebhookCardPagination
+        page={Math.min(Math.max(1, page), pageCount)}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
+    </div>
+  )
+}
+
+function WebhookCard({
+  webhook,
+  onEdit,
+  onToggle,
+  onResetSecret,
+  onOpenDeliveries,
+  onDelete,
+}: {
+  webhook: DashboardWebhookDto
+  onEdit: (webhook: DashboardWebhookDto) => void
+  onToggle: (webhook: DashboardWebhookDto) => void
+  onResetSecret: (webhook: DashboardWebhookDto) => void
+  onOpenDeliveries: (webhook: DashboardWebhookDto) => void
+  onDelete: (webhook: DashboardWebhookDto) => void
+}) {
+  const urlState = getWebhookUrlDisplayState(webhook)
+
+  return (
+    <Card className='h-full gap-4'>
+      <CardHeader>
+        <CardTitle className='flex min-w-0 items-center gap-2 text-base'>
+          <span className='truncate'>{webhook.name}</span>
+          <Badge variant={webhook.enabled ? 'default' : 'secondary'}>
+            {webhook.enabled ? '启用' : '停用'}
+          </Badge>
+        </CardTitle>
+        <CardAction>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button variant='ghost' size='icon' aria-label='Webhook 操作'>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={() => onEdit(webhook)}>
+                  重命名
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onResetSecret(webhook)}>
+                  重置 secret
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  variant='destructive'
+                  onClick={() => onDelete(webhook)}
+                >
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </CardAction>
+      </CardHeader>
+      <CardContent className='flex flex-col gap-4'>
+        <WebhookCardField label='Public ID'>
+          <span className='break-all font-mono'>{webhook.publicId}</span>
+        </WebhookCardField>
+        <WebhookCardField label='URL'>
+          <span className='break-all font-mono text-muted-foreground'>
+            {urlState.label}
+          </span>
+        </WebhookCardField>
+        <div className='grid gap-3 sm:grid-cols-2'>
+          <WebhookCardField label='创建时间'>
+            {formatOptionalWebhookDateTime(webhook.createdAt)}
+          </WebhookCardField>
+          <WebhookCardField label='最近触发'>
+            {formatOptionalWebhookDateTime(webhook.lastDeliveryAt)}
+          </WebhookCardField>
+          <WebhookCardField label='触发状态'>
+            {webhook.lastDeliveryStatus ? (
+              <Badge variant='outline'>
+                {getWebhookDeliveryStatusLabel(webhook.lastDeliveryStatus)}
+              </Badge>
+            ) : (
+              '-'
+            }
+          </WebhookCardField>
+        </div>
+      </CardContent>
+      <CardFooter className='gap-2'>
+        <Button
+          variant={webhook.enabled ? 'outline' : 'default'}
+          size='sm'
+          onClick={() => onToggle(webhook)}
+        >
+          {webhook.enabled ? '停用' : '启用'}
+        </Button>
+        <Button
+          variant='outline'
+          size='sm'
+          onClick={() => onOpenDeliveries(webhook)}
+        >
+          记录
+        </Button>
+      </CardFooter>
+    </Card>
+  )
+}
+
+function WebhookCardField({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className='flex min-w-0 flex-col gap-1 text-sm'>
+      <span className='text-xs font-medium text-muted-foreground'>
+        {label}
+      </span>
+      <div className='min-w-0'>{children}</div>
+    </div>
+  )
+}
+
+function WebhookCardPagination({
+  page,
+  pageCount,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number
+  pageCount: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+}) {
+  const pageNumbers = getPageNumbers(page, pageCount)
+
+  return (
+    <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+      <div className='flex items-center gap-2'>
+        <span className='text-sm text-muted-foreground'>每页</span>
+        <Select
+          value={`${pageSize}`}
+          onValueChange={(value) => onPageSizeChange(Number(value))}
+        >
+          <SelectTrigger size='sm' className='w-20'>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent side='top'>
+            <SelectGroup>
+              {[10, 20, 30, 40, 50].map((option) => (
+                <SelectItem key={option} value={`${option}`}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className='flex flex-wrap items-center gap-2 sm:justify-end'>
+        <Button
+          variant='outline'
+          size='icon'
+          aria-label='上一页'
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          <ChevronLeft />
+        </Button>
+        {pageNumbers.map((pageNumber, index) =>
+          pageNumber === '...' ? (
+            <span
+              key={`${pageNumber}-${index}`}
+              className='px-1 text-sm text-muted-foreground'
+            >
+              ...
+            </span>
+          ) : (
+            <Button
+              key={pageNumber}
+              variant={page === pageNumber ? 'default' : 'outline'}
+              className='h-9 min-w-9 px-3'
+              onClick={() => onPageChange(pageNumber)}
+            >
+              {pageNumber}
+            </Button>
+          )
+        )}
+        <Button
+          variant='outline'
+          size='icon'
+          aria-label='下一页'
+          disabled={page >= pageCount}
+          onClick={() => onPageChange(page + 1)}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function WebhookCardListSkeleton() {
+  return (
+    <ul className='grid gap-4 md:grid-cols-2'>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <li key={index}>
+          <Card className='gap-4'>
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2'>
+                <Skeleton className='h-5 w-40' />
+                <Skeleton className='h-5 w-12' />
+              </CardTitle>
+              <CardAction>
+                <Skeleton className='size-9' />
+              </CardAction>
+            </CardHeader>
+            <CardContent className='flex flex-col gap-4'>
+              <Skeleton className='h-4 w-32' />
+              <Skeleton className='h-4 w-full' />
+              <Skeleton className='h-4 w-3/4' />
+            </CardContent>
+            <CardFooter className='gap-2'>
+              <Skeleton className='h-8 w-16' />
+              <Skeleton className='h-8 w-16' />
+            </CardFooter>
+          </Card>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -446,45 +649,4 @@ function WebhookFormDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-function sortWebhooks(
-  webhooks: DashboardWebhookDto[],
-  sorting: SortingState
-) {
-  const sort = sorting[0]
-  if (!sort) return webhooks
-  return [...webhooks].sort((left, right) => {
-    const result = compareWebhookValue(left, right, sort.id)
-    return sort.desc ? -result : result
-  })
-}
-
-function compareWebhookValue(
-  left: DashboardWebhookDto,
-  right: DashboardWebhookDto,
-  key: string
-) {
-  switch (key) {
-    case 'name':
-      return left.name.localeCompare(right.name, 'zh-CN')
-    case 'enabled':
-      return Number(left.enabled) - Number(right.enabled)
-    case 'publicId':
-      return left.publicId.localeCompare(right.publicId)
-    case 'lastDeliveryAt':
-      return dateValue(left.lastDeliveryAt) - dateValue(right.lastDeliveryAt)
-    case 'createdAt':
-      return dateValue(left.createdAt) - dateValue(right.createdAt)
-    default:
-      return 0
-  }
-}
-
-function dateValue(value: string | undefined) {
-  return value ? new Date(value).getTime() : 0
-}
-
-function formatOptionalDateTime(value: string | undefined) {
-  return value ? new Date(value).toLocaleString('zh-CN') : '-'
 }

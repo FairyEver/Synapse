@@ -1,6 +1,8 @@
 import { WEBHOOK_DELIVERY_STATUS } from '@synapse/shared'
 import { describe, expect, it } from 'vitest'
 import {
+  formatOptionalWebhookDateTime,
+  getWebhookCardPageState,
   getWebhookDeliveryStatusLabel,
   getWebhookReceiptStatusLabel,
   getWebhookUrlDisplayState,
@@ -39,5 +41,31 @@ describe('webhook display helpers', () => {
     expect(getWebhookReceiptStatusLabel('sent')).toBe('已投递')
     expect(getWebhookReceiptStatusLabel('acknowledged')).toBe('已收到')
     expect(getWebhookReceiptStatusLabel('send_failed')).toBe('投递失败')
+  })
+
+  it('formats optional webhook date times', () => {
+    expect(formatOptionalWebhookDateTime(undefined)).toBe('-')
+    expect(formatOptionalWebhookDateTime('2026-06-07T02:03:04.000Z')).toBe(
+      new Date('2026-06-07T02:03:04.000Z').toLocaleString('zh-CN')
+    )
+  })
+
+  it('returns bounded page state for webhook cards', () => {
+    const webhooks = Array.from({ length: 5 }, (_, index) => ({
+      id: `id-${index + 1}`,
+    }))
+
+    expect(getWebhookCardPageState(webhooks, 1, 2)).toEqual({
+      pageCount: 3,
+      pageData: [{ id: 'id-1' }, { id: 'id-2' }],
+    })
+    expect(getWebhookCardPageState(webhooks, 4, 2)).toEqual({
+      pageCount: 3,
+      pageData: [{ id: 'id-5' }],
+    })
+    expect(getWebhookCardPageState([], 1, 20)).toEqual({
+      pageCount: 1,
+      pageData: [],
+    })
   })
 })
