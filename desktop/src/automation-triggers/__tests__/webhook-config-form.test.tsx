@@ -90,12 +90,31 @@ describe("WebhookTriggerConfigForm", () => {
     expect(document.body.textContent).toContain("选择 Webhook")
   })
 
-  async function renderForm(): Promise<void> {
+  it("warns when the selected webhook is disabled", async () => {
+    installAccountBridge({
+      getState: vi.fn().mockResolvedValue(authenticatedState),
+      listWebhooks: vi.fn().mockResolvedValue([
+        { ...webhook, enabled: false },
+      ]),
+    })
+
+    await renderForm({
+      webhookPublicId: webhook.publicId,
+      webhookName: webhook.name,
+    })
+    await waitForText("Webhook 已停用")
+  })
+
+  async function renderForm(
+    value: { readonly webhookPublicId: string; readonly webhookName?: string } = {
+      webhookPublicId: "",
+    },
+  ): Promise<void> {
     const rootElement = document.createElement("div")
     document.body.appendChild(rootElement)
     root = createRoot(rootElement)
     await act(async () => {
-      root?.render(<WebhookTriggerConfigForm value={{ webhookPublicId: "" }} onChange={vi.fn()} />)
+      root?.render(<WebhookTriggerConfigForm value={value} onChange={vi.fn()} />)
     })
   }
 })

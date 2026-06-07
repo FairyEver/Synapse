@@ -69,6 +69,7 @@ export function WebhookTriggerConfigForm({
 
   const selectedWebhook = webhooks.find((webhook) => webhook.publicId === value.webhookPublicId)
   const isMissing = status === "ready" && value.webhookPublicId && !selectedWebhook
+  const isDisabled = status === "ready" && selectedWebhook?.enabled === false
 
   return (
     <div className="grid gap-4">
@@ -109,6 +110,11 @@ export function WebhookTriggerConfigForm({
           )}
           {isMissing ? (
             <div className="text-sm text-destructive">Webhook 不存在或已删除</div>
+          ) : null}
+          {isDisabled ? (
+            <div className="text-sm text-destructive">
+              Webhook 已停用，启用后才会触发自动化
+            </div>
           ) : null}
         </FieldContent>
       </Field>
