@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import type { DashboardWebhookDto } from "@synapse/shared"
 
 import {
@@ -16,6 +16,8 @@ import {
 } from "../../../src/components/ui/select"
 import type { WebhookTriggerConfig } from "./schema"
 
+type WebhookLoadStatus = "loading" | "ready" | "error" | "logged-out"
+
 export function WebhookTriggerConfigForm({
   value,
   onChange,
@@ -24,9 +26,9 @@ export function WebhookTriggerConfigForm({
   readonly onChange: (value: WebhookTriggerConfig) => void
 }) {
   const [webhooks, setWebhooks] = useState<DashboardWebhookDto[]>([])
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
+  const [status, setStatus] = useState<WebhookLoadStatus>("loading")
 
-  const loadWebhooks = () => {
+  const loadWebhooks = useCallback(() => {
     const accountBridge = window.synapse?.account
     if (!accountBridge) {
       setWebhooks([])
@@ -34,20 +36,36 @@ export function WebhookTriggerConfigForm({
       return
     }
     setStatus("loading")
-    accountBridge.listWebhooks()
-      .then((items) => {
-        setWebhooks(items)
-        setStatus("ready")
-      })
+    void (async () => {
+      const accountState = await accountBridge.getState()
+      if (accountState.status !== "authenticated") {
+        setWebhooks([])
+        setStatus("logged-out")
+        return
+      }
+
+      const items = await accountBridge.listWebhooks()
+      setWebhooks(items)
+      setStatus("ready")
+    })()
       .catch(() => {
         setWebhooks([])
         setStatus("error")
       })
-  }
+  }, [])
 
   useEffect(() => {
     loadWebhooks()
-  }, [])
+    return window.synapse?.account?.onStateChanged((event) => {
+      if (event.state.status === "authenticated") {
+        loadWebhooks()
+        return
+      }
+
+      setWebhooks([])
+      setStatus("logged-out")
+    })
+  }, [loadWebhooks])
 
   const selectedWebhook = webhooks.find((webhook) => webhook.publicId === value.webhookPublicId)
   const isMissing = status === "ready" && value.webhookPublicId && !selectedWebhook
@@ -59,6 +77,8 @@ export function WebhookTriggerConfigForm({
         <FieldContent>
           {status === "loading" ? (
             <div className="text-sm text-muted-foreground">加载中...</div>
+          ) : status === "logged-out" ? (
+            <div className="text-sm text-muted-foreground">登录后可选择 Webhook</div>
           ) : status === "error" ? (
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">加载失败</span>
