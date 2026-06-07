@@ -62,6 +62,7 @@ model User {
   createdInvitations  Invitation[]           @relation("UserCreatedInvitations")
   modulePermissions   UserModulePermission[]
   webhooks            UserWebhook[]
+  devices             UserDevice[]
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 }
@@ -140,6 +141,25 @@ model UserSession {
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
+}
+
+model UserDevice {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientInstanceId String
+  displayName      String?  @db.VarChar(120)
+  deviceName       String   @db.VarChar(120)
+  platform         String   @db.VarChar(80)
+  appVersion       String   @db.VarChar(80)
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, clientInstanceId])
+  @@index([userId, lastSeenAt])
+  @@index([lastSeenAt])
 }
 
 model DesktopLoginCode {
