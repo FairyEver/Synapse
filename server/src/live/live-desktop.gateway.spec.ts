@@ -123,6 +123,7 @@ function createGateway(input: {
   readonly streams?: Partial<LiveStreamService>
   readonly randomId?: () => string
   readonly now?: () => Date
+  readonly webhookDeliveryAckHandler?: Parameters<typeof createLiveDesktopGatewayForTest>[0]["webhookDeliveryAckHandler"]
 } = {}): LiveDesktopGateway {
   return createLiveDesktopGatewayForTest({
     auth: {
@@ -143,6 +144,7 @@ function createGateway(input: {
       randomId: input.randomId ?? (() => "conn-test"),
       now: input.now ?? (() => new Date("2026-06-06T10:00:00.000Z")),
     },
+    webhookDeliveryAckHandler: input.webhookDeliveryAckHandler,
   })
 }
 
@@ -160,6 +162,15 @@ describe("parseLiveDesktopMessage", () => {
     }))).toMatchObject({
       type: "live.ping",
       payload: { sentAt: "2026-06-06T10:00:01.000Z" },
+    })
+    expect(parseLiveDesktopMessage(JSON.stringify({
+      type: "webhook.delivery.ack",
+      id: "msg-ack",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: { deliveryId: "delivery-1" },
+    }))).toMatchObject({
+      type: "webhook.delivery.ack",
+      payload: { deliveryId: "delivery-1" },
     })
   })
 
@@ -253,6 +264,53 @@ describe("LiveDesktopGateway", () => {
     }))
 
     expect(socket.closeCalls).toEqual([{ code: 1008, reason: "hello_required" }])
+  })
+
+  it("closes when webhook delivery ack arrives before hello", () => {
+    const socket = new FakeSocket()
+    const gateway = createGateway()
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryAck,
+      id: "msg-ack",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: { deliveryId: "delivery-1" },
+    }))
+
+    expect(socket.closeCalls).toEqual([{ code: 1008, reason: "hello_required" }])
+  })
+
+  it("records webhook delivery acknowledgements after hello without sending pong", () => {
+    const socket = new FakeSocket()
+    const recordDeliveryAck = vi.fn().mockResolvedValue(undefined)
+    const gateway = createGateway({
+      webhookDeliveryAckHandler: { recordDeliveryAck },
+      randomId: () => "connection-1",
+      now: vi.fn()
+        .mockReturnValueOnce(new Date("2026-06-06T10:00:00.000Z"))
+        .mockReturnValue(new Date("2026-06-06T10:00:02.000Z")),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryAck,
+      id: "msg-ack",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: { deliveryId: "delivery-1" },
+    }))
+
+    expect(recordDeliveryAck).toHaveBeenCalledWith({
+      userId: "user-1",
+      deliveryId: "delivery-1",
+      clientInstanceId: "client-a",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      appVersion: "0.2.253",
+      acknowledgedAt: new Date("2026-06-06T10:00:02.000Z"),
+    })
+    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
   })
 
   it("closes invalid messages", () => {
@@ -393,11 +451,15 @@ describe("LiveDesktopGateway", () => {
       payload: webhookDeliveryPayload(),
     })
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       onlineClientCount: 2,
       sentClientCount: 2,
       failedClientCount: 0,
     })
+    expect(result.clientResults).toEqual([
+      expect.objectContaining({ clientInstanceId: "client-a", status: "sent" }),
+      expect.objectContaining({ clientInstanceId: "client-b", status: "sent" }),
+    ])
     expect(first.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(true)
     expect(second.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(true)
     expect(other.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(false)
@@ -426,11 +488,14 @@ describe("LiveDesktopGateway", () => {
       payload: webhookDeliveryPayload(),
     })
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       onlineClientCount: 1,
       sentClientCount: 0,
       failedClientCount: 1,
     })
+    expect(result.clientResults).toEqual([
+      expect.objectContaining({ clientInstanceId: "client-a", status: "send_failed" }),
+    ])
     expect(socket.sent.some((item) => JSON.parse(item).type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived)).toBe(false)
   })
 
@@ -458,11 +523,14 @@ describe("LiveDesktopGateway", () => {
       payload: webhookDeliveryPayload(),
     })
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       onlineClientCount: 1,
       sentClientCount: 0,
       failedClientCount: 1,
     })
+    expect(result.clientResults).toEqual([
+      expect.objectContaining({ clientInstanceId: "client-a", status: "send_failed" }),
+    ])
     const logged = JSON.stringify(warn.mock.calls)
     expect(logged).toContain("Live user broadcast failed")
     expect(logged).not.toContain("secret-token-123")

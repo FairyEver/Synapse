@@ -54,6 +54,7 @@ type AutomationChangedPayload = {
 export class AutomationService {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly runningItemIds = new Set<string>()
+  private readonly eventRunChains = new Map<string, Promise<void>>()
   private started = false
 
   constructor(private readonly deps: AutomationServiceDeps) {}
@@ -137,7 +138,8 @@ export class AutomationService {
 
   async automationList(): Promise<AutomationItem[]> {
     const items = await this.deps.items.list()
-    const result = await Promise.all(items.map((item) => this.withRuntimeState(item)))
+    const result = (await Promise.all(items.map((item) => this.withRuntimeState(item))))
+      .sort(compareAutomationItemsByRecentEdit)
     this.deps.logger?.info("Automations listed.", {
       boundary: "automation.item-list",
       itemCount: result.length,
@@ -353,7 +355,7 @@ export class AutomationService {
         continue
       }
       try {
-        acceptedRuns.push(await this.executeOrSkip(item, "trigger", {
+        acceptedRuns.push(await this.executeQueuedEvent(item, {
           triggeredBy: "trigger",
           triggeredAt: event.receivedAt,
           scheduledAt: event.receivedAt,
@@ -614,7 +616,7 @@ export class AutomationService {
     triggerContext?: AutomationTriggerRuntimeContext,
   ): Promise<AutomationRun> {
     if (this.runningItemIds.has(item.id)) {
-      return this.recordSkipped(item, triggeredBy, "automation is already running")
+      return this.recordSkipped(item, triggeredBy, "automation is already running", triggerContext)
     }
     this.runningItemIds.add(item.id)
     try {
@@ -639,18 +641,38 @@ export class AutomationService {
     }
   }
 
+  private executeQueuedEvent(
+    item: AutomationItem,
+    triggerContext: AutomationTriggerRuntimeContext,
+  ): Promise<AutomationRun> {
+    const previous = this.eventRunChains.get(item.id) ?? Promise.resolve()
+    const runPromise = previous
+      .catch(() => undefined)
+      .then(() => this.executeOrSkip(item, "trigger", triggerContext))
+    const chain = runPromise.then(() => undefined, () => undefined)
+    this.eventRunChains.set(item.id, chain)
+    void chain.finally(() => {
+      if (this.eventRunChains.get(item.id) === chain) {
+        this.eventRunChains.delete(item.id)
+      }
+    })
+    return runPromise
+  }
+
   private async recordSkipped(
     item: AutomationItem,
     triggeredBy: AutomationRunTrigger,
     error: string,
+    triggerContext?: AutomationTriggerRuntimeContext,
   ): Promise<AutomationRun> {
+    const reason = skippedReasonWithEventDelivery(error, triggerContext?.event)
     const run = await this.deps.runs.start(item.id, triggeredBy, {
       triggerType: item.trigger.type,
       executorType: item.executor.type,
     })
     const finished = await this.deps.runs.finish(run.id, {
       status: "skipped",
-      error,
+      error: reason,
     })
     try {
       await this.deps.items.markRunResult(item.id, { status: "skipped" })
@@ -671,7 +693,7 @@ export class AutomationService {
       triggeredBy,
       status: "skipped",
       boundary: "automation-skip-run",
-      reason: error,
+      reason,
     })
     this.emitAutomationChanged({ automationId: item.id, runId: finished.id, reason: "run-skipped" })
     return finished
@@ -828,4 +850,22 @@ function errorMetadata(error: unknown): { readonly errorName: string; readonly e
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function skippedReasonWithEventDelivery(reason: string, event: AutomationTriggerEvent | undefined): string {
+  const deliveryId = event?.payload?.deliveryId
+  return typeof deliveryId === "string" && deliveryId.length > 0
+    ? `${reason} (deliveryId: ${deliveryId})`
+    : reason
+}
+
+function compareAutomationItemsByRecentEdit(left: AutomationItem, right: AutomationItem): number {
+  const updatedAtOrder = compareIsoTimestampDesc(left.updatedAt, right.updatedAt)
+  if (updatedAtOrder !== 0) return updatedAtOrder
+  return compareIsoTimestampDesc(left.createdAt, right.createdAt)
+}
+
+function compareIsoTimestampDesc(left: string, right: string): number {
+  if (left === right) return 0
+  return right.localeCompare(left)
 }

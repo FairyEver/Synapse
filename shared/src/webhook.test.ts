@@ -8,7 +8,11 @@ import {
 describe("shared webhook protocol", () => {
   it("defines the public path prefix and delivery statuses once", () => {
     expect(WEBHOOK_PUBLIC_PATH_PREFIX).toBe("/webhooks")
-    expect(WEBHOOK_DELIVERY_STATUS.accepted).toBe("accepted")
+    expect(WEBHOOK_DELIVERY_STATUS.received).toBe("received")
+    expect(WEBHOOK_DELIVERY_STATUS.noOnlineClients).toBe("no_online_clients")
+    expect(WEBHOOK_DELIVERY_STATUS.sent).toBe("sent")
+    expect(WEBHOOK_DELIVERY_STATUS.delivered).toBe("delivered")
+    expect(WEBHOOK_DELIVERY_STATUS.broadcastFailed).toBe("broadcast_failed")
     expect(WEBHOOK_DELIVERY_STATUS.rejected).toBe("rejected")
   })
 

@@ -61,6 +61,27 @@ describe("createAutomationWindowService", () => {
     })
   })
 
+  it("keeps and focuses the create draft window when reload is aborted", async () => {
+    const window = createWindowMock()
+    const reloadError = Object.assign(new Error("ERR_ABORTED (-3) loading 'app://-'"), { code: "ERR_ABORTED" })
+    window.loadURL.mockResolvedValueOnce(undefined).mockRejectedValueOnce(reloadError)
+    const logger = createLoggerMock()
+    const createWindow = vi.fn(() => window as never)
+    const service = createAutomationWindowService({ createWindow, baseUrl: () => "app://-", logger })
+
+    await service.openCreate()
+    await expect(service.openCreate()).resolves.toBe(window)
+
+    expect(window.destroy).not.toHaveBeenCalled()
+    expect(window.focus).toHaveBeenCalledTimes(1)
+    expect(logger.warn).toHaveBeenCalledWith("Automation editor window reload was aborted.", {
+      errorName: "Error",
+      errorLength: reloadError.message.length,
+      windowKey: "create",
+      windowMode: "create",
+    })
+  })
+
   it("logs and cleans up when loading the editor window fails", async () => {
     const window = createWindowMock()
     const logger = createLoggerMock()

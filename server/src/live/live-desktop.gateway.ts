@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { Server as HttpServer, IncomingMessage } from "node:http"
 import { Injectable, Logger } from "@nestjs/common"
 import {
+  WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS,
   LIVE_MESSAGE_TYPES,
   createLiveEnvelope,
   isLiveDesktopClientMessage,
@@ -25,6 +26,28 @@ interface LiveDesktopGatewayTestInput {
   readonly registry: LiveClientRegistry
   readonly streams: LiveStreamService
   readonly clock: LiveDesktopGatewayClock
+  readonly webhookDeliveryAckHandler?: WebhookDeliveryAckHandler
+}
+
+export interface WebhookDeliveryAckHandler {
+  readonly recordDeliveryAck: (input: {
+    readonly userId: string
+    readonly deliveryId: string
+    readonly clientInstanceId: string
+    readonly deviceName: string
+    readonly platform: string
+    readonly appVersion: string
+    readonly acknowledgedAt: Date
+  }) => Promise<void> | void
+}
+
+export interface LiveBroadcastClientResult {
+  readonly clientInstanceId: string
+  readonly deviceName: string
+  readonly platform: string
+  readonly appVersion: string
+  readonly sentAt: string
+  readonly status: "sent" | "send_failed"
 }
 
 const liveDesktopPath = "/api/live/desktop"
@@ -38,6 +61,7 @@ export class LiveDesktopGateway {
   private server: WebSocketServer | null = null
   private staleInterval: NodeJS.Timeout | null = null
   private clock: LiveDesktopGatewayClock = { randomId: randomUUID, now: () => new Date() }
+  private webhookDeliveryAckHandler: WebhookDeliveryAckHandler | null = null
 
   constructor(
     private readonly auth: UserAuthService,
@@ -48,7 +72,12 @@ export class LiveDesktopGateway {
   static createForTest(input: LiveDesktopGatewayTestInput): LiveDesktopGateway {
     const gateway = new LiveDesktopGateway(input.auth, input.registry, input.streams)
     gateway.clock = input.clock
+    gateway.webhookDeliveryAckHandler = input.webhookDeliveryAckHandler ?? null
     return gateway
+  }
+
+  setWebhookDeliveryAckHandler(handler: WebhookDeliveryAckHandler): void {
+    this.webhookDeliveryAckHandler = handler
   }
 
   attach(httpServer: HttpServer): void {
@@ -99,6 +128,7 @@ export class LiveDesktopGateway {
   bindAuthenticatedSocket(socket: WebSocket, auth: { readonly userId: string }): void {
     const connectionId = this.clock.randomId()
     let registered = false
+    let registeredClient: LiveClientInstance | null = null
     this.socketsByConnectionId.set(connectionId, socket)
 
     socket.on("message", (payload) => {
@@ -128,6 +158,7 @@ export class LiveDesktopGateway {
             this.socketsByConnectionId.delete(oldConnectionId)
           },
         })
+        registeredClient = client
         registered = true
         this.publish(client)
         const serverTime = this.clock.now().toISOString()
@@ -145,9 +176,35 @@ export class LiveDesktopGateway {
         return
       }
 
-      const client = this.registry.touch(connectionId, this.clock.now())
+      const now = this.clock.now()
+      const client = this.registry.touch(connectionId, now)
       if (client) {
+        registeredClient = client
         this.publish(client)
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.webhookDeliveryAck) {
+        const ackClient = client ?? registeredClient
+        if (!ackClient) {
+          socket.close(1008, "hello_required")
+          return
+        }
+        void Promise.resolve(this.webhookDeliveryAckHandler?.recordDeliveryAck({
+          userId: auth.userId,
+          deliveryId: message.payload.deliveryId,
+          clientInstanceId: ackClient.clientInstanceId,
+          deviceName: ackClient.deviceName,
+          platform: ackClient.platform,
+          appVersion: ackClient.appVersion,
+          acknowledgedAt: now,
+        })).catch((error: unknown) => {
+          this.logger.warn({
+            clientInstanceId: ackClient.clientInstanceId,
+            deliveryId: message.payload.deliveryId,
+            errorName: error instanceof Error ? error.name : typeof error,
+            userId: auth.userId,
+          }, "Live webhook delivery acknowledgement failed")
+        })
+        return
       }
       const serverTime = this.clock.now().toISOString()
       sendJson(socket, createLiveEnvelope(LIVE_MESSAGE_TYPES.pong, {
@@ -190,24 +247,30 @@ export class LiveDesktopGateway {
     readonly onlineClientCount: number
     readonly sentClientCount: number
     readonly failedClientCount: number
+    readonly clientResults: readonly LiveBroadcastClientResult[]
   } {
     const clients = this.registry.listOnlineByUser(userId)
     let sentClientCount = 0
     let failedClientCount = 0
+    const clientResults: LiveBroadcastClientResult[] = []
 
     for (const client of clients) {
+      const sentAt = this.clock.now().toISOString()
       if (!client.connectionId) continue
       const socket = this.socketsByConnectionId.get(client.connectionId)
       if (!socket || socket.readyState !== WebSocket.OPEN) {
         failedClientCount += 1
+        clientResults.push(toBroadcastClientResult(client, sentAt, WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sendFailed))
         continue
       }
 
       try {
         sendJson(socket, message)
         sentClientCount += 1
+        clientResults.push(toBroadcastClientResult(client, sentAt, WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sent))
       } catch (error) {
         failedClientCount += 1
+        clientResults.push(toBroadcastClientResult(client, sentAt, WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sendFailed))
         this.logger.warn({
           connectionId: client.connectionId,
           errorName: error instanceof Error ? error.name : typeof error,
@@ -220,6 +283,7 @@ export class LiveDesktopGateway {
       onlineClientCount: clients.length,
       sentClientCount,
       failedClientCount,
+      clientResults,
     }
   }
 
@@ -261,6 +325,21 @@ export function parseLiveDesktopMessage(payload: RawData | string): LiveDesktopC
   }
 
   return isLiveDesktopClientMessage(parsed) ? parsed : null
+}
+
+function toBroadcastClientResult(
+  client: LiveClientInstance,
+  sentAt: string,
+  status: LiveBroadcastClientResult["status"],
+): LiveBroadcastClientResult {
+  return {
+    clientInstanceId: client.clientInstanceId,
+    deviceName: client.deviceName,
+    platform: client.platform,
+    appVersion: client.appVersion,
+    sentAt,
+    status,
+  }
 }
 
 function sendJson(socket: WebSocket, message: LiveDesktopServerMessage): void {

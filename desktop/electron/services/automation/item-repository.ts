@@ -129,7 +129,6 @@ export class AutomationItemRepository {
     return this.mutateItem(id, (existing) => ({
       ...existing,
       nextRunAt,
-      updatedAt: this.isoNow(),
     }))
   }
 
@@ -152,7 +151,6 @@ export class AutomationItemRepository {
         lastRunAt: now,
         lastStatus: result.status,
         runCount: existing.runCount + 1,
-        updatedAt: now,
       }
       const nextRunAt = recalcNextRunAt
         ? this.computeNextRunAtIso(next, this.now())

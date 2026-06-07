@@ -74,6 +74,7 @@ export function buildAutomationTemplateVariables(
     variables["trigger.source"] = input.event.source
     variables["trigger.eventType"] = input.event.type
     variables["trigger.receivedAt"] = input.event.receivedAt
+    variables["trigger.payload"] = stringifyTemplateValue(input.event.payload)
     appendWebhookEventVariables(input.event.payload, variables)
     flattenValue("trigger.payload", input.event.payload, variables)
   }
@@ -87,6 +88,7 @@ function appendWebhookEventVariables(
 ): void {
   const webhook = asRecord(payload.webhook)
   if (webhook) {
+    variables["trigger.webhook"] = stringifyTemplateValue(webhook)
     assignStringVariable(variables, "trigger.webhook.id", webhook.id)
     assignStringVariable(variables, "trigger.webhook.publicId", webhook.publicId)
     assignStringVariable(variables, "trigger.webhook.name", webhook.name)
@@ -96,12 +98,15 @@ function appendWebhookEventVariables(
 
   const request = asRecord(payload.request)
   if (!request) return
+  variables["trigger.request"] = stringifyTemplateValue(request)
   assignStringVariable(variables, "trigger.request.method", request.method)
-  assignStringVariable(variables, "trigger.request.contentType", request.contentType)
-  assignStringVariable(variables, "trigger.request.bodyText", request.bodyText)
-  assignStringVariable(variables, "trigger.request.remoteAddress", request.remoteAddress)
+  variables["trigger.request.contentType"] = typeof request.contentType === "string" ? request.contentType : ""
+  variables["trigger.request.bodyText"] = typeof request.bodyText === "string" ? request.bodyText : ""
+  variables["trigger.request.remoteAddress"] = typeof request.remoteAddress === "string" ? request.remoteAddress : ""
   if ("body" in request) {
     variables["trigger.request.body"] = stringifyTemplateValue(request.body)
+  } else {
+    variables["trigger.request.body"] = ""
   }
   if ("query" in request) {
     flattenValue("trigger.request.query", request.query, variables)

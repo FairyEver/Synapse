@@ -50,6 +50,7 @@ export function WebhookTriggerConfigForm({
   }, [])
 
   const selectedWebhook = webhooks.find((webhook) => webhook.publicId === value.webhookPublicId)
+  const savedWebhookLabel = value.webhookName || value.webhookPublicId || ""
   const isMissing = status === "ready" && value.webhookPublicId && !selectedWebhook
 
   return (
@@ -60,11 +61,20 @@ export function WebhookTriggerConfigForm({
           {status === "loading" ? (
             <div className="text-sm text-muted-foreground">加载中...</div>
           ) : status === "error" ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">加载失败</span>
-              <Button type="button" variant="outline" size="sm" onClick={loadWebhooks}>
-                重试
-              </Button>
+            <div className="grid gap-2">
+              {savedWebhookLabel ? (
+                <Button type="button" variant="outline" className="w-full justify-start font-normal" disabled>
+                  {savedWebhookLabel}
+                </Button>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {savedWebhookLabel ? "列表加载失败" : "加载失败"}
+                </span>
+                <Button type="button" variant="outline" size="sm" onClick={loadWebhooks}>
+                  重试
+                </Button>
+              </div>
             </div>
           ) : (
             <Select

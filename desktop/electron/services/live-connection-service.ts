@@ -227,6 +227,7 @@ export class LiveConnectionService {
     }
 
     if (parsed.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived) {
+      await this.acknowledgeWebhookDelivery(parsed.payload.deliveryId)
       if (!this.webhookDeliveryHandler) {
         logger.warn("Live webhook delivery ignored.", {
           messageType: parsed.type,
@@ -239,6 +240,23 @@ export class LiveConnectionService {
           messageType: parsed.type,
           ...this.liveErrorMetadata(error),
         })
+      })
+    }
+  }
+
+  private async acknowledgeWebhookDelivery(deliveryId: string): Promise<void> {
+    if (this.socket?.readyState !== WebSocket.OPEN) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await liveProtocolPromise
+    if (this.socket?.readyState !== WebSocket.OPEN) return
+    const sentAt = this.now().toISOString()
+    try {
+      this.socket.send(JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.webhookDeliveryAck, {
+        deliveryId,
+      }, { id: this.createMessageId(), sentAt })))
+    } catch (error) {
+      logger.warn("Live webhook delivery acknowledgement failed.", {
+        deliveryId,
+        errorName: error instanceof Error ? error.name : typeof error,
       })
     }
   }

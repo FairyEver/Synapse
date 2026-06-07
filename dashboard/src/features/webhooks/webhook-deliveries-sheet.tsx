@@ -10,17 +10,15 @@ import {
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  getWebhookDeliveryStatusLabel,
+  getWebhookReceiptStatusLabel,
+} from './webhook-display'
 
 type WebhookDeliveriesSheetProps = {
   webhook: DashboardWebhookDto | null
   open: boolean
   onOpenChange: (open: boolean) => void
-}
-
-const deliveryStatusLabel: Record<WebhookDeliveryDto['status'], string> = {
-  accepted: '已转发',
-  rejected: '已拒绝',
-  broadcast_failed: '转发失败',
 }
 
 export function WebhookDeliveriesSheet({
@@ -78,14 +76,14 @@ function DeliveryItem({ delivery }: { delivery: WebhookDeliveryDto }) {
           <Badge variant='outline'>{delivery.method}</Badge>
           <Badge
             variant={
-              delivery.status === 'accepted'
+              delivery.status === 'delivered'
                 ? 'default'
                 : delivery.status === 'broadcast_failed'
                   ? 'destructive'
                   : 'secondary'
             }
           >
-            {deliveryStatusLabel[delivery.status]}
+            {getWebhookDeliveryStatusLabel(delivery.status)}
           </Badge>
         </div>
         <span className='text-sm text-muted-foreground'>
@@ -96,10 +94,29 @@ function DeliveryItem({ delivery }: { delivery: WebhookDeliveryDto }) {
         <div className='break-all text-muted-foreground'>{delivery.path}</div>
         <div>
           客户端 {delivery.sentClientCount}/{delivery.onlineClientCount}
+          {delivery.acknowledgedClientCount > 0
+            ? `，已收到 ${delivery.acknowledgedClientCount}`
+            : ''}
           {delivery.failedClientCount > 0
             ? `，失败 ${delivery.failedClientCount}`
             : ''}
         </div>
+        {delivery.clientReceipts.length ? (
+          <div className='flex flex-col gap-1'>
+            {delivery.clientReceipts.map((receipt) => (
+              <div
+                key={receipt.id}
+                className='flex flex-wrap items-center gap-2 text-muted-foreground'
+              >
+                <span>{receipt.deviceName}</span>
+                <Badge variant='outline'>
+                  {getWebhookReceiptStatusLabel(receipt.status)}
+                </Badge>
+                <span>{formatDateTime(receipt.acknowledgedAt ?? receipt.sentAt)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className='text-muted-foreground'>
           {delivery.bodyKind} · {delivery.bodySize} B
         </div>

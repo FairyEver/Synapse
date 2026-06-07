@@ -7,7 +7,7 @@ Scope: `shared/`, `server/`, `dashboard/`, `desktop/`
 
 Add cloud Webhooks for logged-in Synapse users. A user creates any number of Webhooks in the dashboard, copies a public URL into GitHub or another external service, and Synapse forwards each accepted request through the existing desktop Live WebSocket connection to all of that user's online desktop clients. The desktop Automation module gains a `Webhook` trigger that can select one of the user's Webhooks and expose the received request as trigger variables.
 
-This is a forwarding feature. The server accepts and broadcasts the Webhook request, but it does not wait for desktop clients or local Automation execution results.
+This is a forwarding feature. The server accepts and broadcasts the Webhook request, but it does not wait for local Automation execution results. Desktop clients send a lightweight acknowledgement after receiving a valid Webhook downlink; that acknowledgement only means the client received the notification.
 
 ## Confirmed Product Decisions
 
@@ -19,6 +19,8 @@ This is a forwarding feature. The server accepts and broadcasts the Webhook requ
 
 - The server broadcasts each accepted Webhook delivery to all online desktop clients for the Webhook owner.
 - The server returns `202 Accepted` after receive-and-broadcast bookkeeping; it does not wait for client execution.
+- New and reset Webhooks keep a recoverable URL secret so the dashboard can copy the full URL later. Legacy hash-only Webhooks keep showing the masked URL until the user resets the secret.
+- Desktop clients acknowledge valid Webhook downlinks over Live. Server delivery records can show which clients received the notification, but not whether local Automation matched or executed it.
 - Offline clients do not receive missed Webhooks later in this version.
 - If multiple online desktop clients have matching local Automations, all of them may execute.
 - The server stores receive and broadcast records for troubleshooting.
@@ -27,8 +29,9 @@ This is a forwarding feature. The server accepts and broadcasts the Webhook requ
 
 ## Non-Goals
 
-- Do not build a durable per-client queue, ack protocol, retry queue, or dead-letter workflow.
+- Do not build a durable per-client queue, retry queue, or dead-letter workflow.
 - Do not return desktop Automation execution results to the external caller.
+- Do not return local Automation match, skip, run, or failure results to the server.
 - Do not synchronize local Automation trigger configuration back to the server.
 - Do not add admin management of user Webhooks in this version.
 - Do not implement GitHub, Stripe, or other provider-specific signature validation in this version.
@@ -87,6 +90,7 @@ export const LIVE_MESSAGE_TYPES = {
   ping: "live.ping",
   pong: "live.pong",
   webhookDeliveryReceived: "webhook.delivery.received",
+  webhookDeliveryAck: "webhook.delivery.ack",
 } as const
 ```
 
@@ -98,6 +102,7 @@ Shared unions:
 export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.hello, LiveDesktopHelloPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.ping, LiveDesktopPingPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.webhookDeliveryAck, { readonly deliveryId: string }>
 
 export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
@@ -142,6 +147,7 @@ model UserWebhook {
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   publicId   String            @unique
   secretHash String
+  secret     String?
   name       String            @db.VarChar(80)
   enabled    Boolean           @default(true)
   createdAt  DateTime          @default(now())
@@ -169,9 +175,26 @@ model WebhookDelivery {
   failedClientCount Int
   status            String
   error             String?
+  receipts          WebhookDeliveryReceipt[]
 
   @@index([webhookId, receivedAt])
   @@index([userId, receivedAt])
+}
+
+model WebhookDeliveryReceipt {
+  id               String          @id @default(cuid())
+  deliveryId       String
+  delivery         WebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  clientInstanceId String
+  deviceName       String
+  platform         String
+  appVersion       String
+  sentAt           DateTime
+  acknowledgedAt   DateTime?
+  status           String
+
+  @@unique([deliveryId, clientInstanceId])
+  @@index([deliveryId, sentAt])
 }
 ```
 
@@ -181,9 +204,9 @@ Identifier rules:
 
 - `publicId`: random, URL-safe, effectively non-guessable, such as `wh_` plus 32 base62/base64url characters.
 - `secret`: random URL-safe secret, such as `whsec_` plus 32 bytes encoded with base64url.
-- Database stores only `secretHash`.
-- The full URL is returned only on create and reset-secret responses.
-- List/detail responses show only a masked URL such as `https://synapse.d2.pub/webhooks/wh_xxx/***`.
+- Database stores `secretHash` for validation and nullable `secret` for dashboard copy. Existing hash-only rows keep `secret: null`.
+- The full URL is returned on create, reset-secret, and list/detail responses when `secret` is available.
+- Hash-only legacy rows show only a masked URL such as `https://synapse.d2.pub/webhooks/wh_xxx/***`; resetting the secret creates a copyable full URL.
 
 Delivery retention:
 
@@ -229,6 +252,14 @@ broadcastToUser(userId: string, message: LiveServerMessage): {
   readonly onlineClientCount: number
   readonly sentClientCount: number
   readonly failedClientCount: number
+  readonly clientResults: readonly Array<{
+    readonly clientInstanceId: string
+    readonly deviceName: string
+    readonly platform: string
+    readonly appVersion: string
+    readonly sentAt: string
+    readonly status: "sent" | "send_failed"
+  }>
 }
 ```
 
@@ -238,6 +269,7 @@ Rules:
 - Do not throw after partial send failure; return counts and record failures.
 - Do not log payload body, full URL, or secret.
 - Unknown or stale sockets should not block response to the external caller.
+- `webhook.delivery.ack` is accepted only after `hello`; it updates the corresponding client receipt and can mark the delivery `delivered`.
 
 ## Nginx And Deployment
 
@@ -298,6 +330,7 @@ type DashboardWebhookDto = {
   readonly publicId: string
   readonly name: string
   readonly enabled: boolean
+  readonly url: string | null
   readonly maskedUrl: string
   readonly createdAt: string
   readonly updatedAt: string
@@ -306,7 +339,7 @@ type DashboardWebhookDto = {
 }
 ```
 
-Create and reset-secret responses include `url` once. Normal list/detail responses do not include the raw secret.
+Create and reset-secret responses include `url`. List/detail responses also include `url` when the stored secret is available; legacy rows return `url: null`.
 
 All create, update, delete, and reset-secret operations should be audited without raw secret values.
 
@@ -324,9 +357,9 @@ Page:
 - Title: `Webhooks`
 - Primary action: `新建`
 - Table/list columns: name, enabled status, masked URL, last received time, last broadcast summary, created time, actions.
-- Actions: copy URL when available, show deliveries, rename, enable/disable, reset secret, delete.
+- Actions: copy URL, show deliveries, rename, enable/disable, reset secret, delete. Legacy rows without a stored secret show the masked URL and a reset-secret entry.
 - Empty state: `暂无 Webhook` and `新建`.
-- Delivery detail surface shows the most recent 100 deliveries with time, method, status, online client count, sent count, failed count, body size, and error.
+- Delivery detail surface shows the most recent 100 deliveries with time, method, status, online client count, sent count, acknowledged count, client receipt list, body size, and error.
 
 UI rules:
 
@@ -338,7 +371,7 @@ UI rules:
 
 `LiveConnectionService` should parse Webhook downlink messages after `welcome/pong` handling:
 
-- Valid `webhook.delivery.received`: pass to a main-process handler.
+- Valid `webhook.delivery.received`: send `webhook.delivery.ack`, then pass to a main-process handler.
 - Unknown `type`: ignore and structured-warn with only the type string.
 - Invalid payload: ignore and structured-warn without payload contents.
 
@@ -450,7 +483,7 @@ Header handling:
 ## Security And Logging
 
 - Secret is part of the URL because many external services only accept a URL field.
-- Full secret must not appear in dashboard list responses, delivery records, audit logs, server logs, desktop logs, or deployment diagnostics.
+- Full secret may appear in authenticated user dashboard Webhook responses for copy, but must not appear in delivery records, audit logs, server logs, desktop logs, or deployment diagnostics.
 - `publicId` can appear in logs and UI.
 - Request body is forwarded to the user's own desktop clients, but server records store only safe body metadata and a redacted preview.
 - Permission and audit logging must not include full Webhook URL.
@@ -465,6 +498,7 @@ Header handling:
 - Unsupported body type: `415`, no broadcast.
 - Broadcast with zero online clients: response remains `202`; delivery status records zero targets.
 - Partial socket send failure: response remains `202`; delivery records failed count.
+- Client acknowledgement updates client receipt status and can mark delivery as `delivered`.
 - Desktop invalid Live payload: no Automation event.
 - Desktop Webhook trigger config stale: automation validation reports needs update.
 
@@ -479,6 +513,7 @@ Server:
 - Public Webhook route returns `202` and does not wait for client execution.
 - No online clients still returns `202` and records `onlineClientCount: 0`.
 - Multiple online clients produce matching broadcast counts.
+- Client acknowledgements update delivery receipts without recording local Automation execution results.
 - Only 100 most recent deliveries remain per Webhook.
 - Oversized body returns `413`.
 - Secret does not appear in logs, delivery records, audit records, or masked DTOs.
@@ -529,4 +564,4 @@ Deployment:
 - The dashboard shows recent receive/broadcast records, capped to the most recent 100 per Webhook.
 - `/webhooks/` works through production Nginx and is not redirected to `/dashboard/`.
 - Shared protocol strings and DTOs, including existing Live heartbeat messages and new Webhook delivery messages, are defined once in `@synapse/shared`.
-- Full URL secrets are not stored or displayed in logs, delivery records, audit records, or normal dashboard list responses.
+- Full URL secrets are stored only for user copy and are not displayed in logs, delivery records, audit records, desktop payloads, or deployment diagnostics.

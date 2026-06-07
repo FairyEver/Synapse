@@ -47,6 +47,14 @@ function errorDiagnostic(rawError: unknown): Record<string, unknown> {
   }
 }
 
+function isLoadAbortedError(rawError: unknown): boolean {
+  if (!rawError || typeof rawError !== "object") return false
+  const code = "code" in rawError ? (rawError as { readonly code?: unknown }).code : undefined
+  if (code === "ERR_ABORTED") return true
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  return message.includes("ERR_ABORTED")
+}
+
 export function createAutomationWindowService(deps: AutomationWindowServiceDeps) {
   let createWindow: BrowserWindow | null = null
   const editWindows = new Map<string, BrowserWindow>()
@@ -63,6 +71,15 @@ export function createAutomationWindowService(deps: AutomationWindowServiceDeps)
           await existing.loadURL(url)
           logger.info("Reloaded existing automation editor window.", metadata)
         } catch (error) {
+          if (isLoadAbortedError(error)) {
+            logger.warn("Automation editor window reload was aborted.", {
+              ...metadata,
+              ...errorDiagnostic(error),
+            })
+            focusWindow(existing)
+            logger.info("Focused existing automation editor window.", metadata)
+            return existing
+          }
           createWindow = null
           logger.warn("Failed to reload automation editor window.", {
             ...metadata,

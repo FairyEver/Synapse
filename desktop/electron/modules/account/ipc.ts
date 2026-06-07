@@ -39,11 +39,19 @@ const dashboardWebhookSchema = z.object({
   publicId: z.string(),
   name: z.string(),
   enabled: z.boolean(),
+  url: z.string().nullable(),
   maskedUrl: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
   lastDeliveryAt: z.string().optional(),
-  lastDeliveryStatus: z.enum(["accepted", "rejected", "broadcast_failed"]).optional(),
+  lastDeliveryStatus: z.enum([
+    "received",
+    "no_online_clients",
+    "sent",
+    "delivered",
+    "rejected",
+    "broadcast_failed",
+  ]).optional(),
 })
 
 const accountStateSchema = z.discriminatedUnion("status", [

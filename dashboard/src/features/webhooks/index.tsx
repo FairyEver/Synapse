@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { DashboardWebhookDto } from '@synapse/shared'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MoreHorizontal, Plus } from 'lucide-react'
+import { Copy, MoreHorizontal, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
 import {
@@ -30,6 +30,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { WebhookDeliveriesSheet } from './webhook-deliveries-sheet'
+import { getWebhookUrlDisplayState } from './webhook-display'
 import { getWebhookErrorMessage } from './webhook-error'
 import { WebhookUrlDialog } from './webhook-url-dialog'
 
@@ -145,6 +146,15 @@ export default function WebhooksPage() {
     onError: (error) => toast.error(getWebhookErrorMessage(error, '重置失败')),
   })
 
+  async function copyWebhookUrl(url: string) {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('已复制')
+    } catch {
+      toast.error('复制失败')
+    }
+  }
+
   const columns: ColumnDef<DashboardWebhookDto>[] = [
     {
       accessorKey: 'name',
@@ -180,11 +190,34 @@ export default function WebhooksPage() {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='URL' />
       ),
-      cell: ({ row }) => (
-        <span className='font-mono text-sm break-all text-muted-foreground'>
-          {row.original.maskedUrl}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const urlState = getWebhookUrlDisplayState(row.original)
+        return (
+          <div className='flex items-center gap-2'>
+            <span className='font-mono text-sm break-all text-muted-foreground'>
+              {urlState.label}
+            </span>
+            {urlState.copyValue ? (
+              <Button
+                variant='ghost'
+                size='icon'
+                aria-label='复制 Webhook URL'
+                onClick={() => void copyWebhookUrl(urlState.copyValue)}
+              >
+                <Copy />
+              </Button>
+            ) : (
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => resetSecretMutation.mutate(row.original.id)}
+              >
+                重置 secret
+              </Button>
+            )}
+          </div>
+        )
+      },
       enableSorting: false,
     },
     {

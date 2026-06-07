@@ -1,12 +1,24 @@
 export const WEBHOOK_PUBLIC_PATH_PREFIX = "/webhooks"
 
 export const WEBHOOK_DELIVERY_STATUS = {
-  accepted: "accepted",
+  received: "received",
+  noOnlineClients: "no_online_clients",
+  sent: "sent",
+  delivered: "delivered",
   rejected: "rejected",
   broadcastFailed: "broadcast_failed",
 } as const
 
 export type WebhookDeliveryStatus = typeof WEBHOOK_DELIVERY_STATUS[keyof typeof WEBHOOK_DELIVERY_STATUS]
+
+export const WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS = {
+  sent: "sent",
+  acknowledged: "acknowledged",
+  sendFailed: "send_failed",
+} as const
+
+export type WebhookDeliveryClientReceiptStatus =
+  typeof WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS[keyof typeof WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS]
 
 export interface WebhookDeliveryReceivedPayload {
   readonly deliveryId: string
@@ -33,6 +45,7 @@ export interface DashboardWebhookDto {
   readonly publicId: string
   readonly name: string
   readonly enabled: boolean
+  readonly url: string | null
   readonly maskedUrl: string
   readonly createdAt: string
   readonly updatedAt: string
@@ -59,8 +72,21 @@ export interface WebhookDeliveryDto {
   readonly onlineClientCount: number
   readonly sentClientCount: number
   readonly failedClientCount: number
+  readonly acknowledgedClientCount: number
+  readonly clientReceipts: readonly WebhookDeliveryClientReceiptDto[]
   readonly status: WebhookDeliveryStatus
   readonly error?: string
+}
+
+export interface WebhookDeliveryClientReceiptDto {
+  readonly id: string
+  readonly clientInstanceId: string
+  readonly deviceName: string
+  readonly platform: string
+  readonly appVersion: string
+  readonly sentAt: string
+  readonly acknowledgedAt?: string
+  readonly status: WebhookDeliveryClientReceiptStatus
 }
 
 export function isWebhookDeliveryReceivedPayload(value: unknown): value is WebhookDeliveryReceivedPayload {

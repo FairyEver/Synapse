@@ -73,6 +73,7 @@ describe("action template variables", () => {
       "trigger.source": "github",
       "trigger.eventType": "issue",
       "trigger.receivedAt": "2026-06-06T01:00:01.000Z",
+      "trigger.payload": "{\"issue\":{\"title\":\"Bug\",\"number\":12},\"labels\":[\"bug\"]}",
       "trigger.payload.issue.title": "Bug",
       "trigger.payload.issue.number": "12",
       "trigger.payload.labels.0": "bug",
@@ -107,9 +108,11 @@ describe("action template variables", () => {
       },
     })).toEqual(expect.objectContaining({
       "trigger.deliveryId": "delivery-1",
+      "trigger.webhook": "{\"id\":\"webhook-1\",\"publicId\":\"wh_public\",\"name\":\"GitHub\"}",
       "trigger.webhook.id": "webhook-1",
       "trigger.webhook.publicId": "wh_public",
       "trigger.webhook.name": "GitHub",
+      "trigger.request": "{\"method\":\"POST\",\"contentType\":\"application/json\",\"query\":{\"event\":\"push\"},\"headers\":{\"x-github-event\":\"push\"},\"body\":{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}},\"bodyText\":\"{\\\"repository\\\":{\\\"full_name\\\":\\\"FairyEver/Synapse\\\"}}\"}",
       "trigger.request.method": "POST",
       "trigger.request.contentType": "application/json",
       "trigger.request.query.event": "push",
@@ -117,6 +120,40 @@ describe("action template variables", () => {
       "trigger.request.body": "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
       "trigger.request.bodyText": "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
       "trigger.payload.request.body.repository.full_name": "FairyEver/Synapse",
+    }))
+  })
+
+  it("exposes whole webhook request json and empty defaults for body-less deliveries", () => {
+    expect(buildAutomationTemplateVariables({
+      triggerType: "builtin.webhook",
+      triggerConfig: { webhookPublicId: "wh_public", webhookName: "Ping" },
+      triggeredBy: "trigger",
+      triggeredAt: "2026-06-06T01:00:00.000Z",
+      scheduledAt: "2026-06-06T01:00:00.000Z",
+      automationId: "automation:1",
+      automationName: "Webhook",
+      event: {
+        source: "webhook",
+        type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+        receivedAt: "2026-06-06T01:00:01.000Z",
+        payload: {
+          deliveryId: "delivery-get",
+          webhook: { id: "webhook-1", publicId: "wh_public", name: "Ping" },
+          request: {
+            method: "GET",
+            query: { run: "e2e" },
+            headers: { "x-codex-e2e": "marker" },
+          },
+        },
+      },
+    })).toEqual(expect.objectContaining({
+      "trigger.request": "{\"method\":\"GET\",\"query\":{\"run\":\"e2e\"},\"headers\":{\"x-codex-e2e\":\"marker\"}}",
+      "trigger.request.method": "GET",
+      "trigger.request.contentType": "",
+      "trigger.request.body": "",
+      "trigger.request.bodyText": "",
+      "trigger.request.query.run": "e2e",
+      "trigger.request.headers.x-codex-e2e": "marker",
     }))
   })
 })

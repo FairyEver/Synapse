@@ -39,6 +39,22 @@ describe("shared live protocol", () => {
     })).toBe(false)
   })
 
+  it("recognizes client webhook delivery ack messages", () => {
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(LIVE_MESSAGE_TYPES.webhookDeliveryAck, {
+      deliveryId: "delivery-1",
+    }, {
+      id: "msg-ack",
+      sentAt: "2026-06-06T10:00:02.000Z",
+    }))).toBe(true)
+
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(LIVE_MESSAGE_TYPES.webhookDeliveryAck, {
+      deliveryId: "",
+    }, {
+      id: "msg-ack",
+      sentAt: "2026-06-06T10:00:02.000Z",
+    }))).toBe(false)
+  })
+
   it("recognizes server webhook delivery messages", () => {
     expect(isLiveDesktopServerMessage(createLiveEnvelope(
       LIVE_MESSAGE_TYPES.webhookDeliveryReceived,

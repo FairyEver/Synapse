@@ -1,7 +1,8 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional, PayloadTooLargeException } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnModuleInit, Optional, PayloadTooLargeException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import {
   LIVE_MESSAGE_TYPES,
+  WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS,
   WEBHOOK_DELIVERY_STATUS,
   createLiveEnvelope,
   type DashboardWebhookDto,
@@ -10,6 +11,7 @@ import {
   type WebhookDeliveryDto,
   type WebhookDeliveryReceivedPayload,
   type WebhookDeliveryStatus,
+  type WebhookDeliveryClientReceiptDto,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
@@ -39,6 +41,7 @@ type DeliverySummaryRecord = {
 type WebhookRecord = {
   readonly id: string
   readonly publicId: string
+  readonly secret?: string | null
   readonly name: string
   readonly enabled: boolean
   readonly createdAt: Date
@@ -49,6 +52,17 @@ type WebhookRecord = {
 type PublicWebhookRecord = Pick<WebhookRecord, "id" | "publicId" | "name" | "enabled"> & {
   readonly userId: string
   readonly secretHash: string
+}
+
+type DeliveryReceiptRecord = {
+  readonly id: string
+  readonly clientInstanceId: string
+  readonly deviceName: string
+  readonly platform: string
+  readonly appVersion: string
+  readonly sentAt: Date
+  readonly acknowledgedAt: Date | null
+  readonly status: string
 }
 
 type DeliveryRecord = {
@@ -65,6 +79,7 @@ type DeliveryRecord = {
   readonly onlineClientCount: number
   readonly sentClientCount: number
   readonly failedClientCount: number
+  readonly receipts?: readonly DeliveryReceiptRecord[]
   readonly status: string
   readonly error: string | null
 }
@@ -85,7 +100,7 @@ const maxWebhookBodyBytes = 256 * 1024
 const supportedWebhookMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"])
 
 @Injectable()
-export class WebhookService {
+export class WebhookService implements OnModuleInit {
   private readonly logger = new Logger(WebhookService.name)
 
   constructor(
@@ -94,6 +109,12 @@ export class WebhookService {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly liveDesktopGateway?: LiveDesktopGateway,
   ) {}
+
+  onModuleInit(): void {
+    this.liveDesktopGateway?.setWebhookDeliveryAckHandler({
+      recordDeliveryAck: (input) => this.recordDeliveryAck(input),
+    })
+  }
 
   async listForUser(userId: string, publicAppUrl = ""): Promise<DashboardWebhookDto[]> {
     const webhooks = await this.prisma.userWebhook.findMany({
@@ -120,6 +141,7 @@ export class WebhookService {
           userId,
           publicId,
           secretHash: hashWebhookSecret(secret),
+          secret,
           name,
         },
         include: webhookWithLatestDelivery,
@@ -209,7 +231,7 @@ export class WebhookService {
     const webhook = await this.prisma.$transaction(async (tx) => {
       const result = await tx.userWebhook.updateMany({
         where: { id, userId },
-        data: { secretHash: hashWebhookSecret(secret) },
+        data: { secretHash: hashWebhookSecret(secret), secret },
       })
       if (result.count === 0) throw new NotFoundException("Webhook not found")
       const updated = await tx.userWebhook.findFirst({
@@ -236,10 +258,69 @@ export class WebhookService {
     await this.requireOwnedWebhook(userId, webhookId)
     const deliveries = await this.prisma.webhookDelivery.findMany({
       where: { webhookId, userId },
+      include: { receipts: { orderBy: { sentAt: "asc" } } },
       orderBy: { receivedAt: "desc" },
       take: 100,
     })
     return deliveries.map(toWebhookDeliveryDto)
+  }
+
+  async recordDeliveryAck(input: {
+    readonly userId: string
+    readonly deliveryId: string
+    readonly clientInstanceId: string
+    readonly deviceName: string
+    readonly platform: string
+    readonly appVersion: string
+    readonly acknowledgedAt: Date
+  }): Promise<void> {
+    const result = await this.prisma.webhookDeliveryReceipt.updateMany({
+      where: {
+        deliveryId: input.deliveryId,
+        clientInstanceId: input.clientInstanceId,
+        delivery: { userId: input.userId },
+      },
+      data: {
+        acknowledgedAt: input.acknowledgedAt,
+        status: WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged,
+      },
+    })
+    if (result.count === 0) {
+      const delivery = await this.prisma.webhookDelivery.findFirst({
+        where: { id: input.deliveryId, userId: input.userId },
+        select: { id: true },
+      })
+      if (!delivery) return
+      await this.prisma.webhookDeliveryReceipt.upsert({
+        where: {
+          deliveryId_clientInstanceId: {
+            deliveryId: input.deliveryId,
+            clientInstanceId: input.clientInstanceId,
+          },
+        },
+        update: {
+          acknowledgedAt: input.acknowledgedAt,
+          status: WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged,
+        },
+        create: {
+          deliveryId: input.deliveryId,
+          clientInstanceId: input.clientInstanceId,
+          deviceName: input.deviceName,
+          platform: input.platform,
+          appVersion: input.appVersion,
+          sentAt: input.acknowledgedAt,
+          acknowledgedAt: input.acknowledgedAt,
+          status: WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged,
+        },
+      })
+    }
+    await this.prisma.webhookDelivery.updateMany({
+      where: { id: input.deliveryId, userId: input.userId },
+      data: {
+        status: WEBHOOK_DELIVERY_STATUS.delivered,
+        error: null,
+      },
+    })
   }
 
   async receivePublicWebhook(input: {
@@ -317,10 +398,9 @@ export class WebhookService {
     }) satisfies LiveDesktopServerMessage
 
     const broadcastResult = this.broadcastDelivery(webhook.userId, delivery.id, webhook.publicId, message)
-    const status = broadcastResult.failedClientCount > 0 || broadcastResult.error
-      ? WEBHOOK_DELIVERY_STATUS.broadcastFailed
-      : WEBHOOK_DELIVERY_STATUS.accepted
+    const status = resolveBroadcastDeliveryStatus(broadcastResult)
 
+    await this.createDeliveryReceipts(delivery.id, broadcastResult.clientResults)
     await this.updateDeliveryBroadcastStatus({
       deliveryId: delivery.id,
       webhookId: webhook.id,
@@ -348,6 +428,14 @@ export class WebhookService {
     readonly onlineClientCount: number
     readonly sentClientCount: number
     readonly failedClientCount: number
+    readonly clientResults: readonly {
+      readonly clientInstanceId: string
+      readonly deviceName: string
+      readonly platform: string
+      readonly appVersion: string
+      readonly sentAt: string
+      readonly status: "sent" | "send_failed"
+    }[]
     readonly error?: string
   } {
     try {
@@ -355,6 +443,7 @@ export class WebhookService {
         onlineClientCount: 0,
         sentClientCount: 0,
         failedClientCount: 0,
+        clientResults: [],
       }
     } catch (error) {
       this.logger.warn({
@@ -366,8 +455,43 @@ export class WebhookService {
         onlineClientCount: 0,
         sentClientCount: 0,
         failedClientCount: 0,
+        clientResults: [],
         error: "broadcast_failed",
       }
+    }
+  }
+
+  private async createDeliveryReceipts(
+    deliveryId: string,
+    clientResults: readonly {
+      readonly clientInstanceId: string
+      readonly deviceName: string
+      readonly platform: string
+      readonly appVersion: string
+      readonly sentAt: string
+      readonly status: "sent" | "send_failed"
+    }[] | undefined,
+  ): Promise<void> {
+    if (!clientResults?.length) return
+    try {
+      await this.prisma.webhookDeliveryReceipt.createMany({
+        data: clientResults.map((client) => ({
+          deliveryId,
+          clientInstanceId: client.clientInstanceId,
+          deviceName: client.deviceName,
+          platform: client.platform,
+          appVersion: client.appVersion,
+          sentAt: new Date(client.sentAt),
+          acknowledgedAt: null,
+          status: client.status,
+        })),
+        skipDuplicates: true,
+      })
+    } catch (error) {
+      this.logger.warn({
+        deliveryId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      }, "Webhook delivery receipt insert failed")
     }
   }
 
@@ -480,6 +604,7 @@ export class WebhookService {
       name: webhook.name,
       enabled: webhook.enabled,
       maskedUrl: maskWebhookUrl(buildWebhookUrl(publicAppUrl, webhook.publicId, "secret")),
+      url: null,
       createdAt: webhook.createdAt.toISOString(),
       updatedAt: webhook.updatedAt.toISOString(),
     }
@@ -544,6 +669,10 @@ function firstHeader(value: string | readonly string[] | undefined): string | un
 }
 
 function toWebhookDeliveryDto(delivery: DeliveryRecord): WebhookDeliveryDto {
+  const clientReceipts = (delivery.receipts ?? []).map(toWebhookDeliveryClientReceiptDto)
+  const acknowledgedClientCount = clientReceipts.filter((receipt) =>
+    receipt.status === WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged || Boolean(receipt.acknowledgedAt)
+  ).length
   return {
     id: delivery.id,
     webhookId: delivery.webhookId,
@@ -558,8 +687,23 @@ function toWebhookDeliveryDto(delivery: DeliveryRecord): WebhookDeliveryDto {
     onlineClientCount: delivery.onlineClientCount,
     sentClientCount: delivery.sentClientCount,
     failedClientCount: delivery.failedClientCount,
+    acknowledgedClientCount,
+    clientReceipts,
     status: normalizeWebhookDeliveryStatus(delivery.status) ?? WEBHOOK_DELIVERY_STATUS.rejected,
     error: delivery.error ?? undefined,
+  }
+}
+
+function toWebhookDeliveryClientReceiptDto(receipt: DeliveryReceiptRecord): WebhookDeliveryClientReceiptDto {
+  return {
+    id: receipt.id,
+    clientInstanceId: receipt.clientInstanceId,
+    deviceName: receipt.deviceName,
+    platform: receipt.platform,
+    appVersion: receipt.appVersion,
+    sentAt: receipt.sentAt.toISOString(),
+    ...(receipt.acknowledgedAt ? { acknowledgedAt: receipt.acknowledgedAt.toISOString() } : {}),
+    status: normalizeWebhookDeliveryReceiptStatus(receipt.status),
   }
 }
 
@@ -571,5 +715,28 @@ function readChangedFields(input: { readonly name?: string; readonly enabled?: b
 }
 
 function normalizeWebhookDeliveryStatus(status: string | undefined): WebhookDeliveryStatus | undefined {
+  if (status === "accepted") return WEBHOOK_DELIVERY_STATUS.received
   return status && webhookStatusValues.has(status) ? status as WebhookDeliveryStatus : undefined
+}
+
+function normalizeWebhookDeliveryReceiptStatus(status: string): WebhookDeliveryClientReceiptDto["status"] {
+  if (status === WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged ||
+    status === WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sendFailed ||
+    status === WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sent
+  ) {
+    return status
+  }
+  return WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sendFailed
+}
+
+function resolveBroadcastDeliveryStatus(input: {
+  readonly onlineClientCount: number
+  readonly sentClientCount: number
+  readonly failedClientCount: number
+  readonly error?: string
+}): WebhookDeliveryStatus {
+  if (input.failedClientCount > 0 || input.error) return WEBHOOK_DELIVERY_STATUS.broadcastFailed
+  if (input.onlineClientCount === 0) return WEBHOOK_DELIVERY_STATUS.noOnlineClients
+  if (input.sentClientCount > 0) return WEBHOOK_DELIVERY_STATUS.sent
+  return WEBHOOK_DELIVERY_STATUS.received
 }

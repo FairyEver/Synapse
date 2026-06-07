@@ -66,6 +66,26 @@ describe("AutomationItemRepository", () => {
     expect(result?.runCount).toBe(1)
   })
 
+  it("keeps user edit time unchanged when persisting schedule and run metadata", async () => {
+    const clock = { now: new Date("2026-06-03T00:00:00.000Z") }
+    const repo = new AutomationItemRepository({
+      items: new MemoryNamespace<AutomationItem>("automation.items"),
+      triggers: createBuiltinAutomationTriggerRegistry(),
+      now: () => clock.now,
+      idFactory: () => "automation:1",
+    })
+    const item = await repo.create(validCreateInput())
+
+    clock.now = new Date("2026-06-03T00:10:00.000Z")
+    const scheduled = await repo.markScheduled(item.id, "2026-06-03T09:00:00.000Z")
+    clock.now = new Date("2026-06-03T00:20:00.000Z")
+    const result = await repo.markRunResult(item.id, { status: "success" })
+
+    expect(scheduled?.updatedAt).toBe(item.updatedAt)
+    expect(result?.updatedAt).toBe(item.updatedAt)
+    expect(result?.lastRunAt).toBe("2026-06-03T00:20:00.000Z")
+  })
+
   it("does not let delayed scheduling overwrite a newer run result", async () => {
     const namespace = new ControlledMemoryNamespace<AutomationItem>("automation.items")
     const repo = new AutomationItemRepository({

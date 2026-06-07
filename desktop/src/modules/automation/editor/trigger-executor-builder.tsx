@@ -1,5 +1,4 @@
-import { useState, type ReactNode } from "react"
-import { Copy } from "lucide-react"
+import { type ReactNode } from "react"
 
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
@@ -11,15 +10,11 @@ import {
   ItemDescription,
   ItemTitle,
 } from "@/components/ui/item"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
 import type { SynapseProjectConfig } from "@/types/config"
+import { TriggerVariablesDialog } from "./trigger-variables-dialog"
 
 type TriggerExecutorBuilderProps = {
   triggerType: string | null
@@ -87,56 +82,6 @@ function SelectedSummary({
         </Button>
       </ItemActions>
     </Item>
-  )
-}
-
-function TriggerVariablesButton({
-  variables,
-}: {
-  readonly variables: readonly {
-    readonly key: string
-    readonly label: string
-    readonly group?: string
-  }[]
-}) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  if (variables.length === 0) return null
-
-  const copyVariable = async (key: string) => {
-    const template = `{{${key}}}`
-    await navigator.clipboard.writeText(template)
-    setCopiedKey(key)
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
-          变量
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-2">
-        <div className="grid gap-1">
-          {variables.map((variable) => (
-            <button
-              key={variable.key}
-              type="button"
-              className="grid gap-1 rounded-md px-2 py-1.5 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => void copyVariable(variable.key)}
-            >
-              <span className="text-sm font-medium">{variable.label}</span>
-              <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Copy className="size-3" />
-                {`{{${variable.key}}}`}
-              </span>
-              {copiedKey === variable.key ? (
-                <span className="text-xs text-muted-foreground">已复制</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
   )
 }
 
@@ -216,7 +161,10 @@ export function TriggerExecutorBuilder({
               title={selectedTrigger.manifest.title}
               summary={safeTriggerSummary(selectedTrigger.manifest.id, triggerConfig)}
               extraAction={(
-                <TriggerVariablesButton variables={selectedTrigger.manifest.variables ?? []} />
+                <TriggerVariablesDialog
+                  triggerTitle={selectedTrigger.manifest.title}
+                  variables={selectedTrigger.manifest.variables ?? []}
+                />
               )}
               onClear={() => onTriggerChange(null, {})}
             />

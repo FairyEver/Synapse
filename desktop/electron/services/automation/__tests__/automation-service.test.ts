@@ -89,6 +89,60 @@ describe("AutomationService", () => {
     await runPromise
   })
 
+  it("queues overlapping event runs without mixing delivery payloads", async () => {
+    const action = controllableEventAction()
+    const harness = createHarness({ action: action.definition, triggers: fakeEventTriggerRegistry() })
+    const item = await harness.service.automationCreate({
+      name: "Event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+
+    const first = harness.service.acceptEvent({
+      source: "webhook",
+      type: "demo.created",
+      payload: { deliveryId: "delivery-running" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+    await waitFor(async () => action.started.length === 1)
+    const second = harness.service.acceptEvent({
+      source: "webhook",
+      type: "demo.created",
+      payload: { deliveryId: "delivery-skipped" },
+      receivedAt: "2026-06-03T00:00:01.000Z",
+    })
+    const third = harness.service.acceptEvent({
+      source: "webhook",
+      type: "demo.created",
+      payload: { deliveryId: "delivery-final" },
+      receivedAt: "2026-06-03T00:00:02.000Z",
+    })
+
+    action.resolveNext()
+    await waitFor(async () => action.started.length === 2)
+    action.resolveNext()
+    await waitFor(async () => action.started.length === 3)
+    action.resolveNext()
+
+    await expect(Promise.all([first, second, third])).resolves.toEqual([
+      [expect.objectContaining({ status: "success", result: expect.objectContaining({ summary: "delivery-running" }) })],
+      [expect.objectContaining({ status: "success", result: expect.objectContaining({ summary: "delivery-skipped" }) })],
+      [expect.objectContaining({ status: "success", result: expect.objectContaining({ summary: "delivery-final" }) })],
+    ])
+
+    expect(action.started.map((run) => run.deliveryId)).toEqual([
+      "delivery-running",
+      "delivery-skipped",
+      "delivery-final",
+    ])
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([
+      expect.objectContaining({ status: "success" }),
+      expect.objectContaining({ status: "success" }),
+      expect.objectContaining({ status: "success" }),
+    ])
+  })
+
   it("marks listed automations that are currently running", async () => {
     const harness = createHarness({ action: longRunningAction() })
     const item = await harness.service.automationCreate(createAutomationInput())
@@ -107,6 +161,32 @@ describe("AutomationService", () => {
     expect(running).toBeDefined()
     await harness.service.stopRun(running!.id)
     await runPromise
+  })
+
+  it("lists recently created or updated automations first", async () => {
+    const harness = createHarness()
+    await harness.itemStore.upsert(createStoredAutomation({
+      id: "automation:old",
+      name: "Old automation",
+      createdAt: "2026-06-03T00:00:00.000Z",
+      updatedAt: "2026-06-03T00:00:00.000Z",
+    }))
+    await harness.itemStore.upsert(createStoredAutomation({
+      id: "automation:new",
+      name: "New automation",
+      createdAt: "2026-06-03T00:10:00.000Z",
+      updatedAt: "2026-06-03T00:10:00.000Z",
+    }))
+    await harness.itemStore.upsert(createStoredAutomation({
+      id: "automation:edited",
+      name: "Edited automation",
+      createdAt: "2026-06-03T00:05:00.000Z",
+      updatedAt: "2026-06-03T00:15:00.000Z",
+    }))
+
+    const listedIds = (await harness.service.automationList()).map((item) => item.id)
+
+    expect(listedIds).toEqual(["automation:edited", "automation:new", "automation:old"])
   })
 
   it("emits automation change events when a run finishes", async () => {
@@ -663,6 +743,31 @@ function createCompletionAnchoredIntervalInput() {
   }
 }
 
+function createStoredAutomation(overrides: Partial<AutomationItem> = {}): AutomationItem {
+  return {
+    id: "automation:stored",
+    schemaVersion: 1,
+    name: "Stored automation",
+    enabled: true,
+    scope: { type: "global" },
+    trigger: {
+      type: "builtin.interval",
+      config: {
+        everyMinutes: 10,
+        anchor: "created_at",
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+      },
+    },
+    executor: { type: "builtin.test", config: { message: "ok" } },
+    policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
+    createdAt: "2026-06-03T00:00:00.000Z",
+    updatedAt: "2026-06-03T00:00:00.000Z",
+    runCount: 0,
+    configVersion: 0,
+    ...overrides,
+  }
+}
+
 const testAction: MainActionDefinition<TestActionConfig> = {
   manifest: {
     id: "builtin.test",
@@ -695,6 +800,40 @@ function longRunningAction(): MainActionDefinition<TestActionConfig> {
         resolve({ status: "cancelled", summary: "已停止" })
       }, { once: true })
     }),
+  }
+}
+
+function controllableEventAction(): {
+  readonly definition: MainActionDefinition<TestActionConfig>
+  readonly started: Array<{ readonly runId: string; readonly deliveryId: string }>
+  readonly resolveNext: () => void
+} {
+  const started: Array<{ readonly runId: string; readonly deliveryId: string }> = []
+  const resolvers: Array<() => void> = []
+  const definition: MainActionDefinition<TestActionConfig> = {
+    ...testAction,
+    execute: async ({ context }) => {
+      const rawDeliveryId = context.templateVariables["trigger.payload.deliveryId"]
+      const deliveryId = typeof rawDeliveryId === "string" ? rawDeliveryId : "missing"
+      started.push({ runId: context.runId, deliveryId })
+      await new Promise<void>((resolve) => {
+        resolvers.push(resolve)
+        context.abortSignal.addEventListener("abort", resolve, { once: true })
+      })
+      return {
+        status: "success",
+        summary: deliveryId,
+        outputs: { deliveryId },
+      }
+    },
+  }
+  return {
+    definition,
+    started,
+    resolveNext: () => {
+      const resolve = resolvers.shift()
+      if (resolve) resolve()
+    },
   }
 }
 

@@ -39,7 +39,7 @@ export function WebhookUrlDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>完整 URL 只显示一次</DialogDescription>
+          <DialogDescription>关闭后需重置 secret 才能再次查看完整 URL。</DialogDescription>
         </DialogHeader>
         <div className='grid gap-2'>
           <Label htmlFor='webhook-url'>URL</Label>

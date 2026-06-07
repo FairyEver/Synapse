@@ -9,6 +9,7 @@ const baseWebhook = {
   userId: "user-1",
   publicId: "wh_public",
   secretHash: "hash",
+  secret: "whsec_secret",
   name: "GitHub",
   enabled: true,
   createdAt: new Date("2026-06-06T10:00:00.000Z"),
@@ -32,9 +33,17 @@ function createPrismaMock() {
     },
     webhookDelivery: {
       create: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       deleteMany: vi.fn(),
+    },
+    webhookDeliveryReceipt: {
+      createMany: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+      findMany: vi.fn(),
     },
     $transaction: vi.fn((callback) => callback({
       userWebhook: {
@@ -51,7 +60,7 @@ function createPrismaMock() {
 }
 
 describe("WebhookService", () => {
-  it("creates a webhook for the current user and returns the full URL once", async () => {
+  it("creates a webhook for the current user and returns the full URL only in the one-time result", async () => {
     const prisma = createPrismaMock()
     const tx = {
       userWebhook: {
@@ -81,11 +90,12 @@ describe("WebhookService", () => {
     expect(result.webhook.publicId).toBe("wh_public")
     expect(result.webhook.name).toBe("GitHub")
     expect(result.webhook.enabled).toBe(true)
+    expect(result.webhook.url).toBeNull()
     expect(result.webhook.maskedUrl).toBe("https://synapse.test/webhooks/wh_public/***")
-    expect(JSON.stringify(tx.userWebhook.create.mock.calls)).not.toContain("whsec_secret")
     expect(tx.userWebhook.create.mock.calls[0]?.[0]?.data).toMatchObject({
       userId: "user-1",
       publicId: "wh_public",
+      secret: "whsec_secret",
       name: "GitHub",
     })
   })
@@ -130,7 +140,7 @@ describe("WebhookService", () => {
     expect(serializedAudit).not.toContain("https://synapse.test/webhooks/wh_public/whsec_secret")
   })
 
-  it("rolls back webhook creation when audit insert fails before returning the one-time URL", async () => {
+  it("rolls back webhook creation when audit insert fails before returning the copyable URL", async () => {
     const prisma = createPrismaMock()
     const persistedWebhooks: unknown[] = []
     const tx = {
@@ -181,7 +191,7 @@ describe("WebhookService", () => {
         ...baseWebhook,
         deliveries: [{
           receivedAt: new Date("2026-06-06T11:00:00.000Z"),
-          status: WEBHOOK_DELIVERY_STATUS.accepted,
+          status: "accepted",
         }],
       },
     ])
@@ -192,16 +202,40 @@ describe("WebhookService", () => {
       publicId: "wh_public",
       name: "GitHub",
       enabled: true,
+      url: null,
       maskedUrl: "https://synapse.test/webhooks/wh_public/***",
       createdAt: "2026-06-06T10:00:00.000Z",
       updatedAt: "2026-06-06T10:00:00.000Z",
       lastDeliveryAt: "2026-06-06T11:00:00.000Z",
-      lastDeliveryStatus: WEBHOOK_DELIVERY_STATUS.accepted,
+      lastDeliveryStatus: WEBHOOK_DELIVERY_STATUS.received,
     }])
     const findManyArgs = prisma.userWebhook.findMany.mock.calls[0]?.[0]
     expect(findManyArgs.where).toEqual({ userId: "user-1" })
     expect(findManyArgs.include.deliveries.orderBy).toEqual({ receivedAt: "desc" })
     expect(findManyArgs.include.deliveries.take).toBe(1)
+  })
+
+  it("returns null full URLs for legacy hash-only webhooks", async () => {
+    const prisma = createPrismaMock()
+    prisma.userWebhook.findMany.mockResolvedValue([
+      {
+        ...baseWebhook,
+        secret: null,
+        deliveries: [],
+      },
+    ])
+    const service = new WebhookService(prisma as never)
+
+    await expect(service.listForUser("user-1", "https://synapse.test")).resolves.toEqual([{
+      id: "webhook-1",
+      publicId: "wh_public",
+      name: "GitHub",
+      enabled: true,
+      url: null,
+      maskedUrl: "https://synapse.test/webhooks/wh_public/***",
+      createdAt: "2026-06-06T10:00:00.000Z",
+      updatedAt: "2026-06-06T10:00:00.000Z",
+    }])
   })
 
   it("resets secret and invalidates the old secret hash", async () => {
@@ -223,6 +257,7 @@ describe("WebhookService", () => {
     tx.userWebhook.findFirst.mockImplementation(() => Promise.resolve({
       ...baseWebhook,
       secretHash: tx.userWebhook.updateMany.mock.calls[0]?.[0]?.data.secretHash,
+      secret: tx.userWebhook.updateMany.mock.calls[0]?.[0]?.data.secret,
       deliveries: [],
     }))
     prisma.$transaction.mockImplementation((callback) => callback(tx))
@@ -234,8 +269,10 @@ describe("WebhookService", () => {
     const reset = await service.resetSecret("user-1", "webhook-1", "https://synapse.test")
 
     expect(reset.url).toBe("https://synapse.test/webhooks/wh_public/whsec_new")
+    expect(reset.webhook.url).toBeNull()
     expect(tx.userWebhook.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "webhook-1", userId: "user-1" },
+      data: expect.objectContaining({ secret: "whsec_new" }),
     }))
     const savedHash = tx.userWebhook.updateMany.mock.calls[0]?.[0]?.data.secretHash
     expect(verifyWebhookSecret("whsec_old", savedHash)).toBe(false)
@@ -292,7 +329,7 @@ describe("WebhookService", () => {
     expect(serializedAudit).not.toContain("https://synapse.test/webhooks/wh_public/whsec_new")
   })
 
-  it("rolls back secret reset when audit insert fails before returning the one-time URL", async () => {
+  it("rolls back secret reset when audit insert fails before returning the copyable URL", async () => {
     const prisma = createPrismaMock()
     const oldHash = hashWebhookSecret("whsec_old")
     let storedHash = oldHash
@@ -428,6 +465,18 @@ describe("WebhookService", () => {
         onlineClientCount: 2,
         sentClientCount: 1,
         failedClientCount: 1,
+        receipts: [
+          {
+            id: "receipt-1",
+            clientInstanceId: "client-a",
+            deviceName: "MacBook",
+            platform: "darwin-arm64",
+            appVersion: "0.2.253",
+            sentAt: new Date("2026-06-06T12:00:01.000Z"),
+            acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
+            status: "acknowledged",
+          },
+        ],
         status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
         error: "send failed",
       },
@@ -448,11 +497,23 @@ describe("WebhookService", () => {
       onlineClientCount: 2,
       sentClientCount: 1,
       failedClientCount: 1,
+      acknowledgedClientCount: 1,
+      clientReceipts: [{
+        id: "receipt-1",
+        clientInstanceId: "client-a",
+        deviceName: "MacBook",
+        platform: "darwin-arm64",
+        appVersion: "0.2.253",
+        sentAt: "2026-06-06T12:00:01.000Z",
+        acknowledgedAt: "2026-06-06T12:00:02.000Z",
+        status: "acknowledged",
+      }],
       status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
       error: "send failed",
     }])
     expect(prisma.webhookDelivery.findMany).toHaveBeenCalledWith({
       where: { webhookId: "webhook-1", userId: "user-1" },
+      include: { receipts: { orderBy: { sentAt: "asc" } } },
       orderBy: { receivedAt: "desc" },
       take: 100,
     })
@@ -489,7 +550,29 @@ describe("WebhookService", () => {
 
   it("accepts a webhook request, broadcasts to online clients, and stores delivery counts", async () => {
     const harness = createWebhookReceiveHarness({
-      broadcastResult: { onlineClientCount: 2, sentClientCount: 2, failedClientCount: 0 },
+      broadcastResult: {
+        onlineClientCount: 2,
+        sentClientCount: 2,
+        failedClientCount: 0,
+        clientResults: [
+          {
+            clientInstanceId: "client-a",
+            deviceName: "MacBook",
+            platform: "darwin-arm64",
+            appVersion: "0.2.253",
+            sentAt: "2026-06-06T12:00:00.000Z",
+            status: "sent",
+          },
+          {
+            clientInstanceId: "client-b",
+            deviceName: "Workstation",
+            platform: "win32-x64",
+            appVersion: "0.2.253",
+            sentAt: "2026-06-06T12:00:00.000Z",
+            status: "sent",
+          },
+        ],
+      },
     })
 
     const result = await harness.receive({
@@ -516,7 +599,23 @@ describe("WebhookService", () => {
         onlineClientCount: 2,
         sentClientCount: 2,
         failedClientCount: 0,
-        status: WEBHOOK_DELIVERY_STATUS.accepted,
+        status: WEBHOOK_DELIVERY_STATUS.sent,
+      }),
+    ])
+    expect(harness.receipts).toEqual([
+      expect.objectContaining({
+        deliveryId: "delivery-1",
+        clientInstanceId: "client-a",
+        deviceName: "MacBook",
+        status: "sent",
+        acknowledgedAt: null,
+      }),
+      expect.objectContaining({
+        deliveryId: "delivery-1",
+        clientInstanceId: "client-b",
+        deviceName: "Workstation",
+        status: "sent",
+        acknowledgedAt: null,
       }),
     ])
     const message = harness.live.broadcastToUser.mock.calls[0]?.[1]
@@ -541,6 +640,23 @@ describe("WebhookService", () => {
     expect(serializedPayload).not.toContain("raw-secret")
     expect(serializedPayload).not.toContain("query-secret")
     expect(serializedPayload).not.toContain("body-secret")
+  })
+
+  it("records no_online_clients when no live clients are online", async () => {
+    const harness = createWebhookReceiveHarness()
+
+    await harness.receive()
+
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({
+        onlineClientCount: 0,
+        sentClientCount: 0,
+        failedClientCount: 0,
+        status: WEBHOOK_DELIVERY_STATUS.noOnlineClients,
+        error: null,
+      }),
+    ])
+    expect(harness.receipts).toHaveLength(0)
   })
 
   it("keeps only the most recent 100 deliveries for each webhook", async () => {
@@ -607,7 +723,126 @@ describe("WebhookService", () => {
     })
     expect(harness.live.broadcastToUser).toHaveBeenCalledTimes(1)
     expect(harness.deliveries).toEqual([
-      expect.objectContaining({ method, status: WEBHOOK_DELIVERY_STATUS.accepted }),
+      expect.objectContaining({ method, status: WEBHOOK_DELIVERY_STATUS.noOnlineClients }),
+    ])
+  })
+
+  it("records client acknowledgements and marks deliveries delivered", async () => {
+    const harness = createWebhookReceiveHarness({
+      broadcastResult: {
+        onlineClientCount: 1,
+        sentClientCount: 1,
+        failedClientCount: 0,
+        clientResults: [{
+          clientInstanceId: "client-a",
+          deviceName: "MacBook",
+          platform: "darwin-arm64",
+          appVersion: "0.2.253",
+          sentAt: "2026-06-06T12:00:00.000Z",
+          status: "sent",
+        }],
+      },
+    })
+    await harness.receive()
+
+    await harness.service.recordDeliveryAck({
+      userId: "user-1",
+      deliveryId: "delivery-1",
+      clientInstanceId: "client-a",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      appVersion: "0.2.253",
+      acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
+    })
+
+    expect(harness.receipts).toEqual([
+      expect.objectContaining({
+        deliveryId: "delivery-1",
+        clientInstanceId: "client-a",
+        status: "acknowledged",
+        acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
+      }),
+    ])
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({ id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.delivered }),
+    ])
+  })
+
+  it("ignores acknowledgements for another user or unknown delivery", async () => {
+    const harness = createWebhookReceiveHarness({
+      broadcastResult: {
+        onlineClientCount: 1,
+        sentClientCount: 1,
+        failedClientCount: 0,
+        clientResults: [{
+          clientInstanceId: "client-a",
+          deviceName: "MacBook",
+          platform: "darwin-arm64",
+          appVersion: "0.2.253",
+          sentAt: "2026-06-06T12:00:00.000Z",
+          status: "sent",
+        }],
+      },
+    })
+    await harness.receive()
+
+    await harness.service.recordDeliveryAck({
+      userId: "user-2",
+      deliveryId: "delivery-1",
+      clientInstanceId: "client-a",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      appVersion: "0.2.253",
+      acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
+    })
+    await harness.service.recordDeliveryAck({
+      userId: "user-1",
+      deliveryId: "delivery-missing",
+      clientInstanceId: "client-a",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      appVersion: "0.2.253",
+      acknowledgedAt: new Date("2026-06-06T12:00:03.000Z"),
+    })
+
+    expect(harness.receipts).toEqual([
+      expect.objectContaining({
+        deliveryId: "delivery-1",
+        clientInstanceId: "client-a",
+        status: "sent",
+        acknowledgedAt: null,
+      }),
+    ])
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({ id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.sent }),
+    ])
+  })
+
+  it("records acknowledgements that arrive before receipt insertion completes", async () => {
+    const harness = createWebhookReceiveHarness({
+      broadcastResult: { onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0 },
+    })
+    await harness.receive()
+
+    await harness.service.recordDeliveryAck({
+      userId: "user-1",
+      deliveryId: "delivery-1",
+      clientInstanceId: "client-a",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      appVersion: "0.2.253",
+      acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
+    })
+
+    expect(harness.receipts).toEqual([
+      expect.objectContaining({
+        deliveryId: "delivery-1",
+        clientInstanceId: "client-a",
+        status: "acknowledged",
+      }),
+    ])
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({ id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.delivered }),
     ])
   })
 
@@ -687,9 +922,18 @@ function createWebhookReceiveHarness(input: {
     readonly onlineClientCount: number
     readonly sentClientCount: number
     readonly failedClientCount: number
+    readonly clientResults?: readonly {
+      readonly clientInstanceId: string
+      readonly deviceName: string
+      readonly platform: string
+      readonly appVersion: string
+      readonly sentAt: string
+      readonly status: string
+    }[]
   }
 } = {}) {
   const deliveries: Array<Record<string, unknown>> = []
+  const receipts: Array<Record<string, unknown>> = []
   const prisma = createPrismaMock()
   const webhook = {
     ...baseWebhook,
@@ -747,13 +991,78 @@ function createWebhookReceiveHarness(input: {
     }
     return Promise.resolve({ count: ids.size })
   })
+  prisma.webhookDelivery.updateMany.mockImplementation(({ where, data }) => {
+    let count = 0
+    for (let index = 0; index < deliveries.length; index += 1) {
+      const delivery = deliveries[index]
+      if (delivery?.id === where.id && delivery.userId === where.userId) {
+        deliveries[index] = { ...delivery, ...data }
+        count += 1
+      }
+    }
+    return Promise.resolve({ count })
+  })
+  prisma.webhookDelivery.findFirst.mockImplementation(({ where }) => {
+    const delivery = deliveries.find((item) => item.id === where.id && item.userId === where.userId)
+    return Promise.resolve(delivery ? { id: delivery.id } : null)
+  })
+  prisma.webhookDeliveryReceipt.createMany.mockImplementation(({ data }) => {
+    let count = 0
+    for (const item of data) {
+      if (receipts.some((receipt) =>
+        receipt.deliveryId === item.deliveryId && receipt.clientInstanceId === item.clientInstanceId
+      )) {
+        continue
+      }
+      receipts.push({
+        id: `receipt-${receipts.length + 1}`,
+        ...item,
+      })
+      count += 1
+    }
+    return Promise.resolve({ count })
+  })
+  prisma.webhookDeliveryReceipt.upsert.mockImplementation(({ where, update, create }) => {
+    const key = where.deliveryId_clientInstanceId
+    const index = receipts.findIndex((receipt) =>
+      receipt.deliveryId === key.deliveryId && receipt.clientInstanceId === key.clientInstanceId
+    )
+    if (index >= 0) {
+      receipts[index] = { ...receipts[index], ...update }
+      return Promise.resolve(receipts[index])
+    }
+    const receipt = {
+      id: `receipt-${receipts.length + 1}`,
+      ...create,
+    }
+    receipts.push(receipt)
+    return Promise.resolve(receipt)
+  })
+  prisma.webhookDeliveryReceipt.updateMany.mockImplementation(({ where, data }) => {
+    let count = 0
+    for (let index = 0; index < receipts.length; index += 1) {
+      const receipt = receipts[index]
+      const delivery = deliveries.find((item) => item.id === receipt?.deliveryId)
+      if (
+        receipt?.deliveryId === where.deliveryId &&
+        receipt.clientInstanceId === where.clientInstanceId &&
+        delivery?.userId === where.delivery?.userId
+      ) {
+        receipts[index] = { ...receipt, ...data }
+        count += 1
+      }
+    }
+    return Promise.resolve({ count })
+  })
 
   const service = new WebhookService(prisma as never, {}, undefined, live as never)
 
   return {
+    service,
     prisma,
     live,
     deliveries,
+    receipts,
     receive: (overrides: {
       readonly publicId?: string
       readonly secret?: string

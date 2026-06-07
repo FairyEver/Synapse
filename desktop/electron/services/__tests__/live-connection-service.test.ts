@@ -29,8 +29,12 @@ class FakeSocket extends EventEmitter {
   readonly sent: string[] = []
   readonly close = vi.fn()
   readyState = 1
+  throwOnWebhookAck = false
 
   send(payload: string): void {
+    if (this.throwOnWebhookAck && JSON.parse(payload).type === LIVE_MESSAGE_TYPES.webhookDeliveryAck) {
+      throw new Error("ack failed")
+    }
     this.sent.push(payload)
   }
 }
@@ -194,7 +198,7 @@ describe("LiveConnectionService", () => {
     expect(service.getState().lastSeenAt).toBe("2026-06-06T10:00:05.000Z")
   })
 
-  it("dispatches webhook delivery downlinks to the installed handler", async () => {
+  it("acknowledges webhook delivery downlinks before dispatching to the installed handler", async () => {
     const socket = new FakeSocket()
     const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
     const service = new LiveConnectionService({
@@ -226,9 +230,50 @@ describe("LiveConnectionService", () => {
 
     await waitForCondition(() => webhookDeliveryHandler.handle.mock.calls.length > 0)
 
+    expect(JSON.parse(socket.sent[0] ?? "{}")).toMatchObject({
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryAck,
+      payload: { deliveryId: "delivery-1" },
+    })
     expect(webhookDeliveryHandler.handle).toHaveBeenCalledWith(expect.objectContaining({
       deliveryId: "delivery-1",
       webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+    }))
+  })
+
+  it("still dispatches webhook delivery downlinks when ack sending fails", async () => {
+    const socket = new FakeSocket()
+    socket.throwOnWebhookAck = true
+    const webhookDeliveryHandler = { handle: vi.fn().mockResolvedValue(undefined) }
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      webhookDeliveryHandler,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("message", JSON.stringify(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+      {
+        deliveryId: "delivery-1",
+        webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
+        request: {
+          method: "POST",
+          url: "https://synapse.test/webhooks/wh_public/***",
+          query: {},
+          headers: {},
+          body: { ok: true },
+          receivedAt: "2026-06-06T10:00:00.000Z",
+        },
+      },
+      { id: "msg-webhook", sentAt: "2026-06-06T10:00:01.000Z" },
+    )))
+
+    await waitForCondition(() => webhookDeliveryHandler.handle.mock.calls.length > 0)
+
+    expect(webhookDeliveryHandler.handle).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryId: "delivery-1",
     }))
   })
 
@@ -255,6 +300,7 @@ describe("LiveConnectionService", () => {
     }))
     await flushPromises()
 
+    expect(socket.sent).toHaveLength(0)
     expect(webhookDeliveryHandler.handle).not.toHaveBeenCalled()
   })
 

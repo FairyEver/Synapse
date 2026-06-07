@@ -6,6 +6,7 @@ export const LIVE_MESSAGE_TYPES = {
   ping: "live.ping",
   pong: "live.pong",
   webhookDeliveryReceived: "webhook.delivery.received",
+  webhookDeliveryAck: "webhook.delivery.ack",
 } as const
 
 export type LiveMessageType = typeof LIVE_MESSAGE_TYPES[keyof typeof LIVE_MESSAGE_TYPES]
@@ -39,9 +40,14 @@ export interface LiveDesktopPongPayload {
   readonly serverTime: string
 }
 
+export interface LiveWebhookDeliveryAckPayload {
+  readonly deliveryId: string
+}
+
 export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.hello, LiveDesktopHelloPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.ping, LiveDesktopPingPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.webhookDeliveryAck, LiveWebhookDeliveryAckPayload>
 
 export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
@@ -69,6 +75,7 @@ export function isLiveDesktopClientMessage(value: unknown): value is LiveDesktop
   if (!isLiveEnvelope(value)) return false
   if (value.type === LIVE_MESSAGE_TYPES.hello) return isHelloPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.ping) return isPingPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.webhookDeliveryAck) return isWebhookDeliveryAckPayload(value.payload)
   return false
 }
 
@@ -104,6 +111,10 @@ function isPingPayload(value: unknown): value is LiveDesktopPingPayload {
 
 function isPongPayload(value: unknown): value is LiveDesktopPongPayload {
   return isRecord(value) && nonEmptyString(value.serverTime)
+}
+
+function isWebhookDeliveryAckPayload(value: unknown): value is LiveWebhookDeliveryAckPayload {
+  return isRecord(value) && nonEmptyString(value.deliveryId)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

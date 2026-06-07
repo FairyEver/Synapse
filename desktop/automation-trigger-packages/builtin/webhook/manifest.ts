@@ -14,6 +14,7 @@ const webhookTriggerVariables = [
   { key: "trigger.source", label: "事件来源", group: "event" },
   { key: "trigger.eventType", label: "事件类型", group: "event" },
   { key: "trigger.receivedAt", label: "接收时间", group: "event" },
+  { key: "trigger.payload", label: "完整 Webhook", group: "event" },
   { key: "trigger.deliveryId", label: "投递 ID", group: "event" },
   { key: "trigger.webhook.id", label: "Webhook ID", group: "event" },
   { key: "trigger.webhook.publicId", label: "Webhook Public ID", group: "event" },

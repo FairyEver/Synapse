@@ -183,6 +183,7 @@ model UserWebhook {
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   publicId   String            @unique
   secretHash String
+  secret     String?
   name       String            @db.VarChar(80)
   enabled    Boolean           @default(true)
   createdAt  DateTime          @default(now())
@@ -210,9 +211,26 @@ model WebhookDelivery {
   failedClientCount Int
   status            String
   error             String?
+  receipts          WebhookDeliveryReceipt[]
 
   @@index([webhookId, receivedAt])
   @@index([userId, receivedAt])
+}
+
+model WebhookDeliveryReceipt {
+  id               String          @id @default(cuid())
+  deliveryId       String
+  delivery         WebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  clientInstanceId String
+  deviceName       String
+  platform         String
+  appVersion       String
+  sentAt           DateTime
+  acknowledgedAt   DateTime?
+  status           String
+
+  @@unique([deliveryId, clientInstanceId])
+  @@index([deliveryId, sentAt])
 }
 
 model AuditLog {

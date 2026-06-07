@@ -114,7 +114,7 @@ describe("AutomationEditorApp", () => {
       .toContain("GET · 未设置 URL")
   })
 
-  it("shows trigger variables and copies a template from the trigger panel", async () => {
+  it("opens trigger variables in a dialog and copies a static template", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
@@ -132,8 +132,12 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("变量")?.click()
     })
 
-    expect(document.body.textContent).toContain("触发时间")
-    expect(document.body.textContent).toContain("{{trigger.triggeredAt}}")
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain("Cron 变量")
+    expect(dialog?.textContent).toContain("触发信息")
+    expect(dialog?.textContent).toContain("触发时间")
+    expect(dialog?.textContent).toContain("{{trigger.triggeredAt}}")
+    expect(document.querySelector('[data-slot="popover-content"]')).toBeNull()
 
     await act(async () => {
       findButtonContaining("{{trigger.triggeredAt}}")?.click()
@@ -141,6 +145,101 @@ describe("AutomationEditorApp", () => {
 
     expect(writeText).toHaveBeenCalledWith("{{trigger.triggeredAt}}")
     expect(document.body.textContent).toContain("已复制")
+  })
+
+  it("filters trigger variables by label and key", async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("变量")?.click()
+    })
+
+    const searchInput = document.querySelector<HTMLInputElement>('input[aria-label="搜索变量"]')
+    await act(async () => {
+      if (!searchInput) return
+      changeInput(searchInput, "timezone")
+    })
+
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain("{{trigger.timezone}}")
+    expect(dialog?.textContent).toContain("时区")
+    expect(dialog?.textContent).not.toContain("{{trigger.automationName}}")
+  })
+
+  it("shows webhook whole payload and dynamic variables", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Webhook")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("变量")?.click()
+    })
+
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain("Webhook 变量")
+    expect(dialog?.textContent).toContain("事件内容")
+    expect(dialog?.textContent).toContain("完整 Webhook")
+    expect(dialog?.textContent).toContain("{{trigger.payload}}")
+    expect(dialog?.textContent).toContain("动态路径")
+    expect(dialog?.textContent).toContain("{{trigger.request.body.<path>}}")
+
+    await act(async () => {
+      findButtonContaining("{{trigger.payload}}")?.click()
+    })
+
+    expect(writeText).toHaveBeenCalledWith("{{trigger.payload}}")
+
+    const bodyPathInput = document.querySelector<HTMLInputElement>('input[aria-label="请求 Body 路径"]')
+    await act(async () => {
+      if (!bodyPathInput) return
+      changeInput(bodyPathInput, "repository.full_name")
+    })
+
+    expect(dialog?.textContent).toContain("{{trigger.request.body.repository.full_name}}")
+  })
+
+  it("shows copy failure feedback in the variable dialog", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"))
+    Object.assign(navigator, { clipboard: { writeText } })
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("变量")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("{{trigger.triggeredAt}}")?.click()
+    })
+
+    expect(writeText).toHaveBeenCalledWith("{{trigger.triggeredAt}}")
+    expect(document.body.textContent).toContain("复制失败")
   })
 
   it("shows a generated automation name in create mode instead of an empty title input", async () => {

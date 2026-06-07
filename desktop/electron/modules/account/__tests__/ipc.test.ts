@@ -43,14 +43,16 @@ describe("accountIpcModule", () => {
       publicId: "wh_public",
       name: "GitHub",
       enabled: true,
+      url: "https://synapse.test/webhooks/wh_public/whsec_secret",
       maskedUrl: "https://synapse.test/webhooks/wh_public/***",
       createdAt: "2026-06-06T10:00:00.000Z",
       updatedAt: "2026-06-06T10:00:00.000Z",
       lastDeliveryAt: "2026-06-06T10:01:00.000Z",
-      lastDeliveryStatus: "accepted",
+      lastDeliveryStatus: "delivered",
     }])).toEqual([
       expect.objectContaining({
         publicId: "wh_public",
+        url: "https://synapse.test/webhooks/wh_public/whsec_secret",
         maskedUrl: "https://synapse.test/webhooks/wh_public/***",
       }),
     ])

@@ -8,8 +8,8 @@ const logStoreMock = vi.hoisted(() => ({
 }))
 
 const automationWindowServiceMock = vi.hoisted(() => ({
-  openCreate: vi.fn(async () => undefined),
-  openEdit: vi.fn(async () => undefined),
+  openCreate: vi.fn(async () => ({ id: "window-create" })),
+  openEdit: vi.fn(async () => ({ id: "window-edit" })),
 }))
 
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
@@ -41,8 +41,8 @@ describe("automationIpcModule", () => {
     const harness = createInMemoryHarness()
     harness.registry.register(automationIpcModule, { moduleId: "automation", resolve: (() => undefined) as IpcHandlerContext["resolve"] })
 
-    await harness.invoke("synapse:automation:editor:open-create", undefined)
-    await harness.invoke("synapse:automation:editor:open-edit", { automationId: "automation:1" })
+    await expect(harness.invoke("synapse:automation:editor:open-create", undefined)).resolves.toBeUndefined()
+    await expect(harness.invoke("synapse:automation:editor:open-edit", { automationId: "automation:1" })).resolves.toBeUndefined()
 
     expect(automationWindowServiceMock.openCreate).toHaveBeenCalledTimes(1)
     expect(automationWindowServiceMock.openEdit).toHaveBeenCalledWith("automation:1")
