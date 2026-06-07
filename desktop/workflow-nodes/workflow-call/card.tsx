@@ -1,9 +1,14 @@
+import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
+import { createRendererLogger } from "@/app-shell/logging"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
 import { CopyIdButton } from "@/modules/workflow/components/copy-id-button"
+import { errorDiagnostic } from "@/modules/workflow/lib/error-utils"
 import { statusClass, type NodeStatus } from "../node-status-utils"
 import { workflowCallNodeManifest } from "./manifest"
 import type { WorkflowCallNodeConfig } from "./schema"
+
+const logger = createRendererLogger("workflow.call-node-card")
 
 export function WorkflowCallNodeCard({ config, name, selected, status, progressLabel, startedAt, nodeId }: {
   config: WorkflowCallNodeConfig
@@ -17,6 +22,35 @@ export function WorkflowCallNodeCard({ config, name, selected, status, progressL
   const Icon = workflowCallNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
   const paramCount = Object.keys(config.paramTemplates).length
+  const [workflowName, setWorkflowName] = useState<string | null>(null)
+  const workflowId = typeof config.workflowId === "string" ? config.workflowId.trim() : ""
+
+  useEffect(() => {
+    setWorkflowName(null)
+    if (!workflowId) return
+    const workflowApi = window.synapse?.workflow
+    if (!workflowApi) return
+    let cancelled = false
+    void workflowApi.get(workflowId)
+      .then((workflow) => {
+        if (!cancelled) setWorkflowName(workflow?.name?.trim() || null)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        logger.warn("workflow call child name load failed", {
+          workflowId,
+          boundary: "renderer.workflow.call-node-card.load-child-name",
+          ...errorDiagnostic(err),
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workflowId])
+
+  const workflowDisplay = workflowId
+    ? workflowName ?? "已选择工作流"
+    : "未选择工作流"
 
   return (
     <div className={cn("relative rounded-lg border bg-card px-3 py-2 w-56", status === "running" && "pb-4", selected && "ring-2 ring-primary", statusClass(status))}>
@@ -32,7 +66,7 @@ export function WorkflowCallNodeCard({ config, name, selected, status, progressL
         <p className="truncate text-[11px] text-muted-foreground">{progressLabel}</p>
       ) : (
         <>
-          <p className="truncate text-[11px] text-muted-foreground">{config.workflowId || "未选择工作流"}</p>
+          <p className="truncate text-[11px] text-muted-foreground">{workflowDisplay}</p>
           <p className="truncate text-[11px] text-muted-foreground opacity-70">{paramCount > 0 ? `${paramCount} 个参数` : "无参数映射"}</p>
         </>
       )}
