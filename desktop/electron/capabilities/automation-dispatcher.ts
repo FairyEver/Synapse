@@ -4,7 +4,12 @@ import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { AutomationService } from "../services/automation"
 import type { AutomationTriggerRegistry } from "../services/automation/trigger-registry"
-import type { AutomationItem } from "../services/automation/types"
+import type {
+  AutomationCreateInput,
+  AutomationItem,
+  AutomationRun,
+  AutomationUpdateInput,
+} from "../services/automation/types"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 
 type AutomationServicePort = Pick<
@@ -107,6 +112,68 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
+          case "automation.item.create": {
+            const input = parseCreateParams(params, deps.triggers, deps.actions)
+            const item = await deps.service.automationCreate(input)
+            result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
+            break
+          }
+
+          case "automation.item.update": {
+            const input = parseUpdateParams(params, deps.triggers, deps.actions)
+            const item = await deps.service.automationUpdate(input.automationId, input.patch)
+            result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
+            break
+          }
+
+          case "automation.item.delete": {
+            const { automationId } = parseAutomationIdParams(params)
+            result = { ok: true, data: await deps.service.automationDelete(automationId) }
+            break
+          }
+
+          case "automation.item.enable": {
+            const { automationId } = parseAutomationIdParams(params)
+            const item = await deps.service.automationEnable(automationId)
+            result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
+            break
+          }
+
+          case "automation.item.disable": {
+            const { automationId } = parseAutomationIdParams(params)
+            const item = await deps.service.automationDisable(automationId)
+            result = { ok: true, data: toPublicAutomationItemSummary(item, deps.triggers, deps.actions) }
+            break
+          }
+
+          case "automation.run.execute": {
+            const { automationId } = parseAutomationIdParams(params)
+            const run = await deps.service.runAutomationNow(automationId)
+            result = { ok: true, data: run ? toPublicAutomationRunSummary(run) : null }
+            break
+          }
+
+          case "automation.run.disable": {
+            const { runId } = parseRunIdParams(params)
+            result = { ok: true, data: await deps.service.stopRun(runId) }
+            break
+          }
+
+          case "automation.run.list": {
+            const input = parseRunListParams(params)
+            const item = await deps.service.automationGet(input.automationId)
+            if (!item) throw new Error(`Automation "${input.automationId}" was not found`)
+            const runs = await deps.service.automationRunList(input.automationId, { limit: input.limit })
+            result = { ok: true, data: runs.map(toPublicAutomationRunSummary), total: runs.length }
+            break
+          }
+
+          case "automation.runtime.inspect": {
+            const input = parseRuntimeInspectParams(params)
+            result = { ok: true, data: await buildRuntimeInspect(deps, input.automationId) }
+            break
+          }
+
           default:
             throw new Error(`Unknown automation action: ${action}`)
         }
@@ -138,6 +205,22 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
         throw error
       }
     },
+  }
+}
+
+export function toPublicAutomationRunSummary(run: AutomationRun) {
+  return {
+    id: run.id,
+    automationId: run.automationId,
+    status: run.status,
+    triggeredBy: run.triggeredBy,
+    triggerType: run.triggerType,
+    executorType: run.executorType,
+    startedAt: run.startedAt,
+    ...(run.finishedAt === undefined ? {} : { finishedAt: run.finishedAt }),
+    ...(run.error === undefined ? {} : { error: run.error }),
+    ...(run.result?.summary === undefined ? {} : { summary: run.result.summary }),
+    ...(run.result?.metrics === undefined ? {} : { metrics: run.result.metrics }),
   }
 }
 
@@ -246,6 +329,197 @@ function parseAutomationIdParams(params: Record<string, unknown>): { automationI
     throw new Error("Missing or invalid 'automationId': expected non-empty string")
   }
   return { automationId }
+}
+
+function parseCreateParams(
+  params: Record<string, unknown>,
+  triggers: AutomationTriggerRegistry,
+  actions: MainActionRegistry,
+): AutomationCreateInput {
+  const name = params.name
+  const scope = params.scope
+  const trigger = params.trigger
+  const executor = params.executor
+  if (typeof name !== "string" || !name.trim()) throw new Error("Missing or invalid 'name': expected non-empty string")
+  if (!isRecord(scope)) throw new Error("Missing or invalid 'scope': expected object")
+  if (!isRecord(trigger)) throw new Error("Missing or invalid 'trigger': expected object")
+  if (!isRecord(executor)) throw new Error("Missing or invalid 'executor': expected object")
+  const input: AutomationCreateInput = {
+    name,
+    scope: parseScope(scope),
+    trigger: parseTriggerRef(trigger, triggers),
+    executor: parseExecutorRef(executor, actions),
+  }
+  assignIfDefined(input, "description", optionalString(params.description, "description"))
+  assignIfDefined(input, "enabled", optionalBoolean(params.enabled, "enabled"))
+  assignIfDefined(input, "cwd", optionalString(params.cwd, "cwd"))
+  assignIfDefined(input, "policy", parseOptionalPolicy(params.policy))
+  return input
+}
+
+function parseUpdateParams(
+  params: Record<string, unknown>,
+  triggers: AutomationTriggerRegistry,
+  actions: MainActionRegistry,
+): { automationId: string; patch: AutomationUpdateInput } {
+  const { automationId } = parseAutomationIdParams(params)
+  const patchRecord = requireRecord(params.patch, "patch")
+  const allowed = new Set(["name", "description", "enabled", "scope", "cwd", "trigger", "executor", "policy"])
+  for (const key of Object.keys(patchRecord)) {
+    if (!allowed.has(key)) throw new Error(`Forbidden automation update field: ${key}`)
+  }
+
+  const patch: AutomationUpdateInput = {}
+  assignIfDefined(patch, "name", optionalString(patchRecord.name, "patch.name"))
+  assignIfDefined(patch, "description", optionalString(patchRecord.description, "patch.description"))
+  assignIfDefined(patch, "enabled", optionalBoolean(patchRecord.enabled, "patch.enabled"))
+  assignIfDefined(
+    patch,
+    "scope",
+    patchRecord.scope === undefined ? undefined : parseScope(requireRecord(patchRecord.scope, "patch.scope")),
+  )
+  assignIfDefined(patch, "cwd", optionalString(patchRecord.cwd, "patch.cwd"))
+  assignIfDefined(
+    patch,
+    "trigger",
+    patchRecord.trigger === undefined ? undefined : parseTriggerRef(requireRecord(patchRecord.trigger, "patch.trigger"), triggers),
+  )
+  assignIfDefined(
+    patch,
+    "executor",
+    patchRecord.executor === undefined ? undefined : parseExecutorRef(requireRecord(patchRecord.executor, "patch.executor"), actions),
+  )
+  assignIfDefined(patch, "policy", parseOptionalPolicy(patchRecord.policy))
+  if (Object.keys(patch).length === 0) {
+    throw new Error("automation.item.update requires at least one field to update")
+  }
+  return { automationId, patch }
+}
+
+function parseTriggerRef(value: Record<string, unknown>, triggers: AutomationTriggerRegistry) {
+  const type = requireRecordString(value, "type", "trigger.type")
+  const config = requireRecord(value.config, "trigger.config")
+  return {
+    type,
+    config: triggers.parseConfig(type, config),
+  }
+}
+
+function parseExecutorRef(value: Record<string, unknown>, actions: MainActionRegistry) {
+  const type = requireRecordString(value, "type", "executor.type")
+  const config = requireRecord(value.config, "executor.config")
+  return {
+    type,
+    config: actions.parseConfig(type, config),
+  }
+}
+
+function parseScope(value: Record<string, unknown>) {
+  if (value.type === "global") return { type: "global" as const }
+  if (value.type === "project") {
+    const projectId = value.projectId
+    if (typeof projectId !== "string" || !projectId.trim()) {
+      throw new Error("Missing or invalid 'scope.projectId': expected non-empty string")
+    }
+    return { type: "project" as const, projectId }
+  }
+  throw new Error("Missing or invalid 'scope.type': expected global or project")
+}
+
+function parseOptionalPolicy(value: unknown): { missedRunPolicy?: "skip" | "run_once"; overlapPolicy?: "skip" } | undefined {
+  if (value === undefined) return undefined
+  const record = requireRecord(value, "policy")
+  const missedRunPolicy = record.missedRunPolicy
+  const overlapPolicy = record.overlapPolicy
+  if (missedRunPolicy !== undefined && missedRunPolicy !== "skip" && missedRunPolicy !== "run_once") {
+    throw new Error("Missing or invalid 'policy.missedRunPolicy': expected skip or run_once")
+  }
+  if (overlapPolicy !== undefined && overlapPolicy !== "skip") {
+    throw new Error("Missing or invalid 'policy.overlapPolicy': expected skip")
+  }
+  const policy: { missedRunPolicy?: "skip" | "run_once"; overlapPolicy?: "skip" } = {}
+  if (missedRunPolicy !== undefined) policy.missedRunPolicy = missedRunPolicy
+  if (overlapPolicy !== undefined) policy.overlapPolicy = overlapPolicy
+  return policy
+}
+
+function parseRunIdParams(params: Record<string, unknown>): { runId: string } {
+  return { runId: requireString(params, "runId") }
+}
+
+function parseRunListParams(params: Record<string, unknown>): { automationId: string; limit: number } {
+  const { automationId } = parseAutomationIdParams(params)
+  const rawLimit = params.limit
+  if (rawLimit !== undefined && (!Number.isInteger(rawLimit) || Number(rawLimit) < 1)) {
+    throw new Error("Missing or invalid 'limit': expected positive integer")
+  }
+  return { automationId, limit: rawLimit === undefined ? 20 : Math.min(rawLimit as number, 100) }
+}
+
+function parseRuntimeInspectParams(params: Record<string, unknown>): { automationId?: string } {
+  if (params.automationId === undefined) return {}
+  return parseAutomationIdParams(params)
+}
+
+async function buildRuntimeInspect(deps: AutomationCapabilityDispatcherDeps, automationId?: string) {
+  const inspect = deps.service.automationRuntimeInspect()
+  const runningItemIds = [...inspect.runningItemIds]
+  const scheduledItemIds = [...inspect.timers]
+  const items = automationId
+    ? [await deps.service.automationGet(automationId)]
+    : await deps.service.automationList()
+  if (automationId && !items[0]) throw new Error(`Automation "${automationId}" was not found`)
+  return {
+    runningItemIds,
+    scheduledItemIds,
+    items: items
+      .filter((item): item is AutomationItem => item !== null)
+      .filter((item) => Boolean(automationId) || runningItemIds.includes(item.id) || scheduledItemIds.includes(item.id))
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        enabled: item.enabled,
+        running: runningItemIds.includes(item.id),
+        scheduled: scheduledItemIds.includes(item.id),
+        activeRunId: item.activeRun?.id,
+        nextRunAt: item.nextRunAt,
+        lastRunAt: item.lastRunAt,
+        lastStatus: item.lastStatus,
+      })),
+  }
+}
+
+function requireString(params: Record<string, unknown>, key: string): string {
+  return requireRecordString(params, key, key)
+}
+
+function requireRecordString(params: Record<string, unknown>, key: string, label: string): string {
+  const value = params[key]
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Missing or invalid '${label}': expected non-empty string`)
+  }
+  return value
+}
+
+function requireRecord(value: unknown, key: string): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error(`Missing or invalid '${key}': expected object`)
+  return value
+}
+
+function optionalString(value: unknown, key: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== "string") throw new Error(`Missing or invalid '${key}': expected string`)
+  return value
+}
+
+function optionalBoolean(value: unknown, key: string): boolean | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== "boolean") throw new Error(`Missing or invalid '${key}': expected boolean`)
+  return value
+}
+
+function assignIfDefined<T extends object, K extends keyof T>(target: T, key: K, value: T[K] | undefined): void {
+  if (value !== undefined) target[key] = value
 }
 
 function automationMutationSecurity(

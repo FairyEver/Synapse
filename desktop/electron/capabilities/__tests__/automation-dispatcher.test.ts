@@ -228,4 +228,146 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify([list, get])).not.toContain("everyMinutes")
     expect(permissionGuard.check).not.toHaveBeenCalled()
   })
+
+  it("creates updates enables disables and deletes automations through the service", async () => {
+    const { dispatcher, service } = createHarness()
+    vi.mocked(service.automationCreate).mockResolvedValueOnce({ ...baseItem, id: "automation:new" })
+    vi.mocked(service.automationUpdate).mockResolvedValueOnce({ ...baseItem, name: "Updated automation" })
+    vi.mocked(service.automationEnable).mockResolvedValueOnce({ ...baseItem, enabled: true })
+    vi.mocked(service.automationDisable).mockResolvedValueOnce({ ...baseItem, enabled: false })
+    vi.mocked(service.automationDelete).mockResolvedValueOnce({ deleted: true })
+
+    const createInput = {
+      name: "New automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      executor: { type: "builtin.command", config: { command: "echo ok" } },
+    }
+
+    const created = await dispatcher.dispatch("automation.item.create", createInput, { source: "mcp-http" })
+    const updated = await dispatcher.dispatch("automation.item.update", {
+      automationId: "automation:1",
+      patch: { name: "Updated automation" },
+    }, { source: "mcp-http" })
+    const enabled = await dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" })
+    const disabled = await dispatcher.dispatch("automation.item.disable", { automationId: "automation:1" }, { source: "mcp-http" })
+    const deleted = await dispatcher.dispatch("automation.item.delete", { automationId: "automation:1" }, { source: "mcp-http" })
+
+    expect(service.automationCreate).toHaveBeenCalledWith(expect.objectContaining({
+      name: "New automation",
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      executor: { type: "builtin.command", config: { command: "echo ok" } },
+    }))
+    expect(service.automationUpdate).toHaveBeenCalledWith("automation:1", { name: "Updated automation" })
+    expect(service.automationEnable).toHaveBeenCalledWith("automation:1")
+    expect(service.automationDisable).toHaveBeenCalledWith("automation:1")
+    expect(service.automationDelete).toHaveBeenCalledWith("automation:1")
+    expect(JSON.stringify([created, updated, enabled, disabled, deleted])).not.toContain("echo ok")
+  })
+
+  it("rejects unknown trigger and executor types before persistence", async () => {
+    const { dispatcher, service } = createHarness()
+
+    await expect(dispatcher.dispatch("automation.item.create", {
+      name: "Broken trigger",
+      scope: { type: "global" },
+      trigger: { type: "builtin.missing-trigger", config: {} },
+      executor: { type: "builtin.command", config: { command: "echo ok" } },
+    }, { source: "mcp-http" })).rejects.toThrow('Automation trigger "builtin.missing-trigger" is not registered')
+
+    await expect(dispatcher.dispatch("automation.item.create", {
+      name: "Broken executor",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      executor: { type: "builtin.missing-executor", config: {} },
+    }, { source: "mcp-http" })).rejects.toThrow('Task action "builtin.missing-executor" is not registered')
+
+    expect(service.automationCreate).not.toHaveBeenCalled()
+  })
+
+  it("runs stops lists runs and inspects runtime without exposing raw logs", async () => {
+    const { dispatcher, service } = createHarness()
+    vi.mocked(service.runAutomationNow).mockResolvedValueOnce(baseRun)
+    vi.mocked(service.stopRun).mockResolvedValueOnce({ stopped: false, alreadyFinished: true })
+
+    const run = await dispatcher.dispatch("automation.run.execute", { automationId: "automation:1" }, { source: "mcp-http" })
+    const stopped = await dispatcher.dispatch("automation.run.disable", { runId: "automation-run:1" }, { source: "mcp-http" })
+    const runs = await dispatcher.dispatch("automation.run.list", { automationId: "automation:1" }, { source: "mcp-http" })
+    const runtime = await dispatcher.dispatch("automation.runtime.inspect", {}, { source: "mcp-http" })
+
+    expect(service.runAutomationNow).toHaveBeenCalledWith("automation:1")
+    expect(service.stopRun).toHaveBeenCalledWith("automation-run:1")
+    expect(stopped).toEqual({ ok: true, data: { stopped: false, alreadyFinished: true } })
+    expect(runs).toMatchObject({ ok: true, total: 1 })
+    expect(runtime).toMatchObject({
+      ok: true,
+      data: {
+        runningItemIds: ["automation:1"],
+        scheduledItemIds: ["automation:1"],
+        items: [expect.objectContaining({ id: "automation:1", running: true, scheduled: true })],
+      },
+    })
+    expect(JSON.stringify([run, runs, runtime])).not.toContain("private prompt")
+    expect(JSON.stringify([run, runs, runtime])).not.toContain("private output")
+  })
+
+  it("checks permission and audits allowed automation mutations", async () => {
+    const { auditSink, dispatcher, permissionGuard, service } = createHarness()
+    vi.mocked(service.automationDisable).mockResolvedValueOnce({ ...baseItem, enabled: false })
+
+    await dispatcher.dispatch("automation.item.disable", { automationId: "automation:1" }, { source: "mcp-http" })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "automation.mutate",
+      actor: { kind: "user", id: "automation-dispatch:mcp-http" },
+      resource: "automation:automation:1",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        automationAction: "automation.item.disable",
+        automationId: "automation:1",
+      }),
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.mutate",
+      actor: { kind: "user", id: "automation-dispatch:mcp-http" },
+      resource: "automation:automation:1",
+      outcome: "allowed",
+    }))
+  })
+
+  it("denies automation mutations before service calls", async () => {
+    const { actions, triggers } = registries()
+    const service = serviceMock()
+    const permissionGuard = permissionGuardMock({ allowed: false, reason: "blocked", policyId: "test-policy" })
+    const auditSink = auditSinkMock()
+    const dispatcher = createAutomationCapabilityDispatcher({ service, triggers, actions, permissionGuard, auditSink })
+
+    await expect(dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
+      .rejects.toThrow("blocked")
+
+    expect(service.automationEnable).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.mutate",
+      outcome: "denied",
+      metadata: expect.objectContaining({ reason: "blocked", policyId: "test-policy" }),
+    }))
+  })
+
+  it("audits failed mutations without raw error text", async () => {
+    const { auditSink, dispatcher, service } = createHarness()
+    vi.mocked(service.automationEnable).mockRejectedValueOnce(new Error("failed with private prompt"))
+
+    await expect(dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
+      .rejects.toThrow("failed with private prompt")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.mutate",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        errorName: "Error",
+        errorLength: "Error: failed with private prompt".length,
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("private prompt")
+  })
 })
