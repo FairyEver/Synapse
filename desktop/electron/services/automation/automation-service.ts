@@ -319,11 +319,13 @@ export class AutomationService {
 
   async acceptEvent(event: AutomationTriggerEvent): Promise<AutomationRun[]> {
     const startedAt = Date.now()
+    const traceMetadata = automationEventTraceMetadata(event)
     this.deps.logger?.info("Automation event received.", {
       source: "automation",
       eventSource: event.source,
       eventType: event.type,
       receivedAt: event.receivedAt,
+      ...traceMetadata,
       boundary: "automation-event-trigger",
     })
     const items = await this.deps.items.list()
@@ -378,6 +380,7 @@ export class AutomationService {
       eventSource: event.source,
       eventType: event.type,
       receivedAt: event.receivedAt,
+      ...traceMetadata,
       checkedCount: items.length,
       matchedCount,
       acceptedCount: acceptedRuns.length,
@@ -832,4 +835,23 @@ function errorMetadata(error: unknown): { readonly errorName: string; readonly e
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function automationEventTraceMetadata(event: AutomationTriggerEvent): {
+  readonly deliveryId?: string
+  readonly webhookPublicId?: string
+} {
+  const deliveryId = typeof event.payload.deliveryId === "string" ? event.payload.deliveryId : undefined
+  const webhook = event.payload.webhook
+  const webhookPublicId = isRecord(webhook) && typeof webhook.publicId === "string"
+    ? webhook.publicId
+    : undefined
+  return {
+    ...(deliveryId !== undefined ? { deliveryId } : {}),
+    ...(webhookPublicId !== undefined ? { webhookPublicId } : {}),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

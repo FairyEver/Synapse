@@ -396,7 +396,11 @@ describe("AutomationService", () => {
     const runs = await harness.service.acceptEvent({
       source: "test",
       type: "demo.created",
-      payload: { id: "1" },
+      payload: {
+        id: "1",
+        deliveryId: "delivery-1",
+        webhook: { publicId: "wh_public" },
+      },
       receivedAt: "2026-06-03T00:00:00.000Z",
     })
 
@@ -411,6 +415,8 @@ describe("AutomationService", () => {
       eventSource: "test",
       eventType: "demo.created",
       receivedAt: "2026-06-03T00:00:00.000Z",
+      deliveryId: "delivery-1",
+      webhookPublicId: "wh_public",
       boundary: "automation-event-trigger",
     })
     expect(logger.info).toHaveBeenCalledWith("Automation event processing complete.", {
@@ -418,6 +424,8 @@ describe("AutomationService", () => {
       eventSource: "test",
       eventType: "demo.created",
       receivedAt: "2026-06-03T00:00:00.000Z",
+      deliveryId: "delivery-1",
+      webhookPublicId: "wh_public",
       checkedCount: 2,
       matchedCount: 1,
       acceptedCount: 1,
