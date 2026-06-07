@@ -4,6 +4,7 @@ import {
   WEBHOOK_PUBLIC_PATH_PREFIX,
   isWebhookDeliveryReceivedPayload,
 } from "./webhook.js"
+import type { WebhookDeliveryHistoryDto } from "./webhook.js"
 
 describe("shared webhook protocol", () => {
   it("defines the public path prefix and delivery statuses once", () => {
@@ -58,5 +59,41 @@ describe("shared webhook protocol", () => {
         receivedAt: "2026-06-06T10:00:00.000Z",
       },
     })).toBe(false)
+  })
+
+  it("exports a delivery history DTO that can carry deleted webhook and admin user summaries", () => {
+    const row: WebhookDeliveryHistoryDto = {
+      id: "delivery-1",
+      webhookId: "webhook-1",
+      method: "POST",
+      path: "/webhooks/wh_public/***",
+      query: { event: "push" },
+      headers: { "x-github-event": "push" },
+      bodyKind: "json",
+      bodySize: 12,
+      bodyPreview: "{\"ok\":true}",
+      receivedAt: "2026-06-07T09:00:00.000Z",
+      onlineClientCount: 2,
+      sentClientCount: 2,
+      failedClientCount: 0,
+      acknowledgedClientCount: 1,
+      clientReceipts: [],
+      status: WEBHOOK_DELIVERY_STATUS.delivered,
+      webhook: {
+        id: "webhook-1",
+        publicId: "wh_public",
+        name: "GitHub",
+        currentName: "GitHub",
+        deletedAt: "2026-06-07T10:00:00.000Z",
+      },
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        displayName: null,
+      },
+    }
+
+    expect(row.webhook.deletedAt).toBe("2026-06-07T10:00:00.000Z")
+    expect(row.user?.email).toBe("user@example.com")
   })
 })
