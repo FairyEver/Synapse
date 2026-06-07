@@ -241,6 +241,41 @@ describe("LiveDesktopGateway", () => {
     }))
   })
 
+  it("logs authenticated websocket lifecycle transitions without raw payloads", () => {
+    const log = vi.spyOn(Logger.prototype, "log").mockImplementation(() => undefined)
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const socket = new FakeSocket()
+    const gateway = createGateway({ randomId: () => "connection-1" })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("close", 1006, Buffer.from("network_lost"))
+
+    expect(log).toHaveBeenCalledWith({
+      connectionId: "connection-1",
+      userId: "user-1",
+    }, "Live desktop websocket authenticated")
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({
+      appVersion: "0.2.253",
+      clientInstanceId: "client-a",
+      connectionId: "connection-1",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      userId: "user-1",
+    }), "Live desktop client registered")
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({
+      closeCode: 1006,
+      closeReason: "network_lost",
+      connectionId: "connection-1",
+      userId: "user-1",
+    }), "Live desktop websocket closed")
+    const logged = JSON.stringify([...log.mock.calls, ...warn.mock.calls])
+    expect(logged).not.toContain("secret-token-123")
+    expect(logged).not.toContain("bodyText")
+    log.mockRestore()
+    warn.mockRestore()
+  })
+
   it("closes when ping arrives before hello", () => {
     const socket = new FakeSocket()
     const gateway = createGateway()
@@ -583,6 +618,32 @@ describe("LiveDesktopGateway", () => {
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({
       client: expect.objectContaining({ status: "stale" }),
     }))
+  })
+
+  it("logs clients changed by stale sweep", () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const changedClient = createClient({
+      status: "offline",
+      connectionId: null,
+      disconnectReason: "heartbeat_timeout",
+    })
+    const gateway = createGateway({
+      registry: {
+        listAll: vi.fn().mockReturnValue([createClient({ connectionId: "connection-1" })]),
+        markStaleClients: vi.fn().mockReturnValue([changedClient]),
+      },
+    })
+
+    gateway.sweepStaleClients()
+
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({
+      clientInstanceId: "client-a",
+      connectionId: "connection-1",
+      disconnectReason: "heartbeat_timeout",
+      status: "offline",
+      userId: "user-1",
+    }), "Live desktop client heartbeat stale")
+    warn.mockRestore()
   })
 
   it("closes and forgets sockets when stale sweep marks clients offline", () => {
