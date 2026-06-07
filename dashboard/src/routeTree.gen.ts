@@ -22,8 +22,10 @@ import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authenticated/teams/index'
 import { Route as AuthenticatedSystemIndexRouteImport } from './routes/_authenticated/system/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
+import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_authenticated/invitations/index'
+import { Route as AuthenticatedDevicesIndexRouteImport } from './routes/_authenticated/devices/index'
 import { Route as AuthenticatedBackupIndexRouteImport } from './routes/_authenticated/backup/index'
 import { Route as AuthenticatedAuditLogsIndexRouteImport } from './routes/_authenticated/audit-logs/index'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
@@ -96,6 +98,12 @@ const AuthenticatedSettingsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedMyDevicesIndexRoute =
+  AuthenticatedMyDevicesIndexRouteImport.update({
+    id: '/my-devices/',
+    path: '/my-devices/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedLogsIndexRoute = AuthenticatedLogsIndexRouteImport.update({
   id: '/logs/',
   path: '/logs/',
@@ -105,6 +113,12 @@ const AuthenticatedInvitationsIndexRoute =
   AuthenticatedInvitationsIndexRouteImport.update({
     id: '/invitations/',
     path: '/invitations/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDevicesIndexRoute =
+  AuthenticatedDevicesIndexRouteImport.update({
+    id: '/devices/',
+    path: '/devices/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedBackupIndexRoute =
@@ -136,8 +150,10 @@ export interface FileRoutesByFullPath {
   '/auth/desktop': typeof authAuthDesktopRoute
   '/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/backup/': typeof AuthenticatedBackupIndexRoute
+  '/devices/': typeof AuthenticatedDevicesIndexRoute
   '/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
+  '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/system/': typeof AuthenticatedSystemIndexRoute
   '/teams/': typeof AuthenticatedTeamsIndexRoute
@@ -154,8 +170,10 @@ export interface FileRoutesByTo {
   '/auth/desktop': typeof authAuthDesktopRoute
   '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
   '/backup': typeof AuthenticatedBackupIndexRoute
+  '/devices': typeof AuthenticatedDevicesIndexRoute
   '/invitations': typeof AuthenticatedInvitationsIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
+  '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/system': typeof AuthenticatedSystemIndexRoute
   '/teams': typeof AuthenticatedTeamsIndexRoute
@@ -175,8 +193,10 @@ export interface FileRoutesById {
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/_authenticated/backup/': typeof AuthenticatedBackupIndexRoute
+  '/_authenticated/devices/': typeof AuthenticatedDevicesIndexRoute
   '/_authenticated/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
+  '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/system/': typeof AuthenticatedSystemIndexRoute
   '/_authenticated/teams/': typeof AuthenticatedTeamsIndexRoute
@@ -196,8 +216,10 @@ export interface FileRouteTypes {
     | '/auth/desktop'
     | '/audit-logs/'
     | '/backup/'
+    | '/devices/'
     | '/invitations/'
     | '/logs/'
+    | '/my-devices/'
     | '/settings/'
     | '/system/'
     | '/teams/'
@@ -214,8 +236,10 @@ export interface FileRouteTypes {
     | '/auth/desktop'
     | '/audit-logs'
     | '/backup'
+    | '/devices'
     | '/invitations'
     | '/logs'
+    | '/my-devices'
     | '/settings'
     | '/system'
     | '/teams'
@@ -234,8 +258,10 @@ export interface FileRouteTypes {
     | '/(auth)/auth/desktop'
     | '/_authenticated/audit-logs/'
     | '/_authenticated/backup/'
+    | '/_authenticated/devices/'
     | '/_authenticated/invitations/'
     | '/_authenticated/logs/'
+    | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
     | '/_authenticated/system/'
     | '/_authenticated/teams/'
@@ -346,6 +372,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/my-devices/': {
+      id: '/_authenticated/my-devices/'
+      path: '/my-devices'
+      fullPath: '/my-devices/'
+      preLoaderRoute: typeof AuthenticatedMyDevicesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/logs/': {
       id: '/_authenticated/logs/'
       path: '/logs'
@@ -358,6 +391,13 @@ declare module '@tanstack/react-router' {
       path: '/invitations'
       fullPath: '/invitations/'
       preLoaderRoute: typeof AuthenticatedInvitationsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/devices/': {
+      id: '/_authenticated/devices/'
+      path: '/devices'
+      fullPath: '/devices/'
+      preLoaderRoute: typeof AuthenticatedDevicesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/backup/': {
@@ -403,8 +443,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAuditLogsIndexRoute: typeof AuthenticatedAuditLogsIndexRoute
   AuthenticatedBackupIndexRoute: typeof AuthenticatedBackupIndexRoute
+  AuthenticatedDevicesIndexRoute: typeof AuthenticatedDevicesIndexRoute
   AuthenticatedInvitationsIndexRoute: typeof AuthenticatedInvitationsIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
+  AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
   AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
   AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
@@ -416,8 +458,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAuditLogsIndexRoute: AuthenticatedAuditLogsIndexRoute,
   AuthenticatedBackupIndexRoute: AuthenticatedBackupIndexRoute,
+  AuthenticatedDevicesIndexRoute: AuthenticatedDevicesIndexRoute,
   AuthenticatedInvitationsIndexRoute: AuthenticatedInvitationsIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
+  AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
   AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,
   AuthenticatedTeamsIndexRoute: AuthenticatedTeamsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,

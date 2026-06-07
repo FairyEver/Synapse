@@ -91,6 +91,23 @@ export type LiveClientChangedEvent = {
   occurredAt: string
 }
 
+export type DashboardDeviceRow = {
+  userId?: string
+  userEmail?: string
+  userDisplayName?: string | null
+  clientInstanceId: string
+  displayName: string | null
+  deviceName: string
+  platform: string
+  appVersion: string
+  status: 'online' | 'stale' | 'offline'
+  connectedAt: string | null
+  firstSeenAt: string
+  lastSeenAt: string | null
+  disconnectedAt?: string
+  disconnectReason?: string
+}
+
 export type AdminTeamRow = {
   id: string
   name: string
@@ -404,6 +421,16 @@ export const dashboardApi = {
     }),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${dashboardApiBasePath}/live-clients`),
+  listDevices: () =>
+    request<DashboardDeviceRow[]>(`${dashboardApiBasePath}/devices`),
+  renameDevice: (clientInstanceId: string, input: { displayName: string }) =>
+    request<DashboardDeviceRow>(
+      `${dashboardApiBasePath}/devices/${encodeURIComponent(clientInstanceId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    ),
   listWebhooks: () =>
     request<DashboardWebhookDto[]>(`${dashboardApiBasePath}/webhooks`),
   createWebhook: (input: { name: string }) =>
@@ -476,6 +503,10 @@ export const adminApi = {
     ),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${adminApiBasePath}/live-clients`),
+  listDevices: (options: PaginationOptions = {}) =>
+    request<PaginatedResponse<DashboardDeviceRow>>(
+      `${adminApiBasePath}/devices${paginationSuffix(options)}`
+    ),
   listUserLiveClients: (id: string) =>
     request<LiveClientRow[]>(
       `${adminApiBasePath}/users/${encodeURIComponent(id)}/live-clients`

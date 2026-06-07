@@ -119,3 +119,71 @@ describe('dashboardApi.webhooks', () => {
     )
   })
 })
+
+describe('dashboardApi.devices', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function mockJsonResponse(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+  }
+
+  it('uses dashboard device endpoints', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await dashboardApi.listDevices()
+    await dashboardApi.renameDevice('client/id', { displayName: 'Studio Mac' })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/dashboard/devices',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/dashboard/devices/client%2Fid',
+      expect.objectContaining({
+        body: JSON.stringify({ displayName: 'Studio Mac' }),
+        credentials: 'include',
+        method: 'PATCH',
+      })
+    )
+  })
+})
+
+describe('adminApi.devices', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('uses admin device pagination endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [], total: 0, page: 2, pageSize: 10 }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.listDevices({
+      page: 2,
+      pageSize: 10,
+      sortBy: 'lastSeenAt',
+      sortOrder: 'desc',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/devices?page=2&pageSize=10&sortBy=lastSeenAt&sortOrder=desc',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+})
