@@ -140,12 +140,11 @@ export default function WebhooksPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => dashboardApi.deleteWebhook(id),
-    onSuccess: () => {
-      const id = deleteTarget?.id
+    onSuccess: (_result, deletedId) => {
       setDeleteTarget(null)
       queryClient.setQueryData<DashboardWebhookDto[]>(
         ['dashboard-webhooks'],
-        (current) => (current ?? []).filter((item) => item.id !== id)
+        (current) => removeDeletedWebhookFromCache(current, deletedId)
       )
       toast.success('已删除')
     },
@@ -649,4 +648,11 @@ function WebhookFormDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+export function removeDeletedWebhookFromCache(
+  current: DashboardWebhookDto[] | undefined,
+  deletedId: string
+): DashboardWebhookDto[] {
+  return (current ?? []).filter((item) => item.id !== deletedId)
 }

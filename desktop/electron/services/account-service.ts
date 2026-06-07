@@ -190,8 +190,16 @@ export class AccountService {
         const current = await this.namespace.getSingleton()
         await this.namespace.setSingleton({ ...(current ?? {}), activeAttempt: attempt })
       })
-      if (this.authRevision !== revision) return { state: this.state, loginUrl }
-      this.setState({ status: "authenticating", loginUrl })
+    } catch (error) {
+      logger.warn("Failed to start desktop account login.", { error })
+      this.setState({ status: "error", message: "无法保存登录状态。" })
+      return { state: this.state, loginUrl }
+    }
+
+    if (this.authRevision !== revision) return { state: this.state, loginUrl }
+    this.setState({ status: "authenticating", loginUrl })
+
+    try {
       await this.openExternal(loginUrl)
       logger.info("Desktop account login started.", {
         operation: "startLogin",
@@ -199,8 +207,8 @@ export class AccountService {
         apiMode: apiMode(),
       })
     } catch (error) {
-      logger.warn("Failed to start desktop account login.", { error })
-      this.setState({ status: "error", message: "无法保存登录状态。" })
+      logger.warn("Failed to open desktop account login URL.", { error })
+      this.setState({ status: "error", message: "无法打开浏览器，请检查默认浏览器设置后重试。" })
     }
 
     return { state: this.state, loginUrl }
@@ -232,6 +240,14 @@ export class AccountService {
     const callbackError = parsed.searchParams.get("error")?.trim()
     const persisted = await this.readPersisted("Failed to read stored account for auth callback.")
     const attempt = persisted?.activeAttempt
+
+    if (!attempt && callbackState && this.state.status === "authenticated") {
+      logger.info("Ignored stale account auth callback while already authenticated.", {
+        operation: "handleAuthCallback",
+        status: "already-authenticated",
+      })
+      return this.state
+    }
 
     if (!attempt && callbackState && this.state.status === "unauthenticated") {
       logger.info("Ignored account auth callback without an active login attempt.", {
@@ -473,8 +489,15 @@ export class AccountService {
       logger.info("Desktop account refreshed from storage.", authenticatedLogMeta("refreshFromStorage", profile))
     } catch (error) {
       logger.warn("Account refresh failed.", { error })
-      this.accessToken = null
       const latest = await this.readPersisted("Failed to read stored account after account refresh failed.")
+      if (attemptedRefreshToken && latest?.refreshToken && latest.refreshToken !== attemptedRefreshToken) {
+        logger.info("Ignored stale account refresh failure.", {
+          operation: "refreshFromStorage",
+          status: "stale-refresh-token",
+        })
+        return this.state
+      }
+      this.accessToken = null
       if (latest?.activeAttempt) return this.state
       const failureKind = classifyAccountRefreshFailure(error)
       const lastProfile = latest?.lastProfile

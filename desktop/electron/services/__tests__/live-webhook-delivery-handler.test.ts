@@ -36,11 +36,13 @@ describe("LiveWebhookDeliveryHandler", () => {
         webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
         request: {
           method: "POST",
+          url: "https://synapse.test/webhooks/wh_public/***",
           query: { event: "push" },
           headers: { "x-github-event": "push" },
           body: { repository: { full_name: "FairyEver/Synapse" } },
           bodyText: "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
           contentType: "application/json",
+          receivedAt: "2026-06-06T10:00:00.000Z",
           remoteAddress: "203.0.113.10",
         },
       },

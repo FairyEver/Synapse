@@ -887,7 +887,35 @@ describe("WebhookService", () => {
     ])
   })
 
-  it("leaves a conservative failed marker and returns accepted response when delivery status update fails", async () => {
+  it("keeps successful broadcast status when the first delivery status update fails once", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const harness = createWebhookReceiveHarness({
+      updateError: new Error("transient database update failed"),
+      updateErrorAttempts: 1,
+      broadcastResult: { onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0 },
+    })
+
+    try {
+      await expect(harness.receive()).resolves.toMatchObject({
+        response: { ok: true, deliveryId: "delivery-1" },
+      })
+    } finally {
+      warnSpy.mockRestore()
+    }
+
+    expect(harness.prisma.webhookDelivery.update).toHaveBeenCalledTimes(2)
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({
+        onlineClientCount: 1,
+        sentClientCount: 1,
+        failedClientCount: 0,
+        status: WEBHOOK_DELIVERY_STATUS.sent,
+        error: null,
+      }),
+    ])
+  })
+
+  it("leaves a non-contradictory received marker and returns accepted response when delivery status update fails", async () => {
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const harness = createWebhookReceiveHarness({
       updateError: new Error("database update failed"),
@@ -907,8 +935,8 @@ describe("WebhookService", () => {
         onlineClientCount: 0,
         sentClientCount: 0,
         failedClientCount: 0,
-        status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
-        error: "broadcast_pending",
+        status: WEBHOOK_DELIVERY_STATUS.received,
+        error: null,
       }),
     ])
   })
@@ -918,6 +946,7 @@ function createWebhookReceiveHarness(input: {
   readonly enabled?: boolean
   readonly broadcastError?: Error
   readonly updateError?: Error
+  readonly updateErrorAttempts?: number
   readonly broadcastResult?: {
     readonly onlineClientCount: number
     readonly sentClientCount: number
@@ -934,6 +963,7 @@ function createWebhookReceiveHarness(input: {
 } = {}) {
   const deliveries: Array<Record<string, unknown>> = []
   const receipts: Array<Record<string, unknown>> = []
+  let updateErrorsRemaining = input.updateErrorAttempts ?? (input.updateError ? Number.POSITIVE_INFINITY : 0)
   const prisma = createPrismaMock()
   const webhook = {
     ...baseWebhook,
@@ -968,7 +998,10 @@ function createWebhookReceiveHarness(input: {
     return Promise.resolve(delivery)
   })
   prisma.webhookDelivery.update.mockImplementation(({ where, data }) => {
-    if (input.updateError) return Promise.reject(input.updateError)
+    if (input.updateError && updateErrorsRemaining > 0) {
+      updateErrorsRemaining -= 1
+      return Promise.reject(input.updateError)
+    }
     const index = deliveries.findIndex((delivery) => delivery.id === where.id)
     if (index >= 0) {
       deliveries[index] = { ...deliveries[index], ...data }

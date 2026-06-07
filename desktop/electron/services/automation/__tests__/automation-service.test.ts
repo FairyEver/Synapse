@@ -189,6 +189,30 @@ describe("AutomationService", () => {
     expect(listedIds).toEqual(["automation:edited", "automation:new", "automation:old"])
   })
 
+  it("clears runtime running markers when stop times out waiting for active runs", async () => {
+    const controlled = manuallyResolvedAction()
+    const harness = createHarness({ action: controlled.action })
+    const item = await harness.service.automationCreate(createAutomationInput())
+    const runPromise = harness.service.runNow(item.id)
+    await waitFor(async () => harness.service.automationRuntimeInspect().runningItemIds.includes(item.id))
+
+    vi.useFakeTimers()
+    try {
+      const stopPromise = harness.service.stop()
+      await vi.advanceTimersByTimeAsync(3_000)
+      await stopPromise
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(harness.service.automationRuntimeInspect().runningItemIds).toEqual([])
+    const [listed] = await harness.service.automationList()
+    expect(listed?.activeRun).toBeUndefined()
+
+    controlled.resolve()
+    await runPromise
+  })
+
   it("emits automation change events when a run finishes", async () => {
     const emit = vi.fn()
     const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
@@ -452,7 +476,11 @@ describe("AutomationService", () => {
     const runs = await harness.service.acceptEvent({
       source: "test",
       type: "demo.created",
-      payload: { id: "1" },
+      payload: {
+        id: "1",
+        deliveryId: "delivery-1",
+        webhook: { publicId: "wh_public" },
+      },
       receivedAt: "2026-06-03T00:00:00.000Z",
     })
 
@@ -467,6 +495,8 @@ describe("AutomationService", () => {
       eventSource: "test",
       eventType: "demo.created",
       receivedAt: "2026-06-03T00:00:00.000Z",
+      deliveryId: "delivery-1",
+      webhookPublicId: "wh_public",
       boundary: "automation-event-trigger",
     })
     expect(logger.info).toHaveBeenCalledWith("Automation event processing complete.", {
@@ -474,6 +504,8 @@ describe("AutomationService", () => {
       eventSource: "test",
       eventType: "demo.created",
       receivedAt: "2026-06-03T00:00:00.000Z",
+      deliveryId: "delivery-1",
+      webhookPublicId: "wh_public",
       checkedCount: 2,
       matchedCount: 1,
       acceptedCount: 1,
@@ -813,12 +845,12 @@ function controllableEventAction(): {
   const definition: MainActionDefinition<TestActionConfig> = {
     ...testAction,
     execute: async ({ context }) => {
-      const rawDeliveryId = context.templateVariables["trigger.payload.deliveryId"]
+      const rawDeliveryId = context.templateVariables?.["trigger.payload.deliveryId"]
       const deliveryId = typeof rawDeliveryId === "string" ? rawDeliveryId : "missing"
       started.push({ runId: context.runId, deliveryId })
       await new Promise<void>((resolve) => {
         resolvers.push(resolve)
-        context.abortSignal.addEventListener("abort", resolve, { once: true })
+        context.abortSignal.addEventListener("abort", () => resolve(), { once: true })
       })
       return {
         status: "success",
@@ -833,6 +865,29 @@ function controllableEventAction(): {
     resolveNext: () => {
       const resolve = resolvers.shift()
       if (resolve) resolve()
+    },
+  }
+}
+
+function manuallyResolvedAction(): {
+  readonly action: MainActionDefinition<TestActionConfig>
+  readonly resolve: () => void
+} {
+  type ActionResult = Awaited<ReturnType<MainActionDefinition<TestActionConfig>["execute"]>>
+  let resolveRun: ((value: ActionResult) => void) | undefined
+  return {
+    action: {
+      ...testAction,
+      execute: async () => new Promise<ActionResult>((resolve) => {
+        resolveRun = resolve
+      }),
+    },
+    resolve: () => {
+      resolveRun?.({
+        status: "success",
+        summary: "ok",
+        outputs: { stdout: "ok" },
+      })
     },
   }
 }

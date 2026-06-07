@@ -4,6 +4,7 @@ import { createOpaqueToken, hashToken } from "../auth/token"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { buildTeamInviteUrl } from "../invitations/invitation-url"
+import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
@@ -100,6 +101,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly liveDesktopGateway?: LiveDesktopGateway,
   ) {}
 
   async getSystemOverview() {
@@ -259,6 +261,9 @@ export class AdminService {
       if (isRecordNotFoundError(error)) throw new NotFoundException("用户不存在。")
       throw error
     })
+    if (input.status === "disabled") {
+      this.liveDesktopGateway?.disconnectUser(id)
+    }
     await this.auditLog?.record({
       adminEmail: actorEmail,
       action: "admin.user.status_update",

@@ -81,7 +81,7 @@ describe("action template variables", () => {
   })
 
   it("builds direct webhook request variables", () => {
-    expect(buildAutomationTemplateVariables({
+    const variables = buildAutomationTemplateVariables({
       triggerType: "builtin.webhook",
       triggerConfig: { webhookPublicId: "wh_public", webhookName: "GitHub" },
       triggeredBy: "trigger",
@@ -106,7 +106,9 @@ describe("action template variables", () => {
           },
         },
       },
-    })).toEqual(expect.objectContaining({
+    })
+
+    expect(variables).toEqual(expect.objectContaining({
       "trigger.deliveryId": "delivery-1",
       "trigger.webhook": "{\"id\":\"webhook-1\",\"publicId\":\"wh_public\",\"name\":\"GitHub\"}",
       "trigger.webhook.id": "webhook-1",
@@ -118,9 +120,12 @@ describe("action template variables", () => {
       "trigger.request.query.event": "push",
       "trigger.request.headers.x-github-event": "push",
       "trigger.request.body": "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
+      "trigger.request.body.repository.full_name": "FairyEver/Synapse",
       "trigger.request.bodyText": "{\"repository\":{\"full_name\":\"FairyEver/Synapse\"}}",
       "trigger.payload.request.body.repository.full_name": "FairyEver/Synapse",
     }))
+    expect(renderActionTemplate("repo={{trigger.request.body.repository.full_name}}", variables))
+      .toBe("repo=FairyEver/Synapse")
   })
 
   it("exposes whole webhook request json and empty defaults for body-less deliveries", () => {

@@ -34,6 +34,7 @@ const DEFAULT_RATE_LIMIT_PER_MINUTE = 60
 const DEFAULT_WAIT_MS = 30_000
 const NETWORK_SERVICE_ID = "automation.webhook"
 const MAX_REPLY_CHARS = 3000
+const INTERRUPTED_WEBHOOK_RUN_ERROR = "Webhook 运行因应用关闭或重启而中断。"
 const SAFE_WEBHOOK_REQUEST_METADATA_KEYS = new Set([
   "correlationId",
   "correlation_id",
@@ -85,12 +86,17 @@ export class AutomationIngressService {
   private readonly rateLimiter = new Map<string, number[]>()
   private binding: ResolvedNetworkBinding | undefined
   private runtimeConfigRestartRequired = false
+  private recoveredInterruptedRuns = false
 
   constructor(deps: AutomationIngressServiceDeps) {
     this.deps = deps
   }
 
   async start(): Promise<void> {
+    if (!this.recoveredInterruptedRuns) {
+      await this.recoverInterruptedRuns()
+      this.recoveredInterruptedRuns = true
+    }
     const config = await this.getOrCreateConfig()
     if (!config.enabled) return
     await this.checkListenPermission(config)
@@ -250,6 +256,33 @@ export class AutomationIngressService {
     return filteredRuns.map(sanitizeWebhookRunForDisplay)
   }
 
+  private async recoverInterruptedRuns(): Promise<void> {
+    const runs = await this.deps.runs.list({ status: "running" })
+    let recoveredCount = 0
+
+    for (const run of runs) {
+      try {
+        await this.finishRun(run, "failed", { lastError: INTERRUPTED_WEBHOOK_RUN_ERROR })
+        recoveredCount += 1
+      } catch (error) {
+        this.deps.logger?.warn("Webhook run startup recovery failed.", {
+          runId: run.id,
+          projectId: run.projectId,
+          kind: run.kind,
+          boundary: "webhook-startup-run-recovery",
+          ...errorDiagnostic(error),
+        })
+      }
+    }
+
+    if (recoveredCount > 0) {
+      this.deps.logger?.info("Recovered interrupted webhook runs.", {
+        boundary: "webhook-startup-run-recovery",
+        recoveredCount,
+      })
+    }
+  }
+
   private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
     const url = new URL(request.url, "http://127.0.0.1")
     try {
@@ -385,7 +418,7 @@ export class AutomationIngressService {
       const persistedLastError = run.kind === "prompt" && !(error instanceof WebhookError)
         ? summarizeReturnedAgentError(message)
         : sanitizeWebhookAgentError(message)
-      await this.finishRun(run, "failed", { lastError: persistedLastError })
+      await this.finishRunSafely(run, "failed", { lastError: persistedLastError })
       this.deps.logger?.warn("Webhook run threw.", {
         runId: run.id,
         projectId: project.projectId,
@@ -623,6 +656,29 @@ export class AutomationIngressService {
       delete nextRun.metadata
     }
     await this.deps.runs.upsert(nextRun)
+  }
+
+  private async finishRunSafely(
+    run: WebhookRunEntryV1,
+    status: WebhookRunEntryV1["status"],
+    patch: {
+      readonly resultText?: string
+      readonly lastError?: string
+      readonly metadata?: Record<string, unknown>
+    },
+  ): Promise<void> {
+    try {
+      await this.finishRun(run, status, patch)
+    } catch (error) {
+      this.deps.logger?.warn("Webhook run finish failed.", {
+        runId: run.id,
+        projectId: run.projectId,
+        kind: run.kind,
+        status,
+        boundary: "webhook.run-finish",
+        ...errorDiagnostic(error),
+      })
+    }
   }
 
   private async checkListenPermission(config: WebhookConfigEntryV1): Promise<void> {

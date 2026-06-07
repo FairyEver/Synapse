@@ -1,5 +1,11 @@
-export function getUsersTableError(isUsersError: boolean, usersError: unknown): unknown | null {
-  return isUsersError ? usersError : null
+export function getUsersTableError(
+  isUsersError: boolean,
+  usersError: unknown,
+  isModulePermissionDefinitionsError = false,
+  modulePermissionDefinitionsError: unknown = null
+): unknown | null {
+  if (isUsersError) return usersError
+  return isModulePermissionDefinitionsError ? modulePermissionDefinitionsError : null
 }
 
 export function getUsersTableLoading(input: {

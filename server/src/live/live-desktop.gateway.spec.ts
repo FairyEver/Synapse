@@ -134,6 +134,7 @@ function createGateway(input: {
       touch: vi.fn().mockReturnValue(createClient({ lastSeenAt: "2026-06-06T10:00:01.000Z" })),
       markDisconnected: vi.fn(),
       markStaleClients: vi.fn().mockReturnValue([]),
+      listAll: vi.fn().mockReturnValue([]),
       ...input.registry,
     } as unknown as LiveClientRegistry,
     streams: {
@@ -249,6 +250,41 @@ describe("LiveDesktopGateway", () => {
       type: "live.client.changed",
       client: expect.objectContaining({ userId: "user-1" }),
     }))
+  })
+
+  it("logs authenticated websocket lifecycle transitions without raw payloads", () => {
+    const log = vi.spyOn(Logger.prototype, "log").mockImplementation(() => undefined)
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const socket = new FakeSocket()
+    const gateway = createGateway({ randomId: () => "connection-1" })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("close", 1006, Buffer.from("network_lost"))
+
+    expect(log).toHaveBeenCalledWith({
+      connectionId: "connection-1",
+      userId: "user-1",
+    }, "Live desktop websocket authenticated")
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({
+      appVersion: "0.2.253",
+      clientInstanceId: "client-a",
+      connectionId: "connection-1",
+      deviceName: "MacBook",
+      platform: "darwin-arm64",
+      userId: "user-1",
+    }), "Live desktop client registered")
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({
+      closeCode: 1006,
+      closeReason: "network_lost",
+      connectionId: "connection-1",
+      userId: "user-1",
+    }), "Live desktop websocket closed")
+    const logged = JSON.stringify([...log.mock.calls, ...warn.mock.calls])
+    expect(logged).not.toContain("secret-token-123")
+    expect(logged).not.toContain("bodyText")
+    log.mockRestore()
+    warn.mockRestore()
   })
 
   it("closes when ping arrives before hello", () => {
@@ -539,6 +575,55 @@ describe("LiveDesktopGateway", () => {
     warn.mockRestore()
   })
 
+  it("disconnects every online socket for a disabled user before future broadcasts", () => {
+    const first = new FakeSocket()
+    const second = new FakeSocket()
+    const other = new FakeSocket()
+    const publish = vi.fn()
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish } as unknown as LiveStreamService,
+      clock: {
+        randomId: vi.fn()
+          .mockReturnValueOnce("connection-1")
+          .mockReturnValueOnce("connection-2")
+          .mockReturnValueOnce("connection-3"),
+        now: () => new Date("2026-06-06T10:00:00.000Z"),
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(first as never, { userId: "user-1" })
+    gateway.bindAuthenticatedSocket(second as never, { userId: "user-1" })
+    gateway.bindAuthenticatedSocket(other as never, { userId: "user-2" })
+    first.emit("message", JSON.stringify(helloFor("client-a")))
+    second.emit("message", JSON.stringify(helloFor("client-b")))
+    other.emit("message", JSON.stringify(helloFor("client-c")))
+    publish.mockClear()
+
+    gateway.disconnectUser("user-1")
+    const broadcastResult = gateway.broadcastToUser("user-1", {
+      type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+      id: "delivery-msg-1",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: webhookDeliveryPayload(),
+    })
+
+    expect(first.closeCalls).toEqual([{ code: 1008, reason: "user_disabled" }])
+    expect(second.closeCalls).toEqual([{ code: 1008, reason: "user_disabled" }])
+    expect(other.closeCalls).toEqual([])
+    expect(broadcastResult).toEqual({
+      onlineClientCount: 0,
+      sentClientCount: 0,
+      failedClientCount: 0,
+      clientResults: [],
+    })
+    expect(publish).toHaveBeenCalledTimes(2)
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      client: expect.objectContaining({ disconnectReason: "user_disabled", userId: "user-1" }),
+    }))
+  })
+
   it("authenticates upgrade requests and binds accepted sockets", async () => {
     const request = {
       url: "/api/live/desktop",
@@ -601,6 +686,66 @@ describe("LiveDesktopGateway", () => {
     expect(markStaleClients).toHaveBeenCalledWith(expect.any(Date))
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({
       client: expect.objectContaining({ status: "stale" }),
+    }))
+  })
+
+  it("logs clients changed by stale sweep", () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const changedClient = createClient({
+      status: "offline",
+      connectionId: null,
+      disconnectReason: "heartbeat_timeout",
+    })
+    const gateway = createGateway({
+      registry: {
+        listAll: vi.fn().mockReturnValue([createClient({ connectionId: "connection-1" })]),
+        markStaleClients: vi.fn().mockReturnValue([changedClient]),
+      },
+    })
+
+    gateway.sweepStaleClients()
+
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({
+      clientInstanceId: "client-a",
+      connectionId: "connection-1",
+      disconnectReason: "heartbeat_timeout",
+      status: "offline",
+      userId: "user-1",
+    }), "Live desktop client heartbeat stale")
+    warn.mockRestore()
+  })
+
+  it("closes and forgets sockets when stale sweep marks clients offline", () => {
+    const socket = new FakeSocket()
+    const publish = vi.fn()
+    let now = new Date("2026-06-06T10:00:00.000Z")
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish } as unknown as LiveStreamService,
+      clock: {
+        randomId: () => "connection-1",
+        now: () => now,
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    publish.mockClear()
+    now = new Date("2026-06-06T10:01:31.000Z")
+
+    gateway.sweepStaleClients()
+
+    const trackedSockets = (gateway as unknown as {
+      readonly socketsByConnectionId: Map<string, FakeSocket>
+    }).socketsByConnectionId
+    expect(socket.closeCalls).toEqual([{ code: 1000, reason: "heartbeat_timeout" }])
+    expect(trackedSockets.has("connection-1")).toBe(false)
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      client: expect.objectContaining({
+        status: "offline",
+        disconnectReason: "heartbeat_timeout",
+      }),
     }))
   })
 })

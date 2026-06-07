@@ -150,6 +150,25 @@ describe("AccountService", () => {
     })
   })
 
+  it("reports browser open failures without blaming account storage", async () => {
+    const { namespace, openExternal, service } = await createTestAccountService()
+    openExternal.mockRejectedValueOnce(new Error("browser unavailable"))
+
+    const result = await service.startLogin()
+
+    expect(result.state).toEqual({
+      status: "error",
+      message: "无法打开浏览器，请检查默认浏览器设置后重试。",
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      activeAttempt: {
+        state: expect.any(String),
+        codeVerifier: expect.any(String),
+        apiBaseUrl: "http://localhost:3000/api",
+      },
+    })
+  })
+
   it("logs login start success without leaking the login state", async () => {
     const { service } = await createTestAccountService()
 
@@ -196,6 +215,45 @@ describe("AccountService", () => {
     expect(state.profile.user.email).toBe("u@example.com")
     expect((await namespace.getSingleton())?.refreshToken).toBe("refresh-1")
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+  })
+
+  it("ignores stale auth callbacks after the user is already authenticated", async () => {
+    const fetchMock = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/desktop/token")) {
+        expect(init?.method).toBe("POST")
+        return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    }) as typeof fetch
+    const { namespace, service } = await createTestAccountService({ fetch: fetchMock })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+    const authenticatedState = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`,
+    )
+    expect(authenticatedState.status).toBe("authenticated")
+    expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+
+    const staleState = await service.handleAuthCallback(
+      "synapse://auth/desktop/callback?code=old-code&state=old-state",
+    )
+
+    expect(staleState).toEqual(authenticatedState)
+    expect(service.getState()).toEqual(authenticatedState)
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-1",
+      lastProfile: { user: { email: "u@example.com" } },
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(accountLogger.info).toHaveBeenCalledWith("Ignored stale account auth callback while already authenticated.", {
+      operation: "handleAuthCallback",
+      status: "already-authenticated",
+    })
   })
 
   it("logs successful callback exchange and authentication without leaking credentials", async () => {
@@ -921,6 +979,50 @@ describe("AccountService", () => {
       activeAttempt: { state: attempt!.state },
       refreshToken: "refresh-old",
       lastProfile: storedProfile,
+    })
+  })
+
+  it("keeps a newer successful refresh when an older concurrent refresh fails", async () => {
+    let rejectFirstRefresh: ((error: Error) => void) | undefined
+    let resolveSecondRefresh: ((response: Response) => void) | undefined
+    const firstRefresh = new Promise<Response>((_resolve, reject) => {
+      rejectFirstRefresh = reject
+    })
+    const secondRefresh = new Promise<Response>((resolve) => {
+      resolveSecondRefresh = resolve
+    })
+    let refreshCalls = 0
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        refreshCalls += 1
+        expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+        return refreshCalls === 1 ? firstRefresh : secondRefresh
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const olderRefresh = service.refreshFromStorage()
+    await vi.waitFor(() => expect(refreshCalls).toBe(1))
+    const newerRefresh = service.refreshFromStorage()
+    await vi.waitFor(() => expect(refreshCalls).toBe(2))
+
+    resolveSecondRefresh?.(jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" }))
+    await expect(newerRefresh).resolves.toMatchObject({ status: "authenticated", connectivity: "online" })
+
+    rejectFirstRefresh?.(new Error("expired refresh token"))
+    await expect(olderRefresh).resolves.toMatchObject({ status: "authenticated", connectivity: "online" })
+
+    expect(service.getState()).toMatchObject({ status: "authenticated", connectivity: "online" })
+    expect(service.getAccessTokenForLive()).toBe("access-new")
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-new",
+      lastProfile: { user: { email: "u@example.com" } },
     })
   })
 

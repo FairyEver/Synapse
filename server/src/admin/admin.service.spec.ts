@@ -192,6 +192,37 @@ describe("AdminService", () => {
     expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")
   })
 
+  it("disconnects active Live sockets after disabling a user", async () => {
+    const prisma = createPrismaMock()
+    const liveGateway = { disconnectUser: vi.fn() }
+    const service = new AdminService(
+      prisma as unknown as PrismaService,
+      createPermissionsMock() as never,
+      undefined,
+      liveGateway as never,
+    )
+
+    await service.updateUserStatus("user-1", { status: "disabled" })
+
+    expect(liveGateway.disconnectUser).toHaveBeenCalledWith("user-1")
+  })
+
+  it("does not disconnect Live sockets when enabling a user", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({ status: "disabled" })
+    const liveGateway = { disconnectUser: vi.fn() }
+    const service = new AdminService(
+      prisma as unknown as PrismaService,
+      createPermissionsMock() as never,
+      undefined,
+      liveGateway as never,
+    )
+
+    await service.updateUserStatus("user-1", { status: "active" })
+
+    expect(liveGateway.disconnectUser).not.toHaveBeenCalled()
+  })
+
   it("reports a missing user when updating status", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)

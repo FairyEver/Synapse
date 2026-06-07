@@ -59,9 +59,11 @@ export async function createWebhookAutomationEvent(
       webhook: payload.webhook,
       request: {
         method: payload.request.method,
+        url: payload.request.url,
         query: payload.request.query,
         headers: payload.request.headers,
         body: payload.request.body,
+        receivedAt: payload.request.receivedAt,
         ...(payload.request.bodyText !== undefined ? { bodyText: payload.request.bodyText } : {}),
         ...(payload.request.contentType !== undefined ? { contentType: payload.request.contentType } : {}),
         ...(payload.request.remoteAddress !== undefined ? { remoteAddress: payload.request.remoteAddress } : {}),

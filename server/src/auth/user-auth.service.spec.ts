@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { UnauthorizedException } from "@nestjs/common"
+import { Logger, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
@@ -1024,6 +1024,36 @@ describe("UserAuthService", () => {
     await expect(service.verifyAccessToken(tokens.accessToken))
       .rejects
       .toThrow("未登录或登录已过期。")
+  })
+
+  it("logs token verification lookup failures and reports service unavailability", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: "user-1",
+        email: "u@example.com",
+        passwordHash: await hashPassword("StrongPassword123!"),
+        status: "active",
+      })
+      .mockRejectedValueOnce(Object.assign(new Error("database unavailable token=secret-value"), { code: "P1001" }))
+    const service = createService(prisma)
+
+    const tokens = await service.login({
+      email: "u@example.com",
+      password: "StrongPassword123!",
+    })
+
+    await expect(service.verifyAccessToken(tokens.accessToken))
+      .rejects
+      .toThrow(ServiceUnavailableException)
+    expect(warnSpy).toHaveBeenCalledWith({
+      errorCode: "P1001",
+      errorName: "Error",
+    }, "User access token verification failed")
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(tokens.accessToken)
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    warnSpy.mockRestore()
   })
 
   it("rejects access tokens issued in the same second as a password change", async () => {

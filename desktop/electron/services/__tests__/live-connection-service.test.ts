@@ -52,6 +52,7 @@ const authenticatedState: SynapseAccountState = {
 function createAccountService(input: {
   readonly token?: string | null
   readonly apiBaseUrl?: string
+  readonly state?: SynapseAccountState
   readonly refreshFromStorage?: () => Promise<unknown>
 } = {}) {
   const token = Object.prototype.hasOwnProperty.call(input, "token") ? input.token : "access-token"
@@ -59,6 +60,7 @@ function createAccountService(input: {
   return {
     getAccessTokenForLive: vi.fn().mockReturnValue(token),
     getApiBaseUrlForLive: vi.fn().mockReturnValue(input.apiBaseUrl ?? "http://localhost:3000/api"),
+    getState: vi.fn().mockReturnValue(input.state ?? authenticatedState),
     refreshFromStorage: vi.fn(input.refreshFromStorage ?? (async () => ({ status: "unauthenticated" }))),
   }
 }
@@ -488,6 +490,37 @@ describe("LiveConnectionService", () => {
     expect(service.getState()).toMatchObject({
       status: "unauthenticated",
       lastError: "账号未登录",
+    })
+  })
+
+  it("keeps reconnecting when an offline authenticated account cannot refresh a live token", async () => {
+    const accountService = createAccountService({
+      token: null,
+      state: {
+        ...authenticatedState,
+        connectivity: "offline",
+        offlineReason: "network_error",
+      },
+      refreshFromStorage: async () => ({
+        ...authenticatedState,
+        connectivity: "offline",
+        offlineReason: "network_error",
+      }),
+    })
+    const createSocket = vi.fn()
+    const service = new LiveConnectionService({
+      accountService: accountService as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+    })
+
+    await service.connect()
+
+    expect(accountService.refreshFromStorage).toHaveBeenCalledTimes(1)
+    expect(createSocket).not.toHaveBeenCalled()
+    expect(service.getState()).toMatchObject({
+      status: "reconnecting",
+      lastError: "网络不可用，正在重试",
     })
   })
 })

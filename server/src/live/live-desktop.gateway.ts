@@ -130,6 +130,10 @@ export class LiveDesktopGateway {
     let registered = false
     let registeredClient: LiveClientInstance | null = null
     this.socketsByConnectionId.set(connectionId, socket)
+    this.logger.log({
+      connectionId,
+      userId: auth.userId,
+    }, "Live desktop websocket authenticated")
 
     socket.on("message", (payload) => {
       const message = parseLiveDesktopMessage(payload)
@@ -156,10 +160,24 @@ export class LiveDesktopGateway {
           onSupersede: (oldConnectionId) => {
             this.socketsByConnectionId.get(oldConnectionId)?.close(1000, "superseded")
             this.socketsByConnectionId.delete(oldConnectionId)
+            this.logger.warn({
+              clientInstanceId: hello.clientInstanceId,
+              connectionId: oldConnectionId,
+              newConnectionId: connectionId,
+              userId: auth.userId,
+            }, "Live desktop websocket superseded")
           },
         })
         registeredClient = client
         registered = true
+        this.logger.log({
+          appVersion: client.appVersion,
+          clientInstanceId: client.clientInstanceId,
+          connectionId,
+          deviceName: client.deviceName,
+          platform: client.platform,
+          userId: auth.userId,
+        }, "Live desktop client registered")
         this.publish(client)
         const serverTime = this.clock.now().toISOString()
         sendJson(socket, createLiveEnvelope(LIVE_MESSAGE_TYPES.welcome, {
@@ -212,8 +230,14 @@ export class LiveDesktopGateway {
       }, { id: message.id, sentAt: serverTime }))
     })
 
-    socket.on("close", () => {
+    socket.on("close", (code?: number, reason?: Buffer) => {
       this.socketsByConnectionId.delete(connectionId)
+      this.logger.warn({
+        ...(code !== undefined ? { closeCode: code } : {}),
+        ...closeReasonLogMeta(reason),
+        connectionId,
+        userId: auth.userId,
+      }, "Live desktop websocket closed")
       const client = this.registry.markDisconnected({
         connectionId,
         now: this.clock.now(),
@@ -224,8 +248,13 @@ export class LiveDesktopGateway {
       }
     })
 
-    socket.on("error", () => {
+    socket.on("error", (error) => {
       this.socketsByConnectionId.delete(connectionId)
+      this.logger.warn({
+        connectionId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        userId: auth.userId,
+      }, "Live desktop websocket error")
       const client = this.registry.markDisconnected({
         connectionId,
         now: this.clock.now(),
@@ -238,8 +267,61 @@ export class LiveDesktopGateway {
   }
 
   sweepStaleClients(): void {
+    const connectionIdsByClient = new Map<string, string>()
+    for (const client of this.registry.listAll()) {
+      if (client.connectionId) {
+        connectionIdsByClient.set(liveClientKey(client), client.connectionId)
+      }
+    }
+
     for (const client of this.registry.markStaleClients(this.clock.now())) {
+      const connectionId = connectionIdsByClient.get(liveClientKey(client))
+      this.logger.warn({
+        clientInstanceId: client.clientInstanceId,
+        ...(connectionId ? { connectionId } : {}),
+        ...(client.disconnectReason ? { disconnectReason: client.disconnectReason } : {}),
+        status: client.status,
+        userId: client.userId,
+      }, "Live desktop client heartbeat stale")
+      if (client.status === "offline") {
+        if (connectionId) {
+          this.closeStaleSocket(connectionId, client)
+        }
+      }
       this.publish(client)
+    }
+  }
+
+  disconnectUser(userId: string): void {
+    const clients = this.registry.listOnlineByUser(userId)
+
+    for (const client of clients) {
+      if (!client.connectionId) continue
+
+      const connectionId = client.connectionId
+      const socket = this.socketsByConnectionId.get(connectionId)
+      this.socketsByConnectionId.delete(connectionId)
+
+      const disconnected = this.registry.markDisconnected({
+        connectionId,
+        now: this.clock.now(),
+        reason: "user_disabled",
+      })
+      if (disconnected) {
+        this.publish(disconnected)
+      }
+
+      if (!socket) continue
+
+      try {
+        socket.close(1008, "user_disabled")
+      } catch (error) {
+        this.logger.warn({
+          connectionId,
+          errorName: error instanceof Error ? error.name : typeof error,
+          userId,
+        }, "Live user disconnect failed")
+      }
     }
   }
 
@@ -304,6 +386,23 @@ export class LiveDesktopGateway {
       client: toPublicDto(client, { includeUserId: true }),
     })
   }
+
+  private closeStaleSocket(connectionId: string, client: LiveClientInstance): void {
+    const socket = this.socketsByConnectionId.get(connectionId)
+    this.socketsByConnectionId.delete(connectionId)
+    if (!socket) return
+
+    try {
+      socket.close(1000, "heartbeat_timeout")
+    } catch (error) {
+      this.logger.warn({
+        clientInstanceId: client.clientInstanceId,
+        connectionId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        userId: client.userId,
+      }, "Live stale socket close failed")
+    }
+  }
 }
 
 export function createLiveDesktopGatewayForTest(input: LiveDesktopGatewayTestInput): LiveDesktopGateway {
@@ -366,6 +465,15 @@ function readBearerToken(header: string | string[] | undefined): string | null {
   const value = Array.isArray(header) ? header[0] : header
   const [scheme, token] = value?.split(/\s+/, 2) ?? []
   return scheme?.toLowerCase() === "bearer" && token ? token : null
+}
+
+function liveClientKey(client: Pick<LiveClientInstance, "clientInstanceId" | "userId">): string {
+  return `${client.userId}:${client.clientInstanceId}`
+}
+
+function closeReasonLogMeta(reason: Buffer | undefined): { readonly closeReason?: string } {
+  const closeReason = reason?.toString("utf8")
+  return closeReason ? { closeReason } : {}
 }
 
 function upgradePath(request: IncomingMessage): string {

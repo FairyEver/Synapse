@@ -132,8 +132,12 @@ export class AutomationService {
       clearTimeout(timer)
     }
     this.timers.clear()
-    await this.stopActiveRuns()
-    this.started = false
+    try {
+      await this.stopActiveRuns()
+    } finally {
+      this.runningItemIds.clear()
+      this.started = false
+    }
   }
 
   async automationList(): Promise<AutomationItem[]> {
@@ -317,11 +321,13 @@ export class AutomationService {
 
   async acceptEvent(event: AutomationTriggerEvent): Promise<AutomationRun[]> {
     const startedAt = Date.now()
+    const traceMetadata = automationEventTraceMetadata(event)
     this.deps.logger?.info("Automation event received.", {
       source: "automation",
       eventSource: event.source,
       eventType: event.type,
       receivedAt: event.receivedAt,
+      ...traceMetadata,
       boundary: "automation-event-trigger",
     })
     const items = await this.deps.items.list()
@@ -376,6 +382,7 @@ export class AutomationService {
       eventSource: event.source,
       eventType: event.type,
       receivedAt: event.receivedAt,
+      ...traceMetadata,
       checkedCount: items.length,
       matchedCount,
       acceptedCount: acceptedRuns.length,
@@ -868,4 +875,23 @@ function compareAutomationItemsByRecentEdit(left: AutomationItem, right: Automat
 function compareIsoTimestampDesc(left: string, right: string): number {
   if (left === right) return 0
   return right.localeCompare(left)
+}
+
+function automationEventTraceMetadata(event: AutomationTriggerEvent): {
+  readonly deliveryId?: string
+  readonly webhookPublicId?: string
+} {
+  const deliveryId = typeof event.payload.deliveryId === "string" ? event.payload.deliveryId : undefined
+  const webhook = event.payload.webhook
+  const webhookPublicId = isRecord(webhook) && typeof webhook.publicId === "string"
+    ? webhook.publicId
+    : undefined
+  return {
+    ...(deliveryId !== undefined ? { deliveryId } : {}),
+    ...(webhookPublicId !== undefined ? { webhookPublicId } : {}),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

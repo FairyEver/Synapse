@@ -696,6 +696,128 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("logs finish persistence failures without masking the original webhook run error", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new FailingFinishedRunNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    const originalError = "SDK failed before finish token=sk-ant-test123456"
+    const finishError = "finish persist failed at /Users/test token=sk-finish"
+    runs.failWith(finishError)
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({
+        send: async () => {
+          throw new Error(originalError)
+        },
+      }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+
+    const response = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: {
+        authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: Buffer.from(JSON.stringify({
+        project: "project-1",
+        sessionKey: "local:automation",
+        prompt: "run",
+        replyMode: "wait",
+      })),
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(response.status).toBe(500)
+    const [run] = await runs.list()
+    expect(run).toEqual(expect.objectContaining({
+      kind: "prompt",
+      projectId: "project-1",
+      status: "running",
+    }))
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Webhook run finish failed.",
+      expect.objectContaining({
+        runId: run?.id,
+        projectId: "project-1",
+        kind: "prompt",
+        status: "failed",
+        boundary: "webhook.run-finish",
+        errorName: "Error",
+        errorLength: finishError.length,
+      }),
+    )
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Webhook run threw.",
+      expect.objectContaining({
+        runId: run?.id,
+        projectId: "project-1",
+        kind: "prompt",
+        boundary: "agent-runtime",
+        errorName: "Error",
+        errorLength: originalError.length,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-finish")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/test")
+  })
+
+  it("marks interrupted running webhook runs as failed on start", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    await runs.upsert({
+      id: "webhook-run:interrupted",
+      schemaVersion: 1,
+      requestId: "request-1",
+      projectId: "project-1",
+      kind: "exec",
+      status: "running",
+      source: "127.0.0.1",
+      startedAt: "2026-06-06T10:00:00.000Z",
+      createdAt: "2026-06-06T10:00:00.000Z",
+      updatedAt: "2026-06-06T10:00:00.000Z",
+      metadata: {
+        traceId: "trace-1",
+        token: "sk-secret",
+      },
+    })
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+      now: () => new Date("2026-06-07T09:00:00.000Z"),
+    })
+
+    await service.start()
+
+    const [run] = await runs.list()
+    expect(run).toEqual(expect.objectContaining({
+      id: "webhook-run:interrupted",
+      status: "failed",
+      lastError: "Webhook 运行因应用关闭或重启而中断。",
+      finishedAt: "2026-06-07T09:00:00.000Z",
+      updatedAt: "2026-06-07T09:00:00.000Z",
+      metadata: { traceId: "trace-1" },
+    }))
+    expect(JSON.stringify(await runs.list())).not.toContain("sk-secret")
+    expect(logger.info).toHaveBeenCalledWith("Recovered interrupted webhook runs.", {
+      boundary: "webhook-startup-run-recovery",
+      recoveredCount: 1,
+    })
+  })
+
   it("redacts async webhook background failure diagnostics", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
@@ -1007,7 +1129,10 @@ describe("AutomationIngressService", () => {
   })
 })
 
-function structuredLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn> } {
+function structuredLogger(): StructuredLogger & {
+  info: ReturnType<typeof vi.fn>
+  warn: ReturnType<typeof vi.fn>
+} {
   const logger = {
     trace: vi.fn(),
     debug: vi.fn(),
@@ -1020,7 +1145,10 @@ function structuredLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn>
     child: ReturnType<typeof vi.fn>
   }
   logger.child.mockReturnValue(logger)
-  return logger as StructuredLogger & { warn: ReturnType<typeof vi.fn> }
+  return logger as StructuredLogger & {
+    info: ReturnType<typeof vi.fn>
+    warn: ReturnType<typeof vi.fn>
+  }
 }
 
 function fakeProjectContainers(agent: { send: (message: unknown) => Promise<unknown> }): ProjectContainerRegistry {
@@ -1113,6 +1241,21 @@ class FailingAssignedPortNamespace<T extends WebhookConfigEntryV1> extends Memor
   override async upsert(item: T): Promise<void> {
     if (typeof item.assignedPort === "number") {
       throw new Error("persist failed at /Users/test token=sk-secret")
+    }
+    await super.upsert(item)
+  }
+}
+
+class FailingFinishedRunNamespace<T extends WebhookRunEntryV1> extends MemoryNamespace<T> {
+  private finishError = "finish failed"
+
+  failWith(message: string): void {
+    this.finishError = message
+  }
+
+  override async upsert(item: T): Promise<void> {
+    if (item.status !== "running") {
+      throw new Error(this.finishError)
     }
     await super.upsert(item)
   }
