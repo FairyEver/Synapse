@@ -132,8 +132,8 @@ USER_ACCESS_JWT_SECRET=再次生成并粘贴另一串hex字符
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
-# 外部访问地址（用于生成注册邀请和团队邀请链接，默认同域访问 /dashboard）
-APP_PUBLIC_URL=https://api.yourdomain.com
+# 外部访问地址（用于生成团队邀请、密码重置和 Webhook 公开链接，填写用户访问的站点根地址，不带 /api）
+APP_PUBLIC_URL=https://yourdomain.com
 
 # API 在容器内部监听 3001，由容器内 Nginx 统一从 3000 对外暴露
 PORT=3001
@@ -144,7 +144,7 @@ PORT=3001
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
 - `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_JWT_SECRET` 相同
 - `ADMIN_EMAIL` 不是合法邮箱格式
-- `APP_PUBLIC_URL` 不是用户可访问的后台域名
+- `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
 
 ---

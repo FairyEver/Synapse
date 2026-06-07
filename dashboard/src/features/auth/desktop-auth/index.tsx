@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  DESKTOP_CLIENT_ID,
+  DESKTOP_PKCE_CHALLENGE_METHOD,
+  DESKTOP_REDIRECT_URI,
+} from '@synapse/shared'
 import { useAuthStore } from '@/stores/auth-store'
 import { dashboardApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -13,9 +18,6 @@ import {
 } from '@/components/ui/card'
 import { AuthLayout } from '../auth-layout'
 
-const desktopClientId = 'synapse-desktop'
-const desktopRedirectUri = 'synapse://auth/desktop/callback'
-const pkceChallengeMethod = 'S256' as const
 const protocolFallbackDelayMs = 3500
 const protocolFallbackMessage = '未检测到 Synapse 桌面应用。请确认已安装并允许浏览器打开。'
 const invalidRequestError = 'invalid_request'
@@ -41,7 +43,7 @@ type AuthorizeState =
 
 function buildDesktopAuthErrorCallbackUrl(state: string, error: string) {
   const query = new URLSearchParams({ error, state })
-  return `${desktopRedirectUri}?${query.toString()}`
+  return `${DESKTOP_REDIRECT_URI}?${query.toString()}`
 }
 
 export function buildInvalidDesktopAuthCallbackUrl(search: DesktopAuthSearch) {
@@ -61,10 +63,10 @@ function buildDesktopAuthRedirect(search: DesktopAuthSearch) {
 
 function validateDesktopAuthSearch(search: DesktopAuthSearch) {
   if (
-    search.client_id !== desktopClientId ||
-    search.redirect_uri !== desktopRedirectUri ||
+    search.client_id !== DESKTOP_CLIENT_ID ||
+    search.redirect_uri !== DESKTOP_REDIRECT_URI ||
     search.response_type !== 'code' ||
-    search.code_challenge_method !== pkceChallengeMethod ||
+    search.code_challenge_method !== DESKTOP_PKCE_CHALLENGE_METHOD ||
     !search.state ||
     search.state.trim().length < 16 ||
     !search.code_challenge ||
@@ -77,7 +79,7 @@ function validateDesktopAuthSearch(search: DesktopAuthSearch) {
     redirectUri: search.redirect_uri,
     state: search.state.trim(),
     codeChallenge: search.code_challenge.trim(),
-    codeChallengeMethod: pkceChallengeMethod,
+    codeChallengeMethod: DESKTOP_PKCE_CHALLENGE_METHOD,
   }
 }
 

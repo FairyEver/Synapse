@@ -58,6 +58,8 @@ interface CreateAsarBufferOptions {
   readonly includeFileConversionService?: boolean
   readonly unpackBuiltinToolWorker?: boolean
   readonly includeClaudeRuntimeGuard?: boolean
+  readonly includeDeploymentConfig?: boolean
+  readonly includeSharedPackage?: boolean
 }
 
 function createPackedFileNode(offset: number, content: Buffer, unpacked = false) {
@@ -75,6 +77,8 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includeFileConversionService = true,
     unpackBuiltinToolWorker = false,
     includeClaudeRuntimeGuard = true,
+    includeDeploymentConfig = true,
+    includeSharedPackage = true,
   } = options
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
@@ -84,6 +88,8 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const diagnosticsService = Buffer.from("const id = 'app.claude-runtime'; const message = '内置 Claude Code runtime';\n", "utf8")
   const claudeRuntimeBinary = Buffer.from("export function inspectPackagedClaudeRuntime() {} // 内置 Claude Code runtime\n", "utf8")
   const claudeSdkSession = Buffer.from("inspectPackagedClaudeRuntime(); queryOptions.pathToClaudeCodeExecutable = executablePath;\n", "utf8")
+  const deploymentConfig = Buffer.from("exports.SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG = { apiBaseUrl: 'https://app.example.com/api' };\n", "utf8")
+  const sharedIndex = Buffer.from("export const DESKTOP_CLIENT_ID = 'synapse-desktop';\n", "utf8")
   let offset = 0
   const packageNode = createPackedFileNode(offset, packageJson)
   offset += packageJson.length
@@ -112,6 +118,14 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const claudeSdkSessionNode = createPackedFileNode(offset, claudeSdkSession)
   if (includeClaudeRuntimeGuard) {
     offset += claudeSdkSession.length
+  }
+  const deploymentConfigNode = createPackedFileNode(offset, deploymentConfig)
+  if (includeDeploymentConfig) {
+    offset += deploymentConfig.length
+  }
+  const sharedIndexNode = createPackedFileNode(offset, sharedIndex)
+  if (includeSharedPackage) {
+    offset += sharedIndex.length
   }
   const header = Buffer.from(JSON.stringify({
     files: {
@@ -143,6 +157,15 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                     offset: "0",
                     unpacked: true,
                   },
+                },
+              },
+              generated: {
+                files: {
+                  ...(includeDeploymentConfig
+                    ? {
+                        "deployment-config.generated.js": deploymentConfigNode,
+                      }
+                    : {}),
                 },
               },
               services: {
@@ -186,6 +209,27 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
           },
         },
       },
+      "node_modules": {
+        files: {
+          "@synapse": {
+            files: {
+              shared: {
+                files: {
+                  dist: {
+                    files: {
+                      ...(includeSharedPackage
+                        ? {
+                            "index.js": sharedIndexNode,
+                          }
+                        : {}),
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   }), "utf8")
   const prefix = Buffer.alloc(16)
@@ -202,6 +246,8 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     ...(includeClaudeRuntimeGuard ? [diagnosticsService] : []),
     ...(includeClaudeRuntimeGuard ? [claudeRuntimeBinary] : []),
     ...(includeClaudeRuntimeGuard ? [claudeSdkSession] : []),
+    ...(includeDeploymentConfig ? [deploymentConfig] : []),
+    ...(includeSharedPackage ? [sharedIndex] : []),
   ])
 }
 
@@ -361,6 +407,28 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("dist-electron/electron/services/file-conversion/index.js"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing the shared workspace runtime package", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeSharedPackage: false }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
+      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("node_modules/@synapse/shared/dist/index.js"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })

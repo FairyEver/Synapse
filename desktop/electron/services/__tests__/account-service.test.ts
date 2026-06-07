@@ -136,6 +136,20 @@ describe("AccountService", () => {
     })
   })
 
+  it("uses the generated API base URL instead of switching by package mode", async () => {
+    const { namespace, service } = await createTestAccountService({ isPackaged: true })
+
+    expect(service.getApiBaseUrlForLive()).toBe("http://localhost:3000/api")
+
+    const result = await service.startLogin()
+    expect(new URL(result.loginUrl).origin).toBe("http://localhost:3000")
+    expect(await namespace.getSingleton()).toMatchObject({
+      activeAttempt: {
+        apiBaseUrl: "http://localhost:3000/api",
+      },
+    })
+  })
+
   it("logs login start success without leaking the login state", async () => {
     const { service } = await createTestAccountService()
 

@@ -4,6 +4,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY shared/package.json shared/package.json
 COPY server/package.json server/package.json
 COPY dashboard/package.json dashboard/package.json
 RUN pnpm install --frozen-lockfile --filter @synapse/server... --filter @synapse/dashboard...
@@ -14,6 +15,7 @@ COPY --from=deps /app/server/node_modules ./server/node_modules
 COPY --from=deps /app/dashboard/node_modules ./dashboard/node_modules
 COPY server/ server/
 COPY dashboard/ dashboard/
+COPY shared/ shared/
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build
@@ -26,6 +28,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/node_modules ./server/node_modules
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/dashboard/dist ./dashboard/dist
+COPY --from=build /app/shared ./shared
 COPY server/prisma ./server/prisma
 COPY server/docker-entrypoint.sh ./server/docker-entrypoint.sh
 COPY server/package.json ./server/package.json

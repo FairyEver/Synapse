@@ -24,6 +24,9 @@ jobs:
   build-installers:
     name: Build ${{ matrix.label }} installer
     runs-on: ${{ matrix.os }}
+    env:
+      SYNAPSE_DESKTOP_PUBLIC_APP_URL: https://synapse.d2.pub
+      SYNAPSE_DESKTOP_REQUIRE_PUBLIC_APP_URL: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -69,6 +72,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @synapse/shared run build
 
       - name: Generate definitions registry
         run: pnpm --filter @synapse/desktop run generate:definitions-registry

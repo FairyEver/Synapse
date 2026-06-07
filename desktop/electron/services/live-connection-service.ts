@@ -120,7 +120,9 @@ export class LiveConnectionService {
     const clientInstanceId = await this.clientIdStore.getOrCreate()
     if (!this.isCurrentGeneration(generation)) return
 
-    const socketUrl = liveSocketUrl(this.accountService.getApiBaseUrlForLive())
+    const { buildLiveDesktopSocketUrl } = await liveProtocolPromise
+    if (!this.isCurrentGeneration(generation)) return
+    const socketUrl = buildLiveDesktopSocketUrl(this.accountService.getApiBaseUrlForLive())
     this.closeCurrentSocket("reconnect")
     this.closedIntentionally = false
     this.setState({
@@ -405,15 +407,6 @@ export class LiveConnectionService {
       errorLength: message.length,
     }
   }
-}
-
-function liveSocketUrl(apiBaseUrl: string): string {
-  const url = new URL(apiBaseUrl)
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-  url.pathname = `${url.pathname.replace(/\/+$/u, "")}/live/desktop`
-  url.search = ""
-  url.hash = ""
-  return url.toString()
 }
 
 function isAuthHandshakeError(error: unknown): boolean {

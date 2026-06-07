@@ -3,6 +3,12 @@ import { BadRequestException, Inject, Injectable, Optional, UnauthorizedExceptio
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
 import { Prisma, type TeamMembership, type TeamRole, type User } from "@prisma/client"
+import {
+  DESKTOP_CLIENT_ID,
+  DESKTOP_PKCE_CHALLENGE_METHOD,
+  DESKTOP_REDIRECT_URI,
+  buildPasswordResetUrl as buildSharedPasswordResetUrl,
+} from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
 import { createOpaqueToken, hashToken } from "./token"
@@ -58,9 +64,6 @@ function addDays(date: Date, days: number): Date {
 const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
 const desktopLoginCodeTtlMs = 5 * 60 * 1000
 const passwordResetTokenTtlMs = 30 * 60 * 1000
-const desktopClientId = "synapse-desktop"
-const desktopRedirectUri = "synapse://auth/desktop/callback"
-const pkceS256Method = "S256"
 
 type DesktopLoginExchangeFailureReason =
   | "code_not_found"
@@ -87,13 +90,7 @@ type DesktopLoginExchangeRecord = {
 
 function buildDesktopDeepLink(code: string, state: string): string {
   const query = new URLSearchParams({ code, state })
-  return `${desktopRedirectUri}?${query.toString()}`
-}
-
-function buildPasswordResetUrl(publicAppUrl: string, token: string): string {
-  const url = new URL("/reset-password", `${publicAppUrl.replace(/\/+$/, "")}/`)
-  url.searchParams.set("token", token)
-  return url.toString()
+  return `${DESKTOP_REDIRECT_URI}?${query.toString()}`
 }
 
 function timingSafeEqualText(left: string, right: string): boolean {
@@ -115,9 +112,9 @@ function desktopLoginExchangeFailureReason(
   if (!record) return "code_not_found"
   if (record.usedAt) return "code_already_used"
   if (record.expiresAt <= now) return "code_expired"
-  if (record.clientId !== desktopClientId) return "invalid_client"
-  if (record.redirectUri !== desktopRedirectUri) return "invalid_redirect_uri"
-  if (record.codeChallengeMethod !== pkceS256Method) return "invalid_code_challenge_method"
+  if (record.clientId !== DESKTOP_CLIENT_ID) return "invalid_client"
+  if (record.redirectUri !== DESKTOP_REDIRECT_URI) return "invalid_redirect_uri"
+  if (record.codeChallengeMethod !== DESKTOP_PKCE_CHALLENGE_METHOD) return "invalid_code_challenge_method"
   if (!timingSafeEqualText(record.state, state)) return "state_mismatch"
   if (!timingSafeEqualText(record.codeChallenge, createPkceS256Challenge(codeVerifier))) return "pkce_mismatch"
   if (record.user.status !== "active") return "user_disabled"
@@ -270,7 +267,7 @@ export class UserAuthService {
 
     return {
       ok: true,
-      resetUrl: buildPasswordResetUrl(input.publicAppUrl, token),
+      resetUrl: buildSharedPasswordResetUrl({ publicAppUrl: input.publicAppUrl, token }),
       expiresAt,
     }
   }
@@ -389,9 +386,9 @@ export class UserAuthService {
     if (
       !state ||
       !codeChallenge ||
-      clientId !== desktopClientId ||
-      redirectUri !== desktopRedirectUri ||
-      codeChallengeMethod !== pkceS256Method
+      clientId !== DESKTOP_CLIENT_ID ||
+      redirectUri !== DESKTOP_REDIRECT_URI ||
+      codeChallengeMethod !== DESKTOP_PKCE_CHALLENGE_METHOD
     ) {
       throw new BadRequestException("登录状态无效。")
     }

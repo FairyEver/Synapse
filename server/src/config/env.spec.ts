@@ -4,17 +4,60 @@ import { loadEnv } from "./env"
 describe("loadEnv", () => {
   it("parses required production settings", () => {
     const env = loadEnv({
+      NODE_ENV: "production",
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_EMAIL: "admin@d2.com",
       ADMIN_PASSWORD: "change-me-now!",
       ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      APP_PUBLIC_URL: "https://synapse.test",
       PORT: "3000",
     })
 
     expect(env.port).toBe(3000)
     expect(env.databasePoolSize).toBe(10)
     expect(env.adminEmail).toBe("admin@d2.com")
+    expect(env.appPublicUrl).toBe("https://synapse.test")
+  })
+
+  it("allows missing public app URL outside production", () => {
+    const env = loadEnv({
+      NODE_ENV: "development",
+      DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+      ADMIN_EMAIL: "admin@d2.com",
+      ADMIN_PASSWORD: "change-me-now!",
+      ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+      USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+    })
+
+    expect(env.appPublicUrl).toBeUndefined()
+  })
+
+  it("rejects missing public app URL in production", () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+        ADMIN_EMAIL: "admin@d2.com",
+        ADMIN_PASSWORD: "change-me-now!",
+        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+        USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+      }),
+    ).toThrow("APP_PUBLIC_URL")
+  })
+
+  it("rejects public app URL values that point at the API path", () => {
+    expect(() =>
+      loadEnv({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
+        ADMIN_EMAIL: "admin@d2.com",
+        ADMIN_PASSWORD: "change-me-now!",
+        ADMIN_JWT_SECRET: "a-secret-with-enough-length-32chars",
+        USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
+        APP_PUBLIC_URL: "https://synapse.test/api/",
+      }),
+    ).toThrow("APP_PUBLIC_URL")
   })
 
   it("rejects missing required settings", () => {
