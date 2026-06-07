@@ -30,6 +30,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { WebhookDeliveriesSheet } from './webhook-deliveries-sheet'
+import {
+  getWebhookDeliveryStatusBadgeVariant,
+  getWebhookDeliveryStatusLabel,
+} from './webhook-display'
 import { getWebhookErrorMessage } from './webhook-error'
 import { WebhookUrlDialog } from './webhook-url-dialog'
 
@@ -192,6 +196,21 @@ export default function WebhooksPage() {
         <DataTableColumnHeader column={column} title='最近触发' />
       ),
       cell: ({ row }) => formatOptionalDateTime(row.original.lastDeliveryAt),
+    },
+    {
+      accessorKey: 'lastDeliveryStatus',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='最近状态' />
+      ),
+      cell: ({ row }) => (
+        <Badge
+          variant={getWebhookDeliveryStatusBadgeVariant(
+            row.original.lastDeliveryStatus
+          )}
+        >
+          {getWebhookDeliveryStatusLabel(row.original.lastDeliveryStatus)}
+        </Badge>
+      ),
     },
     {
       accessorKey: 'createdAt',
@@ -447,6 +466,13 @@ function compareWebhookValue(
       return left.publicId.localeCompare(right.publicId)
     case 'lastDeliveryAt':
       return dateValue(left.lastDeliveryAt) - dateValue(right.lastDeliveryAt)
+    case 'lastDeliveryStatus':
+      return getWebhookDeliveryStatusLabel(
+        left.lastDeliveryStatus
+      ).localeCompare(
+        getWebhookDeliveryStatusLabel(right.lastDeliveryStatus),
+        'zh-CN'
+      )
     case 'createdAt':
       return dateValue(left.createdAt) - dateValue(right.createdAt)
     default:

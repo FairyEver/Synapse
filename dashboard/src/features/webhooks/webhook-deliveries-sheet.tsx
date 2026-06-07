@@ -10,17 +10,15 @@ import {
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  getWebhookDeliveryStatusBadgeVariant,
+  getWebhookDeliveryStatusLabel,
+} from './webhook-display'
 
 type WebhookDeliveriesSheetProps = {
   webhook: DashboardWebhookDto | null
   open: boolean
   onOpenChange: (open: boolean) => void
-}
-
-const deliveryStatusLabel: Record<WebhookDeliveryDto['status'], string> = {
-  accepted: '已转发',
-  rejected: '已拒绝',
-  broadcast_failed: '转发失败',
 }
 
 export function WebhookDeliveriesSheet({
@@ -76,16 +74,8 @@ function DeliveryItem({ delivery }: { delivery: WebhookDeliveryDto }) {
       <div className='flex flex-wrap items-center justify-between gap-2'>
         <div className='flex flex-wrap items-center gap-2'>
           <Badge variant='outline'>{delivery.method}</Badge>
-          <Badge
-            variant={
-              delivery.status === 'accepted'
-                ? 'default'
-                : delivery.status === 'broadcast_failed'
-                  ? 'destructive'
-                  : 'secondary'
-            }
-          >
-            {deliveryStatusLabel[delivery.status]}
+          <Badge variant={getWebhookDeliveryStatusBadgeVariant(delivery.status)}>
+            {getWebhookDeliveryStatusLabel(delivery.status)}
           </Badge>
         </div>
         <span className='text-sm text-muted-foreground'>
