@@ -58,6 +58,53 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow({ ...base, nodes: [unknown, nodeEnd], edges: [{ id: "e1", from: "u", to: "end" }] })
     expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "u")).toBe(true)
   })
+  it("rejects workflow_call nodes that call the current workflow", () => {
+    const endForCall = {
+      ...nodeEnd,
+      config: {
+        outputType: "text",
+        template: "{{result}}",
+        variables: [{ name: "result", source: { type: "node_output", node: "call" } }],
+      },
+    }
+    const def: WorkflowDefinition = {
+      ...base,
+      id: "wf-self",
+      nodes: [
+        { id: "call", name: "Call", type: "workflow_call", position: { x: 0, y: 0 }, config: { workflowId: "wf-self", variables: [], paramTemplates: {} } },
+        endForCall,
+      ],
+      edges: [{ id: "e1", from: "call", to: "end" }],
+    }
+
+    const result = validateWorkflow(def)
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((error) => error.message.includes("不能调用当前工作流"))).toBe(true)
+  })
+  it("rejects workflow_call templates that reference unbound variables", () => {
+    const endForCall = {
+      ...nodeEnd,
+      config: {
+        outputType: "text",
+        template: "{{result}}",
+        variables: [{ name: "result", source: { type: "node_output", node: "call" } }],
+      },
+    }
+    const def: WorkflowDefinition = {
+      ...base,
+      nodes: [
+        { id: "call", name: "Call", type: "workflow_call", position: { x: 0, y: 0 }, config: { workflowId: "child", variables: [], paramTemplates: { topic: "请总结 {{topic}}" } } },
+        endForCall,
+      ],
+      edges: [{ id: "e1", from: "call", to: "end" }],
+    }
+
+    const result = validateWorkflow(def)
+
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((error) => error.message.includes("模板变量「topic」未绑定"))).toBe(true)
+  })
   it("errors on edge referencing a missing node", () => {
     const r = validateWorkflow({ ...base, edges: [{ id: "missing", from: "a", to: "nope" }, { id: "e2", from: "a", to: "end" }] })
     expect(r.errors.some((e) => e.type === "invalid_config" && e.edgeId === "missing")).toBe(true)
