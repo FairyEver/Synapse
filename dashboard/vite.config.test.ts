@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest"
 import config from "./vite.config"
 
 describe("dashboard Vite dev proxy", () => {
+  it("fails instead of opening another port when the dashboard port is occupied", () => {
+    expect(config.server?.strictPort).toBe(true)
+  })
+
   it("proxies desktop live websocket upgrades through /api", () => {
     const proxy = config.server?.proxy
     const apiProxy = proxy && !Array.isArray(proxy) ? proxy["/api"] : undefined
