@@ -493,8 +493,15 @@ export class AccountService {
       logger.info("Desktop account refreshed from storage.", authenticatedLogMeta("refreshFromStorage", profile))
     } catch (error) {
       logger.warn("Account refresh failed.", { error })
-      this.accessToken = null
       const latest = await this.readPersisted("Failed to read stored account after account refresh failed.")
+      if (attemptedRefreshToken && latest?.refreshToken && latest.refreshToken !== attemptedRefreshToken) {
+        logger.info("Ignored stale account refresh failure.", {
+          operation: "refreshFromStorage",
+          status: "stale-refresh-token",
+        })
+        return this.state
+      }
+      this.accessToken = null
       if (latest?.activeAttempt) return this.state
       const failureKind = classifyAccountRefreshFailure(error)
       const lastProfile = latest?.lastProfile
