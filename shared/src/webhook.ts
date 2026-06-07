@@ -3,6 +3,7 @@ export const WEBHOOK_PUBLIC_PATH_PREFIX = "/webhooks"
 export const WEBHOOK_DELIVERY_STATUS = {
   accepted: "accepted",
   rejected: "rejected",
+  received: "received",
   broadcastFailed: "broadcast_failed",
 } as const
 

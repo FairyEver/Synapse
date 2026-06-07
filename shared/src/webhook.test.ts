@@ -10,6 +10,7 @@ describe("shared webhook protocol", () => {
     expect(WEBHOOK_PUBLIC_PATH_PREFIX).toBe("/webhooks")
     expect(WEBHOOK_DELIVERY_STATUS.accepted).toBe("accepted")
     expect(WEBHOOK_DELIVERY_STATUS.rejected).toBe("rejected")
+    expect(WEBHOOK_DELIVERY_STATUS.received).toBe("received")
   })
 
   it("validates delivery payload shape", () => {

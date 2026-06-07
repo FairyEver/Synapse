@@ -9,6 +9,7 @@ type WebhookDeliveryStatusBadgeVariant =
 const deliveryStatusLabel: Record<WebhookDeliveryStatus, string> = {
   accepted: '已转发',
   rejected: '已拒绝',
+  received: '已接收',
   broadcast_failed: '转发失败',
 }
 
@@ -18,6 +19,7 @@ const deliveryStatusBadgeVariant: Record<
 > = {
   accepted: 'default',
   rejected: 'secondary',
+  received: 'outline',
   broadcast_failed: 'destructive',
 }
 

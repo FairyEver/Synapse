@@ -680,7 +680,7 @@ describe("WebhookService", () => {
     ])
   })
 
-  it("leaves a conservative failed marker and returns accepted response when delivery status update fails", async () => {
+  it("leaves a non-contradictory received marker and returns accepted response when delivery status update fails", async () => {
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const harness = createWebhookReceiveHarness({
       updateError: new Error("database update failed"),
@@ -700,8 +700,8 @@ describe("WebhookService", () => {
         onlineClientCount: 0,
         sentClientCount: 0,
         failedClientCount: 0,
-        status: WEBHOOK_DELIVERY_STATUS.broadcastFailed,
-        error: "broadcast_pending",
+        status: WEBHOOK_DELIVERY_STATUS.received,
+        error: null,
       }),
     ])
   })

@@ -47,7 +47,7 @@ describe("accountIpcModule", () => {
       createdAt: "2026-06-06T10:00:00.000Z",
       updatedAt: "2026-06-06T10:00:00.000Z",
       lastDeliveryAt: "2026-06-06T10:01:00.000Z",
-      lastDeliveryStatus: "accepted",
+      lastDeliveryStatus: "received",
     }])).toEqual([
       expect.objectContaining({
         publicId: "wh_public",

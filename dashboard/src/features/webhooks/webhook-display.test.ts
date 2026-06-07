@@ -9,6 +9,7 @@ describe('webhook delivery status display', () => {
   it('maps known delivery statuses to user-facing labels', () => {
     expect(getWebhookDeliveryStatusLabel('accepted')).toBe('已转发')
     expect(getWebhookDeliveryStatusLabel('rejected')).toBe('已拒绝')
+    expect(getWebhookDeliveryStatusLabel('received')).toBe('已接收')
     expect(getWebhookDeliveryStatusLabel('broadcast_failed')).toBe('转发失败')
   })
 
@@ -19,6 +20,7 @@ describe('webhook delivery status display', () => {
 
   it('uses the existing badge variants for delivery states', () => {
     expect(getWebhookDeliveryStatusBadgeVariant('accepted')).toBe('default')
+    expect(getWebhookDeliveryStatusBadgeVariant('received')).toBe('outline')
     expect(getWebhookDeliveryStatusBadgeVariant('rejected')).toBe('secondary')
     expect(getWebhookDeliveryStatusBadgeVariant('broadcast_failed')).toBe(
       'destructive'
