@@ -12,7 +12,11 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getLiveClientSummary, upsertLiveClient } from './live-client-utils'
+import {
+  getLiveClientSummary,
+  mergeLiveClientSnapshot,
+  upsertLiveClient,
+} from './live-client-utils'
 import { formatModulePermissionSummary } from './module-permissions'
 import { UserLiveClientsSheet } from './user-live-clients-sheet'
 import { UserModulePermissionsSheet } from './user-module-permissions-sheet'
@@ -59,7 +63,9 @@ export default function UsersPage() {
 
   useEffect(() => {
     if (liveClientSnapshot) {
-      setLiveClients(liveClientSnapshot)
+      setLiveClients((current) =>
+        mergeLiveClientSnapshot(current, liveClientSnapshot)
+      )
     }
   }, [liveClientSnapshot])
 

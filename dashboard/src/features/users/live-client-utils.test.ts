@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { LiveClientChangedEvent, LiveClientRow } from '@/lib/api'
 import {
   getLiveClientSummary,
+  mergeLiveClientSnapshot,
   mergeOwnLiveClientSnapshot,
   upsertLiveClient,
   upsertOwnLiveClient,
@@ -101,6 +102,54 @@ describe('live client utilities', () => {
     const clients = [client('user-1', 'client-a', 'online')]
 
     expect(upsertLiveClient(clients, event(client(undefined, 'client-b', 'online')))).toBe(clients)
+  })
+
+  it('keeps newer admin client events when an older snapshot arrives', () => {
+    const updated = mergeLiveClientSnapshot(
+      [
+        {
+          ...client('user-1', 'client-a', 'online'),
+          lastSeenAt: '2026-06-06T10:03:00.000Z',
+        },
+        {
+          ...client('user-2', 'client-a', 'online'),
+          lastSeenAt: '2026-06-06T10:04:00.000Z',
+        },
+      ],
+      [
+        {
+          ...client('user-1', 'client-a', 'stale'),
+          lastSeenAt: '2026-06-06T10:01:00.000Z',
+        },
+        client('user-3', 'client-c', 'online'),
+      ]
+    )
+
+    expect(updated).toHaveLength(3)
+    expect(
+      updated.find(
+        (item) =>
+          item.userId === 'user-1' && item.clientInstanceId === 'client-a'
+      )
+    ).toMatchObject({
+      status: 'online',
+      lastSeenAt: '2026-06-06T10:03:00.000Z',
+    })
+    expect(
+      updated.find(
+        (item) =>
+          item.userId === 'user-2' && item.clientInstanceId === 'client-a'
+      )
+    ).toMatchObject({
+      status: 'online',
+      lastSeenAt: '2026-06-06T10:04:00.000Z',
+    })
+    expect(
+      updated.find(
+        (item) =>
+          item.userId === 'user-3' && item.clientInstanceId === 'client-c'
+      )
+    ).toMatchObject({ status: 'online' })
   })
 
   it('replaces own clients without requiring a user id', () => {

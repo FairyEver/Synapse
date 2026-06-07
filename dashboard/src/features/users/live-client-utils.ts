@@ -81,6 +81,35 @@ export function upsertOwnLiveClient(
   )
 }
 
+export function mergeLiveClientSnapshot(
+  clients: readonly LiveClientRow[],
+  snapshot: readonly LiveClientRow[]
+): LiveClientRow[] {
+  const byClient = new Map<string, LiveClientRow>()
+
+  for (const client of clients) {
+    const key = getAdminLiveClientKey(client)
+    if (key) {
+      byClient.set(key, client)
+    }
+  }
+
+  for (const client of snapshot) {
+    const key = getAdminLiveClientKey(client)
+    if (!key) continue
+
+    const existing = byClient.get(key)
+    if (
+      !existing ||
+      getLiveClientObservedAt(client) > getLiveClientObservedAt(existing)
+    ) {
+      byClient.set(key, client)
+    }
+  }
+
+  return Array.from(byClient.values())
+}
+
 export function mergeOwnLiveClientSnapshot(
   clients: readonly LiveClientRow[],
   snapshot: readonly LiveClientRow[]
@@ -99,6 +128,11 @@ export function mergeOwnLiveClientSnapshot(
   }
 
   return Array.from(byClientInstance.values())
+}
+
+function getAdminLiveClientKey(client: LiveClientRow) {
+  if (!client.userId) return null
+  return `${client.userId}:${client.clientInstanceId}`
 }
 
 function getLiveClientObservedAt(client: LiveClientRow) {
