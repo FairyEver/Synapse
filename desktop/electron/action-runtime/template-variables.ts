@@ -102,6 +102,7 @@ function appendWebhookEventVariables(
   assignStringVariable(variables, "trigger.request.remoteAddress", request.remoteAddress)
   if ("body" in request) {
     variables["trigger.request.body"] = stringifyTemplateValue(request.body)
+    flattenValue("trigger.request.body", request.body, variables)
   }
   if ("query" in request) {
     flattenValue("trigger.request.query", request.query, variables)
