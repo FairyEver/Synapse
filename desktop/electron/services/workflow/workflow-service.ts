@@ -42,7 +42,10 @@ export class WorkflowService {
         nodeCount: (d.nodes ?? []).length,
         createdAt: d.createdAt as number,
         updatedAt: d.updatedAt as number,
-      }))
+      })).sort((left, right) => (
+        right.updatedAt - left.updatedAt
+        || right.createdAt - left.createdAt
+      ))
     } catch (err) {
       logger.warn("workflow list failed", {
         boundary: "workflow-service.list",
