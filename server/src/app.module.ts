@@ -16,7 +16,12 @@ import { PermissionsModule } from "./permissions/permissions.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { TeamsModule } from "./teams/teams.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
+import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
 import { WebhookModule } from "./webhooks/webhook.module"
+
+type RequestLogObject = {
+  readonly url?: unknown
+} & Record<string, unknown>
 
 @Module({
   imports: [
@@ -26,6 +31,11 @@ import { WebhookModule } from "./webhooks/webhook.module"
       pinoHttp: {
         autoLogging: true,
         redact: ["req.headers.cookie", "req.headers.authorization"],
+        serializers: {
+          req(request: RequestLogObject) {
+            return sanitizeWebhookLogRequest(request)
+          },
+        },
         transport: {
           targets: [
             ...(process.env.NODE_ENV !== "production"

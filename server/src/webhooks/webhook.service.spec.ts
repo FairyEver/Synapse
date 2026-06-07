@@ -43,6 +43,7 @@ function createPrismaMock() {
       createMany: vi.fn(),
       upsert: vi.fn(),
       updateMany: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
     },
     $transaction: vi.fn((callback) => callback({
@@ -846,6 +847,38 @@ describe("WebhookService", () => {
     ])
   })
 
+  it("keeps delivery status delivered when acknowledgement arrives before broadcast status update", async () => {
+    const harness = createWebhookReceiveHarness({
+      acknowledgeBeforeBroadcastStatusUpdate: true,
+      broadcastResult: {
+        onlineClientCount: 1,
+        sentClientCount: 1,
+        failedClientCount: 0,
+        clientResults: [{
+          clientInstanceId: "client-a",
+          deviceName: "MacBook",
+          platform: "darwin-arm64",
+          appVersion: "0.2.253",
+          sentAt: "2026-06-06T12:00:00.000Z",
+          status: "sent",
+        }],
+      },
+    })
+
+    await harness.receive()
+
+    expect(harness.receipts).toEqual([
+      expect.objectContaining({
+        deliveryId: "delivery-1",
+        clientInstanceId: "client-a",
+        status: "acknowledged",
+      }),
+    ])
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({ id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.delivered }),
+    ])
+  })
+
   it("rejects oversized webhook bodies before broadcasting", async () => {
     const harness = createWebhookReceiveHarness()
 
@@ -947,6 +980,7 @@ function createWebhookReceiveHarness(input: {
   readonly broadcastError?: Error
   readonly updateError?: Error
   readonly updateErrorAttempts?: number
+  readonly acknowledgeBeforeBroadcastStatusUpdate?: boolean
   readonly broadcastResult?: {
     readonly onlineClientCount: number
     readonly sentClientCount: number
@@ -964,6 +998,7 @@ function createWebhookReceiveHarness(input: {
   const deliveries: Array<Record<string, unknown>> = []
   const receipts: Array<Record<string, unknown>> = []
   let updateErrorsRemaining = input.updateErrorAttempts ?? (input.updateError ? Number.POSITIVE_INFINITY : 0)
+  let acknowledgeBeforeBroadcastStatusUpdate = input.acknowledgeBeforeBroadcastStatusUpdate ?? false
   const prisma = createPrismaMock()
   const webhook = {
     ...baseWebhook,
@@ -997,10 +1032,26 @@ function createWebhookReceiveHarness(input: {
     deliveries.push(delivery)
     return Promise.resolve(delivery)
   })
-  prisma.webhookDelivery.update.mockImplementation(({ where, data }) => {
+  let service: WebhookService
+  prisma.webhookDelivery.update.mockImplementation(async ({ where, data }) => {
     if (input.updateError && updateErrorsRemaining > 0) {
       updateErrorsRemaining -= 1
       return Promise.reject(input.updateError)
+    }
+    if (
+      acknowledgeBeforeBroadcastStatusUpdate &&
+      data.status === WEBHOOK_DELIVERY_STATUS.sent
+    ) {
+      acknowledgeBeforeBroadcastStatusUpdate = false
+      await service.recordDeliveryAck({
+        userId: "user-1",
+        deliveryId: "delivery-1",
+        clientInstanceId: "client-a",
+        deviceName: "MacBook",
+        platform: "darwin-arm64",
+        appVersion: "0.2.253",
+        acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
+      })
     }
     const index = deliveries.findIndex((delivery) => delivery.id === where.id)
     if (index >= 0) {
@@ -1028,7 +1079,12 @@ function createWebhookReceiveHarness(input: {
     let count = 0
     for (let index = 0; index < deliveries.length; index += 1) {
       const delivery = deliveries[index]
-      if (delivery?.id === where.id && delivery.userId === where.userId) {
+      const statusFilter = where.status as { readonly not?: string } | undefined
+      if (
+        delivery?.id === where.id &&
+        (where.userId === undefined || delivery.userId === where.userId) &&
+        (statusFilter?.not === undefined || delivery.status !== statusFilter.not)
+      ) {
         deliveries[index] = { ...delivery, ...data }
         count += 1
       }
@@ -1087,8 +1143,14 @@ function createWebhookReceiveHarness(input: {
     }
     return Promise.resolve({ count })
   })
+  prisma.webhookDeliveryReceipt.findFirst.mockImplementation(({ where }) => {
+    const receipt = receipts.find((item) =>
+      item.deliveryId === where.deliveryId && item.status === where.status
+    )
+    return Promise.resolve(receipt ? { id: receipt.id } : null)
+  })
 
-  const service = new WebhookService(prisma as never, {}, undefined, live as never)
+  service = new WebhookService(prisma as never, {}, undefined, live as never)
 
   return {
     service,

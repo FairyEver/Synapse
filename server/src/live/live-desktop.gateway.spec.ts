@@ -17,6 +17,7 @@ import type { UserAuthService } from "../auth/user-auth.service"
 class FakeSocket extends EventEmitter {
   readonly sent: string[] = []
   readonly closeCalls: Array<{ readonly code: number; readonly reason: string }> = []
+  readonly terminateCalls: string[] = []
   readyState = 1
   shouldThrowOnSend = false
 
@@ -29,6 +30,10 @@ class FakeSocket extends EventEmitter {
 
   close(code: number, reason: string): void {
     this.closeCalls.push({ code, reason })
+  }
+
+  terminate(): void {
+    this.terminateCalls.push("terminate")
   }
 }
 
@@ -745,6 +750,40 @@ describe("LiveDesktopGateway", () => {
       client: expect.objectContaining({
         status: "offline",
         disconnectReason: "heartbeat_timeout",
+      }),
+    }))
+  })
+
+  it("closes live sockets when the server process shuts down", () => {
+    const socket = new FakeSocket()
+    const publish = vi.fn()
+    const gateway = createLiveDesktopGatewayForTest({
+      auth: { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+      registry: new LiveClientRegistry(),
+      streams: { publish } as unknown as LiveStreamService,
+      clock: {
+        randomId: () => "connection-1",
+        now: () => new Date("2026-06-06T10:00:00.000Z"),
+      },
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    publish.mockClear()
+
+    ;(gateway as unknown as { onApplicationShutdown(signal?: string): void })
+      .onApplicationShutdown("SIGTERM")
+
+    const trackedSockets = (gateway as unknown as {
+      readonly socketsByConnectionId: Map<string, FakeSocket>
+    }).socketsByConnectionId
+    expect(socket.closeCalls).toEqual([{ code: 1012, reason: "server_shutdown" }])
+    expect(socket.terminateCalls).toEqual(["terminate"])
+    expect(trackedSockets.has("connection-1")).toBe(false)
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      client: expect.objectContaining({
+        status: "offline",
+        disconnectReason: "server_shutdown",
       }),
     }))
   })

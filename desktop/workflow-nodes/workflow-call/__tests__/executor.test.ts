@@ -150,8 +150,21 @@ describe("workflowCallNodeExecutor", () => {
   })
 
   it("maps failed child workflow to failed node", async () => {
-    const result = await workflowCallNodeExecutor.execute(makeInput({}, deps(makeResult("failed"))))
+    const childResult: WorkflowRunResult = {
+      status: "failed",
+      output: "",
+      durationMs: 12,
+      nodeResults: {
+        "call-cycle": {
+          nodeId: "call-cycle",
+          status: "failed",
+          input: { variables: {} },
+          error: "调用链包含循环：A -> B -> A",
+        },
+      },
+    }
+    const result = await workflowCallNodeExecutor.execute(makeInput({}, deps(childResult)))
     expect(result.status).toBe("failed")
-    expect(result.error).toBe("子工作流执行失败")
+    expect(result.error).toBe("子工作流执行失败：调用链包含循环：A -> B -> A")
   })
 })

@@ -1377,7 +1377,7 @@ export const coreWorkflowRunStatusesDescriptor: ServiceDescriptor<Map<string, Wo
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   id: "core.workflow.engine",
   criticality: "degraded",
-  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink", "core.workflow"],
+  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink", "core.workflow", "core.workflow.snapshots"],
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
@@ -1470,18 +1470,47 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       workflowCall: {
         getWorkflowDefinition: (id) => registry.get<WorkflowService>("core.workflow").get(id),
         runWorkflow: async (input) => {
+          const snapshots = registry.get<RunSnapshotService>("core.workflow.snapshots")
           const runId = randomUUID()
+          const startedAt = Date.now()
+          let workflowError: string | undefined
           const result = await workflowEngine.run(
             input.definition,
             input.params,
             runId,
-            () => undefined,
+            (event) => {
+              if (event.type === "workflow:failed") {
+                workflowError = event.error
+              }
+            },
             input.abortSignal,
             input.projectId,
             input.triggerSource,
             input.actor,
             input.callStack,
           )
+          const endedAt = Date.now()
+          try {
+            await snapshots.save({
+              runId,
+              workflowId: input.definition.id,
+              version: input.definition.version,
+              startedAt,
+              endedAt,
+              status: result.status,
+              params: input.params,
+              nodeResults: sanitizeNodeResultsForSnapshot(result.nodeResults),
+              definition: input.definition,
+              ...(workflowError ? { error: workflowError } : {}),
+            })
+          } catch (err) {
+            engineLogger.warn("failed to persist nested workflow run snapshot", {
+              runId,
+              workflowId: input.definition.id,
+              boundary: "workflow-call-snapshot",
+              ...capabilityRejectionDiagnostic(err),
+            })
+          }
           return { runId, result }
         },
       },

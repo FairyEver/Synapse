@@ -4,6 +4,7 @@ export type LiveClientDisconnectReason =
   | "socket_close"
   | "socket_error"
   | "heartbeat_timeout"
+  | "server_shutdown"
   | "superseded"
   | "auth_failed"
   | "user_disabled"

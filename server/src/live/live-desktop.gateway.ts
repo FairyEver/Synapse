@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import type { Server as HttpServer, IncomingMessage } from "node:http"
-import { Injectable, Logger } from "@nestjs/common"
+import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common"
 import {
   WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS,
   LIVE_MESSAGE_TYPES,
@@ -55,7 +55,7 @@ const heartbeatIntervalMs = 20_000
 const heartbeatTimeoutMs = 45_000
 
 @Injectable()
-export class LiveDesktopGateway {
+export class LiveDesktopGateway implements OnApplicationShutdown {
   private readonly logger = new Logger(LiveDesktopGateway.name)
   private readonly socketsByConnectionId = new Map<string, WebSocket>()
   private server: WebSocketServer | null = null
@@ -123,6 +123,50 @@ export class LiveDesktopGateway {
 
   createWebSocketServer(): WebSocketServer {
     return new WebSocketServer({ noServer: true })
+  }
+
+  onApplicationShutdown(signal?: string): void {
+    const sockets = Array.from(this.socketsByConnectionId.entries())
+    this.socketsByConnectionId.clear()
+    if (this.staleInterval) {
+      clearInterval(this.staleInterval)
+      this.staleInterval = null
+    }
+    for (const [connectionId, socket] of sockets) {
+      const client = this.registry.markDisconnected({
+        connectionId,
+        now: this.clock.now(),
+        reason: "server_shutdown",
+      })
+      if (client) {
+        this.publish(client)
+      }
+      try {
+        socket.close(1012, "server_shutdown")
+        socket.terminate()
+      } catch (error) {
+        this.logger.warn({
+          connectionId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        }, "Live desktop shutdown socket close failed")
+      }
+    }
+    if (this.server) {
+      try {
+        this.server.close()
+      } catch (error) {
+        this.logger.warn({
+          errorName: error instanceof Error ? error.name : typeof error,
+        }, "Live desktop websocket server close failed")
+      }
+      this.server = null
+    }
+    if (sockets.length > 0) {
+      this.logger.warn({
+        ...(signal ? { signal } : {}),
+        socketCount: sockets.length,
+      }, "Live desktop sockets closed for server shutdown")
+    }
   }
 
   bindAuthenticatedSocket(socket: WebSocket, auth: { readonly userId: string }): void {

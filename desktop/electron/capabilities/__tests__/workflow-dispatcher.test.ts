@@ -10,6 +10,7 @@ const logStoreMock = vi.hoisted(() => ({
 
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
 import type { WorkflowDefinition, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import "../../../workflow-nodes/register.main"
 
 vi.mock("../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
@@ -23,7 +24,7 @@ function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispat
         if (id === "wf-1") return {
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
-          nodes: [{ id: "n1", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+          nodes: [endNode("n1")],
           edges: [],
         }
         return null
@@ -66,6 +67,26 @@ function deferred<T>() {
     reject = rej
   })
   return { promise, resolve, reject }
+}
+
+function scriptNode(id: string, name: string, x: number, y: number): WorkflowDefinition["nodes"][number] {
+  return {
+    id,
+    name,
+    type: "script",
+    position: { x, y },
+    config: { shell: "posix", script: "printf ok", variables: [] },
+  }
+}
+
+function endNode(id = "end", name = "End", x = 600, y = 200): WorkflowDefinition["nodes"][number] {
+  return {
+    id,
+    name,
+    type: "end",
+    position: { x, y },
+    config: { outputType: "text", template: "", variables: [] },
+  }
 }
 
 describe("createWorkflowDispatcher", () => {
@@ -142,7 +163,7 @@ describe("createWorkflowDispatcher", () => {
     const baseDefinition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
-      nodes: [{ id: "n1", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+      nodes: [endNode("n1")],
       edges: [],
     }
     const save = vi.fn(async (def: WorkflowDefinition) => {
@@ -185,10 +206,10 @@ describe("createWorkflowDispatcher", () => {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
       nodes: [
-        { id: "n1", name: "Prompt", type: "prompt", position: { x: 100, y: 200 }, config: {} },
-        { id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+        scriptNode("n1", "Prompt", 100, 200),
+        endNode(),
       ],
-      edges: [],
+      edges: [{ id: "edge-n1-end", from: "n1", to: "end" }],
     }
     const save = vi.fn(async () => releaseFirstSave.promise)
     const deleteWorkflow = vi.fn(async () => {})
@@ -228,7 +249,7 @@ describe("createWorkflowDispatcher", () => {
     const definitionWithoutId: Record<string, unknown> = {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
-      nodes: [{ id: "n1", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+      nodes: [endNode("n1")],
       edges: [],
     }
     delete definitionWithoutId.id
@@ -291,7 +312,7 @@ describe("createWorkflowDispatcher", () => {
     const definition: WorkflowDefinition = {
       id: "wf-1", name: "Updated", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
-      nodes: [{ id: "n1", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+      nodes: [endNode("n1")],
       edges: [],
     }
     const deps = makeDeps({ permissionGuard, auditSink })
@@ -410,7 +431,7 @@ describe("createWorkflowDispatcher", () => {
       defaultProjectId: "project-1",
       defaultProviderId: "local-claude-code",
       defaultModelTier: "sonnet" as const,
-      nodes: [{ id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: { outputType: "text", template: "", variables: [] } }],
+      nodes: [endNode()],
       edges: [],
     }
     const deps = makeDeps({
@@ -602,8 +623,8 @@ describe("createWorkflowDispatcher", () => {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
       nodes: [
-        { id: "n1", name: "Prompt", type: "prompt", position: { x: 100, y: 200 }, config: {} },
-        { id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+        scriptNode("n1", "Prompt", 100, 200),
+        endNode(),
       ],
       edges: [],
     }
@@ -625,42 +646,62 @@ describe("createWorkflowDispatcher", () => {
     expect(get).toHaveBeenCalledTimes(1)
   })
 
-  it("workflow.node.create with auto-position", async () => {
+  it("workflow.node.create rejects an unconnected node without saving", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch(
+    await expect(dispatcher.dispatch(
       "workflow.node.create",
       { workflowId: "wf-1", node: { name: "New Node", type: "prompt" } },
       { source: "api" },
-    )
-    expect(result.ok).toBe(true)
-    const savedDef = (deps.workflowService.save as ReturnType<typeof vi.fn>).mock.calls[0][0]
-    const newNode = savedDef.nodes[savedDef.nodes.length - 1]
-    expect(newNode.position).toEqual({ x: 850, y: 200 })
-    expect(newNode.type).toBe("prompt")
-    expect(newNode.name).toBe("New Node")
+    )).rejects.toThrow("Save failed")
+    expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
-  it("workflow.node.create returns nodeId", async () => {
+  it("workflow.node.create does not return a nodeId for invalid nodes", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
-    const result = await dispatcher.dispatch(
+    await expect(dispatcher.dispatch(
       "workflow.node.create",
       { workflowId: "wf-1", node: { name: "Prompt", type: "prompt" } },
       { source: "api" },
-    )
-    expect(result.ok).toBe(true)
-    expect(result.data).toHaveProperty("nodeId")
-    expect(typeof (result.data as Record<string, unknown>).nodeId).toBe("string")
-    expect((result.data as Record<string, unknown>).nodeId).toHaveLength(36) // UUID format
+    )).rejects.toThrow("Save failed")
+    expect(deps.workflowService.save).not.toHaveBeenCalled()
+  })
+
+  it("workflow.node.create rejects invalid mutations without saving or mutating the loaded definition", async () => {
+    const storedDefinition: WorkflowDefinition = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [endNode()],
+      edges: [],
+    }
+    const save = vi.fn(async () => ({ versionHash: "v_should_not_save" }))
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => storedDefinition),
+        save,
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "workflow.node.create",
+      { workflowId: "wf-1", node: { name: "Unconnected", type: "prompt" } },
+      { source: "api" },
+    )).rejects.toThrow("Save failed")
+
+    expect(save).not.toHaveBeenCalled()
+    expect(storedDefinition.nodes).toHaveLength(1)
+    expect(storedDefinition.nodes[0]?.id).toBe("end")
   })
 
   it("serializes concurrent workflow mutations so later writes include earlier changes", async () => {
     let storedDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
-      nodes: [{ id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
-      edges: [],
+      nodes: [scriptNode("a", "Script A", 200, 200), endNode()],
+      edges: [{ id: "e1", from: "a", to: "end" }],
     }
     const deps = makeDeps({
       workflowService: {
@@ -677,21 +718,20 @@ describe("createWorkflowDispatcher", () => {
 
     await Promise.all([
       dispatcher.dispatch(
-        "workflow.node.create",
-        { workflowId: "wf-1", node: { name: "Prompt A", type: "prompt" } },
+        "workflow.node.update",
+        { workflowId: "wf-1", nodeId: "a", patch: { name: "Script A Updated" } },
         { source: "api" },
       ),
       dispatcher.dispatch(
-        "workflow.node.create",
-        { workflowId: "wf-1", node: { name: "Prompt B", type: "prompt" } },
+        "workflow.node.update",
+        { workflowId: "wf-1", nodeId: "end", patch: { name: "End Updated" } },
         { source: "api" },
       ),
     ])
 
     expect(storedDefinition.nodes.map((node) => node.name).sort()).toEqual([
-      "End",
-      "Prompt A",
-      "Prompt B",
+      "End Updated",
+      "Script A Updated",
     ])
   })
 
@@ -714,8 +754,8 @@ describe("createWorkflowDispatcher", () => {
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
           nodes: [
-            { id: "n1", name: "Prompt", type: "prompt", position: { x: 200, y: 200 }, config: {} },
-            { id: "n2", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+            scriptNode("n1", "Prompt", 200, 200),
+            endNode("n2"),
           ],
           edges: [],
         })),
@@ -743,8 +783,8 @@ describe("createWorkflowDispatcher", () => {
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
           nodes: [
-            { id: "n1", name: "Prompt", type: "prompt", position: { x: 200, y: 200 }, config: {} },
-            { id: "n2", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+            scriptNode("n1", "Prompt", 200, 200),
+            endNode("n2"),
           ],
           edges: [{ id: "e1", from: "n1", to: "n2" }],
         })),
@@ -777,8 +817,8 @@ describe("createWorkflowDispatcher", () => {
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
           nodes: [
-            { id: "n1", name: "Prompt", type: "prompt", position: { x: 200, y: 200 }, config: {} },
-            { id: "n2", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+            scriptNode("n1", "Prompt", 200, 200),
+            endNode("n2"),
           ],
           edges: [
             { id: "e1", from: "n1", to: "n2" },
@@ -838,9 +878,9 @@ describe("createWorkflowDispatcher", () => {
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
           nodes: [
-            { id: "a", name: "Prompt A", type: "prompt", position: { x: 0, y: 0 }, config: {} },
-            { id: "b", name: "Prompt B", type: "prompt", position: { x: 0, y: 0 }, config: {} },
-            { id: "c", name: "End", type: "end", position: { x: 0, y: 0 }, config: {} },
+            scriptNode("a", "Prompt A", 0, 0),
+            scriptNode("b", "Prompt B", 0, 0),
+            endNode("c", "End", 0, 0),
           ],
           edges: [
             { id: "e1", from: "a", to: "b" },
@@ -873,8 +913,8 @@ describe("createWorkflowDispatcher", () => {
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
           nodes: [
-            { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: {} },
-            { id: "b", name: "B", type: "end", position: { x: 0, y: 0 }, config: {} },
+            scriptNode("a", "A", 0, 0),
+            endNode("b", "B", 0, 0),
           ],
           edges: [{ id: "e1", from: "a", to: "b" }],
         })),

@@ -348,6 +348,55 @@ describe("LiveConnectionService", () => {
     })
   })
 
+  it("reconnects when a welcomed socket stops receiving server heartbeats", async () => {
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    const timers = createTimerFns()
+    const createSocket = vi.fn()
+      .mockReturnValueOnce(firstSocket as never)
+      .mockReturnValueOnce(secondSocket as never)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay: () => 2_000,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    firstSocket.emit("open")
+    await waitForCondition(() => firstSocket.sent.length > 0)
+    firstSocket.emit("message", JSON.stringify({
+      type: "live.welcome",
+      id: "msg-welcome",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: {
+        connectionId: "conn-a",
+        serverTime: "2026-06-06T10:00:01.000Z",
+        heartbeatIntervalMs: 20_000,
+        heartbeatTimeoutMs: 45_000,
+      },
+    }))
+    await waitForCondition(() => service.getState().status === "connected")
+
+    timers.timers.find((timer) => timer.delay === 45_000)?.callback()
+    await flushPromises()
+
+    expect(firstSocket.close).toHaveBeenCalledWith(1000, "heartbeat_timeout")
+    expect(service.getState()).toMatchObject({
+      status: "reconnecting",
+      lastError: "连接超时",
+    })
+
+    timers.timers.find((timer) => timer.delay === 2_000)?.callback()
+    await flushPromises()
+
+    expect(createSocket).toHaveBeenCalledTimes(2)
+    expect(secondSocket.close).not.toHaveBeenCalled()
+  })
+
   it("closes the socket when account becomes unauthenticated", async () => {
     const socket = new FakeSocket()
     const service = new LiveConnectionService({

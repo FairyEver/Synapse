@@ -522,6 +522,7 @@ export class WebhookService implements OnModuleInit {
         where: { id: input.deliveryId },
         data: deliveryStatusData,
       })
+      await this.promoteDeliveryIfAcknowledged(input)
       return
     } catch (error) {
       this.logger.warn({
@@ -537,6 +538,7 @@ export class WebhookService implements OnModuleInit {
         where: { id: input.deliveryId },
         data: deliveryStatusData,
       })
+      await this.promoteDeliveryIfAcknowledged(input)
     } catch (error) {
       this.logger.warn({
         deliveryId: input.deliveryId,
@@ -544,6 +546,39 @@ export class WebhookService implements OnModuleInit {
         webhookId: input.webhookId,
         webhookPublicId: input.webhookPublicId,
       }, "Webhook delivery failed-status fallback update failed")
+    }
+  }
+
+  private async promoteDeliveryIfAcknowledged(input: {
+    readonly deliveryId: string
+    readonly webhookId: string
+    readonly webhookPublicId: string
+    readonly status: WebhookDeliveryStatus
+  }): Promise<void> {
+    if (input.status !== WEBHOOK_DELIVERY_STATUS.sent) return
+    try {
+      const acknowledgedReceipt = await this.prisma.webhookDeliveryReceipt.findFirst({
+        where: {
+          deliveryId: input.deliveryId,
+          status: WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged,
+        },
+        select: { id: true },
+      })
+      if (!acknowledgedReceipt) return
+      await this.prisma.webhookDelivery.update({
+        where: { id: input.deliveryId },
+        data: {
+          status: WEBHOOK_DELIVERY_STATUS.delivered,
+          error: null,
+        },
+      })
+    } catch (error) {
+      this.logger.warn({
+        deliveryId: input.deliveryId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        webhookId: input.webhookId,
+        webhookPublicId: input.webhookPublicId,
+      }, "Webhook delivery acknowledged-status promotion failed")
     }
   }
 

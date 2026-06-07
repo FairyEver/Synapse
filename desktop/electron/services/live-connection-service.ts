@@ -12,6 +12,7 @@ import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.live")
 const defaultHeartbeatIntervalMs = 20_000
+const defaultHeartbeatTimeoutMs = 45_000
 const liveProtocolPromise = import("@synapse/shared")
 
 type LiveSocket = Pick<WebSocket, "on" | "send" | "close" | "readyState">
@@ -46,6 +47,8 @@ export class LiveConnectionService {
   private socket: LiveSocket | null = null
   private reconnectTimer: NodeJS.Timeout | null = null
   private heartbeatTimer: NodeJS.Timeout | null = null
+  private serverTimeoutTimer: NodeJS.Timeout | null = null
+  private heartbeatTimeoutMs = defaultHeartbeatTimeoutMs
   private reconnectAttempt = 0
   private connectionGeneration = 0
   private closedIntentionally = false
@@ -207,8 +210,12 @@ export class LiveConnectionService {
       const intervalMs = welcome.heartbeatIntervalMs > 0
         ? welcome.heartbeatIntervalMs
         : defaultHeartbeatIntervalMs
+      this.heartbeatTimeoutMs = welcome.heartbeatTimeoutMs > 0
+        ? welcome.heartbeatTimeoutMs
+        : defaultHeartbeatTimeoutMs
       this.reconnectAttempt = 0
       this.startHeartbeat(intervalMs)
+      this.startServerTimeout(this.heartbeatTimeoutMs)
       this.setState({
         status: "connected",
         clientInstanceId,
@@ -220,6 +227,7 @@ export class LiveConnectionService {
     }
 
     if (parsed.type === LIVE_MESSAGE_TYPES.pong) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
       this.setState({
         ...this.state,
         status: "connected",
@@ -230,6 +238,7 @@ export class LiveConnectionService {
     }
 
     if (parsed.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
       await this.acknowledgeWebhookDelivery(parsed.payload.deliveryId)
       if (!this.webhookDeliveryHandler) {
         logger.warn("Live webhook delivery ignored.", {
@@ -274,6 +283,16 @@ export class LiveConnectionService {
     }, intervalMs)
   }
 
+  private startServerTimeout(timeoutMs: number): void {
+    const socket = this.socket
+    this.clearServerTimeout()
+    this.serverTimeoutTimer = this.setTimer(() => {
+      this.serverTimeoutTimer = null
+      if (socket && this.socket !== socket) return
+      this.handleServerTimeout(socket)
+    }, timeoutMs)
+  }
+
   private async sendHello(socket: LiveSocket, clientInstanceId: string): Promise<void> {
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await liveProtocolPromise
     if (this.socket !== socket) {
@@ -313,6 +332,7 @@ export class LiveConnectionService {
 
     this.socket = null
     this.clearHeartbeat()
+    this.clearServerTimeout()
     const delay = this.reconnectDelay(this.reconnectAttempt)
     this.reconnectAttempt += 1
     this.setState({
@@ -338,11 +358,29 @@ export class LiveConnectionService {
       this.reconnectTimer = null
     }
     this.clearHeartbeat()
+    this.clearServerTimeout()
     if (this.socket) {
       const socket = this.socket
       this.socket = null
       socket.close(1000, reason)
     }
+  }
+
+  private handleServerTimeout(socket: LiveSocket | null): void {
+    if (this.closedIntentionally || this.state.status === "unauthenticated") {
+      return
+    }
+    if (socket && this.socket !== socket) {
+      return
+    }
+
+    const currentSocket = this.socket
+    this.socket = null
+    this.clearHeartbeat()
+    if (currentSocket) {
+      currentSocket.close(1000, "heartbeat_timeout")
+    }
+    this.scheduleReconnect("连接超时")
   }
 
   private refreshAfterAuthFailure(): void {
@@ -406,6 +444,13 @@ export class LiveConnectionService {
     if (this.heartbeatTimer) {
       this.clearTimer(this.heartbeatTimer)
       this.heartbeatTimer = null
+    }
+  }
+
+  private clearServerTimeout(): void {
+    if (this.serverTimeoutTimer) {
+      this.clearTimer(this.serverTimeoutTimer)
+      this.serverTimeoutTimer = null
     }
   }
 

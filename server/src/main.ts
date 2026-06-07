@@ -8,6 +8,7 @@ import { AppModule } from "./app.module"
 import { AllExceptionsFilter } from "./common/all-exceptions.filter"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
+import { registerLiveShutdownSignalHandlers } from "./live/live-shutdown-signals"
 
 async function bootstrap(): Promise<void> {
   const env = loadEnv(process.env)
@@ -29,7 +30,9 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   })
   app.enableShutdownHooks()
-  app.get(LiveDesktopGateway).attach(app.getHttpServer())
+  const liveDesktopGateway = app.get(LiveDesktopGateway)
+  registerLiveShutdownSignalHandlers(liveDesktopGateway)
+  liveDesktopGateway.attach(app.getHttpServer())
   await app.listen(env.port)
 }
 

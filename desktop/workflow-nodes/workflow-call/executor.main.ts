@@ -1,4 +1,5 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult, WorkflowCallStackEntry } from "../types"
+import type { WorkflowRunResult } from "../../src/types/workflow"
 import { createMainLogger } from "../../electron/services/log-store"
 import { workflowNodeLogContext } from "../log-context"
 import { buildWorkflowCallParams } from "./params"
@@ -81,11 +82,19 @@ export const workflowCallNodeExecutor: NodeExecutor<WorkflowCallNodeConfig> = {
       return { status: "cancelled", output: "", outputs, error: "子工作流已取消", durationMs }
     }
     if (childRun.result.status === "failed") {
-      return { status: "failed", output: childRun.result.output ?? "", outputs, error: "子工作流执行失败", durationMs }
+      return { status: "failed", output: childRun.result.output ?? "", outputs, error: childFailureMessage(childRun.result), durationMs }
     }
 
     return { status: "success", output: childRun.result.output ?? "", outputs, durationMs }
   },
+}
+
+function childFailureMessage(result: WorkflowRunResult): string {
+  const failedNodeError = Object.values(result.nodeResults)
+    .find((nodeResult) => nodeResult.status === "failed" && typeof nodeResult.error === "string" && nodeResult.error.trim().length > 0)
+    ?.error
+    ?.trim()
+  return failedNodeError ? `子工作流执行失败：${failedNodeError}` : "子工作流执行失败"
 }
 
 function normalizeCallStack(context: NodeExecutionInput<WorkflowCallNodeConfig>["context"]): readonly WorkflowCallStackEntry[] {

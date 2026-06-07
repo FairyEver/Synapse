@@ -96,9 +96,13 @@ async function atomicMutate(
   return withWorkflowMutationLock(deps, workflowId, async () => {
     const def = await deps.workflowService.get(workflowId)
     if (!def) throw new Error(`Workflow not found: ${workflowId}`)
-    mutate(def)
-    const validation = validateWorkflow(def)
-    const saveResult = await deps.workflowService.save(def)
+    const draft = structuredClone(def) as WorkflowDefinition
+    mutate(draft)
+    const validation = validateWorkflow(draft)
+    if (!validation.valid) {
+      throw new Error(`Save failed: ${validation.errors.map((e) => e.message).join("; ")}`)
+    }
+    const saveResult = await deps.workflowService.save(draft)
     if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
     emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", (saveResult as WorkflowSaveResult).versionHash)
     return { ok: true, data: { versionHash: (saveResult as WorkflowSaveResult).versionHash, validation } }
