@@ -15,7 +15,7 @@ vi.mock("../log-store", () => ({
   createMainLogger: () => logger,
 }))
 
-import { DataRepositoryImpl, JsonNamespace, workflowsSchema } from "../../runtime/data-repo"
+import { DataRepositoryImpl, JsonNamespace, workflowsSchema, type WorkflowEntryV1 } from "../../runtime/data-repo"
 import { WorkflowService } from "../workflow/workflow-service"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import "../../../workflow-nodes/register.main"
@@ -83,6 +83,27 @@ describe("WorkflowService", () => {
     const { svc } = createRepo()
     const list = await svc.list()
     expect(list).toEqual([])
+  })
+  it("lists recently updated or created workflows first", async () => {
+    const { repo, svc } = createRepo()
+    const workflows = repo.namespace<WorkflowEntryV1>("workflows")
+    const base = makeDef()
+    const olderUpdated = { ...base, id: "wf-old-edit", name: "Older edit", createdAt: 100, updatedAt: 200 }
+    const latestCreated = { ...base, id: "wf-latest-create", name: "Latest create", createdAt: 300, updatedAt: 300 }
+    const latestUpdated = { ...base, id: "wf-latest-edit", name: "Latest edit", createdAt: 50, updatedAt: 500 }
+    const newerCreatedSameUpdate = { ...base, id: "wf-tie-newer-create", name: "Tie newer create", createdAt: 400, updatedAt: 300 }
+
+    await workflows.upsert({ ...olderUpdated, schemaVersion: 1 })
+    await workflows.upsert({ ...latestCreated, schemaVersion: 1 })
+    await workflows.upsert({ ...latestUpdated, schemaVersion: 1 })
+    await workflows.upsert({ ...newerCreatedSameUpdate, schemaVersion: 1 })
+
+    expect((await svc.list()).map((workflow) => workflow.id)).toEqual([
+      "wf-latest-edit",
+      "wf-tie-newer-create",
+      "wf-latest-create",
+      "wf-old-edit",
+    ])
   })
   it("returns null for missing workflow", async () => {
     const { svc } = createRepo()
