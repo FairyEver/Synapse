@@ -200,6 +200,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.config",
       "core.event-bus",
       "core.task-scheduler",
+      "core.automation",
       "core.action-runtime",
       "core.workflow",
       "core.workflow.snapshots",
@@ -246,6 +247,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.action-runtime")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.action-runtime")).toBeLessThan(idx("core.database"))
     expect(idx("core.task-scheduler")).toBeLessThan(idx("core.database"))
+    expect(idx("core.automation")).toBeLessThan(idx("core.database"))
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.project-containers"))

@@ -31,6 +31,7 @@ import { randomUUID } from "node:crypto"
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
+import { createAutomationCapabilityDispatcher } from "../capabilities/automation-dispatcher"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
 import { createRepositoryCapabilityDispatcher } from "../capabilities/repository-dispatcher"
@@ -418,6 +419,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.config",
     "core.event-bus",
     "core.task-scheduler",
+    "core.automation",
     "core.action-runtime",
     "core.workflow",
     "core.workflow.snapshots",
@@ -431,6 +433,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
     const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
+    const automation = ctx.registry.get<AutomationService>("core.automation")
     const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
 
     const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
@@ -527,8 +530,16 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       auditSink,
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
+    const automationDispatcher = createAutomationCapabilityDispatcher({
+      service: automation,
+      triggers: createBuiltinAutomationTriggerRegistry(),
+      actions: actionRuntime,
+      permissionGuard,
+      auditSink,
+    })
 
     const actionRouter = createSynapseActionRouter({
+      automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
