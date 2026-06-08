@@ -60,14 +60,14 @@ function AutomationList({
 
   return (
     <div className="rounded-lg border bg-background">
-      <Table className="min-w-[52rem] table-fixed">
+      <Table className="table-fixed">
         <colgroup>
           <col className="w-auto" />
           <col className="w-24" />
-          <col className="w-40" />
+          <col className="w-36" />
+          <col className="w-24" />
+          <col className="w-16" />
           <col className="w-28" />
-          <col className="w-20" />
-          <col className="w-32" />
         </colgroup>
         <TableHeader>
           <TableRow className="hover:bg-transparent">

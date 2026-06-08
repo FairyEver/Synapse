@@ -8,10 +8,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { AutomationItem } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
 import {
-  formatAutomationExecutor,
+  formatAutomationExecutorType,
   formatAutomationNextRun,
   formatAutomationScope,
-  formatAutomationTrigger,
+  formatAutomationTriggerType,
 } from "../utils"
 
 type AutomationListRowProps = {
@@ -55,8 +55,9 @@ function AutomationListRow({
   const needsUpdate = item.validation?.status === "needs_update"
   const disabled = !item.enabled
   const badge = getStatusBadge(item)
-  const triggerSummary = formatAutomationTrigger(item)
-  const executorSummary = formatAutomationExecutor(item)
+  const triggerType = formatAutomationTriggerType(item)
+  const executorType = formatAutomationExecutorType(item)
+  const subtitle = `触发器 ${triggerType} · 执行器 ${executorType}`
   const stopDisabled = activeRunning && !item.activeRun?.id
 
   return (
@@ -78,8 +79,8 @@ function AutomationListRow({
           >
             <span className="truncate">{item.name}</span>
           </Button>
-          <div className="truncate text-xs text-muted-foreground" title={`${triggerSummary} · ${executorSummary}`}>
-            {triggerSummary} · {executorSummary}
+          <div className="truncate text-xs text-muted-foreground" title={subtitle}>
+            {subtitle}
           </div>
         </div>
       </TableCell>

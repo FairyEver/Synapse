@@ -145,6 +145,20 @@ function formatAutomationTrigger(item: Pick<AutomationItem, "trigger">): string 
   }
 }
 
+function formatAutomationTriggerType(item: Pick<AutomationItem, "trigger">): string {
+  try {
+    return rendererAutomationTriggerRegistry.get(item.trigger.type).manifest.title
+  } catch (error) {
+    logger.warn("Automation trigger type title render failed.", {
+      boundary: "automation.trigger-type-title",
+      triggerType: item.trigger.type,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: error instanceof Error ? error.message.length : String(error).length,
+    })
+    return item.trigger.type
+  }
+}
+
 function formatAutomationNextRun(item: Pick<AutomationItem, "activeRun" | "enabled" | "nextRunAt" | "trigger">, now = new Date()): string {
   if (!item.enabled) return "停用中"
   if (isCompletionAnchoredInterval(item) && item.activeRun?.status === "running") return "未知"
@@ -164,6 +178,21 @@ function formatAutomationExecutor(item: AutomationItem): string {
       automationId: item.id,
       executorType: item.executor.type,
       configKeys: Object.keys(item.executor.config).sort(),
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: error instanceof Error ? error.message.length : String(error).length,
+    })
+    return item.executor.type
+  }
+}
+
+function formatAutomationExecutorType(item: Pick<AutomationItem, "id" | "executor">): string {
+  try {
+    return rendererActionRegistry.get(item.executor.type).manifest.title
+  } catch (error) {
+    logger.warn("Automation executor type title render failed.", {
+      boundary: "automation.executor-type-title",
+      automationId: item.id,
+      executorType: item.executor.type,
       errorName: error instanceof Error ? error.name : typeof error,
       errorLength: error instanceof Error ? error.message.length : String(error).length,
     })
@@ -219,9 +248,11 @@ export {
   generateAutomationDraftName,
   formatAutomationDate,
   formatAutomationExecutor,
+  formatAutomationExecutorType,
   formatAutomationNextRun,
   formatAutomationRunStatus,
   formatAutomationScope,
   formatAutomationStatus,
   formatAutomationTrigger,
+  formatAutomationTriggerType,
 }

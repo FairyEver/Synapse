@@ -264,34 +264,30 @@ function AutomationModule() {
     if (loading) {
       return (
         <div className="rounded-lg border bg-background">
-          <div className="overflow-x-auto">
-            <div className="min-w-[52rem]">
-              <div className="grid grid-cols-[minmax(18rem,1fr)_5rem_9rem_7rem_4rem_8rem] gap-3 border-b px-3 py-2 text-sm">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-10" />
-                <Skeleton className="h-4 w-16 justify-self-end" />
-                <Skeleton className="h-4 w-12 justify-self-end" />
-                <Skeleton className="h-4 w-10 justify-self-end" />
-                <Skeleton className="h-4 w-12 justify-self-end" />
-              </div>
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="grid grid-cols-[minmax(18rem,1fr)_5rem_9rem_7rem_4rem_8rem] items-center gap-3 border-b px-3 py-3 last:border-b-0"
-                >
-                  <div className="min-w-0 space-y-2">
-                    <Skeleton className="h-4 w-48 max-w-full" />
-                    <Skeleton className="h-3 w-72 max-w-full" />
-                  </div>
-                  <Skeleton className="h-5 w-14" />
-                  <Skeleton className="h-4 w-28 justify-self-end" />
-                  <Skeleton className="h-4 w-16 justify-self-end" />
-                  <Skeleton className="h-5 w-9 justify-self-end" />
-                  <Skeleton className="h-8 w-24 justify-self-end" />
-                </div>
-              ))}
-            </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_6rem_9rem_6rem_4rem_7rem] gap-3 border-b px-3 py-2 text-sm">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-10" />
+            <Skeleton className="h-4 w-16 justify-self-end" />
+            <Skeleton className="h-4 w-12 justify-self-end" />
+            <Skeleton className="h-4 w-10 justify-self-end" />
+            <Skeleton className="h-4 w-12 justify-self-end" />
           </div>
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-[minmax(0,1fr)_6rem_9rem_6rem_4rem_7rem] items-center gap-3 border-b px-3 py-3 last:border-b-0"
+            >
+              <div className="min-w-0 flex flex-col gap-2">
+                <Skeleton className="h-4 w-48 max-w-full" />
+                <Skeleton className="h-3 w-56 max-w-full" />
+              </div>
+              <Skeleton className="h-5 w-14" />
+              <Skeleton className="h-4 w-24 justify-self-end" />
+              <Skeleton className="h-4 w-16 justify-self-end" />
+              <Skeleton className="h-5 w-9 justify-self-end" />
+              <Skeleton className="h-8 w-20 justify-self-end" />
+            </div>
+          ))}
         </div>
       )
     }

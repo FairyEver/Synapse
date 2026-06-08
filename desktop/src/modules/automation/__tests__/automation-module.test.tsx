@@ -128,7 +128,7 @@ describe("AutomationModule", () => {
     expect(html).toContain("暂无自动化")
   })
 
-  it("renders automation names and trigger info in list rows", () => {
+  it("renders automation names and trigger and executor types in list rows", () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem({ name: "日报自动化" })],
       loading: false,
@@ -139,9 +139,25 @@ describe("AutomationModule", () => {
     const html = renderToStaticMarkup(<AutomationModule />)
 
     expect(html).toContain("日报自动化")
-    expect(html).toContain("每 10 分钟")
+    expect(html).toContain("触发器 固定间隔")
+    expect(html).toContain("执行器 命令")
+    expect(html).not.toContain("每 10 分钟")
+    expect(html).not.toContain("echo ok")
     expect(html).toContain('data-slot="table"')
     expect(html).toContain("下次运行")
+  })
+
+  it("does not force a horizontal minimum width for the automation list", () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem()],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const html = renderToStaticMarkup(<AutomationModule />)
+
+    expect(html).not.toContain("min-w-[52rem]")
   })
 
   it("renders automation rows as compact table rows", () => {
