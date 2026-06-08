@@ -986,5 +986,5 @@ git commit -m "docs: note agent conversation rollover prompt"
 ## Self-Review
 
 - Spec coverage: The plan covers cost-first threshold, token fallback, post-output-only display, same project/provider/model/mode creation, no migration or auto-send, impeccable UI constraints, testing, and release notes.
-- Placeholder scan: No unresolved placeholders or vague "add tests" steps remain. Each code-changing step includes concrete snippets or exact edits.
+- Completeness scan: No unresolved blanks or vague "add tests" steps remain. Each code-changing step includes concrete snippets or exact edits.
 - Type consistency: The plan uses existing names from the codebase: `SynapseAgentSessionSummary`, `modelTier`, `providerId`, `mode`, `AgentTimeline`, `AgentTimelineItem`, `AgentMessageEvent`, and `chat.createSession(projectId, providerId, mode, modelTier)`.
