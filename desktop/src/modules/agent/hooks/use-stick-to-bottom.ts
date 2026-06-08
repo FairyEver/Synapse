@@ -37,6 +37,10 @@ function isViewportPinned(viewport: HTMLElement): boolean {
   })
 }
 
+function isViewportScrollable(viewport: HTMLElement): boolean {
+  return viewport.scrollHeight > viewport.clientHeight
+}
+
 export function isLatestEntryNew(input: {
   previousId: string | undefined
   latestId: string | undefined
@@ -171,6 +175,7 @@ export function useStickToBottom(input: {
       if (
         event.deltaY !== 0
         && isEventInsideViewport(event, viewport)
+        && isViewportScrollable(viewport)
         && (event.deltaY < 0 || !isViewportPinned(viewport))
       ) {
         pauseFollowing()
@@ -184,13 +189,19 @@ export function useStickToBottom(input: {
     const onTouchMove = (event: TouchEvent) => {
       const nextY = event.touches[0]?.clientY
       const previousY = lastTouchYRef.current
-      if (typeof nextY === "number" && typeof previousY === "number" && nextY !== previousY) {
+      if (
+        typeof nextY === "number"
+        && typeof previousY === "number"
+        && nextY !== previousY
+        && isViewportScrollable(viewport)
+      ) {
         pauseFollowing()
       }
       lastTouchYRef.current = typeof nextY === "number" ? nextY : null
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!isViewportScrollable(viewport)) return
       const scrollsUp =
         event.key === "ArrowUp"
         || event.key === "PageUp"

@@ -165,6 +165,32 @@ describe("useStickToBottom", () => {
     expect(controls.current?.hasUnread).toBe(false)
   })
 
+  it("keeps following when wheel input occurs in a non-scrollable empty viewport", async () => {
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "empty",
+      latestEntryId: undefined,
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    setScrollMetrics(viewport, { scrollTop: 0, scrollHeight: 500, clientHeight: 600 })
+
+    await act(async () => {
+      viewport?.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }))
+    })
+
+    expect(controls.current?.isPinned).toBe(true)
+
+    setScrollMetrics(viewport, { scrollTop: 0, scrollHeight: 2000, clientHeight: 600 })
+    scrollTo.mockClear()
+
+    await act(async () => {
+      rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
+    })
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(controls.current?.hasUnread).toBe(false)
+  })
+
   it("pauses following when user input leaves the viewport off bottom even if wheel direction is unreliable", async () => {
     const { controls, rerender, scrollTo } = await renderStickHarness({
       signal: "message:assistant:4",
