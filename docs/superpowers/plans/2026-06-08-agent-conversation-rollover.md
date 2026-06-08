@@ -138,7 +138,7 @@ describe("conversation rollover threshold", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/utils/__tests__/conversation-rollover.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/utils/__tests__/conversation-rollover.test.ts
 ```
 
 Expected: FAIL because `../conversation-rollover` does not exist.
@@ -210,7 +210,7 @@ export type { ConversationRolloverMetadata }
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/utils/__tests__/conversation-rollover.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/utils/__tests__/conversation-rollover.test.ts
 ```
 
 Expected: PASS.
@@ -337,7 +337,7 @@ describe("AgentConversationRolloverPrompt", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/components/__tests__/agent-conversation-rollover-prompt.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-conversation-rollover-prompt.test.tsx
 ```
 
 Expected: FAIL because `../agent-conversation-rollover-prompt` does not exist.
@@ -388,7 +388,7 @@ export type { AgentConversationRolloverPromptProps }
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/components/__tests__/agent-conversation-rollover-prompt.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-conversation-rollover-prompt.test.tsx
 ```
 
 Expected: PASS.
@@ -526,7 +526,7 @@ Append these tests inside the existing `describe("AgentTimeline", () => { ... })
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/components/__tests__/agent-timeline.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-timeline.test.tsx
 ```
 
 Expected: FAIL because `AgentTimeline` has no `onStartNewConversation` prop and does not render the prompt.
@@ -765,7 +765,7 @@ function conversationRolloverPromptMessageId({
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/components/__tests__/agent-timeline.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/components/__tests__/agent-timeline.test.tsx
 ```
 
 Expected: PASS.
@@ -833,7 +833,7 @@ Add this test near the existing `creates an Agent session with an explicit permi
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx --testNamePattern "provider mode and model tier"
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx --testNamePattern "provider mode and model tier"
 ```
 
 Expected: PASS if the existing hook already forwards model tier. If it fails, update `desktop/src/modules/agent/hooks/use-chat-connection.ts` so `createSession` includes the supplied `modelTier` in `bridge.agent.createSession`.
@@ -892,7 +892,7 @@ This keeps the touched code path consistent with the new rollover behavior and a
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx --testNamePattern "model tier|explicit permission mode"
+pnpm --filter @synapse/desktop exec vitest run src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx --testNamePattern "model tier|explicit permission mode"
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -928,10 +928,10 @@ Run:
 
 ```bash
 pnpm --filter @synapse/desktop exec vitest run \
-  desktop/src/modules/agent/utils/__tests__/conversation-rollover.test.ts \
-  desktop/src/modules/agent/components/__tests__/agent-conversation-rollover-prompt.test.tsx \
-  desktop/src/modules/agent/components/__tests__/agent-timeline.test.tsx \
-  desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx
+  src/modules/agent/utils/__tests__/conversation-rollover.test.ts \
+  src/modules/agent/components/__tests__/agent-conversation-rollover-prompt.test.tsx \
+  src/modules/agent/components/__tests__/agent-timeline.test.tsx \
+  src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx
 ```
 
 Expected: PASS.
