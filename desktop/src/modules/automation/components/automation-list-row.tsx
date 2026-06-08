@@ -2,14 +2,8 @@ import { History, Loader2, Play, Square, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemTitle,
-} from "@/components/ui/item"
 import { Switch } from "@/components/ui/switch"
+import { TableCell, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { AutomationItem } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -66,37 +60,42 @@ function AutomationListRow({
   const stopDisabled = activeRunning && !item.activeRun?.id
 
   return (
-    <Item
-      size="sm"
-      className="grid cursor-pointer grid-cols-[minmax(0,1fr)_9rem_7rem_4rem_auto] items-center gap-3 bg-card"
-      tabIndex={0}
-      role="button"
+    <TableRow
+      className="cursor-pointer"
       onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return
-        if (event.key !== "Enter" && event.key !== " ") return
-        event.preventDefault()
-        onOpen()
-      }}
     >
-      <ItemContent className="min-w-0">
-        <ItemTitle className="w-full min-w-0">
-          <span className="min-w-0 truncate">{item.name}</span>
-          <Badge variant={badge.variant}>{badge.label}</Badge>
-        </ItemTitle>
-        <ItemDescription className="truncate">
-          {triggerSummary} · {executorSummary}
-        </ItemDescription>
-      </ItemContent>
-      <span className="justify-self-end truncate text-right text-sm text-muted-foreground">
+      <TableCell className="min-w-0">
+        <div className="min-w-0">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto min-w-0 max-w-full justify-start px-0 py-0 font-medium hover:bg-transparent"
+            title={item.name}
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpen()
+            }}
+          >
+            <span className="truncate">{item.name}</span>
+          </Button>
+          <div className="truncate text-muted-foreground" title={`${triggerSummary} · ${executorSummary}`}>
+            {triggerSummary} · {executorSummary}
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Badge variant={badge.variant}>{badge.label}</Badge>
+      </TableCell>
+      <TableCell className="truncate text-right tabular-nums text-muted-foreground">
         {formatAutomationNextRun(item)}
-      </span>
-      <span className="justify-self-end truncate text-right text-sm text-muted-foreground">
+      </TableCell>
+      <TableCell className="truncate text-right text-muted-foreground">
         {formatAutomationScope(item, projects)}
-      </span>
-      <div
-        className="flex justify-end"
+      </TableCell>
+      <TableCell
+        className="text-right"
         onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
       >
         <Switch
           size="sm"
@@ -107,85 +106,87 @@ function AutomationListRow({
             : item.enabled ? `停用自动化 ${item.name}` : `启用自动化 ${item.name}`}
           onCheckedChange={onToggleEnabled}
         />
-      </div>
-      <ItemActions className="w-32 justify-end gap-1">
-        {activeRunning ? (
+      </TableCell>
+      <TableCell className="text-right">
+        <div
+          className="flex items-center justify-end gap-1"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {activeRunning ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled={stopDisabled}
+                  aria-label="停止运行"
+                  onClick={() => {
+                    onStop()
+                  }}
+                >
+                  <Square />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>停止</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled={disabled || pending || running}
+                  aria-label="运行自动化"
+                  onClick={() => {
+                    onRun()
+                  }}
+                >
+                  {running ? <Loader2 className="animate-spin" /> : <Play />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>运行</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                disabled={stopDisabled}
-                aria-label="停止运行"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onStop()
+                disabled={pending}
+                aria-label="查看运行历史"
+                onClick={() => {
+                  onHistory()
                 }}
               >
-                <Square />
+                <History />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>停止</TooltipContent>
+            <TooltipContent>历史</TooltipContent>
           </Tooltip>
-        ) : (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                disabled={disabled || pending || running}
-                aria-label="运行自动化"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onRun()
+                disabled={pending || activeRunning}
+                aria-label={activeRunning ? "运行中不能删除" : "删除自动化"}
+                onClick={() => {
+                  onDelete()
                 }}
               >
-                {running ? <Loader2 className="animate-spin" /> : <Play />}
+                <Trash2 />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>运行</TooltipContent>
+            <TooltipContent>{activeRunning ? "先停止运行" : "删除"}</TooltipContent>
           </Tooltip>
-        )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              disabled={pending}
-              aria-label="查看运行历史"
-              onClick={(event) => {
-                event.stopPropagation()
-                onHistory()
-              }}
-            >
-              <History />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>历史</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              disabled={pending || activeRunning}
-              aria-label={activeRunning ? "运行中不能删除" : "删除自动化"}
-              onClick={(event) => {
-                event.stopPropagation()
-                onDelete()
-              }}
-            >
-              <Trash2 />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{activeRunning ? "先停止运行" : "删除"}</TooltipContent>
-        </Tooltip>
-      </ItemActions>
-    </Item>
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }
 

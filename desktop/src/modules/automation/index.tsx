@@ -1,11 +1,12 @@
 import { useState } from "react"
-import { LoaderCircle, Plus, RefreshCw } from "lucide-react"
+import { AlertCircle, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
+import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import type { AutomationItem, AutomationRun } from "@/types/automation"
@@ -261,21 +263,54 @@ function AutomationModule() {
   const content = (() => {
     if (loading) {
       return (
-        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          <LoaderCircle className="mr-2 size-4 animate-spin" />
-          加载中
+        <div className="rounded-lg border bg-background">
+          <div className="overflow-x-auto">
+            <div className="min-w-[52rem]">
+              <div className="grid grid-cols-[minmax(18rem,1fr)_5rem_9rem_7rem_4rem_8rem] gap-3 border-b px-3 py-2 text-sm">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-10" />
+                <Skeleton className="h-4 w-16 justify-self-end" />
+                <Skeleton className="h-4 w-12 justify-self-end" />
+                <Skeleton className="h-4 w-10 justify-self-end" />
+                <Skeleton className="h-4 w-12 justify-self-end" />
+              </div>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-[minmax(18rem,1fr)_5rem_9rem_7rem_4rem_8rem] items-center gap-3 border-b px-3 py-3 last:border-b-0"
+                >
+                  <div className="min-w-0 space-y-2">
+                    <Skeleton className="h-4 w-48 max-w-full" />
+                    <Skeleton className="h-3 w-72 max-w-full" />
+                  </div>
+                  <Skeleton className="h-5 w-14" />
+                  <Skeleton className="h-4 w-28 justify-self-end" />
+                  <Skeleton className="h-4 w-16 justify-self-end" />
+                  <Skeleton className="h-5 w-9 justify-self-end" />
+                  <Skeleton className="h-8 w-24 justify-self-end" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )
     }
     if (error) {
       return (
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-          <p>{error}</p>
-          <Button size="sm" variant="outline" onClick={() => { void refresh() }}>
-            <RefreshCw />
-            重试
-          </Button>
-        </div>
+        <Empty className="min-h-64 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <AlertCircle />
+            </EmptyMedia>
+            <EmptyTitle>{error}</EmptyTitle>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button size="sm" variant="outline" onClick={() => { void refresh() }}>
+              <RefreshCw data-icon="inline-start" />
+              重试
+            </Button>
+          </EmptyContent>
+        </Empty>
       )
     }
     return (
@@ -299,7 +334,7 @@ function AutomationModule() {
   return (
     <TooltipProvider>
       <div className="flex h-full min-h-0 flex-col bg-surface">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
           <h2 className="text-sm font-semibold">自动化</h2>
           <div className="flex items-center gap-2">
             <Tooltip>
@@ -324,7 +359,7 @@ function AutomationModule() {
         </div>
 
         <ScrollArea className="min-h-0 flex-1">
-          <div className="min-h-full px-2 pb-2 pt-0">{content}</div>
+          <div className="min-h-full px-3 py-3">{content}</div>
         </ScrollArea>
 
         <AutomationRunsDialog

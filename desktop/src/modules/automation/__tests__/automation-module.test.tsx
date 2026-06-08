@@ -140,32 +140,35 @@ describe("AutomationModule", () => {
 
     expect(html).toContain("日报自动化")
     expect(html).toContain("每 10 分钟")
-    expect(html).toContain('data-slot="item"')
+    expect(html).toContain('data-slot="table"')
+    expect(html).toContain("下次运行")
   })
 
-  it("keeps automation rows from changing background on hover", () => {
+  it("renders automation rows as compact table rows", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
-        <AutomationListRow
-          item={createItem()}
-          projects={[]}
-          pending={false}
-          running={false}
-          onOpen={vi.fn()}
-          onRun={vi.fn()}
-          onStop={vi.fn()}
-          onToggleEnabled={vi.fn()}
-          onHistory={vi.fn()}
-          onDelete={vi.fn()}
-        />
+        <table>
+          <tbody>
+            <AutomationListRow
+              item={createItem()}
+              projects={[]}
+              pending={false}
+              running={false}
+              onOpen={vi.fn()}
+              onRun={vi.fn()}
+              onStop={vi.fn()}
+              onToggleEnabled={vi.fn()}
+              onHistory={vi.fn()}
+              onDelete={vi.fn()}
+            />
+          </tbody>
+        </table>
       </TooltipProvider>,
     )
 
-    const itemClass = html.match(/data-slot="item"[^>]*class="([^"]*)"/)?.[1] ?? ""
-    const rowHoverBackgroundClass = itemClass
-      .split(/\s+/)
-      .find((className) => className.startsWith("hover:bg-"))
-    expect(rowHoverBackgroundClass).toBeUndefined()
+    expect(html).toContain('data-slot="table-row"')
+    expect(html).toContain('data-slot="table-cell"')
+    expect(html).toContain("已启用")
   })
 
   it("uses the workflow-style scroll container", () => {
@@ -275,7 +278,7 @@ describe("AutomationModule", () => {
       root.render(<AutomationModule />)
     })
     await act(async () => {
-      document.querySelector<HTMLElement>('[data-slot="item"]')?.click()
+      document.querySelector<HTMLElement>('tbody tr[data-slot="table-row"]')?.click()
     })
 
     expect(mocks.openEditorWindow).toHaveBeenCalledWith("automation:1")
@@ -347,18 +350,22 @@ describe("AutomationModule", () => {
     await act(async () => {
       root.render(
         <TooltipProvider>
-          <AutomationListRow
-            item={createItem({ activeRun: { status: "running", id: "run-1" } })}
-            projects={[]}
-            pending={false}
-            running={false}
-            onOpen={vi.fn()}
-            onRun={vi.fn()}
-            onStop={vi.fn()}
-            onToggleEnabled={vi.fn()}
-            onHistory={vi.fn()}
-            onDelete={vi.fn()}
-          />
+          <table>
+            <tbody>
+              <AutomationListRow
+                item={createItem({ activeRun: { status: "running", id: "run-1" } })}
+                projects={[]}
+                pending={false}
+                running={false}
+                onOpen={vi.fn()}
+                onRun={vi.fn()}
+                onStop={vi.fn()}
+                onToggleEnabled={vi.fn()}
+                onHistory={vi.fn()}
+                onDelete={vi.fn()}
+              />
+            </tbody>
+          </table>
         </TooltipProvider>,
       )
     })

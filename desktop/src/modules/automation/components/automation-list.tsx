@@ -1,6 +1,14 @@
 import { Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import type { AutomationItem } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
 import { AutomationListRow } from "./automation-list-row"
@@ -36,33 +44,59 @@ function AutomationList({
 }: AutomationListProps) {
   if (items.length === 0) {
     return (
-      <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center">
-        <p className="text-sm text-muted-foreground">暂无自动化</p>
-        <Button size="sm" variant="outline" disabled={createDisabled} onClick={onCreateNew}>
-          <Plus data-icon="inline-start" />
-          新建
-        </Button>
-      </div>
+      <Empty className="min-h-64 border">
+        <EmptyHeader>
+          <EmptyTitle>暂无自动化</EmptyTitle>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button size="sm" variant="outline" disabled={createDisabled} onClick={onCreateNew}>
+            <Plus data-icon="inline-start" />
+            新建
+          </Button>
+        </EmptyContent>
+      </Empty>
     )
   }
 
   return (
-    <div className="grid gap-2">
-      {items.map((item) => (
-        <AutomationListRow
-          key={item.id}
-          item={item}
-          projects={projects}
-          pending={pendingItemIds.has(item.id)}
-          running={runningItemIds.has(item.id)}
-          onOpen={() => onOpen(item)}
-          onRun={() => onRun(item)}
-          onStop={() => onStop(item)}
-          onToggleEnabled={(enabled) => onToggleEnabled(item, enabled)}
-          onHistory={() => onHistory(item)}
-          onDelete={() => onDelete(item)}
-        />
-      ))}
+    <div className="rounded-lg border bg-background">
+      <Table className="min-w-[52rem] table-fixed">
+        <colgroup>
+          <col className="w-auto" />
+          <col className="w-24" />
+          <col className="w-40" />
+          <col className="w-28" />
+          <col className="w-20" />
+          <col className="w-32" />
+        </colgroup>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead>自动化</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead className="text-right">下次运行</TableHead>
+            <TableHead className="text-right">范围</TableHead>
+            <TableHead className="text-right">启用</TableHead>
+            <TableHead className="text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => (
+            <AutomationListRow
+              key={item.id}
+              item={item}
+              projects={projects}
+              pending={pendingItemIds.has(item.id)}
+              running={runningItemIds.has(item.id)}
+              onOpen={() => onOpen(item)}
+              onRun={() => onRun(item)}
+              onStop={() => onStop(item)}
+              onToggleEnabled={(enabled) => onToggleEnabled(item, enabled)}
+              onHistory={() => onHistory(item)}
+              onDelete={() => onDelete(item)}
+            />
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
