@@ -1,4 +1,4 @@
-const CONVERSATION_IDLE_ROLLOVER_PROMPT_MS = 60 * 60 * 1000
+import { CONVERSATION_IDLE_ROLLOVER_PROMPT_MS } from "../../../../config"
 
 type ConversationActivityTimestampItem = {
   readonly timestamp?: string

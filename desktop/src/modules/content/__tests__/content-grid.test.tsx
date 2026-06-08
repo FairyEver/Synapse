@@ -42,6 +42,16 @@ vi.mock("@/modules/content/contexts/install-status-context", () => ({
       }]
     }
 
+    if (contentId === "project-stale-skill") {
+      return [{
+        editorId: "codex",
+        projectName: "Project",
+        projectPath: "/project",
+        scope: "project",
+        status: "needs_update",
+      }]
+    }
+
     return []
   },
   useUninstallFromEditor: () => vi.fn(async () => undefined),
@@ -182,6 +192,17 @@ describe("ContentGrid", () => {
     const { container } = await renderGrid([
       createContentItem("skill", {
         id: "current-skill",
+        name: "review",
+      }),
+    ])
+
+    expect(container.textContent).not.toContain("可更新")
+  })
+
+  it("does not show update badge when only project installs are stale", async () => {
+    const { container } = await renderGrid([
+      createContentItem("skill", {
+        id: "project-stale-skill",
         name: "review",
       }),
     ])

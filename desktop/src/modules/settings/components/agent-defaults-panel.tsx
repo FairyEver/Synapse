@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { type ReactNode, useCallback, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import {
   AlertDialog,
@@ -20,14 +20,26 @@ import { ProviderModelSelectDialog } from "@/components/provider-model-select-di
 import { useProviderModelLabel } from "@/lib/provider-model"
 import { AgentPermissionModeMenu } from "@/modules/agent/components/permission-mode-menu"
 import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
-import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { ProviderModelSelection } from "@/types/provider-model"
 
 const logger = createRendererLogger("settings.agent-defaults")
-const DEFAULTS_FIELD_ROW_CLASSNAME = "grid gap-2 md:grid-cols-[12rem_minmax(0,28rem)] md:items-center md:gap-4"
-const DEFAULTS_FIELD_CONTENT_CLASSNAME = "min-w-0 md:max-w-none"
-const DEFAULTS_FIELD_CONTROL_CLASSNAME = "w-full"
+const DEFAULTS_FIELD_ROW_CLASSNAME = "grid gap-2 md:grid-cols-[12rem_minmax(10rem,17rem)] md:items-center md:gap-4"
+
+function AgentDefaultFieldRow({
+  children,
+  label,
+}: {
+  readonly children: ReactNode
+  readonly label: string
+}) {
+  return (
+    <div className={DEFAULTS_FIELD_ROW_CLASSNAME}>
+      <div className="text-sm font-medium">{label}</div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
 
 function AgentDefaultsContent() {
   const { config, updateConfig } = useAppConfig()
@@ -81,12 +93,7 @@ function AgentDefaultsContent() {
   return (
     <>
       <FieldGroup className="gap-3">
-        <SettingsFieldRow
-          className={DEFAULTS_FIELD_ROW_CLASSNAME}
-          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
-          label="默认权限模式"
-          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
-        >
+        <AgentDefaultFieldRow label="默认权限模式">
           <AgentPermissionModeMenu
             selectedMode={selectedMode}
             onSelect={selectPermissionMode}
@@ -102,14 +109,9 @@ function AgentDefaultsContent() {
               </Button>
             )}
           />
-        </SettingsFieldRow>
-        <SettingsFieldRow
-          className={DEFAULTS_FIELD_ROW_CLASSNAME}
-          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
-          label="默认供应商和模型"
-          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
-        >
-          <div className="flex min-w-0 items-center gap-2">
+        </AgentDefaultFieldRow>
+        <AgentDefaultFieldRow label="默认供应商和模型">
+          <div className="flex min-w-0 w-full items-center gap-2">
             <Button
               type="button"
               variant="outline"
@@ -126,7 +128,6 @@ function AgentDefaultsContent() {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 className="shrink-0"
                 aria-label="清除默认供应商"
                 onClick={() => void saveDefaultProviderModel(null)}
@@ -141,7 +142,7 @@ function AgentDefaultsContent() {
             defaultSelection={defaultPM ?? undefined}
             onSelect={(selection) => saveDefaultProviderModel(selection)}
           />
-        </SettingsFieldRow>
+        </AgentDefaultFieldRow>
       </FieldGroup>
       <AlertDialog open={pendingMode !== null} onOpenChange={(open) => {
         if (!open) {

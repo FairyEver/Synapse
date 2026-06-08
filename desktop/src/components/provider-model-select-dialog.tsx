@@ -178,7 +178,7 @@ function ProviderModelSelectDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+      <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>选择供应商 + 模型</DialogTitle>
         </DialogHeader>
@@ -195,8 +195,8 @@ function ProviderModelSelectDialog({
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-8" />
-                    <TableHead className="w-[120px]">名称</TableHead>
+                    <TableHead className="w-6" />
+                    <TableHead className="w-40 pl-1">名称</TableHead>
                     <TableHead>模型</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -223,11 +223,11 @@ function ProviderModelSelectDialog({
                         className="cursor-pointer"
                         onClick={() => handleSelectProvider(provider.id)}
                       >
-                        <TableCell className="pr-0 align-top">
+                        <TableCell className="w-6 py-2 pr-1 pl-2">
                           <RadioGroupItem value={provider.id} />
                         </TableCell>
-                        <TableCell className="min-w-0 align-top">
-                          <span className="truncate font-medium">{provider.name}</span>
+                        <TableCell className="min-w-0 pl-1">
+                          <span className="block truncate font-medium">{provider.name}</span>
                         </TableCell>
                         <TableCell className="min-w-0">
                           <div className="flex flex-col">
@@ -240,7 +240,7 @@ function ProviderModelSelectDialog({
                                   data-tier={tierConfig.tier}
                                   type="button"
                                   className={cn(
-                                    "w-full rounded px-2 py-1 text-left text-sm",
+                                    "w-full truncate rounded px-2 py-1 text-left text-sm",
                                     selected
                                       ? isTierSelected
                                         ? "bg-foreground font-medium text-background"

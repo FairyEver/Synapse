@@ -501,20 +501,20 @@ function ProviderPanelView({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <CardTitle className="text-base">Claude 供应商</CardTitle>
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onImportFile}>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onImportFile}>
             <DownloadIcon data-icon="inline-start" />
             导入文件
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onImport}>
+          <Button type="button" variant="outline" onClick={onImport}>
             <DownloadIcon data-icon="inline-start" />
             从 CCS 导入
           </Button>
-          <Button type="button" size="sm" onClick={onAdd}>
+          <Button type="button" onClick={onAdd}>
             <Plus data-icon="inline-start" />
             新建
           </Button>

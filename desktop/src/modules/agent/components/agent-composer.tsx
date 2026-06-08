@@ -307,11 +307,11 @@ function AgentComposer({
             <ChevronDown />
           </Button>
         ) : null}
-        {showConversationRolloverPrompt && onStartNewConversation ? (
-          <AgentConversationRolloverPrompt onStartNewConversation={onStartNewConversation} />
-        ) : null}
         <AgentComposerInputBox
           multiline={multiline}
+          contextNotice={showConversationRolloverPrompt && onStartNewConversation ? (
+            <AgentConversationRolloverPrompt onStartNewConversation={onStartNewConversation} />
+          ) : null}
           slashMenu={slashMenuOpen ? (
             <AgentSlashMenu
               candidates={visibleSlashCandidates}

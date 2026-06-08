@@ -8,9 +8,8 @@ function AgentConversationRolloverPrompt({
   onStartNewConversation,
 }: AgentConversationRolloverPromptProps) {
   return (
-    <div className="mb-2 flex w-full min-w-0 items-center justify-center gap-1 rounded-lg border border-border bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-      <span>继续当前对话可能按完整上下文计费，您可以</span>
-      {" "}
+    <div className="agent-conversation-rollover-prompt flex min-w-0 flex-wrap items-center justify-center gap-x-1 gap-y-0.5 text-center text-xs text-muted-foreground">
+      <span>已空闲较久，继续对话可能无法命中缓存</span>
       <Button
         type="button"
         variant="link"
@@ -18,7 +17,7 @@ function AgentConversationRolloverPrompt({
         aria-label="新建对话"
         data-track="agent-conversation-idle-new"
         onClick={onStartNewConversation}
-        className="h-auto p-0 text-sm"
+        className="h-auto p-0 text-xs"
       >
         新建对话
       </Button>

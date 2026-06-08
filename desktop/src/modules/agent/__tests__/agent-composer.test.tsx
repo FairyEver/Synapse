@@ -189,7 +189,7 @@ describe("AgentComposer", () => {
     expect(html).not.toContain('aria-label="滚动到底部"')
   })
 
-  it("renders the one-hour context cache reminder above the input box", () => {
+  it("renders the one-hour context cache reminder inside the input box", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
         draft=""
@@ -207,18 +207,27 @@ describe("AgentComposer", () => {
       />,
     )
 
-    const promptIndex = html.indexOf("继续当前对话可能按完整上下文计费")
+    const promptIndex = html.indexOf("已空闲较久，继续对话可能无法命中缓存")
     const inputBoxIndex = html.indexOf("agent-composer-input-box")
+    const noticeIndex = html.indexOf("agent-composer-input-box__notice")
+    const editorIndex = html.indexOf("agent-composer-input-box__editor")
 
     expect(promptIndex).toBeGreaterThan(-1)
-    expect(inputBoxIndex).toBeGreaterThan(promptIndex)
+    expect(inputBoxIndex).toBeGreaterThan(-1)
+    expect(noticeIndex).toBeGreaterThan(inputBoxIndex)
+    expect(editorIndex).toBeGreaterThan(-1)
+    expect(promptIndex).toBeGreaterThan(noticeIndex)
+    expect(editorIndex).toBeGreaterThan(promptIndex)
+    expect(html).toContain("agent-composer-input-box__notice flex min-w-0 justify-center bg-muted/50")
     expect(html).toContain('aria-label="新建对话"')
     expect(html).toContain(">新建对话</button>")
+    expect(html).not.toContain("继续当前对话可能按完整上下文计费")
+    expect(html).not.toContain("继续会按完整上下文计费")
     expect(html).not.toContain("这个对话已经很长")
     expect(html).not.toContain("开始新对话")
   })
 
-  it("keeps the one-hour reminder between the jump button and input box", () => {
+  it("keeps the one-hour reminder after the jump button and within the input box", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
         draft=""
@@ -239,12 +248,12 @@ describe("AgentComposer", () => {
     )
 
     const jumpIndex = html.indexOf("跳到最新消息")
-    const promptIndex = html.indexOf("继续当前对话可能按完整上下文计费")
+    const promptIndex = html.indexOf("已空闲较久，继续对话可能无法命中缓存")
     const inputBoxIndex = html.indexOf("agent-composer-input-box")
 
     expect(jumpIndex).toBeGreaterThan(-1)
-    expect(promptIndex).toBeGreaterThan(jumpIndex)
-    expect(inputBoxIndex).toBeGreaterThan(promptIndex)
+    expect(inputBoxIndex).toBeGreaterThan(jumpIndex)
+    expect(promptIndex).toBeGreaterThan(inputBoxIndex)
   })
 
   it("calls onStartNewConversation from the one-hour reminder link", async () => {

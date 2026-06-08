@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 describe("AgentConversationRolloverPrompt", () => {
-  it("renders concise idle cache copy and the new conversation action", async () => {
+  it("renders a lightweight composer note and the new conversation action", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -37,9 +37,18 @@ describe("AgentConversationRolloverPrompt", () => {
       )
     })
 
-    expect(container.textContent).toContain("继续当前对话可能按完整上下文计费，您可以")
+    const prompt = container.querySelector(".agent-conversation-rollover-prompt")
+    expect(prompt).toBeTruthy()
+    expect(container.textContent).toContain("已空闲较久，继续对话可能无法命中缓存")
     expect(container.textContent).toContain("新建对话")
+    expect(container.textContent).not.toContain("完整上下文计费")
+    expect(container.textContent).not.toContain("您可以")
     expect(container.textContent).not.toContain("这个对话已经很长")
+    expect(prompt?.className).not.toContain("border")
+    expect(prompt?.className).not.toContain("bg-")
+    expect(prompt?.className).not.toContain("rounded")
+    expect(prompt?.className).toContain("text-xs")
+    expect(container.querySelector("button")?.className).toContain("text-xs")
     expect(container.querySelector("button")?.getAttribute("disabled")).toBeNull()
   })
 

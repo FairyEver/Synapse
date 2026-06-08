@@ -6,6 +6,7 @@ type AgentComposerInputBoxProps = {
   readonly trailingActions: ReactNode
   readonly multiline?: boolean
   readonly pendingMessages?: ReactNode
+  readonly contextNotice?: ReactNode
   readonly slashMenu?: ReactNode
 }
 
@@ -15,6 +16,7 @@ function AgentComposerInputBox({
   trailingActions,
   multiline,
   pendingMessages,
+  contextNotice,
   slashMenu,
 }: AgentComposerInputBoxProps) {
   return (
@@ -29,6 +31,11 @@ function AgentComposerInputBox({
         </div>
       ) : null}
       <div className="mx-auto flex min-w-0 max-w-4xl flex-col">
+        {contextNotice ? (
+          <div className="agent-composer-input-box__notice flex min-w-0 justify-center bg-muted/50 px-3 py-1 -mx-2 -mt-2 mb-1 rounded-t-2xl">
+            {contextNotice}
+          </div>
+        ) : null}
         <div className="agent-composer-input-box__editor min-h-0 flex-1">
           {editor}
         </div>

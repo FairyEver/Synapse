@@ -93,7 +93,7 @@ function EditorBadge({
 
 function EditorInstallBadges({ contentId }: { contentId: string }) {
   const entries = useInstallStatus(contentId)
-  const hasUpdate = entries.some((entry) => entry.status === "needs_update")
+  const hasUpdate = entries.some((entry) => entry.scope === "global" && entry.status === "needs_update")
 
   if (entries.length === 0) return null
 
