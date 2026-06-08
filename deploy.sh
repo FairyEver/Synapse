@@ -4,6 +4,8 @@ set -euo pipefail
 
 SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse"
+LOCAL_ENV_FILE="server/.env"
+REMOTE_ENV_FILE="$REMOTE_DIR/server/.env"
 DEFAULT_APP_PUBLIC_URL="https://synapse.d2.pub"
 DEPLOY_ID=$(date +%Y%m%d_%H%M%S)
 NEW_IMAGE_TAG="deploy-${DEPLOY_ID}"
@@ -11,7 +13,7 @@ ROLLBACK_IMAGE_TAG="rollback-${DEPLOY_ID}"
 ONLINE_BACKUP_FILE="$REMOTE_DIR/backups/synapse-online-before-deploy-${DEPLOY_ID}.sql"
 FINAL_BACKUP_FILE="$REMOTE_DIR/backups/synapse-final-before-switch-${DEPLOY_ID}.sql"
 APPLIED_MIGRATIONS_FILE=$(mktemp)
-TOTAL_STEPS=13
+TOTAL_STEPS=14
 TOTAL_START=$(date +%s)
 
 cleanup() {
@@ -62,6 +64,28 @@ ensure_env "APP_PUBLIC_URL" "$DEFAULT_APP_PUBLIC_URL"
 ensure_env "DATABASE_POOL_SIZE" "10"
 
 docker compose --env-file .env config >/dev/null
+REMOTE_SCRIPT
+}
+
+sync_remote_env() {
+  if ! test -f "$LOCAL_ENV_FILE"; then
+    echo "本机 $LOCAL_ENV_FILE 不存在，已停止部署。"
+    echo "请先创建本机 server/.env，或用 cos.sh 单独配置远程 COS 后再部署。"
+    exit 1
+  fi
+
+  local remote_tmp="$REMOTE_ENV_FILE.tmp-${DEPLOY_ID}"
+
+  ssh "$SERVER" "mkdir -p $REMOTE_DIR/server"
+  scp "$LOCAL_ENV_FILE" "$SERVER:$remote_tmp" >/dev/null
+  ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+chmod 600 "$remote_tmp"
+mv "$remote_tmp" "$REMOTE_ENV_FILE"
+cd "$(dirname "$REMOTE_ENV_FILE")"
+docker compose --env-file .env config >/dev/null
+echo ".env synced and validated"
 REMOTE_SCRIPT
 }
 
@@ -365,7 +389,7 @@ REMOTE_SCRIPT
 
 echo ""
 
-# [1/13] 确保远程目录存在
+# [1/14] 确保远程目录存在
 step 1 "确保远程目录存在" \
   ssh "$SERVER" "mkdir -p $REMOTE_DIR"
 
@@ -375,62 +399,70 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   step 2 "同步代码到服务器" \
     sync_remote_code
 
+  # [3/14] 首次部署同步本机环境变量
+  step 3 "同步本机环境变量到服务器" \
+    sync_remote_env
+
   echo ""
-  echo "首次部署，请 SSH 登录服务器运行初始化："
-  echo "  cd $REMOTE_DIR && bash setup.sh"
+  echo "首次部署已同步本机 server/.env，请 SSH 登录服务器启动服务："
+  echo "  cd $REMOTE_DIR/server && docker compose --env-file .env up -d --build"
   exit 0
 fi
 
-# [2/13] 检查并补齐旧环境变量
-step 2 "检查远程环境变量" \
+# [2/14] 同步本机环境变量
+step 2 "同步本机环境变量到服务器" \
+  sync_remote_env
+
+# [3/14] 检查并补齐旧环境变量
+step 3 "检查远程环境变量" \
   ensure_remote_env
 
-# [3/13] 获取远程已应用迁移
-step 3 "获取远程已应用迁移" \
+# [4/14] 获取远程已应用迁移
+step 4 "获取远程已应用迁移" \
   fetch_applied_migrations
 
-# [4/13] 扫描待发布迁移风险
-step 4 "扫描待发布迁移风险" \
+# [5/14] 扫描待发布迁移风险
+step 5 "扫描待发布迁移风险" \
   scan_pending_migrations
 
-# [5/13] 在线备份远程数据库
-step 5 "在线备份远程数据库" \
+# [6/14] 在线备份远程数据库
+step 6 "在线备份远程数据库" \
   backup_remote_database "$ONLINE_BACKUP_FILE"
 
-# [6/13] 同步代码（只传服务端需要的文件）
-step 6 "同步代码到服务器" \
+# [7/14] 同步代码（只传服务端需要的文件）
+step 7 "同步代码到服务器" \
   sync_remote_code
 
-# [7/13] 构建新 Docker 镜像
-step 7 "构建 Docker 镜像" \
+# [8/14] 构建新 Docker 镜像
+step 8 "构建 Docker 镜像" \
   build_remote_image
 
-# [8/13] 标记当前服务镜像，供失败时回滚
-step 8 "标记回滚镜像" \
+# [9/14] 标记当前服务镜像，供失败时回滚
+step 9 "标记回滚镜像" \
   tag_remote_rollback_image
 
-# [9/13] 用在线备份恢复临时库并预演迁移
-step 9 "临时数据库预演迁移" \
+# [10/14] 用在线备份恢复临时库并预演迁移
+step 10 "临时数据库预演迁移" \
   preflight_remote_migrations
 
-# [10/13] 停止旧服务，保留数据库
-step 10 "停止旧服务" \
+# [11/14] 停止旧服务，保留数据库
+step 11 "停止旧服务" \
   stop_remote_server
 
-# [11/13] 停服后最终备份远程数据库
-step 11 "最终备份远程数据库" \
+# [12/14] 停服后最终备份远程数据库
+step 12 "最终备份远程数据库" \
   backup_remote_database "$FINAL_BACKUP_FILE"
 
-# [12/13] 启动新服务
-step 12 "启动新服务" \
+# [13/14] 启动新服务
+step 13 "启动新服务" \
   start_new_remote_server
 
-# [13/13] 健康检查
-printf "\n[%d/%d] 健康检查\n" 13 "$TOTAL_STEPS"
+# [14/14] 健康检查
+printf "\n[%d/%d] 健康检查\n" 14 "$TOTAL_STEPS"
 if run_remote_health_check 2>&1 | sed 's/^/  /'; then
-  printf "[%d/%d] done\n" 13 "$TOTAL_STEPS"
+  printf "[%d/%d] done\n" 14 "$TOTAL_STEPS"
 else
-  printf "[%d/%d] 健康检查 .......... FAILED\n" 13 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... FAILED\n" 14 "$TOTAL_STEPS"
   echo ""
   echo "正在回滚到上一版服务镜像，不自动恢复数据库..."
   if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check 2>&1 | sed 's/^/  /'; then
