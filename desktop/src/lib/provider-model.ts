@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseAgentProvider } from "@/types/bridge"
 import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
+
+type ProviderModelMap = {
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+}
 
 /**
  * Extract the model name string from a provider by tier.
  */
-function resolveModelName(provider: SynapseAgentProvider, tier: ModelTier): string | undefined {
+function resolveModelName(provider: ProviderModelMap, tier: ModelTier): string | undefined {
   const raw = tier === "default" ? provider.model
     : tier === "haiku" ? provider.haikuModel
     : tier === "sonnet" ? provider.sonnetModel

@@ -9,12 +9,44 @@ import {
   redactSensitiveText,
   REDACTED,
 } from "@/lib/agent-redaction"
+import { formatProviderModelLabel, resolveModelName } from "@/lib/provider-model"
+import type { SynapseAgentProviderSummary } from "@/types/agent"
+import type { ModelTier } from "@/types/provider-model"
 
 const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
 const THINKING_DOT = "·"
 
 function sessionLabel(session: SynapseAgentSessionSummary): string {
   return session.name || session.sourceLabel || session.sessionKey || DEFAULT_LOCAL_SESSION_KEY
+}
+
+function formatAgentHeaderModelLabel(input: {
+  readonly currentConversationModel?: string
+  readonly provider?: SynapseAgentProviderSummary
+  readonly modelTier?: string
+}): string | undefined {
+  const model = input.currentConversationModel?.trim()
+  const providerName = input.provider ? providerDisplayName(input.provider) : undefined
+  if (model) return providerName ? `${providerName} ${model}` : model
+  if (!input.provider || !providerName) return undefined
+
+  const explicitTier = modelTierFromString(input.modelTier)
+  const tier = explicitTier ?? "default"
+  const modelName = resolveModelName(input.provider, tier)
+  if (modelName || explicitTier) {
+    return formatProviderModelLabel(providerName, modelName, tier)
+  }
+  return providerName
+}
+
+function providerDisplayName(provider: SynapseAgentProviderSummary): string {
+  return provider.display?.trim() || provider.id
+}
+
+function modelTierFromString(value: string | undefined): ModelTier | undefined {
+  return value === "default" || value === "haiku" || value === "sonnet" || value === "opus"
+    ? value
+    : undefined
 }
 
 function defaultSessionKey(sessions: readonly SynapseAgentSessionSummary[]): string {
@@ -262,6 +294,7 @@ export {
   formatAgentTranscript,
   formatAgentInputText,
   formatEntryTime,
+  formatAgentHeaderModelLabel,
   sanitizeAgentRawInput,
   sessionLabel,
   thinkingIndicatorText,

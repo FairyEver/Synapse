@@ -317,6 +317,7 @@ export interface SynapseAgentSessionSummary {
   readonly agentType?: string
   readonly agentSessionId?: string
   readonly providerId?: string
+  readonly modelTier?: string
   readonly active: boolean
   readonly historyCount: number
   readonly createdAt: string
@@ -340,6 +341,9 @@ export interface SynapseAgentProviderSummary {
   readonly active: boolean
   readonly readonly?: boolean
   readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
   readonly baseUrl?: string
   readonly scope: "global" | "project"
 }

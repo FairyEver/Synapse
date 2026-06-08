@@ -183,6 +183,9 @@ const providerSummarySchema = z.object({
   active: z.boolean(),
   readonly: z.boolean().optional(),
   model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
   baseUrl: z.string().optional(),
   scope: z.enum(["global", "project"]),
 })
@@ -377,6 +380,9 @@ function providerSummary(provider: CCProvider, activeProviderId?: string): z.inf
     active: provider.id === activeProviderId || Boolean(provider.active),
     readonly: provider.readonly,
     model: provider.model,
+    haikuModel: provider.haikuModel,
+    sonnetModel: provider.sonnetModel,
+    opusModel: provider.opusModel,
     baseUrl: provider.baseUrl,
     scope: "global",
   }

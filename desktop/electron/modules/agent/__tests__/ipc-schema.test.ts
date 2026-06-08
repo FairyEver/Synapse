@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import {
   agentEventSchema,
+  sessionSummary,
   sessionSummarySchema,
   timelineItemSchema,
 } from "../ipc-shared"
+import type { ConversationEntryV1 } from "../../../runtime/data-repo"
 import { messageMethods } from "../ipc-messages"
 import { sessionMethods } from "../ipc-sessions"
 
@@ -106,6 +108,25 @@ describe("agent IPC schemas", () => {
     })).toMatchObject({
       id: "conversation-1",
       mode: "acceptEdits",
+    })
+  })
+
+  it("includes model tier on session summaries", () => {
+    const session: ConversationEntryV1 = {
+      projectId: "project-1",
+      id: "conversation-1",
+      schemaVersion: 1,
+      sessionKey: "local:renderer",
+      agentConfig: { modelTier: "sonnet" },
+      active: true,
+      history: [],
+      createdAt: "2026-05-14T00:00:00.000Z",
+      updatedAt: "2026-05-14T00:00:00.000Z",
+    }
+
+    expect(sessionSummary(session)).toMatchObject({
+      id: "conversation-1",
+      modelTier: "sonnet",
     })
   })
 

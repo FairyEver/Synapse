@@ -46,6 +46,7 @@ import {
   type ConversationSourceFilter,
 } from "./conversation-source"
 import {
+  formatAgentHeaderModelLabel,
   formatAgentTranscript,
   sessionLabel,
 } from "./utils"
@@ -422,6 +423,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     : undefined
   const providerMissing = Boolean(selectedSession?.providerId && !selectedProvider)
   const headerProvider = selectedProvider ?? activeProvider
+  const headerModelLabel = formatAgentHeaderModelLabel({
+    currentConversationModel: chat.currentConversationModel,
+    provider: headerProvider,
+    modelTier: selectedSession?.modelTier,
+  })
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
   const mergedCommands = useMemo(() => {
@@ -567,14 +573,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                   </TooltipTrigger>
                   <TooltipContent>该会话的供应商已删除或归档</TooltipContent>
                 </Tooltip>
-              ) : chat.currentConversationModel ? (
+              ) : headerModelLabel ? (
                 <span className="text-xs text-muted-foreground">
-                  {chat.currentConversationModel}
-                  {headerProvider ? ` · ${headerProvider.display ?? headerProvider.id}` : ""}
-                </span>
-              ) : headerProvider ? (
-                <span className="text-xs text-muted-foreground">
-                  {headerProvider.display ?? headerProvider.id}
+                  {headerModelLabel}
                 </span>
               ) : null}
 

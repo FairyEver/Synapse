@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  formatAgentHeaderModelLabel,
   formatAgentTranscript,
   formatEntryTime,
   sessionLabel,
@@ -64,6 +65,34 @@ describe("agent utils", () => {
       createdAt: "2026-04-27T00:00:00.000Z",
       updatedAt: "2026-04-27T01:00:00.000Z",
     })).toBe("local:key")
+  })
+
+  it("formats the Agent header provider and selected model", () => {
+    expect(formatAgentHeaderModelLabel({
+      provider: {
+        id: "bailian",
+        display: "百炼",
+        active: true,
+        model: "qwen-main",
+        sonnetModel: "qwen-sonnet",
+        scope: "global",
+      },
+      modelTier: "sonnet",
+    })).toBe("百炼 qwen-sonnet")
+  })
+
+  it("keeps the runtime model visible when the SDK reports one", () => {
+    expect(formatAgentHeaderModelLabel({
+      currentConversationModel: "claude-sonnet-4-5",
+      provider: {
+        id: "bailian",
+        display: "百炼",
+        active: true,
+        model: "qwen-main",
+        scope: "global",
+      },
+      modelTier: "default",
+    })).toBe("百炼 claude-sonnet-4-5")
   })
 
   it("formats the current conversation for clipboard copy", () => {
