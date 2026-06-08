@@ -258,6 +258,42 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("cui.md")
   })
 
+  it("keeps the file table stable while opening a folder", async () => {
+    let resolveFolderItems: (items: DriveItemDto[]) => void = () => {}
+    const folderItems = new Promise<DriveItemDto[]>((resolve) => {
+      resolveFolderItems = resolve
+    })
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-1", name: "常用.md", type: "file" }),
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockReturnValueOnce(folderItems)
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await act(async () => {
+      getTableRow("作业范文").click()
+      await flushPromises()
+    })
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "folder-1" })
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+    expect(document.body.textContent).toContain("常用.md")
+    expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("根目录")
+
+    await act(async () => {
+      resolveFolderItems([
+        createDriveItem({ id: "file-2", name: "cui.md", type: "file", parentId: "folder-1" }),
+      ])
+      await flushPromises()
+    })
+
+    expect(document.body.textContent).toContain("cui.md")
+    expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("作业范文")
+  })
+
   it("opens folders when clicking anywhere on the folder row", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([

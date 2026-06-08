@@ -81,6 +81,7 @@ function DriveModule() {
   const [items, setItems] = useState<DriveItemDto[]>([])
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [loading, setLoading] = useState(false)
+  const [openingFolderId, setOpeningFolderId] = useState<string | null>(null)
   const [error, setError] = useState<DriveLoadError | null>(null)
   const [query, setQuery] = useState("")
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
@@ -90,6 +91,7 @@ function DriveModule() {
   const [submitting, setSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const prefetchedParentIdRef = useRef<string | null | undefined>(undefined)
 
   const accountAuthenticated = accountState.status === "authenticated"
   const parentId = path.at(-1)?.id ?? null
@@ -111,14 +113,19 @@ function DriveModule() {
     if (!accountAuthenticated) {
       setItems([])
       setLoading(false)
+      setOpeningFolderId(null)
       setError(null)
       setPath([{ id: null, name: "根目录" }])
       return
     }
+    if (prefetchedParentIdRef.current !== undefined && prefetchedParentIdRef.current === parentId) {
+      prefetchedParentIdRef.current = undefined
+      return
+    }
     void loadItems()
-  }, [accountAuthenticated, loadItems])
+  }, [accountAuthenticated, loadItems, parentId])
 
-  const actionsDisabled = !accountAuthenticated || loading || error !== null
+  const actionsDisabled = !accountAuthenticated || loading || openingFolderId !== null || error !== null
 
   const visibleItems = useMemo(() => {
     const keyword = query.trim().toLowerCase()
@@ -126,10 +133,22 @@ function DriveModule() {
     return items.filter((item) => item.name.toLowerCase().includes(keyword))
   }, [items, query])
 
-  const openFolder = useCallback((item: DriveItemDto) => {
+  const openFolder = useCallback(async (item: DriveItemDto) => {
     if (item.type !== "folder") return
-    setPath((current) => [...current, { id: item.id, name: item.name }])
-  }, [])
+    if (openingFolderId !== null) return
+    setOpeningFolderId(item.id)
+    setError(null)
+    try {
+      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: item.id })
+      prefetchedParentIdRef.current = item.id
+      setItems(nextItems)
+      setPath((current) => [...current, { id: item.id, name: item.name }])
+    } catch (rawError) {
+      setError(driveLoadError(rawError))
+    } finally {
+      setOpeningFolderId(null)
+    }
+  }, [openingFolderId])
 
   const jumpToPath = useCallback((index: number) => {
     setPath((current) => current.slice(0, index + 1))
@@ -314,6 +333,7 @@ function DriveModule() {
       <DriveFileList
         items={visibleItems}
         loading={loading}
+        openingFolderId={openingFolderId}
         path={path}
         query={query}
         onQueryChange={setQuery}
@@ -338,7 +358,7 @@ function DriveModule() {
             <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" disabled={!accountAuthenticated || loading} onClick={() => void loadItems()}>
+                <Button variant="ghost" size="icon-sm" disabled={!accountAuthenticated || loading || openingFolderId !== null} onClick={() => void loadItems()}>
                   <RefreshCw />
                   <span className="sr-only">刷新</span>
                 </Button>
@@ -729,6 +749,7 @@ function DriveMoveTreeSelectButton({
 function DriveFileList({
   items,
   loading,
+  openingFolderId,
   path,
   query,
   onQueryChange,
@@ -742,6 +763,7 @@ function DriveFileList({
 }: {
   readonly items: readonly DriveItemDto[]
   readonly loading: boolean
+  readonly openingFolderId: string | null
   readonly path: readonly DrivePathEntry[]
   readonly query: string
   readonly onQueryChange: (value: string) => void
@@ -788,6 +810,7 @@ function DriveFileList({
               <DriveFileListRow
                 key={item.id}
                 item={item}
+                opening={openingFolderId === item.id}
                 onOpenFolder={onOpenFolder}
                 onRename={onRename}
                 onMove={onMove}
@@ -895,6 +918,7 @@ function DriveBreadcrumbs({
 
 function DriveFileListRow({
   item,
+  opening,
   onOpenFolder,
   onRename,
   onMove,
@@ -903,6 +927,7 @@ function DriveFileListRow({
   onDisableShare,
 }: {
   readonly item: DriveItemDto
+  readonly opening: boolean
   readonly onOpenFolder: (item: DriveItemDto) => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
@@ -916,12 +941,15 @@ function DriveFileListRow({
 
   return (
     <TableRow
-      className={isFolder ? "cursor-pointer" : undefined}
-      onClick={isFolder ? () => onOpenFolder(item) : undefined}
+      className={cn(isFolder && !opening ? "cursor-pointer" : undefined)}
+      aria-busy={opening || undefined}
+      onClick={isFolder && !opening ? () => onOpenFolder(item) : undefined}
     >
       <TableCell className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
-          {isFolder ? (
+          {opening ? (
+            <LoaderCircle className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
+          ) : isFolder ? (
             <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           ) : (
             <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -931,10 +959,12 @@ function DriveFileListRow({
               type="button"
               variant="ghost"
               className="h-auto min-w-0 max-w-full justify-start px-0 py-0 font-medium hover:bg-transparent"
-              aria-label={`打开文件夹 ${item.name}`}
+              aria-label={opening ? `正在打开文件夹 ${item.name}` : `打开文件夹 ${item.name}`}
+              disabled={opening}
               title={item.name}
               onClick={(event) => {
                 event.stopPropagation()
+                if (opening) return
                 onOpenFolder(item)
               }}
             >
