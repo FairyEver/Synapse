@@ -55,6 +55,11 @@ import {
   toKnowledgeBaseComposerActions,
   toKnowledgeBaseSlashCandidates,
 } from "./knowledge-base-commands"
+import {
+  CONVERSATION_IDLE_ROLLOVER_PROMPT_MS,
+  latestConversationActivityTimestamp,
+  shouldShowConversationIdleRolloverPrompt,
+} from "./utils/conversation-rollover"
 
 const logger = createRendererLogger("agent")
 
@@ -171,6 +176,30 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       }
     : undefined
   const selectedPendingMessages = pendingMessagesForTarget(pendingMessages, selectedTarget)
+  const latestActivityTimestamp = useMemo(
+    () => latestConversationActivityTimestamp(chat.timeline),
+    [chat.timeline],
+  )
+  const [conversationRolloverPromptNow, setConversationRolloverPromptNow] = useState(() => Date.now())
+  useEffect(() => {
+    setConversationRolloverPromptNow(Date.now())
+    if (!latestActivityTimestamp) return undefined
+    const latestActivityTime = Date.parse(latestActivityTimestamp)
+    if (!Number.isFinite(latestActivityTime)) return undefined
+    const delay = Math.max(0, latestActivityTime + CONVERSATION_IDLE_ROLLOVER_PROMPT_MS - Date.now())
+    const timer = window.setTimeout(() => {
+      setConversationRolloverPromptNow(Date.now())
+    }, delay)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [latestActivityTimestamp])
+  const showConversationRolloverPrompt = shouldShowConversationIdleRolloverPrompt({
+    latestActivityTimestamp,
+    now: conversationRolloverPromptNow,
+    sending: chat.sending,
+    hasStartAction: Boolean(selectedSession),
+  })
 
   const handleStartRolloverConversation = () => {
     if (!selectedSession) return
@@ -714,8 +743,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onOpenReference={openReference}
               onRespondPermission={(requestId, behavior, updatedInput, message) =>
                 chat.respondPermission(requestId, behavior, updatedInput, message)}
-              onStartNewConversation={selectedSession ? handleStartRolloverConversation : undefined}
-              conversationRolloverThresholds={config.agent.conversationRolloverPrompt}
               viewportRef={stick.viewportRef}
             />
 
@@ -746,6 +773,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onForceKillTurn={() => void chat.forceKillTurn()}
               showJumpToBottom={showJumpToBottom}
               showIdleJumpToBottom={showIdleJumpToBottom}
+              showConversationRolloverPrompt={showConversationRolloverPrompt}
+              onStartNewConversation={selectedSession ? handleStartRolloverConversation : undefined}
               onJumpToBottom={() => stick.scrollToBottom({ behavior: "smooth" })}
               pendingMessages={selectedPendingMessages}
               onRemovePendingMessage={handleRemovePendingMessage}

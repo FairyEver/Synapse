@@ -108,25 +108,25 @@ describe("configIpcModule", () => {
     expect(result.agent.defaultProviderModel).toEqual(providerModel)
   })
 
-  it("preserves conversation rollover prompt thresholds through IPC round-trip", async () => {
-    const conversationRolloverPrompt = {
-      costThresholdCny: 18,
-      tokenThreshold: 6_000_000,
-    }
+  it("ignores legacy conversation rollover prompt patches through IPC", async () => {
     vi.mocked(configStore.update).mockResolvedValue(
       configFixture({
         defaultPermissionMode: "default",
         defaultProviderModel: null,
-        conversationRolloverPrompt,
       }),
     )
     const harness = createHarness()
 
     const result = await harness.invoke("synapse:config:update", {
-      agent: { conversationRolloverPrompt },
+      agent: {
+        conversationRolloverPrompt: {
+          costThresholdCny: 18,
+          tokenThreshold: 6_000_000,
+        },
+      },
     }) as SynapseConfig
 
-    expect(result.agent.conversationRolloverPrompt).toEqual(conversationRolloverPrompt)
+    expect(result.agent).not.toHaveProperty("conversationRolloverPrompt")
   })
 
   it("returns filePath for config backup export", async () => {
@@ -267,10 +267,6 @@ function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
     agent: {
       defaultPermissionMode: "default",
       defaultProviderModel: null,
-      conversationRolloverPrompt: {
-        costThresholdCny: 10,
-        tokenThreshold: 5_000_000,
-      },
       ...agent,
     },
   }

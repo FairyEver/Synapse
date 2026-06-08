@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import {
   AlertDialog,
@@ -13,11 +13,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FieldGroup } from "@/components/ui/field"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -30,7 +25,6 @@ import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { ProviderModelSelection } from "@/types/provider-model"
 
 const logger = createRendererLogger("settings.agent-defaults")
-const TOKEN_THRESHOLD_UNIT = 10_000
 const DEFAULTS_FIELD_ROW_CLASSNAME = "grid gap-2 md:grid-cols-[12rem_minmax(0,28rem)] md:items-center md:gap-4"
 const DEFAULTS_FIELD_CONTENT_CLASSNAME = "min-w-0 md:max-w-none"
 const DEFAULTS_FIELD_CONTROL_CLASSNAME = "w-full"
@@ -42,21 +36,7 @@ function AgentDefaultsContent() {
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const selectedMode = config.agent.defaultPermissionMode
   const defaultPM = config.agent.defaultProviderModel
-  const rolloverPrompt = config.agent.conversationRolloverPrompt
   const resolvedLabel = useProviderModelLabel(defaultPM)
-  const [costThresholdDraft, setCostThresholdDraft] = useState(String(rolloverPrompt.costThresholdCny))
-  const [tokenThresholdDraft, setTokenThresholdDraft] = useState(
-    String(rolloverPrompt.tokenThreshold / TOKEN_THRESHOLD_UNIT),
-  )
-  const [costThresholdError, setCostThresholdError] = useState<string | null>(null)
-  const [tokenThresholdError, setTokenThresholdError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setCostThresholdDraft(String(rolloverPrompt.costThresholdCny))
-    setTokenThresholdDraft(String(rolloverPrompt.tokenThreshold / TOKEN_THRESHOLD_UNIT))
-    setCostThresholdError(null)
-    setTokenThresholdError(null)
-  }, [rolloverPrompt.costThresholdCny, rolloverPrompt.tokenThreshold])
 
   const saveDefaultPermissionMode = async (nextMode: SynapseAgentPermissionMode) => {
     try {
@@ -88,53 +68,6 @@ function AgentDefaultsContent() {
       logger.error("Agent default provider model save failed.", error)
     }
   }, [promise, updateConfig])
-
-  const saveConversationRolloverPrompt = useCallback(async (
-    nextPrompt: typeof rolloverPrompt,
-  ) => {
-    try {
-      await promise(
-        () => updateConfig({ agent: { conversationRolloverPrompt: nextPrompt } }),
-        {
-          loading: "正在保存设置...",
-          success: () => "设置已保存。",
-          error: (error) => error instanceof Error ? error.message : "保存设置失败。",
-        },
-      )
-    } catch (error) {
-      logger.error("Agent conversation rollover threshold save failed.", error)
-    }
-  }, [promise, updateConfig])
-
-  const saveCostThresholdDraft = () => {
-    const nextValue = Number(costThresholdDraft)
-    if (!Number.isFinite(nextValue) || nextValue <= 0) {
-      setCostThresholdError("请输入大于 0 的金额。")
-      return
-    }
-    setCostThresholdError(null)
-    if (nextValue === rolloverPrompt.costThresholdCny) return
-    void saveConversationRolloverPrompt({
-      ...rolloverPrompt,
-      costThresholdCny: nextValue,
-    })
-  }
-
-  const saveTokenThresholdDraft = () => {
-    const normalizedDraft = tokenThresholdDraft.trim()
-    const nextWanTokens = Number(normalizedDraft)
-    if (!/^\d+$/.test(normalizedDraft) || nextWanTokens <= 0) {
-      setTokenThresholdError("请输入大于 0 的整数。")
-      return
-    }
-    const tokenThreshold = nextWanTokens * TOKEN_THRESHOLD_UNIT
-    setTokenThresholdError(null)
-    if (tokenThreshold === rolloverPrompt.tokenThreshold) return
-    void saveConversationRolloverPrompt({
-      ...rolloverPrompt,
-      tokenThreshold,
-    })
-  }
 
   const selectPermissionMode = (mode: SynapseAgentPermissionMode) => {
     if (mode === selectedMode) return
@@ -208,62 +141,6 @@ function AgentDefaultsContent() {
             defaultSelection={defaultPM ?? undefined}
             onSelect={(selection) => saveDefaultProviderModel(selection)}
           />
-        </SettingsFieldRow>
-        <SettingsFieldRow
-          className={DEFAULTS_FIELD_ROW_CLASSNAME}
-          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
-          label="长对话金额阈值"
-          error={costThresholdError}
-          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
-        >
-          <InputGroup>
-            <InputGroupInput
-              aria-label="长对话金额阈值"
-              aria-invalid={costThresholdError ? true : undefined}
-              className="text-right"
-              inputMode="decimal"
-              value={costThresholdDraft}
-              onChange={(event) => {
-                setCostThresholdDraft(event.currentTarget.value)
-                setCostThresholdError(null)
-              }}
-              onBlur={saveCostThresholdDraft}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur()
-                }
-              }}
-            />
-            <InputGroupAddon align="inline-end">元</InputGroupAddon>
-          </InputGroup>
-        </SettingsFieldRow>
-        <SettingsFieldRow
-          className={DEFAULTS_FIELD_ROW_CLASSNAME}
-          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
-          label="长对话 Token 阈值"
-          error={tokenThresholdError}
-          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
-        >
-          <InputGroup>
-            <InputGroupInput
-              aria-label="长对话 Token 阈值"
-              aria-invalid={tokenThresholdError ? true : undefined}
-              className="text-right"
-              inputMode="numeric"
-              value={tokenThresholdDraft}
-              onChange={(event) => {
-                setTokenThresholdDraft(event.currentTarget.value)
-                setTokenThresholdError(null)
-              }}
-              onBlur={saveTokenThresholdDraft}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur()
-                }
-              }}
-            />
-            <InputGroupAddon align="inline-end">万 token</InputGroupAddon>
-          </InputGroup>
         </SettingsFieldRow>
       </FieldGroup>
       <AlertDialog open={pendingMode !== null} onOpenChange={(open) => {

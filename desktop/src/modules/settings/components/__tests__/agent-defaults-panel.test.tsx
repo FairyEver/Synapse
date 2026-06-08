@@ -117,54 +117,12 @@ describe("AgentDefaultsPanel", () => {
   })
 })
 
-describe("AgentDefaultsPanel rollover thresholds", () => {
-  it("renders cost and token threshold inputs", () => {
+describe("AgentDefaultsPanel conversation rollover prompt", () => {
+  it("does not render custom cost or token threshold inputs", () => {
     renderPanel()
 
-    expect(document.querySelector('input[aria-label="长对话金额阈值"]')).toBeTruthy()
-    expect(document.querySelector('input[aria-label="长对话 Token 阈值"]')).toBeTruthy()
-  })
-
-  it("saves cost threshold as CNY", async () => {
-    renderPanel()
-
-    await changeInputValue("长对话金额阈值", "25")
-    await blurInput("长对话金额阈值")
-
-    expect(mocks.updateConfig).toHaveBeenCalledWith({
-      agent: {
-        conversationRolloverPrompt: {
-          costThresholdCny: 25,
-          tokenThreshold: 5_000_000,
-        },
-      },
-    })
-  })
-
-  it("saves token threshold in raw tokens from ten-thousand token units", async () => {
-    renderPanel()
-
-    await changeInputValue("长对话 Token 阈值", "750")
-    await blurInput("长对话 Token 阈值")
-
-    expect(mocks.updateConfig).toHaveBeenCalledWith({
-      agent: {
-        conversationRolloverPrompt: {
-          costThresholdCny: 10,
-          tokenThreshold: 7_500_000,
-        },
-      },
-    })
-  })
-
-  it("does not save invalid threshold inputs", async () => {
-    renderPanel()
-
-    await changeInputValue("长对话金额阈值", "0")
-    await blurInput("长对话金额阈值")
-    await changeInputValue("长对话 Token 阈值", "1.5")
-    await blurInput("长对话 Token 阈值")
-
+    expect(document.querySelector('input[aria-label="长对话金额阈值"]')).toBeNull()
+    expect(document.querySelector('input[aria-label="长对话 Token 阈值"]')).toBeNull()
     expect(mocks.updateConfig).not.toHaveBeenCalled()
   })
 })

@@ -189,6 +189,99 @@ describe("AgentComposer", () => {
     expect(html).not.toContain('aria-label="滚动到底部"')
   })
 
+  it("renders the one-hour context cache reminder above the input box", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        showConversationRolloverPrompt
+        onStartNewConversation={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    const promptIndex = html.indexOf("继续当前对话可能按完整上下文计费")
+    const inputBoxIndex = html.indexOf("agent-composer-input-box")
+
+    expect(promptIndex).toBeGreaterThan(-1)
+    expect(inputBoxIndex).toBeGreaterThan(promptIndex)
+    expect(html).toContain('aria-label="新建对话"')
+    expect(html).toContain(">新建对话</button>")
+    expect(html).not.toContain("这个对话已经很长")
+    expect(html).not.toContain("开始新对话")
+  })
+
+  it("keeps the one-hour reminder between the jump button and input box", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        showJumpToBottom
+        showConversationRolloverPrompt
+        onJumpToBottom={vi.fn()}
+        onStartNewConversation={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    const jumpIndex = html.indexOf("跳到最新消息")
+    const promptIndex = html.indexOf("继续当前对话可能按完整上下文计费")
+    const inputBoxIndex = html.indexOf("agent-composer-input-box")
+
+    expect(jumpIndex).toBeGreaterThan(-1)
+    expect(promptIndex).toBeGreaterThan(jumpIndex)
+    expect(inputBoxIndex).toBeGreaterThan(promptIndex)
+  })
+
+  it("calls onStartNewConversation from the one-hour reminder link", async () => {
+    const onStartNewConversation = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          showConversationRolloverPrompt
+          onStartNewConversation={onStartNewConversation}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const button = container.querySelector('button[aria-label="新建对话"]')
+    expect(button).toBeTruthy()
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onStartNewConversation).toHaveBeenCalledTimes(1)
+  })
+
   it("tracks the jump-to-bottom action from the composer", async () => {
     const onJumpToBottom = vi.fn()
     const container = document.createElement("div")
