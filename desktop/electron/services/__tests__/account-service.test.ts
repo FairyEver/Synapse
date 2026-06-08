@@ -44,6 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
 type PersistedAccountForTest = Record<string, unknown> & {
@@ -78,6 +79,14 @@ const storedProfile: SynapseAccountProfile = {
   user: { id: "u1", email: "u@example.com", displayName: null, status: "active" },
   teams: [],
   syncedAt: "2026-05-28T00:00:00.000Z",
+}
+
+const expectedPublicAppUrl = SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl
+const expectedApiBaseUrl = SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.apiBaseUrl
+const expectedApiMode = new URL(expectedApiBaseUrl).hostname === "localhost" ? "development" : "production"
+
+function expectedApiUrl(path: string): string {
+  return `${expectedApiBaseUrl}${path}`
 }
 
 async function createTestAccountService(input: {
@@ -131,7 +140,7 @@ describe("AccountService", () => {
       activeAttempt: {
         state: expect.any(String),
         codeVerifier: expect.any(String),
-        apiBaseUrl: "http://localhost:3000/api",
+        apiBaseUrl: expectedApiBaseUrl,
       },
     })
   })
@@ -158,13 +167,13 @@ describe("AccountService", () => {
   it("uses the generated API base URL instead of switching by package mode", async () => {
     const { namespace, service } = await createTestAccountService({ isPackaged: true })
 
-    expect(service.getApiBaseUrlForLive()).toBe("http://localhost:3000/api")
+    expect(service.getApiBaseUrlForLive()).toBe(expectedApiBaseUrl)
 
     const result = await service.startLogin()
-    expect(new URL(result.loginUrl).origin).toBe("http://localhost:3000")
+    expect(new URL(result.loginUrl).origin).toBe(new URL(expectedPublicAppUrl).origin)
     expect(await namespace.getSingleton()).toMatchObject({
       activeAttempt: {
-        apiBaseUrl: "http://localhost:3000/api",
+        apiBaseUrl: expectedApiBaseUrl,
       },
     })
   })
@@ -183,7 +192,7 @@ describe("AccountService", () => {
       activeAttempt: {
         state: expect.any(String),
         codeVerifier: expect.any(String),
-        apiBaseUrl: "http://localhost:3000/api",
+        apiBaseUrl: expectedApiBaseUrl,
       },
     })
   })
@@ -197,7 +206,7 @@ describe("AccountService", () => {
     expect(accountLogger.info).toHaveBeenCalledWith("Desktop account login started.", {
       operation: "startLogin",
       status: "success",
-      apiMode: "development",
+      apiMode: expectedApiMode,
     })
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain(loginUrl.searchParams.get("state"))
     expect(JSON.stringify(accountLogger.info.mock.calls)).not.toContain(loginUrl.searchParams.get("code_challenge"))
@@ -383,9 +392,9 @@ describe("AccountService", () => {
 
     expect(state.status).toBe("authenticated")
     expect(calls).toEqual([
-      "http://localhost:3000/api/auth/desktop/token",
-      "http://localhost:3000/api/auth/refresh",
-      "http://localhost:3000/api/auth/me",
+      expectedApiUrl("/auth/desktop/token"),
+      expectedApiUrl("/auth/refresh"),
+      expectedApiUrl("/auth/me"),
     ])
     expect(await namespace.getSingleton()).toMatchObject({
       refreshToken: "refresh-new",
@@ -555,10 +564,10 @@ describe("AccountService", () => {
 
     expect(state.status).toBe("authenticated")
     expect(calls).toEqual([
-      "http://localhost:3000/api/auth/desktop/token",
-      "http://localhost:3000/api/auth/me",
-      "http://localhost:3000/api/auth/refresh",
-      "http://localhost:3000/api/auth/me",
+      expectedApiUrl("/auth/desktop/token"),
+      expectedApiUrl("/auth/me"),
+      expectedApiUrl("/auth/refresh"),
+      expectedApiUrl("/auth/me"),
     ])
     expect(await namespace.getSingleton()).toMatchObject({
       refreshToken: "refresh-2",
@@ -618,8 +627,8 @@ describe("AccountService", () => {
 
     expect(state.status).toBe("authenticated")
     expect(calls).toEqual([
-      "http://localhost:3000/api/auth/refresh",
-      "http://localhost:3000/api/auth/me",
+      expectedApiUrl("/auth/refresh"),
+      expectedApiUrl("/auth/me"),
     ])
     expect(await namespace.getSingleton()).toMatchObject({
       refreshToken: "refresh-new",
@@ -664,9 +673,9 @@ describe("AccountService", () => {
 
     expect(webhooks).toEqual([expect.objectContaining({ publicId: "wh_123", name: "GitHub" })])
     expect(calls).toEqual([
-      "http://localhost:3000/api/auth/desktop/token",
-      "http://localhost:3000/api/auth/me",
-      "http://localhost:3000/api/dashboard/webhooks",
+      expectedApiUrl("/auth/desktop/token"),
+      expectedApiUrl("/auth/me"),
+      expectedApiUrl("/dashboard/webhooks"),
     ])
   })
 
@@ -709,12 +718,12 @@ describe("AccountService", () => {
     await expect(service.listWebhooks()).resolves.toEqual([])
 
     expect(calls).toEqual([
-      "http://localhost:3000/api/auth/desktop/token",
-      "http://localhost:3000/api/auth/me",
-      "http://localhost:3000/api/dashboard/webhooks",
-      "http://localhost:3000/api/auth/refresh",
-      "http://localhost:3000/api/auth/me",
-      "http://localhost:3000/api/dashboard/webhooks",
+      expectedApiUrl("/auth/desktop/token"),
+      expectedApiUrl("/auth/me"),
+      expectedApiUrl("/dashboard/webhooks"),
+      expectedApiUrl("/auth/refresh"),
+      expectedApiUrl("/auth/me"),
+      expectedApiUrl("/dashboard/webhooks"),
     ])
     expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
   })
@@ -1061,7 +1070,7 @@ describe("AccountService", () => {
       activeAttempt: {
         state: "expired-state",
         codeVerifier: "expired-code-verifier",
-        apiBaseUrl: "http://localhost:3000/api",
+        apiBaseUrl: expectedApiBaseUrl,
         createdAt: "2026-05-28T00:00:00.000Z",
         expiresAt: "2026-05-28T00:00:01.000Z",
       },
@@ -1104,7 +1113,7 @@ describe("AccountService", () => {
 
     const refresh = service.refreshFromStorage()
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:3000/api/auth/refresh",
+      expectedApiUrl("/auth/refresh"),
       expect.any(Object),
     ))
     await service.logout()
@@ -1113,7 +1122,7 @@ describe("AccountService", () => {
 
     expect(state.status).toBe("unauthenticated")
     expect(await namespace.getSingleton()).toBeNull()
-    expect(fetch.mock.calls.map(([url]) => String(url))).not.toContain("http://localhost:3000/api/auth/me")
+    expect(fetch.mock.calls.map(([url]) => String(url))).not.toContain(expectedApiUrl("/auth/me"))
   })
 
   it("does not restore credentials when logout happens during the refresh commit", async () => {
@@ -1176,7 +1185,7 @@ describe("AccountService", () => {
 
     const callback = service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:3000/api/auth/desktop/token",
+      expectedApiUrl("/auth/desktop/token"),
       expect.any(Object),
     ))
     await service.logout()
@@ -1185,7 +1194,7 @@ describe("AccountService", () => {
 
     expect(state.status).toBe("unauthenticated")
     expect(await namespace.getSingleton()).toBeNull()
-    expect(fetch.mock.calls.map(([url]) => String(url))).not.toContain("http://localhost:3000/api/auth/me")
+    expect(fetch.mock.calls.map(([url]) => String(url))).not.toContain(expectedApiUrl("/auth/me"))
   })
 
   it("does not restore credentials when logout happens during the callback commit", async () => {
@@ -1245,7 +1254,7 @@ describe("AccountService", () => {
               activeAttempt: {
                 state: "newer-state",
                 codeVerifier: "newer-code-verifier",
-                apiBaseUrl: "http://localhost:3000/api",
+                apiBaseUrl: expectedApiBaseUrl,
                 createdAt: "2026-05-28T00:00:00.000Z",
                 expiresAt: "2026-05-28T00:10:00.000Z",
               },

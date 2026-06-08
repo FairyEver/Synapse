@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import { describe, expect, it, vi } from "vitest"
 
 import type { SynapseConfig } from "../../../src/types/config"
@@ -304,8 +306,9 @@ describe("DiagnosticsService.collect", () => {
   })
 
   it("checks managed knowledge base projects through their backing directory", async () => {
+    const backingPath = path.join("/app/userData", "knowledge-bases", "kb-1")
     const statPath = vi.fn(async (targetPath: string) => {
-      if (targetPath === "/app/userData/knowledge-bases/kb-1" || targetPath === "/repo") {
+      if (targetPath === backingPath || targetPath === "/repo") {
         return { isDirectory: () => true }
       }
       throw new Error(`unexpected stat path: ${targetPath}`)
@@ -335,13 +338,13 @@ describe("DiagnosticsService.collect", () => {
     const report = await service.collect({ projectId: "kb-1" })
     const check = report.checks.find((item) => item.id === "project.path.kb-1")
 
-    expect(statPath).toHaveBeenCalledWith("/app/userData/knowledge-bases/kb-1")
+    expect(statPath).toHaveBeenCalledWith(backingPath)
     expect(check).toMatchObject({
       status: "ok",
       message: "目录可访问",
       details: {
         path: "synapse-kb://kb-1",
-        resolvedPath: "/app/userData/knowledge-bases/kb-1",
+        resolvedPath: backingPath,
       },
     })
   })
@@ -376,7 +379,7 @@ describe("DiagnosticsService.collect", () => {
     const entry = details?.entries.find((item) => item.id === "kb-1")
 
     expect(entry).toMatchObject({
-      path: "/app/userData/knowledge-bases/kb-1",
+      path: path.join("/app/userData", "knowledge-bases", "kb-1"),
       unsafeSegments: [],
     })
   })
