@@ -137,6 +137,12 @@ APP_PUBLIC_URL=https://yourdomain.com
 
 # API 在容器内部监听 3001，由容器内 Nginx 统一从 3000 对外暴露
 PORT=3001
+
+# 腾讯云 COS 存储（可选；配置后用于云盘文件存储和自动备份）
+COS_SECRET_ID=你的 SecretId
+COS_SECRET_KEY=你的 SecretKey
+COS_BUCKET=已存在的存储桶名称，如 synapse-drive-1250000000
+COS_REGION=存储桶地域，如 ap-beijing
 ```
 
 常见配置错误（启动时会报 "服务端环境变量无效"）：
@@ -280,6 +286,8 @@ bash deploy.sh
 ```
 
 `deploy.sh` 会先读取线上已应用的 Prisma migration，扫描本次待发布 migration 中的危险 SQL。遇到删表、删列、删行、唯一索引或危险 `NOT NULL` 变更时，默认会把待发布 migration、风险数量、文件行号和 SQL 明细写入日志并继续部署；如果需要让风险扫描恢复为阻断部署，可用 `STRICT_MIGRATION_RISK_SCAN=1 bash deploy.sh`。
+
+部署脚本会把本机 `server/.env` 作为配置源，单独同步到服务器的 `/www/wwwroot/synapse/server/.env`，再用远端 `docker compose --env-file .env config` 校验；普通代码同步仍会排除 `server/.env`，避免密钥进入 git 或 rsync 的删除流程。修改 COS、JWT、数据库密码等配置后，运行 `bash deploy.sh` 才会同步到服务器；如果只想更新远端 COS 存储配置，也可以运行 `bash cos.sh`。
 
 部署会生成两份完整数据库备份：一份在线备份用于临时数据库预演，一份在停旧服务后生成的最终切换前备份。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。
 
@@ -447,7 +455,8 @@ docker compose logs server
 # 常见原因：
 # 1. .env 配置有误（密码不够长、密钥格式不对）
 # 2. 数据库连接失败（检查 DATABASE_URL）
-# 3. 端口冲突
+# 3. COS_BUCKET / COS_REGION 填错（云盘上传会失败，日志可能出现 NoSuchBucket）
+# 4. 端口冲突
 ```
 
 ### 如何进入容器内部调试
