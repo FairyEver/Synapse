@@ -22,12 +22,18 @@ const rendererLogger = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 
+const toast = vi.hoisted(() => vi.fn())
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
 }))
 
 vi.mock("@/assets/icon.png", () => ({
   default: "icon.png",
+}))
+
+vi.mock("sonner", () => ({
+  toast,
 }))
 
 import { AboutPanel } from "@/modules/settings/components/about-panel"
@@ -38,6 +44,10 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
   installUpdaterBridge()
+  Object.defineProperty(window.navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+  })
 })
 
 afterEach(() => {
@@ -53,6 +63,20 @@ afterEach(() => {
 })
 
 describe("AboutPanel cheat codes", () => {
+  it("copies the visible app version when clicked", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    const versionButton = getVersionButton()
+
+    await act(async () => {
+      versionButton.click()
+      await Promise.resolve()
+    })
+
+    expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith("v0.2.189")
+    expect(toast).toHaveBeenCalledWith("版本号已复制")
+  })
+
   it("arms title input from logo clicks with subtle animated letter spacing", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
@@ -269,6 +293,16 @@ function getLogo(): HTMLImageElement {
   }
 
   return logo
+}
+
+function getVersionButton(): HTMLButtonElement {
+  const button = document.body.querySelector('button[aria-label="复制当前版本 v0.2.189"]')
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error("Version copy button not found")
+  }
+
+  return button
 }
 
 function hoverTitlePart(index: number): void {
