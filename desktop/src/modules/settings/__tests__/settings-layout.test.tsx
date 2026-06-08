@@ -41,6 +41,17 @@ vi.mock("@/app-shell/config", () => ({
   }),
 }))
 
+vi.mock("@/app-shell/account", () => ({
+  useAccount: () => ({
+    state: { status: "unauthenticated" },
+    isLoading: false,
+    pendingAction: null,
+    startLogin: vi.fn(async () => ({ status: "authenticating", loginUrl: "https://example.com/login" })),
+    refresh: vi.fn(async () => ({ status: "unauthenticated" })),
+    logout: vi.fn(async () => ({ status: "unauthenticated" })),
+  }),
+}))
+
 vi.mock("@/app-shell/navigation", () => ({
   consumeRequestedSettingsCategory: () => requestedSettingsCategory.current,
   subscribeOpenSettingsAccount: () => () => undefined,
@@ -111,7 +122,7 @@ describe("SettingsModule layout", () => {
     expect(contentRoot?.className).toContain("overflow-hidden")
   })
 
-  it("hides the account category in packaged builds", async () => {
+  it("keeps the account category visible in packaged builds", async () => {
     ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
       isPackaged: true,
     }
@@ -119,11 +130,11 @@ describe("SettingsModule layout", () => {
     const container = await renderSettingsModule()
     const sidebar = container.querySelector("aside")
 
-    expect(sidebar?.textContent).not.toContain("账号")
+    expect(sidebar?.textContent).toContain("账号")
     expect(sidebar?.textContent).toContain("基础设置")
   })
 
-  it("falls back to general settings when packaged builds request account settings", async () => {
+  it("opens account settings when packaged builds request account settings", async () => {
     requestedSettingsCategory.current = "account"
     ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
       isPackaged: true,
@@ -131,8 +142,8 @@ describe("SettingsModule layout", () => {
 
     const container = await renderSettingsModule()
 
-    expect(container.textContent).toContain("外观")
-    expect(container.textContent).not.toContain("登录")
+    expect(container.textContent).toContain("账号")
+    expect(container.textContent).toContain("登录")
   })
 
   it("keeps the account category visible outside packaged builds", async () => {

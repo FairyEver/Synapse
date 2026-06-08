@@ -186,14 +186,14 @@ describe("AccountUserControl", () => {
     expect(accountActions.logout).toHaveBeenCalledTimes(2)
   })
 
-  it("does not render the top bar account control in packaged builds", () => {
+  it("renders the top bar account control in packaged builds", () => {
     ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
       isPackaged: true,
     }
 
     const container = renderActions()
 
-    expect(container.textContent).not.toContain("Ada")
-    expect(container.querySelector("[data-track='account-user-menu']")).toBeNull()
+    expect(container.textContent).toContain("Ada")
+    expect(container.querySelector("button")?.textContent).toContain("Ada")
   })
 })
