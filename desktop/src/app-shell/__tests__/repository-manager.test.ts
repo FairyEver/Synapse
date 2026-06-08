@@ -11,6 +11,7 @@ vi.mock("@/app-shell/logging", () => ({
 }))
 
 import { RepositoryManager } from "../repository-manager"
+import { DEFAULT_AGENT_GLOBAL_CONFIG } from "@/constants/defaults"
 import type { SynapseBridge } from "@/types/bridge"
 import type { SynapseConfig, SynapseRepositoryConfig } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
@@ -73,10 +74,7 @@ const config: SynapseConfig = {
     contentSortOrder: "modified-desc",
     variables: [],
   },
-  agent: {
-    defaultPermissionMode: "default",
-    defaultProviderModel: null,
-  },
+  agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
 }
 
 function createSkill(id: string): SynapseContentMeta<"skill"> {

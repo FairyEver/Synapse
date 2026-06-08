@@ -8,6 +8,7 @@ import type {
 } from "@/types/agent"
 import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
 import { shouldShowConversationRolloverPrompt } from "../utils/conversation-rollover"
+import type { ConversationRolloverThresholds } from "../utils/conversation-rollover"
 import { AgentPhaseRow } from "./agent-phase-row"
 import { AgentRunStatus } from "./agent-run-status"
 import { AgentTimelineItem } from "./agent-timeline-item"
@@ -21,6 +22,7 @@ function AgentTimeline({
   onOpenReference,
   onRespondPermission,
   onStartNewConversation,
+  conversationRolloverThresholds,
   viewportRef,
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
@@ -36,6 +38,7 @@ function AgentTimeline({
     message?: string,
   ) => void | Promise<void>
   readonly onStartNewConversation?: () => void
+  readonly conversationRolloverThresholds?: ConversationRolloverThresholds
   readonly viewportRef: Ref<HTMLDivElement>
 }) {
   // Drives 1s re-renders for any in-progress phase row's elapsed timer.
@@ -47,6 +50,7 @@ function AgentTimeline({
     displayEntries,
     sending,
     hasStartAction: Boolean(onStartNewConversation),
+    thresholds: conversationRolloverThresholds,
   })
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
@@ -136,17 +140,19 @@ function conversationRolloverPromptMessageId({
   displayEntries,
   sending,
   hasStartAction,
+  thresholds,
 }: {
   readonly displayEntries: readonly TimelineDisplayEntry[]
   readonly sending: boolean
   readonly hasStartAction: boolean
+  readonly thresholds?: ConversationRolloverThresholds
 }): string | undefined {
   if (sending || !hasStartAction) return undefined
   const lastEntry = displayEntries.at(-1)
   const item = lastEntry?.item
   if (!item || item.kind !== "message" || item.role !== "assistant") return undefined
   if (item.streaming === true) return undefined
-  return shouldShowConversationRolloverPrompt(item.metadata) ? item.id : undefined
+  return shouldShowConversationRolloverPrompt(item.metadata, thresholds) ? item.id : undefined
 }
 
 function isUnidentifiedToolCall(item: SynapseAgentTimelineItem): item is SynapseAgentToolCallTimelineItem {

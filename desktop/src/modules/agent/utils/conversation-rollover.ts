@@ -6,6 +6,16 @@ interface ConversationRolloverMetadata {
   readonly usage?: Record<string, unknown>
 }
 
+interface ConversationRolloverThresholds {
+  readonly costThresholdCny: number
+  readonly tokenThreshold: number
+}
+
+const DEFAULT_CONVERSATION_ROLLOVER_THRESHOLDS = {
+  costThresholdCny: CONVERSATION_ROLLOVER_COST_THRESHOLD_CNY,
+  tokenThreshold: CONVERSATION_ROLLOVER_TOKEN_FALLBACK_THRESHOLD,
+} as const satisfies ConversationRolloverThresholds
+
 const COMPONENT_TOKEN_FIELDS = [
   ["inputTokens", "input_tokens"],
   ["outputTokens", "output_tokens"],
@@ -14,12 +24,15 @@ const COMPONENT_TOKEN_FIELDS = [
   ["reasoningOutputTokens", "reasoning_output_tokens"],
 ] as const
 
-function shouldShowConversationRolloverPrompt(metadata: ConversationRolloverMetadata | undefined): boolean {
+function shouldShowConversationRolloverPrompt(
+  metadata: ConversationRolloverMetadata | undefined,
+  thresholds: ConversationRolloverThresholds = DEFAULT_CONVERSATION_ROLLOVER_THRESHOLDS,
+): boolean {
   if (!metadata) return false
   if (isFiniteNumber(metadata.totalCostCny)) {
-    return metadata.totalCostCny >= CONVERSATION_ROLLOVER_COST_THRESHOLD_CNY
+    return metadata.totalCostCny >= thresholds.costThresholdCny
   }
-  return conversationRolloverTotalTokens(metadata.usage) >= CONVERSATION_ROLLOVER_TOKEN_FALLBACK_THRESHOLD
+  return conversationRolloverTotalTokens(metadata.usage) >= thresholds.tokenThreshold
 }
 
 function conversationRolloverTotalTokens(usage: Record<string, unknown> | undefined): number {
@@ -52,4 +65,4 @@ export {
   conversationRolloverTotalTokens,
   shouldShowConversationRolloverPrompt,
 }
-export type { ConversationRolloverMetadata }
+export type { ConversationRolloverMetadata, ConversationRolloverThresholds }

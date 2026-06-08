@@ -133,6 +133,10 @@ describe("ConfigBackupService quick inputs", () => {
       agent: {
         defaultPermissionMode: "bypassPermissions",
         defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+        conversationRolloverPrompt: {
+          costThresholdCny: 18,
+          tokenThreshold: 6_000_000,
+        },
       },
     })
 
@@ -156,6 +160,10 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "bypassPermissions",
           defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+          conversationRolloverPrompt: {
+            costThresholdCny: 18,
+            tokenThreshold: 6_000_000,
+          },
         },
       }))
       const importedConfig = vi.mocked(configStore.replace).mock.calls[0]?.[0] as SynapseConfig | undefined
@@ -188,6 +196,61 @@ describe("ConfigBackupService quick inputs", () => {
     try {
       await expect(configBackupService.readImport(filePath)).rejects.toThrow(
         "config.global.defaultQuickInputsSeededVersion 必须是字符串或 null。",
+      )
+      expect(configStore.replace).not.toHaveBeenCalled()
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
+  it("accepts valid Agent conversation rollover prompt thresholds when importing a backup", async () => {
+    const filePath = await writeBackupFile({}, {
+      agent: {
+        defaultPermissionMode: "default",
+        defaultProviderModel: null,
+        conversationRolloverPrompt: {
+          costThresholdCny: 12.5,
+          tokenThreshold: 8_000_000,
+        },
+      },
+    })
+
+    try {
+      await configBackupService.readImport(filePath)
+
+      expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
+        agent: {
+          defaultPermissionMode: "default",
+          defaultProviderModel: null,
+          conversationRolloverPrompt: {
+            costThresholdCny: 12.5,
+            tokenThreshold: 8_000_000,
+          },
+        },
+      }))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
+  it("rejects invalid Agent conversation rollover prompt thresholds when importing a backup", async () => {
+    const filePath = await writeBackupFile({}, {
+      agent: {
+        defaultPermissionMode: "default",
+        defaultProviderModel: null,
+        conversationRolloverPrompt: {
+          costThresholdCny: -1,
+          tokenThreshold: 1.5,
+        },
+      },
+    })
+
+    try {
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow(
+        "config.agent.conversationRolloverPrompt.costThresholdCny 必须是大于 0 的数字。",
+      )
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow(
+        "config.agent.conversationRolloverPrompt.tokenThreshold 必须是大于 0 的整数。",
       )
       expect(configStore.replace).not.toHaveBeenCalled()
     } finally {

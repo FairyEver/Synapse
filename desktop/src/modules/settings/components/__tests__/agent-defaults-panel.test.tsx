@@ -98,7 +98,11 @@ describe("AgentDefaultsPanel", () => {
   it("changes away from bypassPermissions without confirmation", async () => {
     mocks.config = {
       ...createDefaultConfig(),
-      agent: { defaultPermissionMode: "bypassPermissions", defaultProviderModel: null },
+      agent: {
+        ...createDefaultConfig().agent,
+        defaultPermissionMode: "bypassPermissions",
+        defaultProviderModel: null,
+      },
     }
 
     renderPanel()
@@ -110,6 +114,58 @@ describe("AgentDefaultsPanel", () => {
     expect(mocks.updateConfig).toHaveBeenCalledWith({
       agent: { defaultPermissionMode: "default" },
     })
+  })
+})
+
+describe("AgentDefaultsPanel rollover thresholds", () => {
+  it("renders cost and token threshold inputs", () => {
+    renderPanel()
+
+    expect(document.querySelector('input[aria-label="长对话金额阈值"]')).toBeTruthy()
+    expect(document.querySelector('input[aria-label="长对话 Token 阈值"]')).toBeTruthy()
+  })
+
+  it("saves cost threshold as CNY", async () => {
+    renderPanel()
+
+    await changeInputValue("长对话金额阈值", "25")
+    await blurInput("长对话金额阈值")
+
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      agent: {
+        conversationRolloverPrompt: {
+          costThresholdCny: 25,
+          tokenThreshold: 5_000_000,
+        },
+      },
+    })
+  })
+
+  it("saves token threshold in raw tokens from ten-thousand token units", async () => {
+    renderPanel()
+
+    await changeInputValue("长对话 Token 阈值", "750")
+    await blurInput("长对话 Token 阈值")
+
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      agent: {
+        conversationRolloverPrompt: {
+          costThresholdCny: 10,
+          tokenThreshold: 7_500_000,
+        },
+      },
+    })
+  })
+
+  it("does not save invalid threshold inputs", async () => {
+    renderPanel()
+
+    await changeInputValue("长对话金额阈值", "0")
+    await blurInput("长对话金额阈值")
+    await changeInputValue("长对话 Token 阈值", "1.5")
+    await blurInput("长对话 Token 阈值")
+
+    expect(mocks.updateConfig).not.toHaveBeenCalled()
   })
 })
 
@@ -135,7 +191,11 @@ describe("AgentDefaultsPanel provider model", () => {
   it("shows clear button when default is set", () => {
     mocks.config = {
       ...createDefaultConfig(),
-      agent: { defaultPermissionMode: "default", defaultProviderModel: { providerId: "p1", modelTier: "sonnet" } },
+      agent: {
+        ...createDefaultConfig().agent,
+        defaultPermissionMode: "default",
+        defaultProviderModel: { providerId: "p1", modelTier: "sonnet" },
+      },
     }
     renderPanel()
     const clearButton = document.querySelector('button[aria-label="清除默认供应商"]')
@@ -145,7 +205,11 @@ describe("AgentDefaultsPanel provider model", () => {
   it("clears default on clear button click", async () => {
     mocks.config = {
       ...createDefaultConfig(),
-      agent: { defaultPermissionMode: "default", defaultProviderModel: { providerId: "p1", modelTier: "sonnet" } },
+      agent: {
+        ...createDefaultConfig().agent,
+        defaultPermissionMode: "default",
+        defaultProviderModel: { providerId: "p1", modelTier: "sonnet" },
+      },
     }
     renderPanel()
     const clearButton = document.querySelector('button[aria-label="清除默认供应商"]')
@@ -161,7 +225,11 @@ describe("AgentDefaultsPanel provider model", () => {
   it("logs provider model save failures without rethrowing from event handlers", async () => {
     mocks.config = {
       ...createDefaultConfig(),
-      agent: { defaultPermissionMode: "default", defaultProviderModel: { providerId: "p1", modelTier: "sonnet" } },
+      agent: {
+        ...createDefaultConfig().agent,
+        defaultPermissionMode: "default",
+        defaultProviderModel: { providerId: "p1", modelTier: "sonnet" },
+      },
     }
     mocks.updateConfig.mockRejectedValueOnce(new Error("save failed"))
 
@@ -222,4 +290,31 @@ async function clickButton(label: string): Promise<void> {
   await act(async () => {
     button.click()
   })
+}
+
+async function changeInputValue(label: string, value: string): Promise<void> {
+  const input = document.querySelector(`input[aria-label="${label}"]`)
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`Input "${label}" was not rendered`)
+  }
+  await act(async () => {
+    setNativeInputValue(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+}
+
+async function blurInput(label: string): Promise<void> {
+  const input = document.querySelector(`input[aria-label="${label}"]`)
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`Input "${label}" was not rendered`)
+  }
+  await act(async () => {
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+function setNativeInputValue(input: HTMLInputElement, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+  descriptor?.set?.call(input, value)
 }

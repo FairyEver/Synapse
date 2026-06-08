@@ -26,6 +26,28 @@ describe("conversation rollover threshold", () => {
     })).toBe(false)
   })
 
+  it("uses the provided CNY cost threshold", () => {
+    expect(shouldShowConversationRolloverPrompt({
+      totalCostCny: 15,
+      usage: {
+        inputTokens: 100,
+      },
+    }, {
+      costThresholdCny: 20,
+      tokenThreshold: CONVERSATION_ROLLOVER_TOKEN_FALLBACK_THRESHOLD,
+    })).toBe(false)
+
+    expect(shouldShowConversationRolloverPrompt({
+      totalCostCny: 15,
+      usage: {
+        inputTokens: 100,
+      },
+    }, {
+      costThresholdCny: 15,
+      tokenThreshold: CONVERSATION_ROLLOVER_TOKEN_FALLBACK_THRESHOLD,
+    })).toBe(true)
+  })
+
   it("uses token fallback when cost is unavailable", () => {
     expect(shouldShowConversationRolloverPrompt({
       usage: {
@@ -38,12 +60,35 @@ describe("conversation rollover threshold", () => {
     })).toBe(true)
   })
 
+  it("uses the provided token threshold when cost is unavailable", () => {
+    expect(shouldShowConversationRolloverPrompt({
+      usage: {
+        inputTokens: 1_200_000,
+      },
+    }, {
+      costThresholdCny: CONVERSATION_ROLLOVER_COST_THRESHOLD_CNY,
+      tokenThreshold: 1_500_000,
+    })).toBe(false)
+
+    expect(shouldShowConversationRolloverPrompt({
+      usage: {
+        inputTokens: 1_500_000,
+      },
+    }, {
+      costThresholdCny: CONVERSATION_ROLLOVER_COST_THRESHOLD_CNY,
+      tokenThreshold: 1_500_000,
+    })).toBe(true)
+  })
+
   it("does not use token fallback when known cost is low", () => {
     expect(shouldShowConversationRolloverPrompt({
       totalCostCny: 1,
       usage: {
         inputTokens: CONVERSATION_ROLLOVER_TOKEN_FALLBACK_THRESHOLD,
       },
+    }, {
+      costThresholdCny: 10,
+      tokenThreshold: 100,
     })).toBe(false)
   })
 

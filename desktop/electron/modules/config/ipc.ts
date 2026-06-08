@@ -48,6 +48,11 @@ const providerModelSchema = z.object({
   modelTier: z.string(),
 }).nullable()
 
+const conversationRolloverPromptSchema = z.object({
+  costThresholdCny: z.number(),
+  tokenThreshold: z.number(),
+})
+
 const configSchema = z.object({
   activeRepoUuid: z.union([z.string(), z.null()]),
   repositories: z.array(z.any()),
@@ -55,6 +60,7 @@ const configSchema = z.object({
   agent: z.object({
     defaultPermissionMode: permissionModeSchema,
     defaultProviderModel: providerModelSchema,
+    conversationRolloverPrompt: conversationRolloverPromptSchema,
   }),
 })
 

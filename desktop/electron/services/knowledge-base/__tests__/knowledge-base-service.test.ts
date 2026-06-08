@@ -2,6 +2,7 @@ import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:f
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
 import { KnowledgeBaseService } from "../knowledge-base-service"
 import { KnowledgeBaseRawFileManager } from "../raw-file-manager"
 
@@ -72,7 +73,7 @@ async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
           },
         }],
       },
-      agent: { defaultPermissionMode: "default", defaultProviderModel: null },
+      agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
     }),
   })
   return { projectId, projectPath, service }
@@ -292,7 +293,7 @@ describe("KnowledgeBaseService", () => {
           defaultQuickInputsSeededVersion: null,
           projects: [],
         },
-        agent: { defaultPermissionMode: "default", defaultProviderModel: null },
+        agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
       }),
       trashItem: (targetPath) => rm(targetPath, { recursive: true, force: true }),
     })

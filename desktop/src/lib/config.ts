@@ -613,6 +613,30 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   }
 }
 
+function normalizeConversationRolloverPromptConfig(
+  value: unknown,
+): SynapseAgentGlobalConfig["conversationRolloverPrompt"] {
+  if (!isRecord(value)) {
+    return structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG.conversationRolloverPrompt)
+  }
+
+  const costThresholdCny = typeof value.costThresholdCny === "number"
+    && Number.isFinite(value.costThresholdCny)
+    && value.costThresholdCny > 0
+    ? value.costThresholdCny
+    : DEFAULT_AGENT_GLOBAL_CONFIG.conversationRolloverPrompt.costThresholdCny
+  const tokenThreshold = typeof value.tokenThreshold === "number"
+    && Number.isInteger(value.tokenThreshold)
+    && value.tokenThreshold > 0
+    ? value.tokenThreshold
+    : DEFAULT_AGENT_GLOBAL_CONFIG.conversationRolloverPrompt.tokenThreshold
+
+  return {
+    costThresholdCny,
+    tokenThreshold,
+  }
+}
+
 function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
   if (!isRecord(value)) {
     return structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG)
@@ -637,6 +661,7 @@ function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
   return {
     defaultPermissionMode,
     defaultProviderModel,
+    conversationRolloverPrompt: normalizeConversationRolloverPromptConfig(value.conversationRolloverPrompt),
   }
 }
 

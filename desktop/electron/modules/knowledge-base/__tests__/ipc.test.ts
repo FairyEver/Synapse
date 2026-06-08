@@ -11,6 +11,7 @@ const logStoreMock = vi.hoisted(() => ({
 }))
 
 import { createInMemoryHarness } from "../../../runtime/ipc"
+import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { KnowledgeBaseService } from "../../../services/knowledge-base/knowledge-base-service"
 import { knowledgeBaseIpcModule } from "../ipc"
@@ -343,7 +344,7 @@ describe("knowledgeBaseIpcModule", () => {
             },
           }],
         },
-        agent: { defaultPermissionMode: "default", defaultProviderModel: null },
+        agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
       }),
       now: () => new Date("2026-05-24T10:20:30.000Z"),
       fetchUrl: async () => ({

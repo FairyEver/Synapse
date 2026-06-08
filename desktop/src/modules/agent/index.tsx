@@ -715,6 +715,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onRespondPermission={(requestId, behavior, updatedInput, message) =>
                 chat.respondPermission(requestId, behavior, updatedInput, message)}
               onStartNewConversation={selectedSession ? handleStartRolloverConversation : undefined}
+              conversationRolloverThresholds={config.agent.conversationRolloverPrompt}
               viewportRef={stick.viewportRef}
             />
 

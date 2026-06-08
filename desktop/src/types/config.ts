@@ -81,6 +81,12 @@ export type SynapseGlobalConfig = {
 export type SynapseAgentGlobalConfig = {
   defaultPermissionMode: SynapseAgentPermissionMode
   defaultProviderModel: { providerId: string; modelTier: ModelTier } | null
+  conversationRolloverPrompt: SynapseAgentConversationRolloverPromptConfig
+}
+
+export type SynapseAgentConversationRolloverPromptConfig = {
+  costThresholdCny: number
+  tokenThreshold: number
 }
 
 export type SynapseConfig = {

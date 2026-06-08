@@ -783,6 +783,50 @@ describe("AgentTimeline", () => {
     expect(textFromMarkup(html)).toContain("开始新对话")
   })
 
+  it("uses custom rollover thresholds when deciding whether to show the prompt", () => {
+    const lowThresholdHtml = renderTimeline({
+      onStartNewConversation: vi.fn(),
+      conversationRolloverThresholds: {
+        costThresholdCny: 5,
+        tokenThreshold: 5_000_000,
+      },
+      items: [
+        {
+          id: "assistant-custom-low",
+          kind: "message",
+          role: "assistant",
+          content: "done",
+          timestamp: "2026-06-08T10:00:00.000Z",
+          metadata: {
+            totalCostCny: 8,
+          },
+        },
+      ],
+    })
+    const highThresholdHtml = renderTimeline({
+      onStartNewConversation: vi.fn(),
+      conversationRolloverThresholds: {
+        costThresholdCny: 20,
+        tokenThreshold: 5_000_000,
+      },
+      items: [
+        {
+          id: "assistant-custom-high",
+          kind: "message",
+          role: "assistant",
+          content: "done",
+          timestamp: "2026-06-08T10:00:00.000Z",
+          metadata: {
+            totalCostCny: 8,
+          },
+        },
+      ],
+    })
+
+    expect(textFromMarkup(lowThresholdHtml)).toContain("开始新对话")
+    expect(textFromMarkup(highThresholdHtml)).not.toContain("开始新对话")
+  })
+
   it("does not render the rollover prompt while the conversation is sending", () => {
     const html = renderTimeline({
       sending: true,

@@ -108,6 +108,27 @@ describe("configIpcModule", () => {
     expect(result.agent.defaultProviderModel).toEqual(providerModel)
   })
 
+  it("preserves conversation rollover prompt thresholds through IPC round-trip", async () => {
+    const conversationRolloverPrompt = {
+      costThresholdCny: 18,
+      tokenThreshold: 6_000_000,
+    }
+    vi.mocked(configStore.update).mockResolvedValue(
+      configFixture({
+        defaultPermissionMode: "default",
+        defaultProviderModel: null,
+        conversationRolloverPrompt,
+      }),
+    )
+    const harness = createHarness()
+
+    const result = await harness.invoke("synapse:config:update", {
+      agent: { conversationRolloverPrompt },
+    }) as SynapseConfig
+
+    expect(result.agent.conversationRolloverPrompt).toEqual(conversationRolloverPrompt)
+  })
+
   it("returns filePath for config backup export", async () => {
     const { configBackupService } = await import("../../../services/config-backup-service")
     vi.mocked(configBackupService.selectExportTarget).mockResolvedValue("/tmp/synapse-backup.json")
@@ -229,7 +250,7 @@ function createHarness(options: {
   return harness
 }
 
-function configFixture(agent: SynapseConfig["agent"]): SynapseConfig {
+function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
   return {
     activeRepoUuid: null,
     repositories: [],
@@ -243,6 +264,14 @@ function configFixture(agent: SynapseConfig["agent"]): SynapseConfig {
       contentSortOrder: "modified-desc",
       variables: [],
     },
-    agent,
+    agent: {
+      defaultPermissionMode: "default",
+      defaultProviderModel: null,
+      conversationRolloverPrompt: {
+        costThresholdCny: 10,
+        tokenThreshold: 5_000_000,
+      },
+      ...agent,
+    },
   }
 }

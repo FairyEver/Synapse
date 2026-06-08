@@ -2,6 +2,7 @@ import path from "node:path"
 
 import { describe, expect, it, vi } from "vitest"
 
+import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../src/constants/defaults"
 import type { SynapseConfig } from "../../../src/types/config"
 import type { SynapseDiagnosticsCheck } from "../../../src/types/diagnostics"
 import type { PackagedClaudeRuntimeStatus } from "../agent-runtime/claude-runtime-binary"
@@ -813,10 +814,7 @@ function createConfig(options: {
       contentSortOrder: "modified-desc",
       variables: [],
     },
-    agent: {
-      defaultPermissionMode: "default",
-      defaultProviderModel: null,
-    },
+    agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }
 }
 
