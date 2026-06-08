@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -175,6 +176,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     : "text-sm text-muted-foreground"
   const downloadDetails = getDownloadDetails(updateState)
   const downloadProgressValue = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
+  const currentVersionLabel = `v${updateState.currentVersion}`
 
   const cheatCodeContext = useMemo<CheatCodeContext>(
     () => ({
@@ -280,6 +282,20 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     }
   }
 
+  const handleCopyCurrentVersion = useCallback(async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable")
+      }
+
+      await navigator.clipboard.writeText(currentVersionLabel)
+      toast("版本号已复制")
+    } catch (error) {
+      logger.error("Failed to copy app version.", error)
+      toast("复制失败")
+    }
+  }, [currentVersionLabel])
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col items-center gap-2">
@@ -331,7 +347,16 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">当前版本</p>
-            <p className="text-sm text-muted-foreground">v{updateState.currentVersion}</p>
+            <button
+              type="button"
+              aria-label={`复制当前版本 ${currentVersionLabel}`}
+              onClick={() => {
+                void handleCopyCurrentVersion()
+              }}
+              className="w-fit rounded-sm text-left text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              {currentVersionLabel}
+            </button>
           </div>
         </div>
 
