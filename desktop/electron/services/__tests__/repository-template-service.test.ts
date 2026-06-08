@@ -21,8 +21,10 @@ describe("RepositoryTemplateService", () => {
       iconBg: seed.iconBg,
       id: seed.id,
     }))).toEqual([
+      { id: "synapse-automation-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-content-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-database-mcp", icon: "terminal", iconBg: "teal" },
+      { id: "synapse-drive-mcp", icon: "folder-tree", iconBg: "teal" },
       { id: "synapse-model-price-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-repository-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-scheduler-mcp", icon: "terminal", iconBg: "teal" },

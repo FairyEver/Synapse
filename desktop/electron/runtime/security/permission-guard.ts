@@ -25,6 +25,7 @@ export type PermissionAction =
   | "secret.write"
   | "scheduler.mutate"
   | "automation.mutate"
+  | "workflow.run"
   | "workflow.mutate"
   | "content.mutate"
 
@@ -115,11 +116,15 @@ export const systemShellExecPolicy: PermissionPolicy = {
       : "defer-to-next",
 }
 
-/** Allow system actors to perform network requests and spawn agents (workflow engine, scheduler). */
+/** Allow system actors to perform automation actions (workflow engine, scheduler). */
 export const systemAutomationPolicy: PermissionPolicy = {
   id: "system-automation-allow",
   decide: (req) =>
-    req.actor.kind === "system" && (req.action === "network.connect" || req.action === "agent.spawn")
+    req.actor.kind === "system" && (
+      req.action === "network.connect"
+      || req.action === "agent.spawn"
+      || req.action === "workflow.run"
+    )
       ? "allow"
       : "defer-to-next",
 }

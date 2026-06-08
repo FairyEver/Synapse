@@ -139,6 +139,12 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.process-environment",
       "core.permission-guard",
       "core.audit-sink",
+      "core.event-bus",
+      "core.workflow",
+      "core.workflow.engine",
+      "core.workflow.snapshots",
+      "core.workflow.run-aborts",
+      "core.workflow.run-statuses",
     ])
     expect(byId.get("core.project-containers")?.dependsOn).toEqual([
       "core.process-environment",

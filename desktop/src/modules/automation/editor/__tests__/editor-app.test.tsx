@@ -83,6 +83,7 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).toContain("就执行以下操作")
     expect(document.body.textContent).toContain("命令")
     expect(document.body.textContent).toContain("Agent")
+    expect(document.body.textContent).toContain("工作流")
   })
 
   it("does not show default config summaries before trigger and executor are selected", async () => {

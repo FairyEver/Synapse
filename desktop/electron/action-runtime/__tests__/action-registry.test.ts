@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   MainActionRegistry,
@@ -90,5 +90,17 @@ describe("MainActionRegistry", () => {
         fields: ["method", "url", "headers", "query", "bodyType", "body", "timeoutMins", "auth"],
       },
     ]))
+  })
+
+  it("registers workflow action when workflow runtime is supplied", () => {
+    const registry = createBuiltinMainActionRegistry({
+      processRunner: { run: vi.fn() },
+      workflowRuntime: {
+        getWorkflowDefinition: vi.fn(),
+        runWorkflowAndWait: vi.fn(),
+      },
+    })
+
+    expect(registry.list().map((action) => action.manifest.id)).toContain("builtin.workflow")
   })
 })
