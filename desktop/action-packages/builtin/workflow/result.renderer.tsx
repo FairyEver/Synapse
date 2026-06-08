@@ -8,6 +8,8 @@ export function WorkflowActionResultView({ result }: { readonly result: ActionRu
   if (!outputs?.workflowId || !outputs.workflowRunId) {
     return <ActionResultView result={result} />
   }
+  const workflowId = outputs.workflowId
+  const workflowRunId = outputs.workflowRunId
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -20,7 +22,7 @@ export function WorkflowActionResultView({ result }: { readonly result: ActionRu
           size="sm"
           onClick={(event) => {
             event.stopPropagation()
-            void window.synapse?.workflow.openRunner(outputs.workflowId, outputs.workflowRunId)
+            void window.synapse?.workflow.openRunner(workflowId, workflowRunId)
           }}
         >
           打开运行记录
