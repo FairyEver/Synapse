@@ -15,6 +15,7 @@ import { AgentMessageHeader } from "./agent-message-header"
 import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
 import { AgentUsageCard } from "./agent-usage-card"
+import { AgentConversationRolloverPrompt } from "./agent-conversation-rollover-prompt"
 import { errorLogMeta } from "../utils"
 
 import "streamdown/styles.css"
@@ -69,12 +70,18 @@ interface AgentMessageEventProps {
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
   readonly onOpenReference: (reference: string) => void
+  readonly showConversationRolloverPrompt?: boolean
+  readonly conversationRolloverPromptDisabled?: boolean
+  readonly onStartNewConversation?: () => void
 }
 
 function AgentMessageEvent({
   item,
   agentIcon,
   onOpenReference,
+  showConversationRolloverPrompt = false,
+  conversationRolloverPromptDisabled = false,
+  onStartNewConversation,
 }: AgentMessageEventProps) {
   const outgoing = item.role === "user"
 
@@ -109,6 +116,9 @@ function AgentMessageEvent({
       <AssistantMessageBody
         item={item}
         onOpenReference={onOpenReference}
+        showConversationRolloverPrompt={showConversationRolloverPrompt}
+        conversationRolloverPromptDisabled={conversationRolloverPromptDisabled}
+        onStartNewConversation={onStartNewConversation}
       />
     </article>
   )
@@ -117,9 +127,15 @@ function AgentMessageEvent({
 function AssistantMessageBody({
   item,
   onOpenReference,
+  showConversationRolloverPrompt,
+  conversationRolloverPromptDisabled,
+  onStartNewConversation,
 }: {
   readonly item: SynapseAgentMessageTimelineItem
   readonly onOpenReference: (reference: string) => void
+  readonly showConversationRolloverPrompt: boolean
+  readonly conversationRolloverPromptDisabled: boolean
+  readonly onStartNewConversation?: () => void
 }) {
   const streaming = item.streaming === true
   const preprocessed = wrapLocalReferences(renderObsidianWikilinksAsBoldText(item.content))
@@ -217,6 +233,12 @@ function AssistantMessageBody({
           totalCostBreakdownCny={item.metadata?.totalCostBreakdownCny}
           estimatedCost={item.metadata?.estimatedCost}
           timestamp={item.timestamp}
+        />
+      ) : null}
+      {showConversationRolloverPrompt && onStartNewConversation ? (
+        <AgentConversationRolloverPrompt
+          disabled={conversationRolloverPromptDisabled}
+          onStartNewConversation={onStartNewConversation}
         />
       ) : null}
       <AgentMessageToolbar

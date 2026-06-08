@@ -7,6 +7,7 @@ import type {
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
+import { shouldShowConversationRolloverPrompt } from "../utils/conversation-rollover"
 import { AgentPhaseRow } from "./agent-phase-row"
 import { AgentRunStatus } from "./agent-run-status"
 import { AgentTimelineItem } from "./agent-timeline-item"
@@ -19,6 +20,7 @@ function AgentTimeline({
   pendingPermissions,
   onOpenReference,
   onRespondPermission,
+  onStartNewConversation,
   viewportRef,
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
@@ -33,6 +35,7 @@ function AgentTimeline({
     updatedInput?: Record<string, unknown>,
     message?: string,
   ) => void | Promise<void>
+  readonly onStartNewConversation?: () => void
   readonly viewportRef: Ref<HTMLDivElement>
 }) {
   // Drives 1s re-renders for any in-progress phase row's elapsed timer.
@@ -40,6 +43,11 @@ function AgentTimeline({
   const now = Date.now()
   const latestPendingItemIds = latestPendingTimelineItemIds(items, pendingPermissions)
   const displayEntries = timelineDisplayEntries(items)
+  const rolloverPromptMessageId = conversationRolloverPromptMessageId({
+    displayEntries,
+    sending,
+    hasStartAction: Boolean(onStartNewConversation),
+  })
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <div ref={viewportRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
@@ -64,6 +72,9 @@ function AgentTimeline({
                 latestPendingItemIds={latestPendingItemIds}
                 onOpenReference={onOpenReference}
                 onRespondPermission={onRespondPermission}
+                showConversationRolloverPrompt={entry.item.id === rolloverPromptMessageId}
+                conversationRolloverPromptDisabled={sending}
+                onStartNewConversation={onStartNewConversation}
               />
             )
           ))}
@@ -119,6 +130,23 @@ function attachLegacyToolResult(
     return true
   }
   return false
+}
+
+function conversationRolloverPromptMessageId({
+  displayEntries,
+  sending,
+  hasStartAction,
+}: {
+  readonly displayEntries: readonly TimelineDisplayEntry[]
+  readonly sending: boolean
+  readonly hasStartAction: boolean
+}): string | undefined {
+  if (sending || !hasStartAction) return undefined
+  const lastEntry = displayEntries.at(-1)
+  const item = lastEntry?.item
+  if (!item || item.kind !== "message" || item.role !== "assistant") return undefined
+  if (item.streaming === true) return undefined
+  return shouldShowConversationRolloverPrompt(item.metadata) ? item.id : undefined
 }
 
 function isUnidentifiedToolCall(item: SynapseAgentTimelineItem): item is SynapseAgentToolCallTimelineItem {

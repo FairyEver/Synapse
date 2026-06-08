@@ -757,4 +757,107 @@ describe("AgentTimeline", () => {
       threadId: "thread-1",
     }))
   })
+
+  it("renders the rollover prompt after the latest completed assistant message over the cost threshold", () => {
+    const html = renderTimeline({
+      onStartNewConversation: vi.fn(),
+      items: [
+        {
+          id: "assistant-expensive",
+          kind: "message",
+          role: "assistant",
+          content: "done",
+          timestamp: "2026-06-08T10:00:00.000Z",
+          metadata: {
+            usage: {
+              inputTokens: 100,
+              outputTokens: 20,
+            },
+            totalCostCny: 10,
+          },
+        },
+      ],
+    })
+
+    expect(textFromMarkup(html)).toContain("这个对话已经很长")
+    expect(textFromMarkup(html)).toContain("开始新对话")
+  })
+
+  it("does not render the rollover prompt while the conversation is sending", () => {
+    const html = renderTimeline({
+      sending: true,
+      onStartNewConversation: vi.fn(),
+      items: [
+        {
+          id: "assistant-expensive",
+          kind: "message",
+          role: "assistant",
+          content: "done",
+          timestamp: "2026-06-08T10:00:00.000Z",
+          metadata: {
+            usage: {
+              inputTokens: 100,
+            },
+            totalCostCny: 10,
+          },
+        },
+      ],
+    })
+
+    expect(textFromMarkup(html)).not.toContain("这个对话已经很长")
+  })
+
+  it("does not render the rollover prompt for a streaming assistant message", () => {
+    const html = renderTimeline({
+      onStartNewConversation: vi.fn(),
+      items: [
+        {
+          id: "assistant-streaming",
+          kind: "message",
+          role: "assistant",
+          content: "still running",
+          streaming: true,
+          timestamp: "2026-06-08T10:00:00.000Z",
+          metadata: {
+            usage: {
+              inputTokens: 100,
+            },
+            totalCostCny: 10,
+          },
+        },
+      ],
+    })
+
+    expect(textFromMarkup(html)).not.toContain("这个对话已经很长")
+  })
+
+  it("does not render the rollover prompt on a historical assistant message", () => {
+    const html = renderTimeline({
+      onStartNewConversation: vi.fn(),
+      items: [
+        {
+          id: "assistant-expensive",
+          kind: "message",
+          role: "assistant",
+          content: "old answer",
+          timestamp: "2026-06-08T10:00:00.000Z",
+          metadata: {
+            usage: {
+              inputTokens: 100,
+            },
+            totalCostCny: 10,
+          },
+        },
+        {
+          id: "user-next",
+          kind: "message",
+          role: "user",
+          content: "next question",
+          timestamp: "2026-06-08T10:01:00.000Z",
+        },
+      ],
+    })
+
+    expect(textFromMarkup(html)).not.toContain("这个对话已经很长")
+  })
 })
