@@ -85,6 +85,23 @@ describe("server deployment configuration", () => {
     expect(buildStep).toBeGreaterThan(syncStep)
   })
 
+  it("syncs the local server env file explicitly without including it in code rsync output", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain('LOCAL_ENV_FILE="server/.env"')
+    expect(deployScript).toContain('REMOTE_ENV_FILE="$REMOTE_DIR/server/.env"')
+    expect(deployScript).toContain("sync_remote_env")
+    expect(deployScript).toContain("test -f \"$LOCAL_ENV_FILE\"")
+    expect(deployScript).toContain("scp \"$LOCAL_ENV_FILE\" \"$SERVER:$remote_tmp\"")
+    expect(deployScript).toContain("chmod 600 \"$remote_tmp\"")
+    expect(deployScript).toContain("mv \"$remote_tmp\" \"$REMOTE_ENV_FILE\"")
+    expect(deployScript).toContain("docker compose --env-file .env config >/dev/null")
+    expect(deployScript).toContain("--exclude='server/.env'")
+    expect(deployScript).toContain('"同步本机环境变量到服务器"')
+    expect(deployScript).not.toContain("cat server/.env")
+    expect(deployScript).not.toContain("grep '^COS_' server/.env")
+  })
+
   it("persists server file logs outside the rebuilt container", () => {
     const compose = readRepoFile("server/compose.yml")
 
