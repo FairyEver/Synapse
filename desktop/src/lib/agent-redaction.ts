@@ -7,6 +7,7 @@ const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
 const AUTHORIZATION_HEADER_PATTERN = /\b(authorization)(\s*:\s*)([^\r\n]+)/gi
 const COOKIE_HEADER_PATTERN = /\b((?:set-)?cookie)(\s*:\s*)([^\r\n]+)/gi
 const SK_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g
+const CIRCULAR_MARKER = "[Circular]"
 
 function isSensitiveKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, "")
@@ -56,17 +57,24 @@ function redactCookieHeaderValue(value: string): string {
   return value.replace(/\b([^=;\s'"]+)=([^;\s'"]+)/g, `$1=${REDACTED}`)
 }
 
-function redactSensitiveValue(value: unknown, key = ""): unknown {
+function redactSensitiveValue(value: unknown, key = "", ancestors = new WeakSet<object>()): unknown {
   if (isSensitiveKey(key)) return REDACTED
   if (typeof value === "string") return redactSensitiveText(value)
-  if (Array.isArray(value)) return value.map((item) => redactSensitiveValue(item))
   if (!value || typeof value !== "object") return value
+  if (ancestors.has(value)) return CIRCULAR_MARKER
 
-  const output: Record<string, unknown> = {}
-  for (const [childKey, childValue] of Object.entries(value)) {
-    output[childKey] = redactSensitiveValue(childValue, childKey)
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) return value.map((item) => redactSensitiveValue(item, "", ancestors))
+
+    const output: Record<string, unknown> = {}
+    for (const [childKey, childValue] of Object.entries(value)) {
+      output[childKey] = redactSensitiveValue(childValue, childKey, ancestors)
+    }
+    return output
+  } finally {
+    ancestors.delete(value)
   }
-  return output
 }
 
 function isSensitiveTextKey(key: string): boolean {
