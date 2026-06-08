@@ -9,12 +9,12 @@ afterEach(() => {
 })
 
 describe("isAccountUiVisible", () => {
-  it("hides account UI in packaged builds", () => {
+  it("keeps account UI visible in packaged builds", () => {
     ;(window as unknown as { synapse?: { isPackaged: boolean } }).synapse = {
       isPackaged: true,
     }
 
-    expect(isAccountUiVisible()).toBe(false)
+    expect(isAccountUiVisible()).toBe(true)
   })
 
   it("keeps account UI visible in development builds", () => {

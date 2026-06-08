@@ -1,7 +1,5 @@
-import { getSynapseBridge } from "@/lib/electron-bridge"
-
 function isAccountUiVisible(): boolean {
-  return getSynapseBridge()?.isPackaged !== true
+  return true
 }
 
 export { isAccountUiVisible }
