@@ -136,14 +136,14 @@ while [ -n "$APP_PUBLIC_URL" ] && [[ "$APP_PUBLIC_URL" != http://* ]] && [[ "$AP
 done
 
 echo ""
-echo ">>> 备份配置（可选，回车跳过）"
-echo "  配置腾讯云 COS 后将启用自动备份功能"
-echo "  参考文档: docs/superpowers/specs/2026-05-05-backup-export-design.md"
+echo ">>> COS 存储配置（可选，回车跳过）"
+echo "  配置腾讯云 COS 后将启用云盘文件存储和自动备份能力"
+echo "  请填写已存在且服务端有权限访问的 bucket"
 echo ""
 read -p "腾讯云 COS SecretId (回车跳过): " COS_SECRET_ID
 if [ -n "$COS_SECRET_ID" ]; then
   read -p "腾讯云 COS SecretKey: " COS_SECRET_KEY
-  read -p "COS 存储桶名称 (如 synapse-backup-1250000000): " COS_BUCKET
+  read -p "COS 存储桶名称 (如 synapse-drive-1250000000): " COS_BUCKET
   read -p "COS 地域 (如 ap-guangzhou): " COS_REGION
 fi
 

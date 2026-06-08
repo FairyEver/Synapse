@@ -1,5 +1,5 @@
 #!/bin/bash
-# 本机运行：交互式配置远程服务器的 COS 备份信息
+# 本机运行：交互式配置远程服务器的 COS 存储信息
 set -e
 
 SERVER="root@120.53.17.64"
@@ -7,7 +7,7 @@ REMOTE_DIR="/www/wwwroot/synapse/server"
 ENV_FILE="$REMOTE_DIR/.env"
 
 echo "========================================="
-echo "  配置腾讯云 COS 备份"
+echo "  配置腾讯云 COS 存储"
 echo "========================================="
 echo ""
 
@@ -20,7 +20,7 @@ fi
 # 检查是否已配置
 EXISTING=$(ssh "$SERVER" "grep -c '^COS_SECRET_ID=' $ENV_FILE 2>/dev/null || echo 0")
 if [ "$EXISTING" -gt 0 ]; then
-  echo "检测到已有 COS 配置："
+  echo "检测到已有 COS 存储配置："
   ssh "$SERVER" "grep '^COS_' $ENV_FILE" 2>/dev/null | sed 's/SECRET_KEY=.*/SECRET_KEY=***/'
   echo ""
   read -p "是否覆盖？[y/N]: " CONFIRM
@@ -33,7 +33,7 @@ fi
 echo ""
 read -p "腾讯云 COS SecretId: " COS_SECRET_ID
 read -p "腾讯云 COS SecretKey: " COS_SECRET_KEY
-read -p "COS 存储桶名称 (如 synapse-backup-1250000000): " COS_BUCKET
+read -p "COS 存储桶名称 (如 synapse-drive-1250000000): " COS_BUCKET
 read -p "COS 地域 (如 ap-guangzhou): " COS_REGION
 
 echo ""
@@ -60,5 +60,5 @@ echo "========================================="
 echo "  配置完成"
 echo "========================================="
 echo ""
-echo "COS 备份配置已写入远程 .env。"
+echo "COS 存储配置已写入远程 .env，将用于云盘文件存储和自动备份。"
 echo ""
