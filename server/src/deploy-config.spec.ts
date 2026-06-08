@@ -16,8 +16,21 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("synapse-online-before-deploy-${DEPLOY_ID}.sql")
     expect(deployScript).toContain("synapse-final-before-switch-${DEPLOY_ID}.sql")
     expect(deployScript).toContain("docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse")
+    expect(deployScript).toContain("chmod 600 \"$BACKUP_FILE\"")
     expect(deployScript).not.toContain("docker compose --env-file .env down")
     expect(deployScript).not.toContain("docker compose down")
+  })
+
+  it("backs up deployment secrets and postgres globals without printing values", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain('ENV_BACKUP_FILE="$BACKUP_DIR/env/synapse-env-before-sync-${DEPLOY_ID}.env"')
+    expect(deployScript).toContain('GLOBALS_BACKUP_FILE="$BACKUP_DIR/globals/synapse-globals-before-deploy-${DEPLOY_ID}.sql"')
+    expect(deployScript).toContain("backup_remote_postgres_globals")
+    expect(deployScript).toContain("pg_dumpall -U synapse --globals-only")
+    expect(deployScript).toContain("chmod 600 \"$backup_file\"")
+    expect(deployScript).toContain("chmod 600 \"$GLOBALS_BACKUP_FILE\"")
+    expect(deployScript).not.toContain("backup_file=\"$(dirname \"$REMOTE_ENV_FILE\")/.env.backup-${DEPLOY_ID}\"")
   })
 
   it("preflights risky migrations and restores the previous service image on failed health checks", () => {
@@ -33,6 +46,34 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("print_manual_database_restore_instructions")
     expect(deployScript).toContain("docker compose --env-file .env stop server")
     expect(deployScript).toContain("docker compose --env-file .env up -d --no-build server")
+  })
+
+  it("verifies the final database backup before starting the new service", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain("verify_final_backup_restore")
+    expect(deployScript).toContain("synapse_final_verify_${DEPLOY_ID}")
+    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres psql -U synapse -d "$verify_db" < "$FINAL_BACKUP_FILE"')
+
+    const finalBackupStep = deployScript.indexOf('"最终备份远程数据库"')
+    const finalVerifyStep = deployScript.indexOf('"恢复验证最终数据库备份"')
+    const driveBackupStep = deployScript.indexOf('"备份本地 Drive 数据"')
+    const startStep = deployScript.indexOf('"启动新服务"')
+
+    expect(finalBackupStep).toBeGreaterThan(-1)
+    expect(finalVerifyStep).toBeGreaterThan(finalBackupStep)
+    expect(driveBackupStep).toBeGreaterThan(finalVerifyStep)
+    expect(startStep).toBeGreaterThan(driveBackupStep)
+  })
+
+  it("prints the same deployment artifact summary on success and health-check failure", () => {
+    const deployScript = readRepoFile("deploy.sh")
+
+    expect(deployScript).toContain("print_deployment_artifacts")
+    expect(deployScript).toContain("远端 .env 备份: $ENV_BACKUP_FILE")
+    expect(deployScript).toContain("Postgres globals 备份: $GLOBALS_BACKUP_FILE")
+    expect(deployScript).toContain("本地 Drive 备份: $(drive_backup_summary)")
+    expect(deployScript).toContain("print_deployment_artifacts\n  print_manual_database_restore_instructions")
   })
 
   it("runs migrations in the foreground before starting the production process", () => {
@@ -73,7 +114,7 @@ describe("server deployment configuration", () => {
     const deployScript = readRepoFile("deploy.sh")
 
     expect(deployScript).toContain("backup_remote_database")
-    expect(deployScript).toContain('mkdir -p "$REMOTE_DIR/backups"')
+    expect(deployScript).toContain('mkdir -p "$(dirname "$BACKUP_FILE")"')
     expect(deployScript).toContain("docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse")
 
     const backupStep = deployScript.indexOf('"在线备份远程数据库"')
@@ -95,12 +136,14 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("test -f \"$LOCAL_ENV_FILE\"")
     expect(deployScript).toContain("scp \"$LOCAL_ENV_FILE\" \"$SERVER:$remote_tmp\"")
     expect(deployScript).toContain("chmod 600 \"$remote_tmp\"")
-    expect(deployScript).toContain(".env.backup-${DEPLOY_ID}")
+    expect(deployScript).toContain("synapse-env-before-sync-${DEPLOY_ID}.env")
     expect(deployScript).toContain("protected env keys kept from remote")
     expect(deployScript).toContain("docker compose --env-file .env config >/dev/null")
     expect(deployScript).toContain("--exclude='server/.env'")
     expect(deployScript).toContain("--exclude='server/.env.backup-*'")
     expect(deployScript).toContain("--exclude='server/.env.password-rotation-*'")
+    expect(deployScript).toContain("--exclude='server/.env.merged-*'")
+    expect(deployScript).toContain("--exclude='server/.env.tmp-*'")
     expect(deployScript).toContain('"同步本机环境变量到服务器"')
     expect(deployScript).not.toContain("mv \"$remote_tmp\" \"$REMOTE_ENV_FILE\"")
     expect(deployScript).not.toContain("cat server/.env")
@@ -125,6 +168,19 @@ describe("server deployment configuration", () => {
 
     expect(compose).toContain("volumes:")
     expect(compose).toContain("- ./logs:/app/logs")
+  })
+
+  it("persists and protects local drive fallback data during deployment", () => {
+    const deployScript = readRepoFile("deploy.sh")
+    const compose = readRepoFile("server/compose.yml")
+
+    expect(compose).toContain("SYNAPSE_DRIVE_LOCAL_ROOT: /app/data/drive")
+    expect(compose).toContain("- ./data/drive:/app/data/drive")
+    expect(deployScript).toContain('DRIVE_BACKUP_FILE="$BACKUP_DIR/drive/synapse-drive-final-before-switch-${DEPLOY_ID}.tar.gz"')
+    expect(deployScript).toContain("backup_remote_drive_fallback")
+    expect(deployScript).toContain("tar -czf \"$DRIVE_BACKUP_FILE\" -C data drive")
+    expect(deployScript).toContain("chmod 600 \"$DRIVE_BACKUP_FILE\"")
+    expect(deployScript).toContain("--exclude='server/data'")
   })
 
   it("documents the dashboard package instead of the retired server admin frontend", () => {

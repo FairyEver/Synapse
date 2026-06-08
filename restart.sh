@@ -16,7 +16,7 @@ if docker compose --env-file .env exec -T -e PGPASSWORD="$postgres_password" pos
   psql -h postgres -p 5432 -U synapse -d synapse -Atc 'select 1' >/dev/null; then
   echo "database tcp auth ok"
 else
-  echo "database tcp auth failed: .env POSTGRES_PASSWORD does not match the existing Postgres role password"
+  echo "database tcp auth failed: .env POSTGRES_PASSWORD does not match the existing Postgres role password; restart stopped before touching the server container"
   exit 1
 fi
 REMOTE_SCRIPT

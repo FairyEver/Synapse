@@ -36,11 +36,13 @@ services:
       COS_SECRET_KEY: ${COS_SECRET_KEY:-}
       COS_BUCKET: ${COS_BUCKET:-}
       COS_REGION: ${COS_REGION:-}
+      SYNAPSE_DRIVE_LOCAL_ROOT: /app/data/drive
       PORT: "3001"
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
       - ./logs:/app/logs
+      - ./data/drive:/app/data/drive
     depends_on:
       postgres:
         condition: service_healthy

@@ -11,14 +11,20 @@ DEFAULT_APP_PUBLIC_URL="https://synapse.d2.pub"
 DEPLOY_ID=$(date +%Y%m%d_%H%M%S)
 NEW_IMAGE_TAG="deploy-${DEPLOY_ID}"
 ROLLBACK_IMAGE_TAG="rollback-${DEPLOY_ID}"
-ONLINE_BACKUP_FILE="$REMOTE_DIR/backups/synapse-online-before-deploy-${DEPLOY_ID}.sql"
-FINAL_BACKUP_FILE="$REMOTE_DIR/backups/synapse-final-before-switch-${DEPLOY_ID}.sql"
+BACKUP_DIR="$REMOTE_DIR/backups"
+ENV_BACKUP_FILE="$BACKUP_DIR/env/synapse-env-before-sync-${DEPLOY_ID}.env"
+GLOBALS_BACKUP_FILE="$BACKUP_DIR/globals/synapse-globals-before-deploy-${DEPLOY_ID}.sql"
+ONLINE_BACKUP_FILE="$BACKUP_DIR/synapse-online-before-deploy-${DEPLOY_ID}.sql"
+FINAL_BACKUP_FILE="$BACKUP_DIR/synapse-final-before-switch-${DEPLOY_ID}.sql"
+DRIVE_BACKUP_FILE="$BACKUP_DIR/drive/synapse-drive-final-before-switch-${DEPLOY_ID}.tar.gz"
 APPLIED_MIGRATIONS_FILE=$(mktemp)
-TOTAL_STEPS=15
+DRIVE_BACKUP_STATUS_FILE=$(mktemp)
+TOTAL_STEPS=18
 TOTAL_START=$(date +%s)
 
 cleanup() {
   rm -f "$APPLIED_MIGRATIONS_FILE"
+  rm -f "$DRIVE_BACKUP_STATUS_FILE"
 }
 
 trap cleanup EXIT
@@ -29,6 +35,10 @@ step() {
   printf "\n[%d/%d] %s\n" "$num" "$TOTAL_STEPS" "$desc"
   "$@" 2>&1 | sed 's/^/  /'
   printf "[%d/%d] done\n" "$num" "$TOTAL_STEPS"
+}
+
+ensure_remote_dirs() {
+  ssh "$SERVER" "mkdir -p '$REMOTE_DIR/server' '$BACKUP_DIR/env' '$BACKUP_DIR/globals' '$BACKUP_DIR/drive' '$REMOTE_DIR/server/data/drive'"
 }
 
 ensure_remote_env() {
@@ -77,9 +87,9 @@ sync_remote_env() {
 
   local remote_tmp="$REMOTE_ENV_FILE.tmp-${DEPLOY_ID}"
 
-  ssh "$SERVER" "mkdir -p $REMOTE_DIR/server"
+  ssh "$SERVER" "mkdir -p '$REMOTE_DIR/server'"
   scp "$LOCAL_ENV_FILE" "$SERVER:$remote_tmp" >/dev/null
-  ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' DEPLOY_ID='$DEPLOY_ID' PROTECTED_ENV_KEYS='$PROTECTED_ENV_KEYS' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' ENV_BACKUP_FILE='$ENV_BACKUP_FILE' DEPLOY_ID='$DEPLOY_ID' PROTECTED_ENV_KEYS='$PROTECTED_ENV_KEYS' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 chmod 600 "$remote_tmp"
@@ -98,9 +108,10 @@ if [ ! -f "$REMOTE_ENV_FILE" ]; then
   exit 0
 fi
 
-backup_file="$(dirname "$REMOTE_ENV_FILE")/.env.backup-${DEPLOY_ID}"
+backup_file="$ENV_BACKUP_FILE"
 merged_tmp="$(dirname "$REMOTE_ENV_FILE")/.env.merged-${DEPLOY_ID}"
 
+mkdir -p "$(dirname "$backup_file")"
 cp "$REMOTE_ENV_FILE" "$backup_file"
 chmod 600 "$backup_file"
 
@@ -214,13 +225,29 @@ backup_remote_database() {
   ssh "$SERVER" "REMOTE_DIR='$REMOTE_DIR' BACKUP_FILE='$backup_file' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-mkdir -p "$REMOTE_DIR/backups"
+mkdir -p "$(dirname "$BACKUP_FILE")"
 cd "$REMOTE_DIR/server"
 
 docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > "$BACKUP_FILE"
 test -s "$BACKUP_FILE"
+chmod 600 "$BACKUP_FILE"
 
 printf "backup saved: %s\n" "$BACKUP_FILE"
+REMOTE_SCRIPT
+}
+
+backup_remote_postgres_globals() {
+  ssh "$SERVER" "REMOTE_DIR='$REMOTE_DIR' GLOBALS_BACKUP_FILE='$GLOBALS_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+mkdir -p "$(dirname "$GLOBALS_BACKUP_FILE")"
+cd "$REMOTE_DIR/server"
+
+docker compose --env-file .env exec -T postgres pg_dumpall -U synapse --globals-only > "$GLOBALS_BACKUP_FILE"
+test -s "$GLOBALS_BACKUP_FILE"
+chmod 600 "$GLOBALS_BACKUP_FILE"
+
+printf "postgres globals backup saved: %s\n" "$GLOBALS_BACKUP_FILE"
 REMOTE_SCRIPT
 }
 
@@ -235,6 +262,7 @@ sync_remote_code() {
     --exclude='server/dist' \
     --exclude='server/admin-dist' \
     --exclude='server/logs' \
+    --exclude='server/data' \
     --exclude='dashboard/node_modules' \
     --exclude='dashboard/dist' \
     --exclude='shared/node_modules' \
@@ -299,6 +327,60 @@ printf "preflight migration ok: %s\n" "$preflight_db"
 REMOTE_SCRIPT
 }
 
+verify_final_backup_restore() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && DEPLOY_ID='$DEPLOY_ID' FINAL_BACKUP_FILE='$FINAL_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+verify_db="synapse_final_verify_${DEPLOY_ID}"
+
+cleanup_verify_database() {
+  docker compose --env-file .env exec -T postgres psql -U synapse -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${verify_db}';" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres dropdb -U synapse --if-exists "$verify_db" >/dev/null 2>&1 || true
+}
+
+trap cleanup_verify_database EXIT
+
+cleanup_verify_database
+docker compose --env-file .env exec -T postgres createdb -U synapse "$verify_db"
+docker compose --env-file .env exec -T postgres psql -U synapse -d "$verify_db" < "$FINAL_BACKUP_FILE"
+docker compose --env-file .env exec -T postgres psql -U synapse -d "$verify_db" -Atc 'select 1' >/dev/null
+
+printf "final backup restore verified: %s\n" "$verify_db"
+REMOTE_SCRIPT
+}
+
+backup_remote_drive_fallback() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && DRIVE_BACKUP_FILE='$DRIVE_BACKUP_FILE' bash -s" <<'REMOTE_SCRIPT' | tee "$DRIVE_BACKUP_STATUS_FILE"
+set -euo pipefail
+
+read_env_value() {
+  sed -n "s/^${1}=//p" .env | tail -n 1
+}
+
+cos_secret_id=$(read_env_value COS_SECRET_ID)
+cos_secret_key=$(read_env_value COS_SECRET_KEY)
+cos_bucket=$(read_env_value COS_BUCKET)
+cos_region=$(read_env_value COS_REGION)
+
+if [ -n "$cos_secret_id" ] && [ -n "$cos_secret_key" ] && [ -n "$cos_bucket" ] && [ -n "$cos_region" ]; then
+  echo "drive backup skipped: COS storage is configured"
+  exit 0
+fi
+
+if [ ! -d data/drive ]; then
+  echo "drive backup skipped: local drive directory not found"
+  exit 0
+fi
+
+mkdir -p "$(dirname "$DRIVE_BACKUP_FILE")"
+tar -czf "$DRIVE_BACKUP_FILE" -C data drive
+test -s "$DRIVE_BACKUP_FILE"
+chmod 600 "$DRIVE_BACKUP_FILE"
+
+printf "drive backup saved: %s\n" "$DRIVE_BACKUP_FILE"
+REMOTE_SCRIPT
+}
+
 stop_remote_server() {
   ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env stop server"
 }
@@ -324,8 +406,31 @@ print_manual_database_restore_instructions() {
   SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build server
 
 最终切换前备份：$FINAL_BACKUP_FILE
+Postgres globals 备份：$GLOBALS_BACKUP_FILE
+远端 .env 备份：$ENV_BACKUP_FILE
 回滚服务镜像：synapse-server:$ROLLBACK_IMAGE_TAG
 EOF
+}
+
+drive_backup_summary() {
+  if grep -q "drive backup saved" "$DRIVE_BACKUP_STATUS_FILE"; then
+    echo "$DRIVE_BACKUP_FILE"
+  elif grep -q "COS storage is configured" "$DRIVE_BACKUP_STATUS_FILE"; then
+    echo "skipped (COS storage is configured)"
+  elif grep -q "local drive directory not found" "$DRIVE_BACKUP_STATUS_FILE"; then
+    echo "skipped (local drive directory not found)"
+  else
+    echo "not recorded"
+  fi
+}
+
+print_deployment_artifacts() {
+  echo "远端 .env 备份: $ENV_BACKUP_FILE"
+  echo "Postgres globals 备份: $GLOBALS_BACKUP_FILE"
+  echo "在线预演备份: $ONLINE_BACKUP_FILE"
+  echo "最终切换前备份: $FINAL_BACKUP_FILE"
+  echo "本地 Drive 备份: $(drive_backup_summary)"
+  echo "回滚服务镜像: synapse-server:$ROLLBACK_IMAGE_TAG"
 }
 
 run_remote_health_check() {
@@ -473,17 +578,17 @@ REMOTE_SCRIPT
 
 echo ""
 
-# [1/15] 确保远程目录存在
+# [1/18] 确保远程目录存在
 step 1 "确保远程目录存在" \
-  ssh "$SERVER" "mkdir -p $REMOTE_DIR"
+  ensure_remote_dirs
 
 # 检查是否首次部署
 if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
-  # [2/15] 首次部署同步代码（只传服务端需要的文件）
+  # [2/18] 首次部署同步代码（只传服务端需要的文件）
   step 2 "同步代码到服务器" \
     sync_remote_code
 
-  # [3/15] 首次部署同步本机环境变量
+  # [3/18] 首次部署同步本机环境变量
   step 3 "同步本机环境变量到服务器" \
     sync_remote_env
 
@@ -493,64 +598,76 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   exit 0
 fi
 
-# [2/15] 同步本机环境变量
+# [2/18] 同步本机环境变量
 step 2 "同步本机环境变量到服务器" \
   sync_remote_env
 
-# [3/15] 检查并补齐旧环境变量
+# [3/18] 检查并补齐旧环境变量
 step 3 "检查远程环境变量" \
   ensure_remote_env
 
-# [4/15] 检查数据库网络认证
+# [4/18] 检查数据库网络认证
 step 4 "检查数据库网络认证" \
   verify_remote_database_auth
 
-# [5/15] 获取远程已应用迁移
+# [5/18] 获取远程已应用迁移
 step 5 "获取远程已应用迁移" \
   fetch_applied_migrations
 
-# [6/15] 扫描待发布迁移风险
+# [6/18] 扫描待发布迁移风险
 step 6 "扫描待发布迁移风险" \
   scan_pending_migrations
 
-# [7/15] 在线备份远程数据库
-step 7 "在线备份远程数据库" \
+# [7/18] 备份 Postgres globals
+step 7 "备份 Postgres globals" \
+  backup_remote_postgres_globals
+
+# [8/18] 在线备份远程数据库
+step 8 "在线备份远程数据库" \
   backup_remote_database "$ONLINE_BACKUP_FILE"
 
-# [8/15] 同步代码（只传服务端需要的文件）
-step 8 "同步代码到服务器" \
+# [9/18] 同步代码（只传服务端需要的文件）
+step 9 "同步代码到服务器" \
   sync_remote_code
 
-# [9/15] 构建新 Docker 镜像
-step 9 "构建 Docker 镜像" \
+# [10/18] 构建新 Docker 镜像
+step 10 "构建 Docker 镜像" \
   build_remote_image
 
-# [10/15] 标记当前服务镜像，供失败时回滚
-step 10 "标记回滚镜像" \
+# [11/18] 标记当前服务镜像，供失败时回滚
+step 11 "标记回滚镜像" \
   tag_remote_rollback_image
 
-# [11/15] 用在线备份恢复临时库并预演迁移
-step 11 "临时数据库预演迁移" \
+# [12/18] 用在线备份恢复临时库并预演迁移
+step 12 "临时数据库预演迁移" \
   preflight_remote_migrations
 
-# [12/15] 停止旧服务，保留数据库
-step 12 "停止旧服务" \
+# [13/18] 停止旧服务，保留数据库
+step 13 "停止旧服务" \
   stop_remote_server
 
-# [13/15] 停服后最终备份远程数据库
-step 13 "最终备份远程数据库" \
+# [14/18] 停服后最终备份远程数据库
+step 14 "最终备份远程数据库" \
   backup_remote_database "$FINAL_BACKUP_FILE"
 
-# [14/15] 启动新服务
-step 14 "启动新服务" \
+# [15/18] 恢复验证最终数据库备份
+step 15 "恢复验证最终数据库备份" \
+  verify_final_backup_restore
+
+# [16/18] 备份本地 Drive fallback 数据
+step 16 "备份本地 Drive 数据" \
+  backup_remote_drive_fallback
+
+# [17/18] 启动新服务
+step 17 "启动新服务" \
   start_new_remote_server
 
-# [15/15] 健康检查
-printf "\n[%d/%d] 健康检查\n" 15 "$TOTAL_STEPS"
+# [18/18] 健康检查
+printf "\n[%d/%d] 健康检查\n" 18 "$TOTAL_STEPS"
 if run_remote_health_check 2>&1 | sed 's/^/  /'; then
-  printf "[%d/%d] done\n" 15 "$TOTAL_STEPS"
+  printf "[%d/%d] done\n" 18 "$TOTAL_STEPS"
 else
-  printf "[%d/%d] 健康检查 .......... FAILED\n" 15 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... FAILED\n" 18 "$TOTAL_STEPS"
   echo ""
   echo "正在回滚到上一版服务镜像，不自动恢复数据库..."
   if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check 2>&1 | sed 's/^/  /'; then
@@ -558,6 +675,8 @@ else
   else
     echo "服务镜像回滚后健康检查仍失败，请立即查看日志。"
   fi
+  echo ""
+  print_deployment_artifacts
   print_manual_database_restore_instructions
   exit 1
 fi
@@ -566,5 +685,4 @@ TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 echo ""
 echo "部署完成 (${TOTAL_ELAPSED}s)"
 echo "管理面板: https://synapse.d2.pub/dashboard"
-echo "在线预演备份: $ONLINE_BACKUP_FILE"
-echo "最终切换前备份: $FINAL_BACKUP_FILE"
+print_deployment_artifacts

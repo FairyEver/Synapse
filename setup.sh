@@ -140,6 +140,7 @@ done
 echo ""
 echo ">>> COS 存储配置（可选，回车跳过）"
 echo "  配置腾讯云 COS 后将启用云盘文件存储和自动备份能力"
+echo "  未配置 COS 时，Drive 文件会保存在 server/data/drive 并由 deploy.sh 在切换窗口备份"
 echo "  请填写已存在且服务端有权限访问的 bucket"
 echo ""
 read -p "腾讯云 COS SecretId (回车跳过): " COS_SECRET_ID
