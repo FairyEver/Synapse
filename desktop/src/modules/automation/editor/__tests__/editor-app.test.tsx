@@ -137,6 +137,7 @@ describe("AutomationEditorApp", () => {
     expect(dialog?.textContent).toContain("触发信息")
     expect(dialog?.textContent).toContain("触发时间")
     expect(dialog?.textContent).toContain("{{trigger.triggeredAt}}")
+    expect(dialog?.querySelector('[aria-label="复制 {{trigger.triggeredAt}}"')).not.toBeNull()
     expect(document.querySelector('[data-slot="popover-content"]')).toBeNull()
 
     await act(async () => {
@@ -201,6 +202,10 @@ describe("AutomationEditorApp", () => {
     expect(dialog?.textContent).toContain("{{trigger.payload}}")
     expect(dialog?.textContent).toContain("动态路径")
     expect(dialog?.textContent).toContain("{{trigger.request.body.<path>}}")
+    expect(Array.from(dialog?.querySelectorAll('[data-slot="badge"]') ?? [])
+      .filter((badge) => badge.textContent === "6")).toHaveLength(1)
+    expect(Array.from(dialog?.querySelectorAll('[data-slot="badge"]') ?? [])
+      .filter((badge) => badge.textContent === "17")).toHaveLength(1)
 
     await act(async () => {
       findButtonContaining("{{trigger.payload}}")?.click()
@@ -209,6 +214,7 @@ describe("AutomationEditorApp", () => {
     expect(writeText).toHaveBeenCalledWith("{{trigger.payload}}")
 
     const bodyPathInput = document.querySelector<HTMLInputElement>('input[aria-label="请求 Body 路径"]')
+    expect(bodyPathInput?.placeholder).toBe("字段路径")
     await act(async () => {
       if (!bodyPathInput) return
       changeInput(bodyPathInput, "repository.full_name")

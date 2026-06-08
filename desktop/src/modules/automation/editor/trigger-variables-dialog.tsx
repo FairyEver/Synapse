@@ -152,11 +152,10 @@ export function TriggerVariablesDialog({
                 {filteredGroups.length > 0 ? filteredGroups.map((group, groupIndex) => (
                   <section key={group.id} className="min-w-0">
                     {groupIndex > 0 ? <Separator className="mb-3" /> : null}
-                    <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="mb-2 flex items-center gap-2">
                       <h3 className="text-sm font-medium">{group.label}</h3>
-                      <Badge variant="outline">{group.variables.length}</Badge>
                     </div>
-                    <div className="grid min-w-0 gap-2">
+                    <div className="grid min-w-0 divide-y divide-border">
                       {group.variables.map((variable) => (
                         variable.dynamic ? (
                           <DynamicVariableRow
@@ -204,11 +203,16 @@ function StaticVariableRow({
   return (
     <button
       type="button"
-      className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`复制 ${templateFor(variable.key)}`}
+      className="flex min-w-0 items-center justify-between gap-3 rounded-md px-3 py-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={onCopy}
     >
       <VariableText variable={variable} template={templateFor(variable.key)} />
-      <CopyStatusLabel statusLabel={statusLabel} />
+      <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+        <CopyStatusLabel statusLabel={statusLabel} />
+        <Copy aria-hidden="true" className="size-4" />
+        <span className="sr-only">复制</span>
+      </span>
     </button>
   )
 }
@@ -230,7 +234,7 @@ function DynamicVariableRow({
   const canCopy = path.trim().length > 0
 
   return (
-    <div className="grid min-w-0 gap-2 rounded-lg border border-border px-3 py-2">
+    <div className="grid min-w-0 gap-2 px-3 py-2">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <VariableText variable={variable} template={template} dynamic />
         <CopyStatusLabel statusLabel={statusLabel(template)} />
@@ -238,7 +242,7 @@ function DynamicVariableRow({
       <div className="flex min-w-0 items-center gap-2">
         <Input
           aria-label={`${variable.label} 路径`}
-          placeholder="path"
+          placeholder="字段路径"
           value={path}
           onChange={(event) => onPathChange(event.target.value)}
         />

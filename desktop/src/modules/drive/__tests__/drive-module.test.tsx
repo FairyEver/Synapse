@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { DriveItemDto } from "@synapse/shared"
+import type { SynapseAccountState } from "@/types/account"
 
 import { DriveModule } from "../index"
 
@@ -26,8 +27,42 @@ const mocks = vi.hoisted(() => ({
   writeClipboardText: vi.fn(),
 }))
 
+const accountState = vi.hoisted((): { current: SynapseAccountState } => ({
+  current: {
+    status: "authenticated",
+    connectivity: "online",
+    profile: {
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        status: "active",
+        displayName: "Ada",
+      },
+      teams: [],
+      syncedAt: "2026-06-01T00:00:00.000Z",
+    },
+  },
+}))
+
+const accountActions = vi.hoisted(() => ({
+  logout: vi.fn(),
+  refresh: vi.fn(),
+  startLogin: vi.fn(),
+}))
+
 vi.mock("sonner", () => ({
   toast: mocks.toast,
+}))
+
+vi.mock("@/app-shell/account", () => ({
+  useAccount: () => ({
+    state: accountState.current,
+    isLoading: false,
+    pendingAction: null,
+    startLogin: accountActions.startLogin,
+    refresh: accountActions.refresh,
+    logout: accountActions.logout,
+  }),
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -51,6 +86,10 @@ vi.mock("@/lib/electron-bridge", () => ({
 let roots: Root[] = []
 
 beforeEach(() => {
+  accountState.current = createAuthenticatedState()
+  accountActions.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://example.com/login" })
+  accountActions.refresh.mockResolvedValue(accountState.current)
+  accountActions.logout.mockResolvedValue({ status: "unauthenticated" })
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: mocks.writeClipboardText },
@@ -99,6 +138,67 @@ describe("DriveModule", () => {
     expect(html).toContain("刷新")
   })
 
+  it("shows an account login state without listing drive items when unauthenticated", async () => {
+    accountState.current = { status: "unauthenticated" }
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(mocks.listDriveItems).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("需要登录账号")
+    expect(document.body.textContent).toContain("登录后才能查看云盘。")
+    expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
+    expect(getButton("上传文件").disabled).toBe(true)
+    expect(getButton("上传文件夹").disabled).toBe(true)
+    expect(getButton("新建文件夹").disabled).toBe(true)
+
+    await clickButtonText("登录")
+
+    expect(accountActions.startLogin).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for account login before enabling drive actions", async () => {
+    accountState.current = { status: "authenticating", loginUrl: "https://example.com/login" }
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(mocks.listDriveItems).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("等待账号登录")
+    expect(document.body.textContent).toContain("在浏览器完成登录后会自动刷新。")
+    expect(getButton("上传文件").disabled).toBe(true)
+    expect(getButton("上传文件夹").disabled).toBe(true)
+    expect(getButton("新建文件夹").disabled).toBe(true)
+  })
+
+  it("does not expose the ipc channel when a wrapped account error is returned", async () => {
+    mocks.listDriveItems.mockRejectedValue(new Error("Error invoking remote method 'synapse:account:drive:items:list': Error: 账号未登录。"))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("需要登录账号")
+    expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
+    expect(document.body.textContent).not.toContain("Error invoking remote method")
+  })
+
+  it("shows a retry action for ordinary drive load failures", async () => {
+    mocks.listDriveItems
+      .mockRejectedValueOnce(new Error("云盘列表加载失败。"))
+      .mockResolvedValueOnce([])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("云盘加载失败")
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+
+    await clickButtonText("重试")
+    await flushAct()
+
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
+  })
+
   it("shows meaningful storage status labels", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "pending-file", name: "pending.txt", type: "file", storageStatus: "pending" }),
@@ -115,6 +215,9 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("上传失败")
     expect(document.body.textContent).toContain("删除中")
     expect(document.body.textContent).toContain("已分享")
+    const failedBadge = Array.from(document.querySelectorAll<HTMLElement>("[data-slot='badge']"))
+      .find((element) => element.textContent === "上传失败")
+    expect(failedBadge?.dataset.variant).toBe("destructive")
   })
 
   it("filters the file list through the compact search input", async () => {
@@ -137,7 +240,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("作业范文")
   })
 
-  it("opens folders from the lightweight list", async () => {
+  it("opens folders from the file table", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
         createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
@@ -155,7 +258,31 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("cui.md")
   })
 
-  it("uses file type icons and a grouped breadcrumb trail", async () => {
+  it("opens folders when clicking anywhere on the folder row", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-1", name: "常用.md", type: "file" }),
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-2", name: "cui.md", type: "file", parentId: "folder-1" }),
+      ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const row = getTableRow("作业范文")
+    await act(async () => {
+      row.click()
+      await flushPromises()
+    })
+    await flushAct()
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "folder-1" })
+    expect(document.body.textContent).toContain("cui.md")
+  })
+
+  it("uses file type icons, table columns, and a grouped breadcrumb trail", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
         createDriveItem({ id: "file-1", name: "2.png", type: "file" }),
@@ -171,6 +298,11 @@ describe("DriveModule", () => {
     expect(document.querySelector(".lucide-file-text")).not.toBeNull()
     expect(document.querySelector(".lucide-folder")).not.toBeNull()
     expect(document.querySelector('[aria-label="打开文件夹 作业范文"]')).not.toBeNull()
+    expect(document.querySelector("table")).not.toBeNull()
+    expect(document.body.textContent).toContain("名称")
+    expect(document.body.textContent).toContain("状态")
+    expect(document.body.textContent).toContain("大小")
+    expect(document.body.textContent).toContain("更新时间")
 
     await clickText("作业范文")
     await flushAct()
@@ -317,7 +449,7 @@ describe("DriveModule", () => {
     await clickButtonByLabel("展开 作业范文")
     await flushAct()
     await clickButtonByLabel("选择 二级目录")
-    await clickText("确认")
+    await clickText("移动")
 
     expect(mocks.moveDriveItem).toHaveBeenCalledWith({ itemId: "file-1", parentId: "folder-2" })
   })
@@ -332,7 +464,7 @@ describe("DriveModule", () => {
     await openFirstMenu()
     await clickText("移动")
     await flushAct()
-    await clickText("确认")
+    await clickText("移动")
 
     expect(mocks.moveDriveItem).toHaveBeenCalledWith({ itemId: "file-1", parentId: null })
   })
@@ -428,9 +560,16 @@ function menuItemTexts(): string[] {
     .map((element) => element.textContent?.trim() ?? "")
 }
 
+function getTableRow(text: string): HTMLTableRowElement {
+  const row = Array.from(document.body.querySelectorAll<HTMLTableRowElement>("tbody tr"))
+    .find((candidate) => candidate.textContent?.includes(text))
+  if (!row) throw new Error(`Table row not found: ${text}`)
+  return row
+}
+
 async function openFirstMenu(): Promise<void> {
   await act(async () => {
-    const trigger = document.querySelector('button[aria-label="更多"]')
+    const trigger = document.querySelector('button[aria-label^="更多"]')
     if (!(trigger instanceof HTMLButtonElement)) throw new Error("More menu button not found")
     trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
     await flushPromises()
@@ -491,5 +630,22 @@ function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
     type: "folder" as const,
     updatedAt: "2026-06-07T00:00:00.000Z",
     ...overrides,
+  }
+}
+
+function createAuthenticatedState(): SynapseAccountState {
+  return {
+    status: "authenticated",
+    connectivity: "online",
+    profile: {
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        status: "active",
+        displayName: "Ada",
+      },
+      teams: [],
+      syncedAt: "2026-06-01T00:00:00.000Z",
+    },
   }
 }

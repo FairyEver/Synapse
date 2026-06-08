@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { toast } from "sonner"
-import { ChevronRight, FileText, Folder, FolderPlus, MoreHorizontal, RefreshCw, Upload } from "lucide-react"
+import { ChevronRight, CircleUserRound, FileText, Folder, FolderPlus, LoaderCircle, MoreHorizontal, RefreshCw, Search, Upload } from "lucide-react"
 import type { DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
+import { useAccount } from "@/app-shell/account"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
 import { cn } from "@/lib/utils"
@@ -19,22 +20,33 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog } from "@/components/ui/dialog"
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemGroup,
-  ItemTitle,
-} from "@/components/ui/item"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type DrivePathEntry = {
@@ -53,17 +65,23 @@ type DriveMoveTreeBranch = {
   readonly loading: boolean
 }
 
+type DriveLoadError =
+  | { readonly type: "auth" }
+  | { readonly type: "load"; readonly message: string }
+
 const DRIVE_ROOT_PARENT_VALUE = "root"
+const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 
 function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
 }
 
 function DriveModule() {
+  const { pendingAction, startLogin, state: accountState } = useAccount()
   const [items, setItems] = useState<DriveItemDto[]>([])
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<DriveLoadError | null>(null)
   const [query, setQuery] = useState("")
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moveTarget, setMoveTarget] = useState<DriveItemDto | null>(null)
@@ -73,23 +91,34 @@ function DriveModule() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
+  const accountAuthenticated = accountState.status === "authenticated"
   const parentId = path.at(-1)?.id ?? null
   const loadItems = useCallback(async () => {
+    if (!accountAuthenticated) return
     setLoading(true)
     setError(null)
     try {
       const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId })
       setItems(nextItems)
     } catch (rawError) {
-      setError(errorMessage(rawError, "加载失败"))
+      setError(driveLoadError(rawError))
     } finally {
       setLoading(false)
     }
-  }, [parentId])
+  }, [accountAuthenticated, parentId])
 
   useEffect(() => {
+    if (!accountAuthenticated) {
+      setItems([])
+      setLoading(false)
+      setError(null)
+      setPath([{ id: null, name: "根目录" }])
+      return
+    }
     void loadItems()
-  }, [loadItems])
+  }, [accountAuthenticated, loadItems])
+
+  const actionsDisabled = !accountAuthenticated || loading || error !== null
 
   const visibleItems = useMemo(() => {
     const keyword = query.trim().toLowerCase()
@@ -109,24 +138,27 @@ function DriveModule() {
   const handleFileSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ""
+    if (actionsDisabled) return
     if (files.length === 0) return
     const results = await uploadFiles(files, parentId)
     toast(uploadResultMessage(results))
     await loadItems()
-  }, [loadItems, parentId])
+  }, [actionsDisabled, loadItems, parentId])
 
   const handleFolderSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ""
+    if (actionsDisabled) return
     if (files.length === 0) return
     const results = await uploadFolder(files, parentId)
     toast(uploadResultMessage(results))
     await loadItems()
-  }, [loadItems, parentId])
+  }, [actionsDisabled, loadItems, parentId])
 
-  const handleCreateFolder = useCallback(async () => {
+  const handleCreateFolder = useCallback(() => {
+    if (actionsDisabled) return
     setNameDialog({ mode: "create", item: null, value: "" })
-  }, [])
+  }, [actionsDisabled])
 
   const handleNameSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -221,27 +253,67 @@ function DriveModule() {
   }, [loadItems])
 
   const content = (() => {
-    if (loading) {
+    if (!accountAuthenticated) {
+      if (accountState.status === "authenticating") {
+        return (
+          <DriveStatusState
+            icon={<LoaderCircle className="animate-spin" />}
+            title="等待账号登录"
+            description="在浏览器完成登录后会自动刷新。"
+          />
+        )
+      }
+
       return (
-        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          加载中
-        </div>
+        <DriveStatusState
+          icon={<CircleUserRound />}
+          title="需要登录账号"
+          description="登录后才能查看云盘。"
+          action={(
+            <Button size="sm" disabled={pendingAction === "login"} onClick={() => { void startLogin() }}>
+              <CircleUserRound data-icon="inline-start" />
+              登录
+            </Button>
+          )}
+        />
       )
     }
+
     if (error) {
+      if (error.type === "auth") {
+        return (
+          <DriveStatusState
+            icon={<CircleUserRound />}
+            title="需要登录账号"
+            description="登录后才能查看云盘。"
+            action={(
+              <Button size="sm" disabled={pendingAction === "login"} onClick={() => { void startLogin() }}>
+                <CircleUserRound data-icon="inline-start" />
+                登录
+              </Button>
+            )}
+          />
+        )
+      }
+
       return (
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-          <p>{error}</p>
-          <Button size="sm" variant="outline" onClick={() => { void loadItems() }}>
-            <RefreshCw data-icon="inline-start" />
-            重试
-          </Button>
-        </div>
+        <DriveStatusState
+          icon={<RefreshCw />}
+          title="云盘加载失败"
+          description={error.message}
+          action={(
+            <Button size="sm" variant="outline" onClick={() => { void loadItems() }}>
+              <RefreshCw data-icon="inline-start" />
+              重试
+            </Button>
+          )}
+        />
       )
     }
     return (
       <DriveFileList
         items={visibleItems}
+        loading={loading}
         path={path}
         query={query}
         onQueryChange={setQuery}
@@ -259,29 +331,29 @@ function DriveModule() {
   return (
     <TooltipProvider>
       <section className="flex h-full min-h-0 flex-col bg-surface">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
           <h2 className="text-sm font-semibold">云盘</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
             <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" disabled={loading} onClick={() => void loadItems()}>
+                <Button variant="ghost" size="icon-sm" disabled={!accountAuthenticated || loading} onClick={() => void loadItems()}>
                   <RefreshCw />
                   <span className="sr-only">刷新</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>刷新</TooltipContent>
             </Tooltip>
-            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+            <Button variant="outline" size="sm" disabled={actionsDisabled} onClick={() => fileInputRef.current?.click()}>
               <Upload data-icon="inline-start" />
               上传文件
             </Button>
-            <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()}>
+            <Button variant="outline" size="sm" disabled={actionsDisabled} onClick={() => folderInputRef.current?.click()}>
               <Upload data-icon="inline-start" />
               上传文件夹
             </Button>
-            <Button variant="outline" size="sm" onClick={handleCreateFolder}>
+            <Button variant="outline" size="sm" disabled={actionsDisabled} onClick={handleCreateFolder}>
               <FolderPlus data-icon="inline-start" />
               新建文件夹
             </Button>
@@ -289,7 +361,7 @@ function DriveModule() {
         </div>
 
         <ScrollArea className="min-h-0 flex-1">
-          <div className="min-h-full px-3 pb-2 pt-1">{content}</div>
+          <div className="min-h-full px-3 py-3">{content}</div>
         </ScrollArea>
       <Dialog open={nameDialog !== null} onOpenChange={(open) => {
         if (!open) setNameDialog(null)
@@ -301,7 +373,9 @@ function DriveModule() {
             footer={(
               <>
                 <Button type="button" variant="outline" disabled={submitting} onClick={() => setNameDialog(null)}>取消</Button>
-                <Button type="submit" disabled={submitting || nameDialog.value.trim().length === 0}>确认</Button>
+                <Button type="submit" disabled={submitting || nameDialog.value.trim().length === 0}>
+                  {nameDialog.mode === "create" ? "新建" : "保存"}
+                </Button>
               </>
             )}
           >
@@ -333,7 +407,7 @@ function DriveModule() {
             footer={(
               <>
                 <Button type="button" variant="outline" disabled={submitting} onClick={() => setMoveTarget(null)}>取消</Button>
-                <Button type="submit" disabled={submitting}>确认</Button>
+                <Button type="submit" disabled={submitting}>移动</Button>
               </>
             )}
           >
@@ -463,6 +537,31 @@ function DriveMoveTargetTree({
         />
       </div>
     </div>
+  )
+}
+
+function DriveStatusState({
+  action,
+  description,
+  icon,
+  title,
+}: {
+  readonly action?: ReactNode
+  readonly description?: string
+  readonly icon: ReactNode
+  readonly title: string
+}) {
+  return (
+    <Empty className="h-full border-0">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          {icon}
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        {description ? <EmptyDescription>{description}</EmptyDescription> : null}
+      </EmptyHeader>
+      {action ? <EmptyContent>{action}</EmptyContent> : null}
+    </Empty>
   )
 }
 
@@ -629,6 +728,7 @@ function DriveMoveTreeSelectButton({
 
 function DriveFileList({
   items,
+  loading,
   path,
   query,
   onQueryChange,
@@ -641,6 +741,7 @@ function DriveFileList({
   onDisableShare,
 }: {
   readonly items: readonly DriveItemDto[]
+  readonly loading: boolean
   readonly path: readonly DrivePathEntry[]
   readonly query: string
   readonly onQueryChange: (value: string) => void
@@ -652,48 +753,99 @@ function DriveFileList({
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
 }) {
+  const emptyTitle = query.trim() ? "没有匹配项" : "暂无文件"
+
   return (
-    <div className="flex min-h-full flex-col gap-2">
+    <div className="flex min-h-full flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
-        <div className="w-40">
-          <Input
+        <InputGroup className="w-56">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="搜索"
             aria-label="搜索"
-            className="h-7 rounded-md px-2 text-sm"
           />
-        </div>
+        </InputGroup>
       </div>
-      <div className="grid grid-cols-12 items-center gap-3 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-        <span className="col-span-4">名称</span>
-        <span className="col-span-1">状态</span>
-        <span className="col-span-2 text-right">大小</span>
-        <span className="col-span-2 text-right">更新时间</span>
-        <span className="col-span-3 sr-only">操作</span>
-      </div>
-      {items.length === 0 ? (
-        <div className="flex min-h-64 items-center justify-center text-sm text-muted-foreground">
-          暂无文件
-        </div>
+
+      {loading ? (
+        <DriveFileTableSkeleton />
+      ) : items.length === 0 ? (
+        <Empty className="min-h-64 border-0">
+          <EmptyHeader>
+            <EmptyTitle>{emptyTitle}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <ItemGroup>
-          {items.map((item) => (
-            <DriveFileListRow
-              key={item.id}
-              item={item}
-              onOpenFolder={onOpenFolder}
-              onRename={onRename}
-              onMove={onMove}
-              onDelete={onDelete}
-              onShare={onShare}
-              onDisableShare={onDisableShare}
-            />
-          ))}
-        </ItemGroup>
+        <Table className="min-w-[760px] table-fixed">
+          <DriveFileTableHeader />
+          <TableBody>
+            {items.map((item) => (
+              <DriveFileListRow
+                key={item.id}
+                item={item}
+                onOpenFolder={onOpenFolder}
+                onRename={onRename}
+                onMove={onMove}
+                onDelete={onDelete}
+                onShare={onShare}
+                onDisableShare={onDisableShare}
+              />
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
+  )
+}
+
+function DriveFileTableHeader() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>名称</TableHead>
+        <TableHead className="w-24">状态</TableHead>
+        <TableHead className="w-28 text-right">大小</TableHead>
+        <TableHead className="w-44 text-right">更新时间</TableHead>
+        <TableHead className="w-48 text-right">操作</TableHead>
+      </TableRow>
+    </TableHeader>
+  )
+}
+
+function DriveFileTableSkeleton() {
+  return (
+    <Table className="min-w-[760px] table-fixed">
+      <DriveFileTableHeader />
+      <TableBody>
+        {DRIVE_SKELETON_ROWS.map((row) => (
+          <TableRow key={row}>
+            <TableCell>
+              <div className="flex min-w-0 items-center gap-2">
+                <Skeleton className="size-4 shrink-0" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-5 w-16" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="ml-auto h-4 w-16" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="ml-auto h-4 w-32" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="ml-auto h-7 w-32" />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 
@@ -759,64 +911,73 @@ function DriveFileListRow({
   readonly onDisableShare: (item: DriveItemDto) => void
 }) {
   const status = driveStatusLabel(item)
+  const statusVariant = driveStatusBadgeVariant(item)
   const isFolder = item.type === "folder"
 
   return (
-    <Item
-      size="sm"
-      className="grid grid-cols-12 items-center gap-3 bg-card"
-      role="listitem"
+    <TableRow
+      className={isFolder ? "cursor-pointer" : undefined}
+      onClick={isFolder ? () => onOpenFolder(item) : undefined}
     >
-      <ItemContent className="col-span-4 min-w-0">
-        <ItemTitle className="w-full min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            {isFolder ? (
-              <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            ) : (
-              <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            )}
-            {isFolder ? (
-              <button
-                type="button"
-                className="min-w-0 truncate text-left underline-offset-4 hover:underline"
-                aria-label={`打开文件夹 ${item.name}`}
-                onClick={() => onOpenFolder(item)}
-              >
-                {item.name}
-              </button>
-            ) : (
-              <span className="min-w-0 truncate">
-                <span className="sr-only">文件 </span>
-                {item.name}
-              </span>
-            )}
-          </div>
-        </ItemTitle>
-      </ItemContent>
-      <div className="col-span-1 min-w-0">
-        {status ? <Badge variant={item.shared ? "secondary" : "outline"}>{status}</Badge> : null}
-      </div>
-      <span className="col-span-2 justify-self-end text-right text-sm text-muted-foreground">
+      <TableCell className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          {isFolder ? (
+            <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          ) : (
+            <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          )}
+          {isFolder ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto min-w-0 max-w-full justify-start px-0 py-0 font-medium hover:bg-transparent"
+              aria-label={`打开文件夹 ${item.name}`}
+              title={item.name}
+              onClick={(event) => {
+                event.stopPropagation()
+                onOpenFolder(item)
+              }}
+            >
+              <span className="truncate">{item.name}</span>
+            </Button>
+          ) : (
+            <span className="block min-w-0 truncate font-medium" title={item.name}>
+              <span className="sr-only">文件 </span>
+              {item.name}
+            </span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        {status ? <Badge variant={statusVariant}>{status}</Badge> : null}
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">
         {isFolder ? "-" : formatBytes(item.size)}
-      </span>
-      <span className="col-span-2 justify-self-end truncate text-right text-sm text-muted-foreground">
+      </TableCell>
+      <TableCell className="truncate text-right tabular-nums text-muted-foreground">
         {formatDriveDateTime(item.updatedAt)}
-      </span>
-      <ItemActions className="col-span-3 justify-end gap-1">
-        <Button type="button" variant="ghost" size="sm" onClick={() => onShare(item)}>
-          分享
-        </Button>
-        <Button type="button" variant="destructive" size="sm" onClick={() => onDelete(item)}>
-          删除
-        </Button>
-        <DriveItemMenu
-          item={item}
-          onRename={onRename}
-          onMove={onMove}
-          onDisableShare={onDisableShare}
-        />
-      </ItemActions>
-    </Item>
+      </TableCell>
+      <TableCell className="text-right">
+        <div
+          className="flex items-center justify-end gap-1"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <Button type="button" variant="ghost" size="sm" onClick={() => onShare(item)}>
+            分享
+          </Button>
+          <Button type="button" variant="destructive" size="sm" onClick={() => onDelete(item)}>
+            删除
+          </Button>
+          <DriveItemMenu
+            item={item}
+            onRename={onRename}
+            onMove={onMove}
+            onDisableShare={onDisableShare}
+          />
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -834,7 +995,7 @@ function DriveItemMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="更多">
+        <Button variant="ghost" size="icon-sm" aria-label={`更多 ${item.name}`}>
           <MoreHorizontal />
         </Button>
       </DropdownMenuTrigger>
@@ -948,6 +1109,12 @@ function driveStatusLabel(item: DriveItemDto): string {
   return ""
 }
 
+function driveStatusBadgeVariant(item: DriveItemDto): "secondary" | "destructive" | "outline" {
+  if (item.storageStatus === "failed") return "destructive"
+  if (item.shared) return "secondary"
+  return "outline"
+}
+
 function formatDriveDateTime(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "-"
@@ -961,8 +1128,22 @@ function uploadResultMessage(result: UploadResult): string {
     : `上传完成 ${result.completed} 个，失败 ${result.failed} 个`
 }
 
+function driveLoadError(error: unknown): DriveLoadError {
+  const message = errorMessage(error, "加载失败")
+  if (message.includes("账号未登录")) return { type: "auth" }
+  return { type: "load", message }
+}
+
 function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback
+  if (!(error instanceof Error) || !error.message) return fallback
+  return readableErrorMessage(error.message) || fallback
+}
+
+function readableErrorMessage(message: string): string {
+  return message
+    .replace(/^Error invoking remote method '[^']+':\s*/, "")
+    .replace(/^Error:\s*/, "")
+    .trim()
 }
 
 export { DriveModule }
