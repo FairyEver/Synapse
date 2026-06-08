@@ -13,7 +13,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FieldGroup } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -27,6 +31,9 @@ import type { ProviderModelSelection } from "@/types/provider-model"
 
 const logger = createRendererLogger("settings.agent-defaults")
 const TOKEN_THRESHOLD_UNIT = 10_000
+const DEFAULTS_FIELD_ROW_CLASSNAME = "grid gap-2 md:grid-cols-[12rem_minmax(0,28rem)] md:items-center md:gap-4"
+const DEFAULTS_FIELD_CONTENT_CLASSNAME = "min-w-0 md:max-w-none"
+const DEFAULTS_FIELD_CONTROL_CLASSNAME = "w-full"
 
 function AgentDefaultsContent() {
   const { config, updateConfig } = useAppConfig()
@@ -140,12 +147,12 @@ function AgentDefaultsContent() {
 
   return (
     <>
-      <FieldGroup className="gap-2">
+      <FieldGroup className="gap-3">
         <SettingsFieldRow
-          className="min-h-9 items-center"
-          contentClassName="md:max-w-none md:items-end"
+          className={DEFAULTS_FIELD_ROW_CLASSNAME}
+          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
           label="默认权限模式"
-          controlClassName="w-full md:w-72"
+          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
         >
           <AgentPermissionModeMenu
             selectedMode={selectedMode}
@@ -164,10 +171,10 @@ function AgentDefaultsContent() {
           />
         </SettingsFieldRow>
         <SettingsFieldRow
-          className="min-h-9 items-center"
-          contentClassName="md:max-w-none md:items-end"
+          className={DEFAULTS_FIELD_ROW_CLASSNAME}
+          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
           label="默认供应商和模型"
-          controlClassName="w-full md:w-72"
+          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
         >
           <div className="flex min-w-0 items-center gap-2">
             <Button
@@ -203,16 +210,17 @@ function AgentDefaultsContent() {
           />
         </SettingsFieldRow>
         <SettingsFieldRow
-          className="min-h-9 items-center"
-          contentClassName="md:max-w-none md:items-end"
+          className={DEFAULTS_FIELD_ROW_CLASSNAME}
+          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
           label="长对话金额阈值"
           error={costThresholdError}
-          controlClassName="w-full md:w-72"
+          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
         >
-          <div className="flex items-center gap-2">
-            <Input
+          <InputGroup>
+            <InputGroupInput
               aria-label="长对话金额阈值"
               aria-invalid={costThresholdError ? true : undefined}
+              className="text-right"
               inputMode="decimal"
               value={costThresholdDraft}
               onChange={(event) => {
@@ -226,20 +234,21 @@ function AgentDefaultsContent() {
                 }
               }}
             />
-            <span className="shrink-0 text-sm text-muted-foreground">元</span>
-          </div>
+            <InputGroupAddon align="inline-end">元</InputGroupAddon>
+          </InputGroup>
         </SettingsFieldRow>
         <SettingsFieldRow
-          className="min-h-9 items-center"
-          contentClassName="md:max-w-none md:items-end"
+          className={DEFAULTS_FIELD_ROW_CLASSNAME}
+          contentClassName={DEFAULTS_FIELD_CONTENT_CLASSNAME}
           label="长对话 Token 阈值"
           error={tokenThresholdError}
-          controlClassName="w-full md:w-72"
+          controlClassName={DEFAULTS_FIELD_CONTROL_CLASSNAME}
         >
-          <div className="flex items-center gap-2">
-            <Input
+          <InputGroup>
+            <InputGroupInput
               aria-label="长对话 Token 阈值"
               aria-invalid={tokenThresholdError ? true : undefined}
+              className="text-right"
               inputMode="numeric"
               value={tokenThresholdDraft}
               onChange={(event) => {
@@ -253,8 +262,8 @@ function AgentDefaultsContent() {
                 }
               }}
             />
-            <span className="shrink-0 text-sm text-muted-foreground">万 token</span>
-          </div>
+            <InputGroupAddon align="inline-end">万 token</InputGroupAddon>
+          </InputGroup>
         </SettingsFieldRow>
       </FieldGroup>
       <AlertDialog open={pendingMode !== null} onOpenChange={(open) => {
