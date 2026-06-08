@@ -935,6 +935,41 @@ describe("useAgentChat", () => {
     }))
   })
 
+  it("creates an Agent session with provider mode and model tier", async () => {
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.createSession("project-1", "provider-1", "bypassPermissions", "opus")
+    })
+
+    expect((window as unknown as {
+      synapse: {
+        agent: {
+          createSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      providerId: "provider-1",
+      mode: "bypassPermissions",
+      modelTier: "opus",
+    }))
+  })
+
   it("logs session create failures without exposing backend error text", async () => {
     const bridge = (window as unknown as {
       synapse: {

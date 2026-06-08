@@ -172,6 +172,17 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     : undefined
   const selectedPendingMessages = pendingMessagesForTarget(pendingMessages, selectedTarget)
 
+  const handleStartRolloverConversation = () => {
+    if (!selectedSession) return
+    if (sourceFilter !== "user") setSourceFilter("user")
+    void chat.createSession(
+      selectedSession.projectId,
+      selectedSession.providerId,
+      selectedSession.mode,
+      selectedSession.modelTier,
+    )
+  }
+
   useEffect(() => {
     const selectionKey = `${chat.selectedProjectId ?? ""}:${chat.selectedConversationId ?? ""}`
     if (selectionKey === pinnedSelectionKeyRef.current) return
@@ -703,6 +714,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onOpenReference={openReference}
               onRespondPermission={(requestId, behavior, updatedInput, message) =>
                 chat.respondPermission(requestId, behavior, updatedInput, message)}
+              onStartNewConversation={selectedSession ? handleStartRolloverConversation : undefined}
               viewportRef={stick.viewportRef}
             />
 
@@ -719,7 +731,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 const projectId = chat.selectedProjectId ?? chat.activeProjectId
                 if (!projectId) return
                 if (sourceFilter !== "user") setSourceFilter("user")
-                void chat.createSession(projectId, selectedSession?.providerId, mode)
+                void chat.createSession(projectId, selectedSession?.providerId, mode, selectedSession?.modelTier)
               }}
               onDraftChange={setDraft}
               onQuickInputDirectSend={(content) =>
