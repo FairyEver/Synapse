@@ -22,6 +22,29 @@ vi.mock("electron", () => ({
   },
 }))
 
+vi.mock("../../../services/account-service", () => ({
+  accountService: {
+    getState: () => ({ status: "unauthenticated" }),
+    startLogin: async () => ({ state: { status: "unauthenticated" } }),
+    refreshFromStorage: async () => ({ status: "unauthenticated" }),
+    logout: async () => ({ status: "unauthenticated" }),
+    listWebhooks: async () => [],
+    listDriveItems: async () => [],
+    prepareDriveUpload: async () => ({}),
+    prepareDriveFolderUpload: async () => ({}),
+    completeDriveUpload: async () => ({}),
+    uploadDrivePreparedFile: async () => ({ ok: true }),
+    cancelDriveUpload: async () => ({ ok: true }),
+    createDriveFolder: async () => ({}),
+    renameDriveItem: async () => ({}),
+    moveDriveItem: async () => ({}),
+    deleteDriveItem: async () => ({ ok: true }),
+    shareDriveItem: async () => ({}),
+    disableDriveShare: async () => ({ ok: true }),
+    getDriveUsage: async () => ({}),
+  },
+}))
+
 import { accountIpcModule } from "../ipc"
 
 describe("accountIpcModule", () => {
