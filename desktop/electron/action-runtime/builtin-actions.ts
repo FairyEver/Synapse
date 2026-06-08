@@ -4,6 +4,7 @@ import { createCommandAction } from "../../action-packages/builtin/command/execu
 import { createHttpRequestAction } from "../../action-packages/builtin/http-request/executor.main"
 import { createScriptAction } from "../../action-packages/builtin/script/executor.main"
 import { createAgentAction } from "../../action-packages/builtin/agent/executor.main"
+import { createWorkflowAction, type WorkflowActionRuntimeDeps } from "../../action-packages/builtin/workflow/executor.main"
 import { MainActionRegistry } from "./action-registry"
 
 export function createBuiltinMainActionRegistry(deps: {
@@ -11,6 +12,7 @@ export function createBuiltinMainActionRegistry(deps: {
   readonly platform?: NodeJS.Platform
   readonly baseEnv?: NodeJS.ProcessEnv
   readonly getAgentRuntime?: (projectId: string) => Promise<AgentRuntimeService | undefined>
+  readonly workflowRuntime?: WorkflowActionRuntimeDeps
 }): MainActionRegistry {
   const registry = new MainActionRegistry()
   registry.register(createCommandAction(deps))
@@ -18,6 +20,9 @@ export function createBuiltinMainActionRegistry(deps: {
   registry.register(createHttpRequestAction())
   if (deps.getAgentRuntime) {
     registry.register(createAgentAction({ getAgentRuntime: deps.getAgentRuntime }))
+  }
+  if (deps.workflowRuntime) {
+    registry.register(createWorkflowAction(deps.workflowRuntime))
   }
   return registry
 }

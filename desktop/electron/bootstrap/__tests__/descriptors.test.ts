@@ -136,6 +136,12 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.process-environment",
       "core.permission-guard",
       "core.audit-sink",
+      "core.event-bus",
+      "core.workflow",
+      "core.workflow.engine",
+      "core.workflow.snapshots",
+      "core.workflow.run-aborts",
+      "core.workflow.run-statuses",
     ])
     expect(coreActionRuntimeDescriptor.create).toBeTypeOf("function")
   })

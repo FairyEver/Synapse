@@ -265,12 +265,38 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
     "core.process-environment",
     "core.permission-guard",
     "core.audit-sink",
+    "core.event-bus",
+    "core.workflow",
+    "core.workflow.engine",
+    "core.workflow.snapshots",
+    "core.workflow.run-aborts",
+    "core.workflow.run-statuses",
   ],
   create(ctx) {
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
+    const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
+    const snapshotService = ctx.registry.get<RunSnapshotService>("core.workflow.snapshots")
+    const runAborts = ctx.registry.get<Map<string, AbortController>>("core.workflow.run-aborts")
+    const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+    const runCompletions = new Map<string, Promise<unknown>>()
+    const capabilityLogger = createMainLogger("bootstrap.workflow-action")
     return createBuiltinMainActionRegistry({
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      workflowRuntime: {
+        getWorkflowDefinition: (workflowId) => workflowService.get(workflowId),
+        runWorkflowAndWait: createRunWorkflowAndWait({
+          workflowService,
+          workflowEngine,
+          snapshotService,
+          eventBus: ctx.registry.get<EventBus>("core.event-bus"),
+          runAborts,
+          runStatuses,
+          runCompletions,
+          capabilityLogger,
+        }),
+      },
       getAgentRuntime: async (projectId) => {
         const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
         const existing = containers.peek(projectId)

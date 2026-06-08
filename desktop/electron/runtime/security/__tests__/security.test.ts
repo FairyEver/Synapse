@@ -4,6 +4,7 @@ import {
   DataRepositoryAuditSink,
   InMemoryAuditSink,
   createPermissionGuard,
+  systemAutomationPolicy,
   systemMcpAutoRegisterPolicy,
   userInitiatedAllowPolicy,
   type PermissionPolicy,
@@ -117,6 +118,24 @@ describe("PermissionGuard (T6.6)", () => {
         ...systemMcpAutoRegisterReq.context,
         settingsPath: "/Users/test/.cursor/mcp.json",
       },
+    })).allowed).toBe(false)
+  })
+
+  it("systemAutomationPolicy allows system workflow runs without allowing workflow mutations", async () => {
+    const guard = createPermissionGuard()
+    guard.registerPolicy(systemAutomationPolicy)
+
+    expect((await guard.check({
+      action: "workflow.run",
+      actor: { kind: "system", id: "automation" },
+      resource: "builtin.workflow:wf-1",
+      context: { source: "automation" },
+    })).allowed).toBe(true)
+    expect((await guard.check({
+      action: "workflow.mutate",
+      actor: { kind: "system", id: "automation" },
+      resource: "wf-1",
+      context: { source: "automation" },
     })).allowed).toBe(false)
   })
 })
