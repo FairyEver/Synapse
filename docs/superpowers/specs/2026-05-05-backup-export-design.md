@@ -57,7 +57,7 @@ Docker 重置或 volume 丢失会导致 PostgreSQL 中的激活码、License、�
 
 COS 相关变量全部留空时，自动备份不启用，管理后台备份功能隐藏。
 
-**后期启用**：SSH 编辑 `server/.env` 补上 COS 变量，重启服务即可。BackupService 每次 cron 触发时动态检查环境变量是否完整，完整则执行，缺失则跳过。无需改代码或重新部署。
+**后期启用**：在本机 `server/.env` 补上 COS 变量后运行 `bash deploy.sh` 同步到服务器；如果只更新远端 COS 配置，也可以运行 `bash cos.sh`。BackupService 每次 cron 触发时动态检查环境变量是否完整，完整则执行，缺失则跳过。
 
 ## 腾讯云 COS 配置指南
 
