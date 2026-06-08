@@ -130,7 +130,7 @@ import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "..
 import { sanitizeNodeResultsForSnapshot } from "../services/workflow/run-snapshot-sanitize"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { sanitizeError } from "../services/error-sanitize"
-import type { WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
+import type { WorkflowRunResult, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
 import { agentTimeoutMinsToMs, DEFAULT_AGENT_TIMEOUT_MINS } from "../../workflow-nodes/agent-timeout"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
@@ -140,6 +140,13 @@ type ProcessEnvironmentService = {
   readonly nodePath?: string
   readonly shell: ShellEnvironmentSnapshot
   readonly shimError?: string
+}
+
+type RunWorkflowHandlerOptions = {
+  readonly abortSignal?: AbortSignal
+  readonly triggerSource?: "mcp" | "automation"
+  readonly automationId?: string
+  readonly automationRunId?: string
 }
 
 /**
@@ -297,7 +304,7 @@ export function createRunWorkflowHandler(deps: {
   capabilityLogger: ReturnType<typeof createMainLogger>
   isWorkflowDeleted?: (workflowId: string) => boolean
 }) {
-  return async (id: string, params: Record<string, unknown>): Promise<{ runId: string } | { errors: ValidationError[] }> => {
+  return async (id: string, params: Record<string, unknown>, options?: RunWorkflowHandlerOptions): Promise<{ runId: string } | { errors: ValidationError[] }> => {
     const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, runCompletions, capabilityLogger, isWorkflowDeleted } = deps
     const def = await workflowService.get(id)
     if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
@@ -315,6 +322,15 @@ export function createRunWorkflowHandler(deps: {
     const effectiveParams = buildEffectiveRunParams(def, params)
     const runId = randomUUID()
     const ac = new AbortController()
+    const source = options?.triggerSource ?? "mcp"
+    const abortFromOuter = () => ac.abort()
+    if (options?.abortSignal) {
+      if (options.abortSignal.aborted) {
+        ac.abort()
+      } else {
+        options.abortSignal.addEventListener("abort", abortFromOuter, { once: true })
+      }
+    }
     const startedAt = Date.now()
     runAborts.set(runId, ac)
     runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
@@ -357,7 +373,7 @@ export function createRunWorkflowHandler(deps: {
           })
         }
       }
-    }, ac.signal, projectId, "mcp").catch((err) => {
+    }, ac.signal, projectId, source).catch((err) => {
       const diagnostic = capabilityRejectionDiagnostic(err)
       capabilityLogger.error("workflow engine rejected (mcp dispatch)", { workflowId: id, runId, ...diagnostic })
       runAborts.delete(runId)
@@ -399,11 +415,90 @@ export function createRunWorkflowHandler(deps: {
         }
       }
     }).finally(() => {
+      options?.abortSignal?.removeEventListener("abort", abortFromOuter)
       runCompletions.delete(runId)
     })
     runCompletions.set(runId, completion)
     return { runId }
   }
+}
+
+export function createRunWorkflowAndWait(deps: {
+  workflowService: Pick<WorkflowService, "get">
+  workflowEngine: WorkflowEngine
+  snapshotService: Pick<RunSnapshotService, "save">
+  eventBus: EventBus
+  runAborts: Map<string, AbortController>
+  runStatuses: Map<string, WorkflowRunStatus>
+  runCompletions: Map<string, Promise<unknown>>
+  capabilityLogger: ReturnType<typeof createMainLogger>
+  isWorkflowDeleted?: (workflowId: string) => boolean
+}) {
+  return async (input: {
+    readonly workflowId: string
+    readonly params: Record<string, unknown>
+    readonly abortSignal?: AbortSignal
+    readonly triggerSource: "mcp" | "automation"
+    readonly automationId?: string
+    readonly automationRunId?: string
+  }) => {
+    const handler = createRunWorkflowHandler(deps)
+    const started = await handler(input.workflowId, input.params, {
+      abortSignal: input.abortSignal,
+      triggerSource: input.triggerSource,
+      automationId: input.automationId,
+      automationRunId: input.automationRunId,
+    })
+    if ("errors" in started) {
+      throw new Error(started.errors[0]?.message ?? "工作流启动失败")
+    }
+
+    const completion = deps.runCompletions.get(started.runId)
+    const completionResult = completion ? await completion : undefined
+    const status = deps.runStatuses.get(started.runId)
+    const definition = await deps.workflowService.get(input.workflowId)
+    if (!definition) {
+      throw new Error("工作流不存在")
+    }
+
+    const result = isWorkflowRunResult(completionResult)
+      ? completionResult
+      : status && status.status !== "running"
+        ? {
+            status: status.status,
+            nodeResults: status.nodeResults,
+            durationMs: status.durationMs ?? 0,
+            output: resolveWorkflowOutput(status.nodeResults, definition.nodes.find((node) => node.type === "end")?.id),
+          }
+        : undefined
+    if (!result) {
+      throw new Error("工作流状态未知")
+    }
+
+    return {
+      runId: started.runId,
+      definition,
+      result,
+    }
+  }
+}
+
+function isWorkflowRunResult(value: unknown): value is WorkflowRunResult {
+  if (!value || typeof value !== "object") {
+    return false
+  }
+  const status = (value as { status?: unknown }).status
+  return status === "completed" || status === "failed" || status === "cancelled"
+}
+
+function resolveWorkflowOutput(
+  nodeResults: WorkflowRunStatus["nodeResults"],
+  endNodeId: string | undefined,
+): string | undefined {
+  if (!endNodeId) {
+    return undefined
+  }
+  return nodeResults[endNodeId]?.output
 }
 
 /**
