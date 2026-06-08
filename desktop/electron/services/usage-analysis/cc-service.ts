@@ -30,7 +30,6 @@ import type {
   UsageTimeBucket,
   UsageToolRow,
 } from "./types"
-import { createMainLogger } from "../log-store"
 
 interface UsageAnalysisServiceOptions {
   readonly db: DatabaseSync
@@ -38,7 +37,15 @@ interface UsageAnalysisServiceOptions {
   readonly logger?: UsageAnalysisLogger
 }
 
-type UsageAnalysisLogger = Pick<ReturnType<typeof createMainLogger>, "info" | "warn">
+type UsageAnalysisLogger = {
+  info(message: string, details?: Record<string, unknown>): void
+  warn(message: string, details?: Record<string, unknown>): void
+}
+
+const noopUsageAnalysisLogger: UsageAnalysisLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+}
 
 interface ScanFileRow extends CcStoredScanFile {
   readonly size: number
@@ -207,7 +214,7 @@ export class CcUsageAnalysisService {
   constructor(options: UsageAnalysisServiceOptions) {
     this.db = options.db
     this.roots = options.roots
-    this.logger = options.logger ?? createMainLogger("service.usage-analysis")
+    this.logger = options.logger ?? noopUsageAnalysisLogger
   }
 
   async refresh(): Promise<UsageRefreshResult> {

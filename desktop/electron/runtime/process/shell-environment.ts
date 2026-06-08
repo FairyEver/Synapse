@@ -34,6 +34,9 @@ export type ShellEnvironmentSnapshot = {
   readonly processNodePath: string | null
   readonly shellNodePath: string | null
   readonly effectiveNodePath: string | null
+  readonly processGitPath: string | null
+  readonly shellGitPath: string | null
+  readonly effectiveGitPath: string | null
   readonly nodeRuntimeBinPath: string | null
 }
 
@@ -231,6 +234,9 @@ export function collectShellEnvironmentSnapshot(input: {
     processNodePath: resolveExecutableInPath("node", processPath, { platform, fileExists: input.fileExists }),
     shellNodePath: resolveExecutableInPath("node", shellPath, { platform, fileExists: input.fileExists }),
     effectiveNodePath: resolveExecutableInPath("node", effectivePath, { platform, fileExists: input.fileExists }),
+    processGitPath: resolveExecutableInPath("git", processPath, { platform, fileExists: input.fileExists }),
+    shellGitPath: resolveExecutableInPath("git", shellPath, { platform, fileExists: input.fileExists }),
+    effectiveGitPath: resolveExecutableInPath("git", effectivePath, { platform, fileExists: input.fileExists }),
     nodeRuntimeBinPath,
   }
 }

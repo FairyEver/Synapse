@@ -118,6 +118,7 @@ function buildDiagnosticsSummary(report: SynapseDiagnosticsReport): string {
 
   const keyChecks = [
     "system.node-visibility",
+    "system.git-visibility",
     "logs.lifecycle",
     "ipc.renderer-main.roundtrip",
     "logs.recent-signals",

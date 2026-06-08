@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process"
 import { copyFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -43,6 +44,7 @@ import {
   resourcesPathFromAppPath,
   type PackagedClaudeRuntimeStatus,
 } from "./agent-runtime/claude-runtime-binary"
+import { isManagedKnowledgeBaseProject, resolveProjectWorkspacePath } from "./knowledge-base/managed-path"
 
 type AppPathName = Parameters<Electron.App["getPath"]>[0]
 
@@ -101,6 +103,10 @@ type McpHttpProbeResult = {
   error?: string
 }
 
+type GitVersionProbeResult =
+  | { ok: true; version: string }
+  | { ok: false; error: string }
+
 type DiagnosticsServiceDeps = {
   appInfo: AppInfo
   configStore: ConfigStoreLike
@@ -131,6 +137,7 @@ type DiagnosticsServiceDeps = {
   removePath?: (targetPath: string) => Promise<void>
   createConfigBackupPayload?: () => Promise<unknown>
   collectShellEnvironment?: () => ShellEnvironmentSnapshot
+  probeGitVersion?: (input: { gitPath: string; effectivePath: string }) => Promise<GitVersionProbeResult>
   inspectClaudeRuntime?: () => PackagedClaudeRuntimeStatus
 }
 
@@ -192,7 +199,9 @@ class DiagnosticsService {
       singleInstanceLocked: this.deps.appInfo.hasSingleInstanceLock(),
     }))
     this.addClaudeRuntimeCheck(checks, platformInfo)
-    this.addNodeVisibilityCheck(checks)
+    const shellEnvironment = this.collectShellEnvironmentSnapshot()
+    this.addNodeVisibilityCheck(checks, shellEnvironment)
+    await this.addGitVisibilityCheck(checks, shellEnvironment)
 
     await this.addPathChecks(checks, config)
     await this.addWindowsCompatibilityChecks(checks, config, windowsCompatibility)
@@ -239,10 +248,13 @@ class DiagnosticsService {
     }
   }
 
-  private addNodeVisibilityCheck(checks: SynapseDiagnosticsCheck[]): void {
-    const snapshot = this.deps.collectShellEnvironment
+  private collectShellEnvironmentSnapshot(): ShellEnvironmentSnapshot {
+    return this.deps.collectShellEnvironment
       ? this.deps.collectShellEnvironment()
       : collectShellEnvironmentSnapshot()
+  }
+
+  private addNodeVisibilityCheck(checks: SynapseDiagnosticsCheck[], snapshot: ShellEnvironmentSnapshot): void {
     const details = {
       "App PATH": snapshot.processPath,
       "Login Shell PATH": snapshot.shellPath,
@@ -273,6 +285,52 @@ class DiagnosticsService {
       "未找到可用 Node",
       details,
     ))
+  }
+
+  private async addGitVisibilityCheck(checks: SynapseDiagnosticsCheck[], snapshot: ShellEnvironmentSnapshot): Promise<void> {
+    const details = {
+      "App PATH": snapshot.processPath,
+      "Login Shell PATH": snapshot.shellPath,
+      "最终 PATH": snapshot.effectivePath,
+      "App PATH 中的 git": snapshot.processGitPath,
+      "Login Shell 中的 git": snapshot.shellGitPath,
+      "最终可用 git": snapshot.effectiveGitPath,
+    }
+
+    if (!snapshot.effectiveGitPath) {
+      checks.push(this.degraded(
+        "system.git-visibility",
+        "系统",
+        "Git 可见性",
+        "未找到可用 Git",
+        details,
+      ))
+      return
+    }
+
+    const probe = await this.probeGitVersion({
+      gitPath: snapshot.effectiveGitPath,
+      effectivePath: snapshot.effectivePath,
+    })
+    if (probe.ok) {
+      checks.push(this.ok("system.git-visibility", "系统", "Git 可见性", "Git 可用", {
+        ...details,
+        version: probe.version,
+      }))
+      return
+    }
+
+    checks.push(this.degraded("system.git-visibility", "系统", "Git 可见性", "Git 不可执行", {
+      ...details,
+      error: probe.error,
+    }))
+  }
+
+  private async probeGitVersion(input: { gitPath: string; effectivePath: string }): Promise<GitVersionProbeResult> {
+    if (this.deps.probeGitVersion) {
+      return this.deps.probeGitVersion(input)
+    }
+    return probeGitVersion(input)
   }
 
   private addClaudeRuntimeCheck(checks: SynapseDiagnosticsCheck[], platformInfo: PlatformInfo): void {
@@ -478,11 +536,25 @@ class DiagnosticsService {
 
     for (const project of config.global.projects) {
       await this.capture(checks, `project.path.${project.id}`, "路径与权限", project.name, async () => {
-        const pathStats = await this.statPath(project.path)
+        const pathTarget = this.resolveProjectPathForDiagnostics(project)
+        const pathStats = await this.statPath(pathTarget.resolvedPath)
+        const details = pathTarget.resolvedPath === project.path
+          ? { path: project.path }
+          : { path: project.path, resolvedPath: pathTarget.resolvedPath }
         return pathStats.isDirectory()
-          ? this.ok(`project.path.${project.id}`, "路径与权限", project.name, "目录可访问", { path: project.path })
-          : this.degraded(`project.path.${project.id}`, "路径与权限", project.name, "路径不是目录", { path: project.path })
+          ? this.ok(`project.path.${project.id}`, "路径与权限", project.name, "目录可访问", details)
+          : this.degraded(`project.path.${project.id}`, "路径与权限", project.name, "路径不是目录", details)
       })
+    }
+  }
+
+  private resolveProjectPathForDiagnostics(project: SynapseConfig["global"]["projects"][number]): {
+    resolvedPath: string
+  } {
+    return {
+      resolvedPath: isManagedKnowledgeBaseProject(project)
+        ? resolveProjectWorkspacePath(project, this.deps.appInfo.getPath("userData"))
+        : project.path,
     }
   }
 
@@ -679,7 +751,7 @@ class DiagnosticsService {
           kind: "project" as const,
           id: project.id,
           name: project.name,
-          path: project.path,
+          path: this.resolveProjectPathForDiagnostics(project).resolvedPath,
         })),
       ])
 
@@ -1089,6 +1161,38 @@ async function writeReadDeleteProbe(directoryPath: string): Promise<void> {
   } finally {
     await rm(probeDir, { recursive: true, force: true })
   }
+}
+
+function probeGitVersion(input: { gitPath: string; effectivePath: string }): Promise<GitVersionProbeResult> {
+  return new Promise((resolve) => {
+    execFile(input.gitPath, ["--version"], {
+      timeout: 3000,
+      env: {
+        ...process.env,
+        PATH: input.effectivePath,
+        LANG: "C",
+        LC_ALL: "C",
+      },
+    }, (error, stdout, stderr) => {
+      if (!error) {
+        resolve({ ok: true, version: firstLine(stdout) || "git --version completed" })
+        return
+      }
+
+      resolve({
+        ok: false,
+        error: truncateDiagnosticError(firstLine(stderr) || firstLine(stdout) || error.message),
+      })
+    })
+  })
+}
+
+function firstLine(value: string | Buffer | undefined): string {
+  return String(value ?? "").split(/\r?\n/u).map((line) => line.trim()).find(Boolean) ?? ""
+}
+
+function truncateDiagnosticError(value: string): string {
+  return value.length > 240 ? `${value.slice(0, 237)}...` : value
 }
 
 function resolveActiveProject(config: SynapseConfig, projectId?: string) {

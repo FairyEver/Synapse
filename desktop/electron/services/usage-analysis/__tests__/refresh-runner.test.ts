@@ -41,6 +41,14 @@ describe("usage analysis refresh runner", () => {
     expect(packageJson.build?.asarUnpack).not.toContain("dist-electron/electron/services/usage-analysis/refresh-worker.js")
   })
 
+  it("keeps the refresh worker closure independent from main-process log-store", () => {
+    const serviceSource = readFileSync(path.join(__dirname, "../cc-service.ts"), "utf8")
+    const workerSource = readFileSync(path.join(__dirname, "../refresh-worker.ts"), "utf8")
+
+    expect(workerSource).not.toContain("../log-store")
+    expect(serviceSource).not.toContain("../log-store")
+  })
+
   it("keeps compiled usage analysis src dependencies in the unpacked closure", () => {
     const packageJson = JSON.parse(readFileSync(path.join(__dirname, "../../../../package.json"), "utf8")) as {
       build?: { asarUnpack?: string[] }

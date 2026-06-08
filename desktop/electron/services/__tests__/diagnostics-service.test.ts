@@ -215,6 +215,9 @@ describe("DiagnosticsService.collect", () => {
         processNodePath: null,
         shellNodePath: "/opt/homebrew/bin/node",
         effectiveNodePath: "/opt/homebrew/bin/node",
+        processGitPath: "/usr/bin/git",
+        shellGitPath: "/opt/homebrew/bin/git",
+        effectiveGitPath: "/usr/bin/git",
         nodeRuntimeBinPath: "/synapse/runtime-bin",
       })),
     })
@@ -233,6 +236,148 @@ describe("DiagnosticsService.collect", () => {
         "Login Shell 中的 node": "/opt/homebrew/bin/node",
         "最终可用 node": "/opt/homebrew/bin/node",
       },
+    })
+  })
+
+  it("reports Git visibility with a version probe", async () => {
+    const service = createService({
+      collectShellEnvironment: vi.fn(() => ({
+        processPath: "/usr/bin:/bin",
+        shellPath: "/opt/homebrew/bin:/usr/bin",
+        effectivePath: "/usr/bin:/bin:/opt/homebrew/bin",
+        processNodePath: null,
+        shellNodePath: null,
+        effectiveNodePath: "/usr/bin/node",
+        processGitPath: "/usr/bin/git",
+        shellGitPath: "/opt/homebrew/bin/git",
+        effectiveGitPath: "/usr/bin/git",
+        nodeRuntimeBinPath: null,
+      })),
+      probeGitVersion: vi.fn(async () => ({ ok: true, version: "git version 2.45.0" })),
+    } as Partial<ConstructorParameters<typeof DiagnosticsService>[0]>)
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "system.git-visibility")
+
+    expect(check).toMatchObject({
+      status: "ok",
+      group: "系统",
+      name: "Git 可见性",
+      message: "Git 可用",
+      details: {
+        "最终可用 git": "/usr/bin/git",
+        version: "git version 2.45.0",
+      },
+    })
+  })
+
+  it("degrades Git visibility when git cannot be executed", async () => {
+    const service = createService({
+      collectShellEnvironment: vi.fn(() => ({
+        processPath: "/usr/bin:/bin",
+        shellPath: null,
+        effectivePath: "/usr/bin:/bin",
+        processNodePath: null,
+        shellNodePath: null,
+        effectiveNodePath: "/usr/bin/node",
+        processGitPath: "/usr/bin/git",
+        shellGitPath: null,
+        effectiveGitPath: "/usr/bin/git",
+        nodeRuntimeBinPath: null,
+      })),
+      probeGitVersion: vi.fn(async () => ({ ok: false, error: "xcrun: invalid active developer path" })),
+    } as Partial<ConstructorParameters<typeof DiagnosticsService>[0]>)
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "system.git-visibility")
+
+    expect(check).toMatchObject({
+      status: "degraded",
+      group: "系统",
+      name: "Git 可见性",
+      message: "Git 不可执行",
+      details: {
+        "最终可用 git": "/usr/bin/git",
+        error: "xcrun: invalid active developer path",
+      },
+    })
+  })
+
+  it("checks managed knowledge base projects through their backing directory", async () => {
+    const statPath = vi.fn(async (targetPath: string) => {
+      if (targetPath === "/app/userData/knowledge-bases/kb-1" || targetPath === "/repo") {
+        return { isDirectory: () => true }
+      }
+      throw new Error(`unexpected stat path: ${targetPath}`)
+    })
+    const service = createService({
+      configStore: {
+        load: vi.fn(async () => createConfig({
+          projects: [{
+            id: "kb-1",
+            name: "个人知识库",
+            path: "synapse-kb://kb-1",
+            capabilities: {
+              knowledgeBase: {
+                enabled: true,
+                managed: true,
+                runtimeId: "kb-1",
+                schemaVersion: 1,
+                templateVersion: "2026-05-21",
+              },
+            },
+          }],
+        })),
+      },
+      statPath,
+    })
+
+    const report = await service.collect({ projectId: "kb-1" })
+    const check = report.checks.find((item) => item.id === "project.path.kb-1")
+
+    expect(statPath).toHaveBeenCalledWith("/app/userData/knowledge-bases/kb-1")
+    expect(check).toMatchObject({
+      status: "ok",
+      message: "目录可访问",
+      details: {
+        path: "synapse-kb://kb-1",
+        resolvedPath: "/app/userData/knowledge-bases/kb-1",
+      },
+    })
+  })
+
+  it("uses managed knowledge base backing directories for configured path diagnostics", async () => {
+    const service = createService({
+      configStore: {
+        load: vi.fn(async () => createConfig({
+          projects: [{
+            id: "kb-1",
+            name: "个人知识库",
+            path: "synapse-kb://kb-1",
+            capabilities: {
+              knowledgeBase: {
+                enabled: true,
+                managed: true,
+                runtimeId: "kb-1",
+                schemaVersion: 1,
+                templateVersion: "2026-05-21",
+              },
+            },
+          }],
+        })),
+      },
+    })
+
+    const report = await service.collect({ projectId: "kb-1" })
+    const check = report.checks.find((item) => item.id === "windows.configured-paths")
+    const details = check?.details as {
+      entries: Array<{ id: string; path: string; unsafeSegments: string[] }>
+    } | undefined
+    const entry = details?.entries.find((item) => item.id === "kb-1")
+
+    expect(entry).toMatchObject({
+      path: "/app/userData/knowledge-bases/kb-1",
+      unsafeSegments: [],
     })
   })
 
@@ -644,7 +789,9 @@ function findWrittenPath(files: Map<string, string>, suffix: string): string | u
   return [...files.keys()].find((targetPath) => targetPath.endsWith(suffix))
 }
 
-function createConfig(): SynapseConfig {
+function createConfig(options: {
+  projects?: SynapseConfig["global"]["projects"]
+} = {}): SynapseConfig {
   return {
     activeRepoUuid: "repo-1",
     repositories: [{
@@ -655,7 +802,7 @@ function createConfig(): SynapseConfig {
     }],
     global: {
       themeMode: "system",
-      projects: [{ id: "project-1", name: "Project", path: "/missing-project" }],
+      projects: options.projects ?? [{ id: "project-1", name: "Project", path: "/missing-project" }],
       quickInputs: [],
       defaultQuickInputsSeededVersion: null,
       favorites: { rule: [], skill: [], prompt: [] },

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   appendPathEntries,
   buildHostEnvironment,
+  collectShellEnvironmentSnapshot,
   createNodeRuntimeShimScript,
   resolveLoginShellPath,
   resolveExecutableInPath,
@@ -45,6 +46,28 @@ describe("shell environment helpers", () => {
     })
 
     expect(result).toBe("/opt/homebrew/bin/node")
+  })
+
+  it("reports git visibility across process, shell, and effective PATH", () => {
+    const existing = new Set([
+      "/usr/bin/git",
+      "/opt/homebrew/bin/git",
+      "/synapse/runtime-bin/node",
+    ])
+
+    const snapshot = collectShellEnvironmentSnapshot({
+      baseEnv: {
+        PATH: "/usr/bin:/bin",
+      },
+      shellPath: "/opt/homebrew/bin:/usr/bin",
+      nodeRuntimeBinPath: "/synapse/runtime-bin",
+      platform: "darwin",
+      fileExists: (candidate) => existing.has(candidate),
+    })
+
+    expect(snapshot.processGitPath).toBe("/usr/bin/git")
+    expect(snapshot.shellGitPath).toBe("/opt/homebrew/bin/git")
+    expect(snapshot.effectiveGitPath).toBe("/usr/bin/git")
   })
 
   it("builds a POSIX node shim that runs through Electron as Node", () => {
