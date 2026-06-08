@@ -6,13 +6,20 @@ import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 import { promisify } from "node:util"
-import { pipeline } from "node:stream/promises"
+import { finished, pipeline } from "node:stream/promises"
 import { createGzip } from "node:zlib"
 import * as tar from "tar"
 import type COS from "cos-nodejs-sdk-v5"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
-import { isBackupCosConfigured, loadEnv, type ServerEnv } from "../config/env"
+import { isBackupCosConfigured, isDriveCosConfigured, loadEnv, type ServerEnv } from "../config/env"
+import {
+  contentManifestItem,
+  createBackupManifest,
+  createRestoreMarkdown,
+  scanForSecretLikeText,
+  writeJsonFile,
+} from "./backup-package"
 
 const execFileAsync = promisify(execFile)
 
@@ -119,12 +126,45 @@ export class BackupService {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
     const filename = `synapse-backup-${timestamp}.tar`
     const tempFiles: string[] = []
+    const tempDirs: string[] = []
 
     try {
       const dbPath = await this.dumpDatabase()
       tempFiles.push(dbPath)
 
-      const archivePath = await this.packFiles(dbPath)
+      const createdAt = new Date().toISOString()
+      const packageDir = path.join(os.tmpdir(), `synapse-backup-package-${Date.now()}`)
+      tempDirs.push(packageDir)
+      fs.mkdirSync(packageDir, { recursive: true })
+
+      fs.copyFileSync(dbPath, path.join(packageDir, "database.sql.gz"))
+      await this.dumpPostgresGlobals(path.join(packageDir, "postgres-globals.sql"))
+      await this.writeDriveCosManifest(path.join(packageDir, "drive-cos-manifest.json"))
+
+      const restoreMarkdown = createRestoreMarkdown({ createdAt, filename })
+      if (scanForSecretLikeText(restoreMarkdown)) {
+        throw new Error("恢复说明包含疑似敏感信息。")
+      }
+      fs.writeFileSync(path.join(packageDir, "restore.md"), restoreMarkdown, "utf8")
+
+      const manifest = createBackupManifest({
+        createdAt,
+        appVersion: process.env.npm_package_version ?? "0.1.0",
+        migrationCount: await this.countAppliedMigrations(),
+        backupBucket: this.bucket,
+        backupRegion: this.region,
+        driveBucket: this.env.driveCosBucket,
+        driveRegion: this.env.driveCosRegion,
+        contents: [
+          await contentManifestItem(packageDir, "database.sql.gz"),
+          await contentManifestItem(packageDir, "postgres-globals.sql"),
+          await contentManifestItem(packageDir, "drive-cos-manifest.json"),
+          await contentManifestItem(packageDir, "restore.md"),
+        ],
+      })
+      await writeJsonFile(path.join(packageDir, "backup-manifest.json"), manifest)
+
+      const archivePath = await this.packDirectory(packageDir)
       tempFiles.push(archivePath)
 
       await this.uploadToCos(archivePath, filename)
@@ -156,8 +196,17 @@ export class BackupService {
       for (const file of tempFiles) {
         try {
           if (fs.existsSync(file)) fs.unlinkSync(file)
-        } catch {
-          // ignore cleanup errors
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          this.logger.warn?.({ error: message, file }, "Failed to remove backup temp file")
+        }
+      }
+      for (const dir of tempDirs) {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          this.logger.warn?.({ error: message, dir }, "Failed to remove backup temp directory")
         }
       }
     }
@@ -253,6 +302,139 @@ export class BackupService {
     }
   }
 
+  private async dumpPostgresGlobals(filePath: string): Promise<void> {
+    const pgDump = buildPgDumpOptions(this.env.databaseUrl, filePath)
+    await execFileAsync("pg_dumpall", [
+      "-h",
+      pgDump.args[1],
+      "-p",
+      pgDump.args[3],
+      "-U",
+      pgDump.args[5],
+      "--globals-only",
+      "-f",
+      filePath,
+    ], { env: pgDump.env })
+  }
+
+  private createDriveCosClient(): COS {
+    const CosClient = require("cos-nodejs-sdk-v5") as typeof COS
+    return new CosClient({
+      SecretId: this.env.driveCosSecretId!,
+      SecretKey: this.env.driveCosSecretKey!,
+    })
+  }
+
+  private async writeDriveCosManifest(filePath: string): Promise<void> {
+    if (!isDriveCosConfigured(this.env)) {
+      await writeJsonFile(filePath, {
+        storage: "local",
+        included: false,
+        reason: "Drive COS is not configured.",
+      })
+      return
+    }
+
+    const driveCos = this.createDriveCosClient()
+    const objects: Array<{
+      key: string
+      size: number
+      etag?: string
+      lastModified?: string
+    }> = []
+    let marker: string | undefined
+
+    do {
+      const page = await new Promise<{
+        readonly Contents?: Array<{
+          readonly Key?: string
+          readonly Size?: string | number
+          readonly ETag?: string
+          readonly LastModified?: string
+        }>
+        readonly IsTruncated?: string | boolean
+        readonly NextMarker?: string
+      }>((resolve, reject) => {
+        driveCos.getBucket(
+          {
+            Bucket: this.env.driveCosBucket!,
+            Region: this.env.driveCosRegion!,
+            Prefix: "drive/",
+            ...(marker ? { Marker: marker } : {}),
+          },
+          (err, data) => {
+            if (err) reject(err)
+            else resolve(data)
+          },
+        )
+      })
+
+      for (const item of page.Contents ?? []) {
+        if (!item.Key) continue
+        objects.push({
+          key: item.Key,
+          size: Number(item.Size ?? 0),
+          ...(item.ETag ? { etag: item.ETag } : {}),
+          ...(item.LastModified ? { lastModified: item.LastModified } : {}),
+        })
+      }
+
+      marker = page.NextMarker
+      if (page.IsTruncated !== true && page.IsTruncated !== "true") marker = undefined
+    } while (marker)
+
+    await writeJsonFile(filePath, {
+      bucket: this.env.driveCosBucket,
+      region: this.env.driveCosRegion,
+      prefix: "drive/",
+      objects,
+    })
+  }
+
+  private async packDirectory(directoryPath: string): Promise<string> {
+    const archivePath = path.join(os.tmpdir(), `synapse-backup-${Date.now()}.tar`)
+    let completed = false
+
+    try {
+      await tar.create(
+        { gzip: false, file: archivePath, cwd: directoryPath },
+        [
+          "database.sql.gz",
+          "postgres-globals.sql",
+          "drive-cos-manifest.json",
+          "backup-manifest.json",
+          "restore.md",
+        ],
+      )
+      completed = true
+      return archivePath
+    } finally {
+      if (!completed) {
+        fs.rmSync(archivePath, { force: true })
+      }
+    }
+  }
+
+  private async countAppliedMigrations(): Promise<number> {
+    const pg = buildPgDumpOptions(this.env.databaseUrl, "")
+    const result = await execFileAsync("psql", [
+      "-h",
+      pg.args[1],
+      "-p",
+      pg.args[3],
+      "-U",
+      pg.args[5],
+      "-d",
+      pg.args[7],
+      "-Atc",
+      "SELECT COUNT(*) FROM public._prisma_migrations WHERE finished_at IS NOT NULL;",
+    ], { env: pg.env })
+    const stdout = typeof result === "object" && result !== null && "stdout" in result
+      ? result.stdout
+      : result
+    return Number(String(stdout).trim() || "0")
+  }
+
   private async packFiles(dbPath: string): Promise<string> {
     const tmpDir = os.tmpdir()
     const workDir = path.join(tmpDir, `synapse-backup-${Date.now()}`)
@@ -284,7 +466,7 @@ export class BackupService {
 
     const body = fs.createReadStream(filePath)
 
-    return new Promise((resolve, reject) => {
+    const uploadPromise = new Promise<void>((resolve, reject) => {
       cos.putObject(
         {
           Bucket: this.bucket,
@@ -298,6 +480,13 @@ export class BackupService {
         },
       )
     })
+
+    try {
+      await Promise.all([uploadPromise, finished(body)])
+    } catch (error) {
+      body.destroy()
+      throw error
+    }
   }
 
   private async cleanExpiredBackups(): Promise<void> {

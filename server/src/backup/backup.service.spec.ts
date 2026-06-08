@@ -1,9 +1,18 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import * as fs from "node:fs"
+import { mkdtemp, readFile, writeFile } from "node:fs/promises"
 import * as os from "node:os"
 import * as path from "node:path"
-import { Readable } from "node:stream"
+import { PassThrough, Readable } from "node:stream"
+import * as tar from "tar"
 import { BackupService, buildBackupKey, buildPgDumpOptions } from "./backup.service"
+import {
+  createBackupManifest,
+  createRestoreMarkdown,
+  scanForSecretLikeText,
+  sha256File,
+  writeJsonFile,
+} from "./backup-package"
 
 vi.mock("node:fs", async () => {
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs")
@@ -12,6 +21,27 @@ vi.mock("node:fs", async () => {
     createReadStream: vi.fn(actual.createReadStream),
     readFileSync: vi.fn(actual.readFileSync),
   }
+})
+
+vi.mock("node:child_process", async () => {
+  const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs")
+  return {
+    execFile: vi.fn((_command, args, _options, callback) => {
+      const argList = Array.isArray(args) ? args : []
+      const fileIndex = argList.indexOf("-f")
+      const outputPath = fileIndex >= 0 && typeof argList[fileIndex + 1] === "string"
+        ? argList[fileIndex + 1]
+        : undefined
+      if (outputPath) {
+        actualFs.writeFileSync(outputPath, "postgres globals", "utf8")
+      }
+      callback(null, "25\n", "")
+    }),
+  }
+})
+
+beforeEach(() => {
+  vi.clearAllMocks()
 })
 
 describe("buildPgDumpOptions", () => {
@@ -48,6 +78,72 @@ describe("buildBackupKey", () => {
 
   it("builds keys for plain backup filenames", () => {
     expect(buildBackupKey("backups/", "synapse-backup.tar.gz")).toBe("backups/synapse-backup.tar.gz")
+  })
+})
+
+describe("backup package helpers", () => {
+  it("writes stable JSON and calculates sha256 checksums", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-backup-package-"))
+    const jsonPath = path.join(dir, "manifest.json")
+    const textPath = path.join(dir, "payload.txt")
+
+    try {
+      await writeJsonFile(jsonPath, { ok: true, count: 2 })
+      await writeFile(textPath, "payload", "utf8")
+
+      await expect(readFile(jsonPath, "utf8")).resolves.toBe(
+        "{\n  \"ok\": true,\n  \"count\": 2\n}\n",
+      )
+      await expect(sha256File(textPath)).resolves.toBe(
+        "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5",
+      )
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("creates a manifest without secret values", () => {
+    const manifest = createBackupManifest({
+      createdAt: "2026-06-08T14:23:25.189Z",
+      appVersion: "0.1.0",
+      migrationCount: 25,
+      backupBucket: "synapse-file-backup-1252371654",
+      backupRegion: "ap-beijing",
+      driveBucket: "synapse-file-user-1252371654",
+      driveRegion: "ap-beijing",
+      contents: [
+        {
+          path: "database.sql.gz",
+          sha256: "a".repeat(64),
+          size: 1024,
+        },
+      ],
+    })
+
+    const serialized = JSON.stringify(manifest)
+    expect(manifest.secretsIncluded).toBe(false)
+    expect(manifest.driveObjectsIncluded).toBe(false)
+    expect(serialized).not.toContain("SECRET")
+    expect(serialized).not.toContain("TOKEN")
+    expect(serialized).not.toContain("PASSWORD")
+  })
+
+  it("detects secret-like restore text regressions", () => {
+    expect(scanForSecretLikeText("restore with bucket names only")).toBe(false)
+    expect(scanForSecretLikeText("BACKUP_COS_SECRET_KEY=plain")).toBe(true)
+    expect(scanForSecretLikeText("Authorization: Bearer token")).toBe(true)
+  })
+
+  it("creates restore markdown that points users to local server env", () => {
+    const restore = createRestoreMarkdown({
+      createdAt: "2026-06-08T14:23:25.189Z",
+      filename: "synapse-backup-2026-06-08T14-23-25-189Z.tar",
+    })
+
+    expect(restore).toContain("server/.env")
+    expect(restore).toContain("database.sql.gz")
+    expect(restore).toContain("postgres-globals.sql")
+    expect(scanForSecretLikeText(restore)).toBe(false)
   })
 })
 
@@ -238,6 +334,239 @@ describe("BackupService", () => {
     })
   })
 
+  it("exports postgres globals into the backup package", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({}, logger)
+    const globalsPath = path.join(os.tmpdir(), `synapse-globals-${Date.now()}.sql`)
+
+    await (service as unknown as {
+      dumpPostgresGlobals(filePath: string): Promise<void>
+    }).dumpPostgresGlobals(globalsPath)
+
+    try {
+      expect(fs.readFileSync(globalsPath, "utf8")).toContain("postgres globals")
+    } finally {
+      fs.rmSync(globalsPath, { force: true })
+    }
+  })
+
+  it("writes a paginated Drive COS manifest when Drive COS is configured", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const getBucket = vi.fn((options, callback) => {
+      if (options.Marker === "next") {
+        callback(null, {
+          Contents: [
+            {
+              Key: "drive/item-b",
+              Size: "22",
+              ETag: "\"etag-b\"",
+              LastModified: "2026-06-08T14:23:01.000Z",
+            },
+          ],
+          IsTruncated: "false",
+        })
+        return
+      }
+      callback(null, {
+        Contents: [
+          {
+            Key: "drive/item-a",
+            Size: "11",
+            ETag: "\"etag-a\"",
+            LastModified: "2026-06-08T14:23:00.000Z",
+          },
+        ],
+        IsTruncated: "true",
+        NextMarker: "next",
+      })
+    })
+    const service = createBackupService({ getBucket }, logger)
+    vi.spyOn(service as unknown as {
+      createDriveCosClient(): { getBucket: typeof getBucket }
+    }, "createDriveCosClient").mockReturnValue({ getBucket })
+    Object.assign(service as unknown as { env: Record<string, string> }, {
+      env: {
+        backupCosBucket: "backup-bucket",
+        backupCosRegion: "ap-guangzhou",
+        backupCosSecretId: "secret-id",
+        backupCosSecretKey: "secret-key",
+        driveCosBucket: "drive-bucket",
+        driveCosRegion: "ap-beijing",
+        driveCosSecretId: "drive-secret-id",
+        driveCosSecretKey: "drive-secret-key",
+        databaseUrl: "postgresql://synapse:secret@localhost:5432/synapse",
+      },
+    })
+    const manifestPath = path.join(os.tmpdir(), `drive-cos-manifest-${Date.now()}.json`)
+
+    await (service as unknown as {
+      writeDriveCosManifest(filePath: string): Promise<void>
+    }).writeDriveCosManifest(manifestPath)
+
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+      expect(manifest).toEqual({
+        bucket: "drive-bucket",
+        region: "ap-beijing",
+        prefix: "drive/",
+        objects: [
+          {
+            key: "drive/item-a",
+            size: 11,
+            etag: "\"etag-a\"",
+            lastModified: "2026-06-08T14:23:00.000Z",
+          },
+          {
+            key: "drive/item-b",
+            size: 22,
+            etag: "\"etag-b\"",
+            lastModified: "2026-06-08T14:23:01.000Z",
+          },
+        ],
+      })
+      expect(getBucket).toHaveBeenCalledTimes(2)
+      expect(getBucket).toHaveBeenNthCalledWith(
+        1,
+        {
+          Bucket: "drive-bucket",
+          Region: "ap-beijing",
+          Prefix: "drive/",
+        },
+        expect.any(Function),
+      )
+    } finally {
+      fs.rmSync(manifestPath, { force: true })
+    }
+  })
+
+  it("writes a local Drive manifest when Drive COS is not configured", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({}, logger)
+    const manifestPath = path.join(os.tmpdir(), `drive-local-manifest-${Date.now()}.json`)
+
+    await (service as unknown as {
+      writeDriveCosManifest(filePath: string): Promise<void>
+    }).writeDriveCosManifest(manifestPath)
+
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+      expect(manifest).toEqual({
+        storage: "local",
+        included: false,
+        reason: "Drive COS is not configured.",
+      })
+    } finally {
+      fs.rmSync(manifestPath, { force: true })
+    }
+  })
+
+  it("packs database, globals, Drive manifest, backup manifest, and restore instructions", async () => {
+    const archiveCopyPath = path.join(os.tmpdir(), `synapse-backup-upload-${Date.now()}.tar`)
+    const putObject = vi.fn((options, callback) => {
+      const body = options.Body as NodeJS.ReadableStream
+      body.pipe(fs.createWriteStream(archiveCopyPath)).on("finish", () => callback(null))
+    })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({
+      putObject,
+      getBucket: vi.fn((_options, callback) => callback(null, { Contents: [] })),
+    }, logger)
+
+    vi.spyOn(service as unknown as { dumpDatabase(): Promise<string> }, "dumpDatabase")
+      .mockImplementation(async () => {
+        const dumpPath = path.join(os.tmpdir(), `database-${Date.now()}.sql.gz`)
+        fs.writeFileSync(dumpPath, "database", "utf8")
+        return dumpPath
+      })
+    vi.spyOn(service as unknown as { dumpPostgresGlobals(filePath: string): Promise<void> }, "dumpPostgresGlobals")
+      .mockImplementation(async (filePath) => {
+        fs.writeFileSync(filePath, "globals", "utf8")
+      })
+    vi.spyOn(service as unknown as { writeDriveCosManifest(filePath: string): Promise<void> }, "writeDriveCosManifest")
+      .mockImplementation(async (filePath) => {
+        fs.writeFileSync(filePath, "{\n  \"objects\": []\n}\n", "utf8")
+      })
+
+    const result = await service.performBackup()
+
+    expect(result.status).toBe("success")
+    expect(result.filename).toMatch(/\.tar$/)
+    const extractDir = path.join(os.tmpdir(), `synapse-backup-extract-${Date.now()}`)
+
+    try {
+      fs.mkdirSync(extractDir, { recursive: true })
+      await tar.extract({ file: archiveCopyPath, cwd: extractDir })
+
+      expect(fs.existsSync(path.join(extractDir, "database.sql.gz"))).toBe(true)
+      expect(fs.readFileSync(path.join(extractDir, "postgres-globals.sql"), "utf8")).toBe("globals")
+      expect(fs.existsSync(path.join(extractDir, "drive-cos-manifest.json"))).toBe(true)
+      expect(fs.readFileSync(path.join(extractDir, "restore.md"), "utf8")).toContain("server/.env")
+
+      const manifest = JSON.parse(fs.readFileSync(path.join(extractDir, "backup-manifest.json"), "utf8"))
+      expect(manifest.secretsIncluded).toBe(false)
+      expect(manifest.driveObjectsIncluded).toBe(false)
+      expect(manifest.database.migrationCount).toBe(25)
+      expect(JSON.stringify(manifest)).not.toContain("secret-id")
+      expect(JSON.stringify(manifest)).not.toContain("secret-key")
+      expect(JSON.stringify(manifest)).not.toContain("postgresql://")
+      expect(manifest.contents.map((item: { path: string }) => item.path)).toEqual([
+        "database.sql.gz",
+        "postgres-globals.sql",
+        "drive-cos-manifest.json",
+        "restore.md",
+      ])
+    } finally {
+      fs.rmSync(archiveCopyPath, { force: true })
+      fs.rmSync(extractDir, { recursive: true, force: true })
+    }
+  })
+
+  it("fails the backup when postgres globals export fails", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({
+      putObject: vi.fn((_options, callback) => callback(null)),
+      getBucket: vi.fn((_options, callback) => callback(null, { Contents: [] })),
+    }, logger)
+    vi.spyOn(service as unknown as { dumpDatabase(): Promise<string> }, "dumpDatabase")
+      .mockImplementation(async () => {
+        const dumpPath = path.join(os.tmpdir(), `database-${Date.now()}.sql.gz`)
+        fs.writeFileSync(dumpPath, "database", "utf8")
+        return dumpPath
+      })
+    vi.spyOn(service as unknown as { dumpPostgresGlobals(filePath: string): Promise<void> }, "dumpPostgresGlobals")
+      .mockRejectedValue(new Error("globals failed"))
+
+    const result = await service.performBackup()
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toBe("globals failed")
+  })
+
+  it("fails the backup when Drive COS manifest export fails", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({
+      putObject: vi.fn((_options, callback) => callback(null)),
+      getBucket: vi.fn((_options, callback) => callback(null, { Contents: [] })),
+    }, logger)
+    vi.spyOn(service as unknown as { dumpDatabase(): Promise<string> }, "dumpDatabase")
+      .mockImplementation(async () => {
+        const dumpPath = path.join(os.tmpdir(), `database-${Date.now()}.sql.gz`)
+        fs.writeFileSync(dumpPath, "database", "utf8")
+        return dumpPath
+      })
+    vi.spyOn(service as unknown as { dumpPostgresGlobals(filePath: string): Promise<void> }, "dumpPostgresGlobals")
+      .mockImplementation(async (filePath) => {
+        fs.writeFileSync(filePath, "globals", "utf8")
+      })
+    vi.spyOn(service as unknown as { writeDriveCosManifest(filePath: string): Promise<void> }, "writeDriveCosManifest")
+      .mockRejectedValue(new Error("drive manifest failed"))
+
+    const result = await service.performBackup()
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toBe("drive manifest failed")
+  })
+
   it("returns a COS object stream for backup downloads", () => {
     const stream = Readable.from(["backup"])
     const getObjectStream = vi.fn().mockReturnValue(stream)
@@ -254,9 +583,12 @@ describe("BackupService", () => {
 
   it("streams backup archives to COS without buffering the whole file", async () => {
     const archiveStream = Readable.from(["archive"])
-    const createReadStream = vi.mocked(fs.createReadStream).mockReturnValue(archiveStream as fs.ReadStream)
-    const readFileSync = vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from("archive"))
-    const putObject = vi.fn((options, callback) => callback(null))
+    const createReadStream = vi.mocked(fs.createReadStream).mockReturnValueOnce(archiveStream as fs.ReadStream)
+    const readFileSync = vi.mocked(fs.readFileSync)
+    const putObject = vi.fn((options, callback) => {
+      ;(options.Body as NodeJS.ReadableStream).resume()
+      callback(null)
+    })
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const service = createBackupService({ putObject }, logger)
 
@@ -275,6 +607,33 @@ describe("BackupService", () => {
       },
       expect.any(Function),
     )
+  })
+
+  it("waits for the backup archive stream to finish before resolving upload", async () => {
+    const archiveStream = new PassThrough()
+    vi.mocked(fs.createReadStream).mockReturnValueOnce(archiveStream as fs.ReadStream)
+    const putObject = vi.fn((options, callback) => {
+      ;(options.Body as NodeJS.ReadableStream).resume()
+      callback(null)
+    })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({ putObject }, logger)
+
+    const uploadPromise = (service as unknown as {
+      uploadToCos(filePath: string, filename: string): Promise<void>
+    }).uploadToCos("/tmp/synapse-backup.tar", "synapse-backup.tar")
+    let resolved = false
+    uploadPromise.then(() => {
+      resolved = true
+    })
+
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(resolved).toBe(false)
+
+    archiveStream.end("archive")
+
+    await expect(uploadPromise).resolves.toBeUndefined()
+    expect(resolved).toBe(true)
   })
 
   it("packs the already-compressed database dump without gziping the tar again", async () => {

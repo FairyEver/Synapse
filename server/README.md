@@ -331,9 +331,13 @@ docker compose down
 docker compose down -v
 ```
 
-### 数据库备份
+### 后台轻量灾备备份
 
-`deploy.sh` 的自动备份会保存在 `/www/wwwroot/synapse/backups/`。在线预演备份文件名形如 `synapse-online-before-deploy-20260606_121500.sql`，最终切换前备份文件名形如 `synapse-final-before-switch-20260606_121500.sql`；远端 `.env` 备份在 `backups/env/`，Postgres globals 备份在 `backups/globals/`，本地 Drive fallback 备份在 `backups/drive/`。
+管理后台“备份”页面和每天凌晨 3 点的定时任务会把轻量灾备包上传到 `BACKUP_COS_BUCKET/backups/`。灾备包包含业务数据库、PostgreSQL globals、Drive COS 对象清单、备份 manifest 和恢复说明。灾备包不包含 `.env`、JWT secret、COS Secret、数据库密码或 Drive 文件字节。
+
+恢复时需要使用你本机保存的 `server/.env` 作为配置来源。如果 Drive COS bucket 或对象已经被删除，灾备包只能恢复数据库和 Drive 元数据，不能恢复文件内容。
+
+`deploy.sh` 的发布切换备份仍保存在 `/www/wwwroot/synapse/backups/`。在线预演备份文件名形如 `synapse-online-before-deploy-20260606_121500.sql`，最终切换前备份文件名形如 `synapse-final-before-switch-20260606_121500.sql`；远端 `.env` 备份在 `backups/env/`，Postgres globals 备份在 `backups/globals/`，本地 Drive fallback 备份在 `backups/drive/`。
 
 也可以手动备份：
 
