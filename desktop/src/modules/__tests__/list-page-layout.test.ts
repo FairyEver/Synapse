@@ -32,13 +32,18 @@ describe("list page layout surfaces", () => {
 
   it("keeps workflow list pages on the shared list-page rhythm", async () => {
     const moduleSource = await readModuleSource("../workflow/index.tsx")
+    const modulePageSource = await readModuleSource("../../components/module-page.tsx")
+    const listSource = await readModuleSource("../workflow/components/workflow-list.tsx")
     const cardSource = await readModuleSource("../workflow/components/workflow-card.tsx")
 
-    expect(moduleSource).toContain('className="flex h-full min-h-0 flex-col bg-surface"')
-    expect(moduleSource).toContain('className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5"')
-    expect(moduleSource).not.toContain("border-b")
-    expect(cardSource).not.toContain('variant="outline"')
+    expect(moduleSource).toContain("<ModulePage")
+    expect(moduleSource).toContain('title="工作流"')
+    expect(moduleSource).toContain("afterContent={(")
+    expect(modulePageSource).toContain('className="flex h-full min-h-0 flex-col bg-surface"')
+    expect(listSource).toContain("<ModuleContentPanel>")
+    expect(listSource).toContain('<Table className="min-w-[52rem] table-fixed">')
+    expect(cardSource).toContain("<TableRow")
+    expect(cardSource).not.toContain("<Item")
     expect(cardSource).not.toContain("hover:bg-muted/50")
-    expect(cardSource).toContain("bg-card")
   })
 })
