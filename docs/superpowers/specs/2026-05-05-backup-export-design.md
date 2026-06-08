@@ -55,15 +55,15 @@ Docker 重置或 volume 丢失会导致 PostgreSQL 中的激活码、License、�
 
 | 变量 | 用途 | 示例 | 必填 |
 |------|------|------|------|
-| `COS_SECRET_ID` | 腾讯云 API 密钥 ID | `your-cos-secret-id` | 可选 |
-| `COS_SECRET_KEY` | 腾讯云 API 密钥 Key | `xxxxx` | 可选 |
-| `COS_BUCKET` | 存储桶名称 | `synapse-backup-1250000000` | 可选 |
-| `COS_REGION` | 地域 | `ap-guangzhou` | 可选 |
+| `BACKUP_COS_SECRET_ID` | 备份桶腾讯云 API 密钥 ID | `your-cos-secret-id` | 可选 |
+| `BACKUP_COS_SECRET_KEY` | 备份桶腾讯云 API 密钥 Key | `xxxxx` | 可选 |
+| `BACKUP_COS_BUCKET` | 备份桶名称 | `synapse-backup-1250000000` | 可选 |
+| `BACKUP_COS_REGION` | 备份桶地域 | `ap-guangzhou` | 可选 |
 | `BACKUP_ENCRYPT_KEY` | AES-256 密钥（32字节 hex） | `64位hex字符串` | 可选（自动生成） |
 
-COS 相关变量全部留空时，自动备份不启用，管理后台备份功能隐藏。
+Backup COS 相关变量全部留空时，自动备份不启用，管理后台备份功能隐藏。
 
-**后期启用**：在本机 `server/.env` 补上 COS 变量后运行 `bash deploy.sh` 同步到服务器；如果只更新远端 COS 配置，也可以运行 `bash cos.sh`。BackupService 每次 cron 触发时动态检查环境变量是否完整，完整则执行，缺失则跳过。
+**后期启用**：在本机 `server/.env` 补上 `BACKUP_COS_*` 变量后运行 `bash deploy.sh` 同步到服务器。BackupService 每次 cron 触发时动态检查环境变量是否完整，完整则执行，缺失则跳过。
 
 ## 腾讯云 COS 配置指南
 
@@ -102,10 +102,10 @@ COS 相关变量全部留空时，自动备份不启用，管理后台备份功�
 
 ```bash
 # server/.env 追加
-COS_SECRET_ID=your-cos-secret-id
-COS_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-COS_BUCKET=synapse-backup-1250000000
-COS_REGION=ap-guangzhou
+BACKUP_COS_SECRET_ID=your-cos-secret-id
+BACKUP_COS_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+BACKUP_COS_BUCKET=synapse-backup-1250000000
+BACKUP_COS_REGION=ap-guangzhou
 BACKUP_ENCRYPT_KEY=（setup.sh 自动生成，或手动执行 openssl rand -hex 32）
 ```
 
@@ -117,7 +117,7 @@ BACKUP_ENCRYPT_KEY=（setup.sh 自动生成，或手动执行 openssl rand -hex 
 
 通过 `setup.sh` 初始化脚本交互式收集，写入 `server/.env`：
 
-1. 在管理员信息收集之后，提示输入 COS 配置（可回车跳过）
+1. 在管理员信息收集之后，提示输入 Backup COS 配置（可回车跳过）
 2. `BACKUP_ENCRYPT_KEY` 自动生成（`openssl rand -hex 32`）
 3. 所有备份相关变量追加到同一个 `.env` 文件
 4. 部署时 `deploy.sh` 的普通 rsync 仍排除 `.env`，但会把本机 `server/.env` 作为配置源合并同步到服务器并校验 compose 配置；数据库初始化类变量（如 `POSTGRES_PASSWORD`、`DATABASE_URL`）保留远端现值，不通过普通 deploy 覆盖
@@ -130,7 +130,7 @@ BACKUP_ENCRYPT_KEY=（setup.sh 自动生成，或手动执行 openssl rand -hex 
 2. 读取环境变量 `LICENSE_PRIVATE_KEY` + `LICENSE_PUBLIC_KEY` + `LICENSE_KEY_ID`，序列化为 JSON
 3. 用 `BACKUP_ENCRYPT_KEY` 做 AES-256-GCM 加密，输出 `keys.json.enc`（含 iv + authTag + ciphertext）
 4. 打包为 `synapse-backup-{ISO时间戳}.tar.gz`
-5. 通过 cos-nodejs-sdk-v5 上传到 `{COS_BUCKET}/backups/` 前缀
+5. 通过 cos-nodejs-sdk-v5 上传到 `{BACKUP_COS_BUCKET}/backups/` 前缀
 6. 列出远端备份，删除创建时间超过 30 天的对象
 7. 写入审计日志（action: `backup_created` / `backup_failed`）
 

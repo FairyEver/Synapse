@@ -78,7 +78,7 @@ function AutomationListRow({
           >
             <span className="truncate">{item.name}</span>
           </Button>
-          <div className="truncate text-muted-foreground" title={`${triggerSummary} · ${executorSummary}`}>
+          <div className="truncate text-xs text-muted-foreground" title={`${triggerSummary} · ${executorSummary}`}>
             {triggerSummary} · {executorSummary}
           </div>
         </div>

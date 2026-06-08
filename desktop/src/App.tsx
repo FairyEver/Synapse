@@ -37,8 +37,6 @@ import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
-import { DatabaseModule } from "@/modules/database"
-import { EditorScanModule } from "@/modules/editor-scan"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import { AutomationModule } from "@/modules/automation"
@@ -48,8 +46,13 @@ import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage
 import { WorkflowModule } from "@/modules/workflow"
 import { ToolsModule } from "@/modules/tools"
 import type { SynapseContentType } from "@/types/content"
+import {
+  APP_NAVIGATION_TABS,
+  DEFAULT_APP_NAVIGATION_TAB_ID,
+  type AppNavigationTabId,
+} from "../config"
 
-type AppTabId = SynapseContentType | "agent" | "drive" | "database" | "task-scheduler" | "automation" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "tools" | "settings"
+type AppTabId = AppNavigationTabId
 type AppTabChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 type DialogKind = "install"
 type ContentDialogState = Record<DialogKind, boolean>
@@ -58,18 +61,17 @@ type ContentDialogHandlerMap = Record<SynapseContentType, Record<DialogKind, (op
 
 const logger = createRendererLogger("app")
 
-const CONTENT_TAB_LABELS: Record<SynapseContentType, string> = {
-  rule: "规则",
-  skill: "技能",
-  prompt: "提示词",
-}
-
 const TOP_LEVEL_CONTENT_TAB_ORDER = [
   "skill",
   "rule",
   "prompt",
 ] as const satisfies readonly SynapseContentType[]
-const DEFAULT_APP_TAB: AppTabId = TOP_LEVEL_CONTENT_TAB_ORDER[0]
+const CONTENT_TAB_LABELS = Object.fromEntries(
+  APP_NAVIGATION_TABS
+    .filter((tab) => TOP_LEVEL_CONTENT_TAB_ORDER.includes(tab.id as SynapseContentType))
+    .map((tab) => [tab.id, tab.label]),
+) as Record<SynapseContentType, string>
+const DEFAULT_APP_TAB: AppTabId = DEFAULT_APP_NAVIGATION_TAB_ID
 
 function createEmptyDialogStateMap(): ContentDialogStateMap {
   return Object.fromEntries(
@@ -185,23 +187,9 @@ function MainApp() {
   }, [activeTab, setActiveTab, workflowEntryVisible])
 
   const tabs = useMemo(
-    () => [
-      ...TOP_LEVEL_CONTENT_TAB_ORDER.map((contentType) => ({
-        id: contentType,
-        label: CONTENT_TAB_LABELS[contentType],
-      })),
-      { id: "agent" as const, label: "对话" },
-      { id: "database" as const, label: "数据库" },
-      { id: "task-scheduler" as const, label: "定时" },
-      { id: "automation" as const, label: "自动化" },
-      { id: "tools" as const, label: "工具" },
-      { id: "editor-scan" as const, label: "IDE" },
-      { id: "usage-cc" as const, label: "CC" },
-      { id: "usage-codex" as const, label: "Codex" },
-      ...(workflowEntryVisible ? [{ id: "workflow" as const, label: "工作流" }] : []),
-      { id: "drive" as const, label: "云盘" },
-      { id: "settings" as const, label: "设置" },
-    ],
+    () => APP_NAVIGATION_TABS.filter((tab) => (
+      !("requiresWorkflowEntry" in tab) || workflowEntryVisible
+    )),
     [workflowEntryVisible],
   )
 
@@ -378,11 +366,6 @@ function MainApp() {
               <DriveModule />
             </ErrorBoundary>
           ) : null}
-          {activeTab === "database" ? (
-            <ErrorBoundary fallbackTitle="数据库模块出现问题">
-              <DatabaseModule />
-            </ErrorBoundary>
-          ) : null}
           {activeTab === "task-scheduler" ? (
             <ErrorBoundary fallbackTitle="定时任务模块出现问题">
               <TaskSchedulerModule />
@@ -396,11 +379,6 @@ function MainApp() {
           {activeTab === "tools" ? (
             <ErrorBoundary fallbackTitle="工具模块出现问题">
               <ToolsModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "editor-scan" ? (
-            <ErrorBoundary fallbackTitle="IDE 模块出现问题">
-              <EditorScanModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "usage-cc" ? (

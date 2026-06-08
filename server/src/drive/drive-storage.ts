@@ -6,7 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import { pipeline } from "node:stream/promises"
 import COS from "cos-nodejs-sdk-v5"
-import { loadEnv, isBackupConfigured } from "../config/env"
+import { isDriveCosConfigured, loadEnv } from "../config/env"
 import { driveDownloadUrlTtlSeconds, driveUploadUrlTtlSeconds } from "./drive.constants"
 
 export interface DriveStorageObjectInfo {
@@ -208,18 +208,18 @@ export class CosDriveStorage implements DriveStoragePort {
     const env = loadEnv(process.env)
     this.client = {
       cos: new COS({
-        SecretId: this.requireConfig(env.cosSecretId, "COS_SECRET_ID"),
-        SecretKey: this.requireConfig(env.cosSecretKey, "COS_SECRET_KEY"),
+        SecretId: this.requireConfig(env.driveCosSecretId, "DRIVE_COS_SECRET_ID"),
+        SecretKey: this.requireConfig(env.driveCosSecretKey, "DRIVE_COS_SECRET_KEY"),
       }),
-      bucket: this.requireConfig(env.cosBucket, "COS_BUCKET"),
-      region: this.requireConfig(env.cosRegion, "COS_REGION"),
+      bucket: this.requireConfig(env.driveCosBucket, "DRIVE_COS_BUCKET"),
+      region: this.requireConfig(env.driveCosRegion, "DRIVE_COS_REGION"),
     }
     return this.client
   }
 }
 
 export function shouldUseCosDriveStorage(source: NodeJS.ProcessEnv = process.env): boolean {
-  return isBackupConfigured(loadEnv(source))
+  return isDriveCosConfigured(loadEnv(source))
 }
 
 function isCosNotFound(error: unknown): boolean {

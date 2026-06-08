@@ -169,6 +169,7 @@ describe("AutomationModule", () => {
     expect(html).toContain('data-slot="table-row"')
     expect(html).toContain('data-slot="table-cell"')
     expect(html).toContain("已启用")
+    expect(html).toContain('class="truncate text-xs text-muted-foreground"')
   })
 
   it("uses the workflow-style scroll container", () => {

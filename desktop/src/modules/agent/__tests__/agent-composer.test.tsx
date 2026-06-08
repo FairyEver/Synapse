@@ -422,6 +422,33 @@ describe("AgentComposer", () => {
     expect(html).toContain("py-2")
   })
 
+  it("renders a non-interactive background fade behind the composer", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain('aria-hidden="true"')
+    expect(html).toContain("agent-composer-fade")
+    expect(html).toContain("pointer-events-none")
+    expect(html).toContain("absolute inset-x-0 bottom-0")
+    expect(html).toContain("bg-gradient-to-b")
+    expect(html).toContain("from-background/0")
+    expect(html).toContain("to-background")
+    expect(html).not.toContain("to-background/80")
+    expect(html).toContain("h-56")
+  })
+
   it("disables send button when canSend is false", () => {
     const html = renderToStaticMarkup(
       <AgentComposer

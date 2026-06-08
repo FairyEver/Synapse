@@ -81,7 +81,7 @@ REMOTE_SCRIPT
 sync_remote_env() {
   if ! test -f "$LOCAL_ENV_FILE"; then
     echo "本机 $LOCAL_ENV_FILE 不存在，已停止部署。"
-    echo "请先创建本机 server/.env，或用 cos.sh 单独配置远程 COS 后再部署。"
+    echo "请先创建本机 server/.env，并在其中维护 COS、JWT、公开访问地址等配置。"
     exit 1
   fi
 
@@ -270,7 +270,6 @@ sync_remote_code() {
     --include='/.dockerignore' \
     --include='/setup.sh' \
     --include='/restart.sh' \
-    --include='/cos.sh' \
     --include='/server/***' \
     --include='/dashboard/***' \
     --include='/shared/***' \
@@ -357,12 +356,12 @@ read_env_value() {
   sed -n "s/^${1}=//p" .env | tail -n 1
 }
 
-cos_secret_id=$(read_env_value COS_SECRET_ID)
-cos_secret_key=$(read_env_value COS_SECRET_KEY)
-cos_bucket=$(read_env_value COS_BUCKET)
-cos_region=$(read_env_value COS_REGION)
+drive_cos_secret_id=$(read_env_value DRIVE_COS_SECRET_ID)
+drive_cos_secret_key=$(read_env_value DRIVE_COS_SECRET_KEY)
+drive_cos_bucket=$(read_env_value DRIVE_COS_BUCKET)
+drive_cos_region=$(read_env_value DRIVE_COS_REGION)
 
-if [ -n "$cos_secret_id" ] && [ -n "$cos_secret_key" ] && [ -n "$cos_bucket" ] && [ -n "$cos_region" ]; then
+if [ -n "$drive_cos_secret_id" ] && [ -n "$drive_cos_secret_key" ] && [ -n "$drive_cos_bucket" ] && [ -n "$drive_cos_region" ]; then
   echo "drive backup skipped: COS storage is configured"
   exit 0
 fi

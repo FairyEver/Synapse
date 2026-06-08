@@ -174,15 +174,45 @@ afterEach(() => {
 })
 
 describe("App workflow entry visibility", () => {
-  it("shows automation immediately after scheduler in the top navigation", async () => {
+  it("uses the configured top navigation order while workflow is hidden", async () => {
     mocks.getStates.mockResolvedValue({})
 
     await renderApp()
 
-    const text = document.body.textContent ?? ""
-    expect(text).toContain("定时")
-    expect(text).toContain("自动化")
-    expect(text.indexOf("定时")).toBeLessThan(text.indexOf("自动化"))
+    expect(topNavigationLabels()).toEqual([
+      "技能",
+      "规则",
+      "提示词",
+      "对话",
+      "定时",
+      "自动化",
+      "云盘",
+      "工具",
+      "CC",
+      "Codex",
+      "设置",
+    ])
+  })
+
+  it("places workflow between automation and drive when the workflow entry is visible", async () => {
+    mocks.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
+
+    await renderApp()
+
+    expect(topNavigationLabels()).toEqual([
+      "技能",
+      "规则",
+      "提示词",
+      "对话",
+      "定时",
+      "自动化",
+      "工作流",
+      "云盘",
+      "工具",
+      "CC",
+      "Codex",
+      "设置",
+    ])
   })
 
   it("hides the workflow entry when the initial cheat code state read fails after a visibility event", async () => {
@@ -220,6 +250,10 @@ async function renderApp(): Promise<void> {
     root.render(<App />)
     await Promise.resolve()
   })
+}
+
+function topNavigationLabels(): string[] {
+  return Array.from(document.querySelectorAll("nav button")).map((button) => button.textContent ?? "")
 }
 
 function createDeferred<T>() {

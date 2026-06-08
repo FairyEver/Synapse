@@ -66,13 +66,15 @@ vi.mock("../workflow-card", () => ({
     onRun: () => void
     onOpenActiveRun: (runId: string) => void
   }) => (
-    <>
-      <button type="button" data-testid={`run-${meta.id}`} onClick={onRun}>run</button>
-      {runState?.runId ? (
-        <button type="button" data-testid={`open-active-${meta.id}`} onClick={() => onOpenActiveRun(runState.runId!)}>open active</button>
-      ) : null}
-      <button type="button" data-track="workflow-card-export" onClick={onExport}>export</button>
-    </>
+    <tr>
+      <td>
+        <button type="button" data-testid={`run-${meta.id}`} onClick={onRun}>run</button>
+        {runState?.runId ? (
+          <button type="button" data-testid={`open-active-${meta.id}`} onClick={() => onOpenActiveRun(runState.runId!)}>open active</button>
+        ) : null}
+        <button type="button" data-track="workflow-card-export" onClick={onExport}>export</button>
+      </td>
+    </tr>
   ),
 }))
 

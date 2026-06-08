@@ -24,7 +24,7 @@ import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { ProviderModelSelection } from "@/types/provider-model"
 
 const logger = createRendererLogger("settings.agent-defaults")
-const DEFAULTS_FIELD_ROW_CLASSNAME = "grid gap-2 md:grid-cols-[12rem_minmax(10rem,17rem)] md:items-center md:gap-4"
+const DEFAULTS_FIELD_ROW_CLASSNAME = "grid gap-2 md:grid-cols-[12rem_1fr] md:items-center md:gap-4"
 
 function AgentDefaultFieldRow({
   children,
@@ -36,7 +36,7 @@ function AgentDefaultFieldRow({
   return (
     <div className={DEFAULTS_FIELD_ROW_CLASSNAME}>
       <div className="text-sm font-medium">{label}</div>
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0 md:ml-auto md:w-[17rem]">{children}</div>
     </div>
   )
 }

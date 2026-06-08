@@ -64,6 +64,16 @@ describe("ToolsModule", () => {
 
     expect(bridgeMocks.tools.openTool).toHaveBeenCalledWith("docx-to-markdown")
   })
+
+  it("renders tool descriptions one typography step below titles", async () => {
+    await renderModule()
+
+    await waitForExpectation(() => {
+      const description = elementByText("转换一个 DOCX 文件")
+
+      expect(description.className.split(/\s+/)).toContain("text-xs")
+    })
+  })
 })
 
 async function renderModule(): Promise<void> {
@@ -101,6 +111,13 @@ function buttonByLabel(label: string): HTMLButtonElement {
   const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
   if (!button) throw new Error(`Button not found: ${label}`)
   return button
+}
+
+function elementByText(text: string): HTMLElement {
+  const element = Array.from(document.querySelectorAll<HTMLElement>("*"))
+    .find((candidate) => candidate.textContent === text)
+  if (!element) throw new Error(`Element not found: ${text}`)
+  return element
 }
 
 async function waitForExpectation(assertion: () => void): Promise<void> {

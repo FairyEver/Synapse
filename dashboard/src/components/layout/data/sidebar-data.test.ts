@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { Logo } from '@/assets/logo'
 import { getSidebarData } from './sidebar-data'
 
 function collectUrls(data: ReturnType<typeof getSidebarData>) {
@@ -22,6 +23,8 @@ describe('getSidebarData', () => {
 
     expect(data.user.profileUrl).toBeUndefined()
     expect(data.user.name).toBe('Ada Lovelace')
+    expect(data.appTitle.name).toBe('Synapse Dashboard')
+    expect(data.appTitle.logo).toBe(Logo)
     expect(collectUrls(data)).toContain('/webhooks')
     expect(collectUrls(data)).toContain('/webhook-deliveries')
     expect(collectUrls(data)).toContain('/my-devices')
@@ -42,6 +45,8 @@ describe('getSidebarData', () => {
 
     expect(data.user.profileUrl).toBeUndefined()
     expect(data.user.name).toBe('admin@example.com')
+    expect(data.appTitle.name).toBe('Synapse Dashboard')
+    expect(data.appTitle.logo).toBe(Logo)
     expect(collectUrls(data)).toContain('/devices')
     expect(collectUrls(data)).toContain('/drive')
     expect(collectUrls(data)).toContain('/webhook-deliveries')

@@ -6,9 +6,18 @@ import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
 import { useWorkflowList } from "../hooks/use-workflow-list"
 import { createRendererLogger } from "@/app-shell/logging"
+import { ModuleContentPanel } from "@/components/module-page"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition } from "@/types/workflow"
@@ -240,43 +249,63 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     </div>
   )
   if (items.length === 0) return (
-    <div className="flex h-full flex-col">
-      <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center gap-2 text-center">
-          <FileJson className="size-10 text-muted-foreground/50" />
-          <p className="text-sm text-muted-foreground">还没有工作流</p>
-          <Button size="sm" variant="outline" onClick={onCreate}>
-            <Plus data-icon="inline-start" />创建第一个工作流
-          </Button>
-        </div>
-      </div>
-    </div>
+    <Empty className="min-h-64 border">
+      <EmptyHeader>
+        <FileJson className="size-10 text-muted-foreground/50" />
+        <EmptyTitle>暂无工作流</EmptyTitle>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button size="sm" variant="outline" onClick={onCreate}>
+          <Plus data-icon="inline-start" />创建第一个工作流
+        </Button>
+      </EmptyContent>
+    </Empty>
   )
 
   return (
     <>
-      <div className="grid gap-2">
-        {items.map((meta) => (
-          <WorkflowCard key={meta.id} meta={meta}
-            runState={runStates[meta.id]}
-            running={runningId !== null}
-            onOpen={() => {
-              void requireBridgeDomain("workflow").openEditor(meta.id).catch((err) => {
-                logger.warn("Workflow editor open failed.", {
-                  boundary: "renderer.workflow.list.openEditor",
-                  workflowId: meta.id,
-                  ...errorDiagnostic(err),
-                })
-                toast.error("打开工作流失败，请重试")
-              })
-            }}
-            onRun={() => void handleRun(meta.id)}
-            onOpenActiveRun={(runId) => handleOpenActiveRun(meta.id, runId)}
-            onHistory={() => setHistoryWorkflowId(meta.id)}
-            onExport={() => void handleExport(meta.id, meta.name)}
-            onDelete={() => void handleDelete(meta.id)} />
-        ))}
-      </div>
+      <ModuleContentPanel>
+        <Table className="min-w-[52rem] table-fixed">
+          <colgroup>
+            <col className="w-auto" />
+            <col className="w-24" />
+            <col className="w-28" />
+            <col className="w-24" />
+            <col className="w-40" />
+          </colgroup>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>工作流</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead className="text-right">节点</TableHead>
+              <TableHead>ID</TableHead>
+              <TableHead className="text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((meta) => (
+              <WorkflowCard key={meta.id} meta={meta}
+                runState={runStates[meta.id]}
+                running={runningId !== null}
+                onOpen={() => {
+                  void requireBridgeDomain("workflow").openEditor(meta.id).catch((err) => {
+                    logger.warn("Workflow editor open failed.", {
+                      boundary: "renderer.workflow.list.openEditor",
+                      workflowId: meta.id,
+                      ...errorDiagnostic(err),
+                    })
+                    toast.error("打开工作流失败，请重试")
+                  })
+                }}
+                onRun={() => void handleRun(meta.id)}
+                onOpenActiveRun={(runId) => handleOpenActiveRun(meta.id, runId)}
+                onHistory={() => setHistoryWorkflowId(meta.id)}
+                onExport={() => void handleExport(meta.id, meta.name)}
+                onDelete={() => void handleDelete(meta.id)} />
+            ))}
+          </TableBody>
+        </Table>
+      </ModuleContentPanel>
       <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} lastValues={runTarget ? lastRunValues[runTarget.id] : undefined} onConfirm={async (params, rawValues) => { if (runTarget) setLastRunValues((prev) => ({ ...prev, [runTarget.id]: rawValues })); await handleConfirmRun(params).catch(() => {}) }} onCancel={() => setRunTarget(null)} />
       <RunHistoryDialog open={!!historyWorkflowId} workflowId={historyWorkflowId ?? ""} onClose={() => setHistoryWorkflowId(null)} />
       <AlertDialog open={!!conflictState} onOpenChange={(o) => { if (!o) setConflictState(null) }}>

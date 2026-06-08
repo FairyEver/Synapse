@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { ChevronRight, CircleUserRound, FileText, Folder, FolderPlus, LoaderCircle, MoreHorizontal, RefreshCw, Search, Upload } from "lucide-react"
 import type { DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
+import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
 import { cn } from "@/lib/utils"
@@ -37,7 +38,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -350,10 +350,10 @@ function DriveModule() {
 
   return (
     <TooltipProvider>
-      <section className="flex h-full min-h-0 flex-col bg-surface">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
-          <h2 className="text-sm font-semibold">云盘</h2>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+      <ModulePage
+        title="云盘"
+        actions={(
+          <>
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
             <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
             <Tooltip>
@@ -377,88 +377,90 @@ function DriveModule() {
               <FolderPlus data-icon="inline-start" />
               新建文件夹
             </Button>
-          </div>
-        </div>
-
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="min-h-full px-3 py-3">{content}</div>
-        </ScrollArea>
-      <Dialog open={nameDialog !== null} onOpenChange={(open) => {
-        if (!open) setNameDialog(null)
-      }}>
-        {nameDialog ? (
-          <FormDialog
-            title={nameDialog.mode === "create" ? "新建文件夹" : "重命名"}
-            onSubmit={handleNameSubmit}
-            footer={(
-              <>
-                <Button type="button" variant="outline" disabled={submitting} onClick={() => setNameDialog(null)}>取消</Button>
-                <Button type="submit" disabled={submitting || nameDialog.value.trim().length === 0}>
-                  {nameDialog.mode === "create" ? "新建" : "保存"}
-                </Button>
-              </>
-            )}
-          >
-            <div className="grid gap-2">
-              <Label htmlFor="drive-item-name">
-                {nameDialog.mode === "create" ? "文件夹名称" : "名称"}
-              </Label>
-              <Input
-                id="drive-item-name"
-                aria-label={nameDialog.mode === "create" ? "文件夹名称" : "名称"}
-                value={nameDialog.value}
-                onChange={(event) => {
-                  const value = event.target.value
-                  setNameDialog((current) => current ? { ...current, value } : current)
-                }}
-                autoFocus
-              />
-            </div>
-          </FormDialog>
-        ) : null}
-      </Dialog>
-      <Dialog open={moveTarget !== null} onOpenChange={(open) => {
-        if (!open) setMoveTarget(null)
-      }}>
-        {moveTarget ? (
-          <FormDialog
-            title="移动"
-            onSubmit={handleMoveSubmit}
-            footer={(
-              <>
-                <Button type="button" variant="outline" disabled={submitting} onClick={() => setMoveTarget(null)}>取消</Button>
-                <Button type="submit" disabled={submitting}>移动</Button>
-              </>
-            )}
-          >
-            <div className="grid gap-2">
-              <Label>目标位置</Label>
-              <DriveMoveTargetTree
-                disabledFolderId={moveTarget.type === "folder" ? moveTarget.id : null}
-                selectedParentId={moveParentId}
-                onSelect={setMoveParentId}
-              />
-            </div>
-          </FormDialog>
-        ) : null}
-      </Dialog>
-      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
-        if (!open) setDeleteTarget(null)
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认删除</AlertDialogTitle>
-            <AlertDialogDescription>
-              删除后无法在云盘中继续访问「{deleteTarget?.name}」。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>取消</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={submitting} onClick={() => { void confirmDelete() }}>删除</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      </section>
+          </>
+        )}
+        afterContent={(
+          <>
+            <Dialog open={nameDialog !== null} onOpenChange={(open) => {
+              if (!open) setNameDialog(null)
+            }}>
+              {nameDialog ? (
+                <FormDialog
+                  title={nameDialog.mode === "create" ? "新建文件夹" : "重命名"}
+                  onSubmit={handleNameSubmit}
+                  footer={(
+                    <>
+                      <Button type="button" variant="outline" disabled={submitting} onClick={() => setNameDialog(null)}>取消</Button>
+                      <Button type="submit" disabled={submitting || nameDialog.value.trim().length === 0}>
+                        {nameDialog.mode === "create" ? "新建" : "保存"}
+                      </Button>
+                    </>
+                  )}
+                >
+                  <div className="grid gap-2">
+                    <Label htmlFor="drive-item-name">
+                      {nameDialog.mode === "create" ? "文件夹名称" : "名称"}
+                    </Label>
+                    <Input
+                      id="drive-item-name"
+                      aria-label={nameDialog.mode === "create" ? "文件夹名称" : "名称"}
+                      value={nameDialog.value}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setNameDialog((current) => current ? { ...current, value } : current)
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                </FormDialog>
+              ) : null}
+            </Dialog>
+            <Dialog open={moveTarget !== null} onOpenChange={(open) => {
+              if (!open) setMoveTarget(null)
+            }}>
+              {moveTarget ? (
+                <FormDialog
+                  title="移动"
+                  onSubmit={handleMoveSubmit}
+                  footer={(
+                    <>
+                      <Button type="button" variant="outline" disabled={submitting} onClick={() => setMoveTarget(null)}>取消</Button>
+                      <Button type="submit" disabled={submitting}>移动</Button>
+                    </>
+                  )}
+                >
+                  <div className="grid gap-2">
+                    <Label>目标位置</Label>
+                    <DriveMoveTargetTree
+                      disabledFolderId={moveTarget.type === "folder" ? moveTarget.id : null}
+                      selectedParentId={moveParentId}
+                      onSelect={setMoveParentId}
+                    />
+                  </div>
+                </FormDialog>
+              ) : null}
+            </Dialog>
+            <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
+              if (!open) setDeleteTarget(null)
+            }}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认删除</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    删除后无法在云盘中继续访问「{deleteTarget?.name}」。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={submitting}>取消</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" disabled={submitting} onClick={() => { void confirmDelete() }}>删除</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+      >
+        {content}
+      </ModulePage>
     </TooltipProvider>
   )
 }
@@ -795,32 +797,36 @@ function DriveFileList({
       </div>
 
       {loading ? (
-        <DriveFileTableSkeleton />
+        <ModuleContentPanel>
+          <DriveFileTableSkeleton />
+        </ModuleContentPanel>
       ) : items.length === 0 ? (
-        <Empty className="min-h-64 border-0">
+        <Empty className="min-h-64 border">
           <EmptyHeader>
             <EmptyTitle>{emptyTitle}</EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (
-        <Table className="min-w-[760px] table-fixed">
-          <DriveFileTableHeader />
-          <TableBody>
-            {items.map((item) => (
-              <DriveFileListRow
-                key={item.id}
-                item={item}
-                opening={openingFolderId === item.id}
-                onOpenFolder={onOpenFolder}
-                onRename={onRename}
-                onMove={onMove}
-                onDelete={onDelete}
-                onShare={onShare}
-                onDisableShare={onDisableShare}
-              />
-            ))}
-          </TableBody>
-        </Table>
+        <ModuleContentPanel>
+          <Table className="min-w-[760px] table-fixed">
+            <DriveFileTableHeader />
+            <TableBody>
+              {items.map((item) => (
+                <DriveFileListRow
+                  key={item.id}
+                  item={item}
+                  opening={openingFolderId === item.id}
+                  onOpenFolder={onOpenFolder}
+                  onRename={onRename}
+                  onMove={onMove}
+                  onDelete={onDelete}
+                  onShare={onShare}
+                  onDisableShare={onDisableShare}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </ModuleContentPanel>
       )}
     </div>
   )
@@ -829,7 +835,7 @@ function DriveFileList({
 function DriveFileTableHeader() {
   return (
     <TableHeader>
-      <TableRow>
+      <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
         <TableHead className="w-24">状态</TableHead>
         <TableHead className="w-28 text-right">大小</TableHead>

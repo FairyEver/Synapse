@@ -180,6 +180,11 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("backup_remote_drive_fallback")
     expect(deployScript).toContain("tar -czf \"$DRIVE_BACKUP_FILE\" -C data drive")
     expect(deployScript).toContain("chmod 600 \"$DRIVE_BACKUP_FILE\"")
+    expect(deployScript).toContain("read_env_value DRIVE_COS_SECRET_ID")
+    expect(deployScript).toContain("read_env_value DRIVE_COS_SECRET_KEY")
+    expect(deployScript).toContain("read_env_value DRIVE_COS_BUCKET")
+    expect(deployScript).toContain("read_env_value DRIVE_COS_REGION")
+    expect(deployScript).not.toContain("read_env_value BACKUP_COS_BUCKET")
     expect(deployScript).toContain("--exclude='server/data'")
   })
 

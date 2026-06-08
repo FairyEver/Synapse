@@ -8,10 +8,10 @@ import {
   History,
   ScrollText,
   Settings,
-  Command,
   Webhook,
   MonitorSmartphone,
 } from 'lucide-react'
+import { Logo } from '@/assets/logo'
 import type { AuthUser } from '@/stores/auth-store'
 import { type SidebarData } from '../types'
 
@@ -121,8 +121,8 @@ export function getSidebarData(user: Pick<AuthUser, 'displayName' | 'email' | 'r
       profileUrl: undefined,
     },
     appTitle: {
-      name: isAdmin ? 'Synapse Admin' : 'Synapse',
-      logo: Command,
+      name: 'Synapse Dashboard',
+      logo: Logo,
       description: isAdmin ? '管理后台' : '用户后台',
     },
     navGroups: isAdmin ? [adminNavGroup, adminAccountNavGroup] : [userAccountNavGroup],

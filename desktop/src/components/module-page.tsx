@@ -1,0 +1,41 @@
+import type { ReactNode } from "react"
+
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
+
+type ModulePageProps = {
+  readonly title: string
+  readonly actions?: ReactNode
+  readonly children: ReactNode
+  readonly afterContent?: ReactNode
+}
+
+function ModulePage({ title, actions, children, afterContent }: ModulePageProps) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-full px-3 py-3">{children}</div>
+      </ScrollArea>
+      {afterContent}
+    </div>
+  )
+}
+
+type ModuleContentPanelProps = {
+  readonly children: ReactNode
+  readonly className?: string
+}
+
+function ModuleContentPanel({ children, className }: ModuleContentPanelProps) {
+  return (
+    <div className={cn("rounded-lg border bg-background", className)}>
+      {children}
+    </div>
+  )
+}
+
+export { ModuleContentPanel, ModulePage }

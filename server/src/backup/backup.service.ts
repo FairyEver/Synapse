@@ -12,7 +12,7 @@ import * as tar from "tar"
 import type COS from "cos-nodejs-sdk-v5"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
-import { isBackupConfigured, loadEnv, type ServerEnv } from "../config/env"
+import { isBackupCosConfigured, loadEnv, type ServerEnv } from "../config/env"
 
 const execFileAsync = promisify(execFile)
 
@@ -85,21 +85,21 @@ export class BackupService {
     @Optional() private readonly auditLog?: AuditLogService,
   ) {
     this.env = loadEnv(process.env)
-    this.bucket = this.env.cosBucket ?? ""
-    this.region = this.env.cosRegion ?? ""
+    this.bucket = this.env.backupCosBucket ?? ""
+    this.region = this.env.backupCosRegion ?? ""
 
-    if (isBackupConfigured(this.env)) {
+    if (isBackupCosConfigured(this.env)) {
       const CosClient = require("cos-nodejs-sdk-v5") as typeof COS
       this.cos = new CosClient({
-        SecretId: this.env.cosSecretId!,
-        SecretKey: this.env.cosSecretKey!,
+        SecretId: this.env.backupCosSecretId!,
+        SecretKey: this.env.backupCosSecretKey!,
       })
     }
   }
 
   @Cron("0 3 * * *")
   async scheduledBackup(): Promise<void> {
-    if (!isBackupConfigured(this.env)) {
+    if (!isBackupCosConfigured(this.env)) {
       this.logger.info("Backup not configured, skipping scheduled backup")
       return
     }
@@ -368,7 +368,7 @@ export class BackupService {
   }
 
   private getBackupCos(): COS {
-    if (!isBackupConfigured(this.env) || !this.cos) {
+    if (!isBackupCosConfigured(this.env) || !this.cos) {
       throw new ServiceUnavailableException("备份未配置。")
     }
     return this.cos

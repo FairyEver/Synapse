@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
+import { ModulePage } from "@/components/module-page"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { WorkflowList } from "./components/workflow-list"
 import { Loader2, Plus, Upload } from "lucide-react"
@@ -104,30 +104,31 @@ export function WorkflowModule() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
-        <h2 className="text-sm font-semibold">工作流</h2>
-        <div className="flex items-center gap-2">
+    <ModulePage
+      title="工作流"
+      actions={(
+        <>
           <Button size="sm" variant="outline" disabled={importing} onClick={handleImportStart}>
-            <Upload className="h-4 w-4 mr-1.5" />导入
+            <Upload data-icon="inline-start" />
+            导入
           </Button>
           <Button size="sm" variant="outline" disabled={creating} onClick={handleCreate}>
-            {creating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Plus className="h-4 w-4 mr-1.5" />}新建
+            {creating ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+            新建
           </Button>
-        </div>
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="min-h-full px-2 pb-2 pt-0">
-          <WorkflowList key={listKey} onCreate={handleCreate} />
-        </div>
-      </ScrollArea>
-      <WorkflowImportDialog
-        open={!!importPreview}
-        preview={importPreview}
-        importing={importing}
-        onOpenChange={(open) => { if (!open) setImportPreview(null) }}
-        onImport={(mappings) => void handleImportConfirm(mappings)}
-      />
-    </div>
+        </>
+      )}
+      afterContent={(
+        <WorkflowImportDialog
+          open={!!importPreview}
+          preview={importPreview}
+          importing={importing}
+          onOpenChange={(open) => { if (!open) setImportPreview(null) }}
+          onImport={(mappings) => void handleImportConfirm(mappings)}
+        />
+      )}
+    >
+      <WorkflowList key={listKey} onCreate={handleCreate} />
+    </ModulePage>
   )
 }

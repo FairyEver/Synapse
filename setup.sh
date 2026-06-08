@@ -138,16 +138,28 @@ while [ -n "$APP_PUBLIC_URL" ] && [[ "$APP_PUBLIC_URL" != http://* ]] && [[ "$AP
 done
 
 echo ""
-echo ">>> COS 存储配置（可选，回车跳过）"
-echo "  配置腾讯云 COS 后将启用云盘文件存储和自动备份能力"
-echo "  未配置 COS 时，Drive 文件会保存在 server/data/drive 并由 deploy.sh 在切换窗口备份"
-echo "  请填写已存在且服务端有权限访问的 bucket"
+echo ">>> Drive COS 存储配置（可选，回车跳过）"
+echo "  配置后用户云盘文件将保存到腾讯云 COS"
+echo "  未配置时，Drive 文件会保存在 server/data/drive 并由 deploy.sh 在切换窗口备份"
+echo "  请填写已存在且服务端有权限访问的用户文件 bucket"
 echo ""
-read -p "腾讯云 COS SecretId (回车跳过): " COS_SECRET_ID
-if [ -n "$COS_SECRET_ID" ]; then
-  read -p "腾讯云 COS SecretKey: " COS_SECRET_KEY
-  read -p "COS 存储桶名称 (如 synapse-drive-1250000000): " COS_BUCKET
-  read -p "COS 地域 (如 ap-guangzhou): " COS_REGION
+read -p "Drive COS SecretId (回车跳过): " DRIVE_COS_SECRET_ID
+if [ -n "$DRIVE_COS_SECRET_ID" ]; then
+  read -p "Drive COS SecretKey: " DRIVE_COS_SECRET_KEY
+  read -p "Drive COS 存储桶名称 (如 synapse-drive-1250000000): " DRIVE_COS_BUCKET
+  read -p "Drive COS 地域 (如 ap-guangzhou): " DRIVE_COS_REGION
+fi
+
+echo ""
+echo ">>> Backup COS 存储配置（可选，回车跳过）"
+echo "  配置后后台备份将保存到腾讯云 COS"
+echo "  请填写已存在且服务端有权限访问的备份 bucket"
+echo ""
+read -p "Backup COS SecretId (回车跳过): " BACKUP_COS_SECRET_ID
+if [ -n "$BACKUP_COS_SECRET_ID" ]; then
+  read -p "Backup COS SecretKey: " BACKUP_COS_SECRET_KEY
+  read -p "Backup COS 存储桶名称 (如 synapse-backup-1250000000): " BACKUP_COS_BUCKET
+  read -p "Backup COS 地域 (如 ap-guangzhou): " BACKUP_COS_REGION
 fi
 
 echo ""
@@ -172,13 +184,23 @@ cat >> .env << EOF
 APP_PUBLIC_URL=$APP_PUBLIC_URL
 EOF
 
-if [ -n "$COS_SECRET_ID" ]; then
+if [ -n "$DRIVE_COS_SECRET_ID" ]; then
 cat >> .env << EOF
 
-COS_SECRET_ID=$COS_SECRET_ID
-COS_SECRET_KEY=$COS_SECRET_KEY
-COS_BUCKET=$COS_BUCKET
-COS_REGION=$COS_REGION
+DRIVE_COS_SECRET_ID=$DRIVE_COS_SECRET_ID
+DRIVE_COS_SECRET_KEY=$DRIVE_COS_SECRET_KEY
+DRIVE_COS_BUCKET=$DRIVE_COS_BUCKET
+DRIVE_COS_REGION=$DRIVE_COS_REGION
+EOF
+fi
+
+if [ -n "$BACKUP_COS_SECRET_ID" ]; then
+cat >> .env << EOF
+
+BACKUP_COS_SECRET_ID=$BACKUP_COS_SECRET_ID
+BACKUP_COS_SECRET_KEY=$BACKUP_COS_SECRET_KEY
+BACKUP_COS_BUCKET=$BACKUP_COS_BUCKET
+BACKUP_COS_REGION=$BACKUP_COS_REGION
 EOF
 fi
 

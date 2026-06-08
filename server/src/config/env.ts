@@ -13,10 +13,14 @@ const envSchema = z
     APP_PUBLIC_URL: z.string().url().optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
     PORT: z.coerce.number().int().positive().default(3000),
-    COS_SECRET_ID: z.string().optional(),
-    COS_SECRET_KEY: z.string().optional(),
-    COS_BUCKET: z.string().optional(),
-    COS_REGION: z.string().optional(),
+    DRIVE_COS_SECRET_ID: z.string().optional(),
+    DRIVE_COS_SECRET_KEY: z.string().optional(),
+    DRIVE_COS_BUCKET: z.string().optional(),
+    DRIVE_COS_REGION: z.string().optional(),
+    BACKUP_COS_SECRET_ID: z.string().optional(),
+    BACKUP_COS_SECRET_KEY: z.string().optional(),
+    BACKUP_COS_BUCKET: z.string().optional(),
+    BACKUP_COS_REGION: z.string().optional(),
   })
   .refine((env) => env.USER_ACCESS_JWT_SECRET !== env.ADMIN_JWT_SECRET, {
     path: ["USER_ACCESS_JWT_SECRET"],
@@ -42,10 +46,14 @@ export interface ServerEnv {
   readonly appPublicUrl?: string
   readonly databasePoolSize: number
   readonly port: number
-  readonly cosSecretId?: string
-  readonly cosSecretKey?: string
-  readonly cosBucket?: string
-  readonly cosRegion?: string
+  readonly driveCosSecretId?: string
+  readonly driveCosSecretKey?: string
+  readonly driveCosBucket?: string
+  readonly driveCosRegion?: string
+  readonly backupCosSecretId?: string
+  readonly backupCosSecretKey?: string
+  readonly backupCosBucket?: string
+  readonly backupCosRegion?: string
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
@@ -66,13 +74,21 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     appPublicUrl: result.data.APP_PUBLIC_URL,
     databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,
-    cosSecretId: result.data.COS_SECRET_ID,
-    cosSecretKey: result.data.COS_SECRET_KEY,
-    cosBucket: result.data.COS_BUCKET,
-    cosRegion: result.data.COS_REGION,
+    driveCosSecretId: result.data.DRIVE_COS_SECRET_ID,
+    driveCosSecretKey: result.data.DRIVE_COS_SECRET_KEY,
+    driveCosBucket: result.data.DRIVE_COS_BUCKET,
+    driveCosRegion: result.data.DRIVE_COS_REGION,
+    backupCosSecretId: result.data.BACKUP_COS_SECRET_ID,
+    backupCosSecretKey: result.data.BACKUP_COS_SECRET_KEY,
+    backupCosBucket: result.data.BACKUP_COS_BUCKET,
+    backupCosRegion: result.data.BACKUP_COS_REGION,
   }
 }
 
-export function isBackupConfigured(env: ServerEnv): boolean {
-  return !!(env.cosSecretId && env.cosSecretKey && env.cosBucket && env.cosRegion)
+export function isDriveCosConfigured(env: ServerEnv): boolean {
+  return !!(env.driveCosSecretId && env.driveCosSecretKey && env.driveCosBucket && env.driveCosRegion)
+}
+
+export function isBackupCosConfigured(env: ServerEnv): boolean {
+  return !!(env.backupCosSecretId && env.backupCosSecretKey && env.backupCosBucket && env.backupCosRegion)
 }

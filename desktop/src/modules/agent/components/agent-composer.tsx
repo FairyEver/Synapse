@@ -276,6 +276,10 @@ function AgentComposer({
 
   return (
     <>
+      <div
+        aria-hidden="true"
+        className="agent-composer-fade pointer-events-none absolute inset-x-0 bottom-0 h-56 bg-gradient-to-b from-background/0 to-background"
+      />
       <form
         ref={formRef}
         className="agent-composer absolute inset-x-4 bottom-5 z-10 mx-auto max-w-2xl md:inset-x-20"

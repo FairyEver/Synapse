@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -50,24 +50,7 @@ describe("WorkflowCard", () => {
       value: { writeText },
     })
     const onOpen = vi.fn()
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <WorkflowCard
-          meta={workflowMeta}
-          onOpen={onOpen}
-          onRun={vi.fn()}
-          onOpenActiveRun={vi.fn()}
-          onHistory={vi.fn()}
-          onExport={vi.fn()}
-          onDelete={vi.fn()}
-        />,
-      )
-    })
+    const container = await renderWorkflowCard({ onOpen })
 
     const copyIdButton = container.querySelector<HTMLButtonElement>('[aria-label="复制工作流 ID"]')
     expect(copyIdButton?.textContent).toBe("WORKFL")
@@ -86,24 +69,7 @@ describe("WorkflowCard", () => {
     const onHistory = vi.fn()
     const onExport = vi.fn()
     const onDelete = vi.fn()
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <WorkflowCard
-          meta={workflowMeta}
-          onOpen={vi.fn()}
-          onRun={onRun}
-          onOpenActiveRun={vi.fn()}
-          onHistory={onHistory}
-          onExport={onExport}
-          onDelete={onDelete}
-        />,
-      )
-    })
+    const container = await renderWorkflowCard({ onRun, onHistory, onExport, onDelete })
 
     const runButton = container.querySelector<HTMLButtonElement>('[aria-label="运行工作流"]')
     const historyButton = container.querySelector<HTMLButtonElement>('[aria-label="查看运行历史"]')
@@ -149,25 +115,10 @@ describe("WorkflowCard", () => {
 
   it("opens the active run from the progress action", async () => {
     const onOpenActiveRun = vi.fn()
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <WorkflowCard
-          meta={workflowMeta}
-          runState={{ status: "running", runId: "active-run" }}
-          running={false}
-          onOpen={vi.fn()}
-          onRun={vi.fn()}
-          onOpenActiveRun={onOpenActiveRun}
-          onHistory={vi.fn()}
-          onExport={vi.fn()}
-          onDelete={vi.fn()}
-        />,
-      )
+    const container = await renderWorkflowCard({
+      runState: { status: "running", runId: "active-run" },
+      running: false,
+      onOpenActiveRun,
     })
 
     const progressButton = container.querySelector<HTMLButtonElement>('[aria-label="查看进度"]')
@@ -180,6 +131,34 @@ describe("WorkflowCard", () => {
     expect(onOpenActiveRun).toHaveBeenCalledWith("active-run")
   })
 })
+
+async function renderWorkflowCard(props: Partial<ComponentProps<typeof WorkflowCard>> = {}): Promise<HTMLDivElement> {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+
+  await act(async () => {
+    root.render(
+      <table>
+        <tbody>
+          <WorkflowCard
+            meta={workflowMeta}
+            onOpen={vi.fn()}
+            onRun={vi.fn()}
+            onOpenActiveRun={vi.fn()}
+            onHistory={vi.fn()}
+            onExport={vi.fn()}
+            onDelete={vi.fn()}
+            {...props}
+          />
+        </tbody>
+      </table>,
+    )
+  })
+
+  return container
+}
 
 const workflowMeta: WorkflowMeta = {
   id: "workflow-1",

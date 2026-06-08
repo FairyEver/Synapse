@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { loadEnv } from "./env"
+import { isBackupCosConfigured, isDriveCosConfigured, loadEnv } from "./env"
 
 describe("loadEnv", () => {
   it("parses required production settings", () => {
@@ -86,4 +86,45 @@ describe("loadEnv", () => {
       }),
     ).toThrow("USER_ACCESS_JWT_SECRET")
   })
+
+  it("loads Drive and Backup COS settings independently", () => {
+    const env = loadEnv({
+      ...baseEnv,
+      DRIVE_COS_SECRET_ID: "drive-secret-id",
+      DRIVE_COS_SECRET_KEY: "drive-secret-key",
+      DRIVE_COS_BUCKET: "drive-bucket",
+      DRIVE_COS_REGION: "ap-beijing",
+      BACKUP_COS_SECRET_ID: "backup-secret-id",
+      BACKUP_COS_SECRET_KEY: "backup-secret-key",
+      BACKUP_COS_BUCKET: "backup-bucket",
+      BACKUP_COS_REGION: "ap-guangzhou",
+    })
+
+    expect(env.driveCosBucket).toBe("drive-bucket")
+    expect(env.backupCosBucket).toBe("backup-bucket")
+    expect(isDriveCosConfigured(env)).toBe(true)
+    expect(isBackupCosConfigured(env)).toBe(true)
+  })
+
+  it("ignores legacy COS settings", () => {
+    const env = loadEnv({
+      ...baseEnv,
+      COS_SECRET_ID: "legacy-secret-id",
+      COS_SECRET_KEY: "legacy-secret-key",
+      COS_BUCKET: "legacy-bucket",
+      COS_REGION: "ap-shanghai",
+    })
+
+    expect(isDriveCosConfigured(env)).toBe(false)
+    expect(isBackupCosConfigured(env)).toBe(false)
+  })
 })
+
+const baseEnv = {
+  DATABASE_URL: "postgresql://synapse:secret@localhost:5432/synapse",
+  ADMIN_EMAIL: "admin@synapse.com",
+  ADMIN_PASSWORD: "admin-password-123",
+  ADMIN_JWT_SECRET: "a".repeat(32),
+  USER_ACCESS_JWT_SECRET: "b".repeat(32),
+  APP_PUBLIC_URL: "http://localhost:3000",
+}
