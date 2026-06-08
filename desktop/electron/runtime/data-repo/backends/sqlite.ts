@@ -39,6 +39,7 @@ import { InvalidNamespaceDataError } from "../errors"
 
 const SINGLETON_ID = "__singleton"
 const META_TABLE = "__synapse_meta"
+const SAFE_JSON_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 export interface SqliteBackendDeps<T> extends NamespaceBaseDeps<T> {
   /** Shared database handle. Multiple namespaces can share the same db. */
@@ -170,9 +171,22 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   }
 
   async list(filter?: Partial<T>): Promise<T[]> {
-    const rows = this.prep().list.all(SINGLETON_ID) as Array<{ value?: unknown }>
+    const rows = this.listRows(filter)
     const items = rows.map((r) => this.parseRow(r.value))
     return this.applyFilter(items, filter)
+  }
+
+  private listRows(filter?: Partial<T>): Array<{ value?: unknown }> {
+    const pushedFilter = buildSqliteFilter(filter)
+    if (!pushedFilter) {
+      return this.prep().list.all(SINGLETON_ID) as Array<{ value?: unknown }>
+    }
+    const statement = this.database.prepare(
+      `SELECT value FROM ${this.tableName}
+       WHERE id != ? AND ${pushedFilter.where}
+       ORDER BY id;`,
+    )
+    return statement.all(SINGLETON_ID, ...pushedFilter.params) as Array<{ value?: unknown }>
   }
 
   async get(id: string): Promise<T | null> {
@@ -231,4 +245,41 @@ function sanitizeTableName(namespace: string): string {
   }
   // Replace dots / dashes with underscores for the actual table name.
   return `ns_${namespace.replace(/[.-]/g, "_")}`
+}
+
+type SqliteFilterParam = string | number | null
+
+function buildSqliteFilter<T>(filter?: Partial<T>): { where: string; params: SqliteFilterParam[] } | null {
+  if (!filter) return null
+  const clauses: string[] = []
+  const params: SqliteFilterParam[] = []
+  for (const [key, value] of Object.entries(filter)) {
+    const clause = sqliteFilterClause(key, value)
+    if (!clause) continue
+    clauses.push(clause.where)
+    params.push(...clause.params)
+  }
+  return clauses.length > 0 ? { where: clauses.join(" AND "), params } : null
+}
+
+function sqliteFilterClause(key: string, value: unknown): { where: string; params: SqliteFilterParam[] } | null {
+  if (!isSqliteFilterValue(value)) return null
+  if (key === "id") return { where: "id = ?", params: [toSqliteFilterParam(value)] }
+  if (!SAFE_JSON_KEY_PATTERN.test(key)) return null
+
+  const expression = `json_extract(value, '$.${key}')`
+  if (value === null) return { where: `${expression} IS NULL`, params: [] }
+  return { where: `${expression} = ?`, params: [toSqliteFilterParam(value)] }
+}
+
+function isSqliteFilterValue(value: unknown): value is string | number | boolean | null {
+  return value === null
+    || typeof value === "string"
+    || typeof value === "boolean"
+    || (typeof value === "number" && Number.isFinite(value))
+}
+
+function toSqliteFilterParam(value: string | number | boolean | null): SqliteFilterParam {
+  if (value === null) return null
+  return typeof value === "boolean" ? Number(value) : value
 }

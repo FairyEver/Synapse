@@ -8,6 +8,7 @@ import { InvalidNamespaceDataError } from "../errors"
 interface Conversation extends Record<string, unknown> {
   id: string
   title: string
+  projectId?: string
   archived?: boolean
 }
 
@@ -63,6 +64,33 @@ describe("SqliteNamespace (T2.5)", () => {
       await ns.upsert({ id: "c2", title: "b", archived: true })
       const archived = await ns.list({ archived: true })
       expect(archived.map((c) => c.id)).toEqual(["c2"])
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("pushes simple list filters into SQLite before parsing rows", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+        validate: (value): value is Conversation =>
+          typeof value === "object"
+          && value !== null
+          && typeof (value as { id?: unknown }).id === "string"
+          && typeof (value as { title?: unknown }).title === "string",
+      })
+      await ns.upsert({ id: "c1", title: "target", projectId: "project-1" })
+      await ns.upsert({ id: "bad-other-project", projectId: "project-2" } as Conversation)
+
+      await expect(ns.list({ projectId: "project-1" })).resolves.toEqual([
+        { id: "c1", title: "target", projectId: "project-1" },
+      ])
       db.close()
     } finally {
       await rm(dir, { recursive: true, force: true })

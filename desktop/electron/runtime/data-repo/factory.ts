@@ -91,6 +91,9 @@ function sqliteIndexesFor(namespace: string): readonly string[] {
     case "webhook.runs":
     case "relay.runs":
       return ["json_extract(value, '$.projectId')"]
+    case "agent.events":
+    case "agent.usage":
+      return ["json_extract(value, '$.projectId'), json_extract(value, '$.conversationId')"]
     default:
       return []
   }

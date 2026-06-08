@@ -187,6 +187,65 @@ describe("AgentConversationExportService", () => {
       conversationId: "conv-1",
     })).resolves.toEqual({ success: false })
   })
+
+  it("serializes cyclic runtime timeline values without blocking export", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-cycle-test-"))
+    tempRoots.push(tempRoot)
+    const outputPath = path.join(tempRoot, "conversation.zip")
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const conversation = createConversation()
+    await conversations.upsert(conversation)
+
+    const cyclicInput: Record<string, unknown> = {
+      file_path: "/Users/liyang/project/file.ts",
+      token: "sk-secret",
+    }
+    cyclicInput.self = cyclicInput
+
+    const createZipArchive = vi.fn(async (sourceDirectoryPath: string) => {
+      const timelineText = await readFile(path.join(sourceDirectoryPath, "timeline.json"), "utf8")
+      expect(timelineText).toContain("[Circular]")
+      expect(timelineText).not.toContain("sk-secret")
+    })
+
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: vi.fn().mockResolvedValue(outputPath),
+      createZipArchive,
+      getTimeline: async () => ({
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conv-1",
+        entries: [{
+          id: "tool-call",
+          kind: "toolCall",
+          toolUseId: "toolu-read-1",
+          toolName: "Read",
+          toolInputRaw: cyclicInput,
+          timestamp: "2026-06-08T08:00:01.000Z",
+        }],
+      }),
+      makeTempDir: async () => {
+        const staging = await mkdtemp(path.join(tempRoot, "staging-"))
+        tempRoots.push(staging)
+        return staging
+      },
+      now: () => new Date("2026-06-08T08:30:00.000Z"),
+      removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: "local:renderer",
+    })).resolves.toMatchObject({
+      success: true,
+      filePath: outputPath,
+    })
+    expect(createZipArchive).toHaveBeenCalledTimes(1)
+  })
 })
 
 function createConversation(): ConversationEntryV1 {
