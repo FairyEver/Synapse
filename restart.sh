@@ -5,6 +5,23 @@ set -e
 SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse/server"
 
+verify_remote_database_auth() {
+  ssh "$SERVER" "cd $REMOTE_DIR && bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
+postgres_password=${postgres_password:-synapse}
+
+if docker compose --env-file .env exec -T -e PGPASSWORD="$postgres_password" postgres \
+  psql -h postgres -p 5432 -U synapse -d synapse -Atc 'select 1' >/dev/null; then
+  echo "database tcp auth ok"
+else
+  echo "database tcp auth failed: .env POSTGRES_PASSWORD does not match the existing Postgres role password"
+  exit 1
+fi
+REMOTE_SCRIPT
+}
+
 run_remote_health_check() {
   ssh "$SERVER" "cd $REMOTE_DIR && bash -s" <<'REMOTE_SCRIPT'
 set -uo pipefail
@@ -129,6 +146,9 @@ if [ "$failed" -ne 0 ]; then
 fi
 REMOTE_SCRIPT
 }
+
+echo ">>> 检查数据库网络认证..."
+verify_remote_database_auth
 
 echo ">>> 重启服务容器..."
 ssh "$SERVER" "cd $REMOTE_DIR && docker compose --env-file .env restart server"

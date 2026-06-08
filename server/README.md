@@ -287,11 +287,11 @@ bash deploy.sh
 
 `deploy.sh` 会先读取线上已应用的 Prisma migration，扫描本次待发布 migration 中的危险 SQL。遇到删表、删列、删行、唯一索引或危险 `NOT NULL` 变更时，默认会把待发布 migration、风险数量、文件行号和 SQL 明细写入日志并继续部署；如果需要让风险扫描恢复为阻断部署，可用 `STRICT_MIGRATION_RISK_SCAN=1 bash deploy.sh`。
 
-部署脚本会把本机 `server/.env` 作为配置源，单独同步到服务器的 `/www/wwwroot/synapse/server/.env`，再用远端 `docker compose --env-file .env config` 校验；普通代码同步仍会排除 `server/.env`，避免密钥进入 git 或 rsync 的删除流程。修改 COS、JWT、数据库密码等配置后，运行 `bash deploy.sh` 才会同步到服务器；如果只想更新远端 COS 存储配置，也可以运行 `bash cos.sh`。
+部署脚本会把本机 `server/.env` 作为配置源，合并同步到服务器的 `/www/wwwroot/synapse/server/.env`，再用远端 `docker compose --env-file .env config` 校验；普通代码同步仍会排除 `server/.env`，避免密钥进入 git 或 rsync 的删除流程。已有远端配置时，`POSTGRES_PASSWORD`、`POSTGRES_USER`、`POSTGRES_DB`、`DATABASE_URL` 会始终保留远端值，避免覆盖已有 Postgres volume 的真实数据库身份。修改 COS、JWT、公开访问地址等配置后，运行 `bash deploy.sh` 会同步到服务器；如果只想更新远端 COS 存储配置，也可以运行 `bash cos.sh`。生产数据库密码轮换需要先备份，再执行数据库用户密码变更并同步远端 `.env`，不要通过普通 deploy 覆盖本机值。
 
 部署会生成两份完整数据库备份：一份在线备份用于临时数据库预演，一份在停旧服务后生成的最终切换前备份。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。
 
-真正切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/dashboard/` 静态入口、`/dashboard` 到 `/dashboard/` 的重定向，以及 `/webhooks/not-found/test` 公共 Webhook 路由不会被导向管理后台。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近 server 日志、最终备份路径和人工恢复命令。
+真正切换前脚本会先通过 Docker 网络验证 `.env` 中的数据库密码能连接 `postgres:5432`，失败时会在停服前中止。切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/dashboard/` 静态入口、`/dashboard` 到 `/dashboard/` 的重定向，以及 `/webhooks/not-found/test` 公共 Webhook 路由不会被导向管理后台。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近 server 日志、最终备份路径和人工恢复命令。
 
 如果是在服务器上手动更新，也必须先备份，再构建启动：
 

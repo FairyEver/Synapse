@@ -114,7 +114,7 @@ BACKUP_ENCRYPT_KEY=（setup.sh 自动生成，或手动执行 openssl rand -hex 
 1. 在管理员信息收集之后，提示输入 COS 配置（可回车跳过）
 2. `BACKUP_ENCRYPT_KEY` 自动生成（`openssl rand -hex 32`）
 3. 所有备份相关变量追加到同一个 `.env` 文件
-4. 部署时 `deploy.sh` 的普通 rsync 仍排除 `.env`，但会把本机 `server/.env` 作为配置源单独同步到服务器并校验 compose 配置
+4. 部署时 `deploy.sh` 的普通 rsync 仍排除 `.env`，但会把本机 `server/.env` 作为配置源合并同步到服务器并校验 compose 配置；数据库初始化类变量（如 `POSTGRES_PASSWORD`、`DATABASE_URL`）保留远端现值，不通过普通 deploy 覆盖
 
 ## 备份流程
 

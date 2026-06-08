@@ -61,6 +61,8 @@ if [ -f .env ]; then
   echo "  1) 重置数据库（保留密钥和配置）"
   echo "  2) 完全重置（清除所有数据，重新生成密钥）"
   echo "  3) 退出"
+  echo ""
+  echo "提示：已有数据库的 POSTGRES_PASSWORD 不能通过 deploy.sh 同步修改；需要轮换时先改数据库用户密码，再更新远端 .env。"
   read -p "输入选项 [1/2/3]: " CHOICE
 
   case $CHOICE in

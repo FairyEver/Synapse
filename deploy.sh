@@ -6,6 +6,7 @@ SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse"
 LOCAL_ENV_FILE="server/.env"
 REMOTE_ENV_FILE="$REMOTE_DIR/server/.env"
+PROTECTED_ENV_KEYS="POSTGRES_PASSWORD POSTGRES_USER POSTGRES_DB DATABASE_URL"
 DEFAULT_APP_PUBLIC_URL="https://synapse.d2.pub"
 DEPLOY_ID=$(date +%Y%m%d_%H%M%S)
 NEW_IMAGE_TAG="deploy-${DEPLOY_ID}"
@@ -13,7 +14,7 @@ ROLLBACK_IMAGE_TAG="rollback-${DEPLOY_ID}"
 ONLINE_BACKUP_FILE="$REMOTE_DIR/backups/synapse-online-before-deploy-${DEPLOY_ID}.sql"
 FINAL_BACKUP_FILE="$REMOTE_DIR/backups/synapse-final-before-switch-${DEPLOY_ID}.sql"
 APPLIED_MIGRATIONS_FILE=$(mktemp)
-TOTAL_STEPS=14
+TOTAL_STEPS=15
 TOTAL_START=$(date +%s)
 
 cleanup() {
@@ -78,14 +79,93 @@ sync_remote_env() {
 
   ssh "$SERVER" "mkdir -p $REMOTE_DIR/server"
   scp "$LOCAL_ENV_FILE" "$SERVER:$remote_tmp" >/dev/null
-  ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' DEPLOY_ID='$DEPLOY_ID' PROTECTED_ENV_KEYS='$PROTECTED_ENV_KEYS' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 chmod 600 "$remote_tmp"
-mv "$remote_tmp" "$REMOTE_ENV_FILE"
 cd "$(dirname "$REMOTE_ENV_FILE")"
-docker compose --env-file .env config >/dev/null
-echo ".env synced and validated"
+
+count_env_keys() {
+  sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' "$1" | sort -u | wc -l | tr -d ' '
+}
+
+if [ ! -f "$REMOTE_ENV_FILE" ]; then
+  docker compose --env-file "$remote_tmp" config >/dev/null
+  cp "$remote_tmp" "$REMOTE_ENV_FILE"
+  chmod 600 "$REMOTE_ENV_FILE"
+  rm -f "$remote_tmp"
+  printf ".env created from local file (%s keys)\n" "$(count_env_keys "$REMOTE_ENV_FILE")"
+  exit 0
+fi
+
+backup_file="$(dirname "$REMOTE_ENV_FILE")/.env.backup-${DEPLOY_ID}"
+merged_tmp="$(dirname "$REMOTE_ENV_FILE")/.env.merged-${DEPLOY_ID}"
+
+cp "$REMOTE_ENV_FILE" "$backup_file"
+chmod 600 "$backup_file"
+
+awk -v protected="$PROTECTED_ENV_KEYS" '
+BEGIN {
+  split(protected, keys, " ")
+  for (idx in keys) {
+    protected_key[keys[idx]] = 1
+  }
+}
+function env_key(line, parts) {
+  if (line ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+    split(line, parts, "=")
+    return parts[1]
+  }
+  return ""
+}
+FNR == NR {
+  key = env_key($0)
+  if (key != "" && protected_key[key] && !(key in protected_line)) {
+    protected_line[key] = $0
+    protected_order[++protected_count] = key
+  }
+  next
+}
+{
+  key = env_key($0)
+  if (key != "" && protected_key[key]) {
+    next
+  }
+  print
+}
+END {
+  for (idx = 1; idx <= protected_count; idx++) {
+    key = protected_order[idx]
+    print protected_line[key]
+  }
+}
+' "$backup_file" "$remote_tmp" > "$merged_tmp"
+
+chmod 600 "$merged_tmp"
+docker compose --env-file "$merged_tmp" config >/dev/null
+cp "$merged_tmp" "$REMOTE_ENV_FILE"
+rm -f "$remote_tmp" "$merged_tmp"
+
+printf ".env synced and validated (%s keys)\n" "$(count_env_keys "$REMOTE_ENV_FILE")"
+printf "protected env keys kept from remote: %s\n" "$PROTECTED_ENV_KEYS"
+printf "remote env backup: %s\n" "$backup_file"
+REMOTE_SCRIPT
+}
+
+verify_remote_database_auth() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
+postgres_password=${postgres_password:-synapse}
+
+if docker compose --env-file .env exec -T -e PGPASSWORD="$postgres_password" postgres \
+  psql -h postgres -p 5432 -U synapse -d synapse -Atc 'select 1' >/dev/null; then
+  echo "database tcp auth ok"
+else
+  echo "database tcp auth failed: .env POSTGRES_PASSWORD does not match the existing Postgres role password"
+  exit 1
+fi
 REMOTE_SCRIPT
 }
 
@@ -148,6 +228,10 @@ sync_remote_code() {
   rsync -avz --delete \
     --exclude='server/node_modules' \
     --exclude='server/.env' \
+    --exclude='server/.env.backup-*' \
+    --exclude='server/.env.password-rotation-*' \
+    --exclude='server/.env.merged-*' \
+    --exclude='server/.env.tmp-*' \
     --exclude='server/dist' \
     --exclude='server/admin-dist' \
     --exclude='server/logs' \
@@ -389,17 +473,17 @@ REMOTE_SCRIPT
 
 echo ""
 
-# [1/14] 确保远程目录存在
+# [1/15] 确保远程目录存在
 step 1 "确保远程目录存在" \
   ssh "$SERVER" "mkdir -p $REMOTE_DIR"
 
 # 检查是否首次部署
 if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
-  # [2/13] 首次部署同步代码（只传服务端需要的文件）
+  # [2/15] 首次部署同步代码（只传服务端需要的文件）
   step 2 "同步代码到服务器" \
     sync_remote_code
 
-  # [3/14] 首次部署同步本机环境变量
+  # [3/15] 首次部署同步本机环境变量
   step 3 "同步本机环境变量到服务器" \
     sync_remote_env
 
@@ -409,60 +493,64 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
   exit 0
 fi
 
-# [2/14] 同步本机环境变量
+# [2/15] 同步本机环境变量
 step 2 "同步本机环境变量到服务器" \
   sync_remote_env
 
-# [3/14] 检查并补齐旧环境变量
+# [3/15] 检查并补齐旧环境变量
 step 3 "检查远程环境变量" \
   ensure_remote_env
 
-# [4/14] 获取远程已应用迁移
-step 4 "获取远程已应用迁移" \
+# [4/15] 检查数据库网络认证
+step 4 "检查数据库网络认证" \
+  verify_remote_database_auth
+
+# [5/15] 获取远程已应用迁移
+step 5 "获取远程已应用迁移" \
   fetch_applied_migrations
 
-# [5/14] 扫描待发布迁移风险
-step 5 "扫描待发布迁移风险" \
+# [6/15] 扫描待发布迁移风险
+step 6 "扫描待发布迁移风险" \
   scan_pending_migrations
 
-# [6/14] 在线备份远程数据库
-step 6 "在线备份远程数据库" \
+# [7/15] 在线备份远程数据库
+step 7 "在线备份远程数据库" \
   backup_remote_database "$ONLINE_BACKUP_FILE"
 
-# [7/14] 同步代码（只传服务端需要的文件）
-step 7 "同步代码到服务器" \
+# [8/15] 同步代码（只传服务端需要的文件）
+step 8 "同步代码到服务器" \
   sync_remote_code
 
-# [8/14] 构建新 Docker 镜像
-step 8 "构建 Docker 镜像" \
+# [9/15] 构建新 Docker 镜像
+step 9 "构建 Docker 镜像" \
   build_remote_image
 
-# [9/14] 标记当前服务镜像，供失败时回滚
-step 9 "标记回滚镜像" \
+# [10/15] 标记当前服务镜像，供失败时回滚
+step 10 "标记回滚镜像" \
   tag_remote_rollback_image
 
-# [10/14] 用在线备份恢复临时库并预演迁移
-step 10 "临时数据库预演迁移" \
+# [11/15] 用在线备份恢复临时库并预演迁移
+step 11 "临时数据库预演迁移" \
   preflight_remote_migrations
 
-# [11/14] 停止旧服务，保留数据库
-step 11 "停止旧服务" \
+# [12/15] 停止旧服务，保留数据库
+step 12 "停止旧服务" \
   stop_remote_server
 
-# [12/14] 停服后最终备份远程数据库
-step 12 "最终备份远程数据库" \
+# [13/15] 停服后最终备份远程数据库
+step 13 "最终备份远程数据库" \
   backup_remote_database "$FINAL_BACKUP_FILE"
 
-# [13/14] 启动新服务
-step 13 "启动新服务" \
+# [14/15] 启动新服务
+step 14 "启动新服务" \
   start_new_remote_server
 
-# [14/14] 健康检查
-printf "\n[%d/%d] 健康检查\n" 14 "$TOTAL_STEPS"
+# [15/15] 健康检查
+printf "\n[%d/%d] 健康检查\n" 15 "$TOTAL_STEPS"
 if run_remote_health_check 2>&1 | sed 's/^/  /'; then
-  printf "[%d/%d] done\n" 14 "$TOTAL_STEPS"
+  printf "[%d/%d] done\n" 15 "$TOTAL_STEPS"
 else
-  printf "[%d/%d] 健康检查 .......... FAILED\n" 14 "$TOTAL_STEPS"
+  printf "[%d/%d] 健康检查 .......... FAILED\n" 15 "$TOTAL_STEPS"
   echo ""
   echo "正在回滚到上一版服务镜像，不自动恢复数据库..."
   if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check 2>&1 | sed 's/^/  /'; then
