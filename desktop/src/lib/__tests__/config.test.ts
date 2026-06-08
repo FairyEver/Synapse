@@ -66,20 +66,17 @@ describe("Synapse config Agent defaults", () => {
     expect(createDefaultConfig().agent.defaultProviderModel).toBeNull()
   })
 
-  it("defaults conversation rollover prompt thresholds", () => {
-    expect(createDefaultConfig().agent.conversationRolloverPrompt).toEqual({
-      costThresholdCny: 10,
-      tokenThreshold: 5_000_000,
-    })
+  it("does not include conversation rollover prompt thresholds in defaults", () => {
+    expect(createDefaultConfig().agent).not.toHaveProperty("conversationRolloverPrompt")
   })
 
-  it("normalizes valid conversation rollover prompt thresholds", () => {
+  it("ignores legacy conversation rollover prompt thresholds during normalization", () => {
     const config = sanitizeSynapseConfig({
       activeRepoUuid: null,
       repositories: [],
       global: { themeMode: "light", projects: [] },
       agent: {
-        defaultPermissionMode: "default",
+        defaultPermissionMode: "plan",
         conversationRolloverPrompt: {
           costThresholdCny: 25,
           tokenThreshold: 7_500_000,
@@ -87,43 +84,11 @@ describe("Synapse config Agent defaults", () => {
       },
     })
 
-    expect(config.agent.conversationRolloverPrompt).toEqual({
-      costThresholdCny: 25,
-      tokenThreshold: 7_500_000,
-    })
+    expect(config.agent.defaultPermissionMode).toBe("plan")
+    expect(config.agent).not.toHaveProperty("conversationRolloverPrompt")
   })
 
-  it("falls back to default conversation rollover prompt thresholds when missing or invalid", () => {
-    const missing = sanitizeSynapseConfig({
-      activeRepoUuid: null,
-      repositories: [],
-      global: { themeMode: "light", projects: [] },
-      agent: { defaultPermissionMode: "default" },
-    })
-    const invalid = sanitizeSynapseConfig({
-      activeRepoUuid: null,
-      repositories: [],
-      global: { themeMode: "light", projects: [] },
-      agent: {
-        defaultPermissionMode: "default",
-        conversationRolloverPrompt: {
-          costThresholdCny: 0,
-          tokenThreshold: 1.5,
-        },
-      },
-    })
-
-    expect(missing.agent.conversationRolloverPrompt).toEqual({
-      costThresholdCny: 10,
-      tokenThreshold: 5_000_000,
-    })
-    expect(invalid.agent.conversationRolloverPrompt).toEqual({
-      costThresholdCny: 10,
-      tokenThreshold: 5_000_000,
-    })
-  })
-
-  it("applies conversation rollover prompt threshold patches without changing permission mode or default model", () => {
+  it("ignores legacy conversation rollover prompt patches without changing permission mode or default model", () => {
     const current = applySynapseConfigPatch(createDefaultConfig(), {
       agent: {
         defaultPermissionMode: "plan",
@@ -137,14 +102,11 @@ describe("Synapse config Agent defaults", () => {
           tokenThreshold: 8_000_000,
         },
       },
-    })
+    } as never)
 
     expect(next.agent.defaultPermissionMode).toBe("plan")
     expect(next.agent.defaultProviderModel).toEqual({ providerId: "p1", modelTier: "sonnet" })
-    expect(next.agent.conversationRolloverPrompt).toEqual({
-      costThresholdCny: 12.5,
-      tokenThreshold: 8_000_000,
-    })
+    expect(next.agent).not.toHaveProperty("conversationRolloverPrompt")
   })
 
   it("normalizes valid defaultProviderModel", () => {

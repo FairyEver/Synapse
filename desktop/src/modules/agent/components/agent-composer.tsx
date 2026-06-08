@@ -19,6 +19,7 @@ import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
 import { AgentComposerInputBox } from "./agent-composer-input-box"
+import { AgentConversationRolloverPrompt } from "./agent-conversation-rollover-prompt"
 import {
   KnowledgeBaseActionMenu,
   type KnowledgeBaseComposerAction,
@@ -54,8 +55,10 @@ function AgentComposer({
   pendingMessages = [],
   showJumpToBottom = false,
   showIdleJumpToBottom = false,
+  showConversationRolloverPrompt = false,
   onRemovePendingMessage,
   onRetryPendingMessage,
+  onStartNewConversation,
   onJumpToBottom,
   slashCandidates = [],
   quickInputs = [],
@@ -72,6 +75,7 @@ function AgentComposer({
   readonly pendingMessages?: readonly PendingMessage[]
   readonly showJumpToBottom?: boolean
   readonly showIdleJumpToBottom?: boolean
+  readonly showConversationRolloverPrompt?: boolean
   readonly slashCandidates?: readonly AgentSlashCandidate[]
   readonly quickInputs?: readonly SynapseQuickInput[]
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
@@ -81,6 +85,7 @@ function AgentComposer({
   readonly onCancelTurn: () => void
   readonly onForceKillTurn: () => void
   readonly onJumpToBottom?: () => void
+  readonly onStartNewConversation?: () => void
   readonly onPermissionModeChange?: (mode: SynapseAgentPermissionMode) => Promise<void> | void
   readonly onCreatePermissionModeSession?: (mode: SynapseAgentPermissionMode) => void
   readonly onRemovePendingMessage?: (id: string) => void
@@ -301,6 +306,9 @@ function AgentComposer({
           >
             <ChevronDown />
           </Button>
+        ) : null}
+        {showConversationRolloverPrompt && onStartNewConversation ? (
+          <AgentConversationRolloverPrompt onStartNewConversation={onStartNewConversation} />
         ) : null}
         <AgentComposerInputBox
           multiline={multiline}

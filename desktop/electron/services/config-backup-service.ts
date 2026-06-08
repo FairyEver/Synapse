@@ -524,15 +524,10 @@ function validateAgentConfig(
   const normalizedPermissionMode = defaultPermissionMode as SynapseAgentGlobalConfig["defaultPermissionMode"]
 
   const providerModel = rawValue.defaultProviderModel
-  const conversationRolloverPrompt = validateConversationRolloverPromptConfig(
-    rawValue.conversationRolloverPrompt,
-    errors,
-  )
   if (providerModel === undefined || providerModel === null) {
     return {
       defaultPermissionMode: normalizedPermissionMode,
       defaultProviderModel: null,
-      conversationRolloverPrompt,
     }
   }
 
@@ -560,54 +555,6 @@ function validateAgentConfig(
       providerId: providerId.trim(),
       modelTier: modelTier as ModelTier,
     },
-    conversationRolloverPrompt,
-  }
-}
-
-function validateConversationRolloverPromptConfig(
-  rawValue: unknown,
-  errors: string[],
-): SynapseAgentGlobalConfig["conversationRolloverPrompt"] {
-  if (rawValue === undefined) {
-    return structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG.conversationRolloverPrompt)
-  }
-
-  if (!isRecord(rawValue)) {
-    errors.push("config.agent.conversationRolloverPrompt 必须是对象。")
-    return structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG.conversationRolloverPrompt)
-  }
-
-  const costThresholdCny = rawValue.costThresholdCny
-  const tokenThreshold = rawValue.tokenThreshold
-  if (
-    typeof costThresholdCny !== "number"
-    || !Number.isFinite(costThresholdCny)
-    || costThresholdCny <= 0
-  ) {
-    errors.push("config.agent.conversationRolloverPrompt.costThresholdCny 必须是大于 0 的数字。")
-  }
-  if (
-    typeof tokenThreshold !== "number"
-    || !Number.isInteger(tokenThreshold)
-    || tokenThreshold <= 0
-  ) {
-    errors.push("config.agent.conversationRolloverPrompt.tokenThreshold 必须是大于 0 的整数。")
-  }
-
-  if (
-    typeof costThresholdCny !== "number"
-    || !Number.isFinite(costThresholdCny)
-    || costThresholdCny <= 0
-    || typeof tokenThreshold !== "number"
-    || !Number.isInteger(tokenThreshold)
-    || tokenThreshold <= 0
-  ) {
-    return structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG.conversationRolloverPrompt)
-  }
-
-  return {
-    costThresholdCny,
-    tokenThreshold,
   }
 }
 

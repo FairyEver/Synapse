@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 describe("AgentConversationRolloverPrompt", () => {
-  it("renders concise long-conversation copy and the start action", async () => {
+  it("renders concise idle cache copy and the new conversation action", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -32,15 +32,14 @@ describe("AgentConversationRolloverPrompt", () => {
     await act(async () => {
       root.render(
         <AgentConversationRolloverPrompt
-          disabled={false}
           onStartNewConversation={vi.fn()}
         />,
       )
     })
 
-    expect(container.textContent).toContain("这个对话已经很长")
-    expect(container.textContent).toContain("新对话会保留当前项目和模型。")
-    expect(container.textContent).toContain("开始新对话")
+    expect(container.textContent).toContain("继续当前对话可能按完整上下文计费，您可以")
+    expect(container.textContent).toContain("新建对话")
+    expect(container.textContent).not.toContain("这个对话已经很长")
     expect(container.querySelector("button")?.getAttribute("disabled")).toBeNull()
   })
 
@@ -54,7 +53,6 @@ describe("AgentConversationRolloverPrompt", () => {
     await act(async () => {
       root.render(
         <AgentConversationRolloverPrompt
-          disabled={false}
           onStartNewConversation={onStartNewConversation}
         />,
       )
@@ -65,29 +63,5 @@ describe("AgentConversationRolloverPrompt", () => {
     })
 
     expect(onStartNewConversation).toHaveBeenCalledTimes(1)
-  })
-
-  it("disables the action while unavailable", async () => {
-    const onStartNewConversation = vi.fn()
-    const container = document.createElement("div")
-    document.body.appendChild(container)
-    const root = createRoot(container)
-    roots.push(root)
-
-    await act(async () => {
-      root.render(
-        <AgentConversationRolloverPrompt
-          disabled
-          onStartNewConversation={onStartNewConversation}
-        />,
-      )
-    })
-
-    const button = container.querySelector("button")
-    expect(button?.getAttribute("disabled")).toBe("")
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    })
-    expect(onStartNewConversation).not.toHaveBeenCalled()
   })
 })

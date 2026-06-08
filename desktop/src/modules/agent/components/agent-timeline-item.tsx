@@ -26,9 +26,6 @@ function AgentTimelineItem({
   onOpenReference,
   onRespondPermission,
   toolResult,
-  showConversationRolloverPrompt = false,
-  conversationRolloverPromptDisabled = false,
-  onStartNewConversation,
 }: {
   readonly item: SynapseAgentTimelineItem
   readonly toolResult?: SynapseAgentToolResultTimelineItem
@@ -43,9 +40,6 @@ function AgentTimelineItem({
     updatedInput?: Record<string, unknown>,
     message?: string,
   ) => void | Promise<void>
-  readonly showConversationRolloverPrompt?: boolean
-  readonly conversationRolloverPromptDisabled?: boolean
-  readonly onStartNewConversation?: () => void
 }) {
   switch (item.kind) {
     case "message":
@@ -55,9 +49,6 @@ function AgentTimelineItem({
           profile={profile}
           agentIcon={agentIcon}
           onOpenReference={onOpenReference}
-          showConversationRolloverPrompt={showConversationRolloverPrompt}
-          conversationRolloverPromptDisabled={conversationRolloverPromptDisabled}
-          onStartNewConversation={onStartNewConversation}
         />
       )
     case "thinking":
