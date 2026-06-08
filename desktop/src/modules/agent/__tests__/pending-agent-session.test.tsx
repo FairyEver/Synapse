@@ -49,6 +49,7 @@ const mocks = vi.hoisted(() => {
     bridge: {
       agent: {
         getTimeline: vi.fn(),
+        exportConversationBundle: vi.fn(),
         openReference: vi.fn(),
       },
     },
@@ -836,6 +837,37 @@ describe("AgentModule pending prompt sessions", () => {
     )
     expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("secret transcript IPC detail")
     expect(mocks.toast).toHaveBeenCalledWith("复制失败")
+  })
+
+  it("exports the selected conversation bundle from the toolbar", async () => {
+    mocks.bridge.agent.exportConversationBundle.mockResolvedValue({ success: true, fileCount: 7 })
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{ id: "entry-1", timestamp: "2026-05-13T00:00:00.000Z" }],
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[aria-label="导出对话"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.bridge.agent.exportConversationBundle).toHaveBeenCalledWith({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+    })
+    expect(mocks.toast).toHaveBeenCalledWith("对话调试包已导出")
   })
 
   it("logs reference open failures without an unhandled rejection", async () => {

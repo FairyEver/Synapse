@@ -432,6 +432,12 @@ export interface SynapseAgentTimelineResult {
   readonly entries: SynapseAgentTimelineItem[]
 }
 
+export interface SynapseAgentConversationExportResult {
+  readonly success: boolean
+  readonly filePath?: string
+  readonly fileCount?: number
+}
+
 export interface SynapseAgentEventEnvelope {
   readonly event: SynapseAgentEvent
   readonly projectId: string

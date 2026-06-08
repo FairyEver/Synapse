@@ -11,6 +11,18 @@ const logStoreMock = vi.hoisted(() => ({
   },
 }))
 
+const electronMock = vi.hoisted(() => ({
+  app: {
+    getPath: vi.fn(() => "/tmp/synapse-agent-ipc-test"),
+  },
+  BrowserWindow: {
+    getFocusedWindow: vi.fn(() => undefined),
+  },
+  dialog: {
+    showSaveDialog: vi.fn(),
+  },
+}))
+
 import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
@@ -40,9 +52,13 @@ vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
 
+vi.mock("electron", () => electronMock)
+
 describe("agentIpcModule", () => {
   beforeEach(() => {
     logStoreMock.logger.warn.mockClear()
+    electronMock.BrowserWindow.getFocusedWindow.mockClear()
+    electronMock.dialog.showSaveDialog.mockReset()
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -387,6 +403,23 @@ describe("agentIpcModule", () => {
         toolName: "Read",
       }),
     ])
+  })
+
+  it("returns success false when conversation bundle export is cancelled", async () => {
+    electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true })
+    const harness = createHarness({})
+
+    const result = await harness.invoke("synapse:agent:export-conversation-bundle", {
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: "local:renderer",
+    })
+
+    expect(result).toEqual({ success: false })
+    expect(electronMock.dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
+      title: "导出对话",
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+    }))
   })
 
   it("returns provider summaries without secrets", async () => {
@@ -1443,6 +1476,7 @@ describe("agentIpcModule", () => {
 function createHarness(overrides: {
   readonly agent?: Record<string, unknown>
   readonly providerService?: Record<string, unknown>
+  readonly dataRepository?: Record<string, unknown>
 }) {
   const agent = {
     getStatus: () => ({
@@ -1486,6 +1520,28 @@ function createHarness(overrides: {
   const projectContainers: Pick<ProjectContainerRegistry, "open"> = {
     open: vi.fn().mockResolvedValue(container),
   }
+  const dataRepository = overrides.dataRepository ?? {
+    namespace: vi.fn(() => ({
+      name: "test",
+      schemaVersion: 1,
+      backend: "sqlite",
+      getSingleton: vi.fn().mockResolvedValue(null),
+      setSingleton: vi.fn().mockResolvedValue(undefined),
+      list: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      onChange: vi.fn(() => () => {}),
+    })),
+  }
+  const permissionGuard = {
+    check: vi.fn().mockResolvedValue({ allowed: true }),
+  }
+  const auditSink = {
+    record: vi.fn(),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
   const harness = createInMemoryHarness()
   const eventBusEmits: Array<{ domain: string; type: string; payload: unknown; timestamp?: string }> = []
   const eventBus = {
@@ -1499,6 +1555,9 @@ function createHarness(overrides: {
   const resolve: IpcHandlerContext["resolve"] = <T>(serviceId: string): T => {
     if (serviceId === "core.project-containers") return projectContainers as T
     if (serviceId === "core.event-bus") return eventBus as T
+    if (serviceId === "core.data-repository") return dataRepository as T
+    if (serviceId === "core.permission-guard") return permissionGuard as T
+    if (serviceId === "core.audit-sink") return auditSink as T
     if (serviceId === PROVIDER_SERVICE_ID) return providerService as T
     throw new Error(`Unknown service: ${serviceId}`)
   }
@@ -1506,5 +1565,5 @@ function createHarness(overrides: {
     moduleId: "agent",
     resolve,
   })
-  return Object.assign(harness, { projectContainers, eventBusEmits })
+  return Object.assign(harness, { projectContainers, eventBusEmits, dataRepository, permissionGuard, auditSink })
 }

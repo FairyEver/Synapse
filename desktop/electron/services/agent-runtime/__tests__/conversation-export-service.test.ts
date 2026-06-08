@@ -1,0 +1,263 @@
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+
+import type {
+  AgentEventEntryV1,
+  AgentUsageEntryV1,
+  ConversationEntryV1,
+  DataNamespace,
+} from "../../../runtime/data-repo"
+import { AgentConversationExportService } from "../conversation-export-service"
+
+const tempRoots: string[] = []
+
+afterEach(async () => {
+  for (const root of tempRoots.splice(0)) {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+describe("AgentConversationExportService", () => {
+  it("writes a redacted conversation debug bundle before zipping it", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-test-"))
+    tempRoots.push(tempRoot)
+    const outputPath = path.join(tempRoot, "conversation.zip")
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const conversation = createConversation()
+    await conversations.upsert(conversation)
+    await agentEvents.upsert({
+      id: "event-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      eventType: "toolUse",
+      payload: {
+        type: "toolUse",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+        toolInputRaw: {
+          file_path: "/Users/liyang/project/file.ts",
+          ANTHROPIC_AUTH_TOKEN: "sk-secret",
+        },
+      },
+      createdAt: "2026-06-08T08:00:01.000Z",
+    })
+    await agentUsage.upsert({
+      id: "usage-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      sdkResultUuid: "result-1",
+      sdkSessionId: "sdk-1",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 4,
+      },
+      usageSummary: {
+        inputTokens: 10,
+        outputTokens: 4,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+        totalTokens: 14,
+      },
+      createdAt: "2026-06-08T08:00:02.000Z",
+    })
+    const createZipArchive = vi.fn(async (sourceDirectoryPath: string, targetPath: string) => {
+      expect(targetPath).toBe(outputPath)
+      const readPackageFile = (name: string) => readFile(path.join(sourceDirectoryPath, name), "utf8")
+      const manifest = JSON.parse(await readPackageFile("manifest.json")) as { included: string[] }
+      const summary = JSON.parse(await readPackageFile("summary.json")) as {
+        toolCallCount: number
+        failedToolCount: number
+        usageSummary: { totalTokens: number }
+      }
+      const eventsText = await readPackageFile("agent-events.json")
+      const timelineText = await readPackageFile("timeline.json")
+      const transcript = await readPackageFile("transcript.md")
+
+      expect(manifest.included).toEqual(expect.arrayContaining([
+        "conversation.json",
+        "timeline.json",
+        "agent-events.json",
+        "agent-usage.json",
+        "summary.json",
+        "transcript.md",
+        "live-state.json",
+      ]))
+      expect(summary).toMatchObject({
+        toolCallCount: 1,
+        failedToolCount: 1,
+        usageSummary: { totalTokens: 14 },
+      })
+      expect(eventsText).toContain("toolu-read-1")
+      expect(eventsText).toContain("/Users/liyang/project/file.ts")
+      expect(eventsText).not.toContain("sk-secret")
+      expect(eventsText).not.toContain("[key]")
+      expect(timelineText).toContain("toolu-read-1")
+      expect(transcript).toContain("Read")
+      expect(transcript).toContain("输出")
+      expect(transcript).not.toContain("sk-bearer")
+      expect(transcript).not.toContain("[key]")
+    })
+
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents,
+      agentUsage,
+      chooseSavePath: vi.fn().mockResolvedValue(outputPath),
+      makeTempDir: async () => {
+        const staging = await mkdtemp(path.join(tempRoot, "staging-"))
+        tempRoots.push(staging)
+        return staging
+      },
+      createZipArchive,
+      getTimeline: async () => ({
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conv-1",
+        entries: [
+          {
+            id: "tool-call",
+            kind: "toolCall",
+            toolUseId: "toolu-read-1",
+            toolName: "Read",
+            toolInputRaw: {
+              file_path: "/Users/liyang/project/file.ts",
+              ANTHROPIC_AUTH_TOKEN: "sk-secret",
+            },
+            timestamp: "2026-06-08T08:00:01.000Z",
+          },
+          {
+            id: "tool-result",
+            kind: "toolResult",
+            toolUseId: "toolu-read-1",
+            toolName: "Read",
+            content: "Authorization: Bearer sk-bearer failed",
+            status: "error",
+            success: false,
+            timestamp: "2026-06-08T08:00:02.000Z",
+          },
+        ],
+      }),
+      getLiveState: async () => ({
+        status: {
+          projectId: "project-1",
+          projectName: "Project",
+          agentType: "claude-code",
+          liveSessions: 1,
+          busySessions: 0,
+          queuedTurns: 0,
+          pendingPermissions: 0,
+        },
+        pendingPermissions: [],
+      }),
+      now: () => new Date("2026-06-08T08:30:00.000Z"),
+      removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: "local:renderer",
+    })).resolves.toEqual({
+      success: true,
+      filePath: outputPath,
+      fileCount: 7,
+    })
+    expect(createZipArchive).toHaveBeenCalledTimes(1)
+  })
+
+  it("returns success false when the save dialog is cancelled", async () => {
+    const service = new AgentConversationExportService({
+      conversations: new MemoryNamespace<ConversationEntryV1>("conversations"),
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: vi.fn().mockResolvedValue(null),
+      createZipArchive: vi.fn(),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })).resolves.toEqual({ success: false })
+  })
+})
+
+function createConversation(): ConversationEntryV1 {
+  return {
+    id: "conv-1",
+    schemaVersion: 1,
+    projectId: "project-1",
+    sessionKey: "local:renderer",
+    providerId: "anthropic",
+    sdkSessionId: "sdk-1",
+    usage: {
+      inputTokens: 10,
+      outputTokens: 4,
+      totalTokens: 14,
+    },
+    costCny: 0.01,
+    costCurrency: "CNY",
+    agentType: "claude-code",
+    history: [{
+      role: "tool",
+      content: "Read\n{\"file_path\":\"/Users/liyang/project/file.ts\"}",
+      timestamp: "2026-06-08T08:00:01.000Z",
+      metadata: {
+        agentEventType: "toolUse",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+      },
+    }],
+    active: true,
+    name: "Debug Session",
+    createdAt: "2026-06-08T08:00:00.000Z",
+    updatedAt: "2026-06-08T08:10:00.000Z",
+  }
+}
+
+class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
+  readonly schemaVersion = 1
+  readonly backend = "sqlite" as const
+  private singleton: T | null = null
+  private readonly items = new Map<string, T>()
+
+  constructor(readonly name: string) {}
+
+  async getSingleton(): Promise<T | null> {
+    return this.singleton
+  }
+
+  async setSingleton(value: T): Promise<void> {
+    this.singleton = value
+  }
+
+  async list(filter?: Partial<T>): Promise<T[]> {
+    const entries = [...this.items.values()]
+    if (!filter) return entries
+    return entries.filter((entry) =>
+      Object.entries(filter).every(([key, value]) => entry[key as keyof T] === value))
+  }
+
+  async get(id: string): Promise<T | null> {
+    return this.items.get(id) ?? null
+  }
+
+  async upsert(item: T & { id: string }): Promise<void> {
+    this.items.set(item.id, item)
+  }
+
+  async remove(id: string): Promise<void> {
+    this.items.delete(id)
+  }
+
+  onChange(): () => void {
+    return () => {}
+  }
+}

@@ -33,6 +33,7 @@ import type {
 } from "./live"
 import type {
   SynapseAgentCancelTurnResult,
+  SynapseAgentConversationExportResult,
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
   SynapseAgentPublishedCommand,
@@ -924,6 +925,9 @@ export type SynapseBridge = {
     getTimeline: (
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
+    exportConversationBundle: (
+      args: { projectId: string; sessionKey?: string; conversationId: string },
+    ) => Promise<SynapseAgentConversationExportResult>
     createSession: (
       args: {
         projectId: string

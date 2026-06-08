@@ -1,10 +1,20 @@
 import { randomUUID } from "node:crypto"
+import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
-import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
+import type {
+  AgentEventEntryV1,
+  AgentUsageEntryV1,
+  ConversationEntryV1,
+  DataRepository,
+} from "../../runtime/data-repo"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { createZipArchive } from "../../runtime/archive"
+import { createControlledProcessRunner } from "../../runtime/process"
 import type { AgentEvent } from "../../services/agent-runtime"
+import { AgentConversationExportService } from "../../services/agent-runtime/conversation-export-service"
 import type { EventBus } from "../../runtime/event-bus"
 import { createMainLogger } from "../../services/log-store"
 import {
@@ -65,6 +75,11 @@ const cancelTurnResultSchema = z.object({
   status: z.enum(["no-active-turn", "graceful-pending", "hard-killed"]),
 })
 
+const exportConversationBundleRequestSchema = projectRequestSchema.extend({
+  sessionKey: z.string().optional(),
+  conversationId: z.string().min(1),
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const sendResultSchema = z.object({
@@ -101,12 +116,19 @@ const respondPermissionResultSchema = z.object({
   ok: z.literal(true),
 })
 
+const exportConversationBundleResultSchema = z.object({
+  success: z.boolean(),
+  filePath: z.string().optional(),
+  fileCount: z.number().optional(),
+})
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SendRequest = z.infer<typeof sendRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
 type SetPermissionModeRequest = z.infer<typeof setPermissionModeRequestSchema>
+type ExportConversationBundleRequest = z.infer<typeof exportConversationBundleRequestSchema>
 
 // ─── Message method descriptors ───────────────────────────────────────────────
 
@@ -154,6 +176,57 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           entries: historyEntries(session, request.limit),
         }
       }
+    },
+  },
+  exportConversationBundle: {
+    kind: "invoke",
+    channel: "synapse:agent:export-conversation-bundle",
+    request: exportConversationBundleRequestSchema,
+    response: exportConversationBundleResultSchema,
+    handler: async (ctx, request: ExportConversationBundleRequest) => {
+      const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
+      const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+      const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+      const processRunner = createControlledProcessRunner({ permissionGuard, auditSink })
+      const service = new AgentConversationExportService({
+        conversations: dataRepo.namespace<ConversationEntryV1>("conversations"),
+        agentEvents: dataRepo.namespace<AgentEventEntryV1>("agent.events"),
+        agentUsage: dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
+        permissionGuard,
+        auditSink,
+        logger,
+        chooseSavePath: chooseConversationBundleSavePath,
+        createZipArchive: (sourceDirectoryPath, outputFilePath) =>
+          createZipArchive(sourceDirectoryPath, outputFilePath, {
+            actor: { kind: "user", id: "renderer" },
+            processRunner,
+            messages: {
+              failed: "导出对话调试包失败。",
+            },
+          }),
+        getTimeline: async () => {
+          const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+          const session = await resolveTimelineSession(agent, request)
+          return {
+            projectId: request.projectId,
+            sessionKey: request.sessionKey ?? session?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
+            conversationId: session?.id,
+            entries: session ? historyEntries(session) : [],
+          }
+        },
+        getLiveState: async () => {
+          const { agent, project } = await resolveProjectAgent(ctx.resolve, request.projectId)
+          return {
+            status: {
+              ...agent.getStatus(),
+              projectName: project.name,
+            },
+            pendingPermissions: agent.listPendingPermissions().filter((item) =>
+              item.conversationId === request.conversationId),
+          }
+        },
+      })
+      return service.exportBundle(request)
     },
   },
   send: {
@@ -371,6 +444,19 @@ function timelineLookupErrorMeta(rawError: unknown): {
     errorLength: message.length,
     errorCode: typeof code === "string" || typeof code === "number" ? String(code) : undefined,
   }
+}
+
+async function chooseConversationBundleSavePath(defaultFileName: string): Promise<string | null> {
+  const options = {
+    title: "导出对话",
+    defaultPath: defaultFileName,
+    filters: [{ name: "ZIP", extensions: ["zip"] }],
+  }
+  const focusedWindow = BrowserWindow.getFocusedWindow()
+  const result = focusedWindow
+    ? await dialog.showSaveDialog(focusedWindow, options)
+    : await dialog.showSaveDialog(options)
+  return result.canceled ? null : result.filePath ?? null
 }
 
 function sendFailureDiagnostic(rawError: unknown): {
