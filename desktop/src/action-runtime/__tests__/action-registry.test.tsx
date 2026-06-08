@@ -9,6 +9,7 @@ describe("renderer action registry", () => {
       "builtin.script",
       "builtin.http-request",
       "builtin.agent",
+      "builtin.workflow",
     ])
   })
 
@@ -23,5 +24,10 @@ describe("renderer action registry", () => {
       url: "https://example.com/api",
       bodyType: "none",
     })).toBe("POST · https://example.com/api")
+
+    expect(rendererActionRegistry.summarize("builtin.workflow", {
+      workflowId: "",
+      paramTemplates: {},
+    })).toBe("工作流 · 未选择")
   })
 })

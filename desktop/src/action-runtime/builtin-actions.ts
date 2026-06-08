@@ -6,6 +6,9 @@ import { scriptActionManifest, type ScriptActionConfig } from "../../action-pack
 import { ScriptConfigForm } from "../../action-packages/builtin/script/config.renderer"
 import { agentActionManifest, type AgentActionConfig } from "../../action-packages/builtin/agent"
 import { AgentConfigForm } from "../../action-packages/builtin/agent/config.renderer"
+import { workflowActionManifest, type WorkflowActionConfig } from "../../action-packages/builtin/workflow"
+import { WorkflowConfigForm } from "../../action-packages/builtin/workflow/config.renderer"
+import { WorkflowActionResultView } from "../../action-packages/builtin/workflow/result.renderer"
 import { ActionResultView } from "./action-result-view"
 import {
   RendererActionRegistry,
@@ -43,8 +46,16 @@ const agentRendererAction: RendererActionDefinition<AgentActionConfig> = {
   ResultView: ActionResultView,
 }
 
+const workflowRendererAction: RendererActionDefinition<WorkflowActionConfig> = {
+  manifest: workflowActionManifest,
+  summarizeConfig: (config) => `工作流 · ${config.workflowId || "未选择"}`,
+  ConfigForm: WorkflowConfigForm,
+  ResultView: WorkflowActionResultView,
+}
+
 export const rendererActionRegistry = new RendererActionRegistry()
 rendererActionRegistry.register(commandRendererAction)
 rendererActionRegistry.register(scriptRendererAction)
 rendererActionRegistry.register(httpRequestRendererAction)
 rendererActionRegistry.register(agentRendererAction)
+rendererActionRegistry.register(workflowRendererAction)

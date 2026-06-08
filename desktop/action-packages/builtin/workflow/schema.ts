@@ -11,10 +11,10 @@ export const workflowActionConfigSchema = z.object({
 export type WorkflowActionConfig = z.infer<typeof workflowActionConfigSchema>
 
 export type WorkflowActionOutputs = {
-  readonly runId?: string
   readonly workflowId?: string
   readonly workflowName?: string
-  readonly status?: WorkflowRunResult["status"]
+  readonly workflowRunId?: string
+  readonly workflowStatus?: WorkflowRunResult["status"]
   readonly output?: string
   readonly durationMs?: number
   readonly params?: Record<string, unknown>
