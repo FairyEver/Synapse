@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, CircleHelp, Copy, FolderOpen, ShieldAlert } from "lucide-react"
+import { AlertTriangle, CircleHelp, Copy, Download, FolderOpen, LoaderCircle, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -121,6 +121,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const [sourceFilter, setSourceFilter] = useState<ConversationSourceFilter>("user")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
+  const [isExportingConversation, setIsExportingConversation] = useState(false)
   const pendingSessionRefreshKeyRef = useRef<string | null>(null)
   const pendingSessionMissingKeyRef = useRef<string | null>(null)
   const pendingMessageIdRef = useRef(0)
@@ -383,6 +384,34 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     }
   }
 
+  const handleExportConversation = async () => {
+    if (!selectedSession || isExportingConversation) return
+    const projectId = chat.selectedProjectId ?? chat.activeProjectId
+    if (!projectId || chat.timeline.length === 0) return
+    setIsExportingConversation(true)
+    try {
+      const result = await requireSynapseBridge().agent.exportConversationBundle({
+        projectId,
+        sessionKey: chat.selectedSessionKey,
+        conversationId: selectedSession.id,
+      })
+      if (result.success) {
+        toast("对话调试包已导出")
+      }
+    } catch (rawError) {
+      logger.error("Agent conversation export failed.", {
+        boundary: "renderer.agent.conversation-export",
+        projectId,
+        conversationId: selectedSession.id,
+        sessionKey: chat.selectedSessionKey,
+        ...errorDiagnostic(rawError),
+      })
+      toast("导出失败")
+    } finally {
+      setIsExportingConversation(false)
+    }
+  }
+
   const handlePendingPermissionsClick = () => {
     const requestId = chat.pendingPermissions.find(isToolPermission)?.requestId
     scrollToPendingRequest(requestId)
@@ -622,7 +651,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                     type="button"
                     variant="ghost"
                     size="icon"
-                    disabled={!selectedSession || !chat.activeProjectId || chat.timeline.length === 0}
+                    disabled={!selectedSession || !selectedProjectId || chat.timeline.length === 0}
                     onClick={() => void handleCopyTranscript()}
                     aria-label="复制对话"
                   >
@@ -630,6 +659,22 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>复制对话</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={!selectedSession || !selectedProjectId || chat.timeline.length === 0 || isExportingConversation}
+                    onClick={() => void handleExportConversation()}
+                    aria-label="导出对话"
+                  >
+                    {isExportingConversation ? <LoaderCircle className="animate-spin" /> : <Download />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>导出对话</TooltipContent>
               </Tooltip>
 
             </div>

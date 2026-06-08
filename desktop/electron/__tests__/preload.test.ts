@@ -398,6 +398,25 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps Agent conversation bundle export to the Agent IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.agent.exportConversationBundle({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+    })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:agent:export-conversation-bundle",
+      {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conversation-1",
+      },
+    )
+  })
+
   it("writes a renderer IPC failure log when bridge invoke rejects", async () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("main failed")

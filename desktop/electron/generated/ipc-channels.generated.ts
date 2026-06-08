@@ -156,6 +156,7 @@ export const IPC_CHANNELS = {
     "deleteSession": "synapse:agent:delete-session",
     "renameSession": "synapse:agent:rename-session",
     "getTimeline": "synapse:agent:get-timeline",
+    "exportConversationBundle": "synapse:agent:export-conversation-bundle",
     "send": "synapse:agent:send",
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",
