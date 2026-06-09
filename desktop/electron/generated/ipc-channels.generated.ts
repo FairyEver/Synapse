@@ -196,6 +196,7 @@ export const IPC_CHANNELS = {
     "createTask": "synapse:task-scheduler:tasks:create",
     "updateTask": "synapse:task-scheduler:tasks:update",
     "deleteTask": "synapse:task-scheduler:tasks:delete",
+    "migrateTaskToAutomation": "synapse:task-scheduler:tasks:migrate-to-automation",
     "setTaskEnabled": "synapse:task-scheduler:tasks:set-enabled",
     "runTask": "synapse:task-scheduler:tasks:run",
     "stopRun": "synapse:task-scheduler:runs:stop",
