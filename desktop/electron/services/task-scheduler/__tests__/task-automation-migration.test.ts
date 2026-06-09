@@ -115,6 +115,15 @@ describe("migrateTaskToAutomation", () => {
     expect(harness.scheduler.deleteTask).not.toHaveBeenCalled()
   })
 
+  it("reports the failing stage when automation creation fails", async () => {
+    const harness = createMigrationHarness({
+      createError: new Error("create failed"),
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps }))
+      .rejects.toThrow("创建自动化失败：create failed")
+  })
+
   it("rolls back automation when deleting the source task fails", async () => {
     const harness = createMigrationHarness({
       deleteError: new Error("delete failed"),
@@ -124,6 +133,15 @@ describe("migrateTaskToAutomation", () => {
       .rejects.toThrow("delete failed")
 
     expect(harness.automation.automationDelete).toHaveBeenCalledWith("automation:1")
+  })
+
+  it("reports the failing stage when deleting the source task fails", async () => {
+    const harness = createMigrationHarness({
+      deleteError: new Error("delete failed"),
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps }))
+      .rejects.toThrow("删除原定时任务失败：delete failed")
   })
 
   it("disables both records when rollback delete also fails", async () => {

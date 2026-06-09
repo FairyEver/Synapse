@@ -11,6 +11,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { cancelWatchNextAgentSession, requestWatchNextAgentSession } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { sanitizeError } from "@/lib/error-sanitize"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { Button } from "@/components/ui/button"
 import {
@@ -65,6 +66,14 @@ type AcceptedManualRun = ScheduledTaskRun & {
   status: Extract<ScheduledTaskRun["status"], "running" | "success">
 }
 
+type ValidationIssue = {
+  readonly code?: string
+  readonly expected?: string
+  readonly message?: string
+  readonly path?: readonly unknown[]
+  readonly values?: readonly unknown[]
+}
+
 function isAcceptedManualRun(run: ScheduledTaskRun | null): run is AcceptedManualRun {
   return run !== null && (run.status === "running" || run.status === "success")
 }
@@ -86,6 +95,80 @@ function getMigrationDescription(task: ScheduledTask | null): string {
     return "将先停止当前运行。迁移成功后，此任务会被删除。运行历史不会迁移。"
   }
   return "迁移成功后，此任务会被删除。运行历史不会迁移。"
+}
+
+function formatMigrationError(error: unknown): string {
+  const message = sanitizeError(formatMigrationErrorMessage(error instanceof Error ? error.message : String(error)))
+  return message ? `迁移失败：${message}` : "迁移失败"
+}
+
+function formatMigrationErrorMessage(rawMessage: string): string {
+  const message = stripIpcErrorPrefix(rawMessage)
+  const validationMessage = formatValidationErrorMessage(message)
+  return validationMessage ?? message
+}
+
+function stripIpcErrorPrefix(rawMessage: string): string {
+  return rawMessage
+    .trim()
+    .replace(/^Error invoking remote method '[^']+':\s*/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim()
+}
+
+function formatValidationErrorMessage(message: string): string | null {
+  const match = /^(.*?失败)[：:]\s*(\[[\s\S]*\])$/.exec(message)
+  if (!match) return null
+
+  const issues = parseValidationIssues(match[2])
+    .map(formatValidationIssue)
+    .filter((issue): issue is string => Boolean(issue))
+
+  if (issues.length === 0) return null
+  return `${match[1]}：${issues.join("；")}`
+}
+
+function parseValidationIssues(rawIssues: string): ValidationIssue[] {
+  try {
+    const parsed = JSON.parse(rawIssues) as unknown
+    return Array.isArray(parsed) ? parsed.filter(isValidationIssue) : []
+  } catch {
+    return []
+  }
+}
+
+function isValidationIssue(value: unknown): value is ValidationIssue {
+  return value !== null && typeof value === "object"
+}
+
+function formatValidationIssue(issue: ValidationIssue): string | null {
+  const field = formatValidationPath(issue.path)
+  if (!field) return null
+
+  if (issue.code === "invalid_type" && issue.expected === "string" && /received undefined/i.test(issue.message ?? "")) {
+    return `${field}缺失`
+  }
+
+  if (issue.code === "invalid_value" && issue.values && issue.values.length > 0) {
+    return `${field}无效，应为 ${issue.values.map(String).join("、")}`
+  }
+
+  return issue.message ? `${field}无效：${issue.message}` : `${field}无效`
+}
+
+function formatValidationPath(path: readonly unknown[] | undefined): string | null {
+  if (!path || path.length === 0) return null
+  const key = path.map(String).join(".")
+  const last = String(path.at(-1))
+  const labels: Record<string, string> = {
+    everyMinutes: "间隔分钟",
+    expr: "Cron 表达式",
+    modelTier: "模型档位",
+    projectId: "项目",
+    prompt: "提示词",
+    providerId: "供应商",
+  }
+  return labels[key] ?? labels[last] ?? key
 }
 
 async function stopRunOrThrow(runId: string): Promise<{ readonly stopped: boolean }> {
@@ -198,7 +281,7 @@ const [isExporting, setIsExporting] = useState(false)
           })
           return result
         },
-        { loading: "正在迁移...", success: "已迁移到自动化", error: "迁移失败" },
+        { loading: "正在迁移...", success: "已迁移到自动化", error: formatMigrationError },
       )
       setMigrateTarget(null)
       await refresh()

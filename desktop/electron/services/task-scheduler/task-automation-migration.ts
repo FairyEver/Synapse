@@ -57,29 +57,53 @@ export async function migrateTaskToAutomation({
     taskId,
   })
 
-  const firstTask = await scheduler.schedulerTaskGet(taskId)
+  let firstTask: ScheduledTaskEntry | null
+  try {
+    firstTask = await scheduler.schedulerTaskGet(taskId)
+  } catch (error) {
+    throw migrationStageError("读取定时任务失败", error)
+  }
   if (!firstTask) throw new Error(`任务不存在：${taskId}`)
 
   if (firstTask.activeRun?.status === "running") {
     const activeRunId = firstTask.activeRun.id
     if (!activeRunId) throw new Error("停止运行失败")
-    const stopResult = await scheduler.stopRun(activeRunId)
+    let stopResult: { readonly stopped: boolean }
+    try {
+      stopResult = await scheduler.stopRun(activeRunId)
+    } catch (error) {
+      throw migrationStageError("停止运行失败", error)
+    }
     if (!stopResult.stopped) {
-      throw new Error("停止运行失败")
+      throw new Error("停止运行失败：调度器未返回停止成功")
     }
   }
 
-  const task = await scheduler.schedulerTaskGet(taskId)
+  let task: ScheduledTaskEntry | null
+  try {
+    task = await scheduler.schedulerTaskGet(taskId)
+  } catch (error) {
+    throw migrationStageError("重新读取定时任务失败", error)
+  }
   if (!task) throw new Error(`任务不存在：${taskId}`)
 
   const createInput = buildAutomationCreateInputFromTask(task)
   let automationId: string | undefined
   try {
-    const created = await automation.automationCreate(createInput)
+    let created: { readonly id: string }
+    try {
+      created = await automation.automationCreate(createInput)
+    } catch (error) {
+      throw migrationStageError("创建自动化失败", error)
+    }
     automationId = created.id
-    const deleted = await scheduler.deleteTask(taskId)
-    if (!deleted.deleted) {
-      throw new Error(`任务删除失败：${taskId}`)
+    try {
+      const deleted = await scheduler.deleteTask(taskId)
+      if (!deleted.deleted) {
+        throw new Error(`任务删除失败：${taskId}`)
+      }
+    } catch (error) {
+      throw migrationStageError("删除原定时任务失败", error)
     }
     logger?.info("Scheduled task migration finished.", {
       boundary: "task-scheduler.migrate-to-automation",
@@ -110,6 +134,11 @@ export async function migrateTaskToAutomation({
     })
     throw error
   }
+}
+
+function migrationStageError(stage: string, error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  return new Error(`${stage}：${message}`)
 }
 
 async function rollbackCreatedAutomation({

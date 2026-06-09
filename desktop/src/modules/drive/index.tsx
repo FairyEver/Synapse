@@ -94,6 +94,11 @@ type DriveItemPublicationActions = {
   readonly site: DrivePublicationDto | null
 }
 
+type DrivePublicationSuccessState = Pick<DrivePublicationDto, "name" | "type" | "url">
+type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
+  readonly url: string
+}
+
 const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 
@@ -117,6 +122,8 @@ function DriveModule() {
   const [deleteImpact, setDeleteImpact] = useState<DriveDeleteImpactDto | null>(null)
   const [disablePublicationsOnDelete, setDisablePublicationsOnDelete] = useState(false)
   const [publicationsOpen, setPublicationsOpen] = useState(false)
+  const [publicationSuccess, setPublicationSuccess] = useState<DrivePublicationSuccessState | null>(null)
+  const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [sharesOpen, setSharesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -360,8 +367,8 @@ function DriveModule() {
   const handleShare = useCallback(async (item: DriveItemDto) => {
     try {
       const share = await requireSynapseBridge().account.shareDriveItem({ itemId: item.id })
-      await navigator.clipboard.writeText(share.url)
-      toast("链接已复制")
+      setShareSuccess({ name: item.name, type: item.type, url: share.url })
+      await copySharedUrlAfterShare(share.url)
       await loadItems()
     } catch (rawError) {
       toast(errorMessage(rawError, "分享失败"))
@@ -382,8 +389,8 @@ function DriveModule() {
   const handlePublishPage = useCallback(async (item: DriveItemDto) => {
     try {
       const publication = await requireSynapseBridge().account.publishDrivePage({ itemId: item.id })
-      await navigator.clipboard.writeText(publication.url)
-      toast("发布链接已复制")
+      setPublicationSuccess(publication)
+      await copyPublishedUrlAfterPublish(publication.url)
       await loadItems()
     } catch (rawError) {
       toast(errorMessage(rawError, "发布网页失败"))
@@ -393,8 +400,8 @@ function DriveModule() {
   const handlePublishSite = useCallback(async (item: DriveItemDto) => {
     try {
       const publication = await requireSynapseBridge().account.publishDriveSite({ itemId: item.id })
-      await navigator.clipboard.writeText(publication.url)
-      toast("发布链接已复制")
+      setPublicationSuccess(publication)
+      await copyPublishedUrlAfterPublish(publication.url)
       await loadItems()
     } catch (rawError) {
       toast(errorMessage(rawError, "发布站点失败"))
@@ -479,6 +486,22 @@ function DriveModule() {
         onShare={handleShare}
         onDisableShare={handleDisableShare}
         onUploadDroppedFiles={handleDroppedFiles}
+        actions={(
+          <>
+            <Button variant="outline" size="sm" disabled={uploadActionsDisabled} onClick={() => fileInputRef.current?.click()}>
+              <Upload data-icon="inline-start" />
+              上传文件
+            </Button>
+            <Button variant="outline" size="sm" disabled={uploadActionsDisabled} onClick={() => folderInputRef.current?.click()}>
+              <Upload data-icon="inline-start" />
+              上传文件夹
+            </Button>
+            <Button variant="outline" size="sm" disabled={actionsDisabled} onClick={handleCreateFolder}>
+              <FolderPlus data-icon="inline-start" />
+              新建文件夹
+            </Button>
+          </>
+        )}
         uploadDisabled={uploadActionsDisabled}
         uploadItemCount={uploadItemCount}
         uploading={uploading}
@@ -498,14 +521,16 @@ function DriveModule() {
           <>
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
             <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
-            <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setSharesOpen(true)}>
-              <Link2 data-icon="inline-start" />
-              已分享
-            </Button>
-            <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setPublicationsOpen(true)}>
-              <Globe2 data-icon="inline-start" />
-              已发布
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setSharesOpen(true)}>
+                <Link2 data-icon="inline-start" />
+                已分享
+              </Button>
+              <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setPublicationsOpen(true)}>
+                <Globe2 data-icon="inline-start" />
+                已发布
+              </Button>
+            </div>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon-sm" disabled={!accountAuthenticated || loading || openingFolderId !== null} onClick={() => void loadItems()}>
@@ -515,18 +540,6 @@ function DriveModule() {
               </TooltipTrigger>
               <TooltipContent>刷新</TooltipContent>
             </Tooltip>
-            <Button variant="outline" size="sm" disabled={uploadActionsDisabled} onClick={() => fileInputRef.current?.click()}>
-              <Upload data-icon="inline-start" />
-              上传文件
-            </Button>
-            <Button variant="outline" size="sm" disabled={uploadActionsDisabled} onClick={() => folderInputRef.current?.click()}>
-              <Upload data-icon="inline-start" />
-              上传文件夹
-            </Button>
-            <Button variant="outline" size="sm" disabled={actionsDisabled} onClick={handleCreateFolder}>
-              <FolderPlus data-icon="inline-start" />
-              新建文件夹
-            </Button>
           </>
         )}
         afterContent={(
@@ -625,7 +638,23 @@ function DriveModule() {
               </AlertDialogContent>
             </AlertDialog>
             <DriveSharesDialog open={sharesOpen} onOpenChange={setSharesOpen} />
-            <DrivePublicationsDialog open={publicationsOpen} onOpenChange={setPublicationsOpen} />
+            <DrivePublicationsDialog
+              open={publicationsOpen}
+              onOpenChange={setPublicationsOpen}
+              onPublicationDeployed={setPublicationSuccess}
+            />
+            <DrivePublicationSuccessDialog
+              publication={publicationSuccess}
+              onOpenChange={(open) => {
+                if (!open) setPublicationSuccess(null)
+              }}
+            />
+            <DriveShareSuccessDialog
+              share={shareSuccess}
+              onOpenChange={(open) => {
+                if (!open) setShareSuccess(null)
+              }}
+            />
           </>
         )}
       >
@@ -933,6 +962,7 @@ function DriveFileList({
   onShare,
   onDisableShare,
   onUploadDroppedFiles,
+  actions,
   uploadDisabled,
   uploadItemCount,
   uploading,
@@ -955,6 +985,7 @@ function DriveFileList({
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
+  readonly actions?: ReactNode
   readonly uploadDisabled: boolean
   readonly uploadItemCount: number | null
   readonly uploading: boolean
@@ -1006,18 +1037,21 @@ function DriveFileList({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
-        {uploading ? <Badge variant="outline">{uploadItemCount === null ? "上传中" : `正在上传 ${uploadItemCount} 项`}</Badge> : null}
-        <InputGroup className="w-56">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="搜索"
-            aria-label="搜索"
-          />
-        </InputGroup>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {uploading ? <Badge variant="outline">{uploadItemCount === null ? "上传中" : `正在上传 ${uploadItemCount} 项`}</Badge> : null}
+          <InputGroup className="w-56">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="搜索"
+              aria-label="搜索"
+            />
+          </InputGroup>
+          {actions ? <div className="flex flex-wrap items-center justify-end gap-1">{actions}</div> : null}
+        </div>
       </div>
 
       {loading ? (
@@ -1343,9 +1377,11 @@ type DriveLocalUploadBuildResult = {
 function DrivePublicationsDialog({
   open,
   onOpenChange,
+  onPublicationDeployed,
 }: {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
+  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
 }) {
   const [items, setItems] = useState<DrivePublicationDto[]>([])
   const [loading, setLoading] = useState(false)
@@ -1372,7 +1408,12 @@ function DrivePublicationsDialog({
         onSubmit={(event) => event.preventDefault()}
         footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
       >
-        <DrivePublicationList items={items} loading={loading} onReload={loadPublications} />
+        <DrivePublicationList
+          items={items}
+          loading={loading}
+          onPublicationDeployed={onPublicationDeployed}
+          onReload={loadPublications}
+        />
       </FormDialog>
     </Dialog>
   )
@@ -1381,10 +1422,12 @@ function DrivePublicationsDialog({
 function DrivePublicationList({
   items,
   loading,
+  onPublicationDeployed,
   onReload,
 }: {
   readonly items: readonly DrivePublicationDto[]
   readonly loading: boolean
+  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
   readonly onReload: () => Promise<void>
 }) {
   if (loading) return <div className="text-sm text-muted-foreground">加载中</div>
@@ -1422,7 +1465,7 @@ function DrivePublicationList({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={`重新发布 ${item.name}`}
-                onClick={() => { void redeployDrivePublication(item.id, onReload) }}
+                onClick={() => { void redeployDrivePublication(item.id, onReload, onPublicationDeployed) }}
               >
                 <RotateCw />
               </Button>
@@ -1445,6 +1488,45 @@ function DrivePublicationList({
   )
 }
 
+function DrivePublicationSuccessDialog({
+  publication,
+  onOpenChange,
+}: {
+  readonly publication: DrivePublicationSuccessState | null
+  readonly onOpenChange: (open: boolean) => void
+}) {
+  if (!publication) return null
+
+  const openLabel = publication.type === "site" ? "打开站点" : "打开网页"
+  return (
+    <Dialog open={true} onOpenChange={onOpenChange}>
+      <FormDialog
+        title={publication.type === "site" ? "站点已发布" : "网页已发布"}
+        description={publication.name}
+        onSubmit={(event) => event.preventDefault()}
+        footer={(
+          <>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(publication.url) }}>
+              <Copy data-icon="inline-start" />
+              复制链接
+            </Button>
+            <Button type="button" onClick={() => { void openDriveUrl(publication.url) }}>
+              <ExternalLink data-icon="inline-start" />
+              {openLabel}
+            </Button>
+          </>
+        )}
+      >
+        <div className="grid gap-2">
+          <Label htmlFor="drive-publication-success-url">访问链接</Label>
+          <Input id="drive-publication-success-url" value={publication.url} readOnly />
+        </div>
+      </FormDialog>
+    </Dialog>
+  )
+}
+
 function DrivePublicationSummary({ item }: { readonly item: DrivePublicationDto }) {
   return (
     <div className="min-w-0 flex-1">
@@ -1462,6 +1544,45 @@ function DrivePublicationSummary({ item }: { readonly item: DrivePublicationDto 
         </span>
       </div>
     </div>
+  )
+}
+
+function DriveShareSuccessDialog({
+  share,
+  onOpenChange,
+}: {
+  readonly share: DriveShareSuccessState | null
+  readonly onOpenChange: (open: boolean) => void
+}) {
+  if (!share) return null
+
+  const isFolder = share.type === "folder"
+  return (
+    <Dialog open={true} onOpenChange={onOpenChange}>
+      <FormDialog
+        title={isFolder ? "文件夹已分享" : "文件已分享"}
+        description={share.name}
+        onSubmit={(event) => event.preventDefault()}
+        footer={(
+          <>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(share.url) }}>
+              <Copy data-icon="inline-start" />
+              复制链接
+            </Button>
+            <Button type="button" onClick={() => { void openDriveUrl(share.url) }}>
+              <ExternalLink data-icon="inline-start" />
+              {isFolder ? "打开文件夹" : "打开文件"}
+            </Button>
+          </>
+        )}
+      >
+        <div className="grid gap-2">
+          <Label htmlFor="drive-share-success-url">访问链接</Label>
+          <Input id="drive-share-success-url" value={share.url} readOnly />
+        </div>
+      </FormDialog>
+    </Dialog>
   )
 }
 
@@ -1838,6 +1959,24 @@ async function copyDriveUrl(url: string): Promise<void> {
   }
 }
 
+async function copyPublishedUrlAfterPublish(url: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(url)
+    toast("发布链接已复制")
+  } catch {
+    toast("发布成功，复制失败")
+  }
+}
+
+async function copySharedUrlAfterShare(url: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(url)
+    toast("链接已复制")
+  } catch {
+    toast("分享成功，复制失败")
+  }
+}
+
 async function openDriveUrl(url: string): Promise<void> {
   try {
     await requireSynapseBridge().shell.openExternal(url)
@@ -1846,9 +1985,14 @@ async function openDriveUrl(url: string): Promise<void> {
   }
 }
 
-async function redeployDrivePublication(publicationId: string, onReload: () => Promise<void>): Promise<void> {
+async function redeployDrivePublication(
+  publicationId: string,
+  onReload: () => Promise<void>,
+  onPublicationDeployed?: (publication: DrivePublicationSuccessState) => void,
+): Promise<void> {
   try {
-    await requireSynapseBridge().account.redeployDrivePublication({ publicationId })
+    const publication = await requireSynapseBridge().account.redeployDrivePublication({ publicationId })
+    onPublicationDeployed?.(publication)
     toast("已重新发布")
     await onReload()
   } catch (rawError) {

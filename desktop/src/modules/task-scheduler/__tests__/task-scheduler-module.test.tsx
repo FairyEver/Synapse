@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
   importTasksFromFile: vi.fn(),
   migrateTaskToAutomation: vi.fn(),
   notify: vi.fn(),
+  promise: vi.fn(async <T,>(
+    operation: () => Promise<T>,
+    _messages: { readonly error?: (error: unknown) => unknown } = {},
+  ) => operation()),
   runTask: vi.fn(),
   stopRun: vi.fn(),
   cancelWatchNextAgentSession: vi.fn(),
@@ -53,7 +57,7 @@ vi.mock("@/app-shell/config", () => ({
 vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
     notify: mocks.notify,
-    promise: async <T,>(operation: () => Promise<T>) => operation(),
+    promise: mocks.promise,
   }),
 }))
 
@@ -407,6 +411,69 @@ describe("TaskSchedulerModule", () => {
     await clickButtonByText("迁移")
 
     expect(document.body.textContent).toContain("迁移成功后，此任务会被删除。运行历史不会迁移。")
+  })
+
+  it("shows a sanitized migration failure reason", async () => {
+    mocks.migrateTaskToAutomation.mockRejectedValueOnce(
+      new Error("创建自动化失败：token=sk-secret /Users/example/repo prompt text"),
+    )
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({ id: "task-1" })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    await clickButtonByLabel("迁移到自动化")
+    await clickButtonByText("迁移")
+
+    const migrationMessages = mocks.promise.mock.calls.at(-1)?.[1]
+    const message = migrationMessages?.error?.(
+      new Error("创建自动化失败：token=sk-secret /Users/example/repo prompt text"),
+    )
+
+    expect(message).toBe("迁移失败：创建自动化失败：token=[redacted] [path] prompt text")
+  })
+
+  it("shows readable migration validation issues", async () => {
+    const rawError = [
+      "Error invoking remote method 'synapse:task-scheduler:tasks:migrate-to-automation':",
+      'Error: 创建自动化失败：[{ "expected": "string", "code": "invalid_type", "path": ["providerId"], "message": "Invalid input: expected string, received undefined" },',
+      '{ "code": "invalid_value", "values": ["default", "haiku", "sonnet", "opus"], "path": ["modelTier"], "message": "Invalid option: expected one of \\"default\\"|\\"haiku\\"|\\"sonnet\\"|\\"opus\\"" }]',
+    ].join(" ")
+    mocks.migrateTaskToAutomation.mockRejectedValueOnce(new Error(rawError))
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({ id: "task-1" })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    await clickButtonByLabel("迁移到自动化")
+    await clickButtonByText("迁移")
+
+    const migrationMessages = mocks.promise.mock.calls.at(-1)?.[1]
+    const message = migrationMessages?.error?.(new Error(rawError))
+
+    expect(message).toBe("迁移失败：创建自动化失败：供应商缺失；模型档位无效，应为 default、haiku、sonnet、opus")
   })
 
   it("disables deleting a task while it is running", async () => {
