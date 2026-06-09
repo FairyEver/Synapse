@@ -412,6 +412,40 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已上传 1 个文件")
   })
 
+  it("keeps non-upload list actions available while a local upload is running", async () => {
+    const upload = createDeferred<{ completed: number; failed: number; skipped: number }>()
+    mocks.uploadDriveLocalItems.mockReturnValueOnce(upload.promise)
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    const file = new File(["report"], "report.txt", { type: "text/plain" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(document.body.textContent).toContain("正在上传 1 项")
+    expect(getButton("上传文件").disabled).toBe(true)
+    expect(getButton("新建文件夹").disabled).toBe(false)
+
+    await act(async () => {
+      getButton("新建文件夹").click()
+      await flushPromises()
+    })
+    expect(document.querySelector('input[aria-label="文件夹名称"]')).not.toBeNull()
+
+    await act(async () => {
+      upload.resolve({ completed: 1, failed: 0, skipped: 0 })
+      await flushPromises()
+    })
+  })
+
   it("uploads selected files into the current folder", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
@@ -440,6 +474,46 @@ describe("DriveModule", () => {
     expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({
       parentId: "folder-1",
     }))
+  })
+
+  it("refreshes the current folder when upload finishes after navigating during upload", async () => {
+    const upload = createDeferred<{ completed: number; failed: number; skipped: number }>()
+    mocks.uploadDriveLocalItems.mockReturnValueOnce(upload.promise)
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "nested-before", name: "before.md", type: "file", parentId: "folder-1" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "nested-after", name: "after.md", type: "file", parentId: "folder-1" }),
+      ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    const file = new File(["report"], "report.txt", { type: "text/plain" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    })
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    await clickText("作业范文")
+    await flushAct()
+
+    await act(async () => {
+      upload.resolve({ completed: 1, failed: 0, skipped: 0 })
+      await flushPromises()
+    })
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "folder-1" })
+    expect(document.body.textContent).toContain("after.md")
   })
 
   it("uploads selected folders through the same local upload bridge", async () => {
@@ -482,21 +556,29 @@ describe("DriveModule", () => {
     expect(mocks.uploadDrivePreparedFile).not.toHaveBeenCalled()
   })
 
-  it("uploads dropped files through the unified local upload bridge", async () => {
+  it("uploads dropped files through the unified local upload bridge into the current folder", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
     await render(<DriveModule />)
+    await flushAct()
+    await clickText("作业范文")
     await flushAct()
 
     const dropzone = getDriveDropzone()
     const file = new File(["drop"], "drop.txt", { type: "text/plain" })
     dispatchDragEvent(dropzone, "dragenter", createDataTransfer({ files: [file] }))
 
-    expect(document.body.textContent).toContain("松开上传到 根目录")
+    expect(document.body.textContent).toContain("松开上传到 作业范文")
 
     dispatchDragEvent(dropzone, "drop", createDataTransfer({ files: [file] }))
     await flushAct()
 
     expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
-      parentId: null,
+      parentId: "folder-1",
       items: [{
         kind: "file",
         path: "/tmp/drop.txt",
@@ -714,6 +796,16 @@ async function render(element: React.ReactNode): Promise<void> {
 
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+function createDeferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void; readonly reject: (error: unknown) => void } {
+  let resolveDeferred: (value: T) => void = () => {}
+  let rejectDeferred: (error: unknown) => void = () => {}
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveDeferred = resolve
+    rejectDeferred = reject
+  })
+  return { promise, resolve: resolveDeferred, reject: rejectDeferred }
 }
 
 async function flushAct(): Promise<void> {
