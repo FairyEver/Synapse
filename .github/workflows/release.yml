@@ -97,13 +97,12 @@ jobs:
           CSC_LINK: ${{ secrets.APPLE_SIGNING_CERT }}
         run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
 
-      - name: Verify macOS packaged app
-        if: matrix.os == 'macos-latest'
-        run: pnpm --filter @synapse/desktop run check:packaged-asar
-
       - name: Package Windows installer
         if: matrix.os == 'windows-latest'
         run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
+
+      - name: Verify packaged app
+        run: pnpm --filter @synapse/desktop run check:packaged-asar
 
       - name: Collect release artifacts
         run: |
