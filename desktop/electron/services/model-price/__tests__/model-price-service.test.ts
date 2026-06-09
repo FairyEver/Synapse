@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
 import { isModelPricePresetId } from "../index"
+import { createModelPriceRuleId } from "../rule-id"
 import { initModelPriceSchema, ModelPriceService } from "../service"
 
 function createDb(): DatabaseSync {
@@ -20,7 +21,50 @@ describe("model price service", () => {
     db.close()
   })
 
-  it("does not delete existing model_price_rules when the init marker is missing", () => {
+  it("preserves existing rules and migrates legacy rule ids when the init marker is missing", () => {
+    const db = new DatabaseSync(":memory:")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, enabled, source, sort_index, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("legacy-like-id", "qwen3.7-plus", 2, 12, 0, "user", 7, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const service = new ModelPriceService(db)
+    const [rule] = service.listRules()
+
+    expect(rule).toMatchObject({
+      modelPattern: "qwen3.7-plus",
+      inputPer1M: 2,
+      outputPer1M: 12,
+      enabled: false,
+      source: "user",
+      sortIndex: 7,
+    })
+    expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(rule?.id).not.toContain("qwen")
+    expect(rule?.id).not.toBe("legacy-like-id")
+    expect(db.prepare("SELECT value FROM model_price_meta WHERE key = ?").get("initialized_from_defaults_v1")).toBeTruthy()
+    db.close()
+  })
+
+  it("preserves existing hash-like rule ids during schema initialization", () => {
     const db = new DatabaseSync(":memory:")
     db.exec(`
       CREATE TABLE model_price_rules (
@@ -42,15 +86,96 @@ describe("model price service", () => {
       INSERT INTO model_price_rules (
         id, model_pattern, input_per_1m, output_per_1m, updated_at
       ) VALUES (?, ?, ?, ?, ?)
-    `).run("legacy-like-id", "qwen3.7-plus", 2, 12, "2026-06-09T00:00:00.000Z")
+    `).run("mpr_123456789abc", "qwen3.7-plus", 2, 12, "2026-06-09T00:00:00.000Z")
 
     initModelPriceSchema(db)
     const service = new ModelPriceService(db)
 
     expect(service.listRules()).toEqual([
-      expect.objectContaining({ id: "legacy-like-id", modelPattern: "qwen3.7-plus", inputPer1M: 2, outputPer1M: 12 }),
+      expect.objectContaining({ id: "mpr_123456789abc", modelPattern: "qwen3.7-plus" }),
     ])
-    expect(db.prepare("SELECT value FROM model_price_meta WHERE key = ?").get("initialized_from_defaults_v1")).toBeTruthy()
+    db.close()
+  })
+
+  it("migrates legacy rule ids even when the initialization marker already exists", () => {
+    const db = new DatabaseSync(":memory:")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE model_price_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare("INSERT INTO model_price_meta (key, value, updated_at) VALUES (?, ?, ?)")
+      .run("initialized_from_defaults_v1", "1", "2026-06-09T00:00:00.000Z")
+    db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run("qwen3.7-plus", "qwen3.7-plus", 2, 12, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const [rule] = new ModelPriceService(db).listRules()
+
+    expect(rule).toMatchObject({ modelPattern: "qwen3.7-plus", inputPer1M: 2, outputPer1M: 12 })
+    expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(rule?.id).not.toBe("qwen3.7-plus")
+    db.close()
+  })
+
+  it("keeps all rows when a migrated legacy id would collide with an existing hash id", () => {
+    const db = new DatabaseSync(":memory:")
+    const collidingId = createModelPriceRuleId("legacy:legacy-like-id", "qwen3.7-plus")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    const insert = db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, sort_index, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    insert.run(collidingId, "existing-model", 1, 2, 0, "2026-06-09T00:00:00.000Z")
+    insert.run("legacy-like-id", "qwen3.7-plus", 3, 4, 1, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const rules = new ModelPriceService(db).listRules()
+    const ids = new Set(rules.map((rule) => rule.id))
+
+    expect(rules).toHaveLength(2)
+    expect([...ids].every((id) => /^mpr_[a-f0-9]{12}$/.test(id))).toBe(true)
+    expect(ids.has(collidingId)).toBe(true)
+    expect(ids.has("legacy-like-id")).toBe(false)
+    expect(rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ modelPattern: "existing-model", inputPer1M: 1 }),
+      expect.objectContaining({ modelPattern: "qwen3.7-plus", inputPer1M: 3 }),
+    ]))
     db.close()
   })
 

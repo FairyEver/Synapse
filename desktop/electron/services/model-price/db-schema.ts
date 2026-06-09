@@ -1,6 +1,12 @@
 import type { DatabaseSync } from "node:sqlite"
+import { createModelPriceRuleId, isModelPriceRuleId } from "./rule-id"
 
 export const MODEL_PRICE_DEFAULTS_META_KEY = "initialized_from_defaults_v1"
+
+interface ModelPriceRuleIdMigrationRow {
+  readonly id: string
+  readonly model_pattern: string
+}
 
 export function initModelPriceSchema(database: DatabaseSync): void {
   database.exec(`
@@ -26,7 +32,43 @@ export function initModelPriceSchema(database: DatabaseSync): void {
       updated_at TEXT NOT NULL
     )
   `)
+  migrateLegacyModelPriceRuleIds(database)
   seedModelPriceDefaults(database)
+}
+
+function migrateLegacyModelPriceRuleIds(database: DatabaseSync): void {
+  const rows = database.prepare("SELECT id, model_pattern FROM model_price_rules").all() as unknown as ModelPriceRuleIdMigrationRow[]
+  const existingIds = new Set(rows.map((row) => row.id))
+  const legacyRows = rows.filter((row) => !isModelPriceRuleId(row.id))
+  if (legacyRows.length === 0) return
+
+  let transactionStarted = false
+  database.exec("BEGIN IMMEDIATE")
+  transactionStarted = true
+  try {
+    const update = database.prepare("UPDATE model_price_rules SET id = ? WHERE id = ?")
+    for (const row of legacyRows) {
+      existingIds.delete(row.id)
+      const nextId = createAvailableLegacyRuleId(row, existingIds)
+      update.run(nextId, row.id)
+      existingIds.add(nextId)
+    }
+    database.exec("COMMIT")
+    transactionStarted = false
+  } catch (error) {
+    if (transactionStarted) database.exec("ROLLBACK")
+    throw error
+  }
+}
+
+function createAvailableLegacyRuleId(row: ModelPriceRuleIdMigrationRow, existingIds: Set<string>): string {
+  let attempt = 0
+  while (true) {
+    const namespace = attempt === 0 ? `legacy:${row.id}` : `legacy:${row.id}:${attempt}`
+    const id = createModelPriceRuleId(namespace, row.model_pattern)
+    if (!existingIds.has(id)) return id
+    attempt += 1
+  }
 }
 
 function seedModelPriceDefaults(database: DatabaseSync): void {
