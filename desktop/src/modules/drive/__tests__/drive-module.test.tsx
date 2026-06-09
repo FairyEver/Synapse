@@ -1009,6 +1009,10 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(document.body.textContent).toContain("report.html")
+    expect(document.body.textContent).toContain("类型 / 状态")
+    expect(document.body.textContent).toContain("来源")
+    expect(document.body.textContent).toContain("时间")
+    expect(document.body.textContent).toContain("操作")
     expect(document.body.textContent).toContain("网页")
     expect(document.body.textContent).toContain("site")
     expect(document.body.textContent).toContain("站点")
@@ -1018,6 +1022,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("deleted.html")
     expect(document.body.textContent).toContain("来源已删除")
     expect(queryButtonByLabel("重新发布 deleted.html")).toBeNull()
+    expect(queryButtonByLabel("打开 deleted.html")).toBeNull()
 
     await clickButtonByLabel("复制 report.html")
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_test")
@@ -1040,6 +1045,54 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
 
+  it("shows publication dialog loading state", async () => {
+    const publications = createDeferred<DrivePublicationDto[]>()
+    mocks.listDrivePublications.mockReturnValueOnce(publications.promise)
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("已发布")
+
+    expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
+
+    await act(async () => {
+      publications.resolve([])
+      await flushPromises()
+    })
+  })
+
+  it("shows publication dialog empty state", async () => {
+    mocks.listDrivePublications.mockResolvedValue([])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("已发布")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("暂无发布")
+  })
+
+  it("shows publication dialog retry state", async () => {
+    mocks.listDrivePublications.mockRejectedValue(new Error("发布列表加载失败。"))
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("已发布")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("读取失败")
+    expect(document.body.textContent).toContain("发布列表加载失败。")
+
+    mocks.listDrivePublications.mockReset()
+    mocks.listDrivePublications.mockResolvedValue([])
+
+    await clickButtonText("重试")
+    await flushAct()
+    await flushAct()
+
+    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(1)
+  })
+
   it("manages shares from the shares dialog", async () => {
     mocks.listDriveShares.mockResolvedValue([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
@@ -1052,12 +1105,17 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(document.body.textContent).toContain("report.txt")
+    expect(document.body.textContent).toContain("类型")
+    expect(document.body.textContent).toContain("来源")
+    expect(document.body.textContent).toContain("时间")
+    expect(document.body.textContent).toContain("操作")
     expect(document.body.textContent).toContain("文件")
     expect(document.body.textContent).toContain("2026")
     expect(document.body.textContent).toContain("来源正常")
     expect(document.body.textContent).toContain("folder")
     expect(document.body.textContent).toContain("文件夹")
     expect(document.body.textContent).toContain("来源已删除")
+    expect(queryButtonByLabel("打开 folder")).toBeNull()
 
     await clickButtonByLabel("复制 report.txt")
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
@@ -1072,6 +1130,42 @@ describe("DriveModule", () => {
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(2)
     expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "shr_test" })
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
+  })
+
+  it("shows share dialog loading, empty, and retry states", async () => {
+    const shares = createDeferred<DriveShareListItemDto[]>()
+    mocks.listDriveShares.mockReturnValueOnce(shares.promise)
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("已分享")
+
+    expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
+
+    await act(async () => {
+      shares.resolve([])
+      await flushPromises()
+    })
+    await flushAct()
+
+    expect(document.body.textContent).toContain("暂无分享")
+
+    mocks.listDriveShares
+      .mockRejectedValueOnce(new Error("分享列表加载失败。"))
+      .mockResolvedValueOnce([])
+
+    await clickButtonText("关闭")
+    await clickButtonText("已分享")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("读取失败")
+    expect(document.body.textContent).toContain("分享列表加载失败。")
+
+    await clickButtonText("重试")
+    await flushAct()
+
+    expect(mocks.listDriveShares).toHaveBeenCalledTimes(3)
+    expect(document.body.textContent).toContain("暂无分享")
   })
 
   it("moves an item to a nested folder selected from the tree", async () => {

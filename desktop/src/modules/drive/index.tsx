@@ -1385,13 +1385,17 @@ function DrivePublicationsDialog({
 }) {
   const [items, setItems] = useState<DrivePublicationDto[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadPublications = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       setItems(await requireSynapseBridge().account.listDrivePublications())
     } catch (rawError) {
-      toast(errorMessage(rawError, "已发布加载失败"))
+      const message = errorMessage(rawError, "已发布加载失败")
+      setLoadError(message)
+      toast(message)
     } finally {
       setLoading(false)
     }
@@ -1405,10 +1409,12 @@ function DrivePublicationsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <FormDialog
         title="已发布"
+        contentClassName="sm:max-w-2xl"
         onSubmit={(event) => event.preventDefault()}
         footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
       >
         <DrivePublicationList
+          error={loadError}
           items={items}
           loading={loading}
           onPublicationDeployed={onPublicationDeployed}
@@ -1420,71 +1426,277 @@ function DrivePublicationsDialog({
 }
 
 function DrivePublicationList({
+  error,
   items,
   loading,
   onPublicationDeployed,
   onReload,
 }: {
+  readonly error: string | null
   readonly items: readonly DrivePublicationDto[]
   readonly loading: boolean
   readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
   readonly onReload: () => Promise<void>
 }) {
-  if (loading) return <div className="text-sm text-muted-foreground">加载中</div>
-  if (items.length === 0) return <div className="text-sm text-muted-foreground">暂无发布</div>
+  if (loading) return <DrivePublicationTableSkeleton />
+  if (error) return <DriveDialogErrorState message={error} onRetry={onReload} />
+  if (items.length === 0) return <DriveDialogEmptyState title="暂无发布" />
 
   return (
-    <div className="flex flex-col gap-2">
-      {items.map((item) => (
-        <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border p-2">
-          <DrivePublicationSummary item={item} />
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`复制 ${item.name}`}
-              onClick={() => { void copyDriveUrl(item.url) }}
-            >
-              <Copy />
-            </Button>
-            {item.status === "active" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`打开 ${item.name}`}
-                onClick={() => { void openDriveUrl(item.url) }}
-              >
-                <ExternalLink />
-              </Button>
-            ) : null}
-            {item.status === "active" && !item.sourceDeleted ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`重新发布 ${item.name}`}
-                onClick={() => { void redeployDrivePublication(item.id, onReload, onPublicationDeployed) }}
-              >
-                <RotateCw />
-              </Button>
-            ) : null}
-            {item.status === "active" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`取消发布 ${item.name}`}
-                onClick={() => { void disableDrivePublication(item.id, onReload) }}
-              >
-                <X />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ))}
+    <Table className="min-w-[640px] table-fixed">
+      <DrivePublicationTableHeader />
+      <TableBody>
+        {items.map((item) => (
+          <TableRow key={item.id}>
+            <TableCell>
+              <div className="truncate font-medium">{item.name}</div>
+            </TableCell>
+            <TableCell>
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
+                <Badge variant="outline">{item.type === "site" ? "站点" : "网页"}</Badge>
+                <Badge variant={item.status === "active" ? "secondary" : "outline"}>
+                  {item.status === "active" ? "已发布" : "已取消"}
+                </Badge>
+              </div>
+            </TableCell>
+            <TableCell>
+              <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatDriveDateTime(item.updatedAt)}
+            </TableCell>
+            <TableCell>
+              <DrivePublicationActions
+                item={item}
+                onPublicationDeployed={onPublicationDeployed}
+                onReload={onReload}
+              />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+function DrivePublicationTableHeader() {
+  return (
+    <TableHeader>
+      <TableRow className="hover:bg-transparent">
+        <TableHead>名称</TableHead>
+        <TableHead className="w-40">类型 / 状态</TableHead>
+        <TableHead className="w-28">来源</TableHead>
+        <TableHead className="w-40">时间</TableHead>
+        <TableHead className="w-32 text-right">操作</TableHead>
+      </TableRow>
+    </TableHeader>
+  )
+}
+
+function DriveShareTableHeader() {
+  return (
+    <TableHeader>
+      <TableRow className="hover:bg-transparent">
+        <TableHead>名称</TableHead>
+        <TableHead className="w-24">类型</TableHead>
+        <TableHead className="w-28">来源</TableHead>
+        <TableHead className="w-40">时间</TableHead>
+        <TableHead className="w-28 text-right">操作</TableHead>
+      </TableRow>
+    </TableHeader>
+  )
+}
+
+function DrivePublicationActions({
+  item,
+  onPublicationDeployed,
+  onReload,
+}: {
+  readonly item: DrivePublicationDto
+  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
+  readonly onReload: () => Promise<void>
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <DriveIconAction
+        label={`复制 ${item.name}`}
+        tooltip="复制链接"
+        onClick={() => { void copyDriveUrl(item.url) }}
+      >
+        <Copy />
+      </DriveIconAction>
+      {item.status === "active" && !item.sourceDeleted ? (
+        <DriveIconAction
+          label={`打开 ${item.name}`}
+          tooltip="打开"
+          onClick={() => { void openDriveUrl(item.url) }}
+        >
+          <ExternalLink />
+        </DriveIconAction>
+      ) : null}
+      {item.status === "active" && !item.sourceDeleted ? (
+        <DriveIconAction
+          label={`重新发布 ${item.name}`}
+          tooltip="重新发布"
+          onClick={() => { void redeployDrivePublication(item.id, onReload, onPublicationDeployed) }}
+        >
+          <RotateCw />
+        </DriveIconAction>
+      ) : null}
+      {item.status === "active" ? (
+        <DriveIconAction
+          label={`取消发布 ${item.name}`}
+          tooltip="取消发布"
+          onClick={() => { void disableDrivePublication(item.id, onReload) }}
+        >
+          <X />
+        </DriveIconAction>
+      ) : null}
     </div>
+  )
+}
+
+function DriveShareActions({
+  item,
+  onReload,
+}: {
+  readonly item: DriveShareListItemDto
+  readonly onReload: () => Promise<void>
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <DriveIconAction
+        label={`复制 ${item.itemName}`}
+        tooltip="复制链接"
+        onClick={() => { void copyDriveUrl(item.url) }}
+      >
+        <Copy />
+      </DriveIconAction>
+      {!item.sourceDeleted ? (
+        <DriveIconAction
+          label={`打开 ${item.itemName}`}
+          tooltip="打开"
+          onClick={() => { void openDriveUrl(item.url) }}
+        >
+          <ExternalLink />
+        </DriveIconAction>
+      ) : null}
+      <DriveIconAction
+        label={`取消分享 ${item.itemName}`}
+        tooltip="取消分享"
+        onClick={() => { void disableDriveShare(item.shareId, onReload) }}
+      >
+        <X />
+      </DriveIconAction>
+    </div>
+  )
+}
+
+function DriveIconAction({
+  children,
+  label,
+  onClick,
+  tooltip,
+}: {
+  readonly children: ReactNode
+  readonly label: string
+  readonly onClick: () => void
+  readonly tooltip: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={label}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function DriveSourceBadge({ sourceDeleted }: { readonly sourceDeleted: boolean }) {
+  return (
+    <Badge variant={sourceDeleted ? "outline" : "secondary"}>
+      {sourceDeleted ? "来源已删除" : "来源正常"}
+    </Badge>
+  )
+}
+
+function DriveDialogErrorState({
+  message,
+  onRetry,
+}: {
+  readonly message: string
+  readonly onRetry: () => Promise<void>
+}) {
+  return (
+    <Empty className="min-h-40 border">
+      <EmptyHeader>
+        <EmptyTitle>读取失败</EmptyTitle>
+        <EmptyDescription>{message}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button type="button" size="sm" variant="outline" onClick={() => { void onRetry() }}>
+          <RefreshCw data-icon="inline-start" />
+          重试
+        </Button>
+      </EmptyContent>
+    </Empty>
+  )
+}
+
+function DriveDialogEmptyState({ title }: { readonly title: string }) {
+  return (
+    <Empty className="min-h-40 border">
+      <EmptyHeader>
+        <EmptyTitle>{title}</EmptyTitle>
+      </EmptyHeader>
+    </Empty>
+  )
+}
+
+function DrivePublicationTableSkeleton() {
+  return (
+    <Table className="min-w-[640px] table-fixed">
+      <DrivePublicationTableHeader />
+      <TableBody>
+        {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
+          <TableRow key={row}>
+            <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
+            <TableCell><Skeleton className="h-5 w-28" /></TableCell>
+            <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-28" /></TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+function DriveShareTableSkeleton() {
+  return (
+    <Table className="min-w-[600px] table-fixed">
+      <DriveShareTableHeader />
+      <TableBody>
+        {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
+          <TableRow key={row}>
+            <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
+            <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+            <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 
@@ -1524,26 +1736,6 @@ function DrivePublicationSuccessDialog({
         </div>
       </FormDialog>
     </Dialog>
-  )
-}
-
-function DrivePublicationSummary({ item }: { readonly item: DrivePublicationDto }) {
-  return (
-    <div className="min-w-0 flex-1">
-      <div className="truncate text-sm font-medium">{item.name}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        <Badge variant="outline">{item.type === "site" ? "站点" : "网页"}</Badge>
-        <Badge variant={item.status === "active" ? "secondary" : "outline"}>
-          {item.status === "active" ? "已发布" : "已取消"}
-        </Badge>
-        <span className="text-xs text-muted-foreground">
-          {item.sourceDeleted ? "来源已删除" : "来源正常"}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {formatDriveDateTime(item.updatedAt)}
-        </span>
-      </div>
-    </div>
   )
 }
 
@@ -1595,13 +1787,17 @@ function DriveSharesDialog({
 }) {
   const [items, setItems] = useState<DriveShareListItemDto[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadShares = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       setItems(await requireSynapseBridge().account.listDriveShares())
     } catch (rawError) {
-      toast(errorMessage(rawError, "已分享加载失败"))
+      const message = errorMessage(rawError, "已分享加载失败")
+      setLoadError(message)
+      toast(message)
     } finally {
       setLoading(false)
     }
@@ -1615,83 +1811,56 @@ function DriveSharesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <FormDialog
         title="已分享"
+        contentClassName="sm:max-w-2xl"
         onSubmit={(event) => event.preventDefault()}
         footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
       >
-        <DriveShareList items={items} loading={loading} onReload={loadShares} />
+        <DriveShareList error={loadError} items={items} loading={loading} onReload={loadShares} />
       </FormDialog>
     </Dialog>
   )
 }
 
 function DriveShareList({
+  error,
   items,
   loading,
   onReload,
 }: {
+  readonly error: string | null
   readonly items: readonly DriveShareListItemDto[]
   readonly loading: boolean
   readonly onReload: () => Promise<void>
 }) {
-  if (loading) return <div className="text-sm text-muted-foreground">加载中</div>
-  if (items.length === 0) return <div className="text-sm text-muted-foreground">暂无分享</div>
+  if (loading) return <DriveShareTableSkeleton />
+  if (error) return <DriveDialogErrorState message={error} onRetry={onReload} />
+  if (items.length === 0) return <DriveDialogEmptyState title="暂无分享" />
 
   return (
-    <div className="flex flex-col gap-2">
-      {items.map((item) => (
-        <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border p-2">
-          <DriveShareSummary item={item} />
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`复制 ${item.itemName}`}
-              onClick={() => { void copyDriveUrl(item.url) }}
-            >
-              <Copy />
-            </Button>
-            {!item.sourceDeleted ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`打开 ${item.itemName}`}
-                onClick={() => { void openDriveUrl(item.url) }}
-              >
-                <ExternalLink />
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`取消分享 ${item.itemName}`}
-              onClick={() => { void disableDriveShare(item.shareId, onReload) }}
-            >
-              <X />
-            </Button>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function DriveShareSummary({ item }: { readonly item: DriveShareListItemDto }) {
-  return (
-    <div className="min-w-0 flex-1">
-      <div className="truncate text-sm font-medium">{item.itemName}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>
-        <span className="text-xs text-muted-foreground">
-          {item.sourceDeleted ? "来源已删除" : "来源正常"}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {formatDriveDateTime(item.createdAt)}
-        </span>
-      </div>
-    </div>
+    <Table className="min-w-[600px] table-fixed">
+      <DriveShareTableHeader />
+      <TableBody>
+        {items.map((item) => (
+          <TableRow key={item.id}>
+            <TableCell>
+              <div className="truncate font-medium">{item.itemName}</div>
+            </TableCell>
+            <TableCell>
+              <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>
+            </TableCell>
+            <TableCell>
+              <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatDriveDateTime(item.createdAt)}
+            </TableCell>
+            <TableCell>
+              <DriveShareActions item={item} onReload={onReload} />
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 
