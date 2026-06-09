@@ -95,6 +95,7 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
       return "Thinking"
     case "toolCall":
     case "toolResult":
+    case "toolProgress":
       return "工具"
     case "permissionRequest":
       if (isAskUserQuestionEntry(entry)) return "待回答"
@@ -126,6 +127,10 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       const content = entry.content?.trim()
       return content ? redactSensitiveText(content) : entry.toolName
     }
+    case "toolProgress":
+      return entry.status === "stopped"
+        ? "已停止，工具未执行"
+        : `正在准备 ${entry.toolName}${entry.inputCharCount > 0 ? ` · ${entry.inputCharCount} B` : ""}`
     case "permissionRequest": {
       const permissionEntry = entry
       if (isAskUserQuestionEntry(permissionEntry)) {

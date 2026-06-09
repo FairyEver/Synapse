@@ -8,6 +8,7 @@ import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
   SynapseAgentTimelineItem,
+  SynapseAgentToolProgressTimelineItem,
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { AgentMessageEvent } from "./agent-message-event"
@@ -56,6 +57,8 @@ function AgentTimelineItem({
     case "toolCall":
     case "toolResult":
       return <AgentToolEvent item={item} result={toolResult} profile={profile} />
+    case "toolProgress":
+      return <AgentToolProgressEvent item={item} />
     case "permissionRequest": {
       const hasPendingRequest = pendingPermissions.some((p) => p.requestId === item.requestId)
       const isPending = hasPendingRequest && (latestPendingItemIds?.has(item.id) ?? true)
@@ -125,6 +128,37 @@ function AgentTimelineItem({
       return exhaustive
     }
   }
+}
+
+function AgentToolProgressEvent({ item }: { readonly item: SynapseAgentToolProgressTimelineItem }) {
+  const size = formatInputSize(item.inputCharCount)
+  return (
+    <AgentAnnotation>
+      <div className="flex min-w-0 items-center gap-2 px-0 py-1 text-xs text-muted-foreground">
+        <Info className="size-3.5 shrink-0" />
+        <span className="truncate">
+          {item.status === "stopped" ? "已停止，工具未执行" : `正在准备 ${item.toolName}`}
+        </span>
+        {item.status === "preparing" && size ? (
+          <Badge variant="secondary" className="h-5 shrink-0 text-xs">
+            {size}
+          </Badge>
+        ) : null}
+      </div>
+    </AgentAnnotation>
+  )
+}
+
+function formatInputSize(chars: number): string | undefined {
+  if (chars <= 0) return undefined
+  if (chars < 1024) return `${chars} B`
+  const kb = chars / 1024
+  if (kb < 1024) return `${formatSizeNumber(kb)} KB`
+  return `${formatSizeNumber(kb / 1024)} MB`
+}
+
+function formatSizeNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
 }
 
 function isAskUserQuestionItem(item: SynapseAgentTimelineItem): boolean {

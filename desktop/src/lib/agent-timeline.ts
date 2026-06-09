@@ -4,6 +4,7 @@ import type {
   SynapseAgentMessageTimelineItem,
   SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
+  SynapseAgentToolProgressTimelineItem,
   SynapseAgentUserQuestion,
 } from "../types/agent"
 
@@ -232,6 +233,9 @@ export function appendAgentTimelineEvent(
   })
   const last = current.at(-1)
   if (event.type === "stream") {
+    const toolProgress = toolProgressFromStreamEvent(event, item, timestamp)
+    if (toolProgress) return appendToolProgress(current, toolProgress, event, timestamp)
+
     const kind = streamKind(event)
     if (kind === "text" && item.kind === "message") {
       if (item.content.length === 0) return [...current]
@@ -268,6 +272,20 @@ export function appendAgentTimelineEvent(
     return [...current]
   }
   if (isEmptyTimelineItem(item)) return [...current]
+  if (event.type === "toolUse" && item.kind === "toolCall") {
+    const progressIndex = matchingToolProgressIndex(current, item)
+    if (progressIndex !== -1) {
+      return [
+        ...current.slice(0, progressIndex),
+        item,
+        ...current.slice(progressIndex + 1),
+      ]
+    }
+  }
+  if (event.type === "error") {
+    const withStoppedProgress = markInFlightToolProgressStopped(current, timestamp)
+    return [...withStoppedProgress, item]
+  }
   if (event.type === "text" && item.kind === "message" && last?.kind === "message" && last.role === "assistant") {
     return [...current.slice(0, -1), { ...last, content: `${last.content}${item.content}`, timestamp }]
   }
@@ -334,6 +352,111 @@ export function appendAgentTimelineEvent(
   return [...current, item]
 }
 
+function toolProgressFromStreamEvent(
+  event: Extract<SynapseAgentEvent, { type: "stream" }>,
+  item: SynapseAgentTimelineItem,
+  timestamp: string,
+): SynapseAgentToolProgressTimelineItem | null {
+  const eventType = stringValue(event.event?.type)
+  const contentBlock = recordValue(event.event?.content_block)
+  const isToolStart = eventType === "content_block_start" && stringValue(contentBlock?.type) === "tool_use"
+  const isToolInput = event.deltaType === "input_json_delta"
+  if (!isToolStart && !isToolInput && eventType !== "content_block_stop") return null
+  const toolName = event.toolName ?? stringValue(contentBlock?.name)
+  const toolUseId = event.toolUseId ?? stringValue(contentBlock?.id)
+  return {
+    id: `event:${timestamp}:toolProgress:${event.blockIndex ?? "unknown"}`,
+    kind: "toolProgress",
+    timestamp,
+    agentType: item.agentType,
+    sdkSessionId: item.sdkSessionId,
+    agentSessionId: item.agentSessionId,
+    threadId: item.threadId,
+    ...(toolUseId ? { toolUseId } : {}),
+    toolName: toolName ?? "工具",
+    ...(typeof event.blockIndex === "number" ? { blockIndex: event.blockIndex } : {}),
+    inputCharCount: isToolInput ? toolInputDeltaLength(event) : 0,
+    status: "preparing",
+  }
+}
+
+function appendToolProgress(
+  current: readonly SynapseAgentTimelineItem[],
+  progress: SynapseAgentToolProgressTimelineItem,
+  event: Extract<SynapseAgentEvent, { type: "stream" }>,
+  timestamp: string,
+): SynapseAgentTimelineItem[] {
+  if (stringValue(event.event?.type) === "content_block_stop") {
+    const progressIndex = matchingToolProgressIndex(current, progress)
+    return progressIndex === -1
+      ? [...current]
+      : [
+          ...current.slice(0, progressIndex),
+          ...current.slice(progressIndex + 1),
+        ]
+  }
+  const progressIndex = matchingToolProgressIndex(current, progress)
+  if (progressIndex === -1) return [...current, progress]
+  const existing = current[progressIndex]
+  if (existing?.kind !== "toolProgress") return [...current]
+  const next: SynapseAgentToolProgressTimelineItem = {
+    ...existing,
+    timestamp,
+    toolName: existing.toolName === "工具" ? progress.toolName : existing.toolName,
+    inputCharCount: existing.inputCharCount + progress.inputCharCount,
+    status: "preparing",
+  }
+  return [
+    ...current.slice(0, progressIndex),
+    next,
+    ...current.slice(progressIndex + 1),
+  ]
+}
+
+function toolInputDeltaLength(event: Extract<SynapseAgentEvent, { type: "stream" }>): number {
+  if (typeof event.inputJsonDeltaLength === "number") return Math.max(0, event.inputJsonDeltaLength)
+  return Math.max(0, event.partialJson?.length ?? 0)
+}
+
+function markInFlightToolProgressStopped(
+  current: readonly SynapseAgentTimelineItem[],
+  timestamp: string,
+): SynapseAgentTimelineItem[] {
+  const progressIndex = latestInFlightToolProgressIndex(current)
+  if (progressIndex === -1) return [...current]
+  const progress = current[progressIndex]
+  if (progress?.kind !== "toolProgress" || progress.status !== "preparing") return [...current]
+  return [
+    ...current.slice(0, progressIndex),
+    { ...progress, status: "stopped" as const, timestamp },
+    ...current.slice(progressIndex + 1),
+  ]
+}
+
+function matchingToolProgressIndex(
+  items: readonly SynapseAgentTimelineItem[],
+  target: { readonly toolUseId?: string; readonly blockIndex?: number },
+): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind !== "toolProgress") continue
+    if (target.toolUseId && item.toolUseId === target.toolUseId) return index
+    if (typeof target.blockIndex === "number" && item.blockIndex === target.blockIndex) return index
+  }
+  return -1
+}
+
+function latestInFlightToolProgressIndex(items: readonly SynapseAgentTimelineItem[]): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind === "toolProgress" && item.status === "preparing") return index
+    if (item?.kind === "toolCall" || item?.kind === "toolResult" || (item?.kind === "message" && item.role === "user")) {
+      return -1
+    }
+  }
+  return -1
+}
+
 function latestAssistantMessageIndex(items: readonly SynapseAgentTimelineItem[]): number {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
@@ -386,6 +509,7 @@ function isTimelineMergeBoundary(item: SynapseAgentTimelineItem): boolean {
   return item.kind === "toolCall"
     || item.kind === "toolResult"
     || item.kind === "permissionRequest"
+    || item.kind === "toolProgress"
     || item.kind === "error"
     || item.kind === "result"
 }

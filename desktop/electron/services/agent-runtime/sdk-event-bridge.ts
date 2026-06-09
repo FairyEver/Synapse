@@ -287,17 +287,26 @@ function streamDeltaFields(event: Record<string, unknown>): {
   readonly text?: string
   readonly thinking?: string
   readonly partialJson?: string
+  readonly inputJsonDeltaLength?: number
+  readonly toolUseId?: string
+  readonly toolName?: string
 } {
   const delta = isRecord(event.delta) ? event.delta : undefined
   const deltaType = stringValue(delta?.type)
+  const rawPartialJson = stringValue(delta?.partial_json)
+  const contentBlock = isRecord(event.content_block) ? event.content_block : undefined
+  const toolUse = stringValue(contentBlock?.type) === "tool_use" ? contentBlock : undefined
   return {
     blockIndex: numberValue(event.index),
     deltaType,
     text: deltaType === "text_delta" ? stringValue(delta?.text) : undefined,
     thinking: deltaType === "thinking_delta" ? stringValue(delta?.thinking) : undefined,
     partialJson: deltaType === "input_json_delta"
-      ? redactPartialJson(stringValue(delta?.partial_json))
+      ? redactPartialJson(rawPartialJson)
       : undefined,
+    inputJsonDeltaLength: deltaType === "input_json_delta" ? rawPartialJson?.length : undefined,
+    toolUseId: stringValue(toolUse?.id),
+    toolName: stringValue(toolUse?.name),
   }
 }
 

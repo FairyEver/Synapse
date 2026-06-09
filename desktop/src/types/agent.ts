@@ -115,6 +115,9 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       text?: string
       thinking?: string
       partialJson?: string
+      inputJsonDeltaLength?: number
+      toolUseId?: string
+      toolName?: string
       event?: Record<string, unknown>
     }
   | {
@@ -165,6 +168,7 @@ export type SynapseAgentTimelineKind =
   | "toolCall"
   | "toolResult"
   | "permissionRequest"
+  | "toolProgress"
   | "error"
   | "result"
   | "phase"
@@ -241,6 +245,15 @@ export interface SynapseAgentPermissionRequestTimelineItem extends SynapseAgentT
   readonly questions?: readonly SynapseAgentUserQuestion[]
 }
 
+export interface SynapseAgentToolProgressTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "toolProgress"
+  readonly toolUseId?: string
+  readonly toolName: string
+  readonly blockIndex?: number
+  readonly inputCharCount: number
+  readonly status: "preparing" | "stopped"
+}
+
 export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "error"
   readonly message: string
@@ -284,6 +297,7 @@ export type SynapseAgentTimelineItem =
   | SynapseAgentToolCallTimelineItem
   | SynapseAgentToolResultTimelineItem
   | SynapseAgentPermissionRequestTimelineItem
+  | SynapseAgentToolProgressTimelineItem
   | SynapseAgentErrorTimelineItem
   | SynapseAgentResultTimelineItem
   | SynapseAgentPhaseTimelineItem

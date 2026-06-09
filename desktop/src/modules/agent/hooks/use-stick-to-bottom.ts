@@ -61,6 +61,8 @@ export function latestTimelineContentSignal(item: SynapseAgentTimelineItem | und
       return `${item.kind}:${item.toolName}:${item.status ?? "unknown"}:${String(item.success)}:${item.content?.length ?? 0}`
     case "toolCall":
       return `${item.kind}:${item.toolName}:${item.toolInput?.length ?? 0}`
+    case "toolProgress":
+      return `${item.kind}:${item.toolName}:${item.status}:${item.inputCharCount}`
     case "permissionRequest":
       return `${item.kind}:${item.requestId}:${item.toolName}:${item.toolInput?.length ?? 0}`
     case "error":

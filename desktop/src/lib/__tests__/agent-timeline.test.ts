@@ -298,6 +298,98 @@ describe("agent timeline conversion", () => {
     expect(afterEmptyThinking).toEqual([])
   })
 
+  it("shows SDK tool input streaming as a single progress item", () => {
+    const started = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-write",
+      toolName: "Write",
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "toolu-write", name: "Write" },
+      },
+    }, "2026-05-14T00:00:05.000Z", "claude")
+    const firstChunk = appendAgentTimelineEvent(started, {
+      type: "stream",
+      blockIndex: 1,
+      deltaType: "input_json_delta",
+      inputJsonDeltaLength: 20 * 1024,
+      partialJson: "{\"content\":\"...",
+    }, "2026-05-14T00:00:06.000Z", "claude")
+    const secondChunk = appendAgentTimelineEvent(firstChunk, {
+      type: "stream",
+      blockIndex: 1,
+      deltaType: "input_json_delta",
+      inputJsonDeltaLength: 20 * 1024,
+      partialJson: "more html...",
+    }, "2026-05-14T00:00:07.000Z", "claude")
+
+    expect(secondChunk).toEqual([
+      expect.objectContaining({
+        kind: "toolProgress",
+        toolUseId: "toolu-write",
+        toolName: "Write",
+        blockIndex: 1,
+        inputCharCount: 40 * 1024,
+        status: "preparing",
+      }),
+    ])
+  })
+
+  it("replaces matching tool progress with the final tool call", () => {
+    const progress = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-write",
+      toolName: "Write",
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "toolu-write", name: "Write" },
+      },
+    }, "2026-05-14T00:00:05.000Z", "claude")
+    const after = appendAgentTimelineEvent(progress, {
+      type: "toolUse",
+      toolUseId: "toolu-write",
+      toolName: "Write",
+      toolInput: "{\"file_path\":\"/tmp/a.html\"}",
+    }, "2026-05-14T00:00:08.000Z", "claude")
+
+    expect(after.map((item) => item.kind)).toEqual(["toolCall"])
+    expect(after[0]).toEqual(expect.objectContaining({
+      kind: "toolCall",
+      toolUseId: "toolu-write",
+      toolName: "Write",
+    }))
+  })
+
+  it("marks in-flight tool progress as stopped when an error arrives before the tool call", () => {
+    const progress = appendAgentTimelineEvent([], {
+      type: "stream",
+      blockIndex: 1,
+      toolUseId: "toolu-write",
+      toolName: "Write",
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "toolu-write", name: "Write" },
+      },
+    }, "2026-05-14T00:00:05.000Z", "claude")
+    const after = appendAgentTimelineEvent(progress, {
+      type: "error",
+      message: "Agent 在工具调用后中断，发送“继续”可接着执行。",
+      recoverable: true,
+      errorKind: "tool_use_interrupted",
+    }, "2026-05-14T00:00:08.000Z", "claude")
+
+    expect(after[0]).toEqual(expect.objectContaining({
+      kind: "toolProgress",
+      status: "stopped",
+    }))
+    expect(after[1]).toEqual(expect.objectContaining({ kind: "error" }))
+  })
+
   it("keeps interleaved text and thinking stream blocks in event order", () => {
     const textThenThinking = appendAgentTimelineEvent(appendAgentTimelineEvent([], {
       type: "stream",

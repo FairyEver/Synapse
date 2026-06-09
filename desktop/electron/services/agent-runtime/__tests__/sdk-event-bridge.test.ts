@@ -236,6 +236,54 @@ describe("SDK event bridge", () => {
     })
   })
 
+  it("derives tool stream activity from SDK tool content block events", () => {
+    expect(bridgeSdkMessage({
+      type: "stream_event",
+      session_id: "sdk-tool-progress",
+      uuid: "uuid-tool-progress",
+      parent_tool_use_id: null,
+      event: {
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: "toolu-write",
+          name: "Write",
+          input: {},
+        },
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "stream",
+      sdkSessionId: "sdk-tool-progress",
+      blockIndex: 1,
+      toolUseId: "toolu-write",
+      toolName: "Write",
+      ...baseEnvelope,
+    })
+
+    expect(bridgeSdkMessage({
+      type: "stream_event",
+      session_id: "sdk-tool-progress",
+      uuid: "uuid-tool-progress-delta",
+      parent_tool_use_id: null,
+      event: {
+        type: "content_block_delta",
+        index: 1,
+        delta: {
+          type: "input_json_delta",
+          partial_json: "{\"content\":\"hello\"}",
+        },
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "stream",
+      sdkSessionId: "sdk-tool-progress",
+      blockIndex: 1,
+      deltaType: "input_json_delta",
+      inputJsonDeltaLength: 19,
+      ...baseEnvelope,
+    })
+  })
+
   it("redacts sensitive values from SDK tool input JSON deltas", () => {
     const event = bridgeSdkMessage({
       type: "stream_event",

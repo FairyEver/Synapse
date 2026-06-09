@@ -137,6 +137,15 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     ...timelineBaseSchema,
+    kind: z.literal("toolProgress"),
+    toolUseId: z.string().optional(),
+    toolName: z.string(),
+    blockIndex: z.number().optional(),
+    inputCharCount: z.number(),
+    status: z.enum(["preparing", "stopped"]),
+  }),
+  z.object({
+    ...timelineBaseSchema,
     kind: z.literal("error"),
     message: z.string(),
     errorKind: agentErrorKindSchema.optional(),
@@ -476,6 +485,9 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     text: z.string().optional(),
     thinking: z.string().optional(),
     partialJson: z.string().optional(),
+    inputJsonDeltaLength: z.number().optional(),
+    toolUseId: z.string().optional(),
+    toolName: z.string().optional(),
     event: jsonRecordSchema.optional(),
   }),
   z.object({

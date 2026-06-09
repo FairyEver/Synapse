@@ -97,6 +97,27 @@ describe("AgentTimeline", () => {
     expect(html).not.toContain("正在处理")
   })
 
+  it("renders tool input progress without exposing partial JSON", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "progress:write",
+        kind: "toolProgress",
+        timestamp: "2026-05-10T00:00:00.000Z",
+        toolName: "Write",
+        toolUseId: "toolu-write",
+        blockIndex: 1,
+        inputCharCount: 40 * 1024,
+        status: "preparing",
+      },
+    ]
+    const text = textFromMarkup(renderTimeline({ items }))
+
+    expect(text).toContain("正在准备 Write")
+    expect(text).toContain("40 KB")
+    expect(text).not.toContain("partial_json")
+    expect(text).not.toContain("content")
+  })
+
   it("does not render the legacy 正在处理 spinner row even when sending=true", () => {
     const html = renderTimeline({ sending: true })
     expect(html).not.toContain("正在处理")
