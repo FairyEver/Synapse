@@ -52,6 +52,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -1286,6 +1287,7 @@ function DriveItemMenu({
   const pagePublication = publicationActions.page
   const sitePublication = publicationActions.site
   const activePublication = item.type === "folder" ? sitePublication : pagePublication
+  const hasPublicationItems = isHtmlDriveItem(item) || item.type === "folder" || Boolean(activePublication)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -1294,28 +1296,37 @@ function DriveItemMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {hasPublicationItems ? (
+          <>
+            <DropdownMenuGroup>
+              {isHtmlDriveItem(item) ? (
+                <DropdownMenuItem onClick={() => onPublishPage(item)}>
+                  {pagePublication ? "重新发布网页" : "发布网页"}
+                </DropdownMenuItem>
+              ) : null}
+              {item.type === "folder" ? (
+                <DropdownMenuItem onClick={() => onPublishSite(item)}>
+                  {sitePublication ? "重新发布站点" : "发布站点"}
+                </DropdownMenuItem>
+              ) : null}
+              {activePublication ? (
+                <DropdownMenuItem onClick={() => onDisablePublication(activePublication.id)}>
+                  取消发布
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        {item.activeShareId ? (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => onDisableShare(item)}>取消分享</DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuGroup>
-          {isHtmlDriveItem(item) ? (
-            <DropdownMenuItem onClick={() => onPublishPage(item)}>
-              <Globe2 data-icon="inline-start" />
-              {pagePublication ? "重新发布网页" : "发布网页"}
-            </DropdownMenuItem>
-          ) : null}
-          {item.type === "folder" ? (
-            <DropdownMenuItem onClick={() => onPublishSite(item)}>
-              <Globe2 data-icon="inline-start" />
-              {sitePublication ? "重新发布站点" : "发布站点"}
-            </DropdownMenuItem>
-          ) : null}
-          {activePublication ? (
-            <DropdownMenuItem onClick={() => onDisablePublication(activePublication.id)}>
-              <X data-icon="inline-start" />
-              取消发布
-            </DropdownMenuItem>
-          ) : null}
-          {item.activeShareId ? (
-            <DropdownMenuItem onClick={() => onDisableShare(item)}>取消分享</DropdownMenuItem>
-          ) : null}
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
         </DropdownMenuGroup>
@@ -1382,7 +1393,7 @@ function DrivePublicationList({
   return (
     <div className="flex flex-col gap-2">
       {items.map((item) => (
-        <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border p-2">
+        <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border p-2">
           <DrivePublicationSummary item={item} />
           <div className="flex shrink-0 items-center gap-1">
             <Button
@@ -1436,7 +1447,7 @@ function DrivePublicationList({
 
 function DrivePublicationSummary({ item }: { readonly item: DrivePublicationDto }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 flex-1">
       <div className="truncate text-sm font-medium">{item.name}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1">
         <Badge variant="outline">{item.type === "site" ? "站点" : "网页"}</Badge>
@@ -1507,7 +1518,7 @@ function DriveShareList({
   return (
     <div className="flex flex-col gap-2">
       {items.map((item) => (
-        <div key={item.id} className="flex items-center justify-between gap-3 rounded-md border p-2">
+        <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-md border p-2">
           <DriveShareSummary item={item} />
           <div className="flex shrink-0 items-center gap-1">
             <Button
@@ -1548,7 +1559,7 @@ function DriveShareList({
 
 function DriveShareSummary({ item }: { readonly item: DriveShareListItemDto }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 flex-1">
       <div className="truncate text-sm font-medium">{item.itemName}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1">
         <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>

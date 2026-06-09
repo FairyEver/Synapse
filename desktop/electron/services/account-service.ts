@@ -86,6 +86,10 @@ function apiBaseUrl(): string {
   return SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.apiBaseUrl
 }
 
+function publicAppUrl(): string {
+  return SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl
+}
+
 export function getAccountApiBaseUrl(): string {
   return apiBaseUrl()
 }
@@ -97,6 +101,22 @@ function apiMode(): "production" | "development" {
 async function dashboardLoginUrl(baseUrl: string, state: string, codeChallenge: string): Promise<string> {
   const { buildDesktopDashboardLoginUrl } = await sharedUrlsPromise
   return buildDesktopDashboardLoginUrl({ apiBaseUrl: baseUrl, state, codeChallenge })
+}
+
+async function withCurrentDriveShareUrl<T extends { readonly shareId: string; readonly url: string }>(item: T): Promise<T> {
+  const { buildDriveShareUrl } = await sharedUrlsPromise
+  return {
+    ...item,
+    url: buildDriveShareUrl({ publicAppUrl: publicAppUrl(), shareId: item.shareId }),
+  }
+}
+
+async function withCurrentDrivePublicationUrl<T extends DrivePublicationDto>(item: T): Promise<T> {
+  const { buildDrivePublicationUrl } = await sharedUrlsPromise
+  return {
+    ...item,
+    url: buildDrivePublicationUrl({ publicAppUrl: publicAppUrl(), publishId: item.publishId, type: item.type }),
+  }
 }
 
 function isLocalApiBaseUrl(value: string): boolean {
@@ -278,7 +298,8 @@ export class AccountService {
   }
 
   async shareDriveItem(itemId: string): Promise<DriveShareDto> {
-    return this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, undefined, "分享失败。")
+    const share = await this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, undefined, "分享失败。")
+    return withCurrentDriveShareUrl(share)
   }
 
   async disableDriveShare(shareId: string): Promise<{ ok: true }> {
@@ -451,19 +472,23 @@ export class AccountService {
   }
 
   async listDrivePublications(): Promise<DrivePublicationDto[]> {
-    return this.getAuthenticatedJson<DrivePublicationDto[]>(`${apiBaseUrl()}/drive/publications`, "发布列表加载失败。")
+    const publications = await this.getAuthenticatedJson<DrivePublicationDto[]>(`${apiBaseUrl()}/drive/publications`, "发布列表加载失败。")
+    return Promise.all(publications.map(withCurrentDrivePublicationUrl))
   }
 
   async publishDrivePage(itemId: string): Promise<DrivePublicationDto> {
-    return this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, undefined, "发布网页失败。")
+    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, undefined, "发布网页失败。")
+    return withCurrentDrivePublicationUrl(publication)
   }
 
   async publishDriveSite(itemId: string): Promise<DrivePublicationDto> {
-    return this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, undefined, "发布站点失败。")
+    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, undefined, "发布站点失败。")
+    return withCurrentDrivePublicationUrl(publication)
   }
 
   async redeployDrivePublication(publicationId: string): Promise<DrivePublicationDto> {
-    return this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/publications/${encodeURIComponent(publicationId)}/redeploy`, undefined, "重新发布失败。")
+    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/publications/${encodeURIComponent(publicationId)}/redeploy`, undefined, "重新发布失败。")
+    return withCurrentDrivePublicationUrl(publication)
   }
 
   async disableDrivePublication(publicationId: string): Promise<{ ok: true }> {
@@ -471,11 +496,15 @@ export class AccountService {
   }
 
   async getDriveDeleteImpact(itemId: string): Promise<DriveDeleteImpactDto> {
-    return this.getAuthenticatedJson<DriveDeleteImpactDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/delete-impact`, "删除影响加载失败。")
+    const impact = await this.getAuthenticatedJson<DriveDeleteImpactDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/delete-impact`, "删除影响加载失败。")
+    return {
+      publications: await Promise.all(impact.publications.map(withCurrentDrivePublicationUrl)),
+    }
   }
 
   async listDriveShares(): Promise<DriveShareListItemDto[]> {
-    return this.getAuthenticatedJson<DriveShareListItemDto[]>(`${apiBaseUrl()}/drive/shares`, "分享列表加载失败。")
+    const shares = await this.getAuthenticatedJson<DriveShareListItemDto[]>(`${apiBaseUrl()}/drive/shares`, "分享列表加载失败。")
+    return Promise.all(shares.map(withCurrentDriveShareUrl))
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {

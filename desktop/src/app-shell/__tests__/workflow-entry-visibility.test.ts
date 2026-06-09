@@ -9,4 +9,9 @@ describe("workflow entry visibility", () => {
     expect(isWorkflowEntryVisible({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: false })).toBe(false)
     expect(isWorkflowEntryVisible({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })).toBe(true)
   })
+
+  it("shows the workflow entry when the app config enables it by default", () => {
+    expect(isWorkflowEntryVisible({}, { visibleByDefault: true })).toBe(true)
+    expect(isWorkflowEntryVisible({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: false }, { visibleByDefault: true })).toBe(true)
+  })
 })

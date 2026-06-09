@@ -959,7 +959,7 @@ describe("AccountService", () => {
       status: "active",
       sourceItemId: "item-1",
       sourceDeleted: false,
-      url: "https://synapse.test/pages/pub_public",
+      url: "https://synapse.d2.pub/pages/pub_public",
       currentDeploymentId: "dep-1",
       createdAt: "2026-06-09T00:00:00.000Z",
       updatedAt: "2026-06-09T00:00:00.000Z",
@@ -971,9 +971,12 @@ describe("AccountService", () => {
       itemName: "report.html",
       itemType: "file",
       sourceDeleted: false,
-      url: "https://synapse.test/share/share_public",
+      url: "https://synapse.d2.pub/files/share_public",
       createdAt: "2026-06-09T00:00:00.000Z",
     }
+    const expectedPagePublication = { ...publication, url: `${expectedPublicAppUrl}/pages/pub_public` }
+    const expectedSitePublication = { ...publication, type: "site", url: `${expectedPublicAppUrl}/sites/pub_public/` }
+    const expectedShare = { ...share, url: `${expectedPublicAppUrl}/files/share_public` }
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url, init) => {
         const method = init?.method ?? "GET"
@@ -1006,13 +1009,13 @@ describe("AccountService", () => {
     expect(attempt).toBeTruthy()
     await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
 
-    await expect(service.listDrivePublications()).resolves.toEqual([publication])
-    await expect(service.publishDrivePage("item-1")).resolves.toEqual(publication)
-    await expect(service.publishDriveSite("folder-1")).resolves.toEqual({ ...publication, type: "site" })
-    await expect(service.redeployDrivePublication("pub-row-1")).resolves.toEqual(publication)
+    await expect(service.listDrivePublications()).resolves.toEqual([expectedPagePublication])
+    await expect(service.publishDrivePage("item-1")).resolves.toEqual(expectedPagePublication)
+    await expect(service.publishDriveSite("folder-1")).resolves.toEqual(expectedSitePublication)
+    await expect(service.redeployDrivePublication("pub-row-1")).resolves.toEqual(expectedPagePublication)
     await expect(service.disableDrivePublication("pub-row-1")).resolves.toEqual({ ok: true })
-    await expect(service.getDriveDeleteImpact("item-1")).resolves.toEqual({ publications: [publication] })
-    await expect(service.listDriveShares()).resolves.toEqual([share])
+    await expect(service.getDriveDeleteImpact("item-1")).resolves.toEqual({ publications: [expectedPagePublication] })
+    await expect(service.listDriveShares()).resolves.toEqual([expectedShare])
     await expect(service.deleteDriveItem("item-1", { disablePublications: true })).resolves.toEqual({ ok: true })
 
     expect(calls).toEqual([

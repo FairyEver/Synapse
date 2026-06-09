@@ -234,6 +234,14 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })
 
+  it("routes public drive publication pages and sites through nginx instead of dashboard redirects", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location /pages/")
+    expect(nginx).toContain("location /sites/")
+    expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
   it("forwards public origin and websocket upgrade headers to the api server", () => {
     const nginx = readRepoFile("server/nginx.conf")
 

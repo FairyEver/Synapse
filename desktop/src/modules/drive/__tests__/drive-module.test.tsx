@@ -762,6 +762,38 @@ describe("DriveModule", () => {
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
   })
 
+  it("renders row menu items without icons and separates action groups", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({
+        id: "html-1",
+        name: "report.html",
+        type: "file",
+        mimeType: "text/html",
+        shared: true,
+        activeShareId: "share-row-1",
+      }),
+    ])
+    mocks.listDrivePublications.mockResolvedValue([
+      createDrivePublication({ id: "pub-row-1", sourceItemId: "html-1", name: "report.html", type: "page" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.html")
+
+    const menu = document.body.querySelector<HTMLElement>("[role='menu']")
+    expect(menu).not.toBeNull()
+    expect(menu?.querySelectorAll("[role='menuitem'] svg")).toHaveLength(0)
+    expect(menu?.querySelectorAll("[role='separator']").length).toBeGreaterThanOrEqual(2)
+    expect(menuItemTexts()).toEqual([
+      "重新发布网页",
+      "取消发布",
+      "取消分享",
+      "重命名",
+      "移动",
+    ])
+  })
+
   it("shows redeploy and cancel publication for active sites", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "folder-1", name: "site", type: "folder" }),

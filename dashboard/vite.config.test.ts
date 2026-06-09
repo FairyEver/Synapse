@@ -35,4 +35,19 @@ describe("dashboard Vite dev proxy", () => {
       changeOrigin: true,
     }))
   })
+
+  it("proxies public drive publication endpoints through /pages and /sites", () => {
+    const proxy = config.server?.proxy
+    const pagesProxy = proxy && !Array.isArray(proxy) ? proxy["/pages"] : undefined
+    const sitesProxy = proxy && !Array.isArray(proxy) ? proxy["/sites"] : undefined
+
+    expect(pagesProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
+    expect(sitesProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
+  })
 })

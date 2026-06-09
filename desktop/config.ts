@@ -21,6 +21,9 @@ export const APP_NAVIGATION_TABS = [
   { id: "settings", label: "设置" },
 ] as const
 
+// 工作流入口默认显示开关：为 true 时所有用户直接看到工作流入口；为 false 时继续通过金手指状态控制入口显隐。
+export const WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT = false
+
 // 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
 export const DEFAULT_APP_NAVIGATION_TAB_ID = "skill" satisfies AppNavigationTabId
 
