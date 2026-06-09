@@ -229,6 +229,10 @@ const updateTaskRequestSchema = z.object({
 const taskIdRequestSchema = z.object({
   taskId: z.string().min(1),
 })
+const migrateTaskResultSchema = z.object({
+  automationId: z.string().min(1),
+  deletedTaskId: z.string().min(1),
+})
 
 type TaskIdRequest = z.infer<typeof taskIdRequestSchema>
 type CreateTaskInput = z.infer<typeof createTaskInputSchema>
@@ -306,6 +310,18 @@ export const taskSchedulerIpcModule: IpcModule = {
         "task-scheduler.ipc.delete-task",
         { taskId: request.taskId },
         () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").deleteTask(request.taskId),
+      ),
+    },
+    migrateTaskToAutomation: {
+      channel: "synapse:task-scheduler:tasks:migrate-to-automation",
+      kind: "invoke",
+      request: taskIdRequestSchema,
+      response: migrateTaskResultSchema,
+      handler: async (ctx, request: TaskIdRequest) => loggedSchedulerIpc(
+        "synapse:task-scheduler:tasks:migrate-to-automation",
+        "task-scheduler.ipc.migrate-task-to-automation",
+        { taskId: request.taskId },
+        () => ctx.resolve<TaskSchedulerService>("core.task-scheduler").migrateTaskToAutomation(request.taskId),
       ),
     },
     setTaskEnabled: {

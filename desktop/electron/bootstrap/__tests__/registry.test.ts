@@ -174,6 +174,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.action-runtime",
       "core.event-bus",
+      "core.automation",
     ])
     expect(byId.get("core.automation")?.dependsOn).toEqual([
       "core.data-repository",

@@ -3,8 +3,13 @@ import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import type { EventBus } from "../../runtime/event-bus"
 import type { TaskSchedulerExecutionService } from "./execution-service"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import type { AutomationService } from "../automation"
 import type { ScheduledTaskRunRepository } from "./run-repository"
 import type { ScheduledTaskRepository } from "./task-repository"
+import {
+  migrateTaskToAutomation as migrateScheduledTaskToAutomation,
+  type ScheduledTaskMigrationResult,
+} from "./task-automation-migration"
 import type {
   ScheduledTaskEntry,
   ScheduledTaskCreateInput,
@@ -25,6 +30,7 @@ export interface TaskSchedulerServiceDeps {
   readonly actions: MainActionRegistry
   readonly execution: TaskSchedulerExecutionService
   readonly defaultCwd: string
+  readonly automation?: AutomationService
   readonly eventBus?: Pick<EventBus, "emit">
   readonly logger?: StructuredLogger
   readonly now?: () => Date
@@ -322,6 +328,18 @@ export class TaskSchedulerService {
 
   runTaskNow(id: string): Promise<ScheduledTaskRunEntry | null> {
     return this.runNow(id)
+  }
+
+  async migrateTaskToAutomation(taskId: string): Promise<ScheduledTaskMigrationResult> {
+    if (!this.deps.automation) {
+      throw new Error("Automation service is unavailable")
+    }
+    return migrateScheduledTaskToAutomation({
+      taskId,
+      scheduler: this,
+      automation: this.deps.automation,
+      logger: this.deps.logger,
+    })
   }
 
   async stopRun(runId: string): Promise<{ readonly stopped: boolean }> {

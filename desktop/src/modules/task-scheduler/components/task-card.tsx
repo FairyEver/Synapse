@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeft,
   History,
   Pencil,
   Play,
@@ -33,7 +34,9 @@ type TaskCardProps = {
   onToggleEnabled: (enabled: boolean) => void
   onEdit: () => void
   onHistory: () => void
+  onMigrate: () => void
   onDelete: () => void
+  migrateDisabled?: boolean
 }
 
 function getStatusBadge(task: ScheduledTask): {
@@ -77,7 +80,9 @@ function TaskCard({
   onToggleEnabled,
   onEdit,
   onHistory,
+  onMigrate,
   onDelete,
+  migrateDisabled,
 }: TaskCardProps) {
   const needsUpdate = task.validation?.status === "needs_update"
   const disabled = !task.enabled
@@ -191,6 +196,20 @@ function TaskCard({
             </Button>
           </TooltipTrigger>
           <TooltipContent>历史</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={migrateDisabled}
+              aria-label="迁移到自动化"
+              onClick={onMigrate}
+            >
+              <ArrowRightLeft className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>迁移到自动化</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>

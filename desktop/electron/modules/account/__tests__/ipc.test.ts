@@ -351,6 +351,12 @@ describe("accountIpcModule", () => {
       itemId: "item-1",
       disablePublications: true,
     })).toEqual({ itemId: "item-1", disablePublications: true })
+    const listDrivePublicationsResponse = accountIpcModule.methods.listDrivePublications.response
+    const getDriveDeleteImpactResponse = accountIpcModule.methods.getDriveDeleteImpact.response
+    const listDriveSharesResponse = accountIpcModule.methods.listDriveShares.response
+    if (!listDrivePublicationsResponse || !getDriveDeleteImpactResponse || !listDriveSharesResponse) {
+      throw new Error("Expected drive IPC response schemas to be registered")
+    }
 
     const publication = {
       id: "pub-row-1",
@@ -365,11 +371,11 @@ describe("accountIpcModule", () => {
       createdAt: "2026-06-09T00:00:00.000Z",
       updatedAt: "2026-06-09T00:00:00.000Z",
     }
-    expect(accountIpcModule.methods.listDrivePublications.response.parse([publication]))
+    expect(listDrivePublicationsResponse.parse([publication]))
       .toEqual([publication])
-    expect(accountIpcModule.methods.getDriveDeleteImpact.response.parse({ publications: [publication] }))
+    expect(getDriveDeleteImpactResponse.parse({ publications: [publication] }))
       .toEqual({ publications: [publication] })
-    expect(accountIpcModule.methods.listDriveShares.response.parse([{
+    expect(listDriveSharesResponse.parse([{
       id: "share-row-1",
       shareId: "share_public",
       itemId: "item-1",

@@ -13,11 +13,13 @@ describe("TaskCardGrid", () => {
         projects={[]}
         busy
         runningTaskIds={new Set()}
+        migratingTaskIds={new Set()}
         onRun={noopTaskHandler}
         onStop={noopTaskHandler}
         onToggleEnabled={noopTaskHandler}
         onEdit={noopTaskHandler}
         onHistory={noopTaskHandler}
+        onMigrate={noopTaskHandler}
         onDelete={noopTaskHandler}
         onCreateNew={noopTaskHandler}
       />,

@@ -212,6 +212,7 @@ import type {
   ScheduledTask,
   ScheduledTaskChangedEvent,
   ScheduledTaskCreateInput,
+  ScheduledTaskMigrationResult,
   ScheduledTaskRun,
   ScheduledTaskUpdateInput,
 } from "./task-scheduler"
@@ -950,6 +951,7 @@ export type SynapseBridge = {
     createTask: (input: ScheduledTaskCreateInput) => Promise<ScheduledTask>
     updateTask: (payload: { id: string; patch: ScheduledTaskUpdateInput }) => Promise<ScheduledTask>
     deleteTask: (id: string) => Promise<{ deleted: boolean }>
+    migrateTaskToAutomation: (id: string) => Promise<ScheduledTaskMigrationResult>
     setTaskEnabled: (payload: { id: string; enabled: boolean }) => Promise<ScheduledTask>
     runTask: (id: string) => Promise<ScheduledTaskRun | null>
     stopRun: (runId: string) => Promise<{ stopped: boolean }>

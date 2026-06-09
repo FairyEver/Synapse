@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   createTaskRequest: vi.fn(),
   exportTasksToFile: vi.fn(),
   importTasksFromFile: vi.fn(),
+  migrateTaskToAutomation: vi.fn(),
   notify: vi.fn(),
   runTask: vi.fn(),
   stopRun: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock("../hooks/use-task-scheduler", async () => {
     createTask: mocks.createTaskRequest,
     exportTasksToFile: mocks.exportTasksToFile,
     importTasksFromFile: mocks.importTasksFromFile,
+    migrateTaskToAutomation: mocks.migrateTaskToAutomation,
     runTask: mocks.runTask,
     stopRun: mocks.stopRun,
     useTaskSchedulerTasks: mocks.useTaskSchedulerTasks,
@@ -293,8 +295,118 @@ describe("TaskSchedulerModule", () => {
 
     expect(html).toContain('aria-label="编辑"')
     expect(html).toContain('aria-label="历史"')
+    expect(html).toContain('aria-label="迁移到自动化"')
     expect(html).toContain('aria-label="删除"')
     expect(html).not.toContain("更多操作")
+  })
+
+  it("confirms migration and calls the bridge", async () => {
+    const refresh = vi.fn()
+    mocks.migrateTaskToAutomation.mockResolvedValueOnce({
+      automationId: "automation:1",
+      deletedTaskId: "task-1",
+    })
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({ id: "task-1", name: "Daily build" })],
+      loading: false,
+      error: null,
+      refresh,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    await clickButtonByLabel("迁移到自动化")
+
+    expect(document.body.textContent).toContain("迁移成功后，此任务会被删除。运行历史不会迁移。")
+
+    await clickButtonByText("迁移")
+
+    expect(mocks.migrateTaskToAutomation).toHaveBeenCalledWith("task-1")
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows running-task migration copy", async () => {
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({
+        id: "task-1",
+        activeRun: { status: "running", id: "run-1" },
+      })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    await clickButtonByLabel("迁移到自动化")
+
+    expect(document.body.textContent).toContain("将先停止当前运行。迁移成功后，此任务会被删除。运行历史不会迁移。")
+  })
+
+  it("shows needs-update migration copy", async () => {
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({
+        id: "task-1",
+        validation: {
+          status: "needs_update",
+          issues: [{ field: "action.config.command", message: "命令不能为空" }],
+        },
+      })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    await clickButtonByLabel("迁移到自动化")
+
+    expect(document.body.textContent).toContain("新自动化会保持停用。迁移成功后，此任务会被删除。运行历史不会迁移。")
+  })
+
+  it("keeps the migration dialog open when migration fails", async () => {
+    mocks.migrateTaskToAutomation.mockRejectedValueOnce(new Error("failed"))
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({ id: "task-1" })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    await clickButtonByLabel("迁移到自动化")
+    await clickButtonByText("迁移")
+
+    expect(document.body.textContent).toContain("迁移成功后，此任务会被删除。运行历史不会迁移。")
   })
 
   it("disables deleting a task while it is running", async () => {
@@ -842,6 +954,25 @@ describe("TaskSchedulerModule", () => {
     expect(JSON.stringify(mocks.rendererLogger.warn.mock.calls)).not.toContain("secret prompt")
   })
 })
+
+async function clickButtonByLabel(label: string): Promise<void> {
+  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  expect(button).toBeTruthy()
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function clickButtonByText(text: string): Promise<void> {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  expect(button).toBeTruthy()
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+}
 
 function createTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
   return {
