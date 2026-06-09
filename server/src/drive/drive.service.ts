@@ -608,9 +608,8 @@ export class DriveService {
   }
 
   private async findOrCreatePublication(userId: string, sourceItemId: string, type: string, name: string): Promise<DrivePublicationRecord> {
-    const existing = await this.prisma.drivePublication.findFirst({
-      where: { userId, sourceItemId, type, status: DRIVE_PUBLICATION_STATUS.active },
-    })
+    const activeSourceWhere = { userId, sourceItemId, type, status: DRIVE_PUBLICATION_STATUS.active }
+    const existing = await this.prisma.drivePublication.findFirst({ where: activeSourceWhere })
     if (existing) return existing
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -627,6 +626,8 @@ export class DriveService {
         })
       } catch (error) {
         if (!isUniqueConstraintError(error)) throw error
+        const racedPublication = await this.prisma.drivePublication.findFirst({ where: activeSourceWhere })
+        if (racedPublication) return racedPublication
       }
     }
     throw new Error("Unable to create unique drive publish id.")

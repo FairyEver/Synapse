@@ -37,6 +37,7 @@ CREATE TABLE "DrivePublicationAsset" (
 );
 
 CREATE UNIQUE INDEX "DrivePublication_publishId_key" ON "DrivePublication"("publishId");
+CREATE UNIQUE INDEX "DrivePublication_active_source_unique" ON "DrivePublication"("userId", "sourceItemId", "type") WHERE "status" = 'active' AND "sourceItemId" IS NOT NULL;
 CREATE INDEX "DrivePublication_userId_createdAt_idx" ON "DrivePublication"("userId", "createdAt");
 CREATE INDEX "DrivePublication_sourceItemId_status_idx" ON "DrivePublication"("sourceItemId", "status");
 CREATE INDEX "DrivePublication_status_idx" ON "DrivePublication"("status");

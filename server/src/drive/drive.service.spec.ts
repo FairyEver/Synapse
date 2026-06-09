@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
@@ -141,6 +142,73 @@ describe("DriveService", () => {
     const assets = await prisma.drivePublicationAsset.findMany({ where: { publicationId: publication.id } })
     expect(assets).toMatchObject([{ relativePath: "index.html", sourceItemId: file.id, contentType: "text/html" }])
     expect(publication.currentDeploymentId).toBe(assets[0]?.deploymentId)
+  })
+
+  it("returns the existing active publication when source uniqueness races", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const existing = await prisma.drivePublication.create({
+      data: {
+        userId: "user-1",
+        sourceItemId: file.id,
+        type: "page",
+        name: "report.html",
+        status: "active",
+        publishId: "pub_existing",
+      },
+    })
+    const findFirst = prisma.drivePublication.findFirst
+    let activeLookupCount = 0
+    prisma.drivePublication.findFirst = async (args: any) => {
+      if (args.where?.sourceItemId === file.id && args.where?.type === "page" && args.where?.status === "active") {
+        activeLookupCount += 1
+        if (activeLookupCount === 1) return null
+      }
+      return findFirst(args)
+    }
+    const create = prisma.drivePublication.create
+    prisma.drivePublication.create = async (args: any) => {
+      if (args.data?.sourceItemId === file.id && args.data?.type === "page") {
+        throw uniqueConstraintError(["userId", "sourceItemId", "type"])
+      }
+      return create(args)
+    }
+
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    expect(publication.id).toBe(existing.id)
+    expect(publication.publishId).toBe("pub_existing")
+    const publications = await prisma.drivePublication.findMany({ where: { userId: "user-1", sourceItemId: file.id, type: "page" } })
+    expect(publications).toHaveLength(1)
+  })
+
+  it("retries publication creation when only the publish id collides", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const create = prisma.drivePublication.create
+    let createCount = 0
+    prisma.drivePublication.create = async (args: any) => {
+      createCount += 1
+      if (createCount === 1) throw uniqueConstraintError(["publishId"])
+      return create(args)
+    }
+
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    expect(publication.id).toMatch(/^publication-/u)
+    expect(createCount).toBe(2)
   })
 
   it("rejects non-html page publication", async () => {
@@ -393,7 +461,23 @@ function createPrismaMemory() {
 
   const prisma: any = {
     $transaction: async (input: any) => {
-      if (typeof input === "function") return input(prisma)
+      if (typeof input === "function") {
+        const snapshots = [
+          [items, cloneMap(items)],
+          [usages, cloneMap(usages)],
+          [sessions, cloneMap(sessions)],
+          [shares, cloneMap(shares)],
+          [publications, cloneMap(publications)],
+          [publicationDeployments, cloneMap(publicationDeployments)],
+          [publicationAssets, cloneMap(publicationAssets)],
+        ] as const
+        try {
+          return await input(prisma)
+        } catch (error) {
+          for (const [target, snapshot] of snapshots) restoreMap(target, snapshot)
+          throw error
+        }
+      }
       return Promise.all(input)
     },
     user: {
@@ -621,6 +705,15 @@ function selectFields(row: any, select: any) {
   return result
 }
 
+function cloneMap<T>(value: Map<string, T>): Map<string, T> {
+  return new Map([...value.entries()].map(([key, row]) => [key, typeof row === "object" && row !== null ? { ...row } as T : row]))
+}
+
+function restoreMap<T>(target: Map<string, T>, snapshot: Map<string, T>): void {
+  target.clear()
+  for (const [key, value] of snapshot.entries()) target.set(key, value)
+}
+
 function orderRows(rows: any[], orderBy: any): any[] {
   if (!orderBy) return rows
   const entries = Array.isArray(orderBy) ? orderBy : [orderBy]
@@ -632,5 +725,13 @@ function orderRows(rows: any[], orderBy: any): any[] {
       return direction === "desc" ? -comparison : comparison
     }
     return 0
+  })
+}
+
+function uniqueConstraintError(target: readonly string[]): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+    code: "P2002",
+    clientVersion: "test",
+    meta: { target },
   })
 }
