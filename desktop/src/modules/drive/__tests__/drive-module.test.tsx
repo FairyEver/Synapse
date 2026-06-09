@@ -17,11 +17,14 @@ const mocks = vi.hoisted(() => ({
   createDriveFolder: vi.fn(),
   deleteDriveItem: vi.fn(),
   disableDriveShare: vi.fn(),
+  filePathForDroppedFile: vi.fn(),
   listDriveItems: vi.fn(),
   moveDriveItem: vi.fn(),
+  prepareDriveFolderUpload: vi.fn(),
   prepareDriveUpload: vi.fn(),
   renameDriveItem: vi.fn(),
   shareDriveItem: vi.fn(),
+  uploadDriveLocalItems: vi.fn(),
   toast: vi.fn(),
   uploadDrivePreparedFile: vi.fn(),
   writeClipboardText: vi.fn(),
@@ -72,12 +75,14 @@ vi.mock("@/lib/electron-bridge", () => ({
       createDriveFolder: mocks.createDriveFolder,
       deleteDriveItem: mocks.deleteDriveItem,
       disableDriveShare: mocks.disableDriveShare,
+      filePathForDroppedFile: mocks.filePathForDroppedFile,
       listDriveItems: mocks.listDriveItems,
       moveDriveItem: mocks.moveDriveItem,
-      prepareDriveFolderUpload: vi.fn(),
+      prepareDriveFolderUpload: mocks.prepareDriveFolderUpload,
       prepareDriveUpload: mocks.prepareDriveUpload,
       renameDriveItem: mocks.renameDriveItem,
       shareDriveItem: mocks.shareDriveItem,
+      uploadDriveLocalItems: mocks.uploadDriveLocalItems,
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
     },
   }),
@@ -98,8 +103,13 @@ beforeEach(() => {
   mocks.createDriveFolder.mockResolvedValue(createDriveItem({ id: "folder-1", name: "E2E" }))
   mocks.deleteDriveItem.mockResolvedValue({ ok: true })
   mocks.disableDriveShare.mockResolvedValue({ ok: true })
+  mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.listDriveItems.mockResolvedValue([])
   mocks.moveDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file" }))
+  mocks.prepareDriveFolderUpload.mockResolvedValue({
+    root: createDriveItem({ id: "folder-root", name: "folder", type: "folder", size: "0" }),
+    entries: [],
+  })
   mocks.prepareDriveUpload.mockResolvedValue({
     item: createDriveItem({ id: "file-1", name: "report.txt", type: "file", size: "6" }),
     sessionId: "upload-session-1",
@@ -112,6 +122,7 @@ beforeEach(() => {
   })
   mocks.renameDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "renamed.txt", type: "file" }))
   mocks.shareDriveItem.mockResolvedValue({ id: "share-row-1", shareId: "shr_test", itemId: "file-1", enabled: true, url: "https://synapse.test/files/shr_test", createdAt: "2026-06-07T00:00:00.000Z" })
+  mocks.uploadDriveLocalItems.mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
   mocks.writeClipboardText.mockResolvedValue(undefined)
 })
@@ -364,15 +375,16 @@ describe("DriveModule", () => {
     expect(mocks.createDriveFolder).not.toHaveBeenCalled()
   })
 
-  it("uploads selected files through the desktop bridge", async () => {
+  it("uploads selected files through the unified local upload bridge without reading file bodies", async () => {
     await render(<DriveModule />)
 
     const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
     if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
     const file = new File(["report"], "report.txt", { type: "text/plain" })
+    const arrayBuffer = vi.fn(async () => new TextEncoder().encode("report").buffer)
     Object.defineProperty(file, "arrayBuffer", {
       configurable: true,
-      value: vi.fn(async () => new TextEncoder().encode("report").buffer),
+      value: arrayBuffer,
     })
     Object.defineProperty(input, "files", {
       configurable: true,
@@ -384,20 +396,152 @@ describe("DriveModule", () => {
       await flushPromises()
     })
 
-    expect(mocks.prepareDriveUpload).toHaveBeenCalledWith({
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
       parentId: null,
-      name: "report.txt",
-      size: "6",
-      mimeType: "text/plain",
+      items: [{
+        kind: "file",
+        path: "/tmp/report.txt",
+        name: "report.txt",
+        mimeType: "text/plain",
+      }],
     })
-    expect(mocks.uploadDrivePreparedFile).toHaveBeenCalledWith(expect.objectContaining({
-      headers: { "Content-Type": "text/plain" },
-      method: "PUT",
-      url: "https://upload.example.test/object",
-    }))
-    expect(mocks.uploadDrivePreparedFile.mock.calls[0]?.[0].body.byteLength).toBe(6)
-    expect(mocks.completeDriveUpload).toHaveBeenCalledWith({ sessionId: "upload-session-1" })
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(mocks.prepareDriveUpload).not.toHaveBeenCalled()
+    expect(mocks.uploadDrivePreparedFile).not.toHaveBeenCalled()
+    expect(mocks.completeDriveUpload).not.toHaveBeenCalled()
     expect(mocks.toast).toHaveBeenCalledWith("已上传 1 个文件")
+  })
+
+  it("uploads selected files into the current folder", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    await render(<DriveModule />)
+    await flushAct()
+    await clickText("作业范文")
+    await flushAct()
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    const file = new File(["nested"], "nested.txt", { type: "text/plain" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith(expect.objectContaining({
+      parentId: "folder-1",
+    }))
+  })
+
+  it("uploads selected folders through the same local upload bridge", async () => {
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[webkitdirectory]')
+    if (!(input instanceof HTMLInputElement)) throw new Error("Folder input not found")
+    const first = new File(["alpha"], "a.md", { type: "text/markdown" })
+    const second = new File(["beta"], "b.md", { type: "" })
+    Object.defineProperty(first, "webkitRelativePath", {
+      configurable: true,
+      value: "项目A/a.md",
+    })
+    Object.defineProperty(second, "webkitRelativePath", {
+      configurable: true,
+      value: "项目A/docs/b.md",
+    })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [first, second],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        files: [
+          { path: "/tmp/a.md", relativePath: "a.md", mimeType: "text/markdown" },
+          { path: "/tmp/b.md", relativePath: "docs/b.md", mimeType: null },
+        ],
+      }],
+    })
+    expect(mocks.prepareDriveFolderUpload).not.toHaveBeenCalled()
+    expect(mocks.uploadDrivePreparedFile).not.toHaveBeenCalled()
+  })
+
+  it("uploads dropped files through the unified local upload bridge", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const dropzone = getDriveDropzone()
+    const file = new File(["drop"], "drop.txt", { type: "text/plain" })
+    dispatchDragEvent(dropzone, "dragenter", createDataTransfer({ files: [file] }))
+
+    expect(document.body.textContent).toContain("松开上传到 根目录")
+
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({ files: [file] }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: null,
+      items: [{
+        kind: "file",
+        path: "/tmp/drop.txt",
+        name: "drop.txt",
+        mimeType: "text/plain",
+      }],
+    })
+  })
+
+  it("preserves top-level dragged folders and uploads all dropped items", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const looseFile = new File(["loose"], "loose.txt", { type: "text/plain" })
+    const first = new File(["alpha"], "a.md", { type: "text/markdown" })
+    const second = new File(["beta"], "b.md", { type: "" })
+    const dropzone = getDriveDropzone()
+
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({
+      items: [
+        createFileTransferItem(looseFile),
+        createDirectoryTransferItem("项目A", [
+          createFileEntry("a.md", first),
+          createDirectoryEntry("docs", [
+            createFileEntry("b.md", second),
+          ]),
+        ]),
+      ],
+    }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: null,
+      items: [
+        { kind: "file", path: "/tmp/loose.txt", name: "loose.txt", mimeType: "text/plain" },
+        {
+          kind: "folder",
+          folderName: "项目A",
+          files: [
+            { path: "/tmp/a.md", relativePath: "a.md", mimeType: "text/markdown" },
+            { path: "/tmp/b.md", relativePath: "docs/b.md", mimeType: null },
+          ],
+        },
+      ],
+    })
   })
 
   it("shows cancel share when a shared item keeps its active share id", async () => {
@@ -601,6 +745,78 @@ function getTableRow(text: string): HTMLTableRowElement {
     .find((candidate) => candidate.textContent?.includes(text))
   if (!row) throw new Error(`Table row not found: ${text}`)
   return row
+}
+
+function getDriveDropzone(): HTMLElement {
+  const dropzone = document.querySelector<HTMLElement>('[data-testid="drive-file-list-dropzone"]')
+  if (!dropzone) throw new Error("Drive dropzone not found")
+  return dropzone
+}
+
+function createDataTransfer({
+  files = [],
+  items,
+}: {
+  readonly files?: readonly File[]
+  readonly items?: readonly unknown[]
+}): DataTransfer {
+  return {
+    dropEffect: "none",
+    files,
+    items: items ?? [],
+    types: ["Files"],
+  } as unknown as DataTransfer
+}
+
+function dispatchDragEvent(target: HTMLElement, type: string, dataTransfer: DataTransfer): void {
+  act(() => {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, "dataTransfer", {
+      configurable: true,
+      value: dataTransfer,
+    })
+    target.dispatchEvent(event)
+  })
+}
+
+function createFileTransferItem(file: File): unknown {
+  return {
+    webkitGetAsEntry: () => createFileEntry(file.name, file),
+  }
+}
+
+function createDirectoryTransferItem(name: string, entries: readonly unknown[]): unknown {
+  return {
+    webkitGetAsEntry: () => createDirectoryEntry(name, entries),
+  }
+}
+
+function createFileEntry(name: string, file: File): unknown {
+  return {
+    isDirectory: false,
+    isFile: true,
+    name,
+    file: (success: (nextFile: File) => void) => success(file),
+  }
+}
+
+function createDirectoryEntry(name: string, entries: readonly unknown[]): unknown {
+  let read = false
+  return {
+    isDirectory: true,
+    isFile: false,
+    name,
+    createReader: () => ({
+      readEntries: (success: (nextEntries: unknown[]) => void) => {
+        if (read) {
+          success([])
+          return
+        }
+        read = true
+        success([...entries])
+      },
+    }),
+  }
 }
 
 async function openFirstMenu(): Promise<void> {
