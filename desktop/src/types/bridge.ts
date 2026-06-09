@@ -27,6 +27,38 @@ import type {
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
+
+export type DriveLocalUploadFileItem = {
+  readonly kind: "file"
+  readonly path: string
+  readonly name: string
+  readonly mimeType?: string | null
+}
+
+export type DriveLocalUploadFolderItem = {
+  readonly kind: "folder"
+  readonly folderName: string
+  readonly files: Array<{
+    readonly path: string
+    readonly relativePath: string
+    readonly mimeType?: string | null
+  }>
+}
+
+export type DriveLocalUploadItem = DriveLocalUploadFileItem | DriveLocalUploadFolderItem
+
+export type DriveLocalUploadRequest = {
+  readonly parentId?: string | null
+  readonly items: DriveLocalUploadItem[]
+}
+
+export type DriveLocalUploadResult = {
+  readonly completed: number
+  readonly failed: number
+  readonly skipped: number
+  readonly message?: string
+}
+
 import type {
   SynapseLiveState,
   SynapseLiveStateChangedEvent,
@@ -627,6 +659,8 @@ export type SynapseBridge = {
     prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
     completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>
     uploadDrivePreparedFile: (input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }) => Promise<{ ok: true }>
+    uploadDriveLocalItems: (input: DriveLocalUploadRequest) => Promise<DriveLocalUploadResult>
+    filePathForDroppedFile: (file: File) => string | null
     cancelDriveUpload: (input: { sessionId: string }) => Promise<{ ok: true }>
     createDriveFolder: (input: { parentId?: string | null; name: string }) => Promise<DriveItemDto>
     renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>

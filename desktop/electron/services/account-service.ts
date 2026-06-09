@@ -8,6 +8,10 @@ import type {
   SynapseAccountState,
 } from "../../src/types/account"
 import type {
+  DriveLocalUploadRequest,
+  DriveLocalUploadResult,
+} from "../../src/types/bridge"
+import type {
   DashboardWebhookDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
@@ -216,6 +220,10 @@ export class AccountService {
     })
     if (!response.ok) throw await createHttpError(input.method, input.url, response, "上传失败。")
     return { ok: true }
+  }
+
+  async uploadDriveLocalItems(_input: DriveLocalUploadRequest): Promise<DriveLocalUploadResult> {
+    throw new Error("Local drive upload pipeline is unavailable.")
   }
 
   async cancelDriveUpload(sessionId: string): Promise<{ ok: true }> {

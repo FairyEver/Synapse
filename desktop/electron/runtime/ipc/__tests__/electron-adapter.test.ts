@@ -89,4 +89,58 @@ describe("createElectronTransportInstall", () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sk-live")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("/Users/liyang")
   })
+
+  it("redacts local path-like fields from failed IPC invoke request logs", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const { createElectronTransportInstall } = await import("../electron-adapter")
+    const install = createElectronTransportInstall({ logger })
+
+    install("synapse:account:drive:uploads:local-items", async () => {
+      throw new Error("Local drive upload pipeline is unavailable.")
+    })
+
+    const handler = electronMock.handlers.get("synapse:account:drive:uploads:local-items")
+    await expect(handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
+      parentId: "folder-1",
+      items: [
+        {
+          kind: "file",
+          path: "/Users/alice/Secrets/report.txt",
+          name: "report.txt",
+          mimeType: "text/plain",
+        },
+        {
+          kind: "folder",
+          folderName: "Secrets",
+          files: [
+            {
+              path: "/Users/alice/Secrets/nested/report.txt",
+              relativePath: "nested/report.txt",
+              mimeType: "text/plain",
+            },
+          ],
+        },
+      ],
+      itemPaths: ["/Users/alice/Secrets/report.txt"],
+    })).rejects.toThrow("Local drive upload pipeline is unavailable.")
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "IPC invoke failed.",
+      expect.objectContaining({
+        channel: "synapse:account:drive:uploads:local-items",
+        request: expect.objectContaining({
+          parentId: "folder-1",
+          items: expect.any(Array),
+          itemPaths: expect.any(Array),
+        }),
+      }),
+    )
+
+    const serializedLog = JSON.stringify(logger.error.mock.calls)
+    expect(serializedLog).not.toContain("/Users/alice/Secrets/report.txt")
+    expect(serializedLog).not.toContain("/Users/alice/Secrets")
+    expect(serializedLog).not.toContain("nested/report.txt")
+    expect(serializedLog).not.toContain("report.txt")
+    expect(serializedLog).not.toContain("Secrets")
+  })
 })

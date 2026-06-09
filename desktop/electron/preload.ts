@@ -5,7 +5,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import type { SynapseBridge } from "../src/types/bridge"
+import type { DriveLocalUploadRequest, SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
 import type { OpenAgentSessionPayload } from "../src/types/agent-navigation"
 import type { SynapseAccountStateChangedEvent } from "../src/types/account"
@@ -302,6 +302,7 @@ const IPC_CHANNELS = {
     "prepareDriveFolderUpload": "synapse:account:drive:uploads:folder:prepare",
     "completeDriveUpload": "synapse:account:drive:uploads:complete",
     "uploadDrivePreparedFile": "synapse:account:drive:uploads:put",
+    "uploadDriveLocalItems": "synapse:account:drive:uploads:local-items",
     "cancelDriveUpload": "synapse:account:drive:uploads:cancel",
     "createDriveFolder": "synapse:account:drive:folders:create",
     "renameDriveItem": "synapse:account:drive:items:rename",
@@ -488,6 +489,25 @@ function writeRendererIpcFailureLog(channel: string, args: unknown, error: unkno
   }).catch(() => undefined)
 }
 
+function summarizeDriveLocalUploadRequest(input: unknown): unknown {
+  if (!input || typeof input !== "object") {
+    return { inputType: typeof input }
+  }
+  const request = input as Partial<DriveLocalUploadRequest>
+  const items = Array.isArray(request.items) ? request.items : []
+  const fileCount = items.reduce((count, item) => {
+    if (!item || typeof item !== "object") return count
+    if (item.kind === "file") return count + 1
+    if (item.kind === "folder" && Array.isArray(item.files)) return count + item.files.length
+    return count
+  }, 0)
+  return {
+    parentId: typeof request.parentId === "string" || request.parentId === null ? request.parentId : undefined,
+    itemCount: items.length,
+    fileCount,
+  }
+}
+
 // Helper to create invoke wrapper
 const invoke = (channel: string) => async (args?: unknown) => {
   const startedAt = performance.now()
@@ -496,6 +516,21 @@ const invoke = (channel: string) => async (args?: unknown) => {
   } catch (error) {
     if (channel !== IPC_CHANNELS.log.write) {
       writeRendererIpcFailureLog(channel, args, error, Math.round(performance.now() - startedAt))
+    }
+    throw error
+  }
+}
+
+const invokeWithFailureLogRequest = (
+  channel: string,
+  describeRequest: (args: unknown) => unknown,
+) => async (args?: unknown) => {
+  const startedAt = performance.now()
+  try {
+    return await ipcRenderer.invoke(channel, args)
+  } catch (error) {
+    if (channel !== IPC_CHANNELS.log.write) {
+      writeRendererIpcFailureLog(channel, describeRequest(args), error, Math.round(performance.now() - startedAt))
     }
     throw error
   }
@@ -529,6 +564,11 @@ const synapseBridge: SynapseBridge = {
     prepareDriveFolderUpload: invoke(IPC_CHANNELS.account.prepareDriveFolderUpload),
     completeDriveUpload: invoke(IPC_CHANNELS.account.completeDriveUpload),
     uploadDrivePreparedFile: invoke(IPC_CHANNELS.account.uploadDrivePreparedFile),
+    uploadDriveLocalItems: invokeWithFailureLogRequest(
+      IPC_CHANNELS.account.uploadDriveLocalItems,
+      summarizeDriveLocalUploadRequest,
+    ),
+    filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
     cancelDriveUpload: invoke(IPC_CHANNELS.account.cancelDriveUpload),
     createDriveFolder: invoke(IPC_CHANNELS.account.createDriveFolder),
     renameDriveItem: invoke(IPC_CHANNELS.account.renameDriveItem),
