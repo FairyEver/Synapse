@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite"
 import { migrateUsageAnalysisCostsToCny } from "./currency-migration"
-import { migrateDefaultUsagePriceRules } from "./pricing"
+import { initModelPriceSchema } from "../model-price"
 
 export function initUsageAnalysisSchema(database: DatabaseSync): void {
   database.exec(`
@@ -224,7 +224,7 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
     }
   }
   migrateUsageAnalysisCostsToCny(database)
-  migrateDefaultUsagePriceRules(database)
+  initModelPriceSchema(database)
 }
 
 function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string): void {
