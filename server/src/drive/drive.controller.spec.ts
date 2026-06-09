@@ -1,24 +1,35 @@
+import { Readable } from "node:stream"
 import { type INestApplication, NotFoundException, UnauthorizedException } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
+import type { DrivePublicationDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { DrivePublicController, DriveUserController } from "./drive.controller"
 import { DriveService } from "./drive.service"
 
-type SupertestResponse = { readonly text: string; readonly headers: Record<string, string> }
-type SupertestChain = {
+type SupertestResponse = { readonly body: unknown; readonly text: string; readonly headers: Record<string, string> }
+type SupertestRequest = {
+  readonly send: (body: unknown) => SupertestRequest
   readonly expect: (status: number) => Promise<SupertestResponse>
 }
 const request = require("supertest") as (server: unknown) => {
-  readonly get: (path: string) => SupertestChain
-  readonly post: (path: string) => { readonly send: (body: unknown) => SupertestChain }
+  readonly get: (path: string) => SupertestRequest
+  readonly post: (path: string) => SupertestRequest
+  readonly delete: (path: string) => SupertestRequest
 }
 
 describe("DriveController", () => {
   let app: INestApplication | null = null
+  const originalPagesPublicUrl = process.env.PAGES_PUBLIC_URL
   const drive = {
     listItems: vi.fn(),
     prepareFolderUpload: vi.fn(),
+    listPublications: vi.fn(),
+    publishPage: vi.fn(),
+    publishSite: vi.fn(),
+    redeployPublication: vi.fn(),
+    disablePublication: vi.fn(),
+    resolvePublishedAsset: vi.fn(),
     resolvePublicShare: vi.fn(),
     listPublicFolderChildren: vi.fn(),
     createDownloadUrlForShare: vi.fn(),
@@ -28,10 +39,18 @@ describe("DriveController", () => {
   beforeEach(async () => {
     drive.listItems.mockReset()
     drive.prepareFolderUpload.mockReset()
+    drive.listPublications.mockReset()
+    drive.publishPage.mockReset()
+    drive.publishSite.mockReset()
+    drive.redeployPublication.mockReset()
+    drive.disablePublication.mockReset()
+    drive.resolvePublishedAsset.mockReset()
     drive.resolvePublicShare.mockReset()
     drive.listPublicFolderChildren.mockReset()
     drive.createDownloadUrlForShare.mockReset()
     drive.createDownloadUrlForShareChild.mockReset()
+    process.env.PAGES_PUBLIC_URL = originalPagesPublicUrl
+    drive.resolvePublishedAsset.mockRejectedValue(new NotFoundException("网页未找到"))
     drive.resolvePublicShare.mockRejectedValue(new NotFoundException("文件未找到"))
     const moduleRef = await Test.createTestingModule({
       controllers: [DriveUserController, DrivePublicController],
@@ -47,6 +66,7 @@ describe("DriveController", () => {
   afterEach(async () => {
     await app?.close()
     app = null
+    process.env.PAGES_PUBLIC_URL = originalPagesPublicUrl
   })
 
   it("requires user auth for /api/drive/items", async () => {
@@ -84,6 +104,107 @@ describe("DriveController", () => {
     } finally {
       await userApp.close()
     }
+  })
+
+  it("calls publication services through the user API", async () => {
+    process.env.PAGES_PUBLIC_URL = "https://pages.example"
+    const publication = createPublication()
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.listPublications.mockResolvedValue([publication])
+      drive.publishPage.mockResolvedValue(publication)
+      drive.publishSite.mockResolvedValue({ ...publication, type: "site" })
+      drive.redeployPublication.mockResolvedValue(publication)
+      drive.disablePublication.mockResolvedValue({ ok: true })
+
+      await request(userApp.getHttpServer()).get("/api/drive/publications").expect(200)
+      await request(userApp.getHttpServer()).post("/api/drive/items/file-1/publications/page").expect(201)
+      await request(userApp.getHttpServer()).post("/api/drive/items/folder-1/publications/site").expect(201)
+      await request(userApp.getHttpServer()).post("/api/drive/publications/pub-row-1/redeploy").expect(201)
+      await request(userApp.getHttpServer()).delete("/api/drive/publications/pub-row-1").expect(200)
+
+      expect(drive.listPublications).toHaveBeenCalledWith("user-1", "https://pages.example")
+      expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example")
+      expect(drive.publishSite).toHaveBeenCalledWith("user-1", "folder-1", "https://pages.example")
+      expect(drive.redeployPublication).toHaveBeenCalledWith("user-1", "pub-row-1", "https://pages.example")
+      expect(drive.disablePublication).toHaveBeenCalledWith("user-1", "pub-row-1")
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("serves a published page through the server proxy", async () => {
+    drive.resolvePublishedAsset.mockResolvedValue({
+      stream: Readable.from(["<h1>Hello</h1>"]),
+      contentType: "text/html; charset=utf-8",
+      size: 14n,
+    })
+
+    const response = await request(app!.getHttpServer()).get("/pages/pub_page").expect(200)
+    expect(response.text).toBe("<h1>Hello</h1>")
+    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.headers["content-length"]).toBe("14")
+    expect(response.headers["x-content-type-options"]).toBe("nosniff")
+    expect(response.headers["referrer-policy"]).toBe("no-referrer")
+    expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'")
+    expect(drive.resolvePublishedAsset).toHaveBeenCalledWith({
+      publishId: "pub_page",
+      type: "page",
+      relativePath: "index.html",
+    })
+  })
+
+  it("serves site assets through the server proxy", async () => {
+    drive.resolvePublishedAsset.mockResolvedValue({
+      stream: Readable.from(["window.ok = true"]),
+      contentType: "application/javascript; charset=utf-8",
+      size: 16n,
+    })
+
+    const response = await request(app!.getHttpServer()).get("/sites/pub_site/app.js").expect(200)
+    expect(response.text).toBe("window.ok = true")
+    expect(response.headers["content-type"]).toContain("javascript")
+    expect(drive.resolvePublishedAsset).toHaveBeenCalledWith({
+      publishId: "pub_site",
+      type: "site",
+      relativePath: "app.js",
+    })
+  })
+
+  it("redirects site roots and serves the site index for empty asset paths", async () => {
+    drive.resolvePublishedAsset.mockResolvedValue({
+      stream: Readable.from(["<main>Site</main>"]),
+      contentType: "text/html; charset=utf-8",
+      size: 17n,
+    })
+
+    const redirect = await request(app!.getHttpServer()).get("/sites/pub_site").expect(302)
+    expect(redirect.headers.location).toBe("/sites/pub_site/")
+
+    const index = await request(app!.getHttpServer()).get("/sites/pub_site/").expect(200)
+    expect(index.text).toBe("<main>Site</main>")
+    expect(drive.resolvePublishedAsset).toHaveBeenCalledWith({
+      publishId: "pub_site",
+      type: "site",
+      relativePath: "index.html",
+    })
+  })
+
+  it("returns the same public not found text for missing publications", async () => {
+    const response = await request(app!.getHttpServer()).get("/pages/pub_missing").expect(404)
+    expect(response.text).toBe("网页未找到")
+    expect(response.headers["content-type"]).toContain("text/plain")
   })
 
   it("renders public folder children and redirects public file downloads", async () => {
@@ -124,3 +245,20 @@ describe("DriveController", () => {
     expect(childDownload.headers.location).toBe("https://cos.example/child-download")
   })
 })
+
+function createPublication(input: Partial<DrivePublicationDto> = {}): DrivePublicationDto {
+  return {
+    id: "pub-row-1",
+    publishId: "pub_public",
+    type: "page",
+    name: "report.html",
+    status: "active",
+    sourceItemId: "file-1",
+    sourceDeleted: false,
+    url: "https://pages.example/pages/pub_public",
+    currentDeploymentId: "dep-1",
+    createdAt: "2026-06-09T00:00:00.000Z",
+    updatedAt: "2026-06-09T00:00:00.000Z",
+    ...input,
+  }
+}

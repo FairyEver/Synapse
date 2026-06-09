@@ -398,6 +398,35 @@ export class DriveService {
     return { ok: true }
   }
 
+  async resolvePublishedAsset(input: {
+    readonly publishId: string
+    readonly type: "page" | "site"
+    readonly relativePath: string
+  }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly contentType: string; readonly size?: bigint }> {
+    const relativePath = normalizePublicationRelativePath(input.relativePath || DRIVE_PUBLICATION_INDEX_PATH)
+    const publication = await this.prisma.drivePublication.findFirst({
+      where: {
+        publishId: input.publishId,
+        type: input.type,
+        status: DRIVE_PUBLICATION_STATUS.active,
+        currentDeploymentId: { not: null },
+      },
+    })
+    if (!publication?.currentDeploymentId) throw new NotFoundException("网页未找到")
+
+    const asset = await this.prisma.drivePublicationAsset.findUnique({
+      where: { deploymentId_relativePath: { deploymentId: publication.currentDeploymentId, relativePath } },
+    })
+    if (!asset) throw new NotFoundException("网页未找到")
+
+    const object = await this.storage.getObjectStream({ key: asset.storageKey })
+    return {
+      stream: object.stream,
+      size: object.size ?? asset.size,
+      contentType: resolvePublicationContentType(asset.relativePath, object.contentType ?? asset.contentType),
+    }
+  }
+
   async getUsage(userId: string): Promise<DriveUsageDto> {
     const usage = await ensureUsage(this.prisma, userId)
     return {
@@ -846,6 +875,15 @@ function normalizeRelativePath(value: string): string[] {
 function isHtmlDriveItem(name: string, mimeType: string | null): boolean {
   const lowerName = name.toLowerCase()
   return lowerName.endsWith(".html") || lowerName.endsWith(".htm") || mimeType === "text/html"
+}
+
+function resolvePublicationContentType(relativePath: string, stored: string | null | undefined): string {
+  const lowerPath = relativePath.toLowerCase()
+  if (lowerPath.endsWith(".html") || lowerPath.endsWith(".htm")) return "text/html; charset=utf-8"
+  if (lowerPath.endsWith(".css")) return "text/css; charset=utf-8"
+  if (lowerPath.endsWith(".js") || lowerPath.endsWith(".mjs")) return "application/javascript; charset=utf-8"
+  if (lowerPath.endsWith(".json")) return "application/json; charset=utf-8"
+  return stored || "application/octet-stream"
 }
 
 function toDriveShareDto(share: { id: string; shareId: string; itemId: string; enabled: boolean; createdAt: Date }, publicAppUrl: string): DriveShareDto {

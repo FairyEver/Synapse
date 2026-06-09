@@ -115,6 +115,31 @@ export class DriveUserController {
     return this.drive.createShare(request.user!.id, id, resolveRequestPublicAppUrl(request))
   }
 
+  @Get("/publications")
+  listPublications(@Req() request: AuthenticatedUserRequest) {
+    return this.drive.listPublications(request.user!.id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Post("/items/:id/publications/page")
+  publishPage(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.publishPage(request.user!.id, id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Post("/items/:id/publications/site")
+  publishSite(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.publishSite(request.user!.id, id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Post("/publications/:id/redeploy")
+  redeployPublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.redeployPublication(request.user!.id, id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Delete("/publications/:id")
+  disablePublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.disablePublication(request.user!.id, id)
+  }
+
   @Delete("/shares/:id")
   disableShare(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.disableShare(request.user!.id, id)
@@ -154,6 +179,39 @@ export class DriveAdminController {
 @Controller()
 export class DrivePublicController {
   constructor(private readonly drive: DriveService) {}
+
+  @Get("/pages/:publishId")
+  async openPublishedPage(@Param("publishId") publishId: string, @Res() response: Response) {
+    await this.sendPublishedAsset(response, {
+      publishId,
+      type: "page",
+      relativePath: "index.html",
+    })
+  }
+
+  @Get("/sites/:publishId")
+  async openPublishedSiteRoot(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
+    if (request.path.endsWith("/")) {
+      await this.sendPublishedAsset(response, {
+        publishId,
+        type: "site",
+        relativePath: "index.html",
+      })
+      return
+    }
+    response.redirect(302, `/sites/${encodeURIComponent(publishId)}/`)
+  }
+
+  @Get(["/sites/:publishId/", "/sites/:publishId/*"])
+  async openPublishedSiteAsset(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
+    const prefix = `/sites/${encodeURIComponent(publishId)}/`
+    const relativePath = safeDecodeURIComponent(request.path.startsWith(prefix) ? request.path.slice(prefix.length) : "")
+    await this.sendPublishedAsset(response, {
+      publishId,
+      type: "site",
+      relativePath: relativePath || "index.html",
+    })
+  }
 
   @Get("/files/:shareId")
   async openShare(@Param("shareId") shareId: string, @Res() response: Response) {
@@ -199,6 +257,18 @@ export class DrivePublicController {
     }
     await archive.finalize()
   }
+
+  private async sendPublishedAsset(response: Response, input: {
+    readonly publishId: string
+    readonly type: "page" | "site"
+    readonly relativePath: string
+  }): Promise<void> {
+    try {
+      await sendPublishedAsset(response, await this.drive.resolvePublishedAsset(input))
+    } catch {
+      sendPublicNotFound(response)
+    }
+  }
 }
 
 @Controller("/api/drive")
@@ -229,8 +299,40 @@ function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
   return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
 }
 
+function resolveRequestPagesPublicUrl(request: AuthenticatedUserRequest): string {
+  return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.PAGES_PUBLIC_URL ?? process.env.APP_PUBLIC_URL, request })
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return ""
+  }
+}
+
+async function sendPublishedAsset(response: Response, asset: {
+  readonly stream: NodeJS.ReadableStream
+  readonly contentType: string
+  readonly size?: bigint
+}) {
+  response.setHeader("Content-Type", asset.contentType)
+  response.setHeader("X-Content-Type-Options", "nosniff")
+  response.setHeader("Referrer-Policy", "no-referrer")
+  response.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'none';",
+  )
+  if (asset.size !== undefined) response.setHeader("Content-Length", asset.size.toString())
+  asset.stream.pipe(response)
+}
+
+function sendPublicNotFound(response: Response) {
+  response.status(404).type("text/plain; charset=utf-8").send("网页未找到")
 }
 
 function escapeHtml(value: string): string {
