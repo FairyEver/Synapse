@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-import { buildAutomationCreateInputFromTask } from "../task-automation-migration"
+import {
+  buildAutomationCreateInputFromTask,
+  migrateTaskToAutomation,
+} from "../task-automation-migration"
 import type { ScheduledTaskEntry } from "../types"
 
 describe("task automation migration mapping", () => {
@@ -62,6 +65,81 @@ describe("task automation migration mapping", () => {
   })
 })
 
+describe("migrateTaskToAutomation", () => {
+  it("creates automation then deletes the source task", async () => {
+    const harness = createMigrationHarness()
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps }))
+      .resolves.toEqual({ automationId: "automation:1", deletedTaskId: "task:1" })
+
+    expect(harness.automation.automationCreate).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Daily build",
+      executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
+    }))
+    expect(harness.scheduler.deleteTask).toHaveBeenCalledWith("task:1")
+  })
+
+  it("stops a running task before migration", async () => {
+    const harness = createMigrationHarness({
+      task: createTask({ activeRun: { status: "running", id: "run:1" } }),
+    })
+
+    await migrateTaskToAutomation({ taskId: "task:1", ...harness.deps })
+
+    expect(harness.scheduler.stopRun).toHaveBeenCalledWith("run:1")
+    expect(harness.automation.automationCreate).toHaveBeenCalled()
+    expect(harness.scheduler.deleteTask).toHaveBeenCalledWith("task:1")
+  })
+
+  it("does not create automation when stopping the active run fails", async () => {
+    const harness = createMigrationHarness({
+      task: createTask({ activeRun: { status: "running", id: "run:1" } }),
+      stopResult: { stopped: false },
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps }))
+      .rejects.toThrow("停止运行失败")
+
+    expect(harness.automation.automationCreate).not.toHaveBeenCalled()
+    expect(harness.scheduler.deleteTask).not.toHaveBeenCalled()
+  })
+
+  it("keeps the source task when automation creation fails", async () => {
+    const harness = createMigrationHarness({
+      createError: new Error("create failed"),
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps }))
+      .rejects.toThrow("create failed")
+
+    expect(harness.scheduler.deleteTask).not.toHaveBeenCalled()
+  })
+
+  it("rolls back automation when deleting the source task fails", async () => {
+    const harness = createMigrationHarness({
+      deleteError: new Error("delete failed"),
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps }))
+      .rejects.toThrow("delete failed")
+
+    expect(harness.automation.automationDelete).toHaveBeenCalledWith("automation:1")
+  })
+
+  it("disables both records when rollback delete also fails", async () => {
+    const harness = createMigrationHarness({
+      deleteError: new Error("delete failed"),
+      rollbackError: new Error("rollback failed"),
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps }))
+      .rejects.toThrow("delete failed")
+
+    expect(harness.automation.automationDisable).toHaveBeenCalledWith("automation:1")
+    expect(harness.scheduler.schedulerTaskDisable).toHaveBeenCalledWith("task:1")
+  })
+})
+
 function createTask(overrides: Partial<ScheduledTaskEntry> = {}): ScheduledTaskEntry {
   return {
     id: "task:1",
@@ -80,5 +158,48 @@ function createTask(overrides: Partial<ScheduledTaskEntry> = {}): ScheduledTaskE
     updatedAt: "2026-06-09T00:00:00.000Z",
     runCount: 0,
     ...overrides,
+  }
+}
+
+function createMigrationHarness(options: {
+  task?: ScheduledTaskEntry | null
+  stopResult?: { stopped: boolean }
+  createError?: Error
+  deleteError?: Error
+  rollbackError?: Error
+} = {}) {
+  const task = options.task === undefined ? createTask() : options.task
+  const scheduler = {
+    schedulerTaskGet: vi.fn(async () => task),
+    stopRun: vi.fn(async () => options.stopResult ?? { stopped: true }),
+    deleteTask: vi.fn(async () => {
+      if (options.deleteError) throw options.deleteError
+      return { deleted: true }
+    }),
+    schedulerTaskDisable: vi.fn(async () => createTask({ enabled: false })),
+  }
+  const automation = {
+    automationCreate: vi.fn(async () => {
+      if (options.createError) throw options.createError
+      return { id: "automation:1", enabled: true }
+    }),
+    automationDelete: vi.fn(async () => {
+      if (options.rollbackError) throw options.rollbackError
+      return { deleted: true }
+    }),
+    automationDisable: vi.fn(async () => ({ id: "automation:1", enabled: false })),
+  }
+  const logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+  }
+  return {
+    scheduler,
+    automation,
+    deps: {
+      scheduler: scheduler as never,
+      automation: automation as never,
+      logger,
+    },
   }
 }
