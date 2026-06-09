@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
+  DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_PUBLIC_PATH_PREFIX,
   buildDrivePublicationUrl,
   buildDriveShareUrl,
+  buildDriveUrlWithPassword,
   maskDrivePublicUrl,
   maskDriveShareUrl,
 } from "./drive"
@@ -44,6 +46,29 @@ describe("drive URL helpers", () => {
       .toBe("https://synapse.d2.pub/pages/***")
     expect(maskDrivePublicUrl("https://synapse.d2.pub/sites/pub_secret/app.js"))
       .toBe("https://synapse.d2.pub/sites/***/app.js")
+  })
+
+  it("builds password-bearing drive URLs", () => {
+    expect(buildDriveUrlWithPassword("https://synapse.d2.pub/files/shr_abc", "AbC234xy"))
+      .toBe("https://synapse.d2.pub/files/shr_abc?password=AbC234xy")
+    expect(buildDriveUrlWithPassword("https://synapse.d2.pub/sites/pub_abc/?x=1", "AbC234xy"))
+      .toBe("https://synapse.d2.pub/sites/pub_abc/?x=1&password=AbC234xy")
+  })
+
+  it("does not add a password query when the password is null", () => {
+    expect(buildDriveUrlWithPassword("https://synapse.d2.pub/files/shr_abc", null))
+      .toBe("https://synapse.d2.pub/files/shr_abc")
+  })
+
+  it("redacts drive password query values", () => {
+    expect(maskDriveShareUrl("https://synapse.d2.pub/files/shr_secret?password=AbC234xy"))
+      .toBe("https://synapse.d2.pub/files/***?password=***")
+    expect(maskDrivePublicUrl("https://synapse.d2.pub/sites/pub_secret/app.js?password=AbC234xy"))
+      .toBe("https://synapse.d2.pub/sites/***/app.js?password=***")
+  })
+
+  it("defines the default drive access settings", () => {
+    expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({ passwordEnabled: true, expiresIn: "7d" })
   })
 
   it("uses the files public prefix", () => {

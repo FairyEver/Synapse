@@ -8,6 +8,17 @@ export type DrivePublicationStatus = "active" | "disabled"
 export type DriveShareItemType = "file" | "folder"
 export type DriveStorageStatus = "pending" | "active" | "delete_pending" | "deleted" | "failed"
 export type DriveUploadSessionStatus = "pending" | "completed" | "cancelled" | "expired" | "failed"
+export type DriveAccessExpiresIn = "7d" | "30d" | "1y" | "forever"
+
+export interface DriveAccessSettingsInput {
+  readonly passwordEnabled: boolean
+  readonly expiresIn: DriveAccessExpiresIn
+}
+
+export const DRIVE_DEFAULT_ACCESS_SETTINGS: DriveAccessSettingsInput = {
+  passwordEnabled: true,
+  expiresIn: "7d",
+}
 
 export interface DriveItemDto {
   readonly id: string
@@ -56,6 +67,10 @@ export interface DriveShareDto {
   readonly itemId: string
   readonly enabled: boolean
   readonly url: string
+  readonly urlWithPassword: string
+  readonly passwordEnabled: boolean
+  readonly password: string | null
+  readonly expiresAt: string | null
   readonly createdAt: string
 }
 
@@ -68,6 +83,10 @@ export interface DrivePublicationDto {
   readonly sourceItemId: string | null
   readonly sourceDeleted: boolean
   readonly url: string
+  readonly urlWithPassword: string
+  readonly passwordEnabled: boolean
+  readonly password: string | null
+  readonly expiresAt: string | null
   readonly currentDeploymentId: string | null
   readonly createdAt: string
   readonly updatedAt: string
@@ -85,6 +104,10 @@ export interface DriveShareListItemDto {
   readonly itemType: DriveShareItemType
   readonly sourceDeleted: boolean
   readonly url: string
+  readonly urlWithPassword: string
+  readonly passwordEnabled: boolean
+  readonly password: string | null
+  readonly expiresAt: string | null
   readonly createdAt: string
 }
 
@@ -113,6 +136,13 @@ export function buildDrivePublicationUrl(input: {
     : `${base}${DRIVE_PAGE_PUBLIC_PATH_PREFIX}/${encoded}`
 }
 
+export function buildDriveUrlWithPassword(url: string, password: string | null | undefined): string {
+  if (!password) return url
+  const parsed = new URL(url)
+  parsed.searchParams.set("password", password)
+  return parsed.toString()
+}
+
 export function maskDriveShareUrl(value: string): string {
   try {
     const parsed = new URL(value)
@@ -120,12 +150,12 @@ export function maskDriveShareUrl(value: string): string {
     if (parts.length >= 3 && parts[1] === "files") {
       parts[2] = "***"
       parsed.pathname = parts.join("/")
-      return parsed.toString()
+      return maskPasswordQuery(parsed.toString())
     }
   } catch {
-    return value.replace(/\/files\/[^/?#]+/u, "/files/***")
+    return maskPasswordQuery(value.replace(/\/files\/[^/?#]+/u, "/files/***"))
   }
-  return value.replace(/\/files\/[^/?#]+/u, "/files/***")
+  return maskPasswordQuery(value.replace(/\/files\/[^/?#]+/u, "/files/***"))
 }
 
 export function maskDrivePublicUrl(value: string): string {
@@ -135,18 +165,28 @@ export function maskDrivePublicUrl(value: string): string {
     if (parts.length >= 3 && (parts[1] === "pages" || parts[1] === "sites")) {
       parts[2] = "***"
       parsed.pathname = parts.join("/")
-      return parsed.toString()
+      return maskPasswordQuery(parsed.toString())
     }
   } catch {
-    return value
+    return maskPasswordQuery(value
       .replace(/\/pages\/[^/?#]+/u, "/pages/***")
-      .replace(/\/sites\/[^/?#]+/u, "/sites/***")
+      .replace(/\/sites\/[^/?#]+/u, "/sites/***"))
   }
-  return value
+  return maskPasswordQuery(value
     .replace(/\/pages\/[^/?#]+/u, "/pages/***")
-    .replace(/\/sites\/[^/?#]+/u, "/sites/***")
+    .replace(/\/sites\/[^/?#]+/u, "/sites/***"))
 }
 
 function normalizePublicAppUrl(value: string): string {
   return value.trim().replace(/\/+$/u, "")
+}
+
+function maskPasswordQuery(value: string): string {
+  try {
+    const parsed = new URL(value)
+    if (parsed.searchParams.has("password")) parsed.searchParams.set("password", "***")
+    return parsed.toString()
+  } catch {
+    return value.replace(/([?&]password=)[^&#]*/giu, "$1***")
+  }
 }
