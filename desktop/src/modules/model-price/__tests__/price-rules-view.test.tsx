@@ -5,7 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PriceRulesView } from "../components/price-rules-view"
-import type { ModelPriceRule } from "../types"
+import type { ModelPricePresetSummary, ModelPriceRule } from "../types"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -17,7 +17,9 @@ const notifications = vi.hoisted(() => ({
 
 const modelPriceBridge = vi.hoisted(() => ({
   saveRules: vi.fn(),
-  resetRules: vi.fn(),
+  clearRules: vi.fn(),
+  listPresets: vi.fn(),
+  importPreset: vi.fn(),
 }))
 
 vi.mock("@/app-shell/notifications", () => ({
@@ -50,7 +52,9 @@ beforeEach(() => {
   notifications.success.mockClear()
   notifications.warning.mockClear()
   modelPriceBridge.saveRules.mockReset()
-  modelPriceBridge.resetRules.mockReset()
+  modelPriceBridge.clearRules.mockReset()
+  modelPriceBridge.listPresets.mockReset()
+  modelPriceBridge.importPreset.mockReset()
 })
 
 afterEach(() => {
@@ -65,7 +69,7 @@ afterEach(() => {
 
 describe("PriceRulesView", () => {
   it("confirms and clears rules", async () => {
-    modelPriceBridge.resetRules.mockResolvedValueOnce([])
+    modelPriceBridge.clearRules.mockResolvedValueOnce([])
     const onSaved = vi.fn()
     const host = document.createElement("div")
     document.body.appendChild(host)
@@ -81,6 +85,7 @@ describe("PriceRulesView", () => {
             error: null,
             reload: vi.fn(),
           }}
+          presetState={presetState([])}
           onSaved={onSaved}
         />,
       )
@@ -101,18 +106,129 @@ describe("PriceRulesView", () => {
       await flushPromises()
     })
 
-    expect(modelPriceBridge.resetRules).toHaveBeenCalledTimes(1)
+    expect(modelPriceBridge.clearRules).toHaveBeenCalledTimes(1)
     expect(inputValues()).not.toContain("local-model")
     expect(onSaved).toHaveBeenCalledTimes(1)
     expect(notifications.success).toHaveBeenCalledWith("已清空")
+  })
+
+  it("imports a preset and updates rows", async () => {
+    modelPriceBridge.importPreset.mockResolvedValueOnce([
+      priceRule({ id: "mpr_123456789abc", modelPattern: "deepseek-v4-pro", inputPer1M: 3 }),
+    ])
+    const onSaved = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PriceRulesView
+          state={{
+            data: [priceRule({ id: "local", modelPattern: "local-model", inputPer1M: 99 })],
+            loading: false,
+            error: null,
+            reload: vi.fn(),
+          }}
+          presetState={presetState([
+            { id: "openai", label: "OpenAI", ruleCount: 4 },
+            { id: "deepseek-official", label: "DeepSeek 官方", ruleCount: 2 },
+          ])}
+          onSaved={onSaved}
+        />,
+      )
+      await flushPromises()
+    })
+
+    await act(async () => {
+      clickButton("导入预设")
+      await flushPromises()
+    })
+    expect(document.body.textContent).toContain("导入预设")
+    expect(document.body.textContent).toContain("DeepSeek 官方")
+
+    await act(async () => {
+      clickRadio("DeepSeek 官方")
+      await flushPromises()
+    })
+
+    await act(async () => {
+      clickButton("导入")
+      await flushPromises()
+    })
+
+    expect(modelPriceBridge.importPreset).toHaveBeenCalledWith("deepseek-official")
+    expect(inputValues()).toContain("deepseek-v4-pro")
+    expect(inputValues()).not.toContain("local-model")
+    expect(document.body.textContent).not.toContain("mpr_123456789abc")
+    expect(onSaved).toHaveBeenCalledTimes(1)
+    expect(notifications.success).toHaveBeenCalledWith("已导入")
+  })
+
+  it("disables table controls while importing", async () => {
+    let resolveImport: (rules: ModelPriceRule[]) => void = () => undefined
+    modelPriceBridge.importPreset.mockReturnValueOnce(new Promise<ModelPriceRule[]>((resolve) => {
+      resolveImport = resolve
+    }))
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PriceRulesView
+          state={{
+            data: [priceRule({ id: "hidden-rule-id", modelPattern: "local-model", inputPer1M: 99 })],
+            loading: false,
+            error: null,
+            reload: vi.fn(),
+          }}
+          presetState={presetState([
+            { id: "deepseek-official", label: "DeepSeek 官方", ruleCount: 2 },
+          ])}
+          onSaved={vi.fn()}
+        />,
+      )
+      await flushPromises()
+    })
+
+    expect(document.body.textContent).not.toContain("hidden-rule-id")
+
+    await act(async () => {
+      clickButton("导入预设")
+      await flushPromises()
+    })
+    await act(async () => {
+      clickButton("导入")
+      await flushPromises()
+    })
+
+    expect([...document.querySelectorAll("input")].every((input) => input.disabled)).toBe(true)
+    expect((document.querySelector('[aria-label="启用"]') as HTMLButtonElement | null)?.disabled).toBe(true)
+    expect((document.querySelector('[aria-label="删除"]') as HTMLButtonElement | null)?.disabled).toBe(true)
+
+    await act(async () => {
+      resolveImport([priceRule({ id: "mpr_123456789abc", modelPattern: "deepseek-v4-pro", inputPer1M: 3 })])
+      await flushPromises()
+    })
   })
 })
 
 function clickButton(label: string): void {
   const button = [...document.querySelectorAll("button")]
-    .find((candidate) => candidate.textContent?.includes(label))
+    .find((candidate) => candidate.textContent?.trim() === label)
+    ?? [...document.querySelectorAll("button")]
+      .find((candidate) => candidate.textContent?.includes(label))
   if (!button) throw new Error(`Button not found: ${label}`)
   button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function clickRadio(label: string): void {
+  const radio = document.querySelector<HTMLElement>(`[aria-label="${label}"]`)
+  if (!radio) throw new Error(`Radio not found: ${label}`)
+  radio.dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
 function flushPromises(): Promise<void> {
@@ -121,6 +237,15 @@ function flushPromises(): Promise<void> {
 
 function inputValues(): string[] {
   return [...document.querySelectorAll("input")].map((input) => input.value)
+}
+
+function presetState(data: ModelPricePresetSummary[]) {
+  return {
+    data,
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+  }
 }
 
 function priceRule(input: Partial<ModelPriceRule>): ModelPriceRule {

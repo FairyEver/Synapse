@@ -4,6 +4,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   ModelPriceCoverageInput,
   ModelPriceCoverageRow,
+  ModelPricePresetSummary,
   ModelPriceRule,
   ModelPriceState,
 } from "./types"
@@ -20,6 +21,13 @@ export function useModelPriceCoverage(input: ModelPriceCoverageInput, refreshKey
 export function useModelPriceRules(refreshKey: number): ModelPriceState<ModelPriceRule[]> {
   return useModelPriceLoader(
     () => requireSynapseBridge().modelPrice.getRules(),
+    [refreshKey],
+  )
+}
+
+export function useModelPricePresets(refreshKey = 0): ModelPriceState<ModelPricePresetSummary[]> {
+  return useModelPriceLoader(
+    () => requireSynapseBridge().modelPrice.listPresets(),
     [refreshKey],
   )
 }

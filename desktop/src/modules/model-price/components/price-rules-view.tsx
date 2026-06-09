@@ -15,8 +15,17 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -27,11 +36,19 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { ModelPriceRule, ModelPriceRuleInput, ModelPriceState } from "../types"
+import type {
+  ModelPricePresetId,
+  ModelPricePresetSummary,
+  ModelPriceRule,
+  ModelPriceRuleInput,
+  ModelPriceState,
+} from "../types"
 
 interface PriceRulesViewProps {
   readonly state: ModelPriceState<ModelPriceRule[]>
+  readonly presetState: ModelPriceState<ModelPricePresetSummary[]>
   readonly onSaved: () => void
+  readonly onBusyChange?: (busy: boolean) => void
 }
 
 interface EditablePriceRule {
@@ -57,16 +74,41 @@ const PRICE_COLUMNS: { readonly key: PriceField; readonly label: string }[] = [
   { key: "reasoningPer1M", label: "推理" },
 ]
 
-export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
+export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: PriceRulesViewProps) {
   const { error: showError, success: showSuccess } = useAppNotifications()
   const [rows, setRows] = useState<EditablePriceRule[]>([])
   const [saving, setSaving] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [selectedPresetId, setSelectedPresetId] = useState<ModelPricePresetId | null>(null)
+  const busy = saving || clearing || importing
+
+  useEffect(() => {
+    onBusyChange?.(busy)
+    return () => {
+      if (busy) onBusyChange?.(false)
+    }
+  }, [busy, onBusyChange])
 
   useEffect(() => {
     if (!state.data) return
     setRows(state.data.map(toEditableRule))
   }, [state.data])
+
+  useEffect(() => {
+    if (!importDialogOpen) return
+    const presets = presetState.data
+    if (!presets?.length) {
+      setSelectedPresetId(null)
+      return
+    }
+    setSelectedPresetId((current) => (
+      current && presets.some((preset) => preset.id === current)
+        ? current
+        : presets[0].id
+    ))
+  }, [importDialogOpen, presetState.data])
 
   const updateRow = (clientId: string, field: PriceField, value: string) => {
     setRows((current) => current.map((row) => (
@@ -105,7 +147,7 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
   const clear = async () => {
     setClearing(true)
     try {
-      const clearedRows = await requireSynapseBridge().modelPrice.resetRules()
+      const clearedRows = await requireSynapseBridge().modelPrice.clearRules()
       setRows(clearedRows.map(toEditableRule))
       onSaved()
       showSuccess("已清空")
@@ -113,6 +155,22 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
       showError("清空失败")
     } finally {
       setClearing(false)
+    }
+  }
+
+  const importPreset = async () => {
+    if (!selectedPresetId) return
+    setImporting(true)
+    try {
+      const importedRows = await requireSynapseBridge().modelPrice.importPreset(selectedPresetId)
+      setRows(importedRows.map(toEditableRule))
+      setImportDialogOpen(false)
+      onSaved()
+      showSuccess("已导入")
+    } catch {
+      showError("导入失败")
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -142,9 +200,43 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
       <div className="flex shrink-0 items-center justify-between gap-2">
         <div className="text-sm text-muted-foreground">人民币 / 1M token</div>
         <div className="flex items-center gap-2">
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button type="button" variant="outline" size="sm" disabled={busy}>
+                导入预设
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+              <DialogHeader>
+                <DialogTitle>导入预设</DialogTitle>
+              </DialogHeader>
+              <PresetList
+                state={presetState}
+                selectedPresetId={selectedPresetId}
+                onSelect={setSelectedPresetId}
+              />
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setImportDialogOpen(false)}
+                  disabled={importing}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void importPreset()}
+                  disabled={importing || !selectedPresetId || presetState.loading || !!presetState.error}
+                >
+                  {importing ? "导入中" : "导入"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" disabled={saving || clearing}>
+              <Button type="button" variant="outline" size="sm" disabled={busy}>
                 <Trash2 data-icon="inline-start" />
                 清空
               </Button>
@@ -162,11 +254,11 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={saving || clearing}>
+          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={busy}>
             <Plus data-icon="inline-start" />
             添加
           </Button>
-          <Button type="button" size="sm" onClick={() => void save()} disabled={saving || clearing}>
+          <Button type="button" size="sm" onClick={() => void save()} disabled={busy}>
             {saving ? "保存中" : "保存"}
           </Button>
         </div>
@@ -198,6 +290,7 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
                 <TableCell>
                   <Checkbox
                     checked={row.enabled}
+                    disabled={busy}
                     aria-label="启用"
                     onCheckedChange={(checked) => updateEnabled(row.clientId, checked === true)}
                   />
@@ -211,6 +304,7 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
                       step={column.key === "modelPattern" ? undefined : "0.0001"}
                       aria-label={column.label}
                       className={column.key === "modelPattern" ? "min-w-48" : "min-w-24 text-right tabular-nums"}
+                      disabled={busy}
                       onChange={(event) => updateRow(row.clientId, column.key, event.target.value)}
                     />
                   </TableCell>
@@ -221,6 +315,7 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
                     variant="ghost"
                     size="icon-sm"
                     aria-label="删除"
+                    disabled={busy}
                     onClick={() => removeRow(row.clientId)}
                   >
                     <Trash2 />
@@ -283,4 +378,44 @@ function formatPriceField(value: number): string {
 function parsePriceField(value: string): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+interface PresetListProps {
+  readonly state: ModelPriceState<ModelPricePresetSummary[]>
+  readonly selectedPresetId: ModelPricePresetId | null
+  readonly onSelect: (presetId: ModelPricePresetId) => void
+}
+
+function PresetList({ state, selectedPresetId, onSelect }: PresetListProps) {
+  if (state.loading && !state.data) {
+    return <div className="py-4 text-sm text-muted-foreground">正在加载</div>
+  }
+
+  if (state.error) {
+    return <div className="py-4 text-sm text-destructive">{state.error.message}</div>
+  }
+
+  if (!state.data?.length) {
+    return <div className="py-4 text-sm text-muted-foreground">暂无预设</div>
+  }
+
+  return (
+    <RadioGroup value={selectedPresetId ?? ""} onValueChange={(value) => onSelect(value as ModelPricePresetId)}>
+      <div className="overflow-hidden rounded-lg border">
+        {state.data.map((preset) => (
+          <label
+            key={preset.id}
+            htmlFor={`model-price-preset-${preset.id}`}
+            className="flex w-full cursor-pointer items-center justify-between gap-3 border-b px-3 py-3 text-left last:border-b-0"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <RadioGroupItem id={`model-price-preset-${preset.id}`} value={preset.id} aria-label={preset.label} />
+              <span className="truncate font-medium">{preset.label}</span>
+            </div>
+            <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{preset.ruleCount} 条</span>
+          </label>
+        ))}
+      </div>
+    </RadioGroup>
+  )
 }
