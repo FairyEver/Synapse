@@ -5,6 +5,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
+  ScheduledTaskMigrationResult,
   ScheduledTaskRun,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
@@ -76,6 +77,10 @@ async function deleteTask(id: string): Promise<{ deleted: boolean }> {
   return requireSynapseBridge().taskScheduler.deleteTask(id)
 }
 
+async function migrateTaskToAutomation(id: string): Promise<ScheduledTaskMigrationResult> {
+  return requireSynapseBridge().taskScheduler.migrateTaskToAutomation(id)
+}
+
 async function setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTask> {
   return requireSynapseBridge().taskScheduler.setTaskEnabled({ id, enabled })
 }
@@ -111,6 +116,7 @@ export {
   exportTasksToFile,
   importTasksFromFile,
   listRuns,
+  migrateTaskToAutomation,
   runTask,
   setTaskEnabled,
   stopRun,

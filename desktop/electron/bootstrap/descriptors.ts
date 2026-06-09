@@ -1349,6 +1349,7 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
     "core.audit-sink",
     "core.action-runtime",
     "core.event-bus",
+    "core.automation",
   ],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
@@ -1377,7 +1378,9 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
       actions,
       execution,
       defaultCwd,
+      automation: ctx.registry.get<AutomationService>("core.automation"),
       eventBus,
+      logger: ctx.logger.child("task-scheduler"),
     })
   },
   start(service) {

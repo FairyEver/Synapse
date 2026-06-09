@@ -99,6 +99,10 @@ describe("taskSchedulerIpcModule", () => {
       })),
       runTaskNow: vi.fn(async () => null),
       stopRun: vi.fn(() => ({ stopped: true })),
+      migrateTaskToAutomation: vi.fn(async () => ({
+        automationId: "automation:1",
+        deletedTaskId: "task:1",
+      })),
       schedulerRunList: vi.fn(async () => [{
         id: "run:1",
         schemaVersion: 2,
@@ -139,11 +143,14 @@ describe("taskSchedulerIpcModule", () => {
     })
     await harness.invoke("synapse:task-scheduler:tasks:run", { taskId: "task:1" })
     const runs = await harness.invoke("synapse:task-scheduler:runs:list", { taskId: "task:1" })
+    const migrated = await harness.invoke("synapse:task-scheduler:tasks:migrate-to-automation", { taskId: "task:1" })
 
     expect(service.schedulerTaskCreate).toHaveBeenCalled()
     expect(service.schedulerTaskUpdate).toHaveBeenCalledWith("task:1", { enabled: false })
     expect(service.runTaskNow).toHaveBeenCalledWith("task:1")
     expect(service.schedulerRunList).toHaveBeenCalledWith("task:1", { limit: undefined })
+    expect(service.migrateTaskToAutomation).toHaveBeenCalledWith("task:1")
+    expect(migrated).toEqual({ automationId: "automation:1", deletedTaskId: "task:1" })
     expect(runs).toEqual([
       expect.objectContaining({
         result: expect.objectContaining({
