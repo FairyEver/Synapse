@@ -61,7 +61,7 @@ describe("UsageAnalysisShell", () => {
     expect(html).toContain("90 天")
   })
 
-  it("shows the pricing rules action when provided", () => {
+  it("does not show pricing rules in usage pages", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
         title="CC"
@@ -70,14 +70,13 @@ describe("UsageAnalysisShell", () => {
         refreshing={false}
         onViewChange={() => undefined}
         onRangeChange={() => undefined}
-        onPricingRulesClick={() => undefined}
         onRefresh={() => undefined}
       >
         <div>content</div>
       </UsageAnalysisShell>,
     )
 
-    expect(html).toContain("价格规则")
+    expect(html).not.toContain("价格规则")
   })
 
   it("shows records tab for CC analysis without separate details and conversation tabs", () => {

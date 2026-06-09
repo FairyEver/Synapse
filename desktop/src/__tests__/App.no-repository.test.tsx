@@ -131,6 +131,7 @@ vi.mock("@/modules/usage-analysis", () => ({
   CcUsageAnalysisModule: () => <div>CC 模块</div>,
   CodexUsageAnalysisModule: () => <div>Codex 模块</div>,
 }))
+vi.mock("@/modules/model-price", () => ({ ModelPriceModule: () => <div>价格模块</div> }))
 vi.mock("@/modules/workflow", () => ({ WorkflowModule: () => <div>工作流模块</div> }))
 vi.mock("@/modules/content/components/content-window-page", () => ({
   ContentWindowPage: () => <div>内容窗口</div>,

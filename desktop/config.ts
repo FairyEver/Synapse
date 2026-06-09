@@ -18,6 +18,7 @@ export const APP_NAVIGATION_TABS = [
   { id: "editor-scan", label: "IDE" },
   { id: "usage-cc", label: "CC" },
   { id: "usage-codex", label: "Codex" },
+  { id: "model-price", label: "价格" },
   { id: "settings", label: "设置" },
 ] as const
 

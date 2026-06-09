@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import { PricingRulesDialog } from "../shared/components/pricing-rules-dialog"
 import { CODEX_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
 import { getUsageRefreshWarning } from "../shared/refresh-result"
@@ -21,7 +20,6 @@ export function CodexUsagePage() {
   const [trendBucket, setTrendBucket] = useState<UsageTrendBucketGranularity>("day")
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
-  const [pricingRulesOpen, setPricingRulesOpen] = useState(false)
 
   const refresh = async () => {
     setRefreshing(true)
@@ -46,16 +44,10 @@ export function CodexUsagePage() {
       refreshing={refreshing}
       onViewChange={setView}
       onRangeChange={setRange}
-      onPricingRulesClick={() => setPricingRulesOpen(true)}
       onRefresh={() => {
         void refresh()
       }}
     >
-      <PricingRulesDialog
-        open={pricingRulesOpen}
-        onOpenChange={setPricingRulesOpen}
-        onSaved={() => setRefreshKey((current) => current + 1)}
-      />
       {view === "today" ? <CodexTodayPage refreshKey={refreshKey} /> : null}
       {view === "overview" ? <CodexOverviewPage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
       {view === "time" ? <CodexTimePage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
