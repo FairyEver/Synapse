@@ -163,7 +163,7 @@ describe("PriceRulesView", () => {
     expect(inputValues()).not.toContain("local-model")
     expect(document.body.textContent).not.toContain("mpr_123456789abc")
     expect(onSaved).toHaveBeenCalledTimes(1)
-    expect(notifications.success).toHaveBeenCalledWith("已导入")
+    expect(notifications.success).toHaveBeenCalledWith("已导入预设")
   })
 
   it("disables table controls while importing", async () => {

@@ -166,7 +166,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
       setRows(importedRows.map(toEditableRule))
       setImportDialogOpen(false)
       onSaved()
-      showSuccess("已导入")
+      showSuccess("已导入预设")
     } catch {
       showError("导入失败")
     } finally {

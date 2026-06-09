@@ -19,7 +19,7 @@ Change model price rules from automatic built-in seeding to explicit preset impo
 
 ## Non-Goals
 
-- No automatic clearing or replacement of old user rules during app startup or installation.
+- No automatic clearing or replacement of old user rule prices, model patterns, enabled state, or ordering during app startup or installation.
 - No new database file and no dropping the existing usage-analysis database.
 - No migration from legacy `usage_model_prices`.
 - No provider-bound pricing rules.
@@ -61,11 +61,12 @@ The price rules UI must not display `id`. Users only see and edit `modelPattern`
 
 ## Upgrade Behavior
 
-Existing users may already have rules inserted by older built-in defaults or edited manually. The new version must not silently delete or overwrite them.
+Existing users may already have rules inserted by older built-in defaults or edited manually. The new version must not silently delete or overwrite their user-visible rule behavior.
 
 Rules after upgrade:
 
-- Old rules remain as they are.
+- Old rule prices, `modelPattern`, enabled state, and ordering remain as they are.
+- Legacy model-name-like internal IDs are migrated to opaque `mpr_<short-hash>` rule IDs so MCP/API callers do not keep seeing model names as rule handles.
 - Users who want the new preset model can click `清空`, then import the desired preset.
 - Users who do nothing keep their current price behavior.
 
@@ -74,7 +75,7 @@ Fresh installs:
 - `model_price_rules` starts empty.
 - Schema initialization writes an idempotent marker after ensuring the table exists, but it does not insert default rules.
 
-Schema initialization must never delete existing `model_price_rules` rows. If the marker is missing but rows already exist, keep the rows and write the marker.
+Schema initialization must never delete existing `model_price_rules` rows. If the marker is missing but rows already exist, keep the rows and write the marker. It may normalize legacy internal rule IDs only, preserving all user-visible price data.
 
 This makes the user-visible migration safe and easy to explain in release notes.
 
@@ -147,6 +148,8 @@ mpr_<short-hash>
 
 The hash input should include the normalized `modelPattern` plus a stable namespace such as the preset ID for preset rules or a generated draft seed for manually created duplicate patterns. This keeps IDs stable enough for rule mutation while avoiding human-readable model-name IDs such as `qwen3-6-plus`.
 
+When upgrading existing `model_price_rules`, non-hash legacy IDs should be rewritten to stable opaque IDs. This is not a price migration: it must keep `modelPattern`, prices, enabled state, source, sort order, and timestamps intact.
+
 Preset data should not hand-write rule IDs. Preset rule IDs are derived by the import path from preset ID and `modelPattern`.
 
 Add preset metadata types:
@@ -194,7 +197,7 @@ Import is a write operation.
 
 The normalized key is trimmed and case-insensitive. It must not use `id` as the primary overwrite key, because different presets may price the same model with different rule IDs.
 
-When a preset overwrites an existing rule with the same `modelPattern`, the saved row should receive the preset-derived hash ID. Existing stale model-name-like IDs are allowed to disappear during explicit preset import or manual save normalization. No automatic startup migration is required.
+When a preset overwrites an existing rule with the same `modelPattern`, the saved row should receive the preset-derived hash ID. Existing stale model-name-like IDs are allowed to disappear during explicit preset import, manual save normalization, or the internal-ID-only upgrade migration.
 
 Example:
 
@@ -255,6 +258,7 @@ Main process tests:
 
 - Fresh schema initialization creates empty `model_price_rules`.
 - Existing `model_price_rules` are preserved after schema initialization.
+- Legacy model-name-like rule IDs are migrated to opaque `mpr_<short-hash>` IDs without deleting rules.
 - Legacy `usage_model_prices` remains ignored.
 - `clearRules()` deletes model-price rules only.
 - `importPreset()` appends new preset rules.
