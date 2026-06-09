@@ -132,7 +132,7 @@ describe("DriveService", () => {
     const share = await service.createShare("user-1", prepared.item.id, "https://synapse.test")
     expect(share.url).toMatch(/^https:\/\/synapse\.test\/files\/shr_/u)
     await service.disableShare("user-1", share.id)
-    await expect(service.resolvePublicShare(share.shareId)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 
   it("creates password-protected share links by default", async () => {
@@ -351,13 +351,15 @@ describe("DriveService", () => {
       contentType: "text/plain",
     })
 
-    const asset = await service.resolvePublishedAsset({
+    const asset = await service.resolvePublishedAssetAccess({
       publishId: publication.publishId,
       type: "site",
       relativePath: "asset.bin",
+      password: publication.password ?? undefined,
     })
 
-    expect(asset.contentType).toBe("application/x-synapse-asset")
+    expect(asset.status).toBe("ok")
+    if (asset.status === "ok") expect(asset.value.contentType).toBe("application/x-synapse-asset")
   })
 
   it("returns the existing active publication when source uniqueness races", async () => {
@@ -809,12 +811,19 @@ describe("DriveService", () => {
     await service.completeUpload("user-1", prepared.sessionId)
     const share = await service.createShare("user-1", folder.id, "https://synapse.test")
 
-    const publicFolder = await service.listPublicFolderChildren(share.shareId)
+    const publicFolder = await service.listPublicFolderChildren({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
 
     expect(publicFolder.item.name).toBe("交接材料")
     expect(publicFolder.children).toHaveLength(1)
     expect(publicFolder.children[0]?.name).toBe("brief.txt")
-    const download = await service.createDownloadUrlForShareChild(share.shareId, prepared.item.id)
+    const download = await service.createDownloadUrlForShareChild({
+      shareId: share.shareId,
+      itemId: prepared.item.id,
+      password: share.password ?? undefined,
+    })
     expect(download.url).toBe("https://cos.example/download")
   })
 
@@ -831,7 +840,10 @@ describe("DriveService", () => {
     await service.completeUpload("user-1", prepared.entries[0]!.sessionId)
     const share = await service.createShare("user-1", prepared.root.id, "https://synapse.test")
 
-    const entries = await service.createFolderZipEntriesForShare(share.shareId)
+    const entries = await service.createFolderZipEntriesForShare({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
 
     expect(entries).toEqual([{ path: "docs/spec.txt", url: "https://cos.example/download" }])
   })
@@ -875,7 +887,7 @@ describe("DriveService", () => {
     await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
 
     await expect(service.getItem("user-1", prepared.item.id)).rejects.toBeInstanceOf(NotFoundException)
-    await expect(service.resolvePublicShare(share.shareId)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 })
 

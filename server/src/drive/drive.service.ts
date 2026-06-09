@@ -17,7 +17,14 @@ import {
 import { AuditLogService } from "../common/audit-log.service"
 import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { PrismaService } from "../prisma/prisma.service"
-import { createDrivePasswordMaterial, decryptDrivePassword, type DrivePasswordMaterial } from "./drive-access-protection"
+import {
+  buildDriveAccessCookie,
+  createDrivePasswordMaterial,
+  decryptDrivePassword,
+  verifyDriveAccessCookie,
+  verifyDrivePasswordInput,
+  type DrivePasswordMaterial,
+} from "./drive-access-protection"
 import {
   DRIVE_ITEM_TYPE,
   DRIVE_PUBLICATION_DEPLOYMENT_STATUS,
@@ -61,6 +68,24 @@ type PublicationSourceAsset = {
 
 type DrivePublicationWithImpactAssets = DrivePublicationRecord & {
   readonly assets?: readonly { readonly deploymentId: string }[]
+}
+
+type DrivePublicAccessResult<T> =
+  | { readonly status: "ok"; readonly value: T; readonly cookie?: string }
+  | { readonly status: "password_required" }
+  | { readonly status: "static_denied" }
+
+type DrivePublicShareValue = {
+  readonly item: DriveItemDto
+  readonly ownerId: string
+  readonly storageKey: string | null
+  readonly type: "file" | "folder"
+}
+
+type DrivePublishedAssetValue = {
+  readonly stream: NodeJS.ReadableStream
+  readonly contentType: string
+  readonly size?: bigint
 }
 
 const driveItemWithShares = {
@@ -499,7 +524,21 @@ export class DriveService implements OnApplicationBootstrap {
     readonly publishId: string
     readonly type: "page" | "site"
     readonly relativePath: string
-  }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly contentType: string; readonly size?: bigint }> {
+  }): Promise<DrivePublishedAssetValue> {
+    const result = await this.resolvePublishedAssetAccess(input)
+    if (result.status !== "ok") throw new NotFoundException("网页未找到")
+    return result.value
+  }
+
+  async resolvePublishedAssetAccess(input: {
+    readonly publishId: string
+    readonly type: "page" | "site"
+    readonly relativePath: string
+    readonly password?: string
+    readonly cookie?: string
+    readonly now?: Date
+  }): Promise<DrivePublicAccessResult<DrivePublishedAssetValue>> {
+    const now = input.now ?? new Date()
     const relativePath = normalizePublicationRelativePath(input.relativePath || DRIVE_PUBLICATION_INDEX_PATH)
     const publication = await this.prisma.drivePublication.findFirst({
       where: {
@@ -507,6 +546,7 @@ export class DriveService implements OnApplicationBootstrap {
         type: input.type,
         status: DRIVE_PUBLICATION_STATUS.active,
         currentDeploymentId: { not: null },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
       },
     })
     if (!publication?.currentDeploymentId) throw new NotFoundException("网页未找到")
@@ -525,11 +565,52 @@ export class DriveService implements OnApplicationBootstrap {
     })
     if (!asset) throw new NotFoundException("网页未找到")
 
+    if (publication.passwordEnabled) {
+      const cookieOk = verifyDriveAccessCookie(input.cookie, {
+        kind: input.type,
+        publicId: publication.publishId,
+        now,
+        passwordHash: publication.passwordHash,
+        resourceExpiresAt: publication.expiresAt,
+        secret: this.accessSecret,
+      })
+      const passwordOk = await verifyDrivePasswordInput(input.password, publication.passwordHash)
+      if (!cookieOk && !passwordOk) {
+        return isPublicationPasswordPagePath(input.type, relativePath)
+          ? { status: "password_required" }
+          : { status: "static_denied" }
+      }
+
+      const object = await this.storage.getObjectStream({ key: asset.storageKey })
+      return {
+        status: "ok",
+        value: {
+          stream: object.stream,
+          size: object.size ?? asset.size,
+          contentType: resolvePublicationContentType(asset.relativePath, asset.contentType ?? object.contentType),
+        },
+        ...(passwordOk
+          ? {
+            cookie: buildDriveAccessCookie({
+              kind: input.type,
+              publicId: publication.publishId,
+              expiresAt: publication.expiresAt,
+              passwordHash: publication.passwordHash,
+              secret: this.accessSecret,
+            }),
+          }
+          : {}),
+      }
+    }
+
     const object = await this.storage.getObjectStream({ key: asset.storageKey })
     return {
-      stream: object.stream,
-      size: object.size ?? asset.size,
-      contentType: resolvePublicationContentType(asset.relativePath, asset.contentType ?? object.contentType),
+      status: "ok",
+      value: {
+        stream: object.stream,
+        size: object.size ?? asset.size,
+        contentType: resolvePublicationContentType(asset.relativePath, asset.contentType ?? object.contentType),
+      },
     }
   }
 
@@ -542,31 +623,79 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
-  async resolvePublicShare(shareId: string): Promise<{ readonly item: DriveItemDto; readonly ownerId: string; readonly storageKey: string | null; readonly type: "file" | "folder" }> {
+  async resolvePublicShareAccess(input: {
+    readonly shareId: string
+    readonly password?: string
+    readonly cookie?: string
+    readonly now?: Date
+  }): Promise<DrivePublicAccessResult<DrivePublicShareValue>> {
+    const now = input.now ?? new Date()
     const share = await this.prisma.driveShare.findFirst({
-      where: { shareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      where: { shareId: input.shareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       include: { item: { include: driveItemWithShares } },
     })
     if (!share || share.item.deletedAt || share.item.storageStatus !== DRIVE_STORAGE_STATUS.active) {
       throw new NotFoundException("文件未找到")
     }
-    return {
-      item: toDriveItemDto(share.item),
-      ownerId: share.item.userId,
-      storageKey: share.item.storageKey,
-      type: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
+
+    if (share.passwordEnabled) {
+      const cookieOk = verifyDriveAccessCookie(input.cookie, {
+        kind: "share",
+        publicId: share.shareId,
+        now,
+        passwordHash: share.passwordHash,
+        resourceExpiresAt: share.expiresAt,
+        secret: this.accessSecret,
+      })
+      const passwordOk = await verifyDrivePasswordInput(input.password, share.passwordHash)
+      if (!cookieOk && !passwordOk) return { status: "password_required" }
+      return {
+        status: "ok",
+        value: toDrivePublicShareValue(share),
+        ...(passwordOk
+          ? {
+            cookie: buildDriveAccessCookie({
+              kind: "share",
+              publicId: share.shareId,
+              expiresAt: share.expiresAt,
+              passwordHash: share.passwordHash,
+              secret: this.accessSecret,
+            }),
+          }
+          : {}),
+      }
     }
+
+    return { status: "ok", value: toDrivePublicShareValue(share) }
   }
 
-  async createDownloadUrlForShare(shareId: string): Promise<{ readonly url: string }> {
-    const share = await this.resolvePublicShare(shareId)
+  private async resolvePublicShare(input: {
+    readonly shareId: string
+    readonly password?: string
+    readonly cookie?: string
+  }): Promise<DrivePublicShareValue> {
+    const result = await this.resolvePublicShareAccess(input)
+    if (result.status !== "ok") throw new NotFoundException("文件未找到")
+    return result.value
+  }
+
+  async createDownloadUrlForShare(input: {
+    readonly shareId: string
+    readonly password?: string
+    readonly cookie?: string
+  }): Promise<{ readonly url: string }> {
+    const share = await this.resolvePublicShare(input)
     if (share.type !== "file" || !share.storageKey) throw new NotFoundException("文件未找到")
     const download = await this.storage.createDownloadUrl({ key: share.storageKey, filename: share.item.name })
     return { url: download.url }
   }
 
-  async listPublicFolderChildren(shareId: string): Promise<{ readonly item: DriveItemDto; readonly children: DriveItemDto[] }> {
-    const share = await this.resolvePublicShare(shareId)
+  async listPublicFolderChildren(input: {
+    readonly shareId: string
+    readonly password?: string
+    readonly cookie?: string
+  }): Promise<{ readonly item: DriveItemDto; readonly children: DriveItemDto[] }> {
+    const share = await this.resolvePublicShare(input)
     if (share.type !== "folder") throw new NotFoundException("文件未找到")
     const children = await this.prisma.driveItem.findMany({
       where: { userId: share.ownerId, parentId: share.item.id, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
@@ -576,12 +705,17 @@ export class DriveService implements OnApplicationBootstrap {
     return { item: share.item, children: children.map(toDriveItemDto) }
   }
 
-  async createDownloadUrlForShareChild(shareId: string, itemId: string): Promise<{ readonly url: string }> {
-    const share = await this.resolvePublicShare(shareId)
+  async createDownloadUrlForShareChild(input: {
+    readonly shareId: string
+    readonly itemId: string
+    readonly password?: string
+    readonly cookie?: string
+  }): Promise<{ readonly url: string }> {
+    const share = await this.resolvePublicShare(input)
     if (share.type !== "folder") throw new NotFoundException("文件未找到")
     const child = await this.prisma.driveItem.findFirst({
       where: {
-        id: itemId,
+        id: input.itemId,
         userId: share.ownerId,
         type: DRIVE_ITEM_TYPE.file,
         storageStatus: DRIVE_STORAGE_STATUS.active,
@@ -596,8 +730,12 @@ export class DriveService implements OnApplicationBootstrap {
     return { url: download.url }
   }
 
-  async createFolderZipEntriesForShare(shareId: string): Promise<Array<{ readonly path: string; readonly url: string }>> {
-    const share = await this.resolvePublicShare(shareId)
+  async createFolderZipEntriesForShare(input: {
+    readonly shareId: string
+    readonly password?: string
+    readonly cookie?: string
+  }): Promise<Array<{ readonly path: string; readonly url: string }>> {
+    const share = await this.resolvePublicShare(input)
     if (share.type !== "folder") throw new NotFoundException("文件未找到")
     const entries: Array<{ readonly path: string; readonly url: string }> = []
     const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: share.item.id, prefix: "" }]
@@ -1078,6 +1216,26 @@ function resolvePublicationContentType(relativePath: string, stored: string | nu
   if (lowerPath.endsWith(".js") || lowerPath.endsWith(".mjs")) return "application/javascript; charset=utf-8"
   if (lowerPath.endsWith(".json")) return "application/json; charset=utf-8"
   return stored || "application/octet-stream"
+}
+
+function isPublicationPasswordPagePath(type: "page" | "site", relativePath: string): boolean {
+  if (type === "page") return relativePath === DRIVE_PUBLICATION_INDEX_PATH
+  const lowerPath = relativePath.toLowerCase()
+  return lowerPath === DRIVE_PUBLICATION_INDEX_PATH || lowerPath.endsWith(".html") || lowerPath.endsWith(".htm")
+}
+
+function toDrivePublicShareValue(share: {
+  readonly item: Parameters<typeof toDriveItemDto>[0] & {
+    readonly userId: string
+    readonly storageKey: string | null
+  }
+}): DrivePublicShareValue {
+  return {
+    item: toDriveItemDto(share.item),
+    ownerId: share.item.userId,
+    storageKey: share.item.storageKey,
+    type: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
+  }
 }
 
 function toDriveShareDto(
