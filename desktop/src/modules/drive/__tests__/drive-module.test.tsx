@@ -297,6 +297,33 @@ describe("DriveModule", () => {
     expect(failedBadge?.dataset.variant).toBe("destructive")
   })
 
+  it("shows share and publication states together in one compact status cell", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({
+        activeShareId: "share-row-1",
+        id: "html-1",
+        mimeType: "text/html",
+        name: "report.html",
+        shared: true,
+        type: "file",
+      }),
+      createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+    ])
+    mocks.listDrivePublications.mockResolvedValue([
+      createDrivePublication({ id: "pub-page-1", sourceItemId: "html-1", name: "report.html", type: "page" }),
+      createDrivePublication({ id: "pub-site-1", sourceItemId: "folder-1", name: "site", type: "site" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const reportRow = getTableRow("report.html")
+    const reportBadges = Array.from(reportRow.querySelectorAll<HTMLElement>("[data-slot='badge']"))
+      .map((element) => element.textContent)
+    expect(reportBadges).toEqual(["已发布", "已分享"])
+    expect(getTableRow("site").textContent).toContain("已发布")
+  })
+
   it("filters the file list through the compact search input", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "chart_watermark.png", type: "file" }),
@@ -427,6 +454,25 @@ describe("DriveModule", () => {
     expect(breadcrumbNav?.className).toContain("border")
     expect(breadcrumbNav?.querySelector(".lucide-chevron-right")).not.toBeNull()
     expect(breadcrumbNav?.querySelector('[aria-current="page"]')?.textContent).toBe("作业范文")
+  })
+
+  it("keeps the drive file table fixed, compact, and truncates long names", async () => {
+    const longName = "这是一个非常非常非常非常非常非常非常长的文件名-report-2026-final.html"
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: longName, size: "1536", type: "file" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const table = document.querySelector<HTMLTableElement>("table")
+    expect(table?.className).toContain("table-fixed")
+    expect(table?.className).not.toContain("min-w-[760px]")
+    expect(document.body.textContent).toContain("1.5 KB")
+
+    const nameCellText = document.querySelector<HTMLElement>(`td span[title="${longName}"]`)
+    expect(nameCellText?.className).toContain("truncate")
+    expect(nameCellText?.className).toContain("whitespace-nowrap")
   })
 
   it("opens a folder name dialog before creating a folder", async () => {
