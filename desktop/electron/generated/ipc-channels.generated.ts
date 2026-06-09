@@ -26,6 +26,13 @@ export const IPC_CHANNELS = {
     "shareDriveItem": "synapse:account:drive:items:share",
     "disableDriveShare": "synapse:account:drive:shares:disable",
     "getDriveUsage": "synapse:account:drive:usage:get",
+    "listDrivePublications": "synapse:account:drive:publications:list",
+    "publishDrivePage": "synapse:account:drive:publications:page",
+    "publishDriveSite": "synapse:account:drive:publications:site",
+    "redeployDrivePublication": "synapse:account:drive:publications:redeploy",
+    "disableDrivePublication": "synapse:account:drive:publications:disable",
+    "getDriveDeleteImpact": "synapse:account:drive:items:delete-impact",
+    "listDriveShares": "synapse:account:drive:shares:list",
     "stateChanged": "synapse:events:account",
   },
   "live": {

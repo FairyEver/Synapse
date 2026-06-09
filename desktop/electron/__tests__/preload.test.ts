@@ -235,7 +235,15 @@ describe("preload bridge", () => {
       url: "https://upload.example.test/object",
     })
     await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
+    await bridge.account.deleteDriveItem({ itemId: "item-1", disablePublications: true })
     await bridge.account.shareDriveItem({ itemId: "item-1" })
+    await bridge.account.listDrivePublications()
+    await bridge.account.publishDrivePage({ itemId: "item-1" })
+    await bridge.account.publishDriveSite({ itemId: "folder-1" })
+    await bridge.account.redeployDrivePublication({ publicationId: "pub-row-1" })
+    await bridge.account.disableDrivePublication({ publicationId: "pub-row-1" })
+    await bridge.account.getDriveDeleteImpact({ itemId: "item-1" })
+    await bridge.account.listDriveShares()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:list",
@@ -263,8 +271,40 @@ describe("preload bridge", () => {
       { parentId: null, name: "交接材料" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:items:delete",
+      { itemId: "item-1", disablePublications: true },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:share",
       { itemId: "item-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:publications:list",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:publications:page",
+      { itemId: "item-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:publications:site",
+      { itemId: "folder-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:publications:redeploy",
+      { publicationId: "pub-row-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:publications:disable",
+      { publicationId: "pub-row-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:items:delete-impact",
+      { itemId: "item-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:shares:list",
+      undefined,
     )
   })
 

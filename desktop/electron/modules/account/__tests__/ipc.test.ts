@@ -42,6 +42,13 @@ vi.mock("../../../services/account-service", () => ({
     shareDriveItem: async () => ({}),
     disableDriveShare: async () => ({ ok: true }),
     getDriveUsage: async () => ({}),
+    listDrivePublications: async () => [],
+    publishDrivePage: async () => ({}),
+    publishDriveSite: async () => ({}),
+    redeployDrivePublication: async () => ({}),
+    disableDrivePublication: async () => ({ ok: true }),
+    getDriveDeleteImpact: async () => ({ publications: [] }),
+    listDriveShares: async () => [],
   },
 }))
 
@@ -153,6 +160,57 @@ describe("accountIpcModule", () => {
       expect.objectContaining({
         activeShareId: "share-1",
         shared: true,
+      }),
+    ])
+  })
+
+  it("validates drive publication and share bridge schemas", () => {
+    expect(accountIpcModule.methods.publishDrivePage.request?.parse({ itemId: "item-1" }))
+      .toEqual({ itemId: "item-1" })
+    expect(accountIpcModule.methods.publishDriveSite.request?.parse({ itemId: "folder-1" }))
+      .toEqual({ itemId: "folder-1" })
+    expect(accountIpcModule.methods.redeployDrivePublication.request?.parse({ publicationId: "pub-row-1" }))
+      .toEqual({ publicationId: "pub-row-1" })
+    expect(accountIpcModule.methods.disableDrivePublication.request?.parse({ publicationId: "pub-row-1" }))
+      .toEqual({ publicationId: "pub-row-1" })
+    expect(accountIpcModule.methods.getDriveDeleteImpact.request?.parse({ itemId: "item-1" }))
+      .toEqual({ itemId: "item-1" })
+    expect(accountIpcModule.methods.deleteDriveItem.request?.parse({
+      itemId: "item-1",
+      disablePublications: true,
+    })).toEqual({ itemId: "item-1", disablePublications: true })
+
+    const publication = {
+      id: "pub-row-1",
+      publishId: "pub_public",
+      type: "page",
+      name: "report.html",
+      status: "active",
+      sourceItemId: "item-1",
+      sourceDeleted: false,
+      url: "https://synapse.test/pages/pub_public",
+      currentDeploymentId: "dep-1",
+      createdAt: "2026-06-09T00:00:00.000Z",
+      updatedAt: "2026-06-09T00:00:00.000Z",
+    }
+    expect(accountIpcModule.methods.listDrivePublications.response.parse([publication]))
+      .toEqual([publication])
+    expect(accountIpcModule.methods.getDriveDeleteImpact.response.parse({ publications: [publication] }))
+      .toEqual({ publications: [publication] })
+    expect(accountIpcModule.methods.listDriveShares.response.parse([{
+      id: "share-row-1",
+      shareId: "share_public",
+      itemId: "item-1",
+      itemName: "report.html",
+      itemType: "file",
+      sourceDeleted: false,
+      url: "https://synapse.test/share/share_public",
+      createdAt: "2026-06-09T00:00:00.000Z",
+    }])).toEqual([
+      expect.objectContaining({
+        itemName: "report.html",
+        itemType: "file",
+        shareId: "share_public",
       }),
     ])
   })
