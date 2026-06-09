@@ -2,10 +2,12 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Optional } 
 import { Prisma } from "@prisma/client"
 import {
   buildDriveShareUrl,
+  type DriveDeleteImpactDto,
   type DriveFolderUploadPrepareResult,
   type DriveItemDto,
   type DrivePublicationDto,
   type DriveShareDto,
+  type DriveShareListItemDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
 } from "@synapse/shared"
@@ -51,6 +53,10 @@ type PublicationSourceAsset = {
   readonly relativePath: string
   readonly contentType: string | null
   readonly size: bigint
+}
+
+type DrivePublicationWithImpactAssets = DrivePublicationRecord & {
+  readonly assets?: readonly { readonly deploymentId: string }[]
 }
 
 const driveItemWithShares = {
@@ -298,8 +304,22 @@ export class DriveService {
     }))
   }
 
-  async deleteItem(userId: string, itemId: string, actorEmail = userId, ipAddress = "system"): Promise<{ readonly ok: true }> {
-    await this.deleteItemInternal({ itemId, userId, actorEmail, ipAddress, admin: false })
+  async deleteItem(
+    userId: string,
+    itemId: string,
+    actorEmail = userId,
+    ipAddress = "system",
+    options: { readonly disablePublications?: boolean; readonly publicAppUrl?: string } = {},
+  ): Promise<{ readonly ok: true }> {
+    await this.deleteItemInternal({
+      itemId,
+      userId,
+      actorEmail,
+      ipAddress,
+      admin: false,
+      disablePublications: options.disablePublications ?? false,
+      publicAppUrl: options.publicAppUrl,
+    })
     return { ok: true }
   }
 
@@ -321,6 +341,24 @@ export class DriveService {
     return { ok: true }
   }
 
+  async listShares(userId: string, publicAppUrl: string): Promise<DriveShareListItemDto[]> {
+    const shares = await this.prisma.driveShare.findMany({
+      where: { userId, enabled: true },
+      include: { item: { select: { id: true, name: true, type: true, deletedAt: true } } },
+      orderBy: { createdAt: "desc" },
+    })
+    return shares.map((share) => ({
+      id: share.id,
+      shareId: share.shareId,
+      itemId: share.itemId,
+      itemName: share.item.name,
+      itemType: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
+      sourceDeleted: share.item.deletedAt !== null,
+      url: buildDriveShareUrl({ publicAppUrl, shareId: share.shareId }),
+      createdAt: share.createdAt.toISOString(),
+    }))
+  }
+
   async listPublications(userId: string, publicAppUrl: string): Promise<DrivePublicationDto[]> {
     const publications = await this.prisma.drivePublication.findMany({
       where: { userId },
@@ -328,6 +366,14 @@ export class DriveService {
       orderBy: { updatedAt: "desc" },
     })
     return publications.map((publication) => toDrivePublicationDto(publication, publicAppUrl))
+  }
+
+  async getDeleteImpact(userId: string, itemId: string, publicAppUrl: string): Promise<DriveDeleteImpactDto> {
+    const root = await this.requireOwnedItem(userId, itemId)
+    const items = root.type === DRIVE_ITEM_TYPE.folder ? await this.collectSubtree(root.id) : [root]
+    const itemIds = items.map((item) => item.id)
+    const publications = await this.findActivePublicationsReferencingItems(userId, itemIds)
+    return { publications: publications.map((publication) => toDrivePublicationDto(publication, publicAppUrl)) }
   }
 
   async publishPage(userId: string, itemId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
@@ -768,12 +814,33 @@ export class DriveService {
     return result
   }
 
+  private async findActivePublicationsReferencingItems(userId: string, itemIds: readonly string[]): Promise<DrivePublicationWithImpactAssets[]> {
+    if (itemIds.length === 0) return []
+    const publications = await this.prisma.drivePublication.findMany({
+      where: {
+        userId,
+        status: DRIVE_PUBLICATION_STATUS.active,
+      },
+      include: {
+        sourceItem: { select: { deletedAt: true } },
+        assets: { where: { sourceItemId: { in: [...itemIds] } }, select: { deploymentId: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    })
+    return publications.filter((publication) => (
+      itemIds.includes(publication.sourceItemId ?? "")
+      || publication.assets.some((asset) => asset.deploymentId === publication.currentDeploymentId)
+    ))
+  }
+
   private async deleteItemInternal(input: {
     readonly itemId: string
     readonly userId?: string
     readonly actorEmail: string
     readonly ipAddress: string
     readonly admin: boolean
+    readonly disablePublications?: boolean
+    readonly publicAppUrl?: string
   }): Promise<void> {
     const root = input.userId
       ? await this.requireOwnedItem(input.userId, input.itemId)
@@ -783,11 +850,20 @@ export class DriveService {
     const itemIds = items.map((item) => item.id)
     const activeFiles = items.filter((item) => item.type === DRIVE_ITEM_TYPE.file && item.storageKey && item.storageStatus === DRIVE_STORAGE_STATUS.active)
     const deletedAt = new Date()
+    const impactedPublications = input.disablePublications
+      ? await this.findActivePublicationsReferencingItems(root.userId, itemIds)
+      : []
     await this.prisma.$transaction(async (tx) => {
       await tx.driveShare.updateMany({
         where: { itemId: { in: itemIds } },
         data: { enabled: false, disabledAt: deletedAt },
       })
+      if (impactedPublications.length > 0) {
+        await tx.drivePublication.updateMany({
+          where: { id: { in: impactedPublications.map((publication) => publication.id) } },
+          data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: deletedAt },
+        })
+      }
       await tx.driveItem.updateMany({
         where: { id: { in: itemIds } },
         data: {

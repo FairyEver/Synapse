@@ -370,6 +370,75 @@ describe("DriveService", () => {
     expect(deployments.map((deployment: any) => deployment.status).sort()).toEqual(["active", "failed"])
   })
 
+  it("detects a published site child resource when deleting one file", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const logo = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "logo.png",
+      mimeType: "image/png",
+    })
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+
+    const impact = await service.getDeleteImpact("user-1", logo.id, "https://synapse.test")
+
+    expect(impact.publications.map((item) => item.id)).toEqual([publication.id])
+  })
+
+  it("disables affected publications when deleting with disablePublications", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    await service.deleteItem("user-1", file.id, "user-1", "127.0.0.1", {
+      disablePublications: true,
+      publicAppUrl: "https://synapse.test",
+    })
+
+    const updatedPublication = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
+    const deletedItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: file.id } })
+    expect(updatedPublication).toMatchObject({ status: "disabled" })
+    expect(updatedPublication.disabledAt).toEqual(deletedItem.deletedAt)
+  })
+
+  it("lists enabled shares with source metadata", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+
+    const shares = await service.listShares("user-1", "https://synapse.test")
+
+    expect(shares).toEqual([{
+      id: share.id,
+      shareId: share.shareId,
+      itemId: file.id,
+      itemName: "report.html",
+      itemType: "file",
+      sourceDeleted: false,
+      url: share.url,
+      createdAt: share.createdAt,
+    }])
+  })
+
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -514,6 +583,28 @@ function createPrismaMemory() {
     ...publication,
     sourceItem: publication.sourceItemId ? { deletedAt: items.get(publication.sourceItemId)?.deletedAt ?? null } : null,
   })
+  const withPublicationIncludes = (publication: any, include: any) => {
+    let result = publication
+    if (include?.sourceItem) result = withSourceItem(result)
+    if (include?.assets) {
+      const assetWhere = include.assets.where ?? {}
+      result = {
+        ...result,
+        assets: [...publicationAssets.values()]
+          .filter((asset) => asset.publicationId === publication.id && matchesWhere(asset, assetWhere))
+          .map((asset) => include.assets.select ? selectFields(asset, include.assets.select) : asset),
+      }
+    }
+    return result
+  }
+  const withShareIncludes = (share: any, include: any) => {
+    if (!include?.item) return share
+    const item = items.get(share.itemId)
+    return {
+      ...share,
+      item: include.item.select ? selectFields(item, include.item.select) : withShares(item),
+    }
+  }
 
   const prisma: any = {
     $transaction: async (input: any) => {
@@ -641,7 +732,11 @@ function createPrismaMemory() {
       findFirst: async ({ where, include }: any) => {
         const share = [...shares.values()].find((item) => matchesWhere(item, where))
         if (!share) return null
-        return include?.item ? { ...share, item: withShares(items.get(share.itemId)) } : share
+        return withShareIncludes(share, include)
+      },
+      findMany: async ({ where, include, orderBy }: any = {}) => {
+        const found = orderRows([...shares.values()].filter((share) => matchesWhere(share, where ?? {})), orderBy)
+        return found.map((share) => withShareIncludes(share, include))
       },
       updateMany: async ({ where, data }: any) => {
         let count = 0
@@ -670,23 +765,23 @@ function createPrismaMemory() {
       findFirst: async ({ where, include }: any) => {
         const publication = [...publications.values()].find((item) => matchesWhere(item, where))
         if (!publication) return null
-        return include?.sourceItem ? withSourceItem(publication) : publication
+        return withPublicationIncludes(publication, include)
       },
       findMany: async ({ where, include, orderBy }: any = {}) => {
         let found = [...publications.values()].filter((publication) => matchesWhere(publication, where ?? {}))
         found = orderRows(found, orderBy)
-        return include?.sourceItem ? found.map(withSourceItem) : found
+        return found.map((publication) => withPublicationIncludes(publication, include))
       },
       findUniqueOrThrow: async ({ where, include }: any) => {
         const publication = publications.get(where.id)
         if (!publication) throw new Error("publication not found")
-        return include?.sourceItem ? withSourceItem(publication) : publication
+        return withPublicationIncludes(publication, include)
       },
       update: async ({ where, data, include }: any) => {
         const publication = publications.get(where.id)
         if (!publication) throw new Error("publication not found")
         Object.assign(publication, data, { updatedAt: now() })
-        return include?.sourceItem ? withSourceItem(publication) : publication
+        return withPublicationIncludes(publication, include)
       },
       updateMany: async ({ where, data }: any) => {
         let count = 0

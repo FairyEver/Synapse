@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
+import { Writable } from "node:stream"
+import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
@@ -35,6 +37,7 @@ const folderSchema = z.object({
 
 const renameSchema = z.object({ name: z.string().trim().min(1).max(255) }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
+const deleteItemSchema = z.object({ disablePublications: z.boolean().optional() }).strict()
 const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatus"] as const
 
 @UseGuards(UserAuthGuard)
@@ -50,6 +53,11 @@ export class DriveUserController {
   @Get("/items/:id")
   getItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.getItem(request.user!.id, id)
+  }
+
+  @Get("/items/:id/delete-impact")
+  getDeleteImpact(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.getDeleteImpact(request.user!.id, id, resolveRequestPagesPublicUrl(request))
   }
 
   @Post("/uploads/prepare")
@@ -106,8 +114,12 @@ export class DriveUserController {
   }
 
   @Delete("/items/:id")
-  deleteItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip)
+  deleteItem(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = body === undefined ? { disablePublications: false } : parseBody(deleteItemSchema, body, "删除请求无效。")
+    return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip, {
+      disablePublications: parsed.disablePublications ?? false,
+      publicAppUrl: resolveRequestPagesPublicUrl(request),
+    })
   }
 
   @Post("/items/:id/share")
@@ -143,6 +155,11 @@ export class DriveUserController {
   @Delete("/shares/:id")
   disableShare(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.disableShare(request.user!.id, id)
+  }
+
+  @Get("/shares")
+  listShares(@Req() request: AuthenticatedUserRequest) {
+    return this.drive.listShares(request.user!.id, resolveRequestPublicAppUrl(request))
   }
 
   @Get("/usage")
@@ -265,7 +282,12 @@ export class DrivePublicController {
   }): Promise<void> {
     try {
       await sendPublishedAsset(response, await this.drive.resolvePublishedAsset(input))
-    } catch {
+    } catch (error) {
+      if (response.headersSent) {
+        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+        return
+      }
+      if (response.destroyed) return
       sendPublicNotFound(response)
     }
   }
@@ -332,7 +354,30 @@ async function sendPublishedAsset(response: Response, asset: {
     "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'none';",
   )
   if (asset.size !== undefined) response.setHeader("Content-Length", asset.size.toString())
-  asset.stream.pipe(response)
+  await pipeline(asset.stream, createResponseWritable(response))
+}
+
+function createResponseWritable(response: Response): Writable {
+  let wroteBody = false
+  return new Writable({
+    write(chunk, encoding, callback) {
+      wroteBody = true
+      if (response.write(chunk, encoding)) {
+        callback()
+        return
+      }
+      response.once("drain", callback)
+    },
+    final(callback) {
+      response.end(callback)
+    },
+    destroy(error, callback) {
+      if (error && wroteBody && !response.destroyed) {
+        response.destroy(error instanceof Error ? error : undefined)
+      }
+      callback(error)
+    },
+  })
 }
 
 function sendPublicNotFound(response: Response) {

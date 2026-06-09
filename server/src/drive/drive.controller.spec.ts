@@ -25,6 +25,9 @@ describe("DriveController", () => {
   const drive = {
     listItems: vi.fn(),
     prepareFolderUpload: vi.fn(),
+    deleteItem: vi.fn(),
+    getDeleteImpact: vi.fn(),
+    listShares: vi.fn(),
     listPublications: vi.fn(),
     publishPage: vi.fn(),
     publishSite: vi.fn(),
@@ -40,6 +43,9 @@ describe("DriveController", () => {
   beforeEach(async () => {
     drive.listItems.mockReset()
     drive.prepareFolderUpload.mockReset()
+    drive.deleteItem.mockReset()
+    drive.getDeleteImpact.mockReset()
+    drive.listShares.mockReset()
     drive.listPublications.mockReset()
     drive.publishPage.mockReset()
     drive.publishSite.mockReset()
@@ -147,6 +153,103 @@ describe("DriveController", () => {
     }
   })
 
+  it("passes disablePublications through delete requests", async () => {
+    process.env.PAGES_PUBLIC_URL = "https://pages.example"
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.deleteItem.mockResolvedValue({ ok: true })
+
+      await request(userApp.getHttpServer())
+        .delete("/api/drive/items/file-1")
+        .send({ disablePublications: true })
+        .expect(200)
+
+      expect(drive.deleteItem).toHaveBeenCalledWith("user-1", "file-1", "user-1", expect.any(String), {
+        disablePublications: true,
+        publicAppUrl: "https://pages.example",
+      })
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("rejects unknown delete request fields", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      const response = await request(userApp.getHttpServer())
+        .delete("/api/drive/items/file-1")
+        .send({ disablePublications: true, extra: true })
+        .expect(400)
+
+      expect(response.text).toContain("删除请求无效")
+      expect(drive.deleteItem).not.toHaveBeenCalled()
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("calls delete impact and share listing through the user API", async () => {
+    process.env.PAGES_PUBLIC_URL = "https://pages.example"
+    process.env.APP_PUBLIC_URL = "https://app.example"
+    const publication = createPublication()
+    const share = {
+      id: "share-row-1",
+      shareId: "shr_public",
+      itemId: "file-1",
+      itemName: "report.html",
+      itemType: "file",
+      sourceDeleted: false,
+      url: "https://app.example/files/shr_public",
+      createdAt: "2026-06-09T00:00:00.000Z",
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.getDeleteImpact.mockResolvedValue({ publications: [publication] })
+      drive.listShares.mockResolvedValue([share])
+
+      await request(userApp.getHttpServer()).get("/api/drive/items/file-1/delete-impact").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/shares").expect(200)
+
+      expect(drive.getDeleteImpact).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example")
+      expect(drive.listShares).toHaveBeenCalledWith("user-1", "https://app.example")
+    } finally {
+      await userApp.close()
+    }
+  })
+
   it("falls back to APP_PUBLIC_URL when PAGES_PUBLIC_URL is blank", async () => {
     process.env.PAGES_PUBLIC_URL = "   "
     process.env.APP_PUBLIC_URL = "https://app.example"
@@ -235,6 +338,28 @@ describe("DriveController", () => {
     const response = await request(app!.getHttpServer()).get("/pages/pub_missing").expect(404)
     expect(response.text).toBe("网页未找到")
     expect(response.headers["content-type"]).toContain("text/plain")
+  })
+
+  it("returns public not found when a published asset stream fails before sending headers", async () => {
+    const error = new Error("stream failed")
+    drive.resolvePublishedAsset.mockResolvedValue({
+      stream: new Readable({
+        read() {
+          this.destroy(error)
+        },
+      }),
+      contentType: "text/html; charset=utf-8",
+      size: undefined,
+    })
+
+    const response = await request(app!.getHttpServer()).get("/pages/pub_broken").expect(404)
+
+    expect(response.text).toBe("网页未找到")
+    expect(drive.resolvePublishedAsset).toHaveBeenCalledWith({
+      publishId: "pub_broken",
+      type: "page",
+      relativePath: "index.html",
+    })
   })
 
   it("renders public folder children and redirects public file downloads", async () => {
