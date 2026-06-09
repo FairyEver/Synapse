@@ -196,9 +196,63 @@ describe("DriveService", () => {
 
     expect(publication.type).toBe("page")
     expect(publication.url).toMatch(/^https:\/\/synapse\.test\/pages\/pub_/u)
+    expect(publication.passwordEnabled).toBe(true)
+    expect(publication.password).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{8}$/u)
+    expect(publication.urlWithPassword).toBe(`${publication.url}?password=${publication.password}`)
+    expect(publication.expiresAt).not.toBeNull()
     const assets = await prisma.drivePublicationAsset.findMany({ where: { publicationId: publication.id } })
     expect(assets).toMatchObject([{ relativePath: "index.html", sourceItemId: file.id, contentType: "text/html" }])
     expect(publication.currentDeploymentId).toBe(assets[0]?.deploymentId)
+    const stored = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
+    expect(stored.passwordHash).toEqual(expect.any(String))
+    expect(stored.passwordEncrypted).toEqual(expect.any(String))
+  })
+
+  it("overwrites active publication settings without changing the publication identity", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const first = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    const second = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
+
+    expect(second.id).toBe(first.id)
+    expect(second.publishId).toBe(first.publishId)
+    expect(second.url).toBe(first.url)
+    expect(second.password).not.toBe(first.password)
+    expect(second.expiresAt).not.toBe(first.expiresAt)
+    const active = await prisma.drivePublication.findMany({
+      where: { userId: "user-1", sourceItemId: file.id, type: "page", status: "active" },
+    })
+    expect(active).toHaveLength(1)
+  })
+
+  it("lists publication access settings with readable passwords", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    const publications = await service.listPublications("user-1", "https://synapse.test")
+
+    expect(publications).toHaveLength(1)
+    expect(publications[0]).toMatchObject({
+      id: publication.id,
+      password: publication.password,
+      urlWithPassword: publication.urlWithPassword,
+      passwordEnabled: true,
+      expiresAt: publication.expiresAt,
+    })
   })
 
   it("preserves publication protection during redeploy", async () => {
@@ -520,7 +574,7 @@ describe("DriveService", () => {
     }])
   })
 
-  it("backfills legacy active shares and publications once", async () => {
+  it("backfills legacy active shares and publications on application bootstrap", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -557,10 +611,9 @@ describe("DriveService", () => {
       },
     })
 
-    const first = await service.backfillLegacyDriveAccessProtection(new Date("2026-06-09T00:00:00.000Z"))
+    await service.onApplicationBootstrap()
     const second = await service.backfillLegacyDriveAccessProtection(new Date("2026-06-10T00:00:00.000Z"))
 
-    expect(first).toEqual({ shares: 1, publications: 1 })
     expect(second).toEqual({ shares: 0, publications: 0 })
     const updatedShare = await prisma.driveShare.findFirst({ where: { id: share.id } })
     const updatedPublication = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
@@ -568,14 +621,14 @@ describe("DriveService", () => {
       passwordEnabled: true,
       passwordHash: expect.any(String),
       passwordEncrypted: expect.any(String),
-      expiresAt: new Date("2026-06-16T00:00:00.000Z"),
     })
+    expect(updatedShare.expiresAt).toBeInstanceOf(Date)
     expect(updatedPublication).toMatchObject({
       passwordEnabled: true,
       passwordHash: expect.any(String),
       passwordEncrypted: expect.any(String),
-      expiresAt: new Date("2026-06-16T00:00:00.000Z"),
     })
+    expect(updatedPublication.expiresAt).toBeInstanceOf(Date)
   })
 
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
