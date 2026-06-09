@@ -1243,6 +1243,7 @@ export type SynapseBridge = {
     codex: UsageAnalysisBridgeDomain
     getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
     savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>
+    /** @deprecated Compatibility alias with clear semantics. New code should use modelPrice.clearRules(). */
     resetPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
   }
   modelPrice: {

@@ -1075,7 +1075,7 @@ const synapseBridge: SynapseBridge = {
     getRules: invoke(IPC_CHANNELS["model-price"].rulesGet),
     saveRules: (rules) => invoke(IPC_CHANNELS["model-price"].rulesSave)(rules),
     clearRules: invoke(IPC_CHANNELS["model-price"].rulesClear),
-    // Compatibility bridge: resetRules currently routes to clear semantics until the renderer switches to clearRules.
+    // Compatibility bridge: legacy reset callers now use clear semantics.
     resetRules: invoke(IPC_CHANNELS["model-price"].rulesReset),
   },
   http: {
