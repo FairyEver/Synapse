@@ -40,9 +40,14 @@ export const AGENT_RELAY_PERMISSION_ERROR_MESSAGE = "中继会话请求了工具
 export const AGENT_RELAY_QUESTION_ERROR_MESSAGE = "中继会话请求了用户回复，已停止本次操作。"
 
 const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
+const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
 
 export function sdkResultErrorMessage(subtype: string | undefined, errors: readonly string[]): string | undefined {
-  if (errors.length > 0) return agentDiagnosticMessage(AGENT_EXECUTION_FAILED_MESSAGE, errors.join("\n"))
+  if (errors.length > 0) {
+    const diagnostic = errors.join("\n")
+    if (isWebFetchPreflightFailure(diagnostic)) return WEBFETCH_PREFLIGHT_FAILED_MESSAGE
+    return agentDiagnosticMessage(AGENT_EXECUTION_FAILED_MESSAGE, diagnostic)
+  }
   if (subtype === "error_max_turns") {
     return `已达到本轮执行上限（${DEFAULT_CLAUDE_SDK_MAX_TURNS}），任务尚未完成；发送“继续”可接着执行。`
   }
@@ -56,7 +61,17 @@ export function sdkResultErrorMessage(subtype: string | undefined, errors: reado
 }
 
 export function sdkQueryErrorMessage(diagnostic: string | undefined): string {
+  if (isWebFetchPreflightFailure(diagnostic)) return WEBFETCH_PREFLIGHT_FAILED_MESSAGE
   return agentDiagnosticMessage(AGENT_EXECUTION_FAILED_MESSAGE, diagnostic)
+}
+
+export function webFetchPreflightFailureMeta(diagnostic: string | undefined): Record<string, unknown> {
+  if (!isWebFetchPreflightFailure(diagnostic)) return {}
+  return {
+    webFetchPreflightFailure: true,
+    webFetchDomain: webFetchPreflightDomain(diagnostic),
+    httpStatus: diagnostic?.match(/\bstatus code\s+(\d{3})\b/i)?.[1],
+  }
 }
 
 export function scheduledTimeoutMessage(timeoutMs: number | undefined): string {
@@ -85,4 +100,15 @@ export function commandExecutionStatusMessage(input: {
 export function agentDiagnosticMessage(message: string, diagnostic: string | undefined): string {
   const trimmed = diagnostic?.trim()
   return trimmed ? `${message}诊断信息：${trimmed}` : message
+}
+
+function isWebFetchPreflightFailure(diagnostic: string | undefined): boolean {
+  if (!diagnostic) return false
+  return /DomainCheckFailedError/i.test(diagnostic)
+    || /Unable to verify if domain .+ is safe to fetch/i.test(diagnostic)
+}
+
+function webFetchPreflightDomain(diagnostic: string | undefined): string | undefined {
+  const match = diagnostic?.match(/Unable to verify if domain\s+([^\s]+)\s+is safe to fetch/i)
+  return match?.[1]
 }

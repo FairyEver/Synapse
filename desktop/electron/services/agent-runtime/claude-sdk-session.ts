@@ -29,6 +29,7 @@ import {
   AGENT_SESSION_CLOSED_MESSAGE,
   AGENT_TURN_PERMISSION_CANCELLED_MESSAGE,
   sdkQueryErrorMessage,
+  webFetchPreflightFailureMeta,
 } from "./agent-error-messages"
 import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
@@ -85,9 +86,14 @@ export interface ClaudeSDKSessionOptions {
   readonly toolPolicy?: ClaudeSDKToolPolicy
   readonly abortSignal?: AbortSignal
   readonly additionalDirectories?: readonly string[]
+  readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly queryFactory?: QueryFactory
   readonly logger?: Pick<StructuredLogger, "warn">
   readonly now?: () => Date
+}
+
+export interface ClaudeSDKRuntimeSettings {
+  readonly skipWebFetchPreflight?: boolean
 }
 
 interface PendingPermission {
@@ -312,6 +318,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       settings: {
         enableAllProjectMcpServers: true,
         disableAllHooks: options.allowPluginHooks === true ? false : true,
+        ...options.sdkSettings,
         env: providerSettingsEnv(options.env),
       },
       env: sdkEnv,
@@ -803,9 +810,11 @@ function errorDiagnosticMessage(error: unknown): string | undefined {
 }
 
 function errorLogMeta(error: unknown): Record<string, unknown> {
+  const message = errorMessage(error)
   return {
     errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: errorMessage(error).length,
+    errorLength: message.length,
+    ...webFetchPreflightFailureMeta(message),
   }
 }
 

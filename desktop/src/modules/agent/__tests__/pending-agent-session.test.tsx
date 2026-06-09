@@ -58,6 +58,9 @@ const mocks = vi.hoisted(() => {
         exportConversationBundle: vi.fn(),
         openReference: vi.fn(),
       },
+      shell: {
+        showItemInFolder: vi.fn().mockResolvedValue(undefined),
+      },
     },
     toast,
     rendererLogger: {
@@ -206,6 +209,7 @@ afterEach(() => {
   mocks.configProjects = [{ id: "project-1", name: "Project One", path: "/repo" }]
   mocks.activeRepository = { uuid: "project-1", name: "Project One", localPath: "/repo" }
   mocks.bridgeAvailable = true
+  mocks.bridge.shell.showItemInFolder.mockResolvedValue(undefined)
   mocks.useAgentChat.mockImplementation(() => mocks.chat)
 })
 
@@ -941,8 +945,12 @@ describe("AgentModule pending prompt sessions", () => {
     expect(mocks.toast).toHaveBeenCalledWith("复制失败")
   })
 
-  it("exports the selected conversation bundle from the toolbar", async () => {
-    mocks.bridge.agent.exportConversationBundle.mockResolvedValue({ success: true, fileCount: 7 })
+  it("exports the selected conversation bundle from the toolbar and opens the saved file location", async () => {
+    mocks.bridge.agent.exportConversationBundle.mockResolvedValue({
+      success: true,
+      filePath: "/Users/test/Downloads/conversation.zip",
+      fileCount: 7,
+    })
     mocks.chat = createChatState({
       sessions: [targetSession],
       selectedProjectId: "project-1",
@@ -969,7 +977,79 @@ describe("AgentModule pending prompt sessions", () => {
       sessionKey: "local:renderer",
       conversationId: "conversation-1",
     })
+    expect(mocks.bridge.shell.showItemInFolder).toHaveBeenCalledWith("/Users/test/Downloads/conversation.zip")
     expect(mocks.toast).toHaveBeenCalledWith("对话调试包已导出")
+  })
+
+  it("does not open a folder when conversation bundle export succeeds without a file path", async () => {
+    mocks.bridge.agent.exportConversationBundle.mockResolvedValue({ success: true, fileCount: 7 })
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{ id: "entry-1", timestamp: "2026-05-13T00:00:00.000Z" }],
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[aria-label="导出对话"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.bridge.shell.showItemInFolder).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith("对话调试包已导出")
+  })
+
+  it("keeps export success feedback when opening the saved file location fails", async () => {
+    const openError = new Error("secret finder detail")
+    mocks.bridge.agent.exportConversationBundle.mockResolvedValue({
+      success: true,
+      filePath: "/Users/test/Downloads/conversation.zip",
+      fileCount: 7,
+    })
+    mocks.bridge.shell.showItemInFolder.mockRejectedValue(openError)
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{ id: "entry-1", timestamp: "2026-05-13T00:00:00.000Z" }],
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[aria-label="导出对话"]')?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mocks.bridge.shell.showItemInFolder).toHaveBeenCalledWith("/Users/test/Downloads/conversation.zip")
+    expect(mocks.toast).toHaveBeenCalledWith("对话调试包已导出")
+    expect(mocks.toast).not.toHaveBeenCalledWith("导出失败")
+    expect(mocks.rendererLogger.warn).toHaveBeenCalledWith("Agent conversation export location open failed.", {
+      boundary: "renderer.agent.conversation-export.open-location",
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      errorName: "Error",
+      errorLength: openError.message.length,
+    })
+    expect(JSON.stringify(mocks.rendererLogger.warn.mock.calls)).not.toContain("secret finder detail")
   })
 
   it("logs reference open failures without an unhandled rejection", async () => {

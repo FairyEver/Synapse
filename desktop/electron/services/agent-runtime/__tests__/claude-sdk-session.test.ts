@@ -152,6 +152,34 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("merges runtime SDK settings without leaking non-provider env into settings.env", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      env: {
+        ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com",
+        ANTHROPIC_AUTH_TOKEN: "sk-provider",
+        SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
+      },
+      sdkSettings: {
+        skipWebFetchPreflight: true,
+      },
+    })
+
+    expect(getOptions()).toMatchObject({
+      settings: {
+        enableAllProjectMcpServers: true,
+        disableAllHooks: true,
+        skipWebFetchPreflight: true,
+        env: {
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com",
+          ANTHROPIC_AUTH_TOKEN: "sk-provider",
+        },
+      },
+    })
+    expect(JSON.stringify(getOptions().settings)).not.toContain("side-token")
+    expect(JSON.stringify(getOptions().settings)).not.toContain("SYNAPSE_SIDE_CHANNEL_TOKEN")
+  })
+
   it("passes local SDK plugins to Claude Agent SDK", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {

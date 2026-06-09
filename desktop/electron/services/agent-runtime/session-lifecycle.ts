@@ -3,6 +3,7 @@ import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
 import type { AgentMessage, AgentLiveSession, AgentPendingPermission } from "./types"
+import type { ClaudeSDKRuntimeSettings } from "./claude-sdk-session"
 
 export interface RuntimeSessionState {
   key: string
@@ -17,6 +18,7 @@ export interface RuntimeSessionState {
   turnAbortController?: AbortController
   providerId?: string
   effectiveModel?: string
+  sdkSettings?: ClaudeSDKRuntimeSettings
   additionalDirectories?: readonly string[]
   modeOverride?: string
   closing?: boolean

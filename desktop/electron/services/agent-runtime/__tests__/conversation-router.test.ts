@@ -1103,6 +1103,41 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("persists attachment diagnostics on user history without storing image bytes", async () => {
+    const session = new ScriptedSession([
+      { type: "result", content: "read image", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const { conversations, router } = createRouter({ session })
+
+    const result = await router.send({
+      ...baseMessage("[Image #1]\n\n你可以看到图片吗"),
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        name: "chart_watermark.png",
+        size: 3,
+        data: new Uint8Array([1, 2, 3]),
+      }],
+    })
+    const savedConversation = await conversations.get(result.conversationId)
+    const userEntry = savedConversation?.history.find((entry) => entry.role === "user")
+
+    expect(userEntry?.metadata).toEqual({
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        name: "chart_watermark.png",
+        size: 3,
+        sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+        preparedForSdk: true,
+      }],
+    })
+    expect(JSON.stringify(userEntry)).not.toContain("AQID")
+    expect(
+      (userEntry?.metadata?.attachments as Array<Record<string, unknown>> | undefined)?.[0],
+    ).not.toHaveProperty("data")
+  })
+
   it("calls afterTurn after a live turn completes", async () => {
     const afterTurn = vi.fn()
     const session = new ScriptedSession([

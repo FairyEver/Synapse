@@ -75,7 +75,16 @@ describe("AgentSessionRepository", () => {
       name: "first",
       resumePolicy: "fresh",
     })
-    await repository.appendHistory(first.id, "user", "hello")
+    await repository.appendHistory(first.id, "user", "hello", {
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        name: "chart.png",
+        size: 3,
+        sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+        preparedForSdk: true,
+      }],
+    })
     await repository.saveAgentSession({
       conversationId: first.id,
       agentType: "claude-code",
@@ -87,7 +96,20 @@ describe("AgentSessionRepository", () => {
     expect(cleared.agentSessionId).toBeUndefined()
     expect(cleared.pastAgentSessionIds).toEqual(["claude-1"])
     expect(cleared.history).toEqual([
-      expect.objectContaining({ role: "user", content: "hello" }),
+      expect.objectContaining({
+        role: "user",
+        content: "hello",
+        metadata: {
+          attachments: [{
+            kind: "image",
+            mimeType: "image/png",
+            name: "chart.png",
+            size: 3,
+            sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+            preparedForSdk: true,
+          }],
+        },
+      }),
     ])
 
     const second = await repository.createSession({

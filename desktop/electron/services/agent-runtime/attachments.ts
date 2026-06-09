@@ -1,4 +1,5 @@
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
+import { createHash } from "node:crypto"
 import path from "node:path"
 
 import type {
@@ -11,6 +12,22 @@ import type {
 type SdkMessageContent = SDKUserMessage["message"]["content"]
 type SdkContentBlocks = Exclude<SdkMessageContent, string>
 type PathFlavor = "posix" | "win32"
+
+export type AgentAttachmentDiagnostic = {
+  readonly kind: "image"
+  readonly mimeType: AgentImageAttachment["mimeType"]
+  readonly name?: string
+  readonly size: number
+  readonly sha256: string
+  readonly preparedForSdk: true
+} | {
+  readonly kind: "path"
+  readonly path: string
+  readonly entryType: AgentPathAttachment["entryType"]
+  readonly name?: string
+  readonly preparedForSdk: false
+  readonly includedInReadableContent: true
+}
 
 interface ParsedAbsolutePath {
   readonly flavor: PathFlavor
@@ -51,6 +68,39 @@ export function withReadablePathAttachmentContent(message: AgentMessage): AgentM
   if (message.content.trim().length > 0) return message
   const readableContent = readablePathAttachmentContent(message.attachments)
   return readableContent ? { ...message, content: readableContent } : message
+}
+
+export function attachmentDiagnostics(
+  attachments: readonly AgentAttachment[] | undefined,
+): readonly AgentAttachmentDiagnostic[] {
+  return normalizeAgentAttachments(attachments).map((attachment) => {
+    if (isImageAttachment(attachment)) {
+      const bytes = imageDataToBuffer(attachment.data)
+      return {
+        kind: "image",
+        mimeType: attachment.mimeType,
+        ...(attachment.name ? { name: attachment.name } : {}),
+        size: attachment.size ?? bytes.byteLength,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        preparedForSdk: true,
+      }
+    }
+    return {
+      kind: "path",
+      path: attachment.path,
+      entryType: attachment.entryType,
+      ...(attachment.name ? { name: attachment.name } : {}),
+      preparedForSdk: false,
+      includedInReadableContent: true,
+    }
+  })
+}
+
+export function attachmentHistoryMetadata(
+  attachments: readonly AgentAttachment[] | undefined,
+): Record<string, unknown> | undefined {
+  const diagnostics = attachmentDiagnostics(attachments)
+  return diagnostics.length > 0 ? { attachments: diagnostics } : undefined
 }
 
 export function readablePathAttachmentContent(
@@ -123,10 +173,14 @@ function isPathAttachment(attachment: AgentAttachment): attachment is AgentPathA
 }
 
 function imageDataToBase64(data: ArrayBuffer | Uint8Array): string {
+  return imageDataToBuffer(data).toString("base64")
+}
+
+function imageDataToBuffer(data: ArrayBuffer | Uint8Array): Buffer {
   if (data instanceof Uint8Array) {
-    return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("base64")
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
   }
-  return Buffer.from(data).toString("base64")
+  return Buffer.from(data)
 }
 
 function addDirectory(directories: ParsedAbsolutePath[], directory: ParsedAbsolutePath): void {

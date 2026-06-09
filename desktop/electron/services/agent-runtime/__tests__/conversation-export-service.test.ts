@@ -77,12 +77,20 @@ describe("AgentConversationExportService", () => {
         failedToolCount: number
         usageSummary: { totalTokens: number }
       }
+      const attachments = JSON.parse(await readPackageFile("attachments.json")) as {
+        messages: Array<{
+          role: string
+          contentPreview: string
+          attachments: Array<Record<string, unknown>>
+        }>
+      }
       const eventsText = await readPackageFile("agent-events.json")
       const timelineText = await readPackageFile("timeline.json")
       const transcript = await readPackageFile("transcript.md")
 
       expect(manifest.included).toEqual(expect.arrayContaining([
         "conversation.json",
+        "attachments.json",
         "timeline.json",
         "agent-events.json",
         "agent-usage.json",
@@ -95,6 +103,20 @@ describe("AgentConversationExportService", () => {
         failedToolCount: 1,
         usageSummary: { totalTokens: 14 },
       })
+      expect(attachments.messages).toEqual([{
+        messageIndex: 0,
+        role: "user",
+        timestamp: "2026-06-08T08:00:00.500Z",
+        contentPreview: "[Image #1]\n\n请看图",
+        attachments: [{
+          kind: "image",
+          mimeType: "image/png",
+          name: "chart_watermark.png",
+          size: 3,
+          sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+          preparedForSdk: true,
+        }],
+      }])
       expect(eventsText).toContain("toolu-read-1")
       expect(eventsText).toContain("/Users/liyang/project/file.ts")
       expect(eventsText).not.toContain("sk-secret")
@@ -168,7 +190,7 @@ describe("AgentConversationExportService", () => {
     })).resolves.toEqual({
       success: true,
       filePath: outputPath,
-      fileCount: 7,
+      fileCount: 8,
     })
     expect(createZipArchive).toHaveBeenCalledTimes(1)
   })
@@ -264,16 +286,33 @@ function createConversation(): ConversationEntryV1 {
     costCny: 0.01,
     costCurrency: "CNY",
     agentType: "claude-code",
-    history: [{
-      role: "tool",
-      content: "Read\n{\"file_path\":\"/Users/liyang/project/file.ts\"}",
-      timestamp: "2026-06-08T08:00:01.000Z",
-      metadata: {
-        agentEventType: "toolUse",
-        toolUseId: "toolu-read-1",
-        toolName: "Read",
+    history: [
+      {
+        role: "user",
+        content: "[Image #1]\n\n请看图",
+        timestamp: "2026-06-08T08:00:00.500Z",
+        metadata: {
+          attachments: [{
+            kind: "image",
+            mimeType: "image/png",
+            name: "chart_watermark.png",
+            size: 3,
+            sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+            preparedForSdk: true,
+          }],
+        },
       },
-    }],
+      {
+        role: "tool",
+        content: "Read\n{\"file_path\":\"/Users/liyang/project/file.ts\"}",
+        timestamp: "2026-06-08T08:00:01.000Z",
+        metadata: {
+          agentEventType: "toolUse",
+          toolUseId: "toolu-read-1",
+          toolName: "Read",
+        },
+      },
+    ],
     active: true,
     name: "Debug Session",
     createdAt: "2026-06-08T08:00:00.000Z",

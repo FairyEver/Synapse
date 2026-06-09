@@ -38,7 +38,7 @@ import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
 import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput } from "./project-contributions"
-import { withReadablePathAttachmentContent } from "./attachments"
+import { attachmentHistoryMetadata, withReadablePathAttachmentContent } from "./attachments"
 import type {
   PendingPermissionState,
   RuntimeSessionState,
@@ -407,7 +407,12 @@ export class ConversationRouter {
       if (!conversation) {
         conversation = await this.getOrCreateConversation(message)
       }
-      conversation = await this.repository.appendHistory(conversation.id, "user", message.content)
+      conversation = await this.repository.appendHistory(
+        conversation.id,
+        "user",
+        message.content,
+        attachmentHistoryMetadata(message.attachments),
+      )
       this.emitConversationUpdated(conversation)
 
       const isBackgroundPlatform = message.platform !== "local-renderer"
@@ -756,7 +761,12 @@ export class ConversationRouter {
     let resultCostCurrency: "CNY" | undefined
     let error: string | undefined
     try {
-      const savedConversation = await this.repository.appendHistory(conversation.id, "user", message.content)
+      const savedConversation = await this.repository.appendHistory(
+        conversation.id,
+        "user",
+        message.content,
+        attachmentHistoryMetadata(message.attachments),
+      )
       const sessionHandle = await this.sessionManager.getOrCreateSession({
         state,
         conversation: savedConversation,

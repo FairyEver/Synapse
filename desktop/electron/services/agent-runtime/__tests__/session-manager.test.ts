@@ -301,6 +301,135 @@ describe("SessionManager", () => {
     }))
   })
 
+  it("enables WebFetch preflight skip by default for third-party Anthropic-compatible providers", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
+          ANTHROPIC_AUTH_TOKEN: "sk-test",
+        })),
+        getProvider: vi.fn(async () => ({
+          id: "bailian",
+          settingsConfig: {},
+        })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: { ...baseConversation(), providerId: "bailian" },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      sdkSettings: {
+        skipWebFetchPreflight: true,
+      },
+    }))
+  })
+
+  it("honors explicit WebFetch preflight settings from provider config", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
+          ANTHROPIC_AUTH_TOKEN: "sk-test",
+        })),
+        getProvider: vi.fn(async () => ({
+          id: "bailian",
+          settingsConfig: {
+            skipWebFetchPreflight: false,
+          },
+        })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: { ...baseConversation(), providerId: "bailian" },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      sdkSettings: {
+        skipWebFetchPreflight: false,
+      },
+    }))
+  })
+
+  it("recreates an alive SDK session when runtime SDK settings change", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const sessions: FakeLiveSession[] = []
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => {
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
+    let skipWebFetchPreflight = false
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
+          ANTHROPIC_AUTH_TOKEN: "sk-test",
+        })),
+        getProvider: vi.fn(async () => ({
+          id: "bailian",
+          settingsConfig: { skipWebFetchPreflight },
+        })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    const first = await manager.getOrCreateSession({
+      state,
+      conversation: { ...baseConversation(), providerId: "bailian" },
+      message: baseMessage("default"),
+    })
+    skipWebFetchPreflight = true
+    const second = await manager.getOrCreateSession({
+      state,
+      conversation: { ...baseConversation(), providerId: "bailian" },
+      message: baseMessage("default"),
+    })
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(second.liveSession).not.toBe(first.liveSession)
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(createSession.mock.calls.map(([input]) => input.sdkSettings)).toEqual([
+      { skipWebFetchPreflight: false },
+      { skipWebFetchPreflight: true },
+    ])
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
+  })
+
   it("passes external attachment directories into new live sessions", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())

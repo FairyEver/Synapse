@@ -68,6 +68,10 @@ interface BundleManifest {
     readonly marker: "[redacted]"
     readonly description: string
   }
+  readonly attachments: {
+    readonly binaryIncluded: false
+    readonly description: string
+  }
   readonly included: string[]
   readonly skipped: Array<{ path: string; reason: string }>
 }
@@ -79,6 +83,22 @@ interface UsageSummary {
   cacheCreationInputTokens: number
   reasoningOutputTokens: number
   totalTokens: number
+}
+
+interface AttachmentExportMessage {
+  readonly messageIndex: number
+  readonly role: ConversationEntryV1["history"][number]["role"]
+  readonly timestamp: string
+  readonly contentPreview: string
+  readonly attachments: readonly unknown[]
+}
+
+interface AttachmentExportIndex {
+  readonly schemaVersion: 1
+  readonly binaryIncluded: false
+  readonly messageCount: number
+  readonly attachmentCount: number
+  readonly messages: readonly AttachmentExportMessage[]
 }
 
 class AgentConversationExportService {
@@ -139,6 +159,7 @@ class AgentConversationExportService {
       })
 
       await this.writeJson(packageRoot, "conversation.json", conversation, included)
+      await this.writeJson(packageRoot, "attachments.json", buildAttachmentExportIndex(conversation), included)
       await this.writeJson(packageRoot, "timeline.json", {
         projectId: request.projectId,
         sessionKey: request.sessionKey ?? conversation.sessionKey,
@@ -161,6 +182,10 @@ class AgentConversationExportService {
           enabled: true,
           marker: "[redacted]",
           description: "Sensitive tokens, API keys, Authorization/Bearer headers, cookies, passwords, credentials, and secrets are redacted.",
+        },
+        attachments: {
+          binaryIncluded: false,
+          description: "Only attachment diagnostics are included: kind, MIME type, size, SHA-256, path metadata, and preparation-status fields. Original attachment bytes are not exported.",
         },
         included,
         skipped,
@@ -363,6 +388,36 @@ function buildSummary(input: {
     createdAt: input.conversation.createdAt,
     updatedAt: input.conversation.updatedAt,
   })
+}
+
+function buildAttachmentExportIndex(conversation: ConversationEntryV1): AttachmentExportIndex {
+  const messages: AttachmentExportMessage[] = []
+  conversation.history.forEach((entry, index) => {
+    const attachments = Array.isArray(entry.metadata?.attachments)
+      ? entry.metadata.attachments
+      : []
+    if (attachments.length === 0) return
+    messages.push({
+      messageIndex: index,
+      role: entry.role,
+      timestamp: entry.timestamp,
+      contentPreview: previewContent(entry.content),
+      attachments,
+    })
+  })
+  return {
+    schemaVersion: 1,
+    binaryIncluded: false,
+    messageCount: messages.length,
+    attachmentCount: messages.reduce((sum, message) => sum + message.attachments.length, 0),
+    messages,
+  }
+}
+
+function previewContent(content: string): string {
+  const normalized = content.trim()
+  if (normalized.length <= 200) return normalized
+  return `${normalized.slice(0, 200)}...`
 }
 
 function isFailedToolResult(entry: SynapseAgentTimelineItem): boolean {

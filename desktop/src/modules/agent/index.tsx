@@ -465,12 +465,24 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     if (!projectId || chat.timeline.length === 0) return
     setIsExportingConversation(true)
     try {
-      const result = await requireSynapseBridge().agent.exportConversationBundle({
+      const bridge = requireSynapseBridge()
+      const result = await bridge.agent.exportConversationBundle({
         projectId,
         sessionKey: chat.selectedSessionKey,
         conversationId: selectedSession.id,
       })
       if (result.success) {
+        if (result.filePath) {
+          void bridge.shell.showItemInFolder(result.filePath).catch((rawError: unknown) => {
+            logger.warn("Agent conversation export location open failed.", {
+              boundary: "renderer.agent.conversation-export.open-location",
+              projectId,
+              conversationId: selectedSession.id,
+              sessionKey: chat.selectedSessionKey,
+              ...errorDiagnostic(rawError),
+            })
+          })
+        }
         toast("对话调试包已导出")
       }
     } catch (rawError) {

@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises"
 
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
-import type { ProviderService } from "../provider"
+import type { CCProvider, ProviderService } from "../provider"
 import {
   AGENT_CANCELLED_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
@@ -14,7 +14,11 @@ import {
   hasUnconfiguredAttachmentDirectories,
   normalizeAgentAttachments,
 } from "./attachments"
-import { ClaudeSDKSession, DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./claude-sdk-session"
+import {
+  ClaudeSDKSession,
+  DEFAULT_CLAUDE_SDK_MAX_TURNS,
+  type ClaudeSDKRuntimeSettings,
+} from "./claude-sdk-session"
 import type {
   AgentSdkAgentDefinitions,
   AgentSdkPluginSpec,
@@ -47,6 +51,7 @@ export interface CreateAgentLiveSessionInput {
   readonly agents?: AgentSdkAgentDefinitions
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly additionalDirectories?: readonly string[]
+  readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly abortSignal?: AbortSignal
 }
 
@@ -110,6 +115,7 @@ export class SessionManager {
         agents: input.agents,
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
+        sdkSettings: input.sdkSettings,
         abortSignal: input.abortSignal,
         logger: deps.logger,
         now: deps.now,
@@ -191,6 +197,8 @@ export class SessionManager {
       }
     }
     const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL
+    const sdkSettings = await this.resolveSdkSettings(providerId, env)
+    const sdkSettingsMatch = sdkSettingsEqual(input.state.sdkSettings, sdkSettings)
     if (
       input.state.liveSession
       && input.state.liveSession.alive()
@@ -198,6 +206,7 @@ export class SessionManager {
       && providerMatches
       && modeMatches
       && modelMatches
+      && sdkSettingsMatch
     ) {
       if (hasUnconfiguredAttachmentDirectories({
         cwd,
@@ -210,12 +219,13 @@ export class SessionManager {
     }
 
     if (input.state.liveSession) {
-      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches || !modelMatches)) {
+      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches || !modelMatches || !sdkSettingsMatch)) {
         this.deps.logger?.info("Recreating agent live session.", {
           conversationId: input.conversation.id,
           providerChanged: !providerMatches,
           modeChanged: !modeMatches,
           modelChanged: !modelMatches,
+          sdkSettingsChanged: !sdkSettingsMatch,
           previousProviderId: input.state.providerId,
           nextProviderId: providerId,
           previousMode: input.state.modeOverride,
@@ -249,11 +259,13 @@ export class SessionManager {
         this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},
       ),
       additionalDirectories,
+      sdkSettings,
       abortSignal: input.abortSignal,
     })
     input.state.liveSession = liveSession
     input.state.providerId = providerId
     input.state.effectiveModel = env.ANTHROPIC_MODEL
+    input.state.sdkSettings = sdkSettings
     input.state.modeOverride = modeOverride
     input.state.additionalDirectories = additionalDirectories
     this.deps.logger?.info("Created agent live session.", {
@@ -274,6 +286,31 @@ export class SessionManager {
 
   async getActiveProviderId(): Promise<string | undefined> {
     return (await this.deps.providerService.getActiveProvider())?.id
+  }
+
+  private async resolveSdkSettings(
+    providerId: string,
+    env: Record<string, string>,
+  ): Promise<ClaudeSDKRuntimeSettings | undefined> {
+    const provider = await this.getProviderSafe(providerId)
+    return resolveProviderSdkSettings(provider, env)
+  }
+
+  private async getProviderSafe(providerId: string): Promise<CCProvider | undefined> {
+    const service = this.deps.providerService as ProviderService & {
+      readonly getProvider?: ProviderService["getProvider"]
+    }
+    if (typeof service.getProvider !== "function") return undefined
+    try {
+      return await service.getProvider(providerId)
+    } catch (error) {
+      this.deps.logger?.warn("Failed to read provider SDK settings.", {
+        boundary: "agent-runtime.provider-sdk-settings",
+        providerId,
+        ...errorDiagnostic(error),
+      })
+      return undefined
+    }
   }
 
   async interrupt(conversationId: string): Promise<boolean> {
@@ -441,6 +478,45 @@ function resolveTierFromEnv(env: Record<string, string>, tier: string): string |
     case "opus":    return env.ANTHROPIC_DEFAULT_OPUS_MODEL
     default: return undefined
   }
+}
+
+function resolveProviderSdkSettings(
+  provider: CCProvider | undefined,
+  env: Record<string, string>,
+): ClaudeSDKRuntimeSettings | undefined {
+  const configured = provider?.settingsConfig?.skipWebFetchPreflight
+  if (typeof configured === "boolean") {
+    return { skipWebFetchPreflight: configured }
+  }
+  if (isThirdPartyAnthropicCompatibleBaseUrl(env.ANTHROPIC_BASE_URL)) {
+    return { skipWebFetchPreflight: true }
+  }
+  return undefined
+}
+
+function isThirdPartyAnthropicCompatibleBaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase()
+    return !isAnthropicFirstPartyHost(host)
+  } catch {
+    return true
+  }
+}
+
+function isAnthropicFirstPartyHost(host: string): boolean {
+  return host === "api.anthropic.com"
+    || host === "claude.ai"
+    || host.endsWith(".claude.ai")
+    || host === "platform.claude.com"
+    || host.endsWith(".platform.claude.com")
+}
+
+function sdkSettingsEqual(
+  left: ClaudeSDKRuntimeSettings | undefined,
+  right: ClaudeSDKRuntimeSettings | undefined,
+): boolean {
+  return left?.skipWebFetchPreflight === right?.skipWebFetchPreflight
 }
 
 function errorDiagnostic(error: unknown): {
