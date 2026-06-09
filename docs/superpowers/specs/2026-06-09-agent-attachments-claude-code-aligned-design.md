@@ -39,6 +39,7 @@ This design focuses on the renderer Agent conversation path backed by the Claude
 - Do not convert files before sending.
 - Do not auto-ingest Knowledge Base raw sources.
 - Do not implement file preview, image crop, OCR, PDF page selection, or folder tree browsing in the composer.
+- Do not add choose-file, choose-folder, or choose-image buttons in the first iteration.
 - Do not add renderer-side directory scanning beyond what is needed to display selected folder paths.
 - Do not expose hidden implementation paths or secrets in logs, history, transcript export, or usage analysis.
 
@@ -105,10 +106,10 @@ Input methods:
 
 - paste image from clipboard;
 - drag image into composer;
-- choose image through an attachment menu;
 - paste file or folder paths from clipboard;
-- drag files or folders into composer;
-- choose files or folders through an attachment menu.
+- drag files or folders into composer.
+
+The first iteration intentionally has no explicit attachment picker button. Users add attachments only by paste or drag-and-drop, and remove them from the composer attachment row.
 
 Use existing shadcn/Radix components, lucide icons, and theme token classes. Do not add custom colors, gradients, glow, page-specific CSS, nested cards, or marketing copy.
 
@@ -249,6 +250,7 @@ Add focused tests for:
 - duplicate or nested external directories are collapsed;
 - text-only messages keep existing behavior;
 - attachment-only messages can be sent;
+- no choose-file or choose-image button is rendered in the composer;
 - invalid image and missing path block send;
 - history and transcript show `[Image #N]` and paths but not base64;
 - permission and tool event redaction still preserves normal paths while hiding secrets.
@@ -260,4 +262,3 @@ Implementation should update `RELEASE_NOTES_PENDING.md` because this is user-vis
 ```text
 Agent 对话支持按 Claude Code 的方式携带上下文：图片会作为视觉输入直接发送给模型，文件和文件夹会作为路径上下文交给 Claude 读取。
 ```
-
