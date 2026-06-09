@@ -265,9 +265,10 @@ export class DrivePublicController {
 
   @Get("/files/:shareId")
   async openShare(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    const password = readPasswordQuery(request)
     const access = await this.drive.resolvePublicShareAccess({
       shareId,
-      password: readPasswordQuery(request),
+      password,
       cookie: readDriveAccessCookie(request),
     })
     if (access.status === "password_required") {
@@ -280,6 +281,8 @@ export class DrivePublicController {
     }
     if (access.cookie) {
       setDriveAccessCookie(response, access.cookie)
+    }
+    if (password) {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
@@ -289,7 +292,7 @@ export class DrivePublicController {
     }
     const folder = await this.drive.listPublicFolderChildren({
       shareId,
-      password: readPasswordQuery(request),
+      password,
       cookie: readDriveAccessCookie(request),
     })
     response.type("html").send(renderPublicFolderPage(shareId, folder))
@@ -322,9 +325,9 @@ export class DrivePublicController {
       if (access.status !== "ok") throw new NotFoundException("文件未找到")
       if (access.cookie) {
         setDriveAccessCookie(response, access.cookie)
-        response.redirect(302, cleanPasswordUrl(request))
-        return
       }
+      response.redirect(302, cleanPasswordUrl(request))
+      return
     }
     const download = await this.drive.createDownloadUrlForShare({
       shareId,
@@ -346,9 +349,9 @@ export class DrivePublicController {
       if (access.status !== "ok") throw new NotFoundException("文件未找到")
       if (access.cookie) {
         setDriveAccessCookie(response, access.cookie)
-        response.redirect(302, cleanPasswordUrl(request))
-        return
       }
+      response.redirect(302, cleanPasswordUrl(request))
+      return
     }
     const download = await this.drive.createDownloadUrlForShareChild({
       shareId,
@@ -361,21 +364,24 @@ export class DrivePublicController {
 
   @Get("/files/:shareId/zip")
   async downloadFolderZip(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    const password = readPasswordQuery(request)
     const access = await this.drive.resolvePublicShareAccess({
       shareId,
-      password: readPasswordQuery(request),
+      password,
       cookie: readDriveAccessCookie(request),
     })
     if (access.status !== "ok") throw new NotFoundException("文件未找到")
     if (access.cookie) {
       setDriveAccessCookie(response, access.cookie)
+    }
+    if (password) {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
     if (access.value.type !== "folder") {
       const download = await this.drive.createDownloadUrlForShare({
         shareId,
-        password: readPasswordQuery(request),
+        password,
         cookie: readDriveAccessCookie(request),
       })
       response.redirect(302, download.url)
@@ -383,7 +389,7 @@ export class DrivePublicController {
     }
     const entries = await this.drive.createFolderZipEntriesForShare({
       shareId,
-      password: readPasswordQuery(request),
+      password,
       cookie: readDriveAccessCookie(request),
     })
     response.setHeader("Content-Type", "application/zip")
@@ -405,11 +411,12 @@ export class DrivePublicController {
     readonly request: Request
   }): Promise<void> {
     try {
+      const password = readPasswordQuery(input.request)
       const access = await this.drive.resolvePublishedAssetAccess({
         publishId: input.publishId,
         type: input.type,
         relativePath: input.relativePath,
-        password: readPasswordQuery(input.request),
+        password,
         cookie: readDriveAccessCookie(input.request),
       })
       if (access.status === "password_required") {
@@ -422,6 +429,8 @@ export class DrivePublicController {
       }
       if (access.cookie) {
         setDriveAccessCookie(response, access.cookie)
+      }
+      if (password) {
         response.redirect(302, cleanPasswordUrl(input.request))
         return
       }

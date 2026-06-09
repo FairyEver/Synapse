@@ -494,6 +494,28 @@ describe("DriveController", () => {
     expect(Array.isArray(siteCookie) ? siteCookie.join(";") : siteCookie).toContain("HttpOnly")
   })
 
+  it("cleans stale password query for published pages even without a new cookie", async () => {
+    drive.resolvePublishedAssetAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        stream: Readable.from(["<h1>public</h1>"]),
+        contentType: "text/html; charset=utf-8",
+        size: 15n,
+      },
+    })
+
+    const response = await request(app!.getHttpServer()).get("/pages/pub_page?password=stale").expect(302)
+
+    expect(response.headers.location).toBe("/pages/pub_page")
+    expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
+      publishId: "pub_page",
+      type: "page",
+      relativePath: "index.html",
+      password: "stale",
+      cookie: undefined,
+    })
+  })
+
   it("renders password page without resource details for protected shares", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
 
@@ -528,6 +550,27 @@ describe("DriveController", () => {
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: "letmein",
+      cookie: undefined,
+    })
+  })
+
+  it("cleans stale password query for share landing pages even without a new cookie", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        type: "file",
+        item: createDriveItem({ id: "file-1", name: "brief.txt", size: "11" }),
+        ownerId: "user-1",
+        storageKey: "drive/file-1",
+      },
+    })
+
+    const response = await request(app!.getHttpServer()).get("/files/shr_file?password=stale").expect(302)
+
+    expect(response.headers.location).toBe("/files/shr_file")
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      password: "stale",
       cookie: undefined,
     })
   })
@@ -582,6 +625,28 @@ describe("DriveController", () => {
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: "letmein",
+      cookie: undefined,
+    })
+  })
+
+  it("cleans stale password query for share downloads before creating storage URLs", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        type: "file",
+        item: createDriveItem({ id: "file-1", name: "brief.txt", size: "11" }),
+        ownerId: "user-1",
+        storageKey: "drive/file-1",
+      },
+    })
+
+    const response = await request(app!.getHttpServer()).get("/files/shr_file/download?password=stale").expect(302)
+
+    expect(response.headers.location).toBe("/files/shr_file/download")
+    expect(drive.createDownloadUrlForShare).not.toHaveBeenCalled()
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      password: "stale",
       cookie: undefined,
     })
   })
