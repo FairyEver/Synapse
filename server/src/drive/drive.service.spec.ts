@@ -197,6 +197,35 @@ describe("DriveService", () => {
       .rejects.toThrow("站点根目录需要 index.html。")
   })
 
+  it("rejects inactive folder root for site publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await prisma.driveItem.update({
+      where: { id: folder.id },
+      data: { storageStatus: "pending" },
+    })
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
+      .rejects.toThrow("站点文件夹不可发布。")
+  })
+
+  it("requires lowercase root index html for site publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "INDEX.HTML",
+      mimeType: "text/html",
+    })
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
+      .rejects.toThrow("站点根目录需要 index.html。")
+  })
+
   it("keeps the previous deployment active when redeploy copy fails", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

@@ -349,8 +349,9 @@ export class DriveService {
 
   async publishSite(userId: string, itemId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
     const folder = await this.requireOwnedFolder(userId, itemId)
+    if (folder.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new BadRequestException("站点文件夹不可发布。")
     const files = await this.collectPublicationSiteFiles(userId, folder.id)
-    if (!files.some((file) => file.relativePath.toLowerCase() === DRIVE_PUBLICATION_INDEX_PATH)) {
+    if (!files.some((file) => file.relativePath === DRIVE_PUBLICATION_INDEX_PATH)) {
       throw new BadRequestException("站点根目录需要 index.html。")
     }
 
@@ -366,8 +367,9 @@ export class DriveService {
 
     if (publication.type === DRIVE_PUBLICATION_TYPE.site) {
       const folder = await this.requireOwnedFolder(userId, publication.sourceItemId)
+      if (folder.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new BadRequestException("站点文件夹不可发布。")
       const files = await this.collectPublicationSiteFiles(userId, folder.id)
-      if (!files.some((file) => file.relativePath.toLowerCase() === DRIVE_PUBLICATION_INDEX_PATH)) {
+      if (!files.some((file) => file.relativePath === DRIVE_PUBLICATION_INDEX_PATH)) {
         throw new BadRequestException("站点根目录需要 index.html。")
       }
       return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files)
