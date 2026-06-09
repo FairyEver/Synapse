@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseAgentDomainEvent, SynapseAgentSessionSummary } from "@/types/agent"
 import { useAgentChat } from "../use-agent-chat"
+import { createImageAttachment, createPathAttachment } from "../../attachments"
 import type { AgentProjectScope } from "../../project-resolution"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -158,6 +159,49 @@ describe("useAgentChat", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt=secret")
   })
 
+  it("shows safe attachment send errors without keeping the optimistic message", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          send: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.send.mockRejectedValue(new Error("附件路径不存在。"))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    const sent = await act(async () =>
+      chat?.sendMessage("", {
+        projectId: session.projectId,
+        conversationId: session.id,
+        sessionKey: session.sessionKey,
+      }, {
+        attachments: [createPathAttachment({
+          id: "file-1",
+          path: "/Users/liyang/Desktop/missing.md",
+          entryType: "file",
+        })],
+      }))
+
+    expect(sent).toBe(false)
+    expect(chat?.error).toBe("附件路径不存在。")
+    expect(chat?.timeline).toEqual([])
+  })
+
   it("tracks pending background conversations for phase filtering", async () => {
     const bridge = (window as unknown as {
       synapse: {
@@ -218,6 +262,150 @@ describe("useAgentChat", () => {
         pendingConversation: true,
       }),
     )
+  })
+
+  it("sends attachment-only images with readable optimistic content and binary payload", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          send: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.send.mockResolvedValue(undefined)
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    const imageData = new Uint8Array([1, 2, 3]).buffer
+    const sent = await act(async () =>
+      chat?.sendMessage("", {
+        projectId: session.projectId,
+        conversationId: session.id,
+        sessionKey: session.sessionKey,
+      }, {
+        attachments: [
+          createImageAttachment({
+            id: "img-1",
+            mimeType: "image/png",
+            name: "screen.png",
+            size: 3,
+            bytes: imageData,
+          }),
+        ],
+      }))
+
+    expect(sent).toBe(true)
+    expect(chat?.timeline.at(-1)).toMatchObject({
+      kind: "message",
+      role: "user",
+      content: "[Image #1]",
+    })
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: session.projectId,
+      conversationId: session.id,
+      sessionKey: session.sessionKey,
+      content: "[Image #1]",
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        name: "screen.png",
+        size: 3,
+        data: imageData,
+      }],
+    }))
+    expect(JSON.stringify(bridge.send.mock.calls)).not.toContain("base64")
+  })
+
+  it("sends path attachments as readable path context and path payload entries", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          send: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.send.mockResolvedValue(undefined)
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    const sent = await act(async () =>
+      chat?.sendMessage("请分析", {
+        projectId: session.projectId,
+        conversationId: session.id,
+        sessionKey: session.sessionKey,
+      }, {
+        attachments: [
+          createPathAttachment({
+            id: "file-1",
+            path: "/Users/liyang/Desktop/brief.md",
+            entryType: "file",
+          }),
+          createPathAttachment({
+            id: "dir-1",
+            path: "/Users/liyang/Downloads/materials",
+            entryType: "directory",
+          }),
+        ],
+      }))
+
+    const expectedContent = [
+      "粘贴文件:",
+      "/Users/liyang/Desktop/brief.md",
+      "",
+      "粘贴文件夹:",
+      "/Users/liyang/Downloads/materials",
+      "",
+      "请分析",
+    ].join("\n")
+    expect(sent).toBe(true)
+    expect(chat?.timeline.at(-1)).toMatchObject({
+      kind: "message",
+      role: "user",
+      content: expectedContent,
+    })
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({
+      content: expectedContent,
+      attachments: [
+        {
+          kind: "path",
+          path: "/Users/liyang/Desktop/brief.md",
+          entryType: "file",
+          name: "brief.md",
+        },
+        {
+          kind: "path",
+          path: "/Users/liyang/Downloads/materials",
+          entryType: "directory",
+          name: "materials",
+        },
+      ],
+    }))
   })
 
   it("marks selected automated conversations as sending while their phase is in progress", async () => {

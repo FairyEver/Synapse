@@ -435,6 +435,25 @@ export type SynapseProviderPackageExportResult = {
   readonly filePath: string
 }
 
+export type SynapseAgentBridgeImageAttachment = {
+  readonly kind: "image"
+  readonly mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+  readonly data: ArrayBuffer
+  readonly name?: string
+  readonly size: number
+}
+
+export type SynapseAgentBridgePathAttachment = {
+  readonly kind: "path"
+  readonly path: string
+  readonly entryType: "file" | "directory"
+  readonly name?: string
+}
+
+export type SynapseAgentBridgeAttachment =
+  | SynapseAgentBridgeImageAttachment
+  | SynapseAgentBridgePathAttachment
+
 export type UsageAnalysisRangePreset = "today" | "7d" | "30d" | "90d" | "all"
 export type UsageAnalysisTimeBucketGranularity = "day" | "hour"
 
@@ -954,6 +973,7 @@ export type SynapseBridge = {
         sessionKey?: string
         conversationId?: string
         content: string
+        attachments?: readonly SynapseAgentBridgeAttachment[]
         clientSubmittedAt?: string
         providerId?: string
       },

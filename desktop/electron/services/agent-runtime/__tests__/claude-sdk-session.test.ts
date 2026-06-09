@@ -36,6 +36,70 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("send encodes image attachments as SDK image content blocks only", async () => {
+    const { factory, getPrompt } = createQueryFactory()
+    const session = createSession(factory)
+
+    const input = getPrompt()[Symbol.asyncIterator]().next()
+    await session.send({
+      ...message("[Image #1]"),
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        data: new Uint8Array([1, 2, 3]),
+        name: "pixel.png",
+        size: 3,
+      }],
+    })
+
+    await expect(input).resolves.toEqual({
+      done: false,
+      value: {
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: "AQID",
+              },
+            },
+            { type: "text", text: "[Image #1]" },
+          ],
+        },
+        parent_tool_use_id: null,
+      },
+    })
+  })
+
+  it("send keeps path-only attachment messages as readable text", async () => {
+    const { factory, getPrompt } = createQueryFactory()
+    const session = createSession(factory)
+
+    const input = getPrompt()[Symbol.asyncIterator]().next()
+    await session.send({
+      ...message("Attached file: /tmp/project/report.md"),
+      attachments: [{
+        kind: "path",
+        path: "/tmp/project/report.md",
+        entryType: "file",
+        name: "report.md",
+      }],
+    })
+
+    await expect(input).resolves.toMatchObject({
+      done: false,
+      value: {
+        message: {
+          content: "Attached file: /tmp/project/report.md",
+        },
+      },
+    })
+  })
+
   it("requests partial SDK messages so renderer can stream tokens", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory)
@@ -60,6 +124,17 @@ describe("ClaudeSDKSession", () => {
 
     expect(getOptions()).toMatchObject({
       maxTurns: 12,
+    })
+  })
+
+  it("passes additional directories to Claude Agent SDK", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      additionalDirectories: ["/Users/liyang/Desktop"],
+    })
+
+    expect(getOptions()).toMatchObject({
+      additionalDirectories: ["/Users/liyang/Desktop"],
     })
   })
 

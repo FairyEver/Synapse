@@ -17,6 +17,7 @@ export interface RuntimeSessionState {
   turnAbortController?: AbortController
   providerId?: string
   effectiveModel?: string
+  additionalDirectories?: readonly string[]
   modeOverride?: string
   closing?: boolean
   cancelState?: {

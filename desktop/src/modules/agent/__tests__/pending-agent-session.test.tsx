@@ -2,13 +2,14 @@
  * @vitest-environment jsdom
  */
 import { act } from "react"
-import type { ReactNode, Ref } from "react"
+import type { FormEvent, ReactNode, Ref } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "@/lib/default-agent-workspace"
+import { createPathAttachment, type AgentDraftAttachment } from "../attachments"
 import { AgentModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -32,6 +33,11 @@ const mocks = vi.hoisted(() => {
       knowledgeBaseActions?: readonly unknown[]
       onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
       onQuickInputDirectSend?: (content: string) => void | Promise<void>
+      onSubmit?: (
+        event: FormEvent,
+        attachments: readonly AgentDraftAttachment[],
+        acceptAttachments: () => () => void,
+      ) => void
     } | null,
     timelineProps: null as {
       onOpenReference?: (reference: string) => void
@@ -151,6 +157,11 @@ vi.mock("../components/agent-composer", () => ({
     knowledgeBaseActions?: readonly unknown[]
     onKnowledgeBaseCommand?: (commandText: string) => void | Promise<void>
     onQuickInputDirectSend?: (content: string) => void | Promise<void>
+    onSubmit?: (
+      event: FormEvent,
+      attachments: readonly AgentDraftAttachment[],
+      acceptAttachments: () => () => void,
+    ) => void
   }) => {
     mocks.composerProps = props
     return <form />
@@ -276,6 +287,97 @@ describe("AgentModule pending prompt sessions", () => {
     expect(selectSession).toHaveBeenCalledWith(targetSession)
     expect(sendMessage).toHaveBeenCalledWith("Run this prompt")
     expect(onPendingAgentSessionConsumed).toHaveBeenCalledTimes(1)
+  })
+
+  it("reserves composer attachments immediately before direct send resolves", async () => {
+    const sendMessageResult = deferred<boolean>()
+    const sendMessage = vi.fn(() => sendMessageResult.promise)
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: targetSession.projectId,
+      selectedConversationId: targetSession.id,
+      sendMessage,
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    const preventDefault = vi.fn()
+    const restoreAttachments = vi.fn()
+    const acceptAttachments = vi.fn(() => restoreAttachments)
+    const attachments = [createPathAttachment({
+      id: "path-1",
+      path: "/Users/liyang/Desktop/brief.md",
+      entryType: "file",
+    })]
+
+    await act(async () => {
+      mocks.composerProps?.onSubmit?.(
+        { preventDefault } as unknown as FormEvent,
+        attachments,
+        acceptAttachments,
+      )
+      await Promise.resolve()
+    })
+
+    expect(preventDefault).toHaveBeenCalledTimes(1)
+    expect(acceptAttachments).toHaveBeenCalledTimes(1)
+    expect(sendMessage).toHaveBeenCalledWith("", {
+      projectId: targetSession.projectId,
+      conversationId: targetSession.id,
+      sessionKey: targetSession.sessionKey,
+    }, { attachments })
+    expect(restoreAttachments).not.toHaveBeenCalled()
+
+    await act(async () => {
+      sendMessageResult.resolve(true)
+      await sendMessageResult.promise
+    })
+
+    expect(restoreAttachments).not.toHaveBeenCalled()
+  })
+
+  it("restores reserved composer attachments when direct send fails", async () => {
+    const sendMessage = vi.fn().mockResolvedValue(false)
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: targetSession.projectId,
+      selectedConversationId: targetSession.id,
+      sendMessage,
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    const restoreAttachments = vi.fn()
+    const acceptAttachments = vi.fn(() => restoreAttachments)
+    const attachments = [createPathAttachment({
+      id: "path-1",
+      path: "/Users/liyang/Desktop/brief.md",
+      entryType: "file",
+    })]
+
+    await act(async () => {
+      mocks.composerProps?.onSubmit?.(
+        { preventDefault: vi.fn() } as unknown as FormEvent,
+        attachments,
+        acceptAttachments,
+      )
+      await Promise.resolve()
+    })
+
+    expect(acceptAttachments).toHaveBeenCalledTimes(1)
+    expect(restoreAttachments).toHaveBeenCalledTimes(1)
   })
 
   it("logs pending session refresh failures with sanitized conversation context", async () => {
@@ -1078,4 +1180,14 @@ function createChatState(overrides: Record<string, unknown> = {}) {
     forceKillTurn: vi.fn(),
     ...overrides,
   }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve
+    reject = innerReject
+  })
+  return { promise, resolve, reject }
 }

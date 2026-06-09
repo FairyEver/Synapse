@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import fs from "node:fs/promises"
+import { tmpdir } from "node:os"
 import path from "node:path"
 
 const logStoreMock = vi.hoisted(() => ({
@@ -255,6 +256,185 @@ describe("agentIpcModule", () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       providerId: "deepseek",
     }))
+  })
+
+  it("forwards normalized attachments through local renderer sends", async () => {
+    const root = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), "synapse-agent-attachments-"))
+    const filePath = path.join(root, "report.md")
+    await fs.writeFile(filePath, "report")
+    const imageData = new Uint8Array([1, 2, 3])
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    try {
+      await harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "hello",
+        attachments: [
+          {
+            kind: "image",
+            mimeType: "image/png",
+            data: imageData,
+            name: "chart.png",
+            size: 3,
+          },
+          {
+            kind: "path",
+            path: filePath,
+            entryType: "directory",
+          },
+        ],
+      })
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      attachments: [
+        expect.objectContaining({
+          kind: "image",
+          mimeType: "image/png",
+          data: imageData,
+          name: "chart.png",
+          size: 3,
+        }),
+        expect.objectContaining({
+          kind: "path",
+          path: filePath,
+          entryType: "file",
+          name: "report.md",
+        }),
+      ],
+    }))
+  })
+
+  it("blocks missing path attachments before sending to AgentRuntime", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "",
+      attachments: [{
+        kind: "path",
+        path: path.join(await fs.realpath(tmpdir()), "synapse-agent-missing-attachment.md"),
+        entryType: "file",
+      }],
+    })).rejects.toThrow("附件路径不存在。")
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it.skipIf(process.platform === "win32")("blocks symlink path attachments before sending to AgentRuntime", async () => {
+    const root = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), "synapse-agent-attachments-"))
+    const realPath = path.join(root, "real.md")
+    const linkPath = path.join(root, "linked.md")
+    await fs.writeFile(realPath, "real")
+    await fs.symlink(realPath, linkPath)
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    try {
+      await expect(harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "",
+        attachments: [{
+          kind: "path",
+          path: linkPath,
+          entryType: "file",
+        }],
+      })).rejects.toThrow("附件路径不能是符号链接。")
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it.skipIf(process.platform === "win32")("blocks path attachments that traverse symlinked directories", async () => {
+    const realTmpDir = await fs.realpath(tmpdir())
+    const root = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-"))
+    const outside = await fs.mkdtemp(path.join(realTmpDir, "synapse-agent-attachments-outside-"))
+    const outsideFilePath = path.join(outside, "secret.md")
+    const linkDirectoryPath = path.join(root, "linked-dir")
+    await fs.writeFile(outsideFilePath, "secret")
+    await fs.symlink(outside, linkDirectoryPath, "dir")
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    try {
+      await expect(harness.invoke("synapse:agent:send", {
+        projectId: "project-1",
+        content: "",
+        attachments: [{
+          kind: "path",
+          path: path.join(linkDirectoryPath, "secret.md"),
+          entryType: "file",
+        }],
+      })).rejects.toThrow("附件路径不能是符号链接。")
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+      await fs.rm(outside, { recursive: true, force: true })
+    }
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("blocks oversized image attachments before sending to AgentRuntime", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "",
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        data: new Uint8Array((10 * 1024 * 1024) + 1),
+      }],
+    })).rejects.toThrow("图片附件过大。")
+
+    expect(send).not.toHaveBeenCalled()
   })
 
   it("validates SDK events in local renderer send responses", async () => {

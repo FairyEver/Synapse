@@ -32,6 +32,10 @@ import {
 } from "./agent-error-messages"
 import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
+import {
+  buildClaudeUserMessageContent,
+  normalizeAgentAttachments,
+} from "./attachments"
 import type {
   AgentEvent,
   AgentLiveSession,
@@ -80,6 +84,7 @@ export interface ClaudeSDKSessionOptions {
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly toolPolicy?: ClaudeSDKToolPolicy
   readonly abortSignal?: AbortSignal
+  readonly additionalDirectories?: readonly string[]
   readonly queryFactory?: QueryFactory
   readonly logger?: Pick<StructuredLogger, "warn">
   readonly now?: () => Date
@@ -190,11 +195,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
       })
       return false
     }
+    const attachments = normalizeAgentAttachments(message.attachments)
     this.inputQueue.push({
       type: "user",
       message: {
         role: "user",
-        content: message.content,
+        content: buildClaudeUserMessageContent(message.content, attachments),
       },
       parent_tool_use_id: null,
     })
@@ -320,6 +326,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
     queryOptions.maxTurns = options.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS
     if (options.plugins?.length) queryOptions.plugins = [...options.plugins]
     if (options.agents && Object.keys(options.agents).length > 0) queryOptions.agents = options.agents
+    if (options.additionalDirectories?.length) {
+      queryOptions.additionalDirectories = [...options.additionalDirectories]
+    }
     queryOptions.hooks = this.buildHooks()
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
     if (this.abortController) queryOptions.abortController = this.abortController
@@ -935,14 +944,13 @@ class AsyncQueue<T> implements AsyncIterable<T> {
     if (this.closed) return Promise.resolve(null)
     return new Promise((resolve) => {
       let settled = false
-      let timeout: ReturnType<typeof setTimeout> | undefined
       const waiter = (result: IteratorResult<T, void>): void => {
         if (settled) return
         settled = true
-        if (timeout) clearTimeout(timeout)
+        clearTimeout(timeout)
         resolve(result.done ? null : result.value)
       }
-      timeout = setTimeout(() => {
+      const timeout = setTimeout(() => {
         if (settled) return
         settled = true
         const index = this.waiters.indexOf(waiter)

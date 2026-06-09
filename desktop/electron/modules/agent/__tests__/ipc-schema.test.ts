@@ -1,3 +1,5 @@
+import vm from "node:vm"
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -158,6 +160,184 @@ describe("agent IPC schemas", () => {
       projectId: "project-1",
       conversationId: "conversation-1",
       mode: "free-for-all",
+    })).toThrow()
+  })
+
+  it("accepts normalized image and path attachments on send requests", () => {
+    const imageData = new Uint8Array([1, 2, 3])
+    const parsed = messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "hello",
+      attachments: [
+        {
+          kind: "image",
+          mimeType: "image/png",
+          data: imageData,
+          name: "chart.png",
+          size: 3,
+        },
+        {
+          kind: "path",
+          path: "/Users/example/report.md",
+          entryType: "file",
+          name: "report.md",
+        },
+      ],
+    }) as {
+      readonly attachments?: readonly [
+        { readonly kind: "image"; readonly data: Uint8Array },
+        { readonly kind: "path"; readonly path: string },
+      ]
+    }
+
+    expect(parsed.attachments?.[0]).toEqual(expect.objectContaining({
+      kind: "image",
+      mimeType: "image/png",
+      data: imageData,
+      name: "chart.png",
+      size: 3,
+    }))
+    expect(parsed.attachments?.[1]).toEqual(expect.objectContaining({
+      kind: "path",
+      path: "/Users/example/report.md",
+      entryType: "file",
+      name: "report.md",
+    }))
+  })
+
+  it("allows attachment-only send requests and rejects empty sends", () => {
+    expect(messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "",
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        data: new Uint8Array([1]),
+        size: 1,
+      }],
+    })).toMatchObject({
+      content: "",
+      attachments: [expect.objectContaining({ kind: "image" })],
+    })
+
+    expect(() => messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "",
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "   ",
+      attachments: [],
+    })).toThrow()
+  })
+
+  it("accepts cross-realm binary image data and Buffer image data", () => {
+    const crossRealmArrayBuffer = vm.runInNewContext("new ArrayBuffer(3)") as ArrayBuffer
+    const crossRealmUint8Array = vm.runInNewContext("new Uint8Array([1, 2, 3])") as Uint8Array
+    const bufferData = Buffer.from([1, 2, 3])
+
+    for (const data of [crossRealmArrayBuffer, crossRealmUint8Array, bufferData]) {
+      expect(messageMethods.send.request.parse({
+        projectId: "project-1",
+        content: "",
+        attachments: [{
+          kind: "image",
+          mimeType: "image/png",
+          data,
+        }],
+      })).toMatchObject({
+        attachments: [expect.objectContaining({ data })],
+      })
+    }
+  })
+
+  it("accepts POSIX and Windows absolute path attachments", () => {
+    expect(messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "",
+      attachments: [{ kind: "path", path: "/Users/example/report.md", entryType: "file" }],
+    })).toMatchObject({
+      attachments: [expect.objectContaining({ path: "/Users/example/report.md" })],
+    })
+    expect(messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "",
+      attachments: [{ kind: "path", path: "C:\\Users\\example\\report.md", entryType: "file" }],
+    })).toMatchObject({
+      attachments: [expect.objectContaining({ path: "C:\\Users\\example\\report.md" })],
+    })
+    expect(messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "",
+      attachments: [{ kind: "path", path: "C:/Users/example/report.md", entryType: "file" }],
+    })).toMatchObject({
+      attachments: [expect.objectContaining({ path: "C:/Users/example/report.md" })],
+    })
+    expect(messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "",
+      attachments: [{ kind: "path", path: "\\\\server\\share\\report.md", entryType: "file" }],
+    })).toMatchObject({
+      attachments: [expect.objectContaining({ path: "\\\\server\\share\\report.md" })],
+    })
+    expect(messageMethods.send.request.parse({
+      projectId: "project-1",
+      content: "",
+      attachments: [{ kind: "path", path: "//server/share/report.md", entryType: "file" }],
+    })).toMatchObject({
+      attachments: [expect.objectContaining({ path: "//server/share/report.md" })],
+    })
+  })
+
+  it("rejects malformed send attachments", () => {
+    const baseRequest = {
+      projectId: "project-1",
+      content: "hello",
+    }
+
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "image", mimeType: "image/png", data: new ArrayBuffer(0) }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "image", mimeType: "image/png", data: new Uint8Array() }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "image", mimeType: "image/svg+xml", data: new Uint8Array([1]), size: 1 }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "image", mimeType: "image/png", data: new Uint8Array([1]), size: -1 }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "image", mimeType: "image/png", data: new Uint8Array([1]), size: 1.5 }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "path", path: "", entryType: "file" }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "path", path: "   ", entryType: "file" }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "path", path: "relative/report.md", entryType: "file" }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "path", path: "//server", entryType: "file" }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "path", path: "///server/share/report.md", entryType: "file" }],
+    })).toThrow()
+    expect(() => messageMethods.send.request.parse({
+      ...baseRequest,
+      attachments: [{ kind: "file", path: "/Users/example/report.md" }],
     })).toThrow()
   })
 

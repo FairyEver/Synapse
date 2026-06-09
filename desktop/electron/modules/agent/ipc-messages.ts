@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto"
+import { lstat } from "node:fs/promises"
+import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 
@@ -13,7 +15,7 @@ import type {
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createZipArchive } from "../../runtime/archive"
 import { createControlledProcessRunner } from "../../runtime/process"
-import type { AgentEvent } from "../../services/agent-runtime"
+import type { AgentAttachment, AgentEvent, AgentMessage } from "../../services/agent-runtime"
 import { AgentConversationExportService } from "../../services/agent-runtime/conversation-export-service"
 import type { EventBus } from "../../runtime/event-bus"
 import { createMainLogger } from "../../services/log-store"
@@ -33,7 +35,16 @@ import {
 } from "./ipc-shared"
 
 const MAX_CLIENT_SKEW_MS = 60_000
+const MAX_AGENT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
 const logger = createMainLogger("agent.ipc")
+const agentImageMimeTypeSchema = z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"])
+const binaryAttachmentDataSchema = z.custom<ArrayBuffer | Uint8Array>(
+  isNonEmptyBinaryAttachmentData,
+  "data must be a non-empty ArrayBuffer or Uint8Array",
+)
+const attachmentPathSchema = z.string()
+  .trim()
+  .refine(isAbsoluteAttachmentPath, "path must be an absolute POSIX or Windows path")
 
 function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string): string {
   if (!clientIso) return recvIso
@@ -45,14 +56,142 @@ function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string):
   return clientIso
 }
 
+function isNonEmptyBinaryAttachmentData(value: unknown): value is ArrayBuffer | Uint8Array {
+  if (isArrayBufferLike(value)) return value.byteLength > 0
+  if (isUint8ArrayLike(value)) return value.byteLength > 0
+  return false
+}
+
+function isArrayBufferLike(value: unknown): value is ArrayBuffer {
+  return Object.prototype.toString.call(value) === "[object ArrayBuffer]"
+}
+
+function isUint8ArrayLike(value: unknown): value is Uint8Array {
+  return Object.prototype.toString.call(value) === "[object Uint8Array]"
+}
+
+function isAbsoluteAttachmentPath(value: string): boolean {
+  if (/^([\\/])\1[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value)) return true
+  if (/^[A-Za-z]:[\\/]/.test(value)) return true
+  return value.startsWith("/") && !value.startsWith("//")
+}
+
+function binaryAttachmentByteLength(data: ArrayBuffer | Uint8Array): number {
+  return data.byteLength
+}
+
+function normalizeAbsoluteAttachmentPath(value: string): string {
+  return attachmentPathOps(value).normalize(value)
+}
+
+function attachmentBasename(value: string): string {
+  return attachmentPathOps(value).basename(value)
+}
+
+function attachmentPathOps(value: string): typeof path.posix | typeof path.win32 {
+  return (/^[A-Za-z]:[\\/]/.test(value) || /^([\\/])\1[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value))
+    ? path.win32
+    : path.posix
+}
+
+async function normalizeSendAttachments(
+  attachments: SendRequest["attachments"],
+): Promise<AgentMessage["attachments"]> {
+  if (!attachments || attachments.length === 0) return undefined
+  const normalized: AgentAttachment[] = []
+  for (const attachment of attachments) {
+    if (attachment.kind === "image") {
+      const byteLength = binaryAttachmentByteLength(attachment.data)
+      if (byteLength > MAX_AGENT_IMAGE_ATTACHMENT_BYTES) {
+        throw new Error("图片附件过大。")
+      }
+      normalized.push({
+        ...attachment,
+        size: attachment.size ?? byteLength,
+      })
+      continue
+    }
+    const normalizedPath = normalizeAbsoluteAttachmentPath(attachment.path)
+    const stat = await lstatAttachmentPath(normalizedPath)
+    if (stat.isSymbolicLink()) {
+      throw new Error("附件路径不能是符号链接。")
+    }
+    if (!stat.isFile() && !stat.isDirectory()) {
+      throw new Error("附件路径必须是文件或文件夹。")
+    }
+    normalized.push({
+      ...attachment,
+      path: normalizedPath,
+      entryType: stat.isDirectory() ? "directory" : "file",
+      name: attachment.name ?? attachmentBasename(normalizedPath),
+    })
+  }
+  return normalized
+}
+
+async function lstatAttachmentPath(attachmentPath: string): Promise<Awaited<ReturnType<typeof lstat>>> {
+  let finalStat: Awaited<ReturnType<typeof lstat>> | undefined
+  for (const currentPath of attachmentPathPrefixes(attachmentPath)) {
+    try {
+      finalStat = await lstat(currentPath)
+    } catch (error) {
+      throw new Error("附件路径不存在。", { cause: error })
+    }
+    if (finalStat.isSymbolicLink()) {
+      throw new Error("附件路径不能是符号链接。")
+    }
+  }
+  if (!finalStat) {
+    throw new Error("附件路径不存在。")
+  }
+  return finalStat
+}
+
+function attachmentPathPrefixes(attachmentPath: string): readonly string[] {
+  const ops = attachmentPathOps(attachmentPath)
+  const parsed = ops.parse(attachmentPath)
+  const relative = ops.relative(parsed.root, attachmentPath)
+  if (!relative) return [attachmentPath]
+  const prefixes: string[] = []
+  let currentPath = parsed.root
+  for (const segment of relative.split(/[\\/]+/).filter(Boolean)) {
+    currentPath = currentPath ? ops.join(currentPath, segment) : segment
+    prefixes.push(currentPath)
+  }
+  return prefixes
+}
+
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
 const sendRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   conversationId: z.string().min(1).optional(),
-  content: z.string().min(1),
+  content: z.string(),
   clientSubmittedAt: z.string().optional(),
   providerId: z.string().min(1).optional(),
+  attachments: z.array(z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("image"),
+      mimeType: agentImageMimeTypeSchema,
+      data: binaryAttachmentDataSchema,
+      name: z.string().optional(),
+      size: z.number().int().nonnegative().optional(),
+    }),
+    z.object({
+      kind: z.literal("path"),
+      path: attachmentPathSchema,
+      entryType: z.enum(["file", "directory"]),
+      name: z.string().optional(),
+    }),
+  ])).optional(),
+}).superRefine((request, ctx) => {
+  if (request.content.trim().length > 0) return
+  if ((request.attachments?.length ?? 0) > 0) return
+  ctx.addIssue({
+    code: "custom",
+    path: ["content"],
+    message: "content or attachments are required",
+  })
 })
 
 const respondPermissionRequestSchema = projectRequestSchema.extend({
@@ -276,7 +415,8 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           timestamp: t_recv,
         }, { backpressure: "block" })
 
-        const message = {
+        const attachments = await normalizeSendAttachments(request.attachments)
+        const message: AgentMessage = {
           projectId: request.projectId,
           sessionKey,
           platform: LOCAL_RENDERER_PLATFORM,
@@ -284,6 +424,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           userName: "Renderer",
           content: request.content,
           providerId: request.providerId,
+          attachments,
           replyCtx: {
             kind: LOCAL_RENDERER_PLATFORM,
             projectId: request.projectId,

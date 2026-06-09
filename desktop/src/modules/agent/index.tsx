@@ -30,6 +30,10 @@ import { AgentTimeline } from "./components/agent-timeline"
 import { useAgentChat } from "./hooks/use-agent-chat"
 import { latestTimelineContentSignal, useStickToBottom } from "./hooks/use-stick-to-bottom"
 import {
+  type AgentDraftAttachment,
+  formatDraftAttachmentsForMessage,
+} from "./attachments"
+import {
   enqueuePendingMessage,
   firstQueuedMessageForIdleTarget,
   markPendingMessageFailed,
@@ -311,17 +315,23 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     if (!next) return
     const sendingMessage = markPendingMessageSending(next)
     setPendingMessages((current) => replacePendingMessage(current, sendingMessage))
-    void chat.sendMessage(sendingMessage.content, sendingMessage.target).then((sent) => {
+    void chat.sendMessage(sendingMessage.content, sendingMessage.target, {
+      attachments: sendingMessage.attachments,
+    }).then((sent) => {
       setPendingMessages((current) => sent
         ? removePendingMessage(current, sendingMessage.id)
         : replacePendingMessage(current, markPendingMessageFailed(sendingMessage, "发送失败")))
     })
   }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages])
 
-  const queueMessage = (content: string, target: PendingMessageTarget) => {
+  const queueMessage = (
+    content: string,
+    target: PendingMessageTarget,
+    attachments: readonly AgentDraftAttachment[] = [],
+  ): boolean => {
     if (pendingMessages.length >= MAX_PENDING_QUEUE_SIZE) {
       toast("待发送队列已满，请等待当前消息发送完成")
-      return
+      return false
     }
     pendingMessageIdRef.current += 1
     setPendingMessages((current) => [
@@ -329,17 +339,24 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       enqueuePendingMessage({
         id: `pending:${Date.now()}:${pendingMessageIdRef.current}`,
         content,
+        attachments,
         target,
         createdAt: new Date().toISOString(),
       }),
     ])
+    return true
   }
 
   const submitContent = async (
     content: string,
-    options: { preserveDraft?: boolean; trackSource?: "quick-input-direct" } = {},
-  ) => {
-    if (!content || !selectedTarget) return
+    options: {
+      preserveDraft?: boolean
+      trackSource?: "quick-input-direct"
+      attachments?: readonly AgentDraftAttachment[]
+    } = {},
+  ): Promise<boolean> => {
+    const attachments = options.attachments ?? []
+    if (!formatDraftAttachmentsForMessage(content, attachments).trim() || !selectedTarget) return false
     const preserveDraft = options.preserveDraft === true
     if (options.trackSource === "quick-input-direct") {
       trackDirectAgentSend({
@@ -356,29 +373,43 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     }
     stick.forcePin()
     if (chat.sending) {
-      queueMessage(content, selectedTarget)
-      return
+      return queueMessage(content, selectedTarget, attachments)
     }
-    const sent = await chat.sendMessage(content, selectedTarget)
+    const sent = attachments.length > 0
+      ? await chat.sendMessage(content, selectedTarget, { attachments })
+      : await chat.sendMessage(content, selectedTarget)
     if (!sent && preserveDraft) {
       toast.error("发送失败")
-      return
+      return false
     }
     if (!sent) {
       setDraft(content)
+      return false
     }
+    return true
   }
 
-  const submitDraft = () => {
-    submitContent(draft.trim())
+  const submitDraft = (attachments: readonly AgentDraftAttachment[] = []): Promise<boolean> => {
+    return submitContent(draft.trim(), { attachments })
   }
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = (
+    event: FormEvent,
+    attachments: readonly AgentDraftAttachment[],
+    acceptAttachments: () => () => void,
+  ) => {
     event.preventDefault()
-    submitDraft()
+    const restoreAttachments = acceptAttachments()
+    void submitDraft(attachments).then((accepted) => {
+      if (!accepted) restoreAttachments()
+    })
   }
 
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleInputKeyDown = (
+    event: KeyboardEvent<HTMLTextAreaElement>,
+    attachments: readonly AgentDraftAttachment[] = [],
+    acceptAttachments: () => () => void = () => () => undefined,
+  ) => {
     if (event.key !== "Enter" || event.shiftKey) return
     // Skip while IME is composing (Chinese / Japanese / Korean input). The
     // first Enter that confirms an IME candidate fires keydown with
@@ -387,7 +418,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     // sent message and a partial submission.
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     event.preventDefault()
-    submitDraft()
+    const restoreAttachments = acceptAttachments()
+    void submitDraft(attachments).then((accepted) => {
+      if (!accepted) restoreAttachments()
+    })
   }
 
   const handleRemovePendingMessage = (id: string) => {
