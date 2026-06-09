@@ -9,6 +9,7 @@ import {
   Folder,
   FolderPlus,
   Globe2,
+  KeyRound,
   Link2,
   LoaderCircle,
   MoreHorizontal,
@@ -20,9 +21,11 @@ import {
 } from "lucide-react"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  type DriveAccessSettingsInput,
   type DriveDeleteImpactDto,
   type DriveItemDto,
   type DrivePublicationDto,
+  type DriveShareDto,
   type DriveShareListItemDto,
   type DriveUploadPrepareResult,
 } from "@synapse/shared"
@@ -65,7 +68,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -101,10 +106,23 @@ type DriveItemPublicationActions = {
   readonly site: DrivePublicationDto | null
 }
 
-type DrivePublicationSuccessState = Pick<DrivePublicationDto, "name" | "type" | "url">
-type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
-  readonly url: string
+type DriveAccessSettingsTarget = {
+  readonly kind: "share" | "page" | "site"
+  readonly item: DriveItemDto
 }
+
+type DriveAccessResultState = Pick<DrivePublicationDto, "url" | "urlWithPassword" | "passwordEnabled" | "password" | "expiresAt">
+type DrivePublicationSuccessState = Pick<DrivePublicationDto, "name" | "type"> & DriveAccessResultState
+type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
+  readonly url: DriveShareDto["url"]
+  readonly urlWithPassword: DriveShareDto["urlWithPassword"]
+  readonly passwordEnabled: DriveShareDto["passwordEnabled"]
+  readonly password: DriveShareDto["password"]
+  readonly expiresAt: DriveShareDto["expiresAt"]
+}
+
+type DriveAccessExpiresInOption = DriveAccessSettingsInput["expiresIn"]
+
 type DriveStatusBadge = {
   readonly key: string
   readonly label: string
@@ -115,6 +133,12 @@ const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
+const DRIVE_ACCESS_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; readonly value: DriveAccessExpiresInOption }> = [
+  { label: "7 天", value: "7d" },
+  { label: "30 天", value: "30d" },
+  { label: "1 年", value: "1y" },
+  { label: "永久", value: "forever" },
+]
 
 function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
@@ -138,6 +162,7 @@ function DriveModule() {
   const [publicationsOpen, setPublicationsOpen] = useState(false)
   const [publicationSuccess, setPublicationSuccess] = useState<DrivePublicationSuccessState | null>(null)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
+  const [accessSettingsTarget, setAccessSettingsTarget] = useState<DriveAccessSettingsTarget | null>(null)
   const [sharesOpen, setSharesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -378,19 +403,58 @@ function DriveModule() {
     }
   }, [deleteTarget, disablePublicationsOnDelete, loadItems])
 
-  const handleShare = useCallback(async (item: DriveItemDto) => {
+  const handleShare = useCallback((item: DriveItemDto) => {
+    setAccessSettingsTarget({ kind: "share", item })
+  }, [])
+
+  const handleAccessSettingsConfirm = useCallback(async (settings: DriveAccessSettingsInput) => {
+    if (!accessSettingsTarget) return
+    setSubmitting(true)
     try {
-      const share = await requireSynapseBridge().account.shareDriveItem({
-        itemId: item.id,
-        ...DRIVE_DEFAULT_ACCESS_SETTINGS,
-      })
-      setShareSuccess({ name: item.name, type: item.type, url: share.url })
-      await copySharedUrlAfterShare(share.url)
+      const bridge = requireSynapseBridge()
+      if (accessSettingsTarget.kind === "share") {
+        const share = await bridge.account.shareDriveItem({
+          itemId: accessSettingsTarget.item.id,
+          ...settings,
+        })
+        setShareSuccess({
+          name: accessSettingsTarget.item.name,
+          type: accessSettingsTarget.item.type,
+          url: share.url,
+          urlWithPassword: share.urlWithPassword,
+          passwordEnabled: share.passwordEnabled,
+          password: share.password,
+          expiresAt: share.expiresAt,
+        })
+        await copySharedUrlAfterShare(getDriveAccessUrl(share))
+      } else if (accessSettingsTarget.kind === "page") {
+        const publication = await bridge.account.publishDrivePage({
+          itemId: accessSettingsTarget.item.id,
+          ...settings,
+        })
+        setPublicationSuccess(publication)
+        await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
+      } else {
+        const publication = await bridge.account.publishDriveSite({
+          itemId: accessSettingsTarget.item.id,
+          ...settings,
+        })
+        setPublicationSuccess(publication)
+        await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
+      }
+      setAccessSettingsTarget(null)
       await loadItems()
     } catch (rawError) {
-      toast(errorMessage(rawError, "分享失败"))
+      const fallback = accessSettingsTarget.kind === "share"
+        ? "分享失败"
+        : accessSettingsTarget.kind === "page"
+          ? "发布网页失败"
+          : "发布站点失败"
+      toast(errorMessage(rawError, fallback))
+    } finally {
+      setSubmitting(false)
     }
-  }, [loadItems])
+  }, [accessSettingsTarget, loadItems])
 
   const handleDisableShare = useCallback(async (item: DriveItemDto) => {
     if (!item.activeShareId) return
@@ -403,33 +467,13 @@ function DriveModule() {
     }
   }, [loadItems])
 
-  const handlePublishPage = useCallback(async (item: DriveItemDto) => {
-    try {
-      const publication = await requireSynapseBridge().account.publishDrivePage({
-        itemId: item.id,
-        ...DRIVE_DEFAULT_ACCESS_SETTINGS,
-      })
-      setPublicationSuccess(publication)
-      await copyPublishedUrlAfterPublish(publication.url)
-      await loadItems()
-    } catch (rawError) {
-      toast(errorMessage(rawError, "发布网页失败"))
-    }
-  }, [loadItems])
+  const handlePublishPage = useCallback((item: DriveItemDto) => {
+    setAccessSettingsTarget({ kind: "page", item })
+  }, [])
 
-  const handlePublishSite = useCallback(async (item: DriveItemDto) => {
-    try {
-      const publication = await requireSynapseBridge().account.publishDriveSite({
-        itemId: item.id,
-        ...DRIVE_DEFAULT_ACCESS_SETTINGS,
-      })
-      setPublicationSuccess(publication)
-      await copyPublishedUrlAfterPublish(publication.url)
-      await loadItems()
-    } catch (rawError) {
-      toast(errorMessage(rawError, "发布站点失败"))
-    }
-  }, [loadItems])
+  const handlePublishSite = useCallback((item: DriveItemDto) => {
+    setAccessSettingsTarget({ kind: "site", item })
+  }, [])
 
   const handleDisablePublication = useCallback(async (publicationId: string) => {
     await disableDrivePublication(publicationId, loadItems)
@@ -665,6 +709,12 @@ function DriveModule() {
               open={publicationsOpen}
               onOpenChange={setPublicationsOpen}
               onPublicationDeployed={setPublicationSuccess}
+            />
+            <DriveAccessSettingsDialog
+              target={accessSettingsTarget}
+              submitting={submitting}
+              onCancel={() => setAccessSettingsTarget(null)}
+              onConfirm={handleAccessSettingsConfirm}
             />
             <DrivePublicationSuccessDialog
               publication={publicationSuccess}
@@ -1407,6 +1457,80 @@ type DriveLocalUploadBuildResult = {
   readonly skipped: number
 }
 
+function DriveAccessSettingsDialog({
+  target,
+  submitting,
+  onCancel,
+  onConfirm,
+}: {
+  readonly target: DriveAccessSettingsTarget | null
+  readonly submitting: boolean
+  readonly onCancel: () => void
+  readonly onConfirm: (settings: DriveAccessSettingsInput) => Promise<void>
+}) {
+  const [settings, setSettings] = useState<DriveAccessSettingsInput>(DRIVE_DEFAULT_ACCESS_SETTINGS)
+
+  useEffect(() => {
+    if (target) setSettings(DRIVE_DEFAULT_ACCESS_SETTINGS)
+  }, [target])
+
+  const title = target?.kind === "share" ? "分享设置" : "发布设置"
+
+  return (
+    <Dialog open={target !== null} onOpenChange={(open) => {
+      if (!open && !submitting) onCancel()
+    }}>
+      {target ? (
+        <FormDialog
+          title={title}
+          onSubmit={(event) => {
+            event.preventDefault()
+            void onConfirm(settings)
+          }}
+          footer={(
+            <>
+              <Button type="button" variant="outline" disabled={submitting} onClick={onCancel}>取消</Button>
+              <Button type="submit" disabled={submitting}>确定</Button>
+            </>
+          )}
+        >
+          <div className="grid gap-4">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">需要密码</span>
+              <Switch
+                id="drive-access-password-enabled"
+                aria-label="需要密码"
+                checked={settings.passwordEnabled}
+                onCheckedChange={(checked) => setSettings((current) => ({ ...current, passwordEnabled: checked }))}
+              />
+            </label>
+            <div className="grid gap-2">
+              <Label>有效时长</Label>
+              <RadioGroup
+                value={settings.expiresIn}
+                onValueChange={(value) => setSettings((current) => ({
+                  ...current,
+                  expiresIn: value as DriveAccessExpiresInOption,
+                }))}
+              >
+                {DRIVE_ACCESS_EXPIRES_OPTIONS.map((option) => {
+                  const id = `drive-access-expires-${option.value}`
+                  return (
+                    <label key={option.value} className="flex items-center gap-2 text-sm" htmlFor={id}>
+                      <RadioGroupItem id={id} value={option.value} />
+                      <span>{option.label}</span>
+                    </label>
+                  )
+                })}
+              </RadioGroup>
+            </div>
+          </div>
+        </FormDialog>
+      ) : null}
+    </Dialog>
+  )
+}
+
 function DrivePublicationsDialog({
   open,
   onOpenChange,
@@ -1476,7 +1600,7 @@ function DrivePublicationList({
   if (items.length === 0) return <DriveDialogEmptyState title="暂无发布" />
 
   return (
-    <Table className="min-w-[640px] table-fixed">
+    <Table className="min-w-[820px] table-fixed">
       <DrivePublicationTableHeader />
       <TableBody>
         {items.map((item) => (
@@ -1494,6 +1618,12 @@ function DrivePublicationList({
             </TableCell>
             <TableCell>
               <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatDriveAccessPassword(item)}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatDriveAccessExpiresAt(item.expiresAt)}
             </TableCell>
             <TableCell className="text-muted-foreground">
               {formatDriveDateTime(item.updatedAt)}
@@ -1519,8 +1649,10 @@ function DrivePublicationTableHeader() {
         <TableHead>名称</TableHead>
         <TableHead className="w-40">类型 / 状态</TableHead>
         <TableHead className="w-28">来源</TableHead>
+        <TableHead className="w-24">密码</TableHead>
+        <TableHead className="w-32">到期</TableHead>
         <TableHead className="w-40">时间</TableHead>
-        <TableHead className="w-32 text-right">操作</TableHead>
+        <TableHead className="w-40 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1533,8 +1665,10 @@ function DriveShareTableHeader() {
         <TableHead>名称</TableHead>
         <TableHead className="w-24">类型</TableHead>
         <TableHead className="w-28">来源</TableHead>
+        <TableHead className="w-24">密码</TableHead>
+        <TableHead className="w-32">到期</TableHead>
         <TableHead className="w-40">时间</TableHead>
-        <TableHead className="w-28 text-right">操作</TableHead>
+        <TableHead className="w-36 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1549,20 +1683,30 @@ function DrivePublicationActions({
   readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
   readonly onReload: () => Promise<void>
 }) {
+  const password = item.password
   return (
     <div className="flex items-center justify-end gap-1">
       <DriveIconAction
         label={`复制 ${item.name}`}
         tooltip="复制链接"
-        onClick={() => { void copyDriveUrl(item.url) }}
+        onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
       >
         <Copy />
       </DriveIconAction>
+      {password ? (
+        <DriveIconAction
+          label="复制密码"
+          tooltip="复制密码"
+          onClick={() => { void copyDrivePassword(password) }}
+        >
+          <KeyRound />
+        </DriveIconAction>
+      ) : null}
       {item.status === "active" && !item.sourceDeleted ? (
         <DriveIconAction
           label={`打开 ${item.name}`}
           tooltip="打开"
-          onClick={() => { void openDriveUrl(item.url) }}
+          onClick={() => { void openDriveUrl(getDriveAccessUrl(item)) }}
         >
           <ExternalLink />
         </DriveIconAction>
@@ -1596,20 +1740,30 @@ function DriveShareActions({
   readonly item: DriveShareListItemDto
   readonly onReload: () => Promise<void>
 }) {
+  const password = item.password
   return (
     <div className="flex items-center justify-end gap-1">
       <DriveIconAction
         label={`复制 ${item.itemName}`}
         tooltip="复制链接"
-        onClick={() => { void copyDriveUrl(item.url) }}
+        onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
       >
         <Copy />
       </DriveIconAction>
+      {password ? (
+        <DriveIconAction
+          label="复制密码"
+          tooltip="复制密码"
+          onClick={() => { void copyDrivePassword(password) }}
+        >
+          <KeyRound />
+        </DriveIconAction>
+      ) : null}
       {!item.sourceDeleted ? (
         <DriveIconAction
           label={`打开 ${item.itemName}`}
           tooltip="打开"
-          onClick={() => { void openDriveUrl(item.url) }}
+          onClick={() => { void openDriveUrl(getDriveAccessUrl(item)) }}
         >
           <ExternalLink />
         </DriveIconAction>
@@ -1697,7 +1851,7 @@ function DriveDialogEmptyState({ title }: { readonly title: string }) {
 
 function DrivePublicationTableSkeleton() {
   return (
-    <Table className="min-w-[640px] table-fixed">
+    <Table className="min-w-[820px] table-fixed">
       <DrivePublicationTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
@@ -1705,8 +1859,10 @@ function DrivePublicationTableSkeleton() {
             <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
             <TableCell><Skeleton className="h-5 w-28" /></TableCell>
             <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
             <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-28" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-36" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -1716,7 +1872,7 @@ function DrivePublicationTableSkeleton() {
 
 function DriveShareTableSkeleton() {
   return (
-    <Table className="min-w-[600px] table-fixed">
+    <Table className="min-w-[760px] table-fixed">
       <DriveShareTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
@@ -1724,8 +1880,10 @@ function DriveShareTableSkeleton() {
             <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
             <TableCell><Skeleton className="h-5 w-16" /></TableCell>
             <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
             <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-32" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -1743,6 +1901,8 @@ function DrivePublicationSuccessDialog({
   if (!publication) return null
 
   const openLabel = publication.type === "site" ? "打开站点" : "打开网页"
+  const accessUrl = getDriveAccessUrl(publication)
+  const password = publication.password
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
       <FormDialog
@@ -1752,11 +1912,17 @@ function DrivePublicationSuccessDialog({
         footer={(
           <>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(publication.url) }}>
+            {password ? (
+              <Button type="button" variant="outline" onClick={() => { void copyDrivePassword(password) }}>
+                <KeyRound data-icon="inline-start" />
+                复制密码
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(accessUrl) }}>
               <Copy data-icon="inline-start" />
               复制链接
             </Button>
-            <Button type="button" onClick={() => { void openDriveUrl(publication.url) }}>
+            <Button type="button" onClick={() => { void openDriveUrl(accessUrl) }}>
               <ExternalLink data-icon="inline-start" />
               {openLabel}
             </Button>
@@ -1765,7 +1931,17 @@ function DrivePublicationSuccessDialog({
       >
         <div className="grid gap-2">
           <Label htmlFor="drive-publication-success-url">访问链接</Label>
-          <Input id="drive-publication-success-url" value={publication.url} readOnly />
+          <Input id="drive-publication-success-url" value={accessUrl} readOnly />
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="font-medium">密码</div>
+              <div className="text-muted-foreground">{formatDriveAccessPassword(publication)}</div>
+            </div>
+            <div>
+              <div className="font-medium">到期</div>
+              <div className="text-muted-foreground">{formatDriveAccessExpiresAt(publication.expiresAt)}</div>
+            </div>
+          </div>
         </div>
       </FormDialog>
     </Dialog>
@@ -1782,6 +1958,8 @@ function DriveShareSuccessDialog({
   if (!share) return null
 
   const isFolder = share.type === "folder"
+  const accessUrl = getDriveAccessUrl(share)
+  const password = share.password
   return (
     <Dialog open={true} onOpenChange={onOpenChange}>
       <FormDialog
@@ -1791,11 +1969,17 @@ function DriveShareSuccessDialog({
         footer={(
           <>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(share.url) }}>
+            {password ? (
+              <Button type="button" variant="outline" onClick={() => { void copyDrivePassword(password) }}>
+                <KeyRound data-icon="inline-start" />
+                复制密码
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(accessUrl) }}>
               <Copy data-icon="inline-start" />
               复制链接
             </Button>
-            <Button type="button" onClick={() => { void openDriveUrl(share.url) }}>
+            <Button type="button" onClick={() => { void openDriveUrl(accessUrl) }}>
               <ExternalLink data-icon="inline-start" />
               {isFolder ? "打开文件夹" : "打开文件"}
             </Button>
@@ -1804,7 +1988,17 @@ function DriveShareSuccessDialog({
       >
         <div className="grid gap-2">
           <Label htmlFor="drive-share-success-url">访问链接</Label>
-          <Input id="drive-share-success-url" value={share.url} readOnly />
+          <Input id="drive-share-success-url" value={accessUrl} readOnly />
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div className="font-medium">密码</div>
+              <div className="text-muted-foreground">{formatDriveAccessPassword(share)}</div>
+            </div>
+            <div>
+              <div className="font-medium">到期</div>
+              <div className="text-muted-foreground">{formatDriveAccessExpiresAt(share.expiresAt)}</div>
+            </div>
+          </div>
         </div>
       </FormDialog>
     </Dialog>
@@ -1870,7 +2064,7 @@ function DriveShareList({
   if (items.length === 0) return <DriveDialogEmptyState title="暂无分享" />
 
   return (
-    <Table className="min-w-[600px] table-fixed">
+    <Table className="min-w-[760px] table-fixed">
       <DriveShareTableHeader />
       <TableBody>
         {items.map((item) => (
@@ -1883,6 +2077,12 @@ function DriveShareList({
             </TableCell>
             <TableCell>
               <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatDriveAccessPassword(item)}
+            </TableCell>
+            <TableCell className="text-muted-foreground">
+              {formatDriveAccessExpiresAt(item.expiresAt)}
             </TableCell>
             <TableCell className="text-muted-foreground">
               {formatDriveDateTime(item.createdAt)}
@@ -2161,11 +2361,20 @@ async function copyDriveUrl(url: string): Promise<void> {
   }
 }
 
+async function copyDrivePassword(password: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(password)
+    toast("密码已复制")
+  } catch (rawError) {
+    toast(errorMessage(rawError, "复制失败"))
+  }
+}
+
 async function copyPublishedUrlAfterPublish(url: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(url)
     toast("发布链接已复制")
-  } catch {
+  } catch (_rawError) {
     toast("发布成功，复制失败")
   }
 }
@@ -2174,9 +2383,13 @@ async function copySharedUrlAfterShare(url: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(url)
     toast("链接已复制")
-  } catch {
+  } catch (_rawError) {
     toast("分享成功，复制失败")
   }
+}
+
+function getDriveAccessUrl(item: { readonly url: string; readonly urlWithPassword?: string | null }): string {
+  return item.urlWithPassword || item.url
 }
 
 async function openDriveUrl(url: string): Promise<void> {
@@ -2276,6 +2489,16 @@ function formatDriveDateTime(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "-"
   return date.toLocaleString("zh-CN")
+}
+
+function formatDriveAccessExpiresAt(value: string | null): string {
+  if (!value) return "永久"
+  return formatDriveDateTime(value)
+}
+
+function formatDriveAccessPassword(item: { readonly passwordEnabled?: boolean; readonly password?: string | null }): string {
+  if (!item.passwordEnabled) return "无"
+  return item.password || "无"
 }
 
 function uploadResultMessage(result: DriveLocalUploadResult): string {

@@ -16,6 +16,13 @@ import type { SynapseAccountState } from "@/types/account"
 import { DriveModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & {
+  ResizeObserver: typeof ResizeObserver
+}).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
 
 const mocks = vi.hoisted(() => ({
   completeDriveUpload: vi.fn(),
@@ -148,8 +155,22 @@ beforeEach(() => {
       url: "https://upload.example.test/object",
     },
   })
-  mocks.publishDrivePage.mockResolvedValue(createDrivePublication({ id: "pub-page-1", publishId: "pub_page", name: "report.html", type: "page", url: "https://synapse.test/pages/pub_page" }))
-  mocks.publishDriveSite.mockResolvedValue(createDrivePublication({ id: "pub-site-1", publishId: "pub_site", name: "site", type: "site", url: "https://synapse.test/sites/pub_site/" }))
+  mocks.publishDrivePage.mockResolvedValue(createDrivePublication({
+    id: "pub-page-1",
+    publishId: "pub_page",
+    name: "report.html",
+    type: "page",
+    url: "https://synapse.test/pages/pub_page",
+    urlWithPassword: "https://synapse.test/pages/pub_page?password=AbC234xy",
+  }))
+  mocks.publishDriveSite.mockResolvedValue(createDrivePublication({
+    id: "pub-site-1",
+    publishId: "pub_site",
+    name: "site",
+    type: "site",
+    url: "https://synapse.test/sites/pub_site/",
+    urlWithPassword: "https://synapse.test/sites/pub_site/?password=AbC234xy",
+  }))
   mocks.redeployDrivePublication.mockResolvedValue(createDrivePublication())
   mocks.renameDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "renamed.txt", type: "file" }))
   mocks.shareDriveItem.mockResolvedValue({
@@ -776,22 +797,33 @@ describe("DriveModule", () => {
     await flushAct()
 
     await clickButtonText("分享")
+    expect(mocks.shareDriveItem).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("分享设置")
+    expect(document.body.textContent).toContain("需要密码")
+    expect(document.body.textContent).toContain("有效时长")
+
+    await clickButtonText("确定")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "file-1",
       ...DRIVE_DEFAULT_ACCESS_SETTINGS,
     })
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
     expect(document.body.textContent).toContain("文件已分享")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_test")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_test?password=AbC234xy")
+    expect(document.body.textContent).toContain("AbC234xy")
+    expect(document.body.textContent).toContain("2026")
 
     await clickButtonText("打开文件")
-    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
 
     await clickButtonText("复制链接")
-    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/files/shr_test")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
+
+    await clickButtonText("复制密码")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
   })
 
   it("shares a folder from the row action and shows the share URL actions", async () => {
@@ -814,17 +846,20 @@ describe("DriveModule", () => {
     await flushAct()
 
     await clickButtonText("分享")
+    expect(mocks.shareDriveItem).not.toHaveBeenCalled()
+
+    await clickButtonText("确定")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "folder-1",
       ...DRIVE_DEFAULT_ACCESS_SETTINGS,
     })
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_folder")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_folder?password=AbC234xy")
     expect(document.body.textContent).toContain("文件夹已分享")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_folder")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_folder?password=AbC234xy")
 
     await clickButtonText("打开文件夹")
-    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/files/shr_folder")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/files/shr_folder?password=AbC234xy")
   })
 
   it("shows the shared URL when automatic clipboard copy fails", async () => {
@@ -836,6 +871,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     await clickButtonText("分享")
+    await clickButtonText("确定")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "file-1",
@@ -843,7 +879,7 @@ describe("DriveModule", () => {
     })
     expect(mocks.toast).toHaveBeenCalledWith("分享成功，复制失败")
     expect(document.body.textContent).toContain("文件已分享")
-    expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_test")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_test?password=AbC234xy")
   })
 
   it("shows publish page only for html files", async () => {
@@ -954,22 +990,33 @@ describe("DriveModule", () => {
 
     await openRowMenu("report.html")
     await clickText("发布网页")
+    expect(mocks.publishDrivePage).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("发布设置")
+    expect(document.body.textContent).toContain("需要密码")
+    expect(document.body.textContent).toContain("有效时长")
+
+    await clickButtonText("确定")
 
     expect(mocks.publishDrivePage).toHaveBeenCalledWith({
       itemId: "html-1",
       ...DRIVE_DEFAULT_ACCESS_SETTINGS,
     })
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_page")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_page?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
     expect(document.body.textContent).toContain("网页已发布")
-    expect(getPublicationUrlInput().value).toBe("https://synapse.test/pages/pub_page")
+    expect(getPublicationUrlInput().value).toBe("https://synapse.test/pages/pub_page?password=AbC234xy")
+    expect(document.body.textContent).toContain("AbC234xy")
+    expect(document.body.textContent).toContain("2026")
 
     await clickButtonText("打开网页")
-    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/pages/pub_page")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/pages/pub_page?password=AbC234xy")
 
     await clickButtonText("复制链接")
-    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/pages/pub_page")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/pages/pub_page?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
+
+    await clickButtonText("复制密码")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
 
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
     expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null })
@@ -982,20 +1029,39 @@ describe("DriveModule", () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
     ])
+    mocks.publishDriveSite.mockResolvedValue(createDrivePublication({
+      id: "pub-site-1",
+      publishId: "pub_site",
+      name: "site",
+      type: "site",
+      url: "https://synapse.test/sites/pub_site/",
+      urlWithPassword: "https://synapse.test/sites/pub_site/",
+      passwordEnabled: false,
+      password: null,
+      expiresAt: null,
+    }))
     await render(<DriveModule />)
     await flushAct()
 
     await openRowMenu("site")
     await clickText("发布站点")
+    expect(mocks.publishDriveSite).not.toHaveBeenCalled()
+
+    await clickSwitchByLabel("需要密码")
+    await clickRadioByLabel("30 天")
+    await clickButtonText("确定")
 
     expect(mocks.publishDriveSite).toHaveBeenCalledWith({
       itemId: "folder-1",
-      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+      passwordEnabled: false,
+      expiresIn: "30d",
     })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/sites/pub_site/")
     expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
     expect(document.body.textContent).toContain("站点已发布")
     expect(getPublicationUrlInput().value).toBe("https://synapse.test/sites/pub_site/")
+    expect(document.body.textContent).toContain("无")
+    expect(document.body.textContent).toContain("永久")
 
     await clickButtonText("打开站点")
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/sites/pub_site/")
@@ -1017,6 +1083,7 @@ describe("DriveModule", () => {
 
     await openRowMenu("report.html")
     await clickText("发布网页")
+    await clickButtonText("确定")
 
     expect(mocks.publishDrivePage).toHaveBeenCalledWith({
       itemId: "html-1",
@@ -1024,7 +1091,7 @@ describe("DriveModule", () => {
     })
     expect(mocks.toast).toHaveBeenCalledWith("发布成功，复制失败")
     expect(document.body.textContent).toContain("网页已发布")
-    expect(getPublicationUrlInput().value).toBe("https://synapse.test/pages/pub_page")
+    expect(getPublicationUrlInput().value).toBe("https://synapse.test/pages/pub_page?password=AbC234xy")
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
   })
 
@@ -1095,6 +1162,8 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("report.html")
     expect(document.body.textContent).toContain("类型 / 状态")
     expect(document.body.textContent).toContain("来源")
+    expect(document.body.textContent).toContain("密码")
+    expect(document.body.textContent).toContain("到期")
     expect(document.body.textContent).toContain("时间")
     expect(document.body.textContent).toContain("操作")
     expect(document.body.textContent).toContain("网页")
@@ -1109,17 +1178,20 @@ describe("DriveModule", () => {
     expect(queryButtonByLabel("打开 deleted.html")).toBeNull()
 
     await clickButtonByLabel("复制 report.html")
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_test")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
 
+    await clickButtonByLabel("复制密码")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
+
     await clickButtonByLabel("打开 report.html")
-    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/pages/pub_test")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/pages/pub_test?password=AbC234xy")
 
     await clickButtonByLabel("重新发布 report.html")
     expect(mocks.redeployDrivePublication).toHaveBeenCalledWith({ publicationId: "pub-row-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已重新发布")
     expect(document.body.textContent).toContain("网页已发布")
-    expect(getPublicationUrlInput().value).toBe("https://synapse.test/pages/pub_test")
+    expect(getPublicationUrlInput().value).toBe("https://synapse.test/pages/pub_test?password=AbC234xy")
 
     await clickButtonByLabel("取消发布 report.html")
 
@@ -1191,6 +1263,8 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("report.txt")
     expect(document.body.textContent).toContain("类型")
     expect(document.body.textContent).toContain("来源")
+    expect(document.body.textContent).toContain("密码")
+    expect(document.body.textContent).toContain("到期")
     expect(document.body.textContent).toContain("时间")
     expect(document.body.textContent).toContain("操作")
     expect(document.body.textContent).toContain("文件")
@@ -1202,11 +1276,14 @@ describe("DriveModule", () => {
     expect(queryButtonByLabel("打开 folder")).toBeNull()
 
     await clickButtonByLabel("复制 report.txt")
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
 
+    await clickButtonByLabel("复制密码")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
+
     await clickButtonByLabel("打开 report.txt")
-    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
 
     await clickButtonByLabel("取消分享 report.txt")
 
@@ -1571,6 +1648,30 @@ async function clickCheckboxByLabel(label: string): Promise<void> {
   if (!checkbox) throw new Error(`Checkbox not found: ${label}`)
   await act(async () => {
     checkbox.click()
+    await flushPromises()
+  })
+}
+
+async function clickSwitchByLabel(label: string): Promise<void> {
+  const labelElement = Array.from(document.body.querySelectorAll<HTMLLabelElement>("label"))
+    .find((candidate) => candidate.textContent?.trim() === label)
+  const switchElement = labelElement?.querySelector<HTMLButtonElement>("[role='switch']")
+    ?? (labelElement?.htmlFor ? document.getElementById(labelElement.htmlFor) as HTMLButtonElement | null : null)
+  if (!switchElement) throw new Error(`Switch not found: ${label}`)
+  await act(async () => {
+    switchElement.click()
+    await flushPromises()
+  })
+}
+
+async function clickRadioByLabel(label: string): Promise<void> {
+  const labelElement = Array.from(document.body.querySelectorAll<HTMLLabelElement>("label"))
+    .find((candidate) => candidate.textContent?.trim() === label)
+  const radio = labelElement?.querySelector<HTMLButtonElement>("[role='radio']")
+    ?? (labelElement?.htmlFor ? document.getElementById(labelElement.htmlFor) as HTMLButtonElement | null : null)
+  if (!radio) throw new Error(`Radio not found: ${label}`)
+  await act(async () => {
+    radio.click()
     await flushPromises()
   })
 }
