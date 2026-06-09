@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common"
+import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { DriveService } from "./drive.service"
@@ -16,6 +17,8 @@ const storageMock: DriveStoragePort = {
     expiresAt: new Date("2026-06-07T12:05:00.000Z"),
   })),
   headObject: vi.fn(async () => ({ key: "drive/item-file", size: 11n, etag: "etag" })),
+  copyObject: vi.fn(async () => undefined),
+  getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 0n, contentType: null })),
   deleteObject: vi.fn(async () => undefined),
 }
 
