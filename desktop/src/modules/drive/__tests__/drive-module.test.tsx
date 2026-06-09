@@ -1221,6 +1221,30 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
 
+  it("uses wider dialogs for publication and share history tables", async () => {
+    mocks.listDrivePublications.mockResolvedValue([
+      createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
+    ])
+    mocks.listDriveShares.mockResolvedValue([
+      createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("已发布")
+    await flushAct()
+
+    let dialogContent = document.querySelector('[data-slot="dialog-content"]')
+    expect(dialogContent?.className).toContain("sm:max-w-4xl")
+
+    await clickButtonText("关闭")
+    await clickButtonText("已分享")
+    await flushAct()
+
+    dialogContent = document.querySelector('[data-slot="dialog-content"]')
+    expect(dialogContent?.className).toContain("sm:max-w-4xl")
+  })
+
   it("shows publication dialog loading state", async () => {
     const publications = createDeferred<DrivePublicationDto[]>()
     mocks.listDrivePublications.mockReturnValueOnce(publications.promise)

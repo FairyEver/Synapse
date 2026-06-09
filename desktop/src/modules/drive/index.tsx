@@ -1496,6 +1496,7 @@ function DriveAccessSettingsDialog({
       {target ? (
         <FormDialog
           title={title}
+          contentClassName="sm:max-w-md"
           onSubmit={(event) => {
             event.preventDefault()
             void onConfirm(settings)
@@ -1507,9 +1508,9 @@ function DriveAccessSettingsDialog({
             </>
           )}
         >
-          <div className="grid gap-4">
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium">需要密码</span>
+          <div className="grid gap-5">
+            <label className="flex min-h-8 items-center justify-between gap-4" htmlFor="drive-access-password-enabled">
+              <span className="text-sm font-medium leading-none">需要密码</span>
               <Switch
                 id="drive-access-password-enabled"
                 aria-label="需要密码"
@@ -1517,9 +1518,10 @@ function DriveAccessSettingsDialog({
                 onCheckedChange={(checked) => setSettings((current) => ({ ...current, passwordEnabled: checked }))}
               />
             </label>
-            <div className="grid gap-2">
+            <div className="grid gap-2.5">
               <Label>有效时长</Label>
               <RadioGroup
+                className="gap-1.5"
                 value={settings.expiresIn}
                 onValueChange={(value) => setSettings((current) => ({
                   ...current,
@@ -1529,7 +1531,7 @@ function DriveAccessSettingsDialog({
                 {DRIVE_ACCESS_EXPIRES_OPTIONS.map((option) => {
                   const id = `drive-access-expires-${option.value}`
                   return (
-                    <label key={option.value} className="flex items-center gap-2 text-sm" htmlFor={id}>
+                    <label key={option.value} className="flex min-h-8 items-center gap-2 text-sm" htmlFor={id}>
                       <RadioGroupItem id={id} value={option.value} />
                       <span>{option.label}</span>
                     </label>
@@ -1579,7 +1581,7 @@ function DrivePublicationsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <FormDialog
         title="已发布"
-        contentClassName="sm:max-w-2xl"
+        contentClassName="sm:max-w-4xl"
         onSubmit={(event) => event.preventDefault()}
         footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
       >
@@ -1613,13 +1615,13 @@ function DrivePublicationList({
   if (items.length === 0) return <DriveDialogEmptyState title="暂无发布" />
 
   return (
-    <Table className="min-w-[820px] table-fixed">
+    <Table className="min-w-[920px] table-fixed">
       <DrivePublicationTableHeader />
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id}>
             <TableCell>
-              <div className="truncate font-medium">{item.name}</div>
+              <div className="truncate font-medium" title={item.name}>{item.name}</div>
             </TableCell>
             <TableCell>
               <div className="flex min-w-0 flex-wrap items-center gap-1">
@@ -1633,13 +1635,19 @@ function DrivePublicationList({
               <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {formatDriveAccessPassword(item)}
+              <div className="truncate" title={formatDriveAccessPassword(item)}>
+                {formatDriveAccessPassword(item)}
+              </div>
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatDriveAccessExpiresAt(item.expiresAt)}
+            <TableCell className="text-muted-foreground tabular-nums">
+              <div className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
+                {formatDriveAccessExpiresAt(item.expiresAt)}
+              </div>
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatDriveDateTime(item.updatedAt)}
+            <TableCell className="text-muted-foreground tabular-nums">
+              <div className="truncate" title={formatDriveDateTime(item.updatedAt)}>
+                {formatDriveDateTime(item.updatedAt)}
+              </div>
             </TableCell>
             <TableCell>
               <DrivePublicationActions
@@ -1660,12 +1668,12 @@ function DrivePublicationTableHeader() {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="w-40">类型 / 状态</TableHead>
+        <TableHead className="w-36">类型 / 状态</TableHead>
         <TableHead className="w-28">来源</TableHead>
         <TableHead className="w-24">密码</TableHead>
-        <TableHead className="w-32">到期</TableHead>
-        <TableHead className="w-40">时间</TableHead>
-        <TableHead className="w-40 text-right">操作</TableHead>
+        <TableHead className="w-36">到期</TableHead>
+        <TableHead className="w-36">时间</TableHead>
+        <TableHead className="w-32 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1679,9 +1687,9 @@ function DriveShareTableHeader() {
         <TableHead className="w-24">类型</TableHead>
         <TableHead className="w-28">来源</TableHead>
         <TableHead className="w-24">密码</TableHead>
-        <TableHead className="w-32">到期</TableHead>
-        <TableHead className="w-40">时间</TableHead>
-        <TableHead className="w-36 text-right">操作</TableHead>
+        <TableHead className="w-36">到期</TableHead>
+        <TableHead className="w-36">时间</TableHead>
+        <TableHead className="w-32 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1698,7 +1706,7 @@ function DrivePublicationActions({
 }) {
   const password = item.password
   return (
-    <div className="flex items-center justify-end gap-1">
+    <div className="flex items-center justify-end gap-0.5">
       <DriveIconAction
         label={`复制 ${item.name}`}
         tooltip="复制链接"
@@ -1755,7 +1763,7 @@ function DriveShareActions({
 }) {
   const password = item.password
   return (
-    <div className="flex items-center justify-end gap-1">
+    <div className="flex items-center justify-end gap-0.5">
       <DriveIconAction
         label={`复制 ${item.itemName}`}
         tooltip="复制链接"
@@ -1837,7 +1845,7 @@ function DriveDialogErrorState({
   readonly onRetry: () => Promise<void>
 }) {
   return (
-    <Empty className="min-h-40 border">
+    <Empty className="min-h-48 border">
       <EmptyHeader>
         <EmptyTitle>读取失败</EmptyTitle>
         <EmptyDescription>{message}</EmptyDescription>
@@ -1854,7 +1862,7 @@ function DriveDialogErrorState({
 
 function DriveDialogEmptyState({ title }: { readonly title: string }) {
   return (
-    <Empty className="min-h-40 border">
+    <Empty className="min-h-48 border">
       <EmptyHeader>
         <EmptyTitle>{title}</EmptyTitle>
       </EmptyHeader>
@@ -1864,18 +1872,18 @@ function DriveDialogEmptyState({ title }: { readonly title: string }) {
 
 function DrivePublicationTableSkeleton() {
   return (
-    <Table className="min-w-[820px] table-fixed">
+    <Table className="min-w-[920px] table-fixed">
       <DrivePublicationTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
           <TableRow key={row}>
             <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-28" /></TableCell>
+            <TableCell><Skeleton className="h-5 w-24" /></TableCell>
             <TableCell><Skeleton className="h-5 w-20" /></TableCell>
             <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
             <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-36" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-28" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -1885,7 +1893,7 @@ function DrivePublicationTableSkeleton() {
 
 function DriveShareTableSkeleton() {
   return (
-    <Table className="min-w-[760px] table-fixed">
+    <Table className="min-w-[880px] table-fixed">
       <DriveShareTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
@@ -1894,9 +1902,9 @@ function DriveShareTableSkeleton() {
             <TableCell><Skeleton className="h-5 w-16" /></TableCell>
             <TableCell><Skeleton className="h-5 w-20" /></TableCell>
             <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
             <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-32" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-28" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -1920,10 +1928,11 @@ function DrivePublicationSuccessDialog({
     <Dialog open={true} onOpenChange={onOpenChange}>
       <FormDialog
         title={publication.type === "site" ? "站点已发布" : "网页已发布"}
-        description={publication.name}
+        description={<span className="block truncate">{publication.name}</span>}
+        contentClassName="sm:max-w-xl"
         onSubmit={(event) => event.preventDefault()}
         footer={(
-          <>
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
             {password ? (
               <Button type="button" variant="outline" onClick={() => { void copyDrivePassword(password) }}>
@@ -1939,22 +1948,28 @@ function DrivePublicationSuccessDialog({
               <ExternalLink data-icon="inline-start" />
               {openLabel}
             </Button>
-          </>
+          </div>
         )}
       >
-        <div className="grid gap-2">
-          <Label htmlFor="drive-publication-success-url">访问链接</Label>
-          <Input id="drive-publication-success-url" value={accessUrl} readOnly />
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <div className="font-medium">密码</div>
-              <div className="text-muted-foreground">{formatDriveAccessPassword(publication)}</div>
-            </div>
-            <div>
-              <div className="font-medium">到期</div>
-              <div className="text-muted-foreground">{formatDriveAccessExpiresAt(publication.expiresAt)}</div>
-            </div>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="drive-publication-success-url">访问链接</Label>
+            <Input id="drive-publication-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
           </div>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="font-medium">密码</dt>
+              <dd className="truncate text-muted-foreground" title={formatDriveAccessPassword(publication)}>
+                {formatDriveAccessPassword(publication)}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">到期</dt>
+              <dd className="truncate text-muted-foreground tabular-nums" title={formatDriveAccessExpiresAt(publication.expiresAt)}>
+                {formatDriveAccessExpiresAt(publication.expiresAt)}
+              </dd>
+            </div>
+          </dl>
         </div>
       </FormDialog>
     </Dialog>
@@ -1977,10 +1992,11 @@ function DriveShareSuccessDialog({
     <Dialog open={true} onOpenChange={onOpenChange}>
       <FormDialog
         title={isFolder ? "文件夹已分享" : "文件已分享"}
-        description={share.name}
+        description={<span className="block truncate">{share.name}</span>}
+        contentClassName="sm:max-w-xl"
         onSubmit={(event) => event.preventDefault()}
         footer={(
-          <>
+          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
             {password ? (
               <Button type="button" variant="outline" onClick={() => { void copyDrivePassword(password) }}>
@@ -1996,22 +2012,28 @@ function DriveShareSuccessDialog({
               <ExternalLink data-icon="inline-start" />
               {isFolder ? "打开文件夹" : "打开文件"}
             </Button>
-          </>
+          </div>
         )}
       >
-        <div className="grid gap-2">
-          <Label htmlFor="drive-share-success-url">访问链接</Label>
-          <Input id="drive-share-success-url" value={accessUrl} readOnly />
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <div className="font-medium">密码</div>
-              <div className="text-muted-foreground">{formatDriveAccessPassword(share)}</div>
-            </div>
-            <div>
-              <div className="font-medium">到期</div>
-              <div className="text-muted-foreground">{formatDriveAccessExpiresAt(share.expiresAt)}</div>
-            </div>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="drive-share-success-url">访问链接</Label>
+            <Input id="drive-share-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
           </div>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="font-medium">密码</dt>
+              <dd className="truncate text-muted-foreground" title={formatDriveAccessPassword(share)}>
+                {formatDriveAccessPassword(share)}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">到期</dt>
+              <dd className="truncate text-muted-foreground tabular-nums" title={formatDriveAccessExpiresAt(share.expiresAt)}>
+                {formatDriveAccessExpiresAt(share.expiresAt)}
+              </dd>
+            </div>
+          </dl>
         </div>
       </FormDialog>
     </Dialog>
@@ -2051,7 +2073,7 @@ function DriveSharesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <FormDialog
         title="已分享"
-        contentClassName="sm:max-w-2xl"
+        contentClassName="sm:max-w-4xl"
         onSubmit={(event) => event.preventDefault()}
         footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
       >
@@ -2077,13 +2099,13 @@ function DriveShareList({
   if (items.length === 0) return <DriveDialogEmptyState title="暂无分享" />
 
   return (
-    <Table className="min-w-[760px] table-fixed">
+    <Table className="min-w-[880px] table-fixed">
       <DriveShareTableHeader />
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id}>
             <TableCell>
-              <div className="truncate font-medium">{item.itemName}</div>
+              <div className="truncate font-medium" title={item.itemName}>{item.itemName}</div>
             </TableCell>
             <TableCell>
               <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>
@@ -2092,13 +2114,19 @@ function DriveShareList({
               <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {formatDriveAccessPassword(item)}
+              <div className="truncate" title={formatDriveAccessPassword(item)}>
+                {formatDriveAccessPassword(item)}
+              </div>
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatDriveAccessExpiresAt(item.expiresAt)}
+            <TableCell className="text-muted-foreground tabular-nums">
+              <div className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
+                {formatDriveAccessExpiresAt(item.expiresAt)}
+              </div>
             </TableCell>
-            <TableCell className="text-muted-foreground">
-              {formatDriveDateTime(item.createdAt)}
+            <TableCell className="text-muted-foreground tabular-nums">
+              <div className="truncate" title={formatDriveDateTime(item.createdAt)}>
+                {formatDriveDateTime(item.createdAt)}
+              </div>
             </TableCell>
             <TableCell>
               <DriveShareActions item={item} onReload={onReload} />
