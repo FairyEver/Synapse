@@ -536,6 +536,36 @@ export type UsageAnalysisModelPriceRuleInput = {
   readonly enabled?: boolean
 }
 
+export type ModelPriceRule = UsageAnalysisModelPriceRule
+export type ModelPriceRuleInput = UsageAnalysisModelPriceRuleInput
+export type ModelPriceCoverageSource = "all" | "cc" | "codex"
+export type ModelPriceCoverageRange = UsageAnalysisRangePreset
+export type ModelPriceUsageSourceName = "cc" | "codex"
+
+export type ModelPriceCoverageInput = {
+  readonly source?: ModelPriceCoverageSource
+  readonly range?: ModelPriceCoverageRange
+  readonly limit?: number
+}
+
+export type ModelPriceCoverageRow = {
+  readonly model: string
+  readonly sources: ModelPriceUsageSourceName[]
+  readonly tokens: number
+  readonly requests: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
+  readonly estimatedCost: number
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly reasoning: number
+  readonly priceKnown: boolean
+  readonly matchedRuleId?: string
+  readonly matchedRulePattern?: string
+}
+
 export type UsageAnalysisRefreshResult = {
   readonly scannedFiles: number
   readonly parsedFiles: number
@@ -1196,6 +1226,12 @@ export type SynapseBridge = {
     getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
     savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>
     resetPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
+  }
+  modelPrice: {
+    listCoverage: (input?: ModelPriceCoverageInput) => Promise<ModelPriceCoverageRow[]>
+    getRules: () => Promise<ModelPriceRule[]>
+    saveRules: (rules: ModelPriceRuleInput[]) => Promise<ModelPriceRule[]>
+    resetRules: () => Promise<ModelPriceRule[]>
   }
   http: {
     testRequest: (config: Record<string, unknown>) => Promise<{

@@ -291,6 +291,12 @@ const IPC_CHANNELS = {
     "pricingRulesSave": "synapse:usage-analysis:pricing-rules:save",
     "pricingRulesReset": "synapse:usage-analysis:pricing-rules:reset",
   },
+  "model-price": {
+    "coverageList": "synapse:model-price:coverage:list",
+    "rulesGet": "synapse:model-price:rules:get",
+    "rulesSave": "synapse:model-price:rules:save",
+    "rulesReset": "synapse:model-price:rules:reset",
+  },
   "account": {
     "getState": "synapse:account:get-state",
     "startLogin": "synapse:account:start-login",
@@ -1041,6 +1047,12 @@ const synapseBridge: SynapseBridge = {
     getPricingRules: invoke(IPC_CHANNELS["usage-analysis"].pricingRulesGet),
     savePricingRules: (rules) => invoke(IPC_CHANNELS["usage-analysis"].pricingRulesSave)(rules),
     resetPricingRules: invoke(IPC_CHANNELS["usage-analysis"].pricingRulesReset),
+  },
+  modelPrice: {
+    listCoverage: (input) => invoke(IPC_CHANNELS["model-price"].coverageList)(input),
+    getRules: invoke(IPC_CHANNELS["model-price"].rulesGet),
+    saveRules: (rules) => invoke(IPC_CHANNELS["model-price"].rulesSave)(rules),
+    resetRules: invoke(IPC_CHANNELS["model-price"].rulesReset),
   },
   http: {
     testRequest: invoke(HTTP_CHANNELS.testRequest),

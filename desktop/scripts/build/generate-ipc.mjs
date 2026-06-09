@@ -72,6 +72,7 @@ const MODULE_SOURCES = [
  */
 const EXTRA_CHANNEL_SOURCES = [
   { id: "usage-analysis", importPath: "electron/usage-analysis/channels.ts", exportName: "USAGE_ANALYSIS_CHANNELS" },
+  { id: "model-price", importPath: "electron/model-price/channels.ts", exportName: "MODEL_PRICE_CHANNELS" },
 ]
 
 const OUTPUT_PATH = path.resolve(

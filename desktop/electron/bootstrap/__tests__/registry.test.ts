@@ -86,6 +86,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.execution-isolation",
         "core.http-test",
         "core.logging",
+        "core.model-price",
         "core.network-registry",
         "core.permission-guard",
         "core.process-environment",
