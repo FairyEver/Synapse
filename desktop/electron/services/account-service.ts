@@ -308,7 +308,7 @@ export class AccountService {
   }
 
   async shareDriveItem(itemId: string, settings: DriveAccessSettingsInput): Promise<DriveShareDto> {
-    const share = await this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, { settings }, "分享失败。")
+    const share = await this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, settings, "分享失败。")
     return withCurrentDriveShareUrl(share)
   }
 
@@ -487,12 +487,12 @@ export class AccountService {
   }
 
   async publishDrivePage(itemId: string, settings: DriveAccessSettingsInput): Promise<DrivePublicationDto> {
-    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, { settings }, "发布网页失败。")
+    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, settings, "发布网页失败。")
     return withCurrentDrivePublicationUrl(publication)
   }
 
   async publishDriveSite(itemId: string, settings: DriveAccessSettingsInput): Promise<DrivePublicationDto> {
-    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, { settings }, "发布站点失败。")
+    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, settings, "发布站点失败。")
     return withCurrentDrivePublicationUrl(publication)
   }
 
