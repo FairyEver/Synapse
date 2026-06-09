@@ -40,16 +40,16 @@ function AgentConversationNodeAction({ result }: { result?: NodeRunResult }) {
         <TooltipTrigger asChild>
           <Button
             type="button"
-            size="icon"
+            size="icon-sm"
             variant="secondary"
-            className="absolute -right-3 -top-3 z-10 h-7 w-7 rounded-full"
+            className="absolute -right-3 -top-3 z-10 rounded-full p-1"
             aria-label="打开对话"
             onClick={(event) => {
               event.stopPropagation()
               onOpenAgentConversation(agentConversation)
             }}
           >
-            <MessageSquare className="h-3.5 w-3.5" />
+            <MessageSquare className="size-3" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>打开对话</TooltipContent>
