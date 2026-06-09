@@ -6,13 +6,15 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto"
+import type { DriveAccessExpiresIn } from "@synapse/shared"
 import { hashPassword, verifyPassword } from "../auth/password"
+
+export type { DriveAccessExpiresIn } from "@synapse/shared"
 
 export type DriveAccessCookieKind = "share" | "page" | "site"
 
-export type DriveAccessExpiresIn = "7d" | "30d" | "1y" | "forever"
-
 export type DrivePasswordMaterial = {
+  readonly passwordEnabled: boolean
   readonly password: string | null
   readonly passwordHash: string | null
   readonly passwordEncrypted: string | null
@@ -24,6 +26,7 @@ type DriveAccessCookiePayload = {
   readonly kind: DriveAccessCookieKind
   readonly publicId: string
   readonly expiresMs: number
+  readonly passwordFingerprint: string | null
 }
 
 const drivePasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -104,6 +107,7 @@ export async function createDrivePasswordMaterial(
   const expiresAt = computeDriveAccessExpiresAt(input.expiresIn, now)
   if (!input.passwordEnabled) {
     return {
+      passwordEnabled: false,
       password: null,
       passwordHash: null,
       passwordEncrypted: null,
@@ -113,6 +117,7 @@ export async function createDrivePasswordMaterial(
 
   const password = generateDrivePassword()
   return {
+    passwordEnabled: true,
     password,
     passwordHash: await hashPassword(password),
     passwordEncrypted: encryptDrivePassword(password, secret),
@@ -124,6 +129,7 @@ export function buildDriveAccessCookie(input: {
   readonly kind: DriveAccessCookieKind
   readonly publicId: string
   readonly expiresAt: Date | null
+  readonly passwordHash: string | null | undefined
   readonly secret: string
 }): string {
   const payload: DriveAccessCookiePayload = {
@@ -131,6 +137,7 @@ export function buildDriveAccessCookie(input: {
     kind: input.kind,
     publicId: input.publicId,
     expiresMs: input.expiresAt?.getTime() ?? 0,
+    passwordFingerprint: fingerprintDrivePasswordHash(input.passwordHash),
   }
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url")
   const signature = signDriveAccessCookiePayload(encodedPayload, input.secret)
@@ -139,15 +146,18 @@ export function buildDriveAccessCookie(input: {
 }
 
 export function verifyDriveAccessCookie(
-  value: string,
+  value: string | null | undefined,
   input: {
     readonly kind: DriveAccessCookieKind
     readonly publicId: string
     readonly now: Date
+    readonly passwordHash: string | null | undefined
     readonly resourceExpiresAt: Date | null
     readonly secret: string
   },
 ): boolean {
+  if (!value) return false
+
   const [encodedPayload, signature, extra] = value.split(".")
   if (!encodedPayload || !signature || extra !== undefined) return false
 
@@ -157,6 +167,7 @@ export function verifyDriveAccessCookie(
   const payload = parseDriveAccessCookiePayload(encodedPayload)
   if (!payload) return false
   if (payload.kind !== input.kind || payload.publicId !== input.publicId) return false
+  if (payload.passwordFingerprint !== fingerprintDrivePasswordHash(input.passwordHash)) return false
 
   const expiresMs = earliestExpiringMs(payload.expiresMs, input.resourceExpiresAt?.getTime() ?? 0)
   if (expiresMs === 0) return true
@@ -177,6 +188,12 @@ function signDriveAccessCookiePayload(encodedPayload: string, secret: string): s
   return createHmac("sha256", deriveDriveAccessKey(secret)).update(encodedPayload, "utf8").digest("base64url")
 }
 
+function fingerprintDrivePasswordHash(passwordHash: string | null | undefined): string | null {
+  if (passwordHash === null || passwordHash === undefined) return null
+
+  return createHash("sha256").update(`synapse-drive-access-cookie:${passwordHash}`, "utf8").digest("base64url")
+}
+
 function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left, "utf8")
   const rightBuffer = Buffer.from(right, "utf8")
@@ -192,12 +209,14 @@ function parseDriveAccessCookiePayload(encodedPayload: string): DriveAccessCooki
     if (!isDriveAccessCookieKind(value.kind)) return null
     if (typeof value.publicId !== "string" || !value.publicId) return null
     if (typeof value.expiresMs !== "number" || !Number.isSafeInteger(value.expiresMs) || value.expiresMs < 0) return null
+    if (value.passwordFingerprint !== null && typeof value.passwordFingerprint !== "string") return null
 
     return {
       version: driveAccessCookieVersion,
       kind: value.kind,
       publicId: value.publicId,
       expiresMs: value.expiresMs,
+      passwordFingerprint: value.passwordFingerprint,
     }
   } catch {
     return null
