@@ -143,6 +143,7 @@ vi.mock("@/modules/usage-analysis", () => ({
   CcUsageAnalysisModule: () => <div>CC 模块</div>,
   CodexUsageAnalysisModule: () => <div>Codex 模块</div>,
 }))
+vi.mock("@/modules/model-price", () => ({ ModelPriceModule: () => <div>价格模块</div> }))
 vi.mock("@/modules/workflow", () => ({ WorkflowModule: () => <div>工作流模块</div> }))
 vi.mock("@/modules/tools", () => ({ ToolsModule: () => <div>工具模块</div> }))
 vi.mock("@/modules/content/components/content-window-page", () => ({
@@ -192,6 +193,7 @@ describe("App workflow entry visibility", () => {
       "IDE",
       "CC",
       "Codex",
+      "价格",
       "设置",
     ])
   })
@@ -227,6 +229,7 @@ describe("App workflow entry visibility", () => {
       "IDE",
       "CC",
       "Codex",
+      "价格",
       "设置",
     ])
   })

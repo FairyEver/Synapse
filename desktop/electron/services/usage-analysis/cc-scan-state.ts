@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto"
-import type { UsageModelPriceRule } from "./pricing"
+import { hashModelPriceRules, type ModelPriceRule } from "../model-price"
 
 export const CC_SCAN_STATE_VERSION = 1
 export const CC_RECENT_DEDUPE_KEYS_LIMIT = 8192
@@ -66,23 +65,8 @@ export function classifyCcScanFile({
   return { kind: "replace" }
 }
 
-export function hashUsagePriceRules(rules: readonly UsageModelPriceRule[]): string {
-  const payload = rules
-    .map((rule) => ({
-      id: rule.id,
-      modelPattern: rule.modelPattern,
-      inputPer1M: rule.inputPer1M,
-      outputPer1M: rule.outputPer1M,
-      cacheReadPer1M: rule.cacheReadPer1M,
-      cacheWritePer1M: rule.cacheWritePer1M,
-      reasoningPer1M: rule.reasoningPer1M,
-      currency: rule.currency,
-      enabled: rule.enabled,
-      source: rule.source,
-      sortIndex: rule.sortIndex,
-    }))
-    .sort((a, b) => a.id.localeCompare(b.id))
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex")
+export function hashUsagePriceRules(rules: readonly ModelPriceRule[]): string {
+  return hashModelPriceRules(rules)
 }
 
 export function parseCcFileParserState(raw: string | null | undefined): CcFileParserState {

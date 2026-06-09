@@ -1,35 +1,13 @@
 import type { DatabaseSync } from "node:sqlite"
 import { migrateUsageAnalysisCostsToCny, type UsageAnalysisMigrationLogger } from "./currency-migration"
-import { migrateDefaultUsagePriceRules } from "./pricing"
+import { initModelPriceSchema } from "../model-price"
 
 interface UsageAnalysisSchemaOptions {
   readonly logger?: UsageAnalysisMigrationLogger
 }
 
 export function initUsageAnalysisSchema(database: DatabaseSync, options: UsageAnalysisSchemaOptions = {}): void {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS usage_model_prices (
-      id TEXT PRIMARY KEY,
-      model_pattern TEXT NOT NULL,
-      input_per_1m REAL NOT NULL DEFAULT 0,
-      output_per_1m REAL NOT NULL DEFAULT 0,
-      cache_read_per_1m REAL NOT NULL DEFAULT 0,
-      cache_write_per_1m REAL NOT NULL DEFAULT 0,
-      reasoning_per_1m REAL NOT NULL DEFAULT 0,
-      currency TEXT NOT NULL DEFAULT '',
-      enabled INTEGER NOT NULL DEFAULT 1,
-      source TEXT NOT NULL DEFAULT 'user',
-      sort_index INTEGER NOT NULL DEFAULT 0,
-      updated_at TEXT NOT NULL DEFAULT ''
-    )
-  `)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS usage_pricing_meta (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL DEFAULT '',
-      updated_at TEXT NOT NULL DEFAULT ''
-    )
-  `)
+  initModelPriceSchema(database)
 
   for (const prefix of ["cc", "cx"] as const) {
     database.exec(`
@@ -178,8 +156,6 @@ export function initUsageAnalysisSchema(database: DatabaseSync, options: UsageAn
     )
   `)
 
-  ensureColumn(database, "usage_model_prices", "currency", "TEXT NOT NULL DEFAULT ''")
-
   for (const prefix of ["cc", "cx"] as const) {
     ensureColumn(database, `${prefix}_scan_files`, "line_count", "INTEGER NOT NULL DEFAULT 0")
     if (prefix === "cc") {
@@ -228,7 +204,6 @@ export function initUsageAnalysisSchema(database: DatabaseSync, options: UsageAn
     }
   }
   migrateUsageAnalysisCostsToCny(database, options.logger)
-  migrateDefaultUsagePriceRules(database)
 }
 
 function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string): void {

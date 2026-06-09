@@ -887,31 +887,11 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     expect(models.map((row) => row.model)).toEqual(["claude-opus-4.6"])
   })
 
-  it("migrates legacy USD prices and stored costs exactly once", () => {
+  it("migrates legacy USD stored costs exactly once", () => {
     const db = new DatabaseSync(":memory:")
+    initUsageAnalysisSchema(db)
     db.exec(`
-      CREATE TABLE usage_model_prices (
-        id TEXT PRIMARY KEY,
-        model_pattern TEXT NOT NULL,
-        input_per_1m REAL NOT NULL DEFAULT 0,
-        output_per_1m REAL NOT NULL DEFAULT 0,
-        cache_read_per_1m REAL NOT NULL DEFAULT 0,
-        cache_write_per_1m REAL NOT NULL DEFAULT 0,
-        reasoning_per_1m REAL NOT NULL DEFAULT 0,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        source TEXT NOT NULL DEFAULT 'user',
-        sort_index INTEGER NOT NULL DEFAULT 0,
-        updated_at TEXT NOT NULL DEFAULT ''
-      );
-      CREATE TABLE usage_pricing_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '');
-      CREATE TABLE cc_scan_files (file_path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime_ms INTEGER NOT NULL, line_count INTEGER NOT NULL DEFAULT 0, parse_status TEXT NOT NULL, error_kind TEXT, last_scanned_at TEXT NOT NULL);
-      CREATE TABLE cc_sessions (session_id TEXT PRIMARY KEY, file_path TEXT NOT NULL, workspace_key TEXT NOT NULL DEFAULT '', workspace_label TEXT NOT NULL DEFAULT '', provider TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', cli_version TEXT NOT NULL DEFAULT '', started_at TEXT NOT NULL DEFAULT '', ended_at TEXT NOT NULL DEFAULT '', model_summary TEXT NOT NULL DEFAULT '', request_count INTEGER NOT NULL DEFAULT 0, conversation_count INTEGER NOT NULL DEFAULT 0, tool_call_count INTEGER NOT NULL DEFAULT 0);
-      CREATE TABLE cc_usage_events (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, timestamp_ms INTEGER NOT NULL, date TEXT NOT NULL, hour TEXT NOT NULL, workspace_key TEXT NOT NULL DEFAULT '', workspace_label TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT 'unknown', provider TEXT NOT NULL DEFAULT '', input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0, reasoning_tokens INTEGER NOT NULL DEFAULT 0, cost_input REAL NOT NULL DEFAULT 0, cost_output REAL NOT NULL DEFAULT 0, cost_cache_read REAL NOT NULL DEFAULT 0, cost_cache_write REAL NOT NULL DEFAULT 0, cost_reasoning REAL NOT NULL DEFAULT 0, total_cost REAL NOT NULL DEFAULT 0, price_known INTEGER NOT NULL DEFAULT 0);
-      CREATE TABLE cc_tool_events (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, timestamp_ms INTEGER NOT NULL, date TEXT NOT NULL, hour TEXT NOT NULL DEFAULT '', workspace_key TEXT NOT NULL DEFAULT '', tool_name TEXT NOT NULL, category TEXT NOT NULL, status TEXT NOT NULL DEFAULT '', exit_code INTEGER, duration_ms INTEGER);
-      CREATE TABLE cc_daily_usage (date TEXT NOT NULL, model TEXT NOT NULL, provider TEXT NOT NULL DEFAULT '', workspace_key TEXT NOT NULL DEFAULT '', input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0, reasoning_tokens INTEGER NOT NULL DEFAULT 0, cost_input REAL NOT NULL DEFAULT 0, cost_output REAL NOT NULL DEFAULT 0, cost_cache_read REAL NOT NULL DEFAULT 0, cost_cache_write REAL NOT NULL DEFAULT 0, cost_reasoning REAL NOT NULL DEFAULT 0, total_cost REAL NOT NULL DEFAULT 0, price_known INTEGER NOT NULL DEFAULT 0, requests INTEGER NOT NULL DEFAULT 0, conversations INTEGER NOT NULL DEFAULT 0, tool_calls INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (date, model, provider, workspace_key));
-      CREATE TABLE cc_hourly_usage (hour TEXT NOT NULL, model TEXT NOT NULL, provider TEXT NOT NULL DEFAULT '', workspace_key TEXT NOT NULL DEFAULT '', input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0, reasoning_tokens INTEGER NOT NULL DEFAULT 0, cost_input REAL NOT NULL DEFAULT 0, cost_output REAL NOT NULL DEFAULT 0, cost_cache_read REAL NOT NULL DEFAULT 0, cost_cache_write REAL NOT NULL DEFAULT 0, cost_reasoning REAL NOT NULL DEFAULT 0, total_cost REAL NOT NULL DEFAULT 0, price_known INTEGER NOT NULL DEFAULT 0, requests INTEGER NOT NULL DEFAULT 0, conversations INTEGER NOT NULL DEFAULT 0, tool_calls INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (hour, model, provider, workspace_key));
-      INSERT INTO usage_model_prices (id, model_pattern, input_per_1m, output_per_1m, cache_read_per_1m, cache_write_per_1m, reasoning_per_1m, enabled, source, sort_index, updated_at)
-      VALUES ('legacy', 'legacy-model', 1, 2, 0.5, 3, 2, 1, 'user', 0, '2026-05-01T00:00:00.000Z');
+      DELETE FROM model_price_meta WHERE key = 'cost_currency_migrated_to_cny_v1';
       INSERT INTO cc_usage_events (id, session_id, timestamp_ms, date, hour, model, input_tokens, output_tokens, cost_input, cost_output, total_cost, price_known)
       VALUES ('event-1', 'session-1', 1770000000000, '2026-05-01', '2026-05-01 10', 'legacy-model', 100, 50, 1, 2, 3, 1);
       INSERT INTO cc_daily_usage (date, model, workspace_key, input_tokens, output_tokens, cost_input, cost_output, total_cost, price_known, requests, conversations)
@@ -923,11 +903,6 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     initUsageAnalysisSchema(db)
     initUsageAnalysisSchema(db)
 
-    expect(db.prepare("SELECT input_per_1m, output_per_1m, currency FROM usage_model_prices WHERE id = 'legacy'").get()).toEqual({
-      input_per_1m: 7.2,
-      output_per_1m: 14.4,
-      currency: "CNY",
-    })
     expect(db.prepare("SELECT cost_input, cost_output, total_cost, cost_currency, pricing_rate FROM cc_usage_events WHERE id = 'event-1'").get()).toEqual({
       cost_input: 7.2,
       cost_output: 14.4,

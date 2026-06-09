@@ -27,14 +27,10 @@ describe("migrateUsageAnalysisCostsToCny", () => {
 
     expect(logger.info).toHaveBeenCalledWith("Usage CNY cost migration started.", {
       rate: USD_TO_CNY_RATE,
-      modelPriceRows: 1,
-      seededDefaultPriceRules: false,
     })
     expect(logger.info).toHaveBeenCalledWith("Usage CNY cost migration completed.", {
       rate: USD_TO_CNY_RATE,
-      seededDefaultPriceRules: false,
       affectedRows: {
-        usageModelPrices: 1,
         usageEvents: { cc: 1, cx: 1 },
         dailyUsage: { cc: 1, cx: 0 },
         hourlyUsage: { cc: 1, cx: 0 },
@@ -51,10 +47,8 @@ describe("migrateUsageAnalysisCostsToCny", () => {
 
     expect(logger.error).toHaveBeenCalledWith("Usage CNY cost migration failed.", expect.objectContaining({
       rate: USD_TO_CNY_RATE,
-      seededDefaultPriceRules: false,
       error: expect.any(Error),
       affectedRows: expect.objectContaining({
-        usageModelPrices: 1,
         usageEvents: expect.objectContaining({ cc: 1 }),
       }),
     }))
@@ -68,12 +62,7 @@ function createLegacyUsageDatabase(): DatabaseSync {
   logger.info.mockClear()
   logger.error.mockClear()
   db.exec(`
-    DELETE FROM usage_pricing_meta WHERE key = '${RMB_MIGRATION_META_KEY}';
-    DELETE FROM usage_model_prices;
-    INSERT INTO usage_model_prices (
-      id, model_pattern, input_per_1m, output_per_1m, cache_read_per_1m,
-      cache_write_per_1m, reasoning_per_1m, currency, enabled, source, sort_index, updated_at
-    ) VALUES ('legacy', 'legacy-model', 1, 2, 0.5, 3, 2, 'USD', 1, 'user', 0, '2026-05-01T00:00:00.000Z');
+    DELETE FROM model_price_meta WHERE key = '${RMB_MIGRATION_META_KEY}';
     INSERT INTO cc_usage_events (
       id, session_id, timestamp_ms, date, hour, model, input_tokens, output_tokens,
       cost_input, cost_output, total_cost, price_known, cost_currency

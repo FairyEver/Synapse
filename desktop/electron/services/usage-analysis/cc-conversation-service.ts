@@ -13,9 +13,9 @@ import type {
   CcRecordListInput,
   CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
-import { sanitizeError } from "../../../src/lib/error-sanitize"
+import { sanitizeError } from "../error-sanitize"
+import { roundModelUsageCost } from "../model-price"
 import { parseCcConversationFile } from "./cc-conversation-parser"
-import { roundUsageCost } from "./pricing"
 import { createUsageRangeFilter } from "./range"
 
 type ServiceOptions = {
@@ -64,7 +64,7 @@ function toNumber(value: unknown): number {
 }
 
 function toCostNumber(value: unknown): number {
-  return roundUsageCost(toNumber(value))
+  return roundModelUsageCost(toNumber(value))
 }
 
 function normalizeLimit(value: unknown): number {

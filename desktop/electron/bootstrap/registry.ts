@@ -32,6 +32,7 @@ import {
   coreEventBusDescriptor,
   coreExecutionIsolationDescriptor,
   coreLoggingDescriptor,
+  coreModelPriceDescriptor,
   coreProcessEnvironmentDescriptor,
   coreNetworkRegistryDescriptor,
   corePermissionGuardDescriptor,
@@ -99,6 +100,7 @@ export function buildServiceRegistry(
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDatabaseDescriptor)
   registry.register(coreUsageAnalysisDescriptor)
+  registry.register(coreModelPriceDescriptor)
   registry.register(coreHttpTestDescriptor)
   registry.register(coreKnowledgeBaseDescriptor)
   registry.register(coreToolsWindowDescriptor)

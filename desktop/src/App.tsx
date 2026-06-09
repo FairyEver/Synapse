@@ -44,6 +44,7 @@ import { DriveModule } from "@/modules/drive"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
+import { ModelPriceModule } from "@/modules/model-price"
 import { WorkflowModule } from "@/modules/workflow"
 import { ToolsModule } from "@/modules/tools"
 import type { SynapseContentType } from "@/types/content"
@@ -395,6 +396,11 @@ function MainApp() {
           {activeTab === "usage-codex" ? (
             <ErrorBoundary fallbackTitle="Codex 使用分析出现问题">
               <CodexUsageAnalysisModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "model-price" ? (
+            <ErrorBoundary fallbackTitle="价格模块出现问题">
+              <ModelPriceModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "workflow" && workflowEntryVisible ? (

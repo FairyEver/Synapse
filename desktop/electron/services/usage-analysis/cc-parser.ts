@@ -1,6 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
-import { estimateUsageCost, type UsageModelPriceRule } from "./pricing"
+import { estimateModelUsageCost, type ModelPriceRule } from "../model-price"
 import { localDateKey, localHourKey } from "./range"
 import { CC_RECENT_DEDUPE_KEYS_LIMIT } from "./cc-scan-state"
 
@@ -67,7 +67,7 @@ export interface ParsedUsageFile {
 
 export interface UsageParseOptions {
   readonly startLine?: number
-  readonly priceRules?: readonly UsageModelPriceRule[]
+  readonly priceRules?: readonly ModelPriceRule[]
 }
 
 export type ClaudeUsageParseMode = "append" | "replace"
@@ -289,7 +289,7 @@ export async function parseClaudeUsageFileSegment(options: ClaudeUsageSegmentPar
 
     const date = localDateKey(timestampMs)
     const hour = localHourKey(timestampMs)
-    const cost = estimateUsageCost(model, tokens, options.priceRules)
+    const cost = estimateModelUsageCost(model, tokens, options.priceRules ?? [])
     const eventId = `${sessionId}:usage:${messageId || `offset-${lineStartOffset}`}`
     affectedDates.add(date)
     affectedHours.add(hour)

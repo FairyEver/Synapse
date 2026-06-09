@@ -9,8 +9,7 @@ import type { ScopedEventBus } from "../../runtime/project-container"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService, ReplyTarget } from "../reply-target"
-import type { UsageModelPriceRule } from "../usage-analysis/pricing"
-import { estimateSynapseUsageCostSnapshot } from "../usage-analysis/usage-cost-snapshot"
+import { estimateSynapseUsageCostSnapshot, type ModelPriceRule } from "../model-price"
 import {
   AGENT_CANCELLED_MESSAGE,
   AGENT_COMPRESSION_UNSUPPORTED_MESSAGE,
@@ -67,7 +66,7 @@ export interface ConversationRouterDeps {
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
   }
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
-  readonly getUsagePriceRules?: () => readonly UsageModelPriceRule[]
+  readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
   readonly permissionGuard?: PermissionGuard

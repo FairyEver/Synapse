@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
-import type { UsageModelPriceRule } from "../pricing"
+import { DEFAULT_MODEL_PRICE_RULES, type ModelPriceRule } from "../../model-price"
 import {
   estimateSynapseUsageCostSnapshot,
   usageTokenBreakdownFromRecord,
 } from "../usage-cost-snapshot"
 
-const pricedRule: UsageModelPriceRule = {
+const pricedRule: ModelPriceRule = {
   id: "test-model",
   modelPattern: "test-model",
   inputPer1M: 1000,
@@ -76,6 +76,20 @@ describe("usage cost snapshots", () => {
         cacheWrite: 0.0004,
         reasoning: 0.003,
       },
+      costCurrency: "CNY",
+      priceKnown: true,
+      estimatedCost: true,
+    })
+  })
+
+  it("estimates local cost from model-price rules", () => {
+    expect(estimateSynapseUsageCostSnapshot({
+      modelName: "claude-sonnet-4",
+      usage: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+      priceRules: DEFAULT_MODEL_PRICE_RULES,
+    })).toMatchObject({
+      modelName: "claude-sonnet-4",
+      costCny: 129.6,
       costCurrency: "CNY",
       priceKnown: true,
       estimatedCost: true,

@@ -446,6 +446,32 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps model price methods to first-class IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.modelPrice.listCoverage({ source: "all", range: "30d", limit: 100 })
+    await bridge.modelPrice.getRules()
+    await bridge.modelPrice.saveRules([{ modelPattern: "local-model", inputPer1M: 1 }])
+    await bridge.modelPrice.resetRules()
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:coverage:list",
+      { source: "all", range: "30d", limit: 100 },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:rules:get",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:rules:save",
+      [{ modelPattern: "local-model", inputPer1M: 1 }],
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:rules:reset",
+      undefined,
+    )
+  })
+
   it("maps workflow active runs to the workflow IPC channel", async () => {
     const bridge = await loadPreloadBridge()
 

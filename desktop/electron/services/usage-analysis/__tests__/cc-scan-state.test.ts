@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { DEFAULT_MODEL_PRICE_RULES, hashModelPriceRules } from "../../model-price"
 import {
   CC_SCAN_STATE_VERSION,
   classifyCcScanFile,
@@ -115,6 +116,20 @@ describe("CC scan state", () => {
     ])
 
     expect(first).toBe(second)
+  })
+
+  it("uses the model-price rule hash for scan replacement decisions", () => {
+    const oldHash = hashModelPriceRules(DEFAULT_MODEL_PRICE_RULES)
+    const newHash = hashModelPriceRules([
+      ...DEFAULT_MODEL_PRICE_RULES,
+      { ...DEFAULT_MODEL_PRICE_RULES[0], id: "copy", modelPattern: "copy-model", sortIndex: 999 },
+    ])
+
+    expect(oldHash).not.toBe(newHash)
+  })
+
+  it("delegates pricing hash semantics to model-price", () => {
+    expect(hashUsagePriceRules(DEFAULT_MODEL_PRICE_RULES)).toBe(hashModelPriceRules(DEFAULT_MODEL_PRICE_RULES))
   })
 
   it("round-trips bounded parser state", () => {

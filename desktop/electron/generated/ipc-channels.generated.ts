@@ -302,6 +302,12 @@ export const IPC_CHANNELS = {
     "pricingRulesSave": "synapse:usage-analysis:pricing-rules:save",
     "pricingRulesReset": "synapse:usage-analysis:pricing-rules:reset",
   },
+  "model-price": {
+    "coverageList": "synapse:model-price:coverage:list",
+    "rulesGet": "synapse:model-price:rules:get",
+    "rulesSave": "synapse:model-price:rules:save",
+    "rulesReset": "synapse:model-price:rules:reset",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

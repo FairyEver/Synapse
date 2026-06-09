@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { BadgeDollarSign, RefreshCw } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -14,7 +14,6 @@ interface UsageAnalysisShellProps {
   refreshing: boolean
   onViewChange: (view: UsageViewId) => void
   onRangeChange: (range: UsageRangePreset) => void
-  onPricingRulesClick?: () => void
   onRefresh: () => void
   children: ReactNode
 }
@@ -60,17 +59,6 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
           {props.view === "today" ? null : (
             <RangePicker value={props.range} onChange={props.onRangeChange} />
           )}
-          {props.onPricingRulesClick ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={props.onPricingRulesClick}
-            >
-              <BadgeDollarSign data-icon="inline-start" />
-              价格规则
-            </Button>
-          ) : null}
           <Button
             type="button"
             variant="outline"

@@ -1459,6 +1459,22 @@ export const coreUsageAnalysisDescriptor: ServiceDescriptor<{ initialized: true 
 }
 
 /**
+ * core.model-price — registers first-class model price IPC handlers.
+ *
+ * Status: degraded — price management is non-critical at startup.
+ */
+export const coreModelPriceDescriptor: ServiceDescriptor<{ initialized: true }> = {
+  id: "core.model-price",
+  criticality: "degraded",
+  dependsOn: [],
+  async create() {
+    const { registerModelPriceHandlers } = await import("../model-price/ipc-handlers.js")
+    registerModelPriceHandlers()
+    return { initialized: true }
+  },
+}
+
+/**
  * core.http-test — registers IPC handler for ad-hoc HTTP request testing.
  *
  * Status: degraded — test requests are non-critical.

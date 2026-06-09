@@ -14,16 +14,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -33,12 +26,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { UsageModelPriceRule, UsageModelPriceRuleInput } from "../types"
+import type { ModelPriceRule, ModelPriceRuleInput, ModelPriceState } from "../types"
 
-interface PricingRulesDialogProps {
-  readonly open: boolean
-  readonly onOpenChange: (open: boolean) => void
-  readonly onSaved?: () => void
+interface PriceRulesViewProps {
+  readonly state: ModelPriceState<ModelPriceRule[]>
+  readonly onSaved: () => void
 }
 
 interface EditablePriceRule {
@@ -64,32 +56,16 @@ const PRICE_COLUMNS: { readonly key: PriceField; readonly label: string }[] = [
   { key: "reasoningPer1M", label: "推理" },
 ]
 
-export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRulesDialogProps) {
+export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
   const { error: showError, success: showSuccess } = useAppNotifications()
   const [rows, setRows] = useState<EditablePriceRule[]>([])
-  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
 
   useEffect(() => {
-    if (!open) return
-    let active = true
-    setLoading(true)
-    requireSynapseBridge().usageAnalysis.getPricingRules()
-      .then((rules) => {
-        if (!active) return
-        setRows(rules.map(toEditableRule))
-      })
-      .catch(() => {
-        if (active) showError("读取失败")
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [open, showError])
+    if (!state.data) return
+    setRows(state.data.map(toEditableRule))
+  }, [state.data])
 
   const updateRow = (clientId: string, field: PriceField, value: string) => {
     setRows((current) => current.map((row) => (
@@ -114,11 +90,10 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
   const save = async () => {
     setSaving(true)
     try {
-      const saved = await requireSynapseBridge().usageAnalysis.savePricingRules(rows.map(toRuleInput))
+      const saved = await requireSynapseBridge().modelPrice.saveRules(rows.map(toRuleInput))
       setRows(saved.map(toEditableRule))
-      onSaved?.()
+      onSaved()
       showSuccess("已保存")
-      onOpenChange(false)
     } catch {
       showError("保存失败")
     } finally {
@@ -129,9 +104,9 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
   const reset = async () => {
     setResetting(true)
     try {
-      const resetRows = await requireSynapseBridge().usageAnalysis.resetPricingRules()
+      const resetRows = await requireSynapseBridge().modelPrice.resetRules()
       setRows(resetRows.map(toEditableRule))
-      onSaved?.()
+      onSaved()
       showSuccess("已重置")
     } catch {
       showError("重置失败")
@@ -140,69 +115,35 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
     }
   }
 
+  if (state.loading && !state.data) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Skeleton key={index} className="h-9 w-full" />
+        ))}
+      </div>
+    )
+  }
+
+  if (state.error) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyTitle>读取失败</EmptyTitle>
+          <EmptyDescription>{state.error.message}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>价格规则</DialogTitle>
-          <DialogDescription>人民币 / 1M token</DialogDescription>
-        </DialogHeader>
-        <div className="min-w-0 overflow-hidden">
-          <ScrollArea className="h-96" viewportClassName="min-w-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>启用</TableHead>
-                  {PRICE_COLUMNS.map((column) => (
-                    <TableHead key={column.key} className={column.key === "modelPattern" ? undefined : "text-right"}>{column.label}</TableHead>
-                  ))}
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.clientId}>
-                    <TableCell>
-                      <Checkbox
-                        checked={row.enabled}
-                        aria-label="启用"
-                        onCheckedChange={(checked) => updateEnabled(row.clientId, checked === true)}
-                      />
-                    </TableCell>
-                    {PRICE_COLUMNS.map((column) => (
-                      <TableCell key={column.key}>
-                        <Input
-                          value={row[column.key]}
-                          type={column.key === "modelPattern" ? "text" : "number"}
-                          min={column.key === "modelPattern" ? undefined : 0}
-                          step={column.key === "modelPattern" ? undefined : "0.0001"}
-                          aria-label={column.label}
-                          className={column.key === "modelPattern" ? "min-w-48" : "min-w-24 text-right tabular-nums"}
-                          onChange={(event) => updateRow(row.clientId, column.key, event.target.value)}
-                        />
-                      </TableCell>
-                    ))}
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="删除"
-                        onClick={() => removeRow(row.clientId)}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </div>
-        <DialogFooter className="sm:justify-between">
+    <div className="flex min-h-0 flex-col gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <div className="text-sm text-muted-foreground">人民币 / 1M token</div>
+        <div className="flex items-center gap-2">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" variant="outline" disabled={loading || saving || resetting}>
+              <Button type="button" variant="outline" size="sm" disabled={saving || resetting}>
                 <RotateCcw data-icon="inline-start" />
                 重置
               </Button>
@@ -210,9 +151,7 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>恢复内置默认价格</AlertDialogTitle>
-                <AlertDialogDescription>
-                  当前规则会被内置规则替换。
-                </AlertDialogDescription>
+                <AlertDialogDescription>当前规则会被内置规则替换。</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
@@ -222,22 +161,70 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={addRow} disabled={loading || saving || resetting}>
-              <Plus data-icon="inline-start" />
-              添加
-            </Button>
-            <Button type="button" onClick={save} disabled={loading || saving || resetting}>
-              {saving ? "保存中" : "保存"}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={saving || resetting}>
+            <Plus data-icon="inline-start" />
+            添加
+          </Button>
+          <Button type="button" size="sm" onClick={() => void save()} disabled={saving || resetting}>
+            {saving ? "保存中" : "保存"}
+          </Button>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>启用</TableHead>
+              {PRICE_COLUMNS.map((column) => (
+                <TableHead key={column.key} className={column.key === "modelPattern" ? undefined : "text-right"}>{column.label}</TableHead>
+              ))}
+              <TableHead className="text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={row.clientId}>
+                <TableCell>
+                  <Checkbox
+                    checked={row.enabled}
+                    aria-label="启用"
+                    onCheckedChange={(checked) => updateEnabled(row.clientId, checked === true)}
+                  />
+                </TableCell>
+                {PRICE_COLUMNS.map((column) => (
+                  <TableCell key={column.key}>
+                    <Input
+                      value={row[column.key]}
+                      type={column.key === "modelPattern" ? "text" : "number"}
+                      min={column.key === "modelPattern" ? undefined : 0}
+                      step={column.key === "modelPattern" ? undefined : "0.0001"}
+                      aria-label={column.label}
+                      className={column.key === "modelPattern" ? "min-w-48" : "min-w-24 text-right tabular-nums"}
+                      onChange={(event) => updateRow(row.clientId, column.key, event.target.value)}
+                    />
+                  </TableCell>
+                ))}
+                <TableCell className="text-right">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="删除"
+                    onClick={() => removeRow(row.clientId)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   )
 }
 
-function toEditableRule(rule: UsageModelPriceRule): EditablePriceRule {
+function toEditableRule(rule: ModelPriceRule): EditablePriceRule {
   return {
     clientId: rule.id,
     id: rule.id,
@@ -264,7 +251,7 @@ function newEditableRule(): EditablePriceRule {
   }
 }
 
-function toRuleInput(rule: EditablePriceRule): UsageModelPriceRuleInput {
+function toRuleInput(rule: EditablePriceRule): ModelPriceRuleInput {
   return {
     id: rule.id,
     modelPattern: rule.modelPattern,
