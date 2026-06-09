@@ -339,6 +339,35 @@ describe("DriveService", () => {
     }))
   })
 
+  it("denies protected published static assets before deployment and asset lookup", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+    const findDeployment = vi.fn(prisma.drivePublicationDeployment.findFirst)
+    const findAsset = vi.fn(prisma.drivePublicationAsset.findUnique)
+    prisma.drivePublicationDeployment.findFirst = findDeployment
+    prisma.drivePublicationAsset.findUnique = findAsset
+    vi.mocked(storageMock.getObjectStream).mockClear()
+
+    const access = await service.resolvePublishedAssetAccess({
+      publishId: publication.publishId,
+      type: "site",
+      relativePath: "missing.css",
+    })
+
+    expect(access).toEqual({ status: "static_denied" })
+    expect(findDeployment).not.toHaveBeenCalled()
+    expect(findAsset).not.toHaveBeenCalled()
+    expect(storageMock.getObjectStream).not.toHaveBeenCalled()
+  })
+
   it("uses asset content type before storage content type for published assets", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -888,6 +917,35 @@ describe("DriveService", () => {
       password: share.password ?? undefined,
     })
     expect(download.url).toBe("https://cos.example/download")
+  })
+
+  it("rejects protected share direct access before storage download urls", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "secret.txt",
+      mimeType: "text/plain",
+    })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "交接材料" })
+    const child = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "brief.txt",
+      mimeType: "text/plain",
+    })
+    const fileShare = await service.createShare("user-1", file.id, "https://synapse.test")
+    const folderShare = await service.createShare("user-1", folder.id, "https://synapse.test")
+    vi.mocked(storageMock.createDownloadUrl).mockClear()
+
+    await expect(service.createDownloadUrlForShare({ shareId: fileShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.listPublicFolderChildren({ shareId: folderShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.createDownloadUrlForShareChild({
+      shareId: folderShare.shareId,
+      itemId: child.id,
+    })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.createFolderZipEntriesForShare({ shareId: folderShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
   it("builds public folder archive entries with relative paths", async () => {

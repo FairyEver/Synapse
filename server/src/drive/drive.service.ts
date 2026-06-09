@@ -551,20 +551,7 @@ export class DriveService implements OnApplicationBootstrap {
     })
     if (!publication?.currentDeploymentId) throw new NotFoundException("网页未找到")
 
-    const deployment = await this.prisma.drivePublicationDeployment.findFirst({
-      where: {
-        id: publication.currentDeploymentId,
-        publicationId: publication.id,
-        status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.active,
-      },
-    })
-    if (!deployment) throw new NotFoundException("网页未找到")
-
-    const asset = await this.prisma.drivePublicationAsset.findUnique({
-      where: { deploymentId_relativePath: { deploymentId: publication.currentDeploymentId, relativePath } },
-    })
-    if (!asset) throw new NotFoundException("网页未找到")
-
+    let cookie: string | undefined
     if (publication.passwordEnabled) {
       const cookieOk = verifyDriveAccessCookie(input.cookie, {
         kind: input.type,
@@ -580,28 +567,30 @@ export class DriveService implements OnApplicationBootstrap {
           ? { status: "password_required" }
           : { status: "static_denied" }
       }
-
-      const object = await this.storage.getObjectStream({ key: asset.storageKey })
-      return {
-        status: "ok",
-        value: {
-          stream: object.stream,
-          size: object.size ?? asset.size,
-          contentType: resolvePublicationContentType(asset.relativePath, asset.contentType ?? object.contentType),
-        },
-        ...(passwordOk
-          ? {
-            cookie: buildDriveAccessCookie({
-              kind: input.type,
-              publicId: publication.publishId,
-              expiresAt: publication.expiresAt,
-              passwordHash: publication.passwordHash,
-              secret: this.accessSecret,
-            }),
-          }
-          : {}),
+      if (passwordOk) {
+        cookie = buildDriveAccessCookie({
+          kind: input.type,
+          publicId: publication.publishId,
+          expiresAt: publication.expiresAt,
+          passwordHash: publication.passwordHash,
+          secret: this.accessSecret,
+        })
       }
     }
+
+    const deployment = await this.prisma.drivePublicationDeployment.findFirst({
+      where: {
+        id: publication.currentDeploymentId,
+        publicationId: publication.id,
+        status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.active,
+      },
+    })
+    if (!deployment) throw new NotFoundException("网页未找到")
+
+    const asset = await this.prisma.drivePublicationAsset.findUnique({
+      where: { deploymentId_relativePath: { deploymentId: publication.currentDeploymentId, relativePath } },
+    })
+    if (!asset) throw new NotFoundException("网页未找到")
 
     const object = await this.storage.getObjectStream({ key: asset.storageKey })
     return {
@@ -611,6 +600,7 @@ export class DriveService implements OnApplicationBootstrap {
         size: object.size ?? asset.size,
         contentType: resolvePublicationContentType(asset.relativePath, asset.contentType ?? object.contentType),
       },
+      ...(cookie ? { cookie } : {}),
     }
   }
 

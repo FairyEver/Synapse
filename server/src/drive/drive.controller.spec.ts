@@ -458,6 +458,42 @@ describe("DriveController", () => {
     })
   })
 
+  it("renders password page for protected published html routes", async () => {
+    drive.resolvePublishedAssetAccess.mockResolvedValue({ status: "password_required" })
+
+    const page = await request(app!.getHttpServer()).get("/pages/pub_locked").expect(200)
+    expect(page.text).toContain("drive-password-shell")
+    expect(page.text).toContain("密码")
+
+    const site = await request(app!.getHttpServer()).get("/sites/pub_locked/").expect(200)
+    expect(site.text).toContain("drive-password-shell")
+    expect(site.text).toContain("密码")
+  })
+
+  it("unlocks published password query and redirects to clean html urls", async () => {
+    drive.resolvePublishedAssetAccess.mockResolvedValue({
+      status: "ok",
+      cookie: "cookie-value",
+      value: {
+        stream: Readable.from(["<h1>unlocked</h1>"]),
+        contentType: "text/html; charset=utf-8",
+        size: 17n,
+      },
+    })
+
+    const page = await request(app!.getHttpServer()).get("/pages/pub_locked?password=AbC234xy").expect(302)
+    const pageCookie = page.headers["set-cookie"]
+    expect(page.headers.location).toBe("/pages/pub_locked")
+    expect(Array.isArray(pageCookie) ? pageCookie.join(";") : pageCookie).toContain("synapse_drive_access=cookie-value")
+    expect(Array.isArray(pageCookie) ? pageCookie.join(";") : pageCookie).toContain("HttpOnly")
+
+    const site = await request(app!.getHttpServer()).get("/sites/pub_locked/?password=AbC234xy").expect(302)
+    const siteCookie = site.headers["set-cookie"]
+    expect(site.headers.location).toBe("/sites/pub_locked/")
+    expect(Array.isArray(siteCookie) ? siteCookie.join(";") : siteCookie).toContain("synapse_drive_access=cookie-value")
+    expect(Array.isArray(siteCookie) ? siteCookie.join(";") : siteCookie).toContain("HttpOnly")
+  })
+
   it("renders password page without resource details for protected shares", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
 
