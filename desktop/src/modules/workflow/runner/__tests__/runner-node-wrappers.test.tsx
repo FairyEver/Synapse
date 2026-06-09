@@ -79,6 +79,11 @@ describe("runnerNodeTypes", () => {
 
     const button = container.querySelector<HTMLButtonElement>("button[aria-label='打开对话']")
     expect(button).not.toBeNull()
+    expect(button?.dataset.size).toBe("icon-sm")
+    expect(button?.className).toContain("absolute -right-3 -top-3")
+    expect(button?.className).toContain("rounded-full")
+    expect(button?.className).toContain("p-1")
+    expect(button?.querySelector("svg")?.className.baseVal).toContain("size-3")
 
     await act(async () => {
       button?.click()
