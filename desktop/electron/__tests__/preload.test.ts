@@ -20,12 +20,16 @@ const electronMock = vi.hoisted(() => {
       on: vi.fn(),
       removeListener: vi.fn(),
     },
+    webUtils: {
+      getPathForFile: vi.fn(() => "/tmp/report.txt"),
+    },
   }
 })
 
 vi.mock("electron", () => ({
   contextBridge: electronMock.contextBridge,
   ipcRenderer: electronMock.ipcRenderer,
+  webUtils: electronMock.webUtils,
 }))
 
 async function loadPreloadBridge(): Promise<SynapseBridge> {
@@ -35,6 +39,7 @@ async function loadPreloadBridge(): Promise<SynapseBridge> {
   electronMock.ipcRenderer.invoke.mockClear()
   electronMock.ipcRenderer.on.mockClear()
   electronMock.ipcRenderer.removeListener.mockClear()
+  electronMock.webUtils.getPathForFile.mockClear()
 
   await import("../preload")
 
@@ -234,6 +239,12 @@ describe("preload bridge", () => {
       method: "PUT",
       url: "https://upload.example.test/object",
     })
+    await bridge.account.uploadDriveLocalItems({
+      parentId: null,
+      items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain" }],
+    })
+    const droppedFile = new File(["report"], "report.txt", { type: "text/plain" })
+    expect(bridge.account.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
     await bridge.account.shareDriveItem({ itemId: "item-1" })
 
@@ -258,6 +269,14 @@ describe("preload bridge", () => {
         url: "https://upload.example.test/object",
       },
     )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:uploads:local-items",
+      {
+        parentId: null,
+        items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain" }],
+      },
+    )
+    expect(electronMock.webUtils.getPathForFile).toHaveBeenCalledWith(droppedFile)
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:folders:create",
       { parentId: null, name: "交接材料" },
@@ -471,6 +490,65 @@ describe("preload bridge", () => {
     expect(serializedLog).not.toContain("sk-secret")
     expect(serializedLog).not.toContain("abc.def")
     expect(serializedLog).not.toContain("/Users/liyang/private")
+  })
+
+  it("does not log local file paths when local drive upload IPC fails", async () => {
+    const bridge = await loadPreloadBridge()
+    const failure = new Error("upload unavailable")
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if (channel === "synapse:account:drive:uploads:local-items") {
+        return Promise.reject(failure)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    await expect(bridge.account.uploadDriveLocalItems({
+      parentId: "folder-1",
+      items: [
+        {
+          kind: "file",
+          path: "/Users/liyang/LocalUploadCanary/root.txt",
+          name: "root.txt",
+          mimeType: "text/plain",
+        },
+        {
+          kind: "folder",
+          folderName: "LocalUploadCanary",
+          files: [
+            {
+              path: "/Users/liyang/LocalUploadCanary/a.md",
+              relativePath: "a.md",
+              mimeType: "text/markdown",
+            },
+            {
+              path: "/Users/liyang/LocalUploadCanary/docs/b.md",
+              relativePath: "docs/b.md",
+              mimeType: null,
+            },
+          ],
+        },
+      ],
+    })).rejects.toThrow("upload unavailable")
+
+    const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
+      channel === "synapse:log:write")
+    expect(logCall?.[1]).toEqual(expect.objectContaining({
+      level: "error",
+      category: "renderer.ipc",
+      message: "IPC invoke failed.",
+      details: expect.objectContaining({
+        channel: "synapse:account:drive:uploads:local-items",
+        request: expect.objectContaining({
+          itemCount: 2,
+          fileCount: 3,
+        }),
+      }),
+    }))
+
+    const serializedLog = JSON.stringify(logCall?.[1])
+    expect(serializedLog).not.toContain("/Users/liyang/LocalUploadCanary")
+    expect(serializedLog).not.toContain("docs/b.md")
+    expect(serializedLog).not.toContain("root.txt")
   })
 
   it("passes direct update event payloads through", async () => {

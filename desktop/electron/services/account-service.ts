@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
+import { createReadStream, type Stats } from "node:fs"
+import { stat } from "node:fs/promises"
 import path from "node:path"
 import { app, safeStorage } from "electron"
 
@@ -7,6 +9,12 @@ import type {
   SynapseAccountProfile,
   SynapseAccountState,
 } from "../../src/types/account"
+import type {
+  DriveLocalUploadFileItem,
+  DriveLocalUploadFolderItem,
+  DriveLocalUploadRequest,
+  DriveLocalUploadResult,
+} from "../../src/types/bridge"
 import type {
   DashboardWebhookDto,
   DriveFolderUploadPrepareResult,
@@ -26,6 +34,7 @@ const ATTEMPT_TTL_MS = 10 * 60 * 1000
 const ACCOUNT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000, 120_000, 300_000] as const
 const HTTP_ERROR_BODY_MAX_LENGTH = 200
 const SENSITIVE_HTTP_DETAIL_KEY_PATTERN = /password|token|secret|credential|authorization|cookie|apiKey/i
+const UNSAFE_DRIVE_RELATIVE_PATH_PATTERN = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
 const sharedUrlsPromise = import("@synapse/shared")
 
 type PersistedAccount = Record<string, unknown> & {
@@ -218,6 +227,30 @@ export class AccountService {
     return { ok: true }
   }
 
+  async uploadDriveLocalItems(input: DriveLocalUploadRequest): Promise<DriveLocalUploadResult> {
+    let completed = 0
+    let failed = 0
+    let skipped = 0
+    let firstError: string | undefined
+
+    for (const item of input.items) {
+      const result = item.kind === "file"
+        ? await this.uploadDriveLocalFile(input.parentId ?? null, item)
+        : await this.uploadDriveLocalFolder(input.parentId ?? null, item)
+      completed += result.completed
+      failed += result.failed
+      skipped += result.skipped
+      firstError ??= result.message
+    }
+
+    return {
+      completed,
+      failed,
+      skipped,
+      ...(firstError ? { message: firstError } : {}),
+    }
+  }
+
   async cancelDriveUpload(sessionId: string): Promise<{ ok: true }> {
     return this.requestAuthenticatedJson<{ ok: true }>("POST", `${apiBaseUrl()}/drive/uploads/${encodeURIComponent(sessionId)}/cancel`, undefined, "上传取消失败。")
   }
@@ -251,6 +284,167 @@ export class AccountService {
 
   async getDriveUsage(): Promise<DriveUsageDto> {
     return this.getAuthenticatedJson<DriveUsageDto>(`${apiBaseUrl()}/drive/usage`, "云盘用量加载失败。")
+  }
+
+  private async uploadDriveLocalFile(
+    parentId: string | null,
+    item: DriveLocalUploadFileItem,
+  ): Promise<DriveLocalUploadResult> {
+    const fileStat = await safeLocalFileStat(item.path)
+    if (!fileStat?.isFile()) {
+      logger.warn("Drive local upload skipped.", { operation: "uploadDriveLocalFile", reason: "not-file" })
+      return { completed: 0, failed: 0, skipped: 1 }
+    }
+
+    let prepared: DriveUploadPrepareResult
+    try {
+      prepared = await this.prepareDriveUpload({
+        parentId,
+        name: item.name,
+        size: String(fileStat.size),
+        mimeType: item.mimeType ?? null,
+      })
+    } catch {
+      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage() }
+    }
+
+    try {
+      await this.putPreparedUploadFromPath(prepared.upload, item.path, fileStat.size)
+      await this.completeDriveUpload(prepared.sessionId)
+      return { completed: 1, failed: 0, skipped: 0 }
+    } catch {
+      await this.cancelPreparedDriveUpload(prepared.sessionId, "uploadDriveLocalFile")
+      return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage() }
+    }
+  }
+
+  private async uploadDriveLocalFolder(
+    parentId: string | null,
+    item: DriveLocalUploadFolderItem,
+  ): Promise<DriveLocalUploadResult> {
+    const files: Array<{
+      path: string
+      relativePath: string
+      size: string
+      sizeBytes: number
+      mimeType: string | null
+    }> = []
+    const seenRelativePaths = new Set<string>()
+    let skipped = 0
+
+    for (const file of item.files) {
+      if (!isSafeDriveRelativePath(file.relativePath)) {
+        skipped += 1
+        logger.warn("Drive local upload skipped.", {
+          operation: "uploadDriveLocalFolder",
+          reason: "invalid-relative-path",
+        })
+        continue
+      }
+
+      if (seenRelativePaths.has(file.relativePath)) {
+        skipped += 1
+        logger.warn("Drive local upload skipped.", {
+          operation: "uploadDriveLocalFolder",
+          reason: "duplicate-relative-path",
+        })
+        continue
+      }
+      seenRelativePaths.add(file.relativePath)
+
+      const fileStat = await safeLocalFileStat(file.path)
+      if (!fileStat?.isFile()) {
+        skipped += 1
+        logger.warn("Drive local upload skipped.", { operation: "uploadDriveLocalFolder", reason: "not-file" })
+        continue
+      }
+
+      files.push({
+        path: file.path,
+        relativePath: file.relativePath,
+        size: String(fileStat.size),
+        sizeBytes: fileStat.size,
+        mimeType: file.mimeType ?? null,
+      })
+    }
+
+    if (files.length === 0) return { completed: 0, failed: 0, skipped }
+
+    let prepared: DriveFolderUploadPrepareResult
+    try {
+      prepared = await this.prepareDriveFolderUpload({
+        parentId,
+        folderName: item.folderName,
+        files: files.map((file) => ({
+          relativePath: file.relativePath,
+          size: file.size,
+          mimeType: file.mimeType,
+        })),
+      })
+    } catch {
+      return { completed: 0, failed: files.length, skipped, message: localUploadErrorMessage() }
+    }
+
+    const preparedByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
+    let completed = 0
+    let failed = 0
+    let firstError: string | undefined
+
+    for (const file of files) {
+      const preparedEntry = preparedByPath.get(file.relativePath)
+      if (!preparedEntry) {
+        failed += 1
+        firstError ??= localUploadErrorMessage()
+        continue
+      }
+
+      try {
+        await this.putPreparedUploadFromPath(preparedEntry.upload, file.path, file.sizeBytes)
+        await this.completeDriveUpload(preparedEntry.sessionId)
+        completed += 1
+      } catch {
+        failed += 1
+        firstError ??= localUploadErrorMessage()
+        await this.cancelPreparedDriveUpload(preparedEntry.sessionId, "uploadDriveLocalFolder")
+      }
+    }
+
+    return {
+      completed,
+      failed,
+      skipped,
+      ...(firstError ? { message: firstError } : {}),
+    }
+  }
+
+  private async putPreparedUploadFromPath(
+    upload: DriveUploadPrepareResult["upload"],
+    filePath: string,
+    sizeBytes: number,
+  ): Promise<void> {
+    const stream = createReadStream(filePath)
+    const init: RequestInit & { duplex: "half" } = {
+      method: upload.method,
+      headers: withContentLengthHeader(upload.headers, sizeBytes),
+      body: stream as unknown as RequestInit["body"],
+      duplex: "half",
+    }
+
+    try {
+      const response = await this.fetchImpl(upload.url, init)
+      if (!response.ok) throw await createHttpError(upload.method, upload.url, response, "上传失败。")
+    } finally {
+      stream.destroy()
+    }
+  }
+
+  private async cancelPreparedDriveUpload(sessionId: string, operation: string): Promise<void> {
+    await this.cancelDriveUpload(sessionId).catch((error) => {
+      logger.warn("Drive local upload cancel failed.", {
+        operation,
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+    })
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
@@ -941,6 +1135,41 @@ function endpointPath(url: string): string {
   } catch {
     return url.split("?")[0] ?? url
   }
+}
+
+async function safeLocalFileStat(filePath: string): Promise<Stats | null> {
+  try {
+    return await stat(filePath)
+  } catch (error) {
+    logger.warn("Drive local upload stat failed.", {
+      operation: "safeLocalFileStat",
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorCode: errorCode(error),
+    })
+    return null
+  }
+}
+
+function isSafeDriveRelativePath(value: string): boolean {
+  if (value.length === 0 || value.includes("\\") || UNSAFE_DRIVE_RELATIVE_PATH_PATTERN.test(value)) {
+    return false
+  }
+  return value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
+}
+
+function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {
+  if (Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) return headers
+  return { ...headers, "Content-Length": String(sizeBytes) }
+}
+
+function localUploadErrorMessage(): string {
+  return "上传失败。"
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined
+  const code = (error as { code?: unknown }).code
+  return typeof code === "string" ? code : undefined
 }
 
 function classifyAccountRefreshFailure(error: unknown): AccountHttpFailureKind {

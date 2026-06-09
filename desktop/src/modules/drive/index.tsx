@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 import { ChevronRight, CircleUserRound, FileText, Folder, FolderPlus, LoaderCircle, MoreHorizontal, RefreshCw, Search, Upload } from "lucide-react"
-import type { DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
+import type { DriveItemDto } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog } from "@/components/ui/dialog"
+import type { DriveLocalUploadFolderItem, DriveLocalUploadItem, DriveLocalUploadRequest, DriveLocalUploadResult } from "@/types/bridge"
 import {
   Empty,
   EmptyContent,
@@ -89,12 +90,19 @@ function DriveModule() {
   const [moveParentId, setMoveParentId] = useState<string>("root")
   const [deleteTarget, setDeleteTarget] = useState<DriveItemDto | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const prefetchedParentIdRef = useRef<string | null | undefined>(undefined)
+  const currentParentIdRef = useRef<string | null>(null)
 
   const accountAuthenticated = accountState.status === "authenticated"
   const parentId = path.at(-1)?.id ?? null
+  useEffect(() => {
+    currentParentIdRef.current = parentId
+  }, [parentId])
+
   const loadItems = useCallback(async () => {
     if (!accountAuthenticated) return
     setLoading(true)
@@ -126,6 +134,7 @@ function DriveModule() {
   }, [accountAuthenticated, loadItems, parentId])
 
   const actionsDisabled = !accountAuthenticated || loading || openingFolderId !== null || error !== null
+  const uploadActionsDisabled = actionsDisabled || uploading
 
   const visibleItems = useMemo(() => {
     const keyword = query.trim().toLowerCase()
@@ -154,25 +163,64 @@ function DriveModule() {
     setPath((current) => current.slice(0, index + 1))
   }, [])
 
+  const refreshCurrentItemsAfterUpload = useCallback(async () => {
+    if (!accountAuthenticated) return
+    try {
+      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId: currentParentIdRef.current })
+      setError(null)
+      setItems(nextItems)
+    } catch (rawError) {
+      setError(driveLoadError(rawError))
+    }
+  }, [accountAuthenticated])
+
+  const runLocalUpload = useCallback(async (createRequest: () => Promise<DriveLocalUploadBuildResult>) => {
+    if (uploadActionsDisabled) return
+    setUploading(true)
+    try {
+      const { request, skipped } = await createRequest()
+      if (request.items.length === 0) {
+        toast(skipped > 0 ? `已跳过 ${skipped} 个文件` : "没有可上传的文件")
+        return
+      }
+      setUploadItemCount(countDriveLocalUploadItems(request.items))
+      const result = await requireSynapseBridge().account.uploadDriveLocalItems(request)
+      toast(uploadResultMessage(withSkipped(result, skipped)))
+      await refreshCurrentItemsAfterUpload()
+    } catch (rawError) {
+      toast(errorMessage(rawError, "上传失败"))
+    } finally {
+      setUploading(false)
+      setUploadItemCount(null)
+    }
+  }, [refreshCurrentItemsAfterUpload, uploadActionsDisabled])
+
   const handleFileSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ""
-    if (actionsDisabled) return
-    if (files.length === 0) return
-    const results = await uploadFiles(files, parentId)
-    toast(uploadResultMessage(results))
-    await loadItems()
-  }, [actionsDisabled, loadItems, parentId])
+    await runLocalUpload(async () => buildDriveLocalUploadRequestFromFiles({
+      files,
+      mode: "files",
+      parentId,
+    }))
+  }, [parentId, runLocalUpload])
 
   const handleFolderSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ""
-    if (actionsDisabled) return
-    if (files.length === 0) return
-    const results = await uploadFolder(files, parentId)
-    toast(uploadResultMessage(results))
-    await loadItems()
-  }, [actionsDisabled, loadItems, parentId])
+    await runLocalUpload(async () => buildDriveLocalUploadRequestFromFiles({
+      files,
+      mode: "folders",
+      parentId,
+    }))
+  }, [parentId, runLocalUpload])
+
+  const handleDroppedFiles = useCallback(async (dataTransfer: DataTransfer) => {
+    await runLocalUpload(async () => buildDriveLocalUploadRequestFromDrop({
+      dataTransfer,
+      parentId,
+    }))
+  }, [parentId, runLocalUpload])
 
   const handleCreateFolder = useCallback(() => {
     if (actionsDisabled) return
@@ -344,6 +392,10 @@ function DriveModule() {
         onDelete={handleDelete}
         onShare={handleShare}
         onDisableShare={handleDisableShare}
+        onUploadDroppedFiles={handleDroppedFiles}
+        uploadDisabled={uploadActionsDisabled}
+        uploadItemCount={uploadItemCount}
+        uploading={uploading}
       />
     )
   })()
@@ -365,11 +417,11 @@ function DriveModule() {
               </TooltipTrigger>
               <TooltipContent>刷新</TooltipContent>
             </Tooltip>
-            <Button variant="outline" size="sm" disabled={actionsDisabled} onClick={() => fileInputRef.current?.click()}>
+            <Button variant="outline" size="sm" disabled={uploadActionsDisabled} onClick={() => fileInputRef.current?.click()}>
               <Upload data-icon="inline-start" />
               上传文件
             </Button>
-            <Button variant="outline" size="sm" disabled={actionsDisabled} onClick={() => folderInputRef.current?.click()}>
+            <Button variant="outline" size="sm" disabled={uploadActionsDisabled} onClick={() => folderInputRef.current?.click()}>
               <Upload data-icon="inline-start" />
               上传文件夹
             </Button>
@@ -762,6 +814,10 @@ function DriveFileList({
   onDelete,
   onShare,
   onDisableShare,
+  onUploadDroppedFiles,
+  uploadDisabled,
+  uploadItemCount,
+  uploading,
 }: {
   readonly items: readonly DriveItemDto[]
   readonly loading: boolean
@@ -776,13 +832,55 @@ function DriveFileList({
   readonly onDelete: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
+  readonly uploadDisabled: boolean
+  readonly uploadItemCount: number | null
+  readonly uploading: boolean
 }) {
+  const [dragDepth, setDragDepth] = useState(0)
   const emptyTitle = query.trim() ? "没有匹配项" : "暂无文件"
+  const currentFolderName = path.at(-1)?.name ?? "根目录"
+  const dragActive = dragDepth > 0 && !uploadDisabled
+
+  const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasExternalDraggedFiles(event.dataTransfer)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = uploadDisabled ? "none" : "copy"
+    setDragDepth((current) => current + 1)
+  }, [uploadDisabled])
+
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasExternalDraggedFiles(event.dataTransfer)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = uploadDisabled ? "none" : "copy"
+  }, [uploadDisabled])
+
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasExternalDraggedFiles(event.dataTransfer)) return
+    event.preventDefault()
+    setDragDepth((current) => Math.max(0, current - 1))
+  }, [])
+
+  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasExternalDraggedFiles(event.dataTransfer)) return
+    event.preventDefault()
+    setDragDepth(0)
+    if (uploadDisabled) return
+    void onUploadDroppedFiles(event.dataTransfer)
+  }, [onUploadDroppedFiles, uploadDisabled])
 
   return (
-    <div className="flex min-h-full flex-col gap-3">
+    <div
+      className="relative flex min-h-full flex-col gap-3"
+      data-testid="drive-file-list-dropzone"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
+        {uploading ? <Badge variant="outline">{uploadItemCount === null ? "上传中" : `正在上传 ${uploadItemCount} 项`}</Badge> : null}
         <InputGroup className="w-56">
           <InputGroupAddon>
             <Search />
@@ -828,6 +926,14 @@ function DriveFileList({
           </Table>
         </ModuleContentPanel>
       )}
+      {dragActive ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border border-dashed bg-background/80">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Upload className="size-4" aria-hidden="true" />
+            <span>松开上传到 {currentFolderName}</span>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1048,79 +1154,258 @@ function DriveItemMenu({
   )
 }
 
-type UploadResult = {
-  readonly completed: number
-  readonly failed: number
-  readonly error?: string
+type DriveLocalUploadBuildResult = {
+  readonly request: DriveLocalUploadRequest
+  readonly skipped: number
 }
 
-async function uploadFiles(files: readonly File[], parentId: string | null): Promise<UploadResult> {
-  let completed = 0
-  let failed = 0
-  let error: string | undefined
-  for (const file of files) {
-    try {
-      const prepared = await requireSynapseBridge().account.prepareDriveUpload({
-        parentId,
-        name: file.name,
-        size: String(file.size),
-        mimeType: file.type || null,
-      })
-      await uploadPreparedFile(prepared, file)
-      await requireSynapseBridge().account.completeDriveUpload({ sessionId: prepared.sessionId })
-      completed += 1
-    } catch (rawError) {
-      error ??= errorMessage(rawError, "上传失败")
-      failed += 1
-    }
+type DriveLocalUploadFilesMode = "files" | "folders"
+
+type DriveFileSystemEntry = {
+  readonly fullPath?: string
+  readonly isDirectory: boolean
+  readonly isFile: boolean
+  readonly name: string
+}
+
+type DriveFileSystemFileEntry = DriveFileSystemEntry & {
+  readonly isFile: true
+  readonly file: (success: (file: File) => void, failure?: (error: DOMException) => void) => void
+}
+
+type DriveFileSystemDirectoryEntry = DriveFileSystemEntry & {
+  readonly isDirectory: true
+  readonly createReader: () => {
+    readonly readEntries: (success: (entries: DriveFileSystemEntry[]) => void, failure?: (error: DOMException) => void) => void
   }
-  return { completed, error, failed }
 }
 
-async function uploadFolder(files: readonly File[], parentId: string | null): Promise<UploadResult> {
-  const withPaths = files.map((file) => ({ file, path: readRelativeFilePath(file) }))
-  const firstPath = withPaths[0]?.path ?? "上传文件夹"
-  const folderName = firstPath.split("/")[0] || "上传文件夹"
-  const prepared = await requireSynapseBridge().account.prepareDriveFolderUpload({
-    parentId,
-    folderName,
-    files: withPaths.map(({ file, path }) => ({
-      relativePath: path.split("/").slice(1).join("/") || file.name,
-      size: String(file.size),
-      mimeType: file.type || null,
-    })),
-  })
-  const entriesByPath = new Map(prepared.entries.map((entry) => [entry.relativePath, entry]))
-  let completed = 0
-  let failed = 0
-  let error: string | undefined
-  for (const { file, path } of withPaths) {
-    const relativePath = path.split("/").slice(1).join("/") || file.name
-    const entry = entriesByPath.get(relativePath)
-    if (!entry) {
-      error ??= "上传文件不存在"
-      failed += 1
+async function buildDriveLocalUploadRequestFromFiles({
+  files,
+  mode,
+  parentId,
+}: {
+  readonly files: readonly File[]
+  readonly mode: DriveLocalUploadFilesMode
+  readonly parentId: string | null
+}): Promise<DriveLocalUploadBuildResult> {
+  const items = mode === "folders"
+    ? await buildDriveLocalFolderItemsFromFiles(files)
+    : buildDriveLocalFileItems(files)
+  return {
+    request: { parentId, items: items.items },
+    skipped: items.skipped,
+  }
+}
+
+async function buildDriveLocalUploadRequestFromDrop({
+  dataTransfer,
+  parentId,
+}: {
+  readonly dataTransfer: DataTransfer
+  readonly parentId: string | null
+}): Promise<DriveLocalUploadBuildResult> {
+  const entries = Array.from(dataTransfer.items ?? [])
+    .map(webkitEntryFromDataTransferItem)
+    .filter((entry): entry is DriveFileSystemEntry => entry !== null)
+
+  if (entries.length === 0) {
+    const files = Array.from(dataTransfer.files ?? [])
+    return buildDriveLocalUploadRequestFromFiles({
+      files,
+      mode: files.some((file) => readRelativeFilePath(file).includes("/")) ? "folders" : "files",
+      parentId,
+    })
+  }
+
+  const items: DriveLocalUploadItem[] = []
+  let skipped = 0
+  for (const entry of entries) {
+    if (isDriveFileEntry(entry)) {
+      const file = await fileFromEntry(entry)
+      const item = driveLocalFileItemFromFile(file)
+      if (item) {
+        items.push(item)
+      } else {
+        skipped += 1
+      }
       continue
     }
-    try {
-      await uploadPreparedFile(entry, file)
-      await requireSynapseBridge().account.completeDriveUpload({ sessionId: entry.sessionId })
-      completed += 1
-    } catch (rawError) {
-      error ??= errorMessage(rawError, "上传失败")
-      failed += 1
+    if (isDriveDirectoryEntry(entry)) {
+      const folder = await driveLocalFolderItemFromDirectoryEntry(entry)
+      if (folder.item) {
+        items.push(folder.item)
+      }
+      skipped += folder.skipped
     }
   }
-  return { completed, error, failed }
+
+  return { request: { parentId, items }, skipped }
 }
 
-async function uploadPreparedFile(prepared: Pick<DriveUploadPrepareResult, "upload">, file: File): Promise<void> {
-  await requireSynapseBridge().account.uploadDrivePreparedFile({
-    body: await file.arrayBuffer(),
-    method: prepared.upload.method,
-    url: prepared.upload.url,
-    headers: prepared.upload.headers,
+function buildDriveLocalFileItems(files: readonly File[]): { readonly items: DriveLocalUploadItem[]; readonly skipped: number } {
+  const items: DriveLocalUploadItem[] = []
+  let skipped = 0
+  for (const file of files) {
+    const item = driveLocalFileItemFromFile(file)
+    if (item) {
+      items.push(item)
+    } else {
+      skipped += 1
+    }
+  }
+  return { items, skipped }
+}
+
+async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Promise<{ readonly items: DriveLocalUploadItem[]; readonly skipped: number }> {
+  const folders = new Map<string, DriveLocalUploadFolderItem["files"]>()
+  let skipped = 0
+
+  for (const file of files) {
+    const path = requireSynapseBridge().account.filePathForDroppedFile(file)
+    const relativePath = normalizeSlashRelativePath(readRelativeFilePath(file))
+    if (!path || !relativePath) {
+      skipped += 1
+      continue
+    }
+
+    const [folderName, ...rest] = relativePath.split("/")
+    if (!folderName) {
+      skipped += 1
+      continue
+    }
+    const fileRelativePath = rest.join("/") || file.name
+    const folderFiles = folders.get(folderName) ?? []
+    folderFiles.push({
+      path,
+      relativePath: fileRelativePath,
+      mimeType: file.type || null,
+    })
+    folders.set(folderName, folderFiles)
+  }
+
+  return {
+    items: Array.from(folders.entries()).map(([folderName, folderFiles]) => ({
+      kind: "folder",
+      folderName,
+      files: folderFiles,
+    })),
+    skipped,
+  }
+}
+
+function driveLocalFileItemFromFile(file: File): DriveLocalUploadItem | null {
+  const path = requireSynapseBridge().account.filePathForDroppedFile(file)
+  if (!path) return null
+  return {
+    kind: "file",
+    path,
+    name: file.name,
+    mimeType: file.type || null,
+  }
+}
+
+async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry): Promise<{ readonly item: DriveLocalUploadItem | null; readonly skipped: number }> {
+  const files = await filesFromDirectoryEntry(entry)
+  const uploadFiles: DriveLocalUploadFolderItem["files"] = []
+  let skipped = 0
+
+  for (const file of files) {
+    const path = requireSynapseBridge().account.filePathForDroppedFile(file.file)
+    const relativePath = normalizeSlashRelativePath(file.relativePath)
+    if (!path || !relativePath) {
+      skipped += 1
+      continue
+    }
+    uploadFiles.push({
+      path,
+      relativePath,
+      mimeType: file.file.type || null,
+    })
+  }
+
+  if (uploadFiles.length === 0) return { item: null, skipped }
+  return {
+    item: {
+      kind: "folder",
+      folderName: entry.name,
+      files: uploadFiles,
+    },
+    skipped,
+  }
+}
+
+async function filesFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry): Promise<Array<{ readonly file: File; readonly relativePath: string }>> {
+  const reader = entry.createReader()
+  const files: Array<{ readonly file: File; readonly relativePath: string }> = []
+
+  for (;;) {
+    const entries = await readDirectoryEntries(reader)
+    if (entries.length === 0) break
+    for (const child of entries) {
+      if (isDriveFileEntry(child)) {
+        files.push({ file: await fileFromEntry(child), relativePath: child.name })
+        continue
+      }
+      if (isDriveDirectoryEntry(child)) {
+        const childFiles = await filesFromDirectoryEntry(child)
+        for (const childFile of childFiles) {
+          files.push({
+            file: childFile.file,
+            relativePath: `${child.name}/${childFile.relativePath}`,
+          })
+        }
+      }
+    }
+  }
+
+  return files
+}
+
+function readDirectoryEntries(reader: ReturnType<DriveFileSystemDirectoryEntry["createReader"]>): Promise<DriveFileSystemEntry[]> {
+  return new Promise((resolve, reject) => {
+    reader.readEntries(resolve, reject)
   })
+}
+
+function fileFromEntry(entry: DriveFileSystemFileEntry): Promise<File> {
+  return new Promise((resolve, reject) => {
+    entry.file(resolve, reject)
+  })
+}
+
+function isDriveFileEntry(entry: DriveFileSystemEntry): entry is DriveFileSystemFileEntry {
+  return entry.isFile
+}
+
+function isDriveDirectoryEntry(entry: DriveFileSystemEntry): entry is DriveFileSystemDirectoryEntry {
+  return entry.isDirectory
+}
+
+function webkitEntryFromDataTransferItem(item: DataTransferItem): DriveFileSystemEntry | null {
+  const candidate = item as { readonly webkitGetAsEntry?: () => unknown }
+  const entry = candidate.webkitGetAsEntry?.()
+  return isDriveFileSystemEntry(entry) ? entry : null
+}
+
+function isDriveFileSystemEntry(entry: unknown): entry is DriveFileSystemEntry {
+  if (!entry || typeof entry !== "object") return false
+  const candidate = entry as Partial<DriveFileSystemEntry>
+  return typeof candidate.name === "string"
+    && typeof candidate.isFile === "boolean"
+    && typeof candidate.isDirectory === "boolean"
+}
+
+function hasExternalDraggedFiles(dataTransfer: DataTransfer | null | undefined): boolean {
+  return Array.from(dataTransfer?.types ?? []).includes("Files") || (dataTransfer?.files.length ?? 0) > 0
+}
+
+function normalizeSlashRelativePath(value: string): string | null {
+  if (!value || value.includes("\\")) return null
+  const parts = value.split("/").filter(Boolean)
+  if (parts.length === 0) return null
+  if (parts.some((part) => part === "." || part === "..")) return null
+  return parts.join("/")
 }
 
 function readRelativeFilePath(file: File): string {
@@ -1157,11 +1442,24 @@ function formatDriveDateTime(value: string): string {
   return date.toLocaleString("zh-CN")
 }
 
-function uploadResultMessage(result: UploadResult): string {
-  if (result.failed === 0) return `已上传 ${result.completed} 个文件`
-  return result.error
-    ? `上传完成 ${result.completed} 个，失败 ${result.failed} 个：${result.error}`
+function uploadResultMessage(result: DriveLocalUploadResult): string {
+  if (result.failed === 0) {
+    return result.skipped > 0
+      ? `已上传 ${result.completed} 个文件，跳过 ${result.skipped} 个`
+      : `已上传 ${result.completed} 个文件`
+  }
+  return result.message
+    ? `上传完成 ${result.completed} 个，失败 ${result.failed} 个：${result.message}`
     : `上传完成 ${result.completed} 个，失败 ${result.failed} 个`
+}
+
+function withSkipped(result: DriveLocalUploadResult, skipped: number): DriveLocalUploadResult {
+  if (skipped === 0) return result
+  return { ...result, skipped: result.skipped + skipped }
+}
+
+function countDriveLocalUploadItems(items: readonly DriveLocalUploadItem[]): number {
+  return items.length
 }
 
 function driveLoadError(error: unknown): DriveLoadError {

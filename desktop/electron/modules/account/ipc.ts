@@ -1,7 +1,9 @@
 import { z } from "zod"
 
-import type { IpcModule } from "../../runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
+import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import { accountService } from "../../services/account-service"
+import { sanitizeError } from "../../services/error-sanitize"
 
 const accountUserSchema = z.object({
   id: z.string(),
@@ -129,6 +131,44 @@ const drivePreparedFileUploadSchema = z.object({
   headers: z.record(z.string(), z.string()),
   body: z.custom<ArrayBuffer>(isArrayBufferLike, "body must be an ArrayBuffer"),
 })
+const unsafeRelativePathSegmentPattern = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
+
+const driveLocalUploadRelativePathSchema = z.string().min(1).refine(
+  (value) => !unsafeRelativePathSegmentPattern.test(value) && !value.includes("\\"),
+  "relativePath must be a safe slash-delimited relative path",
+)
+
+const driveLocalUploadFileItemSchema = z.object({
+  kind: z.literal("file"),
+  path: z.string().min(1),
+  name: z.string().min(1),
+  mimeType: z.string().nullable().optional(),
+})
+
+const driveLocalUploadFolderItemSchema = z.object({
+  kind: z.literal("folder"),
+  folderName: z.string().min(1),
+  files: z.array(z.object({
+    path: z.string().min(1),
+    relativePath: driveLocalUploadRelativePathSchema,
+    mimeType: z.string().nullable().optional(),
+  })).min(1),
+})
+
+const driveLocalUploadRequestSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  items: z.array(z.discriminatedUnion("kind", [
+    driveLocalUploadFileItemSchema,
+    driveLocalUploadFolderItemSchema,
+  ])).min(1),
+})
+
+const driveLocalUploadResultSchema = z.object({
+  completed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  message: z.string().optional(),
+})
 const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optional(), name: z.string() })
 const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
 const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
@@ -158,6 +198,90 @@ const accountStateChangedDomainEventSchema = z.object({
 
 function isArrayBufferLike(value: unknown): value is ArrayBuffer {
   return Object.prototype.toString.call(value) === "[object ArrayBuffer]"
+}
+
+type DriveLocalUploadRequestForIpc = z.infer<typeof driveLocalUploadRequestSchema>
+
+function driveLocalUploadPaths(request: DriveLocalUploadRequestForIpc): string[] {
+  return request.items.flatMap((item) => (
+    item.kind === "file"
+      ? [item.path]
+      : item.files.map((file) => file.path)
+  ))
+}
+
+async function checkAccountPermission(options: {
+  ctx: IpcHandlerContext
+  action: PermissionAction
+  resource: string
+  source: string
+}): Promise<void> {
+  const actor = { kind: "user" } as const
+  const permissionGuard = options.ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const permission = await permissionGuard.check({
+    action: options.action,
+    actor,
+    resource: options.resource,
+    context: { source: options.source },
+  })
+  if (!permission.allowed) {
+    auditSink.record({
+      action: options.action,
+      actor,
+      resource: options.resource,
+      outcome: "denied",
+      metadata: { source: options.source, reason: permission.reason, policyId: permission.policyId },
+    })
+    throw new Error(permission.reason)
+  }
+  auditSink.record({
+    action: options.action,
+    actor,
+    resource: options.resource,
+    outcome: "allowed",
+    metadata: { source: options.source },
+  })
+}
+
+async function runGuardedDriveLocalUpload<T>(options: {
+  ctx: IpcHandlerContext
+  request: DriveLocalUploadRequestForIpc
+  run(): Promise<T>
+}): Promise<T> {
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const actor = { kind: "user" } as const
+  for (const filePath of driveLocalUploadPaths(options.request)) {
+    await checkAccountPermission({
+      ctx: options.ctx,
+      action: "fs.read.outside-userdata",
+      resource: filePath,
+      source: "account.driveLocalUpload.read",
+    })
+  }
+  await checkAccountPermission({
+    ctx: options.ctx,
+    action: "fs.write",
+    resource: "synapse-drive:local-upload",
+    source: "account.driveLocalUpload.write",
+  })
+  try {
+    return await options.run()
+  } catch (error) {
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource: "synapse-drive:local-upload",
+      outcome: "failed",
+      metadata: {
+        source: "account.driveLocalUpload.write",
+        errorName: error instanceof Error ? error.name : typeof error,
+        error: sanitizeError(String(error)),
+        errorLength: String(error).length,
+      },
+    })
+    throw error
+  }
 }
 
 export const accountIpcModule: IpcModule = {
@@ -235,6 +359,20 @@ export const accountIpcModule: IpcModule = {
       request: drivePreparedFileUploadSchema,
       response: okSchema,
       handler: async (_ctx, input) => accountService.uploadDrivePreparedFile(drivePreparedFileUploadSchema.parse(input)),
+    },
+    uploadDriveLocalItems: {
+      kind: "invoke",
+      channel: "synapse:account:drive:uploads:local-items",
+      request: driveLocalUploadRequestSchema,
+      response: driveLocalUploadResultSchema,
+      handler: async (ctx, input) => {
+        const request = driveLocalUploadRequestSchema.parse(input)
+        return runGuardedDriveLocalUpload({
+          ctx,
+          request,
+          run: () => accountService.uploadDriveLocalItems(request),
+        })
+      },
     },
     cancelDriveUpload: {
       kind: "invoke",

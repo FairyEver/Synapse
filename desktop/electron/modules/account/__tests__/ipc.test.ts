@@ -3,6 +3,7 @@ import { vi } from "vitest"
 import os from "node:os"
 import path from "node:path"
 import vm from "node:vm"
+import type { IpcHandlerContext } from "../../../runtime/ipc/types"
 
 vi.mock("electron", () => ({
   app: {
@@ -34,6 +35,7 @@ vi.mock("../../../services/account-service", () => ({
     prepareDriveFolderUpload: async () => ({}),
     completeDriveUpload: async () => ({}),
     uploadDrivePreparedFile: async () => ({ ok: true }),
+    uploadDriveLocalItems: vi.fn(async () => ({ completed: 0, failed: 0, skipped: 0 })),
     cancelDriveUpload: async () => ({ ok: true }),
     createDriveFolder: async () => ({}),
     renameDriveItem: async () => ({}),
@@ -45,6 +47,7 @@ vi.mock("../../../services/account-service", () => ({
   },
 }))
 
+import { accountService } from "../../../services/account-service"
 import { accountIpcModule } from "../ipc"
 
 describe("accountIpcModule", () => {
@@ -130,6 +133,175 @@ describe("accountIpcModule", () => {
       body,
       method: "PUT",
     })
+  })
+
+  it("validates local drive upload requests", () => {
+    const requestSchema = accountIpcModule.methods.uploadDriveLocalItems.request
+    expect(requestSchema).toBeDefined()
+    if (!requestSchema) throw new Error("expected local upload request schema")
+
+    expect(requestSchema.parse({
+      parentId: "folder-1",
+      items: [
+        { kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain" },
+        {
+          kind: "folder",
+          folderName: "项目A",
+          files: [
+            { path: "/tmp/项目A/a.md", relativePath: "a.md", mimeType: "text/markdown" },
+            { path: "/tmp/项目A/docs/b.md", relativePath: "docs/b.md", mimeType: null },
+          ],
+        },
+      ],
+    })).toMatchObject({
+      parentId: "folder-1",
+      items: [
+        { kind: "file", name: "report.txt" },
+        { kind: "folder", folderName: "项目A" },
+      ],
+    })
+
+    expect(() => requestSchema.parse({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "bad",
+        files: [{ path: "/tmp/bad.txt", relativePath: "../bad.txt" }],
+      }],
+    })).toThrow()
+  })
+
+  it("guards local drive upload file reads and cloud writes", async () => {
+    const uploadDriveLocalItems = vi.fn().mockResolvedValue({
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    })
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const ctx: IpcHandlerContext = {
+      moduleId: "account",
+      resolve: ((id: string) => {
+        if (id === "core.permission-guard") return permissionGuard
+        if (id === "core.audit-sink") return auditSink
+        throw new Error(`unexpected service ${id}`)
+      }) as IpcHandlerContext["resolve"],
+    }
+    vi.mocked(accountService.uploadDriveLocalItems).mockImplementation(uploadDriveLocalItems)
+
+    const handler = accountIpcModule.methods.uploadDriveLocalItems.handler
+    await expect(handler(ctx, {
+      parentId: null,
+      items: [{ kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: null }],
+    })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/report.txt",
+      context: { source: "account.driveLocalUpload.read" },
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "synapse-drive:local-upload",
+      context: { source: "account.driveLocalUpload.write" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+    }))
+  })
+
+  it("checks every nested file path before local folder drive uploads", async () => {
+    const uploadDriveLocalItems = vi.fn().mockResolvedValue({
+      completed: 2,
+      failed: 0,
+      skipped: 0,
+    })
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const ctx: IpcHandlerContext = {
+      moduleId: "account",
+      resolve: ((id: string) => {
+        if (id === "core.permission-guard") return permissionGuard
+        if (id === "core.audit-sink") return auditSink
+        throw new Error(`unexpected service ${id}`)
+      }) as IpcHandlerContext["resolve"],
+    }
+    vi.mocked(accountService.uploadDriveLocalItems).mockImplementation(uploadDriveLocalItems)
+
+    await accountIpcModule.methods.uploadDriveLocalItems.handler(ctx, {
+      parentId: "folder-1",
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        files: [
+          { path: "/tmp/项目A/a.md", relativePath: "a.md", mimeType: "text/markdown" },
+          { path: "/tmp/项目A/docs/b.md", relativePath: "docs/b.md", mimeType: null },
+        ],
+      }],
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/tmp/项目A/a.md",
+      context: { source: "account.driveLocalUpload.read" },
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/tmp/项目A/docs/b.md",
+      context: { source: "account.driveLocalUpload.read" },
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "synapse-drive:local-upload",
+      context: { source: "account.driveLocalUpload.write" },
+    }))
+    expect(uploadDriveLocalItems).toHaveBeenCalledTimes(1)
+  })
+
+  it("stops local drive upload when file read permission is denied", async () => {
+    const uploadDriveLocalItems = vi.fn().mockResolvedValue({
+      completed: 1,
+      failed: 0,
+      skipped: 0,
+    })
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
+    const ctx: IpcHandlerContext = {
+      moduleId: "account",
+      resolve: ((id: string) => {
+        if (id === "core.permission-guard") return permissionGuard
+        if (id === "core.audit-sink") return auditSink
+        throw new Error(`unexpected service ${id}`)
+      }) as IpcHandlerContext["resolve"],
+    }
+    vi.mocked(accountService.uploadDriveLocalItems).mockImplementation(uploadDriveLocalItems)
+
+    await expect(accountIpcModule.methods.uploadDriveLocalItems.handler(ctx, {
+      parentId: null,
+      items: [{ kind: "file", path: "/tmp/blocked.txt", name: "blocked.txt", mimeType: null }],
+    })).rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/tmp/blocked.txt",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "account.driveLocalUpload.read",
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      }),
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledTimes(1)
+    expect(uploadDriveLocalItems).not.toHaveBeenCalled()
   })
 
   it("preserves active drive share ids in item responses", () => {

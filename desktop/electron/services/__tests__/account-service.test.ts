@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises"
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -44,6 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
+import type { DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -162,6 +163,275 @@ describe("AccountService", () => {
       headers: { "Content-Type": "text/plain" },
       method: "PUT",
     }))
+  })
+
+  it("uploads local drive files from the main process without ArrayBuffer IPC bodies", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-file-"))
+    const filePath = path.join(dir, "report.txt")
+    await writeFile(filePath, "hello")
+
+    const fetch = vi.fn(async (_url, init) => {
+      expect(init?.method).toBe("PUT")
+      expect(init?.headers).toMatchObject({ "Content-Type": "text/plain", "Content-Length": "5" })
+      expect(init?.body).not.toBeInstanceOf(ArrayBuffer)
+      expect((init as RequestInit & { duplex?: string })?.duplex).toBe("half")
+      return new Response(null, { status: 200 })
+    }) as unknown as typeof globalThis.fetch
+
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "file-1", name: "report.txt", size: "5" }),
+      sessionId: "session-file-1",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "text/plain" },
+        method: "PUT",
+        url: "https://upload.example.test/file-1",
+      },
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "file-1", name: "report.txt", size: "5" }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: "folder-1",
+      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain" }],
+    })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
+
+    expect(service.prepareDriveUpload).toHaveBeenCalledWith({
+      parentId: "folder-1",
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/plain",
+    })
+    expect(service.completeDriveUpload).toHaveBeenCalledWith("session-file-1")
+    expect(service.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("preserves existing prepared upload content-length headers", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-existing-length-"))
+    const filePath = path.join(dir, "report.txt")
+    await writeFile(filePath, "hello")
+
+    const fetch = vi.fn(async (_url, init) => {
+      expect(init?.headers).toMatchObject({
+        "Content-Type": "text/plain",
+        "content-length": "already-set",
+      })
+      expect(init?.headers).not.toMatchObject({ "Content-Length": "5" })
+      return new Response(null, { status: 200 })
+    }) as unknown as typeof globalThis.fetch
+
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "file-1", name: "report.txt", size: "5" }),
+      sessionId: "session-file-1",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "text/plain", "content-length": "already-set" },
+        method: "PUT",
+        url: "https://upload.example.test/file-1",
+      },
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "file-1", name: "report.txt", size: "5" }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: "folder-1",
+      items: [{ kind: "file", path: filePath, name: "report.txt", mimeType: "text/plain" }],
+    })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
+  })
+
+  it("uploads local drive folders with the selected folder name and relative manifest", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-"))
+    const docsDir = path.join(dir, "项目A", "docs")
+    await mkdir(docsDir, { recursive: true })
+    const firstPath = path.join(dir, "项目A", "a.md")
+    const secondPath = path.join(docsDir, "b.md")
+    await writeFile(firstPath, "alpha")
+    await writeFile(secondPath, "beta")
+
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+      root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      entries: [
+        preparedFolderEntry("a.md", "session-a", "https://upload.example.test/a"),
+        preparedFolderEntry("docs/b.md", "session-b", "https://upload.example.test/b"),
+      ],
+    })
+    vi.spyOn(service, "completeDriveUpload")
+      .mockResolvedValueOnce(driveItem({ id: "a", name: "a.md", size: "5" }))
+      .mockResolvedValueOnce(driveItem({ id: "b", name: "b.md", size: "4" }))
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        files: [
+          { path: firstPath, relativePath: "a.md", mimeType: "text/markdown" },
+          { path: secondPath, relativePath: "docs/b.md", mimeType: null },
+        ],
+      }],
+    })).resolves.toEqual({ completed: 2, failed: 0, skipped: 0 })
+
+    expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: "项目A",
+      files: [
+        { relativePath: "a.md", size: "5", mimeType: "text/markdown" },
+        { relativePath: "docs/b.md", size: "4", mimeType: null },
+      ],
+    })
+  })
+
+  it("skips non-canonical local drive folder relative paths before prepare", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-safe-paths-"))
+    await mkdir(path.join(dir, "safe", "docs"), { recursive: true })
+    await mkdir(path.join(dir, "secret"), { recursive: true })
+    const validPath = path.join(dir, "safe", "docs", "a.md")
+    const doubleSlashPath = path.join(dir, "secret", "double-slash.md")
+    const dotSegmentPath = path.join(dir, "secret", "dot-segment.md")
+    const trailingSlashPath = path.join(dir, "secret", "trailing-slash.md")
+    await writeFile(validPath, "alpha")
+    await writeFile(doubleSlashPath, "double")
+    await writeFile(dotSegmentPath, "dot")
+    await writeFile(trailingSlashPath, "trailing")
+
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+      root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      entries: [preparedFolderEntry("docs/a.md", "session-a", "https://upload.example.test/a")],
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "a", name: "a.md", size: "5" }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    const result = await service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        files: [
+          { path: validPath, relativePath: "docs/a.md", mimeType: "text/markdown" },
+          { path: doubleSlashPath, relativePath: "docs//b.md", mimeType: "text/markdown" },
+          { path: dotSegmentPath, relativePath: "docs/./b.md", mimeType: "text/markdown" },
+          { path: trailingSlashPath, relativePath: "docs/", mimeType: "text/markdown" },
+        ],
+      }],
+    })
+
+    expect(result).toEqual({ completed: 1, failed: 0, skipped: 3 })
+    expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: "项目A",
+      files: [{ relativePath: "docs/a.md", size: "5", mimeType: "text/markdown" }],
+    })
+    const prepareCalls = JSON.stringify(vi.mocked(service.prepareDriveFolderUpload).mock.calls)
+    expect(prepareCalls).not.toContain("docs//b.md")
+    expect(prepareCalls).not.toContain("docs/./b.md")
+    expect(prepareCalls).not.toContain("\"docs/\"")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(doubleSlashPath)
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(dotSegmentPath)
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(trailingSlashPath)
+  })
+
+  it("skips duplicate local drive folder relative paths before prepare", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-folder-duplicates-"))
+    await mkdir(path.join(dir, "first"), { recursive: true })
+    await mkdir(path.join(dir, "second"), { recursive: true })
+    const firstPath = path.join(dir, "first", "a.md")
+    const duplicatePath = path.join(dir, "second", "a.md")
+    await writeFile(firstPath, "alpha")
+    await writeFile(duplicatePath, "duplicate")
+
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveFolderUpload").mockResolvedValue({
+      root: driveItem({ id: "folder-root", name: "项目A", type: "folder", size: "0" }),
+      entries: [preparedFolderEntry("docs/a.md", "session-a", "https://upload.example.test/a")],
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "a", name: "a.md", size: "5" }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    const result = await service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "项目A",
+        files: [
+          { path: firstPath, relativePath: "docs/a.md", mimeType: "text/markdown" },
+          { path: duplicatePath, relativePath: "docs/a.md", mimeType: "text/markdown" },
+        ],
+      }],
+    })
+
+    expect(result).toEqual({ completed: 1, failed: 0, skipped: 1 })
+    expect(service.prepareDriveFolderUpload).toHaveBeenCalledWith({
+      parentId: null,
+      folderName: "项目A",
+      files: [{ relativePath: "docs/a.md", size: "5", mimeType: "text/markdown" }],
+    })
+    const warnings = JSON.stringify(accountLogger.warn.mock.calls)
+    expect(warnings).toContain("duplicate-relative-path")
+    expect(warnings).not.toContain(duplicatePath)
+    expect(warnings).not.toContain("docs/a.md")
+  })
+
+  it("continues local drive uploads after one file fails and cancels the failed session", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-partial-"))
+    const firstPath = path.join(dir, "first.txt")
+    const secondPath = path.join(dir, "second.txt")
+    await writeFile(firstPath, "first")
+    await writeFile(secondPath, "second")
+
+    const fetch = vi.fn(async (url) => (
+      String(url).includes("first")
+        ? new Response("nope", { status: 500 })
+        : new Response(null, { status: 200 })
+    )) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload")
+      .mockResolvedValueOnce(preparedFile("session-first", "https://upload.example.test/first"))
+      .mockResolvedValueOnce(preparedFile("session-second", "https://upload.example.test/second"))
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "second", name: "second.txt", size: "6" }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [
+        { kind: "file", path: firstPath, name: "first.txt", mimeType: null },
+        { kind: "file", path: secondPath, name: "second.txt", mimeType: null },
+      ],
+    })).resolves.toMatchObject({ completed: 1, failed: 1, skipped: 0 })
+
+    expect(service.cancelDriveUpload).toHaveBeenCalledWith("session-first")
+    expect(service.completeDriveUpload).toHaveBeenCalledWith("session-second")
+  })
+
+  it("does not leak local paths in local upload summaries or logs", async () => {
+    const missingPath = "/tmp/synapse-secret-folder/secret-token.txt"
+    const { service } = await createTestAccountService()
+
+    const result = await service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{ kind: "file", path: missingPath, name: "secret-token.txt", mimeType: null }],
+    })
+
+    expect(result).toMatchObject({ completed: 0, failed: 0, skipped: 1 })
+    expect(JSON.stringify(result)).not.toContain(missingPath)
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(missingPath)
   })
 
   it("uses the generated API base URL instead of switching by package mode", async () => {
@@ -1287,3 +1557,46 @@ describe("AccountService", () => {
     expect(state).toEqual({ status: "unauthenticated" })
   })
 })
+
+function driveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
+  return {
+    id: overrides.id ?? "item-1",
+    parentId: overrides.parentId ?? null,
+    type: overrides.type ?? "file",
+    name: overrides.name ?? "report.txt",
+    size: overrides.size ?? "0",
+    mimeType: overrides.mimeType ?? null,
+    storageStatus: overrides.storageStatus ?? "active",
+    shared: overrides.shared ?? false,
+    activeShareId: overrides.activeShareId ?? null,
+    createdAt: overrides.createdAt ?? "2026-06-09T00:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-06-09T00:00:00.000Z",
+  }
+}
+
+function preparedFile(sessionId: string, url: string): DriveUploadPrepareResult {
+  return {
+    item: driveItem({ id: sessionId, name: `${sessionId}.txt`, size: "1" }),
+    sessionId,
+    upload: {
+      expiresAt: "2026-06-09T00:10:00.000Z",
+      headers: {},
+      method: "PUT",
+      url,
+    },
+  }
+}
+
+function preparedFolderEntry(relativePath: string, sessionId: string, url: string) {
+  return {
+    relativePath,
+    sessionId,
+    item: driveItem({ id: sessionId, name: path.basename(relativePath), size: "1" }),
+    upload: {
+      expiresAt: "2026-06-09T00:10:00.000Z",
+      headers: {},
+      method: "PUT" as const,
+      url,
+    },
+  }
+}

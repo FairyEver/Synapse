@@ -21,9 +21,11 @@ type ElectronTransportInstallOptions = {
 const SENSITIVE_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
 const BODY_FIELD_PATTERN = /^(prompt|message|content|body|text|requestbody|responsebody|requesttext|responsetext)$/
+const PATH_FIELD_PATTERN = /^(path|paths|filepath|filepaths|folderpath|folderpaths|relativepath|relativepaths|fullpath|fullpaths|targetpath|targetpaths|sourcepath|sourcepaths|itempath|itempaths|foldername|filename)$/
 const MAX_STRING_LENGTH = 300
 const MAX_STACK_LENGTH = 1200
 const MAX_ARRAY_LENGTH = 20
+const PATH_REDACTED = "[path redacted]"
 
 function sanitizeIpcValue(fieldName: string, value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value
@@ -31,6 +33,7 @@ function sanitizeIpcValue(fieldName: string, value: unknown, depth = 0): unknown
   if (typeof value === "string") {
     if (SENSITIVE_FIELD_PATTERN.test(fieldName)) return "[redacted]"
     if (isBodyField(fieldName)) return `[redacted text ${value.length} chars]`
+    if (isPathLikeField(fieldName)) return PATH_REDACTED
     return value.length > MAX_STRING_LENGTH
       ? `${value.slice(0, 120)}...[truncated ${value.length} chars]`
       : value
@@ -40,18 +43,39 @@ function sanitizeIpcValue(fieldName: string, value: unknown, depth = 0): unknown
   }
   if (typeof value === "object") {
     if (depth >= 3) return "[object]"
+    const record = value as Record<string, unknown>
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      Object.entries(record).map(([key, item]) => [
         key,
-        sanitizeIpcValue(key, item, depth + 1),
+        sanitizeIpcObjectField(record, key, item, depth + 1),
       ]),
     )
   }
   return String(value)
 }
 
+function sanitizeIpcObjectField(
+  owner: Record<string, unknown>,
+  key: string,
+  item: unknown,
+  depth: number,
+): unknown {
+  if (key === "name" && typeof item === "string" && isLocalFileItemLike(owner)) {
+    return PATH_REDACTED
+  }
+  return sanitizeIpcValue(key, item, depth)
+}
+
 function isBodyField(fieldName: string): boolean {
   return BODY_FIELD_PATTERN.test(fieldName.toLowerCase().replace(/[-_\s]/g, ""))
+}
+
+function isPathLikeField(fieldName: string): boolean {
+  return PATH_FIELD_PATTERN.test(fieldName.toLowerCase().replace(/[-_\s]/g, ""))
+}
+
+function isLocalFileItemLike(value: Record<string, unknown>): boolean {
+  return value.kind === "file" && typeof value.path === "string"
 }
 
 function sanitizeErrorForLog(error: unknown): Record<string, unknown> {
