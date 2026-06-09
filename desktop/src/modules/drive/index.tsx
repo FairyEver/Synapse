@@ -18,7 +18,14 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import type { DriveDeleteImpactDto, DriveItemDto, DrivePublicationDto, DriveShareListItemDto, DriveUploadPrepareResult } from "@synapse/shared"
+import {
+  DRIVE_DEFAULT_ACCESS_SETTINGS,
+  type DriveDeleteImpactDto,
+  type DriveItemDto,
+  type DrivePublicationDto,
+  type DriveShareListItemDto,
+  type DriveUploadPrepareResult,
+} from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
@@ -373,7 +380,10 @@ function DriveModule() {
 
   const handleShare = useCallback(async (item: DriveItemDto) => {
     try {
-      const share = await requireSynapseBridge().account.shareDriveItem({ itemId: item.id })
+      const share = await requireSynapseBridge().account.shareDriveItem({
+        itemId: item.id,
+        ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+      })
       setShareSuccess({ name: item.name, type: item.type, url: share.url })
       await copySharedUrlAfterShare(share.url)
       await loadItems()
@@ -395,7 +405,10 @@ function DriveModule() {
 
   const handlePublishPage = useCallback(async (item: DriveItemDto) => {
     try {
-      const publication = await requireSynapseBridge().account.publishDrivePage({ itemId: item.id })
+      const publication = await requireSynapseBridge().account.publishDrivePage({
+        itemId: item.id,
+        ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+      })
       setPublicationSuccess(publication)
       await copyPublishedUrlAfterPublish(publication.url)
       await loadItems()
@@ -406,7 +419,10 @@ function DriveModule() {
 
   const handlePublishSite = useCallback(async (item: DriveItemDto) => {
     try {
-      const publication = await requireSynapseBridge().account.publishDriveSite({ itemId: item.id })
+      const publication = await requireSynapseBridge().account.publishDriveSite({
+        itemId: item.id,
+        ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+      })
       setPublicationSuccess(publication)
       await copyPublishedUrlAfterPublish(publication.url)
       await loadItems()

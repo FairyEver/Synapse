@@ -960,9 +960,25 @@ describe("AccountService", () => {
       sourceItemId: "item-1",
       sourceDeleted: false,
       url: "https://synapse.d2.pub/pages/pub_public",
+      urlWithPassword: "https://synapse.d2.pub/pages/pub_public?password=server-secret",
+      passwordEnabled: true,
+      password: "AbC234xy",
+      expiresAt: "2026-06-16T00:00:00.000Z",
       currentDeploymentId: "dep-1",
       createdAt: "2026-06-09T00:00:00.000Z",
       updatedAt: "2026-06-09T00:00:00.000Z",
+    }
+    const shareResult = {
+      id: "share-result-1",
+      shareId: "share_direct",
+      itemId: "item-1",
+      enabled: true,
+      url: "https://synapse.d2.pub/files/share_direct",
+      urlWithPassword: "https://synapse.d2.pub/files/share_direct?password=server-secret",
+      passwordEnabled: true,
+      password: "SharePw1",
+      expiresAt: "2026-06-16T00:00:00.000Z",
+      createdAt: "2026-06-09T00:00:00.000Z",
     }
     const share = {
       id: "share-row-1",
@@ -972,11 +988,36 @@ describe("AccountService", () => {
       itemType: "file",
       sourceDeleted: false,
       url: "https://synapse.d2.pub/files/share_public",
+      urlWithPassword: "https://synapse.d2.pub/files/share_public?password=server-secret",
+      passwordEnabled: true,
+      password: "ListPw1",
+      expiresAt: "2026-06-16T00:00:00.000Z",
       createdAt: "2026-06-09T00:00:00.000Z",
     }
-    const expectedPagePublication = { ...publication, url: `${expectedPublicAppUrl}/pages/pub_public` }
-    const expectedSitePublication = { ...publication, type: "site", url: `${expectedPublicAppUrl}/sites/pub_public/` }
-    const expectedShare = { ...share, url: `${expectedPublicAppUrl}/files/share_public` }
+    const expectedPagePublication = {
+      ...publication,
+      url: `${expectedPublicAppUrl}/pages/pub_public`,
+      urlWithPassword: `${expectedPublicAppUrl}/pages/pub_public?password=AbC234xy`,
+    }
+    const expectedSitePublication = {
+      ...publication,
+      type: "site",
+      url: `${expectedPublicAppUrl}/sites/pub_public/`,
+      urlWithPassword: `${expectedPublicAppUrl}/sites/pub_public/?password=AbC234xy`,
+    }
+    const expectedShareResult = {
+      ...shareResult,
+      url: `${expectedPublicAppUrl}/files/share_direct`,
+      urlWithPassword: `${expectedPublicAppUrl}/files/share_direct?password=SharePw1`,
+    }
+    const expectedShare = {
+      ...share,
+      url: `${expectedPublicAppUrl}/files/share_public`,
+      urlWithPassword: `${expectedPublicAppUrl}/files/share_public?password=ListPw1`,
+    }
+    const shareSettings = { passwordEnabled: true, expiresIn: "30d" } as const
+    const pageSettings = { passwordEnabled: true, expiresIn: "1y" } as const
+    const siteSettings = { passwordEnabled: false, expiresIn: "forever" } as const
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url, init) => {
         const method = init?.method ?? "GET"
@@ -994,6 +1035,7 @@ describe("AccountService", () => {
         }
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
         if (String(url).endsWith("/drive/publications")) return jsonResponse([publication])
+        if (String(url).endsWith("/drive/items/item-1/share")) return jsonResponse(shareResult)
         if (String(url).endsWith("/drive/items/item-1/publications/page")) return jsonResponse(publication)
         if (String(url).endsWith("/drive/items/folder-1/publications/site")) return jsonResponse({ ...publication, type: "site" })
         if (String(url).endsWith("/drive/publications/pub-row-1/redeploy")) return jsonResponse(publication)
@@ -1010,8 +1052,9 @@ describe("AccountService", () => {
     await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
 
     await expect(service.listDrivePublications()).resolves.toEqual([expectedPagePublication])
-    await expect(service.publishDrivePage("item-1")).resolves.toEqual(expectedPagePublication)
-    await expect(service.publishDriveSite("folder-1")).resolves.toEqual(expectedSitePublication)
+    await expect(service.shareDriveItem("item-1", shareSettings)).resolves.toEqual(expectedShareResult)
+    await expect(service.publishDrivePage("item-1", pageSettings)).resolves.toEqual(expectedPagePublication)
+    await expect(service.publishDriveSite("folder-1", siteSettings)).resolves.toEqual(expectedSitePublication)
     await expect(service.redeployDrivePublication("pub-row-1")).resolves.toEqual(expectedPagePublication)
     await expect(service.disableDrivePublication("pub-row-1")).resolves.toEqual({ ok: true })
     await expect(service.getDriveDeleteImpact("item-1")).resolves.toEqual({ publications: [expectedPagePublication] })
@@ -1022,8 +1065,9 @@ describe("AccountService", () => {
       { url: expectedApiUrl("/auth/desktop/token"), method: "POST", body: expect.any(Object) },
       { url: expectedApiUrl("/auth/me"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/publications"), method: "GET", body: undefined },
-      { url: expectedApiUrl("/drive/items/item-1/publications/page"), method: "POST", body: undefined },
-      { url: expectedApiUrl("/drive/items/folder-1/publications/site"), method: "POST", body: undefined },
+      { url: expectedApiUrl("/drive/items/item-1/share"), method: "POST", body: { settings: shareSettings } },
+      { url: expectedApiUrl("/drive/items/item-1/publications/page"), method: "POST", body: { settings: pageSettings } },
+      { url: expectedApiUrl("/drive/items/folder-1/publications/site"), method: "POST", body: { settings: siteSettings } },
       { url: expectedApiUrl("/drive/publications/pub-row-1/redeploy"), method: "POST", body: undefined },
       { url: expectedApiUrl("/drive/publications/pub-row-1"), method: "DELETE", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/delete-impact"), method: "GET", body: undefined },

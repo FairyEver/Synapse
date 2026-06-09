@@ -99,6 +99,10 @@ const driveShareSchema = z.object({
   itemId: z.string(),
   enabled: z.boolean(),
   url: z.string(),
+  urlWithPassword: z.string(),
+  passwordEnabled: z.boolean(),
+  password: z.string().nullable(),
+  expiresAt: z.string().nullable(),
   createdAt: z.string(),
 })
 
@@ -111,6 +115,10 @@ const drivePublicationSchema = z.object({
   sourceItemId: z.string().nullable(),
   sourceDeleted: z.boolean(),
   url: z.string(),
+  urlWithPassword: z.string(),
+  passwordEnabled: z.boolean(),
+  password: z.string().nullable(),
+  expiresAt: z.string().nullable(),
   currentDeploymentId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -126,6 +134,10 @@ const driveShareListItemSchema = z.object({
   itemType: z.enum(["file", "folder"]),
   sourceDeleted: z.boolean(),
   url: z.string(),
+  urlWithPassword: z.string(),
+  passwordEnabled: z.boolean(),
+  password: z.string().nullable(),
+  expiresAt: z.string().nullable(),
   createdAt: z.string(),
 })
 
@@ -200,6 +212,11 @@ const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optio
 const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
 const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
 const driveItemIdSchema = z.object({ itemId: z.string() })
+const driveAccessSettingsSchema = z.object({
+  passwordEnabled: z.boolean(),
+  expiresIn: z.enum(["7d", "30d", "1y", "forever"]),
+})
+const driveAccessItemSchema = driveItemIdSchema.extend(driveAccessSettingsSchema.shape)
 const driveDeleteItemSchema = z.object({ itemId: z.string(), disablePublications: z.boolean().optional() })
 const driveShareIdSchema = z.object({ shareId: z.string() })
 const drivePublicationIdSchema = z.object({ publicationId: z.string() })
@@ -452,9 +469,15 @@ export const accountIpcModule: IpcModule = {
     shareDriveItem: {
       kind: "invoke",
       channel: "synapse:account:drive:items:share",
-      request: driveItemIdSchema,
+      request: driveAccessItemSchema,
       response: driveShareSchema,
-      handler: async (_ctx, input) => accountService.shareDriveItem(driveItemIdSchema.parse(input).itemId),
+      handler: async (_ctx, input) => {
+        const parsed = driveAccessItemSchema.parse(input)
+        return accountService.shareDriveItem(parsed.itemId, {
+          passwordEnabled: parsed.passwordEnabled,
+          expiresIn: parsed.expiresIn,
+        })
+      },
     },
     disableDriveShare: {
       kind: "invoke",
@@ -480,16 +503,28 @@ export const accountIpcModule: IpcModule = {
     publishDrivePage: {
       kind: "invoke",
       channel: "synapse:account:drive:publications:page",
-      request: driveItemIdSchema,
+      request: driveAccessItemSchema,
       response: drivePublicationSchema,
-      handler: async (_ctx, input) => accountService.publishDrivePage(driveItemIdSchema.parse(input).itemId),
+      handler: async (_ctx, input) => {
+        const parsed = driveAccessItemSchema.parse(input)
+        return accountService.publishDrivePage(parsed.itemId, {
+          passwordEnabled: parsed.passwordEnabled,
+          expiresIn: parsed.expiresIn,
+        })
+      },
     },
     publishDriveSite: {
       kind: "invoke",
       channel: "synapse:account:drive:publications:site",
-      request: driveItemIdSchema,
+      request: driveAccessItemSchema,
       response: drivePublicationSchema,
-      handler: async (_ctx, input) => accountService.publishDriveSite(driveItemIdSchema.parse(input).itemId),
+      handler: async (_ctx, input) => {
+        const parsed = driveAccessItemSchema.parse(input)
+        return accountService.publishDriveSite(parsed.itemId, {
+          passwordEnabled: parsed.passwordEnabled,
+          expiresIn: parsed.expiresIn,
+        })
+      },
     },
     redeployDrivePublication: {
       kind: "invoke",

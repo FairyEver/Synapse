@@ -21,6 +21,7 @@ import type {
 } from "./account"
 import type {
   DashboardWebhookDto,
+  DriveAccessSettingsInput,
   DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
@@ -719,12 +720,12 @@ export type SynapseBridge = {
     renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
     moveDriveItem: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
     deleteDriveItem: (input: { itemId: string; disablePublications?: boolean }) => Promise<{ ok: true }>
-    shareDriveItem: (input: { itemId: string }) => Promise<DriveShareDto>
+    shareDriveItem: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
     disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
     getDriveUsage: () => Promise<DriveUsageDto>
     listDrivePublications: () => Promise<DrivePublicationDto[]>
-    publishDrivePage: (input: { itemId: string }) => Promise<DrivePublicationDto>
-    publishDriveSite: (input: { itemId: string }) => Promise<DrivePublicationDto>
+    publishDrivePage: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DrivePublicationDto>
+    publishDriveSite: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DrivePublicationDto>
     redeployDrivePublication: (input: { publicationId: string }) => Promise<DrivePublicationDto>
     disableDrivePublication: (input: { publicationId: string }) => Promise<{ ok: true }>
     getDriveDeleteImpact: (input: { itemId: string }) => Promise<DriveDeleteImpactDto>

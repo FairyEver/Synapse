@@ -41,12 +41,12 @@ vi.mock("../../../services/account-service", () => ({
     renameDriveItem: async () => ({}),
     moveDriveItem: async () => ({}),
     deleteDriveItem: async () => ({ ok: true }),
-    shareDriveItem: async () => ({}),
+    shareDriveItem: vi.fn(async () => ({})),
     disableDriveShare: async () => ({ ok: true }),
     getDriveUsage: async () => ({}),
     listDrivePublications: async () => [],
-    publishDrivePage: async () => ({}),
-    publishDriveSite: async () => ({}),
+    publishDrivePage: vi.fn(async () => ({})),
+    publishDriveSite: vi.fn(async () => ({})),
     redeployDrivePublication: async () => ({}),
     disableDrivePublication: async () => ({ ok: true }),
     getDriveDeleteImpact: async () => ({ publications: [] }),
@@ -336,11 +336,70 @@ describe("accountIpcModule", () => {
     ])
   })
 
+  it("passes drive access settings through share and publication handlers", async () => {
+    await accountIpcModule.methods.shareDriveItem.handler({} as IpcHandlerContext, {
+      itemId: "item-1",
+      passwordEnabled: false,
+      expiresIn: "30d",
+    })
+    await accountIpcModule.methods.publishDrivePage.handler({} as IpcHandlerContext, {
+      itemId: "page-1",
+      passwordEnabled: true,
+      expiresIn: "1y",
+    })
+    await accountIpcModule.methods.publishDriveSite.handler({} as IpcHandlerContext, {
+      itemId: "site-1",
+      passwordEnabled: true,
+      expiresIn: "forever",
+    })
+
+    expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
+      passwordEnabled: false,
+      expiresIn: "30d",
+    })
+    expect(accountService.publishDrivePage).toHaveBeenCalledWith("page-1", {
+      passwordEnabled: true,
+      expiresIn: "1y",
+    })
+    expect(accountService.publishDriveSite).toHaveBeenCalledWith("site-1", {
+      passwordEnabled: true,
+      expiresIn: "forever",
+    })
+  })
+
   it("validates drive publication and share bridge schemas", () => {
-    expect(accountIpcModule.methods.publishDrivePage.request?.parse({ itemId: "item-1" }))
-      .toEqual({ itemId: "item-1" })
-    expect(accountIpcModule.methods.publishDriveSite.request?.parse({ itemId: "folder-1" }))
-      .toEqual({ itemId: "folder-1" })
+    expect(accountIpcModule.methods.shareDriveItem.request?.parse({
+      itemId: "share-1",
+      passwordEnabled: false,
+      expiresIn: "30d",
+    })).toEqual({
+      itemId: "share-1",
+      passwordEnabled: false,
+      expiresIn: "30d",
+    })
+    expect(accountIpcModule.methods.publishDrivePage.request?.parse({
+      itemId: "item-1",
+      passwordEnabled: true,
+      expiresIn: "1y",
+    })).toEqual({
+      itemId: "item-1",
+      passwordEnabled: true,
+      expiresIn: "1y",
+    })
+    expect(accountIpcModule.methods.publishDriveSite.request?.parse({
+      itemId: "folder-1",
+      passwordEnabled: true,
+      expiresIn: "forever",
+    })).toEqual({
+      itemId: "folder-1",
+      passwordEnabled: true,
+      expiresIn: "forever",
+    })
+    expect(() => accountIpcModule.methods.shareDriveItem.request?.parse({
+      itemId: "share-1",
+      passwordEnabled: true,
+      expiresIn: "14d",
+    })).toThrow()
     expect(accountIpcModule.methods.redeployDrivePublication.request?.parse({ publicationId: "pub-row-1" }))
       .toEqual({ publicationId: "pub-row-1" })
     expect(accountIpcModule.methods.disableDrivePublication.request?.parse({ publicationId: "pub-row-1" }))
@@ -367,6 +426,10 @@ describe("accountIpcModule", () => {
       sourceItemId: "item-1",
       sourceDeleted: false,
       url: "https://synapse.test/pages/pub_public",
+      urlWithPassword: "https://synapse.test/pages/pub_public?password=AbC234xy",
+      passwordEnabled: true,
+      password: "AbC234xy",
+      expiresAt: "2026-06-16T00:00:00.000Z",
       currentDeploymentId: "dep-1",
       createdAt: "2026-06-09T00:00:00.000Z",
       updatedAt: "2026-06-09T00:00:00.000Z",
@@ -383,6 +446,10 @@ describe("accountIpcModule", () => {
       itemType: "file",
       sourceDeleted: false,
       url: "https://synapse.test/share/share_public",
+      urlWithPassword: "https://synapse.test/share/share_public?password=AbC234xy",
+      passwordEnabled: true,
+      password: "AbC234xy",
+      expiresAt: "2026-06-16T00:00:00.000Z",
       createdAt: "2026-06-09T00:00:00.000Z",
     }])).toEqual([
       expect.objectContaining({

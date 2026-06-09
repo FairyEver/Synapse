@@ -2,6 +2,7 @@ import path from "node:path"
 import { readdir, readFile, stat } from "node:fs/promises"
 
 import type {
+  DriveAccessSettingsInput,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
   DriveShareDto,
@@ -29,7 +30,7 @@ type DriveAccountServicePort = {
   readonly createDriveFolder: (input: { readonly parentId?: string | null; readonly name: string }) => Promise<DriveItemDto>
   readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<DriveItemDto>
   readonly deleteDriveItem: (itemId: string) => Promise<{ ok: true }>
-  readonly shareDriveItem: (itemId: string) => Promise<DriveShareDto>
+  readonly shareDriveItem: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DriveShareDto>
   readonly disableDriveShare: (shareId: string) => Promise<{ ok: true }>
   readonly getDriveUsage: () => Promise<DriveUsageDto>
 }
@@ -96,7 +97,14 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         }
         case "drive.share.create": {
           await authorizeDriveMutation(deps, action, context)
-          return { ok: true, data: await deps.accountService.shareDriveItem(requireString(params, "itemId")) }
+          const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
+          return {
+            ok: true,
+            data: await deps.accountService.shareDriveItem(
+              requireString(params, "itemId"),
+              DRIVE_DEFAULT_ACCESS_SETTINGS,
+            ),
+          }
         }
         case "drive.share.disable": {
           await authorizeDriveMutation(deps, action, context)

@@ -5,7 +5,12 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { DriveItemDto, DrivePublicationDto, DriveShareListItemDto } from "@synapse/shared"
+import {
+  DRIVE_DEFAULT_ACCESS_SETTINGS,
+  type DriveItemDto,
+  type DrivePublicationDto,
+  type DriveShareListItemDto,
+} from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
 
 import { DriveModule } from "../index"
@@ -147,7 +152,18 @@ beforeEach(() => {
   mocks.publishDriveSite.mockResolvedValue(createDrivePublication({ id: "pub-site-1", publishId: "pub_site", name: "site", type: "site", url: "https://synapse.test/sites/pub_site/" }))
   mocks.redeployDrivePublication.mockResolvedValue(createDrivePublication())
   mocks.renameDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "renamed.txt", type: "file" }))
-  mocks.shareDriveItem.mockResolvedValue({ id: "share-row-1", shareId: "shr_test", itemId: "file-1", enabled: true, url: "https://synapse.test/files/shr_test", createdAt: "2026-06-07T00:00:00.000Z" })
+  mocks.shareDriveItem.mockResolvedValue({
+    id: "share-row-1",
+    shareId: "shr_test",
+    itemId: "file-1",
+    enabled: true,
+    url: "https://synapse.test/files/shr_test",
+    urlWithPassword: "https://synapse.test/files/shr_test?password=AbC234xy",
+    passwordEnabled: true,
+    password: "AbC234xy",
+    expiresAt: "2026-06-14T00:00:00.000Z",
+    createdAt: "2026-06-07T00:00:00.000Z",
+  })
   mocks.uploadDriveLocalItems.mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
   mocks.writeClipboardText.mockResolvedValue(undefined)
@@ -761,7 +777,10 @@ describe("DriveModule", () => {
 
     await clickButtonText("分享")
 
-    expect(mocks.shareDriveItem).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.shareDriveItem).toHaveBeenCalledWith({
+      itemId: "file-1",
+      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+    })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
     expect(document.body.textContent).toContain("文件已分享")
@@ -785,6 +804,10 @@ describe("DriveModule", () => {
       itemId: "folder-1",
       enabled: true,
       url: "https://synapse.test/files/shr_folder",
+      urlWithPassword: "https://synapse.test/files/shr_folder?password=AbC234xy",
+      passwordEnabled: true,
+      password: "AbC234xy",
+      expiresAt: "2026-06-14T00:00:00.000Z",
       createdAt: "2026-06-07T00:00:00.000Z",
     })
     await render(<DriveModule />)
@@ -792,7 +815,10 @@ describe("DriveModule", () => {
 
     await clickButtonText("分享")
 
-    expect(mocks.shareDriveItem).toHaveBeenCalledWith({ itemId: "folder-1" })
+    expect(mocks.shareDriveItem).toHaveBeenCalledWith({
+      itemId: "folder-1",
+      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+    })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_folder")
     expect(document.body.textContent).toContain("文件夹已分享")
     expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_folder")
@@ -811,7 +837,10 @@ describe("DriveModule", () => {
 
     await clickButtonText("分享")
 
-    expect(mocks.shareDriveItem).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.shareDriveItem).toHaveBeenCalledWith({
+      itemId: "file-1",
+      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+    })
     expect(mocks.toast).toHaveBeenCalledWith("分享成功，复制失败")
     expect(document.body.textContent).toContain("文件已分享")
     expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_test")
@@ -926,7 +955,10 @@ describe("DriveModule", () => {
     await openRowMenu("report.html")
     await clickText("发布网页")
 
-    expect(mocks.publishDrivePage).toHaveBeenCalledWith({ itemId: "html-1" })
+    expect(mocks.publishDrivePage).toHaveBeenCalledWith({
+      itemId: "html-1",
+      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+    })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_page")
     expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
     expect(document.body.textContent).toContain("网页已发布")
@@ -956,7 +988,10 @@ describe("DriveModule", () => {
     await openRowMenu("site")
     await clickText("发布站点")
 
-    expect(mocks.publishDriveSite).toHaveBeenCalledWith({ itemId: "folder-1" })
+    expect(mocks.publishDriveSite).toHaveBeenCalledWith({
+      itemId: "folder-1",
+      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+    })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/sites/pub_site/")
     expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
     expect(document.body.textContent).toContain("站点已发布")
@@ -983,7 +1018,10 @@ describe("DriveModule", () => {
     await openRowMenu("report.html")
     await clickText("发布网页")
 
-    expect(mocks.publishDrivePage).toHaveBeenCalledWith({ itemId: "html-1" })
+    expect(mocks.publishDrivePage).toHaveBeenCalledWith({
+      itemId: "html-1",
+      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+    })
     expect(mocks.toast).toHaveBeenCalledWith("发布成功，复制失败")
     expect(document.body.textContent).toContain("网页已发布")
     expect(getPublicationUrlInput().value).toBe("https://synapse.test/pages/pub_page")
@@ -1567,6 +1605,10 @@ function createDrivePublication(overrides: Partial<DrivePublicationDto> = {}): D
     type: "page",
     updatedAt: "2026-06-07T00:00:00.000Z",
     url: "https://synapse.test/pages/pub_test",
+    urlWithPassword: "https://synapse.test/pages/pub_test?password=AbC234xy",
+    passwordEnabled: true,
+    password: "AbC234xy",
+    expiresAt: "2026-06-14T00:00:00.000Z",
     ...overrides,
   }
 }
@@ -1581,6 +1623,10 @@ function createDriveShare(overrides: Partial<DriveShareListItemDto> = {}): Drive
     shareId: "shr_test",
     sourceDeleted: false,
     url: "https://synapse.test/files/shr_test",
+    urlWithPassword: "https://synapse.test/files/shr_test?password=AbC234xy",
+    passwordEnabled: true,
+    password: "AbC234xy",
+    expiresAt: "2026-06-14T00:00:00.000Z",
     ...overrides,
   }
 }

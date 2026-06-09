@@ -247,10 +247,10 @@ describe("preload bridge", () => {
     expect(bridge.account.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
     await bridge.account.deleteDriveItem({ itemId: "item-1", disablePublications: true })
-    await bridge.account.shareDriveItem({ itemId: "item-1" })
+    await bridge.account.shareDriveItem({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d" })
     await bridge.account.listDrivePublications()
-    await bridge.account.publishDrivePage({ itemId: "item-1" })
-    await bridge.account.publishDriveSite({ itemId: "folder-1" })
+    await bridge.account.publishDrivePage({ itemId: "item-1", passwordEnabled: false, expiresIn: "30d" })
+    await bridge.account.publishDriveSite({ itemId: "folder-1", passwordEnabled: true, expiresIn: "forever" })
     await bridge.account.redeployDrivePublication({ publicationId: "pub-row-1" })
     await bridge.account.disableDrivePublication({ publicationId: "pub-row-1" })
     await bridge.account.getDriveDeleteImpact({ itemId: "item-1" })
@@ -295,7 +295,7 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:share",
-      { itemId: "item-1" },
+      { itemId: "item-1", passwordEnabled: true, expiresIn: "7d" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:publications:list",
@@ -303,11 +303,11 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:publications:page",
-      { itemId: "item-1" },
+      { itemId: "item-1", passwordEnabled: false, expiresIn: "30d" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:publications:site",
-      { itemId: "folder-1" },
+      { itemId: "folder-1", passwordEnabled: true, expiresIn: "forever" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:publications:redeploy",

@@ -17,6 +17,7 @@ import type {
 } from "../../src/types/bridge"
 import type {
   DashboardWebhookDto,
+  DriveAccessSettingsInput,
   DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
@@ -103,19 +104,28 @@ async function dashboardLoginUrl(baseUrl: string, state: string, codeChallenge: 
   return buildDesktopDashboardLoginUrl({ apiBaseUrl: baseUrl, state, codeChallenge })
 }
 
-async function withCurrentDriveShareUrl<T extends { readonly shareId: string; readonly url: string }>(item: T): Promise<T> {
-  const { buildDriveShareUrl } = await sharedUrlsPromise
+async function withCurrentDriveShareUrl<T extends {
+  readonly shareId: string
+  readonly url: string
+  readonly urlWithPassword: string
+  readonly password: string | null
+}>(item: T): Promise<T> {
+  const { buildDriveShareUrl, buildDriveUrlWithPassword } = await sharedUrlsPromise
+  const url = buildDriveShareUrl({ publicAppUrl: publicAppUrl(), shareId: item.shareId })
   return {
     ...item,
-    url: buildDriveShareUrl({ publicAppUrl: publicAppUrl(), shareId: item.shareId }),
+    url,
+    urlWithPassword: buildDriveUrlWithPassword(url, item.password),
   }
 }
 
 async function withCurrentDrivePublicationUrl<T extends DrivePublicationDto>(item: T): Promise<T> {
-  const { buildDrivePublicationUrl } = await sharedUrlsPromise
+  const { buildDrivePublicationUrl, buildDriveUrlWithPassword } = await sharedUrlsPromise
+  const url = buildDrivePublicationUrl({ publicAppUrl: publicAppUrl(), publishId: item.publishId, type: item.type })
   return {
     ...item,
-    url: buildDrivePublicationUrl({ publicAppUrl: publicAppUrl(), publishId: item.publishId, type: item.type }),
+    url,
+    urlWithPassword: buildDriveUrlWithPassword(url, item.password),
   }
 }
 
@@ -297,8 +307,8 @@ export class AccountService {
     return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, input, "删除失败。")
   }
 
-  async shareDriveItem(itemId: string): Promise<DriveShareDto> {
-    const share = await this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, undefined, "分享失败。")
+  async shareDriveItem(itemId: string, settings: DriveAccessSettingsInput): Promise<DriveShareDto> {
+    const share = await this.requestAuthenticatedJson<DriveShareDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/share`, { settings }, "分享失败。")
     return withCurrentDriveShareUrl(share)
   }
 
@@ -476,13 +486,13 @@ export class AccountService {
     return Promise.all(publications.map(withCurrentDrivePublicationUrl))
   }
 
-  async publishDrivePage(itemId: string): Promise<DrivePublicationDto> {
-    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, undefined, "发布网页失败。")
+  async publishDrivePage(itemId: string, settings: DriveAccessSettingsInput): Promise<DrivePublicationDto> {
+    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, { settings }, "发布网页失败。")
     return withCurrentDrivePublicationUrl(publication)
   }
 
-  async publishDriveSite(itemId: string): Promise<DrivePublicationDto> {
-    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, undefined, "发布站点失败。")
+  async publishDriveSite(itemId: string, settings: DriveAccessSettingsInput): Promise<DrivePublicationDto> {
+    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, { settings }, "发布站点失败。")
     return withCurrentDrivePublicationUrl(publication)
   }
 
