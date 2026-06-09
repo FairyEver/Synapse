@@ -435,6 +435,10 @@ describe("DriveService", () => {
       itemType: "file",
       sourceDeleted: false,
       url: share.url,
+      urlWithPassword: share.urlWithPassword,
+      passwordEnabled: false,
+      password: null,
+      expiresAt: null,
       createdAt: share.createdAt,
     }])
   })
