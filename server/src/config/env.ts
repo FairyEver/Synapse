@@ -17,6 +17,10 @@ const envSchema = z
     DRIVE_COS_SECRET_KEY: z.string().optional(),
     DRIVE_COS_BUCKET: z.string().optional(),
     DRIVE_COS_REGION: z.string().optional(),
+    CONTENT_STORE_COS_SECRET_ID: z.string().optional(),
+    CONTENT_STORE_COS_SECRET_KEY: z.string().optional(),
+    CONTENT_STORE_COS_BUCKET: z.string().optional(),
+    CONTENT_STORE_COS_REGION: z.string().optional(),
     BACKUP_COS_SECRET_ID: z.string().optional(),
     BACKUP_COS_SECRET_KEY: z.string().optional(),
     BACKUP_COS_BUCKET: z.string().optional(),
@@ -50,6 +54,10 @@ export interface ServerEnv {
   readonly driveCosSecretKey?: string
   readonly driveCosBucket?: string
   readonly driveCosRegion?: string
+  readonly contentStoreCosSecretId?: string
+  readonly contentStoreCosSecretKey?: string
+  readonly contentStoreCosBucket?: string
+  readonly contentStoreCosRegion?: string
   readonly backupCosSecretId?: string
   readonly backupCosSecretKey?: string
   readonly backupCosBucket?: string
@@ -78,6 +86,10 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     driveCosSecretKey: result.data.DRIVE_COS_SECRET_KEY,
     driveCosBucket: result.data.DRIVE_COS_BUCKET,
     driveCosRegion: result.data.DRIVE_COS_REGION,
+    contentStoreCosSecretId: result.data.CONTENT_STORE_COS_SECRET_ID,
+    contentStoreCosSecretKey: result.data.CONTENT_STORE_COS_SECRET_KEY,
+    contentStoreCosBucket: result.data.CONTENT_STORE_COS_BUCKET,
+    contentStoreCosRegion: result.data.CONTENT_STORE_COS_REGION,
     backupCosSecretId: result.data.BACKUP_COS_SECRET_ID,
     backupCosSecretKey: result.data.BACKUP_COS_SECRET_KEY,
     backupCosBucket: result.data.BACKUP_COS_BUCKET,
@@ -87,6 +99,10 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
 
 export function isDriveCosConfigured(env: ServerEnv): boolean {
   return !!(env.driveCosSecretId && env.driveCosSecretKey && env.driveCosBucket && env.driveCosRegion)
+}
+
+export function isContentStoreCosConfigured(env: ServerEnv): boolean {
+  return !!(env.contentStoreCosSecretId && env.contentStoreCosSecretKey && env.contentStoreCosBucket && env.contentStoreCosRegion)
 }
 
 export function isBackupCosConfigured(env: ServerEnv): boolean {
