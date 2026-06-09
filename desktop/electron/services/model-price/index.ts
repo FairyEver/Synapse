@@ -9,9 +9,14 @@ export {
 } from "./matching"
 export type {
   EstimatedModelUsageCost,
+  ModelPriceCoverageInput,
+  ModelPriceCoverageRange,
+  ModelPriceCoverageRow,
+  ModelPriceCoverageSource,
   ModelPriceRule,
   ModelPriceRuleDeleteResult,
   ModelPriceRuleInput,
   ModelPriceRulePatch,
   ModelUsageTokenBreakdown,
+  ModelPriceUsageSourceName,
 } from "./types"

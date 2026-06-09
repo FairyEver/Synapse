@@ -65,3 +65,31 @@ export interface ModelPriceRuleDeleteResult {
   readonly deleted: true
   readonly ruleId: string
 }
+
+export type ModelPriceCoverageSource = "all" | "cc" | "codex"
+export type ModelPriceCoverageRange = "today" | "7d" | "30d" | "90d" | "all"
+export type ModelPriceUsageSourceName = "cc" | "codex"
+
+export interface ModelPriceCoverageInput {
+  readonly source?: ModelPriceCoverageSource
+  readonly range?: ModelPriceCoverageRange
+  readonly limit?: number
+}
+
+export interface ModelPriceCoverageRow {
+  readonly model: string
+  readonly sources: ModelPriceUsageSourceName[]
+  readonly tokens: number
+  readonly requests: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
+  readonly estimatedCost: number
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly reasoning: number
+  readonly priceKnown: boolean
+  readonly matchedRuleId?: string
+  readonly matchedRulePattern?: string
+}

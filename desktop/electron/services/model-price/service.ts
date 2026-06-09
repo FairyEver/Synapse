@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite"
+import { listModelPriceCoverage } from "./coverage"
 import { DEFAULT_MODEL_PRICE_RULES } from "./defaults"
 import { initModelPriceSchema } from "./db-schema"
 import {
@@ -9,6 +10,8 @@ import {
 } from "./matching"
 import type {
   EstimatedModelUsageCost,
+  ModelPriceCoverageInput,
+  ModelPriceCoverageRow,
   ModelPriceRule,
   ModelPriceRuleDeleteResult,
   ModelPriceRuleInput,
@@ -102,6 +105,10 @@ export class ModelPriceService {
 
   estimateUsageCost(model: string, tokens: ModelUsageTokenBreakdown): EstimatedModelUsageCost {
     return estimateModelUsageCost(model, tokens, this.listRules())
+  }
+
+  listCoverage(input: ModelPriceCoverageInput = {}): ModelPriceCoverageRow[] {
+    return listModelPriceCoverage(this.db, this.listRules(), input)
   }
 }
 
