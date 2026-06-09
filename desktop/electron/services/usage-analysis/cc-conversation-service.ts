@@ -13,7 +13,7 @@ import type {
   CcRecordListInput,
   CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
-import { sanitizeError } from "../error-sanitize"
+import { sanitizeError } from "../../../src/lib/error-sanitize"
 import { roundModelUsageCost } from "../model-price"
 import { parseCcConversationFile } from "./cc-conversation-parser"
 import { createUsageRangeFilter } from "./range"
