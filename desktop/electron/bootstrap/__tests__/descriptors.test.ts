@@ -958,6 +958,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.audit-sink",
       "core.action-runtime",
       "core.event-bus",
+      "core.automation",
     ])
   })
 
