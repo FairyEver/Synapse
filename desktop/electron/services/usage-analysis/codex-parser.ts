@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import readline from "node:readline"
-import { estimateUsageCost } from "./pricing"
+import { estimateModelUsageCost } from "../model-price"
 import { localDateKey, localHourKey } from "./range"
 import type { ParsedToolEvent, ParsedUsageEvent, ParsedUsageSession, UsageParseOptions } from "./cc-parser"
 
@@ -116,7 +116,7 @@ export async function parseCodexUsageFile(filePath: string, options: UsageParseO
         cacheWrite: 0,
         reasoning: asNumber(last.reasoning_output_tokens),
       }
-      const cost = estimateUsageCost(currentModel, tokens, options.priceRules)
+      const cost = estimateModelUsageCost(currentModel, tokens, options.priceRules ?? [])
       usageEvents.push({
         id: `${sessionId}:usage:${usageEvents.length}`,
         sessionId,

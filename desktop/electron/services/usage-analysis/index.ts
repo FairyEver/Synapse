@@ -14,5 +14,5 @@ export {
 export { refreshUsageInWorker } from "./refresh-runner"
 export { estimateSynapseUsageCostSnapshot, usageTokenBreakdownFromRecord } from "./usage-cost-snapshot"
 export type { SynapseUsageCostSnapshot } from "./usage-cost-snapshot"
-export type { UsageModelPriceRule, UsageModelPriceRuleInput } from "./pricing"
+export type { ModelPriceRule as UsageModelPriceRule, ModelPriceRuleInput as UsageModelPriceRuleInput } from "../model-price"
 export type { UsageDetailInput, UsageRangeInput, UsageRefreshResult } from "./types"

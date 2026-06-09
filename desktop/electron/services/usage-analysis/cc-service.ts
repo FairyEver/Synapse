@@ -16,7 +16,13 @@ import {
   type CcStoredScanFile,
 } from "./cc-scan-state"
 import { SYNAPSE_COST_CURRENCY, USD_TO_CNY_RATE } from "../../../action-packages/shared/cost-currency"
-import { listUsagePriceRules, resetUsagePriceRulesToDefaults, roundUsageCost, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
+import {
+  listModelPriceRules,
+  ModelPriceService,
+  roundModelUsageCost,
+  type ModelPriceRule,
+  type ModelPriceRuleInput,
+} from "../model-price"
 import { createUsageRangeFilter } from "./range"
 import { collectJsonlFiles, fingerprintFile } from "./scan"
 import type {
@@ -151,7 +157,7 @@ function toNumber(value: unknown): number {
 }
 
 function toCostNumber(value: unknown): number {
-  return roundUsageCost(toNumber(value))
+  return roundModelUsageCost(toNumber(value))
 }
 
 function countUsageEvents(db: DatabaseSync, prefix: "cc" | "cx"): number {
@@ -159,7 +165,7 @@ function countUsageEvents(db: DatabaseSync, prefix: "cc" | "cx"): number {
   return toNumber(row?.count_value)
 }
 
-function pricingRuleLogSignature(rule: UsageModelPriceRule): string {
+function pricingRuleLogSignature(rule: ModelPriceRule): string {
   return JSON.stringify({
     modelPattern: rule.modelPattern,
     inputPer1M: rule.inputPer1M,
@@ -176,8 +182,8 @@ function pricingRuleLogSignature(rule: UsageModelPriceRule): string {
 
 function createPricingRulesSaveLogMetadata(
   db: DatabaseSync,
-  oldRules: readonly UsageModelPriceRule[],
-  newRules: readonly UsageModelPriceRule[],
+  oldRules: readonly ModelPriceRule[],
+  newRules: readonly ModelPriceRule[],
 ): Record<string, unknown> {
   const oldById = new Map(oldRules.map((rule) => [rule.id, rule]))
   const newById = new Map(newRules.map((rule) => [rule.id, rule]))
@@ -262,14 +268,15 @@ export class CcUsageAnalysisService {
     }
   }
 
-  getPricingRules(): UsageModelPriceRule[] {
-    return listUsagePriceRules(this.db)
+  getPricingRules(): ModelPriceRule[] {
+    return new ModelPriceService(this.db).listRules()
   }
 
-  savePricingRules(rules: readonly UsageModelPriceRuleInput[]): UsageModelPriceRule[] {
+  savePricingRules(rules: readonly ModelPriceRuleInput[]): ModelPriceRule[] {
     const startedAt = Date.now()
-    const oldRules = listUsagePriceRules(this.db)
-    const savedRules = saveUsagePriceRules(this.db, rules)
+    const modelPriceService = new ModelPriceService(this.db)
+    const oldRules = modelPriceService.listRules()
+    const savedRules = modelPriceService.saveRules(rules)
     this.logger.info("Usage pricing rules saved.", {
       ...createPricingRulesSaveLogMetadata(this.db, oldRules, savedRules),
       elapsedMs: Date.now() - startedAt,
@@ -277,8 +284,8 @@ export class CcUsageAnalysisService {
     return savedRules
   }
 
-  resetPricingRules(): UsageModelPriceRule[] {
-    return resetUsagePriceRulesToDefaults(this.db)
+  resetPricingRules(): ModelPriceRule[] {
+    return new ModelPriceService(this.db).resetRulesToDefaults()
   }
 
   getTime(range: UsageRangeInput): UsageTimeBucket[] {
@@ -996,7 +1003,7 @@ async function refreshUsageNamespace(options: {
   readonly db: DatabaseSync
   readonly prefix: "cc" | "cx"
   readonly roots: string[]
-  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly UsageModelPriceRule[] }) => Promise<ParsedFileWithTasks>
+  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly ModelPriceRule[] }) => Promise<ParsedFileWithTasks>
 }): Promise<UsageRefreshResult> {
   if (options.prefix === "cc") {
     return refreshClaudeUsageNamespace({
@@ -1016,7 +1023,7 @@ async function refreshClaudeUsageNamespace(options: {
   const startedAt = Date.now()
   const files = collectJsonlFiles(options.roots)
   const scanResultCanPrune = canPruneFromScanResult(options.roots)
-  const priceRules = listUsagePriceRules(options.db)
+  const priceRules = listModelPriceRules(options.db)
   const pricingRulesHash = hashUsagePriceRules(priceRules)
   const pricedAt = new Date().toISOString()
   let parsedFiles = 0
@@ -1126,12 +1133,12 @@ async function refreshLegacyUsageNamespace(options: {
   readonly db: DatabaseSync
   readonly prefix: "cc" | "cx"
   readonly roots: string[]
-  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly UsageModelPriceRule[] }) => Promise<ParsedFileWithTasks>
+  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly ModelPriceRule[] }) => Promise<ParsedFileWithTasks>
 }): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
   const files = collectJsonlFiles(options.roots)
   const scanResultCanPrune = canPruneFromScanResult(options.roots)
-  const priceRules = listUsagePriceRules(options.db)
+  const priceRules = listModelPriceRules(options.db)
   const pricedAt = new Date().toISOString()
   let parsedFiles = 0
   let skippedFiles = 0

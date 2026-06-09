@@ -1,4 +1,4 @@
-import { estimateUsageCost, roundUsageCost, type UsageModelPriceRule } from "./pricing"
+import { estimateModelUsageCost, roundModelUsageCost, type ModelPriceRule } from "../model-price"
 import type { UsageCostBreakdown, UsageTokenBreakdown } from "./types"
 
 export interface SynapseUsageCostSnapshot {
@@ -32,13 +32,13 @@ export function usageTokenBreakdownFromRecord(
 export function estimateSynapseUsageCostSnapshot(input: {
   readonly modelName?: string
   readonly usage?: Record<string, unknown>
-  readonly priceRules: readonly UsageModelPriceRule[]
+  readonly priceRules: readonly ModelPriceRule[]
 }): SynapseUsageCostSnapshot | undefined {
   const modelName = input.modelName?.trim()
   if (!modelName) return undefined
   const tokens = usageTokenBreakdownFromRecord(input.usage)
   if (!tokens) return undefined
-  const cost = estimateUsageCost(modelName, tokens, input.priceRules)
+  const cost = estimateModelUsageCost(modelName, tokens, input.priceRules)
   if (!cost.priceKnown) {
     return {
       modelName,
@@ -48,13 +48,13 @@ export function estimateSynapseUsageCostSnapshot(input: {
   }
   return {
     modelName,
-    costCny: roundUsageCost(cost.total),
+    costCny: roundModelUsageCost(cost.total),
     costBreakdownCny: {
-      input: roundUsageCost(cost.input),
-      output: roundUsageCost(cost.output),
-      cacheRead: roundUsageCost(cost.cacheRead),
-      cacheWrite: roundUsageCost(cost.cacheWrite),
-      reasoning: roundUsageCost(cost.reasoning),
+      input: roundModelUsageCost(cost.input),
+      output: roundModelUsageCost(cost.output),
+      cacheRead: roundModelUsageCost(cost.cacheRead),
+      cacheWrite: roundModelUsageCost(cost.cacheWrite),
+      reasoning: roundModelUsageCost(cost.reasoning),
     },
     costCurrency: "CNY",
     priceKnown: true,

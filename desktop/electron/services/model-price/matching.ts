@@ -85,8 +85,8 @@ export function estimateModelUsageCost(
 }
 
 export function hashModelPriceRules(rules: readonly ModelPriceRule[]): string {
-  return createHash("sha256")
-    .update(JSON.stringify(rules.map((rule) => ({
+  const payload = rules
+    .map((rule) => ({
       id: rule.id,
       modelPattern: rule.modelPattern,
       inputPer1M: rule.inputPer1M,
@@ -96,8 +96,12 @@ export function hashModelPriceRules(rules: readonly ModelPriceRule[]): string {
       reasoningPer1M: rule.reasoningPer1M,
       currency: rule.currency,
       enabled: rule.enabled,
+      source: rule.source,
       sortIndex: rule.sortIndex,
-    }))))
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id))
+  return createHash("sha256")
+    .update(JSON.stringify(payload))
     .digest("hex")
 }
 
