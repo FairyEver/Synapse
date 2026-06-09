@@ -18,11 +18,13 @@ type TaskCardGridProps = {
   projects: readonly SynapseProjectConfig[]
   busy: boolean
   runningTaskIds: ReadonlySet<string>
+  migratingTaskIds: ReadonlySet<string>
   onRun: (task: ScheduledTask) => void
   onStop: (task: ScheduledTask) => void
   onToggleEnabled: (task: ScheduledTask, enabled: boolean) => void
   onEdit: (task: ScheduledTask) => void
   onHistory: (task: ScheduledTask) => void
+  onMigrate: (task: ScheduledTask) => void
   onDelete: (task: ScheduledTask) => void
   onCreateNew: () => void
 }
@@ -32,11 +34,13 @@ function TaskCardGrid({
   projects,
   busy,
   runningTaskIds,
+  migratingTaskIds,
   onRun,
   onStop,
   onToggleEnabled,
   onEdit,
   onHistory,
+  onMigrate,
   onDelete,
   onCreateNew,
 }: TaskCardGridProps) {
@@ -68,11 +72,13 @@ function TaskCardGrid({
           task={task}
           projects={projects}
           busy={busy || runningTaskIds.has(task.id)}
+          migrateDisabled={migratingTaskIds.has(task.id)}
           onRun={() => onRun(task)}
           onStop={() => onStop(task)}
           onToggleEnabled={(enabled) => onToggleEnabled(task, enabled)}
           onEdit={() => onEdit(task)}
           onHistory={() => onHistory(task)}
+          onMigrate={() => onMigrate(task)}
           onDelete={() => onDelete(task)}
         />
       ))}

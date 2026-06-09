@@ -42,6 +42,7 @@ describe("TaskCard", () => {
             onDelete={vi.fn()}
             onEdit={vi.fn()}
             onHistory={vi.fn()}
+            onMigrate={vi.fn()}
             onRun={vi.fn()}
             onStop={vi.fn()}
             onToggleEnabled={vi.fn()}
@@ -66,6 +67,7 @@ describe("TaskCard", () => {
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onHistory={vi.fn()}
+          onMigrate={vi.fn()}
           onRun={vi.fn()}
           onStop={vi.fn()}
           onToggleEnabled={vi.fn()}
@@ -95,6 +97,7 @@ describe("TaskCard", () => {
             onDelete={vi.fn()}
             onEdit={vi.fn()}
             onHistory={vi.fn()}
+            onMigrate={vi.fn()}
             onRun={vi.fn()}
             onStop={vi.fn()}
             onToggleEnabled={onToggleEnabled}
@@ -140,6 +143,7 @@ describe("TaskCard", () => {
             onDelete={vi.fn()}
             onEdit={vi.fn()}
             onHistory={vi.fn()}
+            onMigrate={vi.fn()}
             onRun={onRun}
             onStop={vi.fn()}
             onToggleEnabled={vi.fn()}
@@ -174,6 +178,7 @@ describe("TaskCard", () => {
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onHistory={vi.fn()}
+          onMigrate={vi.fn()}
           onRun={vi.fn()}
           onStop={vi.fn()}
           onToggleEnabled={vi.fn()}
@@ -208,6 +213,7 @@ describe("TaskCard", () => {
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onHistory={vi.fn()}
+          onMigrate={vi.fn()}
           onRun={vi.fn()}
           onStop={vi.fn()}
           onToggleEnabled={vi.fn()}
@@ -238,6 +244,7 @@ describe("TaskCard", () => {
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onHistory={vi.fn()}
+          onMigrate={vi.fn()}
           onRun={vi.fn()}
           onStop={vi.fn()}
           onToggleEnabled={vi.fn()}
@@ -261,6 +268,7 @@ describe("TaskCard", () => {
           onDelete={vi.fn()}
           onEdit={vi.fn()}
           onHistory={vi.fn()}
+          onMigrate={vi.fn()}
           onRun={vi.fn()}
           onStop={vi.fn()}
           onToggleEnabled={vi.fn()}
@@ -270,11 +278,73 @@ describe("TaskCard", () => {
 
     expect(html).toContain('aria-label="编辑"')
     expect(html).toContain('aria-label="历史"')
+    expect(html).toContain('aria-label="迁移到自动化"')
     expect(html).toContain('aria-label="删除"')
     expect(html).not.toContain(">编辑</button>")
     expect(html).not.toContain(">历史</button>")
+    expect(html).not.toContain(">迁移到自动化</button>")
     expect(html).not.toContain(">删除</button>")
     expect(html).not.toContain("更多操作")
+  })
+
+  it("renders a migration icon action between history and delete", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TaskCard
+          busy={false}
+          projects={projects}
+          task={createTask()}
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onHistory={vi.fn()}
+          onMigrate={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    expect(html).toContain("迁移到自动化")
+    expect(html.indexOf('aria-label="历史"')).toBeLessThan(html.indexOf('aria-label="迁移到自动化"'))
+    expect(html.indexOf('aria-label="迁移到自动化"')).toBeLessThan(html.indexOf('aria-label="删除"'))
+  })
+
+  it("keeps migration available for running tasks unless the task is migrating", async () => {
+    const onMigrate = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <TaskCard
+            busy={false}
+            migrateDisabled={false}
+            projects={projects}
+            task={createTask({ activeRun: { status: "running", id: "run:1" } })}
+            onDelete={vi.fn()}
+            onEdit={vi.fn()}
+            onHistory={vi.fn()}
+            onMigrate={onMigrate}
+            onRun={vi.fn()}
+            onStop={vi.fn()}
+            onToggleEnabled={vi.fn()}
+          />
+        </TooltipProvider>,
+      )
+    })
+
+    const migrateButton = document.querySelector<HTMLButtonElement>('button[aria-label="迁移到自动化"]')
+    expect(migrateButton?.disabled).toBe(false)
+
+    await act(async () => {
+      migrateButton?.click()
+    })
+
+    expect(onMigrate).toHaveBeenCalled()
   })
 
   it("shows needs-update tasks as frozen", async () => {
@@ -300,6 +370,7 @@ describe("TaskCard", () => {
             onDelete={vi.fn()}
             onEdit={vi.fn()}
             onHistory={vi.fn()}
+            onMigrate={vi.fn()}
             onRun={vi.fn()}
             onStop={vi.fn()}
             onToggleEnabled={onToggleEnabled}
