@@ -1,5 +1,7 @@
+import { BadRequestException } from "@nestjs/common"
 import { createHash } from "node:crypto"
 import { describe, expect, it } from "vitest"
+import type { NormalizedContentStoreFile } from "./content-store.types"
 import { normalizeRuleBody, normalizeSkillFiles } from "./content-store-file-rules"
 import { buildContentStorePackage } from "./content-store-package"
 
@@ -53,6 +55,28 @@ describe("buildContentStorePackage", () => {
     expect(result.manifest.files[0]?.path).toBe("content/RULE.md")
     expect(result.sha256).toBe(createHash("sha256").update(result.bytes).digest("hex"))
     expect(readZipEntryNames(result.bytes)).toEqual(["manifest.json", "content/RULE.md"])
+  })
+
+  it("rejects package file paths that would escape the content root", async () => {
+    const evilFile: NormalizedContentStoreFile = {
+      path: "../evil.md",
+      size: 4,
+      sha256: "0".repeat(64),
+      kind: "text",
+      mimeType: "text/markdown",
+      text: "evil",
+      bytes: Buffer.from("evil"),
+    }
+
+    await expect(
+      buildContentStorePackage({
+        contentId: "content-3",
+        versionId: "version-3",
+        type: "skill",
+        title: "Skill",
+        files: [evilFile],
+      }),
+    ).rejects.toThrow(BadRequestException)
   })
 })
 

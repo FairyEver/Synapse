@@ -45,6 +45,8 @@ const textExtensions = new Set([
   ".ini",
 ])
 
+const windowsReservedPathNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
+
 export function normalizeSkillFiles(files: readonly ContentStoreFileInput[]): NormalizedContentStoreFile[] {
   if (files.length === 0) throw new BadRequestException("Skill 文件不能为空。")
   if (files.length > contentStoreSkillMaxFileCount) throw new BadRequestException("Skill 文件数量超过 200 个。")
@@ -90,6 +92,7 @@ export function normalizeContentStorePath(input: string): string {
     throw new BadRequestException("文件路径必须是相对路径。")
   }
   if (trimmed.split("/").includes("..")) throw new BadRequestException("文件路径不能包含上级目录。")
+  validateContentStorePathSegments(trimmed)
 
   const normalized = path.posix.normalize(trimmed)
   if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.includes("/../")) {
@@ -139,11 +142,30 @@ function decodeUtf8(bytes: Buffer): { readonly kind: "text"; readonly text: stri
   if (text.includes("\u0000")) return null
 
   let controls = 0
+  let printable = 0
   for (const char of text) {
     const code = char.charCodeAt(0)
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) controls += 1
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+      controls += 1
+    } else if (code >= 32) {
+      printable += 1
+    }
   }
+  if (controls > 0 && printable === 0) return null
   if (controls > Math.max(4, text.length * 0.02)) return null
 
   return { kind: "text", text }
+}
+
+function validateContentStorePathSegments(relativePath: string): void {
+  for (const segment of relativePath.split("/")) {
+    if (!segment || segment === ".") continue
+    if (segment.includes(":")) throw new BadRequestException("文件路径包含非法字符。")
+    if (windowsReservedPathNames.test(segment)) {
+      throw new BadRequestException("文件路径不能使用 Windows 保留名称。")
+    }
+    if (segment.endsWith(".") || segment.endsWith(" ")) {
+      throw new BadRequestException("文件路径片段不能以点或空格结尾。")
+    }
+  }
 }
