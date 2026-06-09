@@ -8,8 +8,10 @@ import {
   normalizeSkillFiles,
 } from "./content-store-file-rules"
 import {
+  contentStoreSkillMaxTotalBytes,
   contentStoreSkillMaxFileBytes,
   contentStoreSkillMaxFileCount,
+  contentStoreTextMaxBytes,
 } from "./content-store.constants"
 
 describe("content store file rules", () => {
@@ -81,5 +83,25 @@ describe("content store file rules", () => {
         { path: "large.bin", bytes: Buffer.alloc(contentStoreSkillMaxFileBytes + 1) },
       ]),
     ).toThrow("Skill 单文件超过 20MB。")
+  })
+
+  it("rejects excessive total skill file size", () => {
+    const chunk = Buffer.alloc(Math.floor(contentStoreSkillMaxTotalBytes / 3) + 1)
+
+    expect(() =>
+      normalizeSkillFiles([
+        { path: "SKILL.md", bytes: Buffer.from("# Skill") },
+        { path: "references/a.bin", bytes: chunk },
+        { path: "references/b.bin", bytes: chunk },
+        { path: "references/c.bin", bytes: chunk },
+      ]),
+    ).toThrow("Skill 文件总大小超过 50MB。")
+  })
+
+  it("rejects rule and prompt text bodies over 1MB", () => {
+    const oversizedBody = "a".repeat(contentStoreTextMaxBytes + 1)
+
+    expect(() => normalizeRuleBody(oversizedBody)).toThrow("正文超过 1MB。")
+    expect(() => normalizePromptBody(oversizedBody)).toThrow("Prompt 正文超过 1MB。")
   })
 })
