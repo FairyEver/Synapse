@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest"
-import type { UsageModelPriceRule } from "../pricing"
-import { DEFAULT_MODEL_PRICE_RULES } from "../../model-price"
+import { DEFAULT_MODEL_PRICE_RULES, type ModelPriceRule } from "../../model-price"
 import {
   estimateSynapseUsageCostSnapshot,
   usageTokenBreakdownFromRecord,
 } from "../usage-cost-snapshot"
 
-const pricedRule: UsageModelPriceRule = {
+const pricedRule: ModelPriceRule = {
   id: "test-model",
   modelPattern: "test-model",
   inputPer1M: 1000,

@@ -23,7 +23,7 @@ import type { ReplyTarget } from "../reply-target"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import { resolveEffectiveShell, resolveShellCommand } from "../shell-exec"
 import type { ProviderService } from "../provider"
-import type { UsageModelPriceRule } from "../usage-analysis"
+import type { ModelPriceRule } from "../model-price"
 import { AgentCommandRouter } from "./command-router"
 import {
   AGENT_ABORTED_BEFORE_EXECUTION_MESSAGE,
@@ -105,7 +105,7 @@ export interface AgentRuntimeServiceDeps {
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
-  readonly getUsagePriceRules?: () => readonly UsageModelPriceRule[]
+  readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
   readonly now?: () => Date

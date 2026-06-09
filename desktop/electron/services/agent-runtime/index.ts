@@ -18,7 +18,7 @@ import {
   createProviderServiceFromDataRepository,
 } from "../provider"
 import { getUsageAnalysisDb } from "../usage-analysis"
-import { listUsagePriceRules } from "../usage-analysis/pricing"
+import { listModelPriceRules } from "../model-price"
 import { ReplyOutboxService } from "../reply-target"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
@@ -178,7 +178,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: ctx.dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
-        getUsagePriceRules: () => listUsagePriceRules(getUsageAnalysisDb()),
+        getUsagePriceRules: () => listModelPriceRules(getUsageAnalysisDb()),
         providerService,
         agentType: "claude-code",
         eventBus: ctx.eventBus,

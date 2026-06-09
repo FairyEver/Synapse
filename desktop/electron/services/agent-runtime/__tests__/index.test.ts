@@ -30,8 +30,9 @@ vi.mock("../../usage-analysis", () => ({
   getUsageAnalysisDb: vi.fn(() => ({})),
 }))
 
-vi.mock("../../usage-analysis/pricing", () => ({
-  listUsagePriceRules: vi.fn(() => []),
+vi.mock("../../model-price", () => ({
+  listModelPriceRules: vi.fn(() => []),
+  estimateSynapseUsageCostSnapshot: vi.fn(() => undefined),
 }))
 
 vi.mock("../claude-sdk-session", () => ({

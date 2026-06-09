@@ -7,6 +7,7 @@ export {
   normalizeModelPriceRules,
   roundModelUsageCost,
 } from "./matching"
+export { estimateSynapseUsageCostSnapshot, usageTokenBreakdownFromRecord } from "./usage-cost-snapshot"
 export type {
   EstimatedModelUsageCost,
   ModelPriceCoverageInput,
@@ -20,3 +21,4 @@ export type {
   ModelUsageTokenBreakdown,
   ModelPriceUsageSourceName,
 } from "./types"
+export type { SynapseUsageCostSnapshot } from "./usage-cost-snapshot"

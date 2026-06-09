@@ -11,7 +11,7 @@ import type {
 import type { EventBusEmitOptions } from "../../../runtime/event-bus/types"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { ProviderService } from "../../provider"
-import type { UsageModelPriceRule } from "../../usage-analysis"
+import type { ModelPriceRule } from "../../model-price"
 import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
 import type { ConversationRouterDeps } from "../conversation-router"
@@ -1846,7 +1846,7 @@ function createRouter(input: {
   readonly commandRouter?: AgentCommandRouter
   readonly eventBus?: ConversationRouterDeps["eventBus"]
   readonly logger?: ConversationRouterDeps["logger"]
-  readonly priceRules?: readonly UsageModelPriceRule[]
+  readonly priceRules?: readonly ModelPriceRule[]
   readonly outbox?: ConversationRouterDeps["outbox"]
   readonly replyTargets?: ConversationRouterDeps["replyTargets"]
   readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
