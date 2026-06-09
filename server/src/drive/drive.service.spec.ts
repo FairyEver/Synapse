@@ -154,6 +154,7 @@ describe("DriveService", () => {
     const stored = await prisma.driveShare.findFirst({ where: { id: share.id } })
     expect(stored.passwordHash).toEqual(expect.any(String))
     expect(stored.passwordEncrypted).toEqual(expect.any(String))
+    expect(stored.accessSettingsAppliedAt).toBeInstanceOf(Date)
   })
 
   it("overwrites active share settings without changing the share id", async () => {
@@ -175,7 +176,9 @@ describe("DriveService", () => {
     expect(second.password).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{8}$/u)
     expect(second.password).not.toBe(first.password)
     expect(second.expiresAt).not.toBe(first.expiresAt)
-    expect(await prisma.driveShare.findMany({ where: { itemId: file.id, userId: "user-1", enabled: true } })).toHaveLength(1)
+    const activeShares = await prisma.driveShare.findMany({ where: { itemId: file.id, userId: "user-1", enabled: true } })
+    expect(activeShares).toHaveLength(1)
+    expect(activeShares[0]?.accessSettingsAppliedAt).toBeInstanceOf(Date)
   })
 
   it("publishes an html file as a snapshot page", async () => {
@@ -202,6 +205,7 @@ describe("DriveService", () => {
     const stored = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
     expect(stored.passwordHash).toEqual(expect.any(String))
     expect(stored.passwordEncrypted).toEqual(expect.any(String))
+    expect(stored.accessSettingsAppliedAt).toBeInstanceOf(Date)
   })
 
   it("overwrites active publication settings without changing the publication identity", async () => {
@@ -226,6 +230,7 @@ describe("DriveService", () => {
       where: { userId: "user-1", sourceItemId: file.id, type: "page", status: "active" },
     })
     expect(active).toHaveLength(1)
+    expect(active[0]?.accessSettingsAppliedAt).toBeInstanceOf(Date)
   })
 
   it("keeps existing publication access settings when republish deployment fails", async () => {
@@ -247,6 +252,7 @@ describe("DriveService", () => {
       passwordHash: storedBefore.passwordHash,
       passwordEncrypted: storedBefore.passwordEncrypted,
       expiresAt: storedBefore.expiresAt,
+      accessSettingsAppliedAt: storedBefore.accessSettingsAppliedAt,
     }
     vi.mocked(failingStorage.copyObject).mockRejectedValueOnce(new Error("copy failed"))
 
@@ -258,6 +264,7 @@ describe("DriveService", () => {
       passwordHash: storedAfter.passwordHash,
       passwordEncrypted: storedAfter.passwordEncrypted,
       expiresAt: storedAfter.expiresAt,
+      accessSettingsAppliedAt: storedAfter.accessSettingsAppliedAt,
     }).toEqual(accessBefore)
   })
 
@@ -294,14 +301,17 @@ describe("DriveService", () => {
       mimeType: "text/html",
     })
     const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "7d" })
+    const markerBefore = (await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })).accessSettingsAppliedAt
 
     const redeployed = await service.redeployPublication("user-1", publication.id, "https://synapse.test")
+    const markerAfter = (await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })).accessSettingsAppliedAt
 
     expect(redeployed.passwordEnabled).toBe(true)
     expect(redeployed.password).toBe(publication.password)
     expect(redeployed.expiresAt).toBe(publication.expiresAt)
     expect(redeployed.urlWithPassword).toBe(publication.urlWithPassword)
     expect(redeployed.currentDeploymentId).not.toBe(publication.currentDeploymentId)
+    expect(markerAfter).toEqual(markerBefore)
   })
 
   it("does not serve assets from an inactive current deployment", async () => {
@@ -678,9 +688,11 @@ describe("DriveService", () => {
       },
     })
 
-    await service.onApplicationBootstrap()
+    const backfilledAt = new Date("2026-06-09T12:00:00.000Z")
+    const first = await service.backfillLegacyDriveAccessProtection(backfilledAt)
     const second = await service.backfillLegacyDriveAccessProtection(new Date("2026-06-10T00:00:00.000Z"))
 
+    expect(first).toEqual({ shares: 1, publications: 1 })
     expect(second).toEqual({ shares: 0, publications: 0 })
     const updatedShare = await prisma.driveShare.findFirst({ where: { id: share.id } })
     const updatedPublication = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
@@ -688,14 +700,65 @@ describe("DriveService", () => {
       passwordEnabled: true,
       passwordHash: expect.any(String),
       passwordEncrypted: expect.any(String),
+      accessSettingsAppliedAt: backfilledAt,
     })
     expect(updatedShare.expiresAt).toBeInstanceOf(Date)
     expect(updatedPublication).toMatchObject({
       passwordEnabled: true,
       passwordHash: expect.any(String),
       passwordEncrypted: expect.any(String),
+      accessSettingsAppliedAt: backfilledAt,
     })
     expect(updatedPublication.expiresAt).toBeInstanceOf(Date)
+  })
+
+  it("does not backfill explicit no-password share and publication settings", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+
+    const share = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: false, expiresIn: "forever" })
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: false, expiresIn: "forever" })
+
+    const storedShareBefore = await prisma.driveShare.findFirst({ where: { id: share.id } })
+    const storedPublicationBefore = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
+    expect(storedShareBefore).toMatchObject({
+      passwordEnabled: false,
+      passwordHash: null,
+      passwordEncrypted: null,
+      expiresAt: null,
+    })
+    expect(storedShareBefore.accessSettingsAppliedAt).toBeInstanceOf(Date)
+    expect(storedPublicationBefore).toMatchObject({
+      passwordEnabled: false,
+      passwordHash: null,
+      passwordEncrypted: null,
+      expiresAt: null,
+    })
+    expect(storedPublicationBefore.accessSettingsAppliedAt).toBeInstanceOf(Date)
+
+    const result = await service.backfillLegacyDriveAccessProtection(new Date("2026-06-10T00:00:00.000Z"))
+
+    expect(result).toEqual({ shares: 0, publications: 0 })
+    expect(await prisma.driveShare.findFirst({ where: { id: share.id } })).toMatchObject({
+      passwordEnabled: false,
+      passwordHash: null,
+      passwordEncrypted: null,
+      expiresAt: null,
+      accessSettingsAppliedAt: storedShareBefore.accessSettingsAppliedAt,
+    })
+    expect(await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })).toMatchObject({
+      passwordEnabled: false,
+      passwordHash: null,
+      passwordEncrypted: null,
+      expiresAt: null,
+      accessSettingsAppliedAt: storedPublicationBefore.accessSettingsAppliedAt,
+    })
   })
 
   it("skips legacy access backfill rows that changed after selection", async () => {
@@ -1081,6 +1144,7 @@ function createPrismaMemory() {
           passwordHash: null,
           passwordEncrypted: null,
           expiresAt: null,
+          accessSettingsAppliedAt: null,
           disabledAt: null,
           createdAt: now(),
           ...data,
@@ -1125,6 +1189,7 @@ function createPrismaMemory() {
           passwordHash: null,
           passwordEncrypted: null,
           expiresAt: null,
+          accessSettingsAppliedAt: null,
           createdAt: now(),
           updatedAt: now(),
           ...data,

@@ -302,8 +302,9 @@ model DriveShare {
   passwordHash      String?
   passwordEncrypted String?
   expiresAt         DateTime?
-  createdAt         DateTime  @default(now())
-  disabledAt        DateTime?
+  accessSettingsAppliedAt DateTime?
+  createdAt               DateTime  @default(now())
+  disabledAt              DateTime?
 
   @@index([itemId, enabled])
   @@index([userId, createdAt])
@@ -355,13 +356,14 @@ model DrivePublication {
   passwordHash        String?
   passwordEncrypted   String?
   expiresAt           DateTime?
-  currentDeploymentId String?
-  currentDeployment   DrivePublicationDeployment?  @relation("CurrentPublicationDeployment", fields: [currentDeploymentId, id], references: [id, publicationId], onDelete: NoAction)
-  createdAt           DateTime                     @default(now())
-  updatedAt           DateTime                     @updatedAt
-  disabledAt          DateTime?
-  deployments         DrivePublicationDeployment[] @relation("PublicationDeployments")
-  assets              DrivePublicationAsset[]
+  accessSettingsAppliedAt DateTime?
+  currentDeploymentId     String?
+  currentDeployment       DrivePublicationDeployment?  @relation("CurrentPublicationDeployment", fields: [currentDeploymentId, id], references: [id, publicationId], onDelete: NoAction)
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  disabledAt              DateTime?
+  deployments             DrivePublicationDeployment[] @relation("PublicationDeployments")
+  assets                  DrivePublicationAsset[]
 
   @@index([userId, createdAt])
   @@index([sourceItemId, status])

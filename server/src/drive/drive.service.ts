@@ -803,11 +803,11 @@ export class DriveService implements OnApplicationBootstrap {
 
   async backfillLegacyDriveAccessProtection(now = new Date()): Promise<{ readonly shares: number; readonly publications: number }> {
     const legacyShares = await this.prisma.driveShare.findMany({
-      where: { enabled: true, passwordEnabled: false, passwordHash: null },
+      where: { enabled: true, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
       select: { id: true },
     })
     const legacyPublications = await this.prisma.drivePublication.findMany({
-      where: { status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null },
+      where: { status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
       select: { id: true },
     })
 
@@ -816,16 +816,16 @@ export class DriveService implements OnApplicationBootstrap {
     for (const share of legacyShares) {
       const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn: "7d" }, this.accessSecret, now)
       const result = await this.prisma.driveShare.updateMany({
-        where: { id: share.id, enabled: true, passwordEnabled: false, passwordHash: null },
-        data: toDrivePasswordUpdateData(material),
+        where: { id: share.id, enabled: true, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
+        data: toDrivePasswordUpdateData(material, now),
       })
       if (result.count === 1) shares += 1
     }
     for (const publication of legacyPublications) {
       const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn: "7d" }, this.accessSecret, now)
       const result = await this.prisma.drivePublication.updateMany({
-        where: { id: publication.id, status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null },
-        data: toDrivePasswordUpdateData(material),
+        where: { id: publication.id, status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
+        data: toDrivePasswordUpdateData(material, now),
       })
       if (result.count === 1) publications += 1
     }
@@ -1267,12 +1267,13 @@ function toDriveShareDto(
   }
 }
 
-function toDrivePasswordUpdateData(material: DrivePasswordMaterial) {
+function toDrivePasswordUpdateData(material: DrivePasswordMaterial, appliedAt = new Date()) {
   return {
     passwordEnabled: material.passwordEnabled,
     passwordHash: material.passwordHash,
     passwordEncrypted: material.passwordEncrypted,
     expiresAt: material.expiresAt,
+    accessSettingsAppliedAt: appliedAt,
   }
 }
 
