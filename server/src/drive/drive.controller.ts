@@ -300,11 +300,15 @@ function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
 }
 
 function resolveRequestPagesPublicUrl(request: AuthenticatedUserRequest): string {
-  return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.PAGES_PUBLIC_URL ?? process.env.APP_PUBLIC_URL, request })
+  return resolvePublicAppUrl({ configuredPublicAppUrl: firstConfiguredUrl(process.env.PAGES_PUBLIC_URL, process.env.APP_PUBLIC_URL), request })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function firstConfiguredUrl(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value !== undefined && value.trim().length > 0)
 }
 
 function safeDecodeURIComponent(value: string): string {

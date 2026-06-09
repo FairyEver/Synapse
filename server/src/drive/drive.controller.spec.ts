@@ -21,6 +21,7 @@ const request = require("supertest") as (server: unknown) => {
 describe("DriveController", () => {
   let app: INestApplication | null = null
   const originalPagesPublicUrl = process.env.PAGES_PUBLIC_URL
+  const originalAppPublicUrl = process.env.APP_PUBLIC_URL
   const drive = {
     listItems: vi.fn(),
     prepareFolderUpload: vi.fn(),
@@ -49,7 +50,8 @@ describe("DriveController", () => {
     drive.listPublicFolderChildren.mockReset()
     drive.createDownloadUrlForShare.mockReset()
     drive.createDownloadUrlForShareChild.mockReset()
-    process.env.PAGES_PUBLIC_URL = originalPagesPublicUrl
+    restoreEnv("PAGES_PUBLIC_URL", originalPagesPublicUrl)
+    restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
     drive.resolvePublishedAsset.mockRejectedValue(new NotFoundException("网页未找到"))
     drive.resolvePublicShare.mockRejectedValue(new NotFoundException("文件未找到"))
     const moduleRef = await Test.createTestingModule({
@@ -66,7 +68,8 @@ describe("DriveController", () => {
   afterEach(async () => {
     await app?.close()
     app = null
-    process.env.PAGES_PUBLIC_URL = originalPagesPublicUrl
+    restoreEnv("PAGES_PUBLIC_URL", originalPagesPublicUrl)
+    restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
   })
 
   it("requires user auth for /api/drive/items", async () => {
@@ -139,6 +142,33 @@ describe("DriveController", () => {
       expect(drive.publishSite).toHaveBeenCalledWith("user-1", "folder-1", "https://pages.example")
       expect(drive.redeployPublication).toHaveBeenCalledWith("user-1", "pub-row-1", "https://pages.example")
       expect(drive.disablePublication).toHaveBeenCalledWith("user-1", "pub-row-1")
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("falls back to APP_PUBLIC_URL when PAGES_PUBLIC_URL is blank", async () => {
+    process.env.PAGES_PUBLIC_URL = "   "
+    process.env.APP_PUBLIC_URL = "https://app.example"
+    const publication = createPublication({ url: "https://app.example/pages/pub_public" })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.publishPage.mockResolvedValue(publication)
+
+      await request(userApp.getHttpServer()).post("/api/drive/items/file-1/publications/page").expect(201)
+
+      expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://app.example")
     } finally {
       await userApp.close()
     }
@@ -261,4 +291,12 @@ function createPublication(input: Partial<DrivePublicationDto> = {}): DrivePubli
     updatedAt: "2026-06-09T00:00:00.000Z",
     ...input,
   }
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+    return
+  }
+  process.env[name] = value
 }

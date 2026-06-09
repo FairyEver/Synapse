@@ -144,6 +144,62 @@ describe("DriveService", () => {
     expect(publication.currentDeploymentId).toBe(assets[0]?.deploymentId)
   })
 
+  it("does not serve assets from an inactive current deployment", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+    await prisma.drivePublicationDeployment.update({
+      where: { id: publication.currentDeploymentId },
+      data: { status: "failed" },
+    })
+
+    await expect(service.resolvePublishedAsset({
+      publishId: publication.publishId,
+      type: "page",
+      relativePath: "index.html",
+    })).rejects.toThrow("网页未找到")
+    expect(storageMock.getObjectStream).not.toHaveBeenCalledWith(expect.objectContaining({
+      key: expect.stringContaining(publication.currentDeploymentId ?? ""),
+    }))
+  })
+
+  it("uses asset content type before storage content type for published assets", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "asset.bin",
+      mimeType: "application/x-synapse-asset",
+    })
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+    vi.mocked(storageMock.getObjectStream).mockResolvedValueOnce({
+      stream: Readable.from(["payload"]),
+      size: 7n,
+      contentType: "text/plain",
+    })
+
+    const asset = await service.resolvePublishedAsset({
+      publishId: publication.publishId,
+      type: "site",
+      relativePath: "asset.bin",
+    })
+
+    expect(asset.contentType).toBe("application/x-synapse-asset")
+  })
+
   it("returns the existing active publication when source uniqueness races", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -655,6 +711,7 @@ function createPrismaMemory() {
         publicationDeployments.set(deployment.id, deployment)
         return deployment
       },
+      findFirst: async ({ where }: any) => [...publicationDeployments.values()].find((deployment) => matchesWhere(deployment, where)) ?? null,
       findMany: async ({ where, orderBy }: any = {}) => orderRows(
         [...publicationDeployments.values()].filter((deployment) => matchesWhere(deployment, where ?? {})),
         orderBy,
@@ -673,6 +730,15 @@ function createPrismaMemory() {
           publicationAssets.set(asset.id, asset)
         }
         return { count: data.length }
+      },
+      findUnique: async ({ where }: any) => {
+        if (where.deploymentId_relativePath) {
+          return [...publicationAssets.values()].find((asset) => (
+            asset.deploymentId === where.deploymentId_relativePath.deploymentId
+            && asset.relativePath === where.deploymentId_relativePath.relativePath
+          )) ?? null
+        }
+        return publicationAssets.get(where.id) ?? null
       },
       findMany: async ({ where, orderBy }: any = {}) => orderRows(
         [...publicationAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})),

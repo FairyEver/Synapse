@@ -414,6 +414,15 @@ export class DriveService {
     })
     if (!publication?.currentDeploymentId) throw new NotFoundException("网页未找到")
 
+    const deployment = await this.prisma.drivePublicationDeployment.findFirst({
+      where: {
+        id: publication.currentDeploymentId,
+        publicationId: publication.id,
+        status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.active,
+      },
+    })
+    if (!deployment) throw new NotFoundException("网页未找到")
+
     const asset = await this.prisma.drivePublicationAsset.findUnique({
       where: { deploymentId_relativePath: { deploymentId: publication.currentDeploymentId, relativePath } },
     })
@@ -423,7 +432,7 @@ export class DriveService {
     return {
       stream: object.stream,
       size: object.size ?? asset.size,
-      contentType: resolvePublicationContentType(asset.relativePath, object.contentType ?? asset.contentType),
+      contentType: resolvePublicationContentType(asset.relativePath, asset.contentType ?? object.contentType),
     }
   }
 
