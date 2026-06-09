@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   listDriveItems: vi.fn(),
   listDriveShares: vi.fn(),
   moveDriveItem: vi.fn(),
+  openExternal: vi.fn(),
   prepareDriveUpload: vi.fn(),
   publishDrivePage: vi.fn(),
   publishDriveSite: vi.fn(),
@@ -95,7 +96,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
     },
     shell: {
-      openExternal: vi.fn(),
+      openExternal: mocks.openExternal,
     },
   }),
 }))
@@ -121,6 +122,7 @@ beforeEach(() => {
   mocks.listDriveItems.mockResolvedValue([])
   mocks.listDriveShares.mockResolvedValue([])
   mocks.moveDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file" }))
+  mocks.openExternal.mockResolvedValue(undefined)
   mocks.prepareDriveUpload.mockResolvedValue({
     item: createDriveItem({ id: "file-1", name: "report.txt", type: "file", size: "6" }),
     sessionId: "upload-session-1",
@@ -185,6 +187,8 @@ describe("DriveModule", () => {
     expect(getButton("上传文件").disabled).toBe(true)
     expect(getButton("上传文件夹").disabled).toBe(true)
     expect(getButton("新建文件夹").disabled).toBe(true)
+    expect(getButton("已分享").disabled).toBe(true)
+    expect(getButton("已发布").disabled).toBe(true)
 
     await clickButtonText("登录")
 
@@ -203,6 +207,26 @@ describe("DriveModule", () => {
     expect(getButton("上传文件").disabled).toBe(true)
     expect(getButton("上传文件夹").disabled).toBe(true)
     expect(getButton("新建文件夹").disabled).toBe(true)
+    expect(getButton("已分享").disabled).toBe(true)
+    expect(getButton("已发布").disabled).toBe(true)
+  })
+
+  it("keeps management actions disabled while the drive list is loading", async () => {
+    let resolveItems: (items: DriveItemDto[]) => void = () => {}
+    mocks.listDriveItems.mockReturnValue(new Promise<DriveItemDto[]>((resolve) => {
+      resolveItems = resolve
+    }))
+
+    await render(<DriveModule />)
+    await flushPromises()
+
+    expect(getButton("已分享").disabled).toBe(true)
+    expect(getButton("已发布").disabled).toBe(true)
+
+    await act(async () => {
+      resolveItems([])
+      await flushPromises()
+    })
   })
 
   it("does not expose the ipc channel when a wrapped account error is returned", async () => {
@@ -502,6 +526,11 @@ describe("DriveModule", () => {
     expect(mocks.publishDrivePage).toHaveBeenCalledWith({ itemId: "html-1" })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_page")
     expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null })
+    expect(mocks.publishDrivePage.mock.invocationCallOrder[0]).toBeLessThan(mocks.writeClipboardText.mock.invocationCallOrder[0])
+    expect(mocks.writeClipboardText.mock.invocationCallOrder[0]).toBeLessThan(mocks.toast.mock.invocationCallOrder[0])
+    expect(mocks.toast.mock.invocationCallOrder[0]).toBeLessThan(mocks.listDriveItems.mock.invocationCallOrder[1])
   })
 
   it("publishes folders and copies the site URL", async () => {
@@ -517,6 +546,11 @@ describe("DriveModule", () => {
     expect(mocks.publishDriveSite).toHaveBeenCalledWith({ itemId: "folder-1" })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/sites/pub_site/")
     expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null })
+    expect(mocks.publishDriveSite.mock.invocationCallOrder[0]).toBeLessThan(mocks.writeClipboardText.mock.invocationCallOrder[0])
+    expect(mocks.writeClipboardText.mock.invocationCallOrder[0]).toBeLessThan(mocks.toast.mock.invocationCallOrder[0])
+    expect(mocks.toast.mock.invocationCallOrder[0]).toBeLessThan(mocks.listDriveItems.mock.invocationCallOrder[1])
   })
 
   it("keeps rename and move in the more menu without share or delete", async () => {
@@ -571,34 +605,77 @@ describe("DriveModule", () => {
     expect(mocks.deleteDriveItem).toHaveBeenCalledWith({ itemId: "file-1", disablePublications: true })
   })
 
-  it("opens the publications dialog and disables a publication", async () => {
+  it("manages publications from the publications dialog", async () => {
     mocks.listDrivePublications.mockResolvedValue([
       createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
+      createDrivePublication({ id: "pub-row-2", name: "site", type: "site", publishId: "pub_site", url: "https://synapse.test/sites/pub_site/" }),
+      createDrivePublication({ id: "pub-row-3", name: "deleted.html", sourceDeleted: true }),
     ])
     await render(<DriveModule />)
     await flushAct()
 
     await clickButtonText("已发布")
     await flushAct()
+
+    expect(document.body.textContent).toContain("report.html")
+    expect(document.body.textContent).toContain("网页")
+    expect(document.body.textContent).toContain("site")
+    expect(document.body.textContent).toContain("站点")
+    expect(document.body.textContent).toContain("来源正常")
+    expect(document.body.textContent).toContain("deleted.html")
+    expect(document.body.textContent).toContain("来源已删除")
+    expect(queryButtonByLabel("重新发布 deleted.html")).toBeNull()
+
+    await clickButtonByLabel("复制 report.html")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_test")
+    expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
+
+    await clickButtonByLabel("打开 report.html")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/pages/pub_test")
+
+    await clickButtonByLabel("重新发布 report.html")
+    expect(mocks.redeployDrivePublication).toHaveBeenCalledWith({ publicationId: "pub-row-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("已重新发布")
+
     await clickButtonByLabel("取消发布 report.html")
 
     expect(mocks.listDrivePublications).toHaveBeenCalled()
+    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(3)
     expect(mocks.disableDrivePublication).toHaveBeenCalledWith({ publicationId: "pub-row-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
 
-  it("opens the shares dialog and disables a share", async () => {
+  it("manages shares from the shares dialog", async () => {
     mocks.listDriveShares.mockResolvedValue([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
+      createDriveShare({ id: "share-row-2", shareId: "shr_folder", itemName: "folder", itemType: "folder", sourceDeleted: true, url: "https://synapse.test/files/shr_folder" }),
     ])
     await render(<DriveModule />)
     await flushAct()
 
     await clickButtonText("已分享")
     await flushAct()
+
+    expect(document.body.textContent).toContain("report.txt")
+    expect(document.body.textContent).toContain("文件")
+    expect(document.body.textContent).toContain("来源正常")
+    expect(document.body.textContent).toContain("folder")
+    expect(document.body.textContent).toContain("文件夹")
+    expect(document.body.textContent).toContain("来源已删除")
+
+    await clickButtonByLabel("复制 report.txt")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
+    expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
+
+    await clickButtonByLabel("打开 report.txt")
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/files/shr_test")
+
     await clickButtonByLabel("取消分享 report.txt")
 
     expect(mocks.listDriveShares).toHaveBeenCalled()
+    expect(mocks.listDriveShares).toHaveBeenCalledTimes(2)
     expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "shr_test" })
+    expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
   it("moves an item to a nested folder selected from the tree", async () => {
@@ -802,12 +879,16 @@ async function clickText(text: string): Promise<void> {
 }
 
 async function clickButtonByLabel(label: string): Promise<void> {
-  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  const button = queryButtonByLabel(label)
   if (!button) throw new Error(`Button not found: ${label}`)
   await act(async () => {
     button.click()
     await flushPromises()
   })
+}
+
+function queryButtonByLabel(label: string): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
 }
 
 async function clickCheckboxByLabel(label: string): Promise<void> {
