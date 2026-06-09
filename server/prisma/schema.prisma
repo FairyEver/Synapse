@@ -373,6 +373,7 @@ model DrivePublicationDeployment {
   error                  String?
   assets                 DrivePublicationAsset[]
 
+  @@unique([id, publicationId])
   @@index([publicationId, createdAt])
   @@index([status])
 }
@@ -382,7 +383,7 @@ model DrivePublicationAsset {
   publicationId String
   publication   DrivePublication           @relation(fields: [publicationId], references: [id], onDelete: Cascade)
   deploymentId  String
-  deployment    DrivePublicationDeployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  deployment    DrivePublicationDeployment @relation(fields: [deploymentId, publicationId], references: [id, publicationId], onDelete: Cascade)
   sourceItemId  String?
   sourceItem    DriveItem?                  @relation(fields: [sourceItemId], references: [id], onDelete: SetNull)
   relativePath  String                     @db.VarChar(1024)

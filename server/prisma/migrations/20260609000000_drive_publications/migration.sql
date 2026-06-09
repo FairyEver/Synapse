@@ -40,6 +40,7 @@ CREATE UNIQUE INDEX "DrivePublication_publishId_key" ON "DrivePublication"("publ
 CREATE INDEX "DrivePublication_userId_createdAt_idx" ON "DrivePublication"("userId", "createdAt");
 CREATE INDEX "DrivePublication_sourceItemId_status_idx" ON "DrivePublication"("sourceItemId", "status");
 CREATE INDEX "DrivePublication_status_idx" ON "DrivePublication"("status");
+CREATE UNIQUE INDEX "DrivePublicationDeployment_id_publicationId_key" ON "DrivePublicationDeployment"("id", "publicationId");
 CREATE INDEX "DrivePublicationDeployment_publicationId_createdAt_idx" ON "DrivePublicationDeployment"("publicationId", "createdAt");
 CREATE INDEX "DrivePublicationDeployment_status_idx" ON "DrivePublicationDeployment"("status");
 CREATE UNIQUE INDEX "DrivePublicationAsset_storageKey_key" ON "DrivePublicationAsset"("storageKey");
@@ -52,5 +53,5 @@ ALTER TABLE "DrivePublication" ADD CONSTRAINT "DrivePublication_sourceItemId_fke
 ALTER TABLE "DrivePublication" ADD CONSTRAINT "DrivePublication_currentDeploymentId_fkey" FOREIGN KEY ("currentDeploymentId") REFERENCES "DrivePublicationDeployment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "DrivePublicationDeployment" ADD CONSTRAINT "DrivePublicationDeployment_publicationId_fkey" FOREIGN KEY ("publicationId") REFERENCES "DrivePublication"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "DrivePublicationAsset" ADD CONSTRAINT "DrivePublicationAsset_publicationId_fkey" FOREIGN KEY ("publicationId") REFERENCES "DrivePublication"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "DrivePublicationAsset" ADD CONSTRAINT "DrivePublicationAsset_deploymentId_fkey" FOREIGN KEY ("deploymentId") REFERENCES "DrivePublicationDeployment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "DrivePublicationAsset" ADD CONSTRAINT "DrivePublicationAsset_deploymentId_publicationId_fkey" FOREIGN KEY ("deploymentId", "publicationId") REFERENCES "DrivePublicationDeployment"("id", "publicationId") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "DrivePublicationAsset" ADD CONSTRAINT "DrivePublicationAsset_sourceItemId_fkey" FOREIGN KEY ("sourceItemId") REFERENCES "DriveItem"("id") ON DELETE SET NULL ON UPDATE CASCADE;
