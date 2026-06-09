@@ -8,11 +8,14 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
+import type { SynapseAgentBridgeAttachment } from "@/types/bridge"
 import { DEFAULT_LOCAL_SESSION_KEY } from "../utils"
 import {
   clearConversationUnread,
   shouldApplyTimelineSnapshot,
 } from "../live-sync"
+import type { AgentDraftAttachment } from "../attachments"
+import { formatDraftAttachmentsForMessage } from "../attachments"
 import type { ChatAction, ChatState } from "./use-chat-reducer"
 
 const logger = createRendererLogger("agent")
@@ -24,6 +27,10 @@ type TimelineTarget = {
 }
 
 type SendMessageTarget = TimelineTarget
+
+type SendMessageOptions = {
+  readonly attachments?: readonly AgentDraftAttachment[]
+}
 
 type ChatConnectionRefs = {
   readonly projectIdsRef: React.RefObject<string[]>
@@ -55,7 +62,7 @@ type ChatConnectionResult = {
     modelTier?: string,
   ) => Promise<void>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
-  readonly sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
+  readonly sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
@@ -502,9 +509,14 @@ function useChatConnection(
     state.sessions,
   ])
 
-  const sendMessage = useCallback(async (content: string, target?: SendMessageTarget) => {
-    const trimmed = content.trim()
-    if (!trimmed) return false
+  const sendMessage = useCallback(async (
+    content: string,
+    target?: SendMessageTarget,
+    options: SendMessageOptions = {},
+  ) => {
+    const attachments = options.attachments ?? []
+    const readableContent = formatDraftAttachmentsForMessage(content, attachments).trim()
+    if (!readableContent) return false
     const selected = target
       ? findSessionByRef(state.sessions, target.projectId, target.conversationId)
       : findSessionByRef(
@@ -517,7 +529,7 @@ function useChatConnection(
     const conversationId = target?.conversationId ?? selected?.id
     const sessionKey = target?.sessionKey ?? selected?.sessionKey ?? selectedSessionKeyRef.current
     const now = new Date().toISOString()
-    const optimisticItem = localUserTimelineItem(trimmed, now, state.timeline.length)
+    const optimisticItem = localUserTimelineItem(readableContent, now, state.timeline.length)
     let didAppendOptimisticItem = false
     if (isSelectedTimelineTarget(target ?? {
       projectId,
@@ -542,7 +554,8 @@ function useChatConnection(
         projectId,
         sessionKey,
         conversationId,
-        content: trimmed,
+        content: readableContent,
+        attachments: serializeDraftAttachments(attachments),
         clientSubmittedAt: now,
       })
       // NOTE: send() resolves when the message is enqueued, NOT when the turn
@@ -555,12 +568,12 @@ function useChatConnection(
         projectId,
         conversationId,
         sessionKey,
-        messageLength: trimmed.length,
+        messageLength: readableContent.length,
         boundary: "renderer.agent.send",
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
-      dispatch({ type: "SET_ERROR", error: "发送失败" })
+      dispatch({ type: "SET_ERROR", error: sendFailureDisplayMessage(rawError) })
       if (didAppendOptimisticItem) {
         updateTimeline((current) => current.filter((item) => item.id !== optimisticItem.id))
       }
@@ -873,7 +886,7 @@ function useChatConnection(
 }
 
 export { useChatConnection }
-export type { ChatConnectionRefs, ChatConnectionResult, SendMessageTarget, TimelineTarget }
+export type { ChatConnectionRefs, ChatConnectionResult, SendMessageOptions, SendMessageTarget, TimelineTarget }
 
 function normalizeSessionProject(
   session: SynapseAgentSessionSummary,
@@ -919,6 +932,29 @@ function isSelectedTimelineTarget(
   return target.sessionKey === selected.sessionKey
 }
 
+function serializeDraftAttachments(
+  attachments: readonly AgentDraftAttachment[],
+): SynapseAgentBridgeAttachment[] | undefined {
+  if (attachments.length === 0) return undefined
+  return attachments.map((attachment) => {
+    if (attachment.kind === "image") {
+      return {
+        kind: "image",
+        mimeType: attachment.mimeType,
+        data: attachment.bytes,
+        name: attachment.name,
+        size: attachment.size,
+      }
+    }
+    return {
+      kind: "path",
+      path: attachment.path,
+      entryType: attachment.entryType,
+      name: attachment.name,
+    }
+  })
+}
+
 function sessionSnapshotForLog(
   sessions: readonly SynapseAgentSessionSummary[],
 ): Array<Record<string, unknown>> {
@@ -936,6 +972,19 @@ function sessionSnapshotForLog(
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return typeof error === "string" ? error : "Unknown error"
+}
+
+function sendFailureDisplayMessage(error: unknown): string {
+  const message = errorMessage(error)
+  return isAttachmentFailureMessage(message) ? message : "发送失败"
+}
+
+function isAttachmentFailureMessage(message: string): boolean {
+  return message === "图片附件过大。"
+    || message === "附件路径不存在。"
+    || message === "附件路径不能是符号链接。"
+    || message === "附件路径必须是文件或文件夹。"
+    || message === "当前会话无法访问新附件路径。请开启新会话后重试。"
 }
 
 function isPermissionNotPendingError(error: unknown): boolean {

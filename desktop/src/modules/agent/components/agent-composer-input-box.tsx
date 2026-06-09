@@ -8,6 +8,7 @@ type AgentComposerInputBoxProps = {
   readonly pendingMessages?: ReactNode
   readonly contextNotice?: ReactNode
   readonly slashMenu?: ReactNode
+  readonly attachments?: ReactNode
 }
 
 function AgentComposerInputBox({
@@ -18,6 +19,7 @@ function AgentComposerInputBox({
   pendingMessages,
   contextNotice,
   slashMenu,
+  attachments,
 }: AgentComposerInputBoxProps) {
   return (
     <div
@@ -34,6 +36,11 @@ function AgentComposerInputBox({
         {contextNotice ? (
           <div className="agent-composer-input-box__notice flex min-w-0 justify-center bg-muted/50 px-3 py-1 -mx-2 -mt-2 mb-1 rounded-t-2xl">
             {contextNotice}
+          </div>
+        ) : null}
+        {attachments ? (
+          <div className="agent-composer-input-box__attachments border-b border-border px-1 pb-2">
+            {attachments}
           </div>
         ) : null}
         <div className="agent-composer-input-box__editor min-h-0 flex-1">

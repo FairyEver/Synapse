@@ -9,6 +9,7 @@ import {
   removePendingMessage,
   targetKey,
 } from "../pending-message-queue"
+import { createPathAttachment } from "../attachments"
 
 const targetA = {
   projectId: "project-a",
@@ -117,5 +118,29 @@ describe("pending message queue", () => {
 
   it("uses project, conversation, and session key for queue identity", () => {
     expect(targetKey(targetA)).toBe("project-a\u0000conversation-a\u0000local:renderer")
+  })
+
+  it("preserves attachments through enqueue and retry transitions", () => {
+    const attachments = [
+      createPathAttachment({
+        id: "path-1",
+        path: "/Users/liyang/Desktop/brief.md",
+        entryType: "file",
+      }),
+    ]
+
+    const queued = enqueuePendingMessage({
+      id: "pending-1",
+      content: "",
+      attachments,
+      target: targetA,
+      createdAt: "2026-05-13T10:00:00.000Z",
+    })
+    const failed = markPendingMessageFailed(queued, "发送失败")
+    const retried = enqueuePendingMessage(failed)
+
+    expect(queued.attachments).toBe(attachments)
+    expect(failed.attachments).toBe(attachments)
+    expect(retried.attachments).toBe(attachments)
   })
 })

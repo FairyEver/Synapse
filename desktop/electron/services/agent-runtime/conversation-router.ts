@@ -38,6 +38,7 @@ import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
 import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput } from "./project-contributions"
+import { withReadablePathAttachmentContent } from "./attachments"
 import type {
   PendingPermissionState,
   RuntimeSessionState,
@@ -178,6 +179,7 @@ export class ConversationRouter {
     timeoutMs: number,
   ): Promise<AgentRuntimeRelayResult> {
     this.assertProject(message)
+    message = withReadablePathAttachmentContent(message)
 
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
@@ -263,6 +265,7 @@ export class ConversationRouter {
     conversation: ConversationEntryV1,
     options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
   ): Promise<AgentRuntimeTurnResult> {
+    message = withReadablePathAttachmentContent(message)
     this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
@@ -538,7 +541,7 @@ export class ConversationRouter {
           ...errorMetadata(error),
         },
       })
-      throw new Error(AGENT_SPAWN_PERMISSION_CHECK_FAILED_MESSAGE)
+      throw new Error(AGENT_SPAWN_PERMISSION_CHECK_FAILED_MESSAGE, { cause: error })
     }
   }
 
@@ -1622,15 +1625,13 @@ function metadataWithoutLocalCost(
   metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
 ): ConversationEntryV1["history"][number]["metadata"] | undefined {
   if (!metadata) return undefined
-  const {
-    costCny: _costCny,
-    costBreakdownCny: _costBreakdownCny,
-    costCurrency: _costCurrency,
-    totalCostCny: _totalCostCny,
-    totalCostBreakdownCny: _totalCostBreakdownCny,
-    estimatedCost: _estimatedCost,
-    ...rest
-  } = metadata
+  const rest = { ...metadata }
+  delete rest.costCny
+  delete rest.costBreakdownCny
+  delete rest.costCurrency
+  delete rest.totalCostCny
+  delete rest.totalCostBreakdownCny
+  delete rest.estimatedCost
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 

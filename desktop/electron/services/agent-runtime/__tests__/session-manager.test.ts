@@ -301,6 +301,94 @@ describe("SessionManager", () => {
     }))
   })
 
+  it("passes external attachment directories into new live sessions", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: {
+        ...baseMessage("default"),
+        attachments: [
+          {
+            kind: "path",
+            path: "/Users/liyang/Desktop/report.pdf",
+            entryType: "file",
+          },
+          {
+            kind: "path",
+            path: "/Users/liyang/Downloads/sources",
+            entryType: "directory",
+          },
+          {
+            kind: "path",
+            path: "/tmp/project/inside.md",
+            entryType: "file",
+          },
+        ],
+      },
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      additionalDirectories: [
+        "/Users/liyang/Desktop",
+        "/Users/liyang/Downloads/sources",
+      ],
+    }))
+  })
+
+  it("blocks existing live sessions when new external attachment directories were not configured", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    await expect(manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: {
+        ...baseMessage("default"),
+        attachments: [{
+          kind: "path",
+          path: "/Users/liyang/Desktop/report.pdf",
+          entryType: "file",
+        }],
+      },
+    })).rejects.toThrow("当前会话无法访问新附件路径")
+    expect(createSession).toHaveBeenCalledOnce()
+  })
+
   it("records the final model after provider env reply target env and model tier resolution", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())

@@ -1067,6 +1067,42 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("adds readable path attachment context when content is blank", async () => {
+    const session = new ScriptedSession([
+      { type: "result", content: "read paths", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const { conversations, router } = createRouter({ session })
+
+    const result = await router.send({
+      ...baseMessage(""),
+      attachments: [
+        {
+          kind: "path",
+          path: "/Users/liyang/Desktop/report.pdf",
+          entryType: "file",
+        },
+        {
+          kind: "path",
+          path: "/Users/liyang/Downloads/sources",
+          entryType: "directory",
+        },
+      ],
+    })
+    const savedConversation = await conversations.get(result.conversationId)
+
+    const readableContent = [
+      "粘贴文件:",
+      "/Users/liyang/Desktop/report.pdf",
+      "",
+      "粘贴文件夹:",
+      "/Users/liyang/Downloads/sources",
+    ].join("\n")
+    expect(session.sent).toEqual([readableContent])
+    expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([
+      expect.objectContaining({ content: readableContent }),
+    ])
+  })
+
   it("calls afterTurn after a live turn completes", async () => {
     const afterTurn = vi.fn()
     const session = new ScriptedSession([

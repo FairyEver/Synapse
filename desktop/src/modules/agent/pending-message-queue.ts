@@ -1,3 +1,5 @@
+import type { AgentDraftAttachment } from "./attachments"
+
 type PendingMessageTarget = {
   readonly projectId: string
   readonly conversationId: string
@@ -9,6 +11,7 @@ type PendingMessageStatus = "queued" | "sending" | "failed"
 type PendingMessageInput = {
   readonly id: string
   readonly content: string
+  readonly attachments?: readonly AgentDraftAttachment[]
   readonly target: PendingMessageTarget
   readonly createdAt: string
 }
@@ -28,6 +31,7 @@ function enqueuePendingMessage(input: PendingMessageInput): PendingMessage {
   return {
     id: input.id,
     content: input.content,
+    attachments: input.attachments,
     target: input.target,
     createdAt: input.createdAt,
     status: "queued",

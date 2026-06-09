@@ -13,7 +13,7 @@ import type { UnreadState } from "../live-sync"
 import { chatReducer, initialChatState } from "./use-chat-reducer"
 import type { ChatState } from "./use-chat-reducer"
 import { useChatConnection } from "./use-chat-connection"
-import type { SendMessageTarget } from "./use-chat-connection"
+import type { SendMessageOptions, SendMessageTarget } from "./use-chat-connection"
 import { useChatEvents } from "./use-chat-events"
 
 type UseAgentChatState = {
@@ -45,7 +45,7 @@ type UseAgentChatState = {
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
-  sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
+  sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
   respondPermission: (
     requestId: string,

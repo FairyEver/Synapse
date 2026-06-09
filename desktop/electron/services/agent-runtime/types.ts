@@ -3,12 +3,24 @@ import type { SynapseAgentConversationTarget } from "../../../src/types/agent-na
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
-export interface AgentAttachment {
-  readonly kind: string
-  readonly path?: string
-  readonly mimeType?: string
-  readonly metadata?: Record<string, unknown>
+export type AgentImageAttachment = {
+  readonly kind: "image"
+  readonly mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+  readonly data: ArrayBuffer | Uint8Array
+  readonly name?: string
+  readonly size?: number
 }
+
+export type AgentPathAttachment = {
+  readonly kind: "path"
+  readonly path: string
+  readonly entryType: "file" | "directory"
+  readonly name?: string
+}
+
+export type AgentAttachment =
+  | AgentImageAttachment
+  | AgentPathAttachment
 
 export interface AgentMessage {
   readonly projectId: string

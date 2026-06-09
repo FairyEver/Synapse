@@ -1,12 +1,13 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type FormEvent, type Ref } from "react"
+import { act, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type Ref } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AgentComposer } from "../components/agent-composer"
+import type { AgentDraftAttachment } from "../attachments"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -39,6 +40,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
 })
 
@@ -468,6 +470,535 @@ describe("AgentComposer", () => {
     expect(html).toContain("disabled")
   })
 
+  it("renders a pasted image attachment and lets users delete it", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    const image = imageFile([1, 2, 3], "screen.png", "image/png")
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => image,
+        }],
+      }))
+      await wait(0)
+    })
+
+    expect(container.textContent).toContain("[Image #1]")
+    expect(container.querySelector('button[aria-label^="删除附件"]')).toBeTruthy()
+
+    await act(async () => {
+      container.querySelector('button[aria-label^="删除附件"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(container.textContent).not.toContain("[Image #1]")
+  })
+
+  it("renders dropped path files and folders as path context", async () => {
+    const filePathForDroppedFile = installToolsBridge()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const file = withPath(new File(["content"], "brief.md", { type: "text/markdown" }), "/Users/liyang/Desktop/brief.md")
+    const folder = withPath(new File([], "materials"), "/Users/liyang/Downloads/materials")
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+
+    await act(async () => {
+      form!.dispatchEvent(createDropEvent([file, folder]))
+      await wait(0)
+    })
+
+    expect(container.textContent).toContain("/Users/liyang/Desktop/brief.md")
+    expect(container.textContent).toContain("/Users/liyang/Downloads/materials")
+    expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(2)
+    expect(filePathForDroppedFile).toHaveBeenCalledTimes(2)
+  })
+
+  it("resolves dropped file paths through the bridge before legacy file path fallback", async () => {
+    const filePathForDroppedFile = installToolsBridge((file) =>
+      file.name === "bridge.md" ? "/Users/liyang/Bridge/bridge.md" : null)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const file = withPath(new File(["content"], "bridge.md", { type: "text/markdown" }), "/legacy/bridge.md")
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+
+    await act(async () => {
+      form!.dispatchEvent(createDropEvent([file]))
+      await wait(0)
+    })
+
+    expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
+    expect(container.textContent).toContain("/Users/liyang/Bridge/bridge.md")
+    expect(container.textContent).not.toContain("/legacy/bridge.md")
+  })
+
+  it("submits attachment-only drafts when canSend is false because text is empty", async () => {
+    const onSubmit = vi.fn((
+      event: FormEvent,
+      _attachments: readonly AgentDraftAttachment[],
+    ) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    const image = imageFile([4, 5], "visual.webp", "image/webp")
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/webp",
+          getAsFile: () => image,
+        }],
+      }))
+      await wait(0)
+    })
+
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+    expect(sendButton!.disabled).toBe(false)
+
+    await act(async () => {
+      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0]?.[1]).toHaveLength(1)
+  })
+
+  it("clears attachment rows after an accepted click submit", async () => {
+    const onSubmit = vi.fn((
+      event: FormEvent,
+      _attachments: readonly AgentDraftAttachment[],
+      accept: () => void,
+    ) => {
+      event.preventDefault()
+      accept()
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => imageFile([8, 9], "accepted.png", "image/png"),
+        }],
+      }))
+      await wait(0)
+    })
+
+    expect(container.textContent).toContain("[Image #1]")
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+
+    await act(async () => {
+      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(container.textContent).not.toContain("[Image #1]")
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')?.disabled).toBe(true)
+  })
+
+  it("keeps attachment rows when submit is not accepted", async () => {
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => imageFile([1, 1], "rejected.png", "image/png"),
+        }],
+      }))
+      await wait(0)
+    })
+
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+
+    await act(async () => {
+      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain("[Image #1]")
+  })
+
+  it("restores attachment rows when an accepted submit is restored", async () => {
+    const onSubmit = vi.fn((
+      event: FormEvent,
+      _attachments: readonly AgentDraftAttachment[],
+      accept: () => () => void,
+    ) => {
+      event.preventDefault()
+      const restore = accept()
+      restore()
+      restore()
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => imageFile([3, 3], "restore.png", "image/png"),
+        }],
+      }))
+      await wait(0)
+    })
+
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+
+    await act(async () => {
+      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain("[Image #1]")
+    expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(1)
+  })
+
+  it("clears attachment rows after an accepted Enter submit", async () => {
+    const onInputKeyDown = vi.fn((
+      event: ReactKeyboardEvent<HTMLTextAreaElement>,
+      _attachments: readonly AgentDraftAttachment[],
+      accept: () => void,
+    ) => {
+      if (event.key !== "Enter") return
+      event.preventDefault()
+      accept()
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={onInputKeyDown}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => imageFile([2, 2], "enter-accepted.png", "image/png"),
+        }],
+      }))
+      await wait(0)
+    })
+
+    expect(container.textContent).toContain("[Image #1]")
+
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }))
+    })
+
+    expect(onInputKeyDown).toHaveBeenCalledTimes(1)
+    expect(container.textContent).not.toContain("[Image #1]")
+  })
+
+  it("passes current attachments to Enter submissions", async () => {
+    const onInputKeyDown = vi.fn((
+      _event: unknown,
+      _attachments: readonly AgentDraftAttachment[],
+    ) => undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={onInputKeyDown}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    const image = imageFile([6, 7], "enter.png", "image/png")
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "image/png",
+          getAsFile: () => image,
+        }],
+      }))
+      await wait(0)
+    })
+
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }))
+    })
+
+    expect(onInputKeyDown).toHaveBeenCalledTimes(1)
+    const [, attachments] = onInputKeyDown.mock.calls[0] ?? []
+    expect(attachments).toHaveLength(1)
+    expect(attachments?.[0]).toMatchObject({
+      kind: "image",
+      name: "enter.png",
+      mimeType: "image/png",
+      size: 2,
+    })
+  })
+
+  it("treats pasted absolute paths with trailing separators as directories", async () => {
+    const onSubmit = vi.fn((
+      event: FormEvent,
+      _attachments: readonly AgentDraftAttachment[],
+    ) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [],
+        text: "/Users/liyang/Downloads/materials/\nC:\\Users\\liyang\\Pictures\\",
+      }))
+    })
+
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+
+    await act(async () => {
+      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    const [, attachments] = onSubmit.mock.calls[0] ?? []
+    expect(attachments).toEqual([
+      expect.objectContaining({
+        kind: "path",
+        path: "/Users/liyang/Downloads/materials/",
+        entryType: "directory",
+        name: "materials",
+      }),
+      expect.objectContaining({
+        kind: "path",
+        path: "C:\\Users\\liyang\\Pictures\\",
+        entryType: "directory",
+        name: "Pictures",
+      }),
+    ])
+  })
+
   it("renders queued and failed messages above the input", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
@@ -820,6 +1351,7 @@ describe("AgentComposer", () => {
       metadata: {
         boundary: "renderer.agent.composer-submit",
         draftLength: 18,
+        attachmentCount: 0,
         canSend: true,
         sending: true,
         pendingCount: 1,
@@ -1603,4 +2135,70 @@ async function hoverElement(element: HTMLElement) {
     element.focus()
     await wait(120)
   })
+}
+
+function withPath<T extends File>(file: T, path: string): T {
+  Object.defineProperty(file, "path", {
+    configurable: true,
+    value: path,
+  })
+  return file
+}
+
+function imageFile(bytes: readonly number[], name: string, type: "image/png" | "image/webp"): File {
+  const file = new File([new Uint8Array(bytes)], name, { type })
+  Object.defineProperty(file, "arrayBuffer", {
+    configurable: true,
+    value: () => Promise.resolve(new Uint8Array(bytes).buffer),
+  })
+  return file
+}
+
+function createPasteEvent(input: {
+  readonly items: Array<{
+    readonly kind: string
+    readonly type: string
+    readonly getAsFile: () => File | null
+  }>
+  readonly text?: string
+}): Event {
+  const event = new Event("paste", { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "clipboardData", {
+    configurable: true,
+    value: {
+      items: input.items,
+      getData: (type: string) => type === "text/plain" ? input.text ?? "" : "",
+    },
+  })
+  return event
+}
+
+function createDropEvent(files: readonly File[]): Event {
+  const event = new Event("drop", { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "dataTransfer", {
+    configurable: true,
+    value: {
+      files,
+    },
+  })
+  return event
+}
+
+function installToolsBridge(
+  filePathForDroppedFile: (file: File) => string | null = (file) =>
+    (file as File & { readonly path?: string }).path ?? null,
+) {
+  const filePathForDroppedFileMock = vi.fn(filePathForDroppedFile)
+  ;(window as unknown as {
+    synapse?: {
+      tools: {
+        filePathForDroppedFile: typeof filePathForDroppedFileMock
+      }
+    }
+  }).synapse = {
+    tools: {
+      filePathForDroppedFile: filePathForDroppedFileMock,
+    },
+  }
+  return filePathForDroppedFileMock
 }

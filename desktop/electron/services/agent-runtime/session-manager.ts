@@ -9,6 +9,11 @@ import {
   AGENT_PROVIDER_REQUIRED_MESSAGE,
   AGENT_SESSION_RESETTING_MESSAGE,
 } from "./agent-error-messages"
+import {
+  directoriesForPathAttachments,
+  hasUnconfiguredAttachmentDirectories,
+  normalizeAgentAttachments,
+} from "./attachments"
 import { ClaudeSDKSession, DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./claude-sdk-session"
 import type {
   AgentSdkAgentDefinitions,
@@ -41,6 +46,7 @@ export interface CreateAgentLiveSessionInput {
   readonly allowPluginHooks?: boolean
   readonly agents?: AgentSdkAgentDefinitions
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
+  readonly additionalDirectories?: readonly string[]
   readonly abortSignal?: AbortSignal
 }
 
@@ -79,6 +85,7 @@ export interface SessionManagerDeps {
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
+const AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE = "当前会话无法访问新附件路径。请开启新会话后重试。"
 
 export class SessionManager {
   private readonly deps: SessionManagerDeps
@@ -102,6 +109,7 @@ export class SessionManager {
         allowPluginHooks: input.allowPluginHooks,
         agents: input.agents,
         subagentToolPolicies: input.subagentToolPolicies,
+        additionalDirectories: input.additionalDirectories,
         abortSignal: input.abortSignal,
         logger: deps.logger,
         now: deps.now,
@@ -157,6 +165,11 @@ export class SessionManager {
       throw new Error(AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE)
     }
     await this.deps.validateWorkspacePath?.(cwd)
+    const attachments = normalizeAgentAttachments(input.message.attachments)
+    const additionalDirectories = directoriesForPathAttachments({
+      cwd,
+      attachments,
+    })
 
     const modeOverride = input.message.modeOverride ?? input.conversation.agentConfig?.mode
     const providerMatches = input.state.providerId === providerId
@@ -186,6 +199,13 @@ export class SessionManager {
       && modeMatches
       && modelMatches
     ) {
+      if (hasUnconfiguredAttachmentDirectories({
+        cwd,
+        attachments,
+        configuredDirectories: input.state.additionalDirectories ?? [],
+      })) {
+        throw new Error(AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE)
+      }
       return { liveSession: input.state.liveSession, created: false }
     }
 
@@ -228,12 +248,14 @@ export class SessionManager {
       subagentToolPolicies: await Promise.resolve(
         this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},
       ),
+      additionalDirectories,
       abortSignal: input.abortSignal,
     })
     input.state.liveSession = liveSession
     input.state.providerId = providerId
     input.state.effectiveModel = env.ANTHROPIC_MODEL
     input.state.modeOverride = modeOverride
+    input.state.additionalDirectories = additionalDirectories
     this.deps.logger?.info("Created agent live session.", {
       boundary: "agent-runtime.live-session.create",
       projectId: this.deps.projectId,
@@ -302,6 +324,7 @@ export class SessionManager {
     state.liveSession = undefined
     state.providerId = undefined
     state.modeOverride = undefined
+    state.additionalDirectories = undefined
   }
 
   async closeState(conversationId: string): Promise<void> {

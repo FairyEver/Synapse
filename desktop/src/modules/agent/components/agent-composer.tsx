@@ -1,6 +1,17 @@
-import { type FormEvent, type KeyboardEvent, useMemo, useRef, useEffect, useState } from "react"
-import { ArrowUp, ChevronDown, CornerDownRight, RotateCcw, Square, Trash2 } from "lucide-react"
+import {
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  useMemo,
+  useRef,
+  useEffect,
+  useState,
+} from "react"
+import { ArrowUp, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon, RotateCcw, Square, Trash2, X } from "lucide-react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
 import {
   Dialog,
   DialogContent,
@@ -18,6 +29,14 @@ import { insertTextAtComposerSelection } from "../composer-insert"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
+import {
+  createImageAttachment,
+  createPathAttachment,
+  formatDraftAttachmentsForMessage,
+  nextImageLabel,
+  type AgentDraftAttachment,
+  type AgentDraftImageAttachment,
+} from "../attachments"
 import { AgentComposerInputBox } from "./agent-composer-input-box"
 import { AgentConversationRolloverPrompt } from "./agent-conversation-rollover-prompt"
 import {
@@ -37,6 +56,15 @@ import {
 
 const SINGLE_LINE_HEIGHT = 48
 const MAX_TEXTAREA_HEIGHT = 160
+const logger = createRendererLogger("agent")
+const SUPPORTED_IMAGE_MIME_TYPES = new Set<AgentDraftImageAttachment["mimeType"]>([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+])
+type RestoreAttachments = () => void
+type AcceptAttachments = () => RestoreAttachments
 
 function AgentComposer({
   draft,
@@ -80,8 +108,16 @@ function AgentComposer({
   readonly quickInputs?: readonly SynapseQuickInput[]
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
   readonly onDraftChange: (value: string) => void
-  readonly onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
-  readonly onSubmit: (event: FormEvent) => void
+  readonly onInputKeyDown: (
+    event: KeyboardEvent<HTMLTextAreaElement>,
+    attachments: readonly AgentDraftAttachment[],
+    acceptAttachments: AcceptAttachments,
+  ) => void
+  readonly onSubmit: (
+    event: FormEvent,
+    attachments: readonly AgentDraftAttachment[],
+    acceptAttachments: AcceptAttachments,
+  ) => void
   readonly onCancelTurn: () => void
   readonly onForceKillTurn: () => void
   readonly onJumpToBottom?: () => void
@@ -101,6 +137,7 @@ function AgentComposer({
   const [slashMenuDismissed, setSlashMenuDismissed] = useState(false)
   const [highlightedSlashIndex, setHighlightedSlashIndex] = useState(0)
   const [selectionStart, setSelectionStart] = useState(0)
+  const [attachments, setAttachments] = useState<AgentDraftAttachment[]>([])
   const activeSlashFragment = useMemo(
     () => findAgentSlashFragment(draft, selectionStart),
     [draft, selectionStart],
@@ -114,6 +151,31 @@ function AgentComposer({
   const slashMenuOpen = Boolean(activeSlashFragment && !slashMenuDismissed && slashCandidates.length > 0)
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
   const isNewSessionMode = pendingModeAction === "new-session"
+  const attachmentAwareCanSend = canSend || attachments.length > 0
+
+  const addAttachments = (next: readonly AgentDraftAttachment[]) => {
+    if (next.length === 0) return
+    setAttachments((current) => [...current, ...next])
+  }
+
+  const removeAttachment = (id: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id))
+  }
+
+  const acceptSubmittedAttachments = (submittedAttachments: readonly AgentDraftAttachment[]) => {
+    const submittedIds = new Set(submittedAttachments.map((attachment) => attachment.id))
+    setAttachments((current) => current.filter((attachment) => !submittedIds.has(attachment.id)))
+    let restored = false
+    return () => {
+      if (restored) return
+      restored = true
+      setAttachments((current) => {
+        const currentIds = new Set(current.map((attachment) => attachment.id))
+        const missing = submittedAttachments.filter((attachment) => !currentIds.has(attachment.id))
+        return missing.length === 0 ? current : [...current, ...missing]
+      })
+    }
+  }
 
   const selectPermissionMode = (mode: SynapseAgentPermissionMode) => {
     const capability = getPermissionModeCapability({
@@ -170,13 +232,14 @@ function AgentComposer({
       metadata: {
         boundary: "renderer.agent.composer-submit",
         draftLength: draft.trim().length,
-        canSend,
+        attachmentCount: attachments.length,
+        canSend: attachmentAwareCanSend,
         sending,
         pendingCount: pendingMessages.length,
         permissionMode,
       },
     })
-    onSubmit(event)
+    onSubmit(event, attachments, () => acceptSubmittedAttachments(attachments))
   }
 
   const updateSelectionStart = () => {
@@ -231,7 +294,7 @@ function AgentComposer({
 
   const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) {
-      onInputKeyDown(event)
+      onInputKeyDown(event, attachments, () => acceptSubmittedAttachments(attachments))
       return
     }
 
@@ -271,7 +334,44 @@ function AgentComposer({
       }
     }
 
-    onInputKeyDown(event)
+    onInputKeyDown(event, attachments, () => acceptSubmittedAttachments(attachments))
+  }
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(event.clipboardData.items ?? [])
+    const imageFiles = items
+      .filter((item) => item.kind === "file" && isSupportedImageMimeType(item.type))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file))
+
+    if (imageFiles.length > 0) {
+      event.preventDefault()
+      void addImageFiles(imageFiles, addAttachments).catch((error) => {
+        logger.warn("Agent attachment image read failed.", { error })
+      })
+      return
+    }
+
+    const text = event.clipboardData.getData("text/plain")
+    const pastedPaths = parseAbsolutePathLines(text)
+    if (pastedPaths.length === 0) return
+
+    event.preventDefault()
+    addAttachments(pastedPaths.map((entry) => createPathAttachment({
+      id: createDraftAttachmentId(),
+      path: entry.path,
+      entryType: entry.entryType,
+    })))
+  }
+
+  const handleDrop = (event: DragEvent<HTMLFormElement>) => {
+    const files = Array.from(event.dataTransfer.files ?? [])
+    if (files.length === 0) return
+
+    event.preventDefault()
+    void addDroppedFiles(files, addAttachments).catch((error) => {
+      logger.warn("Agent attachment drop failed.", { error })
+    })
   }
 
   return (
@@ -284,6 +384,8 @@ function AgentComposer({
         ref={formRef}
         className="agent-composer absolute inset-x-4 bottom-5 z-10 mx-auto max-w-2xl md:inset-x-20"
         data-track="agent-composer"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={handleDrop}
         onSubmit={handleSubmit}
       >
         {showJumpToBottom ? (
@@ -334,7 +436,9 @@ function AgentComposer({
                   >
                     <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-muted-foreground">{message.content}</p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {formatDraftAttachmentsForMessage(message.content, message.attachments ?? [])}
+                      </p>
                       {message.status === "failed" ? (
                         <p className="truncate text-xs text-destructive">{message.error ?? "发送失败"}</p>
                       ) : null}
@@ -366,6 +470,37 @@ function AgentComposer({
               </div>
             </ScrollArea>
           ) : null}
+          attachments={attachments.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {attachments.map((attachment, index) => (
+                <div
+                  key={attachment.id}
+                  className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-sm"
+                >
+                  {attachment.kind === "image" ? (
+                    <ImageIcon className="size-4 shrink-0 text-muted-foreground" />
+                  ) : attachment.entryType === "directory" ? (
+                    <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">
+                    {attachmentLabel(attachments, attachment, index)}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`删除附件 ${attachmentRemoveLabel(attachments, attachment, index)}`}
+                    data-track="agent-attachment-remove"
+                    onClick={() => removeAttachment(attachment.id)}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           editor={(
             <Textarea
               ref={textareaRef}
@@ -378,6 +513,7 @@ function AgentComposer({
               }}
               onClick={updateSelectionStart}
               onKeyDown={handleTextareaKeyDown}
+              onPaste={handlePaste}
               onSelect={updateSelectionStart}
               placeholder="输入消息"
               disabled={disabled}
@@ -435,7 +571,7 @@ function AgentComposer({
                   type="submit"
                   className="agent-composer__send rounded-full"
                   size="icon-sm"
-                  disabled={!canSend}
+                  disabled={disabled || !attachmentAwareCanSend}
                   aria-label="发送"
                   data-track="agent-message-send"
                 >
@@ -493,6 +629,112 @@ function AgentComposer({
       </Dialog>
     </>
   )
+}
+
+function isSupportedImageMimeType(type: string): type is AgentDraftImageAttachment["mimeType"] {
+  return SUPPORTED_IMAGE_MIME_TYPES.has(type as AgentDraftImageAttachment["mimeType"])
+}
+
+async function addImageFiles(
+  files: readonly File[],
+  addAttachments: (attachments: readonly AgentDraftAttachment[]) => void,
+) {
+  const images = await Promise.all(files.map(createImageAttachmentFromFile))
+  addAttachments(images)
+}
+
+async function addDroppedFiles(
+  files: readonly File[],
+  addAttachments: (attachments: readonly AgentDraftAttachment[]) => void,
+) {
+  const next = await Promise.all(files.map(async (file) => {
+    if (isSupportedImageMimeType(file.type)) {
+      return createImageAttachmentFromFile(file)
+    }
+    const path = droppedFilePath(file)
+    return createPathAttachment({
+      id: createDraftAttachmentId(),
+      path,
+      entryType: inferDroppedEntryType(file),
+      name: file.name || path,
+    })
+  }))
+  addAttachments(next)
+}
+
+async function createImageAttachmentFromFile(file: File): Promise<AgentDraftImageAttachment> {
+  return createImageAttachment({
+    id: createDraftAttachmentId(),
+    name: file.name || undefined,
+    mimeType: file.type as AgentDraftImageAttachment["mimeType"],
+    size: file.size,
+    bytes: await file.arrayBuffer(),
+  })
+}
+
+function droppedFilePath(file: File): string {
+  return requireSynapseBridge().tools.filePathForDroppedFile(file) || legacyFilePath(file)
+}
+
+function legacyFilePath(file: File): string {
+  return (file as File & { readonly path?: string }).path || file.name
+}
+
+function inferDroppedEntryType(file: File): "file" | "directory" {
+  return file.size === 0 && !file.type ? "directory" : "file"
+}
+
+type PastedPathEntry = {
+  readonly path: string
+  readonly entryType: "file" | "directory"
+}
+
+function parseAbsolutePathLines(text: string): PastedPathEntry[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return []
+  return lines.every(isAbsolutePathLine)
+    ? lines.map((path) => ({
+        path,
+        entryType: hasTrailingPathSeparator(path) ? "directory" : "file",
+      }))
+    : []
+}
+
+function isAbsolutePathLine(value: string): boolean {
+  return value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)
+}
+
+function hasTrailingPathSeparator(value: string): boolean {
+  return /[\\/]$/.test(value)
+}
+
+function attachmentLabel(
+  attachments: readonly AgentDraftAttachment[],
+  attachment: AgentDraftAttachment,
+  index: number,
+): string {
+  if (attachment.kind === "path") return attachment.path
+  return nextImageLabel(imageIndexAt(attachments, index))
+}
+
+function attachmentRemoveLabel(
+  attachments: readonly AgentDraftAttachment[],
+  attachment: AgentDraftAttachment,
+  index: number,
+): string {
+  if (attachment.kind === "path") return attachment.name
+  return nextImageLabel(imageIndexAt(attachments, index))
+}
+
+function imageIndexAt(attachments: readonly AgentDraftAttachment[], index: number): number {
+  return attachments.slice(0, index + 1).filter((attachment) => attachment.kind === "image").length - 1
+}
+
+function createDraftAttachmentId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 export { AgentComposer }
