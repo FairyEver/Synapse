@@ -451,7 +451,10 @@ describe("preload bridge", () => {
 
     await bridge.modelPrice.listCoverage({ source: "all", range: "30d", limit: 100 })
     await bridge.modelPrice.getRules()
+    await bridge.modelPrice.listPresets()
+    await bridge.modelPrice.importPreset("deepseek-official")
     await bridge.modelPrice.saveRules([{ modelPattern: "local-model", inputPer1M: 1 }])
+    await bridge.modelPrice.clearRules()
     await bridge.modelPrice.resetRules()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
@@ -463,8 +466,20 @@ describe("preload bridge", () => {
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:presets:list",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:presets:import",
+      "deepseek-official",
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:model-price:rules:save",
       [{ modelPattern: "local-model", inputPer1M: 1 }],
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:model-price:rules:clear",
+      undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:model-price:rules:reset",

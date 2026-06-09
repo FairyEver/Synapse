@@ -3,6 +3,8 @@ import type {
   ModelPriceCoverageRange,
   ModelPriceCoverageRow,
   ModelPriceCoverageSource,
+  ModelPricePresetId,
+  ModelPricePresetSummary,
   ModelPriceRule,
   ModelPriceRuleInput,
 } from "@/types/bridge"
@@ -12,6 +14,8 @@ export type {
   ModelPriceCoverageRange,
   ModelPriceCoverageRow,
   ModelPriceCoverageSource,
+  ModelPricePresetId,
+  ModelPricePresetSummary,
   ModelPriceRule,
   ModelPriceRuleInput,
 }
