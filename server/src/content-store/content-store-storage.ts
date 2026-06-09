@@ -21,7 +21,7 @@ export interface ContentStoreStoragePort {
     readonly body: Buffer | NodeJS.ReadableStream
     readonly contentType?: string | null
   }): Promise<void>
-  getObjectStream(key: string): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }>
+  getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }>
   headObject(key: string): Promise<ContentStoreStorageObject | null>
   deleteObject(key: string): Promise<void>
 }
@@ -56,13 +56,13 @@ export class LocalContentStoreStorage implements ContentStoreStoragePort {
     this.contentTypes.set(input.key, input.contentType ?? null)
   }
 
-  async getObjectStream(key: string): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
-    const objectPath = this.pathForKey(key)
+  async getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
+    const objectPath = this.pathForKey(input.key)
     const info = await stat(objectPath)
     return {
       stream: createReadStream(objectPath),
       size: BigInt(info.size),
-      contentType: this.contentTypes.get(key) ?? null,
+      contentType: this.contentTypes.get(input.key) ?? null,
     }
   }
 
@@ -119,13 +119,13 @@ export class CosContentStoreStorage implements ContentStoreStoragePort {
     })
   }
 
-  async getObjectStream(key: string): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
+  async getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
     const client = this.getClient()
-    const info = await this.headObjectRaw(key)
+    const info = await this.headObjectRaw(input.key)
     const stream = client.cos.getObjectStream({
       Bucket: client.bucket,
       Region: client.region,
-      Key: key,
+      Key: input.key,
     }) as unknown as NodeJS.ReadableStream
     return {
       stream,
@@ -201,6 +201,5 @@ function isCosNotFound(error: unknown): boolean {
 }
 
 function parseContentLength(value: string | undefined): bigint | undefined {
-  if (!value) return undefined
-  return BigInt(value)
+  return value && /^\d+$/u.test(value) ? BigInt(value) : undefined
 }

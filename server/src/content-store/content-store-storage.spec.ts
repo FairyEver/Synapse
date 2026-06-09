@@ -26,7 +26,7 @@ describe("LocalContentStoreStorage", () => {
     })
 
     await expect(readFile(path.join(root, "content-store/drafts/user-1/draft-1/file.txt"), "utf8")).resolves.toBe("hello")
-    const object = await storage.getObjectStream("content-store/drafts/user-1/draft-1/file.txt")
+    const object = await storage.getObjectStream({ key: "content-store/drafts/user-1/draft-1/file.txt" })
 
     expect(object.size).toBe(5n)
     expect(object.contentType).toBe("text/plain")
