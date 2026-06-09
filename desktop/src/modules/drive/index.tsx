@@ -98,9 +98,16 @@ type DrivePublicationSuccessState = Pick<DrivePublicationDto, "name" | "type" | 
 type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
   readonly url: string
 }
+type DriveStatusBadge = {
+  readonly key: string
+  readonly label: string
+  readonly variant: "secondary" | "destructive" | "outline"
+}
 
 const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
+const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
+const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
 
 function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
@@ -1066,7 +1073,7 @@ function DriveFileList({
         </Empty>
       ) : (
         <ModuleContentPanel>
-          <Table className="min-w-[760px] table-fixed">
+          <Table className="table-fixed">
             <DriveFileTableHeader />
             <TableBody>
               {items.map((item) => (
@@ -1107,10 +1114,10 @@ function DriveFileTableHeader() {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="w-24">状态</TableHead>
-        <TableHead className="w-28 text-right">大小</TableHead>
-        <TableHead className="w-44 text-right">更新时间</TableHead>
-        <TableHead className="w-48 text-right">操作</TableHead>
+        <TableHead className="w-32">状态</TableHead>
+        <TableHead className="w-24 text-right">大小</TableHead>
+        <TableHead className="w-40 text-right">更新时间</TableHead>
+        <TableHead className="w-36 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1118,7 +1125,7 @@ function DriveFileTableHeader() {
 
 function DriveFileTableSkeleton() {
   return (
-    <Table className="min-w-[760px] table-fixed">
+    <Table className="table-fixed">
       <DriveFileTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.map((row) => (
@@ -1130,7 +1137,10 @@ function DriveFileTableSkeleton() {
               </div>
             </TableCell>
             <TableCell>
-              <Skeleton className="h-5 w-16" />
+              <div className="flex items-center gap-1">
+                <Skeleton className="h-5 w-14" />
+                <Skeleton className="h-5 w-14" />
+              </div>
             </TableCell>
             <TableCell>
               <Skeleton className="ml-auto h-4 w-16" />
@@ -1139,7 +1149,7 @@ function DriveFileTableSkeleton() {
               <Skeleton className="ml-auto h-4 w-32" />
             </TableCell>
             <TableCell>
-              <Skeleton className="ml-auto h-7 w-32" />
+              <Skeleton className="ml-auto h-7 w-28" />
             </TableCell>
           </TableRow>
         ))}
@@ -1219,9 +1229,8 @@ function DriveFileListRow({
   readonly onPublishSite: (item: DriveItemDto) => void
   readonly onDisablePublication: (publicationId: string) => void
 }) {
-  const status = driveStatusLabel(item)
-  const statusVariant = driveStatusBadgeVariant(item)
   const isFolder = item.type === "folder"
+  const statusBadges = getDriveStatusBadges(item, publicationActions)
 
   return (
     <TableRow
@@ -1252,10 +1261,10 @@ function DriveFileListRow({
                 onOpenFolder(item)
               }}
             >
-              <span className="truncate">{item.name}</span>
+              <span className="min-w-0 truncate whitespace-nowrap">{item.name}</span>
             </Button>
           ) : (
-            <span className="block min-w-0 truncate font-medium" title={item.name}>
+            <span className="block min-w-0 truncate whitespace-nowrap font-medium" title={item.name}>
               <span className="sr-only">文件 </span>
               {item.name}
             </span>
@@ -1263,7 +1272,15 @@ function DriveFileListRow({
         </div>
       </TableCell>
       <TableCell>
-        {status ? <Badge variant={statusVariant}>{status}</Badge> : null}
+        {statusBadges.length > 0 ? (
+          <div className="flex items-center gap-1">
+            {statusBadges.map((badge) => (
+              <Badge key={badge.key} variant={badge.variant}>
+                {badge.label}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
       </TableCell>
       <TableCell className="text-right tabular-nums text-muted-foreground">
         {isFolder ? "-" : formatBytes(item.size)}
@@ -1277,10 +1294,10 @@ function DriveFileListRow({
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <Button type="button" variant="ghost" size="sm" onClick={() => onShare(item)}>
+          <Button type="button" variant="ghost" size="xs" onClick={() => onShare(item)}>
             分享
           </Button>
-          <Button type="button" variant="destructive" size="sm" onClick={() => onDelete(item)}>
+          <Button type="button" variant="destructive" size="xs" onClick={() => onDelete(item)}>
             删除
           </Button>
           <DriveItemMenu
@@ -2032,25 +2049,42 @@ function isHtmlDriveItem(item: DriveItemDto): boolean {
 
 function formatBytes(value: string): string {
   const bytes = Number(value)
-  if (!Number.isFinite(bytes)) return "-"
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
+  if (!Number.isFinite(bytes) || bytes < 0) return "-"
+
+  let nextValue = bytes
+  let unitIndex = 0
+  while (nextValue >= 1024 && unitIndex < DRIVE_BYTE_UNITS.length - 1) {
+    nextValue /= 1024
+    unitIndex += 1
+  }
+
+  const formattedValue = unitIndex === 0 ? String(Math.round(nextValue)) : DRIVE_BYTE_NUMBER_FORMAT.format(nextValue)
+  return `${formattedValue} ${DRIVE_BYTE_UNITS[unitIndex]}`
 }
 
-function driveStatusLabel(item: DriveItemDto): string {
-  if (item.shared) return "已分享"
-  if (item.storageStatus === "pending") return "上传中"
-  if (item.storageStatus === "failed") return "上传失败"
-  if (item.storageStatus === "delete_pending") return "删除中"
-  return ""
+function getDriveStatusBadges(item: DriveItemDto, publicationActions: DriveItemPublicationActions): DriveStatusBadge[] {
+  const badges: DriveStatusBadge[] = []
+  const storageBadge = getDriveStorageStatusBadge(item.storageStatus)
+  if (storageBadge) badges.push(storageBadge)
+  if (getActiveDrivePublication(item, publicationActions)) {
+    badges.push({ key: "published", label: "已发布", variant: "secondary" })
+  }
+  if (item.shared || item.activeShareId) {
+    badges.push({ key: "shared", label: "已分享", variant: "outline" })
+  }
+  return badges
 }
 
-function driveStatusBadgeVariant(item: DriveItemDto): "secondary" | "destructive" | "outline" {
-  if (item.storageStatus === "failed") return "destructive"
-  if (item.shared) return "secondary"
-  return "outline"
+function getDriveStorageStatusBadge(storageStatus: DriveItemDto["storageStatus"]): DriveStatusBadge | null {
+  if (storageStatus === "pending") return { key: "pending", label: "上传中", variant: "outline" }
+  if (storageStatus === "failed") return { key: "failed", label: "上传失败", variant: "destructive" }
+  if (storageStatus === "delete_pending") return { key: "delete-pending", label: "删除中", variant: "outline" }
+  return null
+}
+
+function getActiveDrivePublication(item: DriveItemDto, publicationActions: DriveItemPublicationActions): DrivePublicationDto | null {
+  if (item.type === "folder") return publicationActions.site ?? publicationActions.page
+  return publicationActions.page ?? publicationActions.site
 }
 
 function formatDriveDateTime(value: string): string {
