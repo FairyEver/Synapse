@@ -417,6 +417,7 @@ function DriveModule() {
           itemId: accessSettingsTarget.item.id,
           ...settings,
         })
+        setAccessSettingsTarget(null)
         setShareSuccess({
           name: accessSettingsTarget.item.name,
           type: accessSettingsTarget.item.type,
@@ -432,6 +433,7 @@ function DriveModule() {
           itemId: accessSettingsTarget.item.id,
           ...settings,
         })
+        setAccessSettingsTarget(null)
         setPublicationSuccess(publication)
         await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
       } else {
@@ -439,10 +441,10 @@ function DriveModule() {
           itemId: accessSettingsTarget.item.id,
           ...settings,
         })
+        setAccessSettingsTarget(null)
         setPublicationSuccess(publication)
         await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
       }
-      setAccessSettingsTarget(null)
       await loadItems()
     } catch (rawError) {
       const fallback = accessSettingsTarget.kind === "share"

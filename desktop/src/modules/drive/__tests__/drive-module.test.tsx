@@ -826,6 +826,26 @@ describe("DriveModule", () => {
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
   })
 
+  it("closes the access settings dialog before waiting for clipboard copy", async () => {
+    const clipboardWrite = createDeferred<void>()
+    mocks.writeClipboardText.mockReturnValueOnce(clipboardWrite.promise)
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("分享")
+    await clickButtonText("确定")
+
+    expect(document.body.textContent).not.toContain("分享设置")
+    expect(document.body.textContent).toContain("文件已分享")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/files/shr_test?password=AbC234xy")
+
+    clipboardWrite.resolve()
+    await flushAct()
+  })
+
   it("shares a folder from the row action and shows the share URL actions", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
