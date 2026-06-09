@@ -285,7 +285,7 @@ export class CcUsageAnalysisService {
   }
 
   resetPricingRules(): ModelPriceRule[] {
-    return new ModelPriceService(this.db).resetRulesToDefaults()
+    return new ModelPriceService(this.db).clearRules()
   }
 
   getTime(range: UsageRangeInput): UsageTimeBucket[] {

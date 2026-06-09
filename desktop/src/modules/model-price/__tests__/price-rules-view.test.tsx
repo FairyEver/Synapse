@@ -64,8 +64,8 @@ afterEach(() => {
 })
 
 describe("PriceRulesView", () => {
-  it("confirms and resets rules to built-in defaults", async () => {
-    modelPriceBridge.resetRules.mockResolvedValueOnce([priceRule({ id: "gpt-5-5", modelPattern: "gpt-5.5", inputPer1M: 36 })])
+  it("confirms and clears rules", async () => {
+    modelPriceBridge.resetRules.mockResolvedValueOnce([])
     const onSaved = vi.fn()
     const host = document.createElement("div")
     document.body.appendChild(host)
@@ -90,21 +90,21 @@ describe("PriceRulesView", () => {
     expect(inputValues()).toContain("local-model")
 
     await act(async () => {
-      clickButton("重置")
+      clickButton("清空")
       await flushPromises()
     })
-    expect(document.body.textContent).toContain("恢复内置默认价格")
+    expect(document.body.textContent).toContain("清空价格规则")
+    expect(document.body.textContent).not.toContain("恢复内置默认价格")
 
     await act(async () => {
-      clickButton("确认重置")
+      clickButton("确认清空")
       await flushPromises()
     })
 
     expect(modelPriceBridge.resetRules).toHaveBeenCalledTimes(1)
-    expect(inputValues()).toContain("gpt-5.5")
     expect(inputValues()).not.toContain("local-model")
     expect(onSaved).toHaveBeenCalledTimes(1)
-    expect(notifications.success).toHaveBeenCalledWith("已重置")
+    expect(notifications.success).toHaveBeenCalledWith("已清空")
   })
 })
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Plus, RotateCcw, Trash2 } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { ModuleContentPanel } from "@/components/module-page"
 import {
@@ -61,7 +61,7 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
   const { error: showError, success: showSuccess } = useAppNotifications()
   const [rows, setRows] = useState<EditablePriceRule[]>([])
   const [saving, setSaving] = useState(false)
-  const [resetting, setResetting] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   useEffect(() => {
     if (!state.data) return
@@ -102,17 +102,17 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
     }
   }
 
-  const reset = async () => {
-    setResetting(true)
+  const clear = async () => {
+    setClearing(true)
     try {
-      const resetRows = await requireSynapseBridge().modelPrice.resetRules()
-      setRows(resetRows.map(toEditableRule))
+      const clearedRows = await requireSynapseBridge().modelPrice.resetRules()
+      setRows(clearedRows.map(toEditableRule))
       onSaved()
-      showSuccess("已重置")
+      showSuccess("已清空")
     } catch {
-      showError("重置失败")
+      showError("清空失败")
     } finally {
-      setResetting(false)
+      setClearing(false)
     }
   }
 
@@ -144,29 +144,29 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
         <div className="flex items-center gap-2">
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" disabled={saving || resetting}>
-                <RotateCcw data-icon="inline-start" />
-                重置
+              <Button type="button" variant="outline" size="sm" disabled={saving || clearing}>
+                <Trash2 data-icon="inline-start" />
+                清空
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>恢复内置默认价格</AlertDialogTitle>
-                <AlertDialogDescription>当前规则会被内置规则替换。</AlertDialogDescription>
+                <AlertDialogTitle>清空价格规则</AlertDialogTitle>
+                <AlertDialogDescription>当前规则会被删除。</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction onClick={() => void reset()} disabled={resetting}>
-                  {resetting ? "重置中" : "确认重置"}
+                <AlertDialogAction onClick={() => void clear()} disabled={clearing}>
+                  {clearing ? "清空中" : "确认清空"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={saving || resetting}>
+          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={saving || clearing}>
             <Plus data-icon="inline-start" />
             添加
           </Button>
-          <Button type="button" size="sm" onClick={() => void save()} disabled={saving || resetting}>
+          <Button type="button" size="sm" onClick={() => void save()} disabled={saving || clearing}>
             {saving ? "保存中" : "保存"}
           </Button>
         </div>

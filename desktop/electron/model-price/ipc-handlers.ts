@@ -39,7 +39,7 @@ export function registerModelPriceHandlers(): void {
     })
     return savedRules
   })
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesReset, async () => modelPrice.resetRulesToDefaults())
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesReset, async () => modelPrice.clearRules())
 
   registered = true
 }

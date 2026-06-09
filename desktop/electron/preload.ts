@@ -1069,6 +1069,7 @@ const synapseBridge: SynapseBridge = {
     listCoverage: (input) => invoke(IPC_CHANNELS["model-price"].coverageList)(input),
     getRules: invoke(IPC_CHANNELS["model-price"].rulesGet),
     saveRules: (rules) => invoke(IPC_CHANNELS["model-price"].rulesSave)(rules),
+    // Compatibility bridge: resetRules currently routes to clear semantics until Task 4 renames the channel/method.
     resetRules: invoke(IPC_CHANNELS["model-price"].rulesReset),
   },
   http: {

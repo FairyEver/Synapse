@@ -1,6 +1,5 @@
 import type { DatabaseSync } from "node:sqlite"
 import { listModelPriceCoverage } from "./coverage"
-import { DEFAULT_MODEL_PRICE_RULES } from "./defaults"
 import { initModelPriceSchema } from "./db-schema"
 import {
   compareModelPriceRules,
@@ -55,9 +54,9 @@ export class ModelPriceService {
     return rules
   }
 
-  resetRulesToDefaults(): ModelPriceRule[] {
-    replaceModelPriceRules(this.db, DEFAULT_MODEL_PRICE_RULES)
-    return this.listRules()
+  clearRules(): ModelPriceRule[] {
+    replaceModelPriceRules(this.db, [])
+    return []
   }
 
   getRule(ruleId: string): ModelPriceRule | null {

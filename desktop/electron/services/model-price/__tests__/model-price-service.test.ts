@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
 import { initModelPriceSchema, ModelPriceService } from "../service"
-import { DEFAULT_MODEL_PRICE_RULES } from "../defaults"
 
 function createDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:")
@@ -10,22 +9,46 @@ function createDb(): DatabaseSync {
 }
 
 describe("model price service", () => {
-  it("initializes the new model price tables from built-in defaults", () => {
-    const db = createDb()
+  it("initializes model price tables without inserting default rules", () => {
+    const db = new DatabaseSync(":memory:")
+    initModelPriceSchema(db)
     const service = new ModelPriceService(db)
 
-    const rules = service.listRules()
+    expect(service.listRules()).toEqual([])
+    expect(db.prepare("SELECT value FROM model_price_meta WHERE key = ?").get("initialized_from_defaults_v1")).toBeTruthy()
+    db.close()
+  })
 
-    expect(rules).toHaveLength(DEFAULT_MODEL_PRICE_RULES.length)
-    expect(rules.find((rule) => rule.modelPattern === "claude-sonnet-4")).toMatchObject({
-      inputPer1M: 21.6,
-      outputPer1M: 108,
-      cacheReadPer1M: 2.16,
-      cacheWritePer1M: 27,
-      reasoningPer1M: 108,
-      currency: "CNY",
-      source: "builtin",
-    })
+  it("does not delete existing model_price_rules when the init marker is missing", () => {
+    const db = new DatabaseSync(":memory:")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run("legacy-like-id", "qwen3.7-plus", 2, 12, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const service = new ModelPriceService(db)
+
+    expect(service.listRules()).toEqual([
+      expect.objectContaining({ id: "legacy-like-id", modelPattern: "qwen3.7-plus", inputPer1M: 2, outputPer1M: 12 }),
+    ])
     expect(db.prepare("SELECT value FROM model_price_meta WHERE key = ?").get("initialized_from_defaults_v1")).toBeTruthy()
     db.close()
   })
@@ -91,7 +114,7 @@ describe("model price service", () => {
     db.close()
   })
 
-  it("creates updates disables enables deletes and resets rules in model_price_rules", () => {
+  it("creates updates disables enables deletes and clears rules in model_price_rules", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
 
@@ -107,8 +130,8 @@ describe("model price service", () => {
     expect(service.listRules().some((rule) => rule.id === created.id)).toBe(false)
 
     service.createRule({ modelPattern: "custom-only", inputPer1M: 1 })
-    expect(service.resetRulesToDefaults()).toEqual(DEFAULT_MODEL_PRICE_RULES)
-    expect(service.listRules().some((rule) => rule.modelPattern === "custom-only")).toBe(false)
+    expect(service.clearRules()).toEqual([])
+    expect(service.listRules()).toEqual([])
     db.close()
   })
 })
