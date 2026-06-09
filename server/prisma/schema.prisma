@@ -291,21 +291,23 @@ model DriveItem {
 }
 
 model DriveShare {
-  id              String    @id @default(cuid())
-  shareId         String    @unique
-  itemId          String
-  item            DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  userId          String
-  type            String    @db.VarChar(16)
-  enabled         Boolean   @default(true)
-  passwordEnabled Boolean   @default(false)
-  passwordHash    String?
-  expiresAt       DateTime?
-  createdAt       DateTime  @default(now())
-  disabledAt      DateTime?
+  id                String    @id @default(cuid())
+  shareId           String    @unique
+  itemId            String
+  item              DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  userId            String
+  type              String    @db.VarChar(16)
+  enabled           Boolean   @default(true)
+  passwordEnabled   Boolean   @default(false)
+  passwordHash      String?
+  passwordEncrypted String?
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  disabledAt        DateTime?
 
   @@index([itemId, enabled])
   @@index([userId, createdAt])
+  @@index([enabled, passwordEnabled])
 }
 
 model DriveUsage {
@@ -349,6 +351,10 @@ model DrivePublication {
   type                String                       @db.VarChar(16)
   name                String                       @db.VarChar(255)
   status              String                       @db.VarChar(32)
+  passwordEnabled     Boolean                      @default(false)
+  passwordHash        String?
+  passwordEncrypted   String?
+  expiresAt           DateTime?
   currentDeploymentId String?
   currentDeployment   DrivePublicationDeployment?  @relation("CurrentPublicationDeployment", fields: [currentDeploymentId, id], references: [id, publicationId], onDelete: NoAction)
   createdAt           DateTime                     @default(now())
@@ -360,6 +366,7 @@ model DrivePublication {
   @@index([userId, createdAt])
   @@index([sourceItemId, status])
   @@index([status])
+  @@index([status, passwordEnabled])
 }
 
 model DrivePublicationDeployment {
