@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_MODEL_PRICE_RULES, type ModelPriceRule } from "../../model-price"
+import type { ModelPriceRule } from "../../model-price"
 import {
   estimateSynapseUsageCostSnapshot,
   usageTokenBreakdownFromRecord,
@@ -17,6 +17,21 @@ const pricedRule: ModelPriceRule = {
   enabled: true,
   source: "user",
   sortIndex: 0,
+  updatedAt: "2026-06-03T00:00:00.000Z",
+}
+
+const claudeSonnetRule: ModelPriceRule = {
+  id: "mpr_444444444444",
+  modelPattern: "claude-sonnet-4",
+  inputPer1M: 21.6,
+  outputPer1M: 108,
+  cacheReadPer1M: 2.16,
+  cacheWritePer1M: 27,
+  reasoningPer1M: 108,
+  currency: "CNY",
+  enabled: true,
+  source: "user",
+  sortIndex: 1,
   updatedAt: "2026-06-03T00:00:00.000Z",
 }
 
@@ -86,7 +101,7 @@ describe("usage cost snapshots", () => {
     expect(estimateSynapseUsageCostSnapshot({
       modelName: "claude-sonnet-4",
       usage: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
-      priceRules: DEFAULT_MODEL_PRICE_RULES,
+      priceRules: [claudeSonnetRule],
     })).toMatchObject({
       modelName: "claude-sonnet-4",
       costCny: 129.6,

@@ -17,8 +17,8 @@ Do not use this skill for Database tables, Scheduler tasks, Workflow definitions
 ## Default Flow
 
 1. If the user asks which models need prices, call `model_price_used_model_list`.
-2. If the user asks to change, delete, enable, or disable an existing rule, call `model_price_rule_list` first and use the returned `id` as `ruleId`.
-3. Use `model_price_rule_get` when the user names a specific rule id or when you need to inspect one rule before changing it.
+2. If the user asks to change, delete, enable, or disable an existing rule, call `model_price_rule_list` first and use the returned `id` field as `ruleId`.
+3. Use `model_price_rule_get` when the user names a specific rule ID or when you need to inspect one rule before changing it.
 4. Use `model_price_rule_create` only when no existing rule should be changed.
 5. Use `model_price_rule_update` for partial price or pattern edits. Pass only fields that should change.
 6. Use `model_price_rule_disable` to keep a rule but stop matching it.
@@ -27,6 +27,8 @@ Do not use this skill for Database tables, Scheduler tasks, Workflow definitions
 ## Safety Rules
 
 - Mutating operations must use `ruleId`.
+- `ruleId` is the opaque rule ID from the rule `id` field. It is not a model name, not a display name, and not `modelPattern`.
+- When explaining rules to users, refer to `modelPattern` and prices. Do not present internal IDs as names.
 - Do not update or delete by guessing from `modelPattern`.
 - If multiple rules could match the user's model, ask which rule to change.
 - Prices are RMB per 1M tokens.
@@ -36,7 +38,7 @@ Do not use this skill for Database tables, Scheduler tasks, Workflow definitions
 
 ## Matching Notes
 
-`model_price_used_model_list` returns `priceKnown`, `matchedRuleId`, and `matchedRulePattern` based on currently enabled rules. This indicates current rule coverage only. It does not prove that older usage events were priced.
+`model_price_used_model_list` returns `priceKnown`, `matchedRuleId`, and `matchedRulePattern` based on currently enabled rules. `matchedRuleId` is a rule ID, while `matchedRulePattern` is the user-facing model pattern. This indicates current rule coverage only. It does not prove that older usage events were priced.
 
 ## API Reference
 

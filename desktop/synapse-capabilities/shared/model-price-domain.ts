@@ -4,7 +4,7 @@ import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinitio
 
 const ruleIdProperty = {
   type: "string",
-  description: "Model price rule id. Call model_price_rule_list first when only a model name or pattern is known.",
+  description: "Opaque model price rule ID from a rule's id field. This is not a model name and not modelPattern. Call model_price_rule_list first when only modelPattern is known.",
 }
 
 const priceProperty = (label: string) => ({
@@ -15,11 +15,11 @@ const priceProperty = (label: string) => ({
 
 const modelPriceCapabilities: readonly CapabilityDefinition[] = [
   { id: "model_price.used_model.list" as CapabilityId, title: "List used models", description: "List models seen in CC and Codex usage data with current price-rule match status.", mutates: false },
-  { id: "model_price.rule.list" as CapabilityId, title: "List price rules", description: "List model price rules, including disabled rules.", mutates: false },
-  { id: "model_price.rule.get" as CapabilityId, title: "Get price rule", description: "Get one model price rule by ruleId.", mutates: false },
+  { id: "model_price.rule.list" as CapabilityId, title: "List price rules", description: "List model price rules, including disabled rules. The id field is the opaque rule ID, not a rule name.", mutates: false },
+  { id: "model_price.rule.get" as CapabilityId, title: "Get price rule", description: "Get one model price rule by opaque ruleId.", mutates: false },
   { id: "model_price.rule.create" as CapabilityId, title: "Create price rule", description: "Create one model price rule.", mutates: true },
-  { id: "model_price.rule.update" as CapabilityId, title: "Update price rule", description: "Partially update one model price rule by ruleId.", mutates: true },
-  { id: "model_price.rule.delete" as CapabilityId, title: "Delete price rule", description: "Hard-delete one model price rule by ruleId.", mutates: true },
+  { id: "model_price.rule.update" as CapabilityId, title: "Update price rule", description: "Partially update one model price rule by opaque ruleId.", mutates: true },
+  { id: "model_price.rule.delete" as CapabilityId, title: "Delete price rule", description: "Hard-delete one model price rule by opaque ruleId.", mutates: true },
   { id: "model_price.rule.enable" as CapabilityId, title: "Enable price rule", description: "Enable one model price rule.", mutates: true },
   { id: "model_price.rule.disable" as CapabilityId, title: "Disable price rule", description: "Disable one model price rule without deleting it.", mutates: true },
 ]
@@ -45,7 +45,7 @@ export function buildModelPriceTools(): McpToolDefinition[] {
   return [
     {
       name: "model_price_used_model_list",
-      description: "List models used by CC and Codex with current enabled price-rule match status. This reads indexed usage data and does not refresh usage logs.",
+      description: "List models used by CC and Codex with current enabled price-rule match status. matchedRuleId is a rule ID, not a model name. This reads indexed usage data and does not refresh usage logs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -57,12 +57,12 @@ export function buildModelPriceTools(): McpToolDefinition[] {
     },
     {
       name: "model_price_rule_list",
-      description: "List all model price rules, including disabled rules. Call this before update, delete, enable, or disable when only a model name is known.",
+      description: "List all model price rules, including disabled rules. Each rule's id is an opaque rule ID, not a model name. Call this before update, delete, enable, or disable when only a model name is known.",
       inputSchema: { type: "object", properties: {} },
     },
     {
       name: "model_price_rule_get",
-      description: "Get one model price rule by ruleId.",
+      description: "Get one model price rule by opaque ruleId.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
     },
     {
@@ -71,7 +71,7 @@ export function buildModelPriceTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {
-          modelPattern: { type: "string", description: "Model name substring or wildcard pattern. Must not be empty." },
+          modelPattern: { type: "string", description: "User-visible model matching pattern: a model-name substring or wildcard pattern. Must not be empty." },
           ...priceFields,
           enabled: { type: "boolean", description: "Whether the rule participates in matching. Defaults to true." },
         },
@@ -80,12 +80,12 @@ export function buildModelPriceTools(): McpToolDefinition[] {
     },
     {
       name: "model_price_rule_update",
-      description: "Partially update one model price rule by ruleId. Only provided fields change; omitted prices keep their current values.",
+      description: "Partially update one model price rule by opaque ruleId. Only provided fields change; omitted prices keep their current values.",
       inputSchema: {
         type: "object",
         properties: {
           ruleId: ruleIdProperty,
-          modelPattern: { type: "string", description: "Replacement model pattern. Must not be empty when provided." },
+          modelPattern: { type: "string", description: "Replacement user-visible model matching pattern. Must not be empty when provided." },
           ...priceFields,
         },
         required: ["ruleId"],
@@ -93,17 +93,17 @@ export function buildModelPriceTools(): McpToolDefinition[] {
     },
     {
       name: "model_price_rule_delete",
-      description: "Hard-delete one model price rule by ruleId.",
+      description: "Hard-delete one model price rule by opaque ruleId.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
     },
     {
       name: "model_price_rule_enable",
-      description: "Enable one model price rule by ruleId.",
+      description: "Enable one model price rule by opaque ruleId.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
     },
     {
       name: "model_price_rule_disable",
-      description: "Disable one model price rule by ruleId without deleting it.",
+      description: "Disable one model price rule by opaque ruleId without deleting it.",
       inputSchema: { type: "object", properties: { ruleId: ruleIdProperty }, required: ["ruleId"] },
     },
   ]

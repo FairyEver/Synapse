@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { SYNAPSE_COST_CURRENCY } from "../../../action-packages/shared/cost-currency"
 import type { EstimatedModelUsageCost, ModelPriceRule, ModelPriceRuleInput, ModelUsageTokenBreakdown } from "./types"
+import { createModelPriceRuleId, isModelPriceRuleId } from "./rule-id"
 
 const COST_FRACTION_DIGITS = 6
 
@@ -115,17 +116,14 @@ function normalizePrice(value: unknown): number {
   return Number.isFinite(next) && next > 0 ? next : 0
 }
 
-function normalizeRuleId(value: string): string {
-  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "")
-  return normalized || "price-rule"
-}
-
 function makeRuleId(input: ModelPriceRuleInput, index: number, usedIds: Set<string>): string {
-  const base = normalizeRuleId(input.id || input.modelPattern || `price-rule-${index + 1}`)
+  const base = input.id && isModelPriceRuleId(input.id)
+    ? input.id
+    : createModelPriceRuleId(input.id || `manual-${index + 1}`, input.modelPattern || `price-rule-${index + 1}`)
   let id = base
   let suffix = 2
   while (usedIds.has(id)) {
-    id = `${base}-${suffix}`
+    id = `${base.slice(0, 16 - String(suffix).length)}${suffix}`
     suffix += 1
   }
   usedIds.add(id)

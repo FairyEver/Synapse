@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
+import { isModelPricePresetId } from "../index"
+import { createModelPriceRuleId } from "../rule-id"
 import { initModelPriceSchema, ModelPriceService } from "../service"
-import { DEFAULT_MODEL_PRICE_RULES } from "../defaults"
 
 function createDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:")
@@ -10,23 +11,171 @@ function createDb(): DatabaseSync {
 }
 
 describe("model price service", () => {
-  it("initializes the new model price tables from built-in defaults", () => {
-    const db = createDb()
+  it("initializes model price tables without inserting default rules", () => {
+    const db = new DatabaseSync(":memory:")
+    initModelPriceSchema(db)
     const service = new ModelPriceService(db)
 
-    const rules = service.listRules()
-
-    expect(rules).toHaveLength(DEFAULT_MODEL_PRICE_RULES.length)
-    expect(rules.find((rule) => rule.modelPattern === "claude-sonnet-4")).toMatchObject({
-      inputPer1M: 21.6,
-      outputPer1M: 108,
-      cacheReadPer1M: 2.16,
-      cacheWritePer1M: 27,
-      reasoningPer1M: 108,
-      currency: "CNY",
-      source: "builtin",
-    })
+    expect(service.listRules()).toEqual([])
     expect(db.prepare("SELECT value FROM model_price_meta WHERE key = ?").get("initialized_from_defaults_v1")).toBeTruthy()
+    db.close()
+  })
+
+  it("preserves existing rules and migrates legacy rule ids when the init marker is missing", () => {
+    const db = new DatabaseSync(":memory:")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, enabled, source, sort_index, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("legacy-like-id", "qwen3.7-plus", 2, 12, 0, "user", 7, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const service = new ModelPriceService(db)
+    const [rule] = service.listRules()
+
+    expect(rule).toMatchObject({
+      modelPattern: "qwen3.7-plus",
+      inputPer1M: 2,
+      outputPer1M: 12,
+      enabled: false,
+      source: "user",
+      sortIndex: 7,
+    })
+    expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(rule?.id).not.toContain("qwen")
+    expect(rule?.id).not.toBe("legacy-like-id")
+    expect(db.prepare("SELECT value FROM model_price_meta WHERE key = ?").get("initialized_from_defaults_v1")).toBeTruthy()
+    db.close()
+  })
+
+  it("preserves existing hash-like rule ids during schema initialization", () => {
+    const db = new DatabaseSync(":memory:")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run("mpr_123456789abc", "qwen3.7-plus", 2, 12, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const service = new ModelPriceService(db)
+
+    expect(service.listRules()).toEqual([
+      expect.objectContaining({ id: "mpr_123456789abc", modelPattern: "qwen3.7-plus" }),
+    ])
+    db.close()
+  })
+
+  it("migrates legacy rule ids even when the initialization marker already exists", () => {
+    const db = new DatabaseSync(":memory:")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE model_price_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    db.prepare("INSERT INTO model_price_meta (key, value, updated_at) VALUES (?, ?, ?)")
+      .run("initialized_from_defaults_v1", "1", "2026-06-09T00:00:00.000Z")
+    db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run("qwen3.7-plus", "qwen3.7-plus", 2, 12, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const [rule] = new ModelPriceService(db).listRules()
+
+    expect(rule).toMatchObject({ modelPattern: "qwen3.7-plus", inputPer1M: 2, outputPer1M: 12 })
+    expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(rule?.id).not.toBe("qwen3.7-plus")
+    db.close()
+  })
+
+  it("keeps all rows when a migrated legacy id would collide with an existing hash id", () => {
+    const db = new DatabaseSync(":memory:")
+    const collidingId = createModelPriceRuleId("legacy:legacy-like-id", "qwen3.7-plus")
+    db.exec(`
+      CREATE TABLE model_price_rules (
+        id TEXT PRIMARY KEY,
+        model_pattern TEXT NOT NULL,
+        input_per_1m REAL NOT NULL DEFAULT 0,
+        output_per_1m REAL NOT NULL DEFAULT 0,
+        cache_read_per_1m REAL NOT NULL DEFAULT 0,
+        cache_write_per_1m REAL NOT NULL DEFAULT 0,
+        reasoning_per_1m REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'CNY',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        source TEXT NOT NULL DEFAULT 'user',
+        sort_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+    `)
+    const insert = db.prepare(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, sort_index, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    insert.run(collidingId, "existing-model", 1, 2, 0, "2026-06-09T00:00:00.000Z")
+    insert.run("legacy-like-id", "qwen3.7-plus", 3, 4, 1, "2026-06-09T00:00:00.000Z")
+
+    initModelPriceSchema(db)
+    const rules = new ModelPriceService(db).listRules()
+    const ids = new Set(rules.map((rule) => rule.id))
+
+    expect(rules).toHaveLength(2)
+    expect([...ids].every((id) => /^mpr_[a-f0-9]{12}$/.test(id))).toBe(true)
+    expect(ids.has(collidingId)).toBe(true)
+    expect(ids.has("legacy-like-id")).toBe(false)
+    expect(rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ modelPattern: "existing-model", inputPer1M: 1 }),
+      expect.objectContaining({ modelPattern: "qwen3.7-plus", inputPer1M: 3 }),
+    ]))
     db.close()
   })
 
@@ -91,7 +240,173 @@ describe("model price service", () => {
     db.close()
   })
 
-  it("creates updates disables enables deletes and resets rules in model_price_rules", () => {
+  it("generates hash-like internal ids for new rules", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const created = service.createRule({ modelPattern: "qwen3.7-plus", inputPer1M: 2 })
+
+    expect(created.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(created.id).not.toContain("qwen")
+    expect(created.modelPattern).toBe("qwen3.7-plus")
+    db.close()
+  })
+
+  it("preserves existing hash-like ids during manual saves", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const saved = service.saveRules([{ id: "mpr_123456789abc", modelPattern: "local-model", inputPer1M: 1 }])
+
+    expect(saved[0]?.id).toBe("mpr_123456789abc")
+    db.close()
+  })
+
+  it("lists preset summaries including deepseek official and aliyun bailian", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const presets = service.listPresets()
+
+    expect(presets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "deepseek-official", label: "DeepSeek 官方", ruleCount: expect.any(Number) }),
+      expect.objectContaining({ id: "aliyun-bailian", label: "阿里云百炼", ruleCount: expect.any(Number) }),
+    ]))
+    expect(presets.find((preset) => preset.id === "deepseek-official")?.ruleCount).toBeGreaterThan(0)
+    expect(presets.find((preset) => preset.id === "aliyun-bailian")?.ruleCount).toBeGreaterThan(0)
+    db.close()
+  })
+
+  it("recognizes valid model price preset ids", () => {
+    expect(isModelPricePresetId("deepseek-official")).toBe(true)
+    expect(isModelPricePresetId("aliyun-bailian")).toBe(true)
+    expect(isModelPricePresetId("missing-preset")).toBe(false)
+    expect(isModelPricePresetId(123)).toBe(false)
+  })
+
+  it("imports deepseek official preset using official prices", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const imported = service.importPreset("deepseek-official")
+    const rule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(rule).toMatchObject({
+      modelPattern: "deepseek-v4-pro",
+      inputPer1M: 3,
+      outputPer1M: 6,
+      cacheReadPer1M: 0.025,
+      reasoningPer1M: 6,
+      source: "builtin",
+    })
+    expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(rule?.id).not.toContain("deepseek")
+    db.close()
+  })
+
+  it("overwrites existing user rule when importing deepseek official preset", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    service.createRule({
+      modelPattern: "deepseek-v4-pro",
+      inputPer1M: 99,
+      outputPer1M: 199,
+      cacheReadPer1M: 9,
+      reasoningPer1M: 299,
+    })
+
+    const imported = service.importPreset("deepseek-official")
+    const rule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(rule).toMatchObject({
+      inputPer1M: 3,
+      outputPer1M: 6,
+      cacheReadPer1M: 0.025,
+      reasoningPer1M: 6,
+      source: "builtin",
+    })
+    db.close()
+  })
+
+  it("keeps non-overlapping user rules and appends preset rules after import", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const localRule = service.createRule({ modelPattern: "local-model", inputPer1M: 7 })
+    const imported = service.importPreset("deepseek-official")
+    const localIndex = imported.findIndex((item) => item.modelPattern === "local-model")
+    const deepseekIndex = imported.findIndex((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(imported).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: localRule.id, modelPattern: "local-model", inputPer1M: 7, sortIndex: 0 }),
+      expect.objectContaining({ modelPattern: "deepseek-v4-pro", source: "builtin" }),
+    ]))
+    expect(localIndex).toBeGreaterThanOrEqual(0)
+    expect(deepseekIndex).toBeGreaterThan(localIndex)
+    expect(imported[localIndex]?.sortIndex).toBe(0)
+    expect(imported[deepseekIndex]?.sortIndex).toBeGreaterThan(imported[localIndex]?.sortIndex ?? -1)
+    db.close()
+  })
+
+  it("deduplicates matched patterns when importing a preset", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    service.saveRules([
+      { modelPattern: "DeepSeek-V4-Pro", inputPer1M: 91, outputPer1M: 191 },
+      { modelPattern: "deepseek-v4-pro", inputPer1M: 92, outputPer1M: 192 },
+      { modelPattern: "keep-duplicate", inputPer1M: 7 },
+      { modelPattern: "KEEP-DUPLICATE", inputPer1M: 8 },
+    ])
+
+    const imported = service.importPreset("deepseek-official")
+    const deepseekRules = imported.filter((item) => item.modelPattern.toLowerCase() === "deepseek-v4-pro")
+    const untouchedDuplicates = imported.filter((item) => item.modelPattern.toLowerCase() === "keep-duplicate")
+
+    expect(deepseekRules).toHaveLength(1)
+    expect(deepseekRules[0]).toMatchObject({
+      modelPattern: "deepseek-v4-pro",
+      inputPer1M: 3,
+      outputPer1M: 6,
+      cacheReadPer1M: 0.025,
+      source: "builtin",
+      sortIndex: 0,
+    })
+    expect(untouchedDuplicates).toHaveLength(2)
+    db.close()
+  })
+
+  it("lets later preset imports win for overlapping model patterns", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    service.importPreset("deepseek-official")
+    const imported = service.importPreset("aliyun-bailian")
+    const rule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(rule).toMatchObject({
+      inputPer1M: 12,
+      outputPer1M: 24,
+      cacheReadPer1M: 0,
+      reasoningPer1M: 24,
+      source: "builtin",
+    })
+    db.close()
+  })
+
+  it("throws on unknown preset and does not change existing rules", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const existing = service.createRule({ modelPattern: "keep-me", inputPer1M: 7 })
+
+    expect(() => service.importPreset("missing-preset" as never)).toThrow("Unknown model price preset: missing-preset")
+    expect(service.listRules()).toEqual([expect.objectContaining({ id: existing.id, modelPattern: "keep-me", inputPer1M: 7 })])
+    db.close()
+  })
+
+  it("creates updates disables enables deletes and clears rules in model_price_rules", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
 
@@ -107,8 +422,8 @@ describe("model price service", () => {
     expect(service.listRules().some((rule) => rule.id === created.id)).toBe(false)
 
     service.createRule({ modelPattern: "custom-only", inputPer1M: 1 })
-    expect(service.resetRulesToDefaults()).toEqual(DEFAULT_MODEL_PRICE_RULES)
-    expect(service.listRules().some((rule) => rule.modelPattern === "custom-only")).toBe(false)
+    expect(service.clearRules()).toEqual([])
+    expect(service.listRules()).toEqual([])
     db.close()
   })
 })

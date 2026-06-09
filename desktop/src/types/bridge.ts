@@ -543,6 +543,12 @@ export type UsageAnalysisModelPriceRuleInput = {
 
 export type ModelPriceRule = UsageAnalysisModelPriceRule
 export type ModelPriceRuleInput = UsageAnalysisModelPriceRuleInput
+export type ModelPricePresetId = "openai" | "anthropic" | "deepseek-official" | "aliyun-bailian" | "other"
+export type ModelPricePresetSummary = {
+  readonly id: ModelPricePresetId
+  readonly label: string
+  readonly ruleCount: number
+}
 export type ModelPriceCoverageSource = "all" | "cc" | "codex"
 export type ModelPriceCoverageRange = UsageAnalysisRangePreset
 export type ModelPriceUsageSourceName = "cc" | "codex"
@@ -1238,12 +1244,17 @@ export type SynapseBridge = {
     codex: UsageAnalysisBridgeDomain
     getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
     savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>
+    /** @deprecated Compatibility alias with clear semantics. New code should use modelPrice.clearRules(). */
     resetPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
   }
   modelPrice: {
     listCoverage: (input?: ModelPriceCoverageInput) => Promise<ModelPriceCoverageRow[]>
+    listPresets: () => Promise<ModelPricePresetSummary[]>
+    importPreset: (presetId: ModelPricePresetId) => Promise<ModelPriceRule[]>
     getRules: () => Promise<ModelPriceRule[]>
     saveRules: (rules: ModelPriceRuleInput[]) => Promise<ModelPriceRule[]>
+    clearRules: () => Promise<ModelPriceRule[]>
+    /** @deprecated Compatibility alias for clearRules. New code should call clearRules(). */
     resetRules: () => Promise<ModelPriceRule[]>
   }
   http: {

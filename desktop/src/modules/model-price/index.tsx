@@ -12,12 +12,12 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ModelCoverageView } from "./components/model-coverage-view"
 import { PriceRulesView } from "./components/price-rules-view"
-import { useModelPriceCoverage, useModelPriceRules } from "./hooks"
+import { useModelPriceCoverage, useModelPricePresets, useModelPriceRules } from "./hooks"
 import type { ModelPriceCoverageRange, ModelPriceCoverageSource, ModelPriceViewId } from "./types"
 
 const MODEL_PRICE_VIEWS: readonly { readonly id: ModelPriceViewId; readonly label: string }[] = [
-  { id: "coverage", label: "模型覆盖" },
   { id: "rules", label: "价格规则" },
+  { id: "coverage", label: "模型覆盖" },
 ]
 
 const SOURCE_OPTIONS: readonly { readonly value: ModelPriceCoverageSource; readonly label: string }[] = [
@@ -34,13 +34,15 @@ const RANGE_OPTIONS: readonly { readonly value: ModelPriceCoverageRange; readonl
 ]
 
 export function ModelPriceModule() {
-  const [view, setView] = useState<ModelPriceViewId>("coverage")
+  const [view, setView] = useState<ModelPriceViewId>("rules")
   const [source, setSource] = useState<ModelPriceCoverageSource>("all")
   const [range, setRange] = useState<ModelPriceCoverageRange>("30d")
   const [refreshKey, setRefreshKey] = useState(0)
+  const [rulesBusy, setRulesBusy] = useState(false)
   const coverageState = useModelPriceCoverage({ source, range, limit: 200 }, refreshKey)
   const rulesState = useModelPriceRules(refreshKey)
-  const activeState = view === "coverage" ? coverageState : rulesState
+  const presetsState = useModelPricePresets(refreshKey)
+  const activeLoading = rulesBusy || (view === "coverage" ? coverageState.loading : (rulesState.loading || presetsState.loading))
 
   const refresh = () => {
     setRefreshKey((current) => current + 1)
@@ -53,7 +55,7 @@ export function ModelPriceModule() {
         <Tabs value={view} onValueChange={(next) => setView(next as ModelPriceViewId)}>
           <TabsList>
             {MODEL_PRICE_VIEWS.map((item) => (
-              <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>
+              <TabsTrigger key={item.id} value={item.id} disabled={rulesBusy}>{item.label}</TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
@@ -88,12 +90,12 @@ export function ModelPriceModule() {
             type="button"
             variant="outline"
             size="sm"
-            disabled={activeState.loading}
-            aria-busy={activeState.loading}
+            disabled={activeLoading}
+            aria-busy={activeLoading}
             onClick={refresh}
           >
-            <RefreshCw data-icon="inline-start" className={activeState.loading ? "animate-spin" : undefined} />
-            {activeState.loading ? "刷新中" : "刷新"}
+            <RefreshCw data-icon="inline-start" className={activeLoading ? "animate-spin" : undefined} />
+            {activeLoading ? "刷新中" : "刷新"}
           </Button>
         </>
       )}
@@ -102,6 +104,8 @@ export function ModelPriceModule() {
       {view === "rules" ? (
         <PriceRulesView
           state={rulesState}
+          presetState={presetsState}
+          onBusyChange={setRulesBusy}
           onSaved={refresh}
         />
       ) : null}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_MODEL_PRICE_RULES, hashModelPriceRules } from "../../model-price"
+import { hashModelPriceRules, type ModelPriceRule } from "../../model-price"
 import {
   CC_SCAN_STATE_VERSION,
   classifyCcScanFile,
@@ -7,6 +7,37 @@ import {
   parseCcFileParserState,
   serializeCcFileParserState,
 } from "../cc-scan-state"
+
+const scanPriceRulesFixture: readonly ModelPriceRule[] = [
+  {
+    id: "mpr_111111111111",
+    modelPattern: "fixture-model-a",
+    inputPer1M: 1,
+    outputPer1M: 2,
+    cacheReadPer1M: 0,
+    cacheWritePer1M: 0,
+    reasoningPer1M: 2,
+    currency: "CNY",
+    enabled: true,
+    source: "user",
+    sortIndex: 0,
+    updatedAt: "2026-06-03T00:00:00.000Z",
+  },
+  {
+    id: "mpr_222222222222",
+    modelPattern: "fixture-model-b",
+    inputPer1M: 3,
+    outputPer1M: 4,
+    cacheReadPer1M: 0,
+    cacheWritePer1M: 0,
+    reasoningPer1M: 4,
+    currency: "CNY",
+    enabled: true,
+    source: "user",
+    sortIndex: 1,
+    updatedAt: "2026-06-03T00:00:00.000Z",
+  },
+]
 
 describe("CC scan state", () => {
   it("classifies exact fingerprint matches as unchanged", () => {
@@ -119,17 +150,17 @@ describe("CC scan state", () => {
   })
 
   it("uses the model-price rule hash for scan replacement decisions", () => {
-    const oldHash = hashModelPriceRules(DEFAULT_MODEL_PRICE_RULES)
+    const oldHash = hashModelPriceRules(scanPriceRulesFixture)
     const newHash = hashModelPriceRules([
-      ...DEFAULT_MODEL_PRICE_RULES,
-      { ...DEFAULT_MODEL_PRICE_RULES[0], id: "copy", modelPattern: "copy-model", sortIndex: 999 },
+      ...scanPriceRulesFixture,
+      { ...scanPriceRulesFixture[0], id: "mpr_333333333333", modelPattern: "copy-model", sortIndex: 999 },
     ])
 
     expect(oldHash).not.toBe(newHash)
   })
 
   it("delegates pricing hash semantics to model-price", () => {
-    expect(hashUsagePriceRules(DEFAULT_MODEL_PRICE_RULES)).toBe(hashModelPriceRules(DEFAULT_MODEL_PRICE_RULES))
+    expect(hashUsagePriceRules(scanPriceRulesFixture)).toBe(hashModelPriceRules(scanPriceRulesFixture))
   })
 
   it("round-trips bounded parser state", () => {

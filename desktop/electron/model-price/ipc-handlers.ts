@@ -3,7 +3,13 @@ import { MODEL_PRICE_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
-import { ModelPriceService, type ModelPriceCoverageInput, type ModelPriceRuleInput } from "../services/model-price"
+import {
+  isModelPricePresetId,
+  ModelPriceService,
+  type ModelPriceCoverageInput,
+  type ModelPricePresetId,
+  type ModelPriceRuleInput,
+} from "../services/model-price"
 
 let registered = false
 
@@ -29,6 +35,19 @@ export function registerModelPriceHandlers(): void {
     logger.info("Model price coverage requested.", normalized)
     return modelPrice.listCoverage(normalized)
   })
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsList, async () => modelPrice.listPresets())
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsImport, async (_event, input?: unknown) => {
+    if (!isModelPricePresetId(input)) {
+      throw new Error("Invalid model price preset id.")
+    }
+    const presetId: ModelPricePresetId = input
+    const importedRules = modelPrice.importPreset(presetId)
+    logger.info("Model price preset import completed.", {
+      presetId,
+      resultingRuleCount: importedRules.length,
+    })
+    return importedRules
+  })
   handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesGet, async () => modelPrice.listRules())
   handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesSave, async (_event, rules?: readonly ModelPriceRuleInput[]) => {
     const normalizedRules = Array.isArray(rules) ? rules : []
@@ -39,7 +58,8 @@ export function registerModelPriceHandlers(): void {
     })
     return savedRules
   })
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesReset, async () => modelPrice.resetRulesToDefaults())
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesClear, async () => modelPrice.clearRules())
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesReset, async () => modelPrice.clearRules())
 
   registered = true
 }

@@ -1,6 +1,5 @@
 import type { DatabaseSync } from "node:sqlite"
 import { listModelPriceCoverage } from "./coverage"
-import { DEFAULT_MODEL_PRICE_RULES } from "./defaults"
 import { initModelPriceSchema } from "./db-schema"
 import {
   compareModelPriceRules,
@@ -8,9 +7,13 @@ import {
   findModelPriceRuleForModel,
   normalizeModelPriceRules,
 } from "./matching"
+import { getModelPricePreset, listModelPricePresetSummaries } from "./presets"
+import { createModelPriceRuleId, normalizeModelPatternKey } from "./rule-id"
 import type {
   EstimatedModelUsageCost,
   ModelPriceCoverageInput,
+  ModelPricePresetId,
+  ModelPricePresetSummary,
   ModelPriceCoverageRow,
   ModelPriceRule,
   ModelPriceRuleDeleteResult,
@@ -43,6 +46,10 @@ export class ModelPriceService {
     return listModelPriceRules(this.db)
   }
 
+  listPresets(): ModelPricePresetSummary[] {
+    return listModelPricePresetSummaries()
+  }
+
   saveRules(inputs: readonly ModelPriceRuleInput[]): ModelPriceRule[] {
     const now = new Date().toISOString()
     const rules = normalizeModelPriceRules(inputs.map((rule, index) => ({
@@ -55,9 +62,60 @@ export class ModelPriceService {
     return rules
   }
 
-  resetRulesToDefaults(): ModelPriceRule[] {
-    replaceModelPriceRules(this.db, DEFAULT_MODEL_PRICE_RULES)
-    return this.listRules()
+  clearRules(): ModelPriceRule[] {
+    replaceModelPriceRules(this.db, [])
+    return []
+  }
+
+  importPreset(presetId: ModelPricePresetId): ModelPriceRule[] {
+    const preset = getModelPricePreset(presetId)
+    if (!preset) throw new Error(`Unknown model price preset: ${presetId}`)
+
+    const existing = this.listRules()
+    const now = new Date().toISOString()
+    const highestSortIndex = existing.reduce((max, rule) => Math.max(max, rule.sortIndex), -1)
+    const presetRulesByPattern = new Map(preset.rules.map((rule) => [normalizeModelPatternKey(rule.modelPattern), rule] as const))
+    const result: ModelPriceRuleInput[] = []
+    const matchedPatterns = new Set<string>()
+    let nextSortIndex = highestSortIndex + 1
+
+    for (const rule of existing) {
+      const key = normalizeModelPatternKey(rule.modelPattern)
+      const presetRule = presetRulesByPattern.get(key)
+      if (!presetRule) {
+        result.push(rule)
+        continue
+      }
+
+      if (matchedPatterns.has(key)) {
+        continue
+      }
+
+      matchedPatterns.add(key)
+      result.push({
+        ...presetRule,
+        id: createModelPriceRuleId(`preset:${preset.id}`, presetRule.modelPattern),
+        source: "builtin",
+        updatedAt: now,
+        sortIndex: rule.sortIndex,
+      })
+    }
+
+    for (const [key, rule] of presetRulesByPattern) {
+      if (matchedPatterns.has(key)) continue
+      result.push({
+        ...rule,
+        id: createModelPriceRuleId(`preset:${preset.id}`, rule.modelPattern),
+        source: "builtin",
+        updatedAt: now,
+        sortIndex: nextSortIndex,
+      })
+      nextSortIndex += 1
+    }
+
+    const rules = normalizeModelPriceRules(result)
+    replaceModelPriceRules(this.db, rules)
+    return rules
   }
 
   getRule(ruleId: string): ModelPriceRule | null {

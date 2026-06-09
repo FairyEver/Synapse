@@ -9,6 +9,14 @@ function createDb(): DatabaseSync {
   return db
 }
 
+function isoTimestampForDay(dayOffset: number, hour = 1): string {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  date.setDate(date.getDate() + dayOffset)
+  date.setHours(hour, 0, 0, 0)
+  return date.toISOString()
+}
+
 function insertUsageEvent(db: DatabaseSync, prefix: "cc" | "cx", input: {
   id: string
   model: string
@@ -50,7 +58,7 @@ describe("model price coverage", () => {
   it("merges used CC and Codex models and reports current rule matches", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
-    service.saveRules([{ id: "local", modelPattern: "local-model", inputPer1M: 1 }])
+    const [savedRule] = service.saveRules([{ id: "local", modelPattern: "local-model", inputPer1M: 1 }])
     insertUsageEvent(db, "cc", { id: "cc-1", model: "local-model", inputTokens: 100, priceKnown: true, totalCost: 0.001 })
     insertUsageEvent(db, "cx", { id: "cx-1", model: "local-model", inputTokens: 50, priceKnown: false })
     insertUsageEvent(db, "cx", { id: "cx-2", model: "other-model", inputTokens: 25, priceKnown: false })
@@ -64,7 +72,7 @@ describe("model price coverage", () => {
         pricedTokens: 100,
         unpricedTokens: 50,
         priceKnown: true,
-        matchedRuleId: "local",
+        matchedRuleId: savedRule?.id,
         matchedRulePattern: "local-model",
       }),
       expect.objectContaining({
@@ -81,8 +89,8 @@ describe("model price coverage", () => {
   it("filters coverage by source and range without refreshing usage logs", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
-    insertUsageEvent(db, "cc", { id: "old", model: "old-model", inputTokens: 1, timestamp: "2026-01-01T00:00:00.000Z" })
-    insertUsageEvent(db, "cx", { id: "today", model: "today-model", inputTokens: 2, timestamp: "2026-06-09T01:00:00.000Z" })
+    insertUsageEvent(db, "cc", { id: "old", model: "old-model", inputTokens: 1, timestamp: isoTimestampForDay(-30, 0) })
+    insertUsageEvent(db, "cx", { id: "today", model: "today-model", inputTokens: 2, timestamp: isoTimestampForDay(0, 1) })
 
     expect(service.listCoverage({ source: "codex", range: "today" })).toEqual([
       expect.objectContaining({ model: "today-model", sources: ["codex"], tokens: 2 }),

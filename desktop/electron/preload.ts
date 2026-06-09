@@ -294,8 +294,11 @@ const IPC_CHANNELS = {
   },
   "model-price": {
     "coverageList": "synapse:model-price:coverage:list",
+    "presetsList": "synapse:model-price:presets:list",
+    "presetsImport": "synapse:model-price:presets:import",
     "rulesGet": "synapse:model-price:rules:get",
     "rulesSave": "synapse:model-price:rules:save",
+    "rulesClear": "synapse:model-price:rules:clear",
     "rulesReset": "synapse:model-price:rules:reset",
   },
   "account": {
@@ -1067,8 +1070,12 @@ const synapseBridge: SynapseBridge = {
   },
   modelPrice: {
     listCoverage: (input) => invoke(IPC_CHANNELS["model-price"].coverageList)(input),
+    listPresets: invoke(IPC_CHANNELS["model-price"].presetsList),
+    importPreset: (presetId) => invoke(IPC_CHANNELS["model-price"].presetsImport)(presetId),
     getRules: invoke(IPC_CHANNELS["model-price"].rulesGet),
     saveRules: (rules) => invoke(IPC_CHANNELS["model-price"].rulesSave)(rules),
+    clearRules: invoke(IPC_CHANNELS["model-price"].rulesClear),
+    // Compatibility bridge: legacy reset callers now use clear semantics.
     resetRules: invoke(IPC_CHANNELS["model-price"].rulesReset),
   },
   http: {

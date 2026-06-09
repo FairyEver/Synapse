@@ -23,6 +23,7 @@ import {
   type ModelPriceRule,
   type ModelPriceRuleInput,
 } from "../model-price"
+import { normalizeModelPatternKey } from "../model-price/rule-id"
 import { createUsageRangeFilter } from "./range"
 import { collectJsonlFiles, fingerprintFile } from "./scan"
 import type {
@@ -167,7 +168,7 @@ function countUsageEvents(db: DatabaseSync, prefix: "cc" | "cx"): number {
 
 function pricingRuleLogSignature(rule: ModelPriceRule): string {
   return JSON.stringify({
-    modelPattern: rule.modelPattern,
+    modelPattern: normalizeModelPatternKey(rule.modelPattern),
     inputPer1M: rule.inputPer1M,
     outputPer1M: rule.outputPer1M,
     cacheReadPer1M: rule.cacheReadPer1M,
@@ -185,13 +186,17 @@ function createPricingRulesSaveLogMetadata(
   oldRules: readonly ModelPriceRule[],
   newRules: readonly ModelPriceRule[],
 ): Record<string, unknown> {
-  const oldById = new Map(oldRules.map((rule) => [rule.id, rule]))
-  const newById = new Map(newRules.map((rule) => [rule.id, rule]))
-  const addedRuleIds = newRules.filter((rule) => !oldById.has(rule.id)).map((rule) => rule.id)
-  const removedRuleIds = oldRules.filter((rule) => !newById.has(rule.id)).map((rule) => rule.id)
+  const oldByPattern = new Map(oldRules.map((rule) => [normalizeModelPatternKey(rule.modelPattern), rule]))
+  const newByPattern = new Map(newRules.map((rule) => [normalizeModelPatternKey(rule.modelPattern), rule]))
+  const addedRuleIds = newRules
+    .filter((rule) => !oldByPattern.has(normalizeModelPatternKey(rule.modelPattern)))
+    .map((rule) => rule.id)
+  const removedRuleIds = oldRules
+    .filter((rule) => !newByPattern.has(normalizeModelPatternKey(rule.modelPattern)))
+    .map((rule) => rule.id)
   const changedRuleIds = newRules
     .filter((rule) => {
-      const oldRule = oldById.get(rule.id)
+      const oldRule = oldByPattern.get(normalizeModelPatternKey(rule.modelPattern))
       return oldRule !== undefined && pricingRuleLogSignature(oldRule) !== pricingRuleLogSignature(rule)
     })
     .map((rule) => rule.id)
@@ -285,7 +290,7 @@ export class CcUsageAnalysisService {
   }
 
   resetPricingRules(): ModelPriceRule[] {
-    return new ModelPriceService(this.db).resetRulesToDefaults()
+    return new ModelPriceService(this.db).clearRules()
   }
 
   getTime(range: UsageRangeInput): UsageTimeBucket[] {
