@@ -44,7 +44,32 @@ describe("LocalDriveStorage", () => {
     await expect(readFile(path.join(root, "drive/item-1"), "utf8")).resolves.toBe("hello")
     await expect(storage.headObject("drive/item-1")).resolves.toMatchObject({ key: "drive/item-1", size: 5n })
   })
+
+  it("copies and streams local drive objects", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/html" })
+    const token = upload.url.split("/").at(-1)
+    if (!token) throw new Error("missing upload token")
+
+    await storage.acceptUpload(token, Readable.from("<h1>Hello</h1>"))
+    await storage.copyObject({ fromKey: "drive/item-1", toKey: "drive-publications/pub-1/dep-1/index.html", contentType: "text/html" })
+    const object = await storage.getObjectStream({ key: "drive-publications/pub-1/dep-1/index.html" })
+
+    expect(object.size).toBe(14n)
+    expect(object.contentType).toBe("text/html")
+    await expect(streamToText(object.stream)).resolves.toBe("<h1>Hello</h1>")
+  })
 })
+
+async function streamToText(stream: NodeJS.ReadableStream): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)))
+  }
+  return Buffer.concat(chunks).toString("utf8")
+}
 
 describe("shouldUseCosDriveStorage", () => {
   const baseEnv = {

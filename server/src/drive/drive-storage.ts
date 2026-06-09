@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import { createReadStream, createWriteStream } from "node:fs"
-import { mkdir, rm, stat } from "node:fs/promises"
+import { copyFile, mkdir, rm, stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { pipeline } from "node:stream/promises"
@@ -26,11 +26,14 @@ export interface DriveStoragePort {
   createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction>
   createDownloadUrl(input: { readonly key: string; readonly filename: string }): Promise<{ readonly url: string; readonly expiresAt: Date }>
   headObject(key: string): Promise<DriveStorageObjectInfo | null>
+  copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void>
+  getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }>
   deleteObject(key: string): Promise<void>
 }
 
 type LocalStorageToken = {
   readonly key: string
+  readonly contentType?: string | null
   readonly filename?: string
   readonly expiresAt: Date
 }
@@ -46,6 +49,7 @@ export type LocalDriveStorageOptions = {
 export class LocalDriveStorage implements DriveStoragePort {
   private readonly uploadTokens = new Map<string, LocalStorageToken>()
   private readonly downloadTokens = new Map<string, LocalStorageToken>()
+  private readonly contentTypes = new Map<string, string | null>()
   private readonly publicAppUrl: string
   private readonly root: string
 
@@ -58,7 +62,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   async createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction> {
     const expiresAt = new Date(Date.now() + driveUploadUrlTtlSeconds * 1000)
     const token = randomUUID()
-    this.uploadTokens.set(token, { key: input.key, expiresAt })
+    this.uploadTokens.set(token, { key: input.key, contentType: input.contentType ?? null, expiresAt })
     return {
       method: "PUT",
       url: `${this.publicAppUrl.replace(/\/+$/u, "")}/api/drive/local-upload/${encodeURIComponent(token)}`,
@@ -90,6 +94,24 @@ export class LocalDriveStorage implements DriveStoragePort {
 
   async deleteObject(key: string): Promise<void> {
     await rm(this.pathForKey(key), { force: true })
+    this.contentTypes.delete(key)
+  }
+
+  async copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void> {
+    const targetPath = this.pathForKey(input.toKey)
+    await mkdir(path.dirname(targetPath), { recursive: true })
+    await copyFile(this.pathForKey(input.fromKey), targetPath)
+    this.contentTypes.set(input.toKey, input.contentType ?? this.contentTypes.get(input.fromKey) ?? null)
+  }
+
+  async getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
+    const objectPath = this.pathForKey(input.key)
+    const info = await stat(objectPath)
+    return {
+      stream: createReadStream(objectPath),
+      size: BigInt(info.size),
+      contentType: this.contentTypes.get(input.key) ?? null,
+    }
   }
 
   async acceptUpload(token: string, stream: NodeJS.ReadableStream): Promise<void> {
@@ -97,6 +119,7 @@ export class LocalDriveStorage implements DriveStoragePort {
     const objectPath = this.pathForKey(entry.key)
     await mkdir(path.dirname(objectPath), { recursive: true })
     await pipeline(stream, createWriteStream(objectPath))
+    this.contentTypes.set(entry.key, entry.contentType ?? null)
   }
 
   resolveDownload(token: string): { readonly stream: NodeJS.ReadableStream; readonly filename: string } {
@@ -171,6 +194,38 @@ export class CosDriveStorage implements DriveStoragePort {
     })
   }
 
+  async copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const client = this.getClient()
+      client.cos.putObjectCopy({
+        Bucket: client.bucket,
+        Region: client.region,
+        Key: input.toKey,
+        CopySource: `${client.bucket}.cos.${client.region}.myqcloud.com/${encodeCosCopySourceKey(input.fromKey)}`,
+        MetadataDirective: input.contentType ? "Replaced" : "Copy",
+        ContentType: input.contentType ?? undefined,
+      }, (error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+  }
+
+  async getObjectStream(input: { readonly key: string }): Promise<{ readonly stream: NodeJS.ReadableStream; readonly size?: bigint; readonly contentType?: string | null }> {
+    const client = this.getClient()
+    const info = await this.headObjectRaw(input.key)
+    const stream = client.cos.getObjectStream({
+      Bucket: client.bucket,
+      Region: client.region,
+      Key: input.key,
+    }) as unknown as NodeJS.ReadableStream
+    return {
+      stream,
+      size: parseContentLength(info.headers?.["content-length"]),
+      contentType: info.headers?.["content-type"] ?? null,
+    }
+  }
+
   private getSignedUrl(input: { readonly key: string; readonly method: "put" | "get"; readonly expires: number }): Promise<string> {
     return new Promise((resolve, reject) => {
       const client = this.getClient()
@@ -227,4 +282,13 @@ function isCosNotFound(error: unknown): boolean {
     && error !== null
     && ("statusCode" in error)
     && (error as { readonly statusCode?: unknown }).statusCode === 404
+}
+
+function encodeCosCopySourceKey(key: string): string {
+  return key.split("/").map((part) => encodeURIComponent(part)).join("/")
+}
+
+function parseContentLength(value: string | undefined): bigint | undefined {
+  if (!value) return undefined
+  return BigInt(value)
 }
