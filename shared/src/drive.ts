@@ -138,9 +138,13 @@ export function buildDrivePublicationUrl(input: {
 
 export function buildDriveUrlWithPassword(url: string, password: string | null | undefined): string {
   if (!password) return url
-  const parsed = new URL(url)
-  parsed.searchParams.set("password", password)
-  return parsed.toString()
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set("password", password)
+    return parsed.toString()
+  } catch {
+    return buildRelativeUrlWithPassword(url, password)
+  }
 }
 
 export function maskDriveShareUrl(value: string): string {
@@ -181,10 +185,24 @@ function normalizePublicAppUrl(value: string): string {
   return value.trim().replace(/\/+$/u, "")
 }
 
+function buildRelativeUrlWithPassword(url: string, password: string): string {
+  const hashIndex = url.indexOf("#")
+  const beforeHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url
+  const hash = hashIndex >= 0 ? url.slice(hashIndex) : ""
+  const queryIndex = beforeHash.indexOf("?")
+  const path = queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash
+  const query = queryIndex >= 0 ? beforeHash.slice(queryIndex + 1) : ""
+  const params = new URLSearchParams(query)
+  params.set("password", password)
+  return `${path}?${params.toString()}${hash}`
+}
+
 function maskPasswordQuery(value: string): string {
   try {
     const parsed = new URL(value)
-    if (parsed.searchParams.has("password")) parsed.searchParams.set("password", "***")
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (key.toLowerCase() === "password") parsed.searchParams.set(key, "***")
+    }
     return parsed.toString()
   } catch {
     return value.replace(/([?&]password=)[^&#]*/giu, "$1***")

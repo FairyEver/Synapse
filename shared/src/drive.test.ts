@@ -55,6 +55,13 @@ describe("drive URL helpers", () => {
       .toBe("https://synapse.d2.pub/sites/pub_abc/?x=1&password=AbC234xy")
   })
 
+  it("builds password-bearing relative drive URLs", () => {
+    expect(buildDriveUrlWithPassword("/files/shr_abc", "AbC234xy"))
+      .toBe("/files/shr_abc?password=AbC234xy")
+    expect(buildDriveUrlWithPassword("/files/shr_abc?password=old#top", "new"))
+      .toBe("/files/shr_abc?password=new#top")
+  })
+
   it("does not add a password query when the password is null", () => {
     expect(buildDriveUrlWithPassword("https://synapse.d2.pub/files/shr_abc", null))
       .toBe("https://synapse.d2.pub/files/shr_abc")
@@ -65,6 +72,11 @@ describe("drive URL helpers", () => {
       .toBe("https://synapse.d2.pub/files/***?password=***")
     expect(maskDrivePublicUrl("https://synapse.d2.pub/sites/pub_secret/app.js?password=AbC234xy"))
       .toBe("https://synapse.d2.pub/sites/***/app.js?password=***")
+  })
+
+  it("redacts drive password query values case-insensitively", () => {
+    expect(maskDriveShareUrl("https://synapse.d2.pub/files/shr_secret?Password=AbC234xy"))
+      .toBe("https://synapse.d2.pub/files/***?Password=***")
   })
 
   it("defines the default drive access settings", () => {

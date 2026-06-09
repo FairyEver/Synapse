@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException, Optional } 
 import { Prisma } from "@prisma/client"
 import {
   buildDriveShareUrl,
+  buildDriveUrlWithPassword,
   type DriveDeleteImpactDto,
   type DriveFolderUploadPrepareResult,
   type DriveItemDto,
@@ -347,16 +348,23 @@ export class DriveService {
       include: { item: { select: { id: true, name: true, type: true, deletedAt: true } } },
       orderBy: { createdAt: "desc" },
     })
-    return shares.map((share) => ({
-      id: share.id,
-      shareId: share.shareId,
-      itemId: share.itemId,
-      itemName: share.item.name,
-      itemType: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
-      sourceDeleted: share.item.deletedAt !== null,
-      url: buildDriveShareUrl({ publicAppUrl, shareId: share.shareId }),
-      createdAt: share.createdAt.toISOString(),
-    }))
+    return shares.map((share) => {
+      const url = buildDriveShareUrl({ publicAppUrl, shareId: share.shareId })
+      return {
+        id: share.id,
+        shareId: share.shareId,
+        itemId: share.itemId,
+        itemName: share.item.name,
+        itemType: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
+        sourceDeleted: share.item.deletedAt !== null,
+        url,
+        urlWithPassword: buildDriveUrlWithPassword(url, null),
+        passwordEnabled: share.passwordEnabled,
+        password: null,
+        expiresAt: share.expiresAt?.toISOString() ?? null,
+        createdAt: share.createdAt.toISOString(),
+      }
+    })
   }
 
   async listPublications(userId: string, publicAppUrl: string): Promise<DrivePublicationDto[]> {
@@ -971,13 +979,29 @@ function resolvePublicationContentType(relativePath: string, stored: string | nu
   return stored || "application/octet-stream"
 }
 
-function toDriveShareDto(share: { id: string; shareId: string; itemId: string; enabled: boolean; createdAt: Date }, publicAppUrl: string): DriveShareDto {
+function toDriveShareDto(
+  share: {
+    id: string
+    shareId: string
+    itemId: string
+    enabled: boolean
+    passwordEnabled?: boolean
+    expiresAt?: Date | null
+    createdAt: Date
+  },
+  publicAppUrl: string,
+): DriveShareDto {
+  const url = buildDriveShareUrl({ publicAppUrl, shareId: share.shareId })
   return {
     id: share.id,
     shareId: share.shareId,
     itemId: share.itemId,
     enabled: share.enabled,
-    url: buildDriveShareUrl({ publicAppUrl, shareId: share.shareId }),
+    url,
+    urlWithPassword: buildDriveUrlWithPassword(url, null),
+    passwordEnabled: share.passwordEnabled ?? false,
+    password: null,
+    expiresAt: share.expiresAt?.toISOString() ?? null,
     createdAt: share.createdAt.toISOString(),
   }
 }

@@ -1,5 +1,6 @@
 import {
   buildDrivePublicationUrl,
+  buildDriveUrlWithPassword,
   type DriveFolderUploadPrepareFileInput,
   type DriveItemDto,
   type DrivePublicationDto,
@@ -56,6 +57,8 @@ export type DrivePublicationRecord = {
   readonly status: string
   readonly sourceItemId: string | null
   readonly currentDeploymentId: string | null
+  readonly passwordEnabled?: boolean
+  readonly expiresAt?: Date | null
   readonly createdAt: Date
   readonly updatedAt: Date
   readonly sourceItem?: { readonly deletedAt: Date | null } | null
@@ -79,6 +82,7 @@ export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
 
 export function toDrivePublicationDto(item: DrivePublicationRecord, publicAppUrl: string): DrivePublicationDto {
   const type = item.type === "site" ? "site" : "page"
+  const url = buildDrivePublicationUrl({ publicAppUrl, publishId: item.publishId, type })
   return {
     id: item.id,
     publishId: item.publishId,
@@ -87,7 +91,11 @@ export function toDrivePublicationDto(item: DrivePublicationRecord, publicAppUrl
     status: item.status === "disabled" ? "disabled" : "active",
     sourceItemId: item.sourceItemId,
     sourceDeleted: item.sourceItem?.deletedAt !== null && item.sourceItem?.deletedAt !== undefined,
-    url: buildDrivePublicationUrl({ publicAppUrl, publishId: item.publishId, type }),
+    url,
+    urlWithPassword: buildDriveUrlWithPassword(url, null),
+    passwordEnabled: item.passwordEnabled ?? false,
+    password: null,
+    expiresAt: item.expiresAt?.toISOString() ?? null,
     currentDeploymentId: item.currentDeploymentId,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
