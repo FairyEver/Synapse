@@ -15,6 +15,7 @@ export const APP_NAVIGATION_TABS = [
   { id: "workflow", label: "工作流", requiresWorkflowEntry: true },
   { id: "drive", label: "云盘" },
   { id: "tools", label: "工具" },
+  { id: "editor-scan", label: "IDE" },
   { id: "usage-cc", label: "CC" },
   { id: "usage-codex", label: "Codex" },
   { id: "settings", label: "设置" },

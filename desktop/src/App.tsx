@@ -41,6 +41,7 @@ import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import { AutomationModule } from "@/modules/automation"
 import { DriveModule } from "@/modules/drive"
+import { EditorScanModule } from "@/modules/editor-scan"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
@@ -379,6 +380,11 @@ function MainApp() {
           {activeTab === "tools" ? (
             <ErrorBoundary fallbackTitle="工具模块出现问题">
               <ToolsModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "editor-scan" ? (
+            <ErrorBoundary fallbackTitle="IDE 模块出现问题">
+              <EditorScanModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "usage-cc" ? (

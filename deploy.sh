@@ -547,6 +547,7 @@ run_checks_once() {
   # Expected redirect header: Location: /dashboard/
   check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/dashboard/"
   check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found/test"
+  check_not_redirect_to_dashboard "drive share route" "http://127.0.0.1:3000/files/shr_not_found"
   return "$failed"
 }
 

@@ -36,12 +36,13 @@ vi.mock("@/app-shell/components/app-shell-layout", () => ({
 }))
 
 vi.mock("@/app-shell/components/app-shell-navigation", () => ({
-  AppShellNavigation: ({ tabs }: {
+  AppShellNavigation: ({ tabs, onValueChange }: {
     tabs: Array<{ id: string; label: string }>
+    onValueChange: (value: string) => void
   }) => (
     <div>
       {tabs.map((tab) => (
-        <button key={tab.id} type="button">
+        <button key={tab.id} type="button" onClick={() => onValueChange(tab.id)}>
           {tab.label}
         </button>
       ))}
@@ -188,10 +189,24 @@ describe("App workflow entry visibility", () => {
       "自动化",
       "云盘",
       "工具",
+      "IDE",
       "CC",
       "Codex",
       "设置",
     ])
+  })
+
+  it("opens the IDE scan module from the top navigation", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      findTopNavigationButton("IDE").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("本机模块")
   })
 
   it("places workflow between automation and drive when the workflow entry is visible", async () => {
@@ -209,6 +224,7 @@ describe("App workflow entry visibility", () => {
       "工作流",
       "云盘",
       "工具",
+      "IDE",
       "CC",
       "Codex",
       "设置",
@@ -254,6 +270,17 @@ async function renderApp(): Promise<void> {
 
 function topNavigationLabels(): string[] {
   return Array.from(document.querySelectorAll("nav button")).map((button) => button.textContent ?? "")
+}
+
+function findTopNavigationButton(label: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll("nav button"))
+    .find((item) => item.textContent === label)
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Top navigation button not found: ${label}`)
+  }
+
+  return button
 }
 
 function createDeferred<T>() {

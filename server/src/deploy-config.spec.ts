@@ -206,20 +206,31 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("http://127.0.0.1:3000/healthz")
     expect(deployScript).toContain("http://127.0.0.1:3000/dashboard/")
     expect(deployScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
+    expect(deployScript).toContain("http://127.0.0.1:3000/files/shr_not_found")
     expect(deployScript).toContain("Location: /dashboard/")
     expect(deployScript).toContain("webhook route")
+    expect(deployScript).toContain("drive share route")
     expect(deployScript).toContain('<div id="root">')
     expect(deployScript).toContain("docker compose --env-file .env ps")
     expect(deployScript).toContain("docker compose --env-file .env logs --tail=80 server")
 
     expect(restartScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
     expect(restartScript).toContain("webhook route")
+    expect(restartScript).toContain("http://127.0.0.1:3000/files/shr_not_found")
+    expect(restartScript).toContain("drive share route")
   })
 
   it("routes public webhooks through nginx instead of dashboard redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
     expect(nginx).toContain("location /webhooks/")
+    expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
+  it("routes public drive shares through nginx instead of dashboard redirects", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location /files/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })
 
