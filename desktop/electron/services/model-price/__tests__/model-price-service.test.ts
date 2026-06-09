@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
+import { isModelPricePresetId } from "../index"
 import { initModelPriceSchema, ModelPriceService } from "../service"
 
 function createDb(): DatabaseSync {
@@ -133,6 +134,150 @@ describe("model price service", () => {
     const saved = service.saveRules([{ id: "mpr_123456789abc", modelPattern: "local-model", inputPer1M: 1 }])
 
     expect(saved[0]?.id).toBe("mpr_123456789abc")
+    db.close()
+  })
+
+  it("lists preset summaries including deepseek official and aliyun bailian", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const presets = service.listPresets()
+
+    expect(presets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "deepseek-official", label: "DeepSeek 官方", ruleCount: expect.any(Number) }),
+      expect.objectContaining({ id: "aliyun-bailian", label: "阿里云百炼", ruleCount: expect.any(Number) }),
+    ]))
+    expect(presets.find((preset) => preset.id === "deepseek-official")?.ruleCount).toBeGreaterThan(0)
+    expect(presets.find((preset) => preset.id === "aliyun-bailian")?.ruleCount).toBeGreaterThan(0)
+    db.close()
+  })
+
+  it("recognizes valid model price preset ids", () => {
+    expect(isModelPricePresetId("deepseek-official")).toBe(true)
+    expect(isModelPricePresetId("aliyun-bailian")).toBe(true)
+    expect(isModelPricePresetId("missing-preset")).toBe(false)
+    expect(isModelPricePresetId(123)).toBe(false)
+  })
+
+  it("imports deepseek official preset using official prices", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const imported = service.importPreset("deepseek-official")
+    const rule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(rule).toMatchObject({
+      modelPattern: "deepseek-v4-pro",
+      inputPer1M: 3,
+      outputPer1M: 6,
+      cacheReadPer1M: 0.025,
+      reasoningPer1M: 6,
+      source: "builtin",
+    })
+    expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(rule?.id).not.toContain("deepseek")
+    db.close()
+  })
+
+  it("overwrites existing user rule when importing deepseek official preset", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    service.createRule({
+      modelPattern: "deepseek-v4-pro",
+      inputPer1M: 99,
+      outputPer1M: 199,
+      cacheReadPer1M: 9,
+      reasoningPer1M: 299,
+    })
+
+    const imported = service.importPreset("deepseek-official")
+    const rule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(rule).toMatchObject({
+      inputPer1M: 3,
+      outputPer1M: 6,
+      cacheReadPer1M: 0.025,
+      reasoningPer1M: 6,
+      source: "builtin",
+    })
+    db.close()
+  })
+
+  it("keeps non-overlapping user rules and appends preset rules after import", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const localRule = service.createRule({ modelPattern: "local-model", inputPer1M: 7 })
+    const imported = service.importPreset("deepseek-official")
+    const localIndex = imported.findIndex((item) => item.modelPattern === "local-model")
+    const deepseekIndex = imported.findIndex((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(imported).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: localRule.id, modelPattern: "local-model", inputPer1M: 7, sortIndex: 0 }),
+      expect.objectContaining({ modelPattern: "deepseek-v4-pro", source: "builtin" }),
+    ]))
+    expect(localIndex).toBeGreaterThanOrEqual(0)
+    expect(deepseekIndex).toBeGreaterThan(localIndex)
+    expect(imported[localIndex]?.sortIndex).toBe(0)
+    expect(imported[deepseekIndex]?.sortIndex).toBeGreaterThan(imported[localIndex]?.sortIndex ?? -1)
+    db.close()
+  })
+
+  it("deduplicates matched patterns when importing a preset", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    service.saveRules([
+      { modelPattern: "DeepSeek-V4-Pro", inputPer1M: 91, outputPer1M: 191 },
+      { modelPattern: "deepseek-v4-pro", inputPer1M: 92, outputPer1M: 192 },
+      { modelPattern: "keep-duplicate", inputPer1M: 7 },
+      { modelPattern: "KEEP-DUPLICATE", inputPer1M: 8 },
+    ])
+
+    const imported = service.importPreset("deepseek-official")
+    const deepseekRules = imported.filter((item) => item.modelPattern.toLowerCase() === "deepseek-v4-pro")
+    const untouchedDuplicates = imported.filter((item) => item.modelPattern.toLowerCase() === "keep-duplicate")
+
+    expect(deepseekRules).toHaveLength(1)
+    expect(deepseekRules[0]).toMatchObject({
+      modelPattern: "deepseek-v4-pro",
+      inputPer1M: 3,
+      outputPer1M: 6,
+      cacheReadPer1M: 0.025,
+      source: "builtin",
+      sortIndex: 0,
+    })
+    expect(untouchedDuplicates).toHaveLength(2)
+    db.close()
+  })
+
+  it("lets later preset imports win for overlapping model patterns", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    service.importPreset("deepseek-official")
+    const imported = service.importPreset("aliyun-bailian")
+    const rule = imported.find((item) => item.modelPattern === "deepseek-v4-pro")
+
+    expect(rule).toMatchObject({
+      inputPer1M: 12,
+      outputPer1M: 24,
+      cacheReadPer1M: 0,
+      reasoningPer1M: 24,
+      source: "builtin",
+    })
+    db.close()
+  })
+
+  it("throws on unknown preset and does not change existing rules", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const existing = service.createRule({ modelPattern: "keep-me", inputPer1M: 7 })
+
+    expect(() => service.importPreset("missing-preset" as never)).toThrow("Unknown model price preset: missing-preset")
+    expect(service.listRules()).toEqual([expect.objectContaining({ id: existing.id, modelPattern: "keep-me", inputPer1M: 7 })])
     db.close()
   })
 

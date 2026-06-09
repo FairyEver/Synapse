@@ -30,6 +30,25 @@ export interface ModelPriceRule {
   readonly updatedAt: string
 }
 
+export type ModelPricePresetId =
+  | "openai"
+  | "anthropic"
+  | "deepseek-official"
+  | "aliyun-bailian"
+  | "other"
+
+export interface ModelPricePreset {
+  readonly id: ModelPricePresetId
+  readonly label: string
+  readonly rules: readonly ModelPriceRuleInput[]
+}
+
+export interface ModelPricePresetSummary {
+  readonly id: ModelPricePresetId
+  readonly label: string
+  readonly ruleCount: number
+}
+
 export interface ModelUsageTokenBreakdown {
   readonly input: number
   readonly output: number
