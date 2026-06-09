@@ -4,6 +4,7 @@ import {
   buildDriveShareUrl,
   type DriveFolderUploadPrepareResult,
   type DriveItemDto,
+  type DrivePublicationDto,
   type DriveShareDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
@@ -13,23 +14,44 @@ import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../c
 import { PrismaService } from "../prisma/prisma.service"
 import {
   DRIVE_ITEM_TYPE,
+  DRIVE_PUBLICATION_DEPLOYMENT_STATUS,
+  DRIVE_PUBLICATION_INDEX_PATH,
+  DRIVE_PUBLICATION_STATUS,
+  DRIVE_PUBLICATION_TYPE,
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_STATUS,
   driveDefaultQuotaBytes,
   driveMaxFileBytes,
   driveUploadUrlTtlSeconds,
 } from "./drive.constants"
-import { createDriveShareId, driveStorageKeyForItem, isValidDriveItemName } from "./drive-token"
+import {
+  createDrivePublishId,
+  createDriveShareId,
+  drivePublicationStorageKey,
+  driveStorageKeyForItem,
+  isValidDriveItemName,
+  normalizePublicationRelativePath,
+} from "./drive-token"
 import type { DriveStoragePort } from "./drive-storage"
 import {
+  toDrivePublicationDto,
   toDriveItemDto,
   type DriveAdminFilters,
   type DriveAdminItemDto,
+  type DrivePublicationRecord,
   type DrivePrepareFolderUploadInput,
   type DrivePrepareUploadInput,
 } from "./drive.types"
 
 type DrivePrismaClient = PrismaService | Prisma.TransactionClient
+
+type PublicationSourceAsset = {
+  readonly sourceItemId: string
+  readonly sourceStorageKey: string
+  readonly relativePath: string
+  readonly contentType: string | null
+  readonly size: bigint
+}
 
 const driveItemWithShares = {
   shares: {
@@ -299,6 +321,81 @@ export class DriveService {
     return { ok: true }
   }
 
+  async listPublications(userId: string, publicAppUrl: string): Promise<DrivePublicationDto[]> {
+    const publications = await this.prisma.drivePublication.findMany({
+      where: { userId },
+      include: { sourceItem: { select: { deletedAt: true } } },
+      orderBy: { updatedAt: "desc" },
+    })
+    return publications.map((publication) => toDrivePublicationDto(publication, publicAppUrl))
+  }
+
+  async publishPage(userId: string, itemId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
+    const item = await this.requireOwnedItem(userId, itemId)
+    if (item.type !== DRIVE_ITEM_TYPE.file || item.storageStatus !== DRIVE_STORAGE_STATUS.active || !item.storageKey) {
+      throw new BadRequestException("只能发布 HTML 文件。")
+    }
+    if (!isHtmlDriveItem(item.name, item.mimeType)) throw new BadRequestException("只能发布 HTML 文件。")
+
+    const publication = await this.findOrCreatePublication(userId, item.id, DRIVE_PUBLICATION_TYPE.page, item.name)
+    return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
+      sourceItemId: item.id,
+      sourceStorageKey: item.storageKey,
+      relativePath: DRIVE_PUBLICATION_INDEX_PATH,
+      contentType: "text/html",
+      size: item.size,
+    }])
+  }
+
+  async publishSite(userId: string, itemId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
+    const folder = await this.requireOwnedFolder(userId, itemId)
+    const files = await this.collectPublicationSiteFiles(userId, folder.id)
+    if (!files.some((file) => file.relativePath.toLowerCase() === DRIVE_PUBLICATION_INDEX_PATH)) {
+      throw new BadRequestException("站点根目录需要 index.html。")
+    }
+
+    const publication = await this.findOrCreatePublication(userId, folder.id, DRIVE_PUBLICATION_TYPE.site, folder.name)
+    return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files)
+  }
+
+  async redeployPublication(userId: string, publicationId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
+    const publication = await this.prisma.drivePublication.findFirst({
+      where: { id: publicationId, userId, status: DRIVE_PUBLICATION_STATUS.active },
+    })
+    if (!publication?.sourceItemId) throw new NotFoundException("发布不存在。")
+
+    if (publication.type === DRIVE_PUBLICATION_TYPE.site) {
+      const folder = await this.requireOwnedFolder(userId, publication.sourceItemId)
+      const files = await this.collectPublicationSiteFiles(userId, folder.id)
+      if (!files.some((file) => file.relativePath.toLowerCase() === DRIVE_PUBLICATION_INDEX_PATH)) {
+        throw new BadRequestException("站点根目录需要 index.html。")
+      }
+      return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files)
+    }
+
+    const item = await this.requireOwnedItem(userId, publication.sourceItemId)
+    if (item.type !== DRIVE_ITEM_TYPE.file || item.storageStatus !== DRIVE_STORAGE_STATUS.active || !item.storageKey) {
+      throw new BadRequestException("只能发布 HTML 文件。")
+    }
+    if (!isHtmlDriveItem(item.name, item.mimeType)) throw new BadRequestException("只能发布 HTML 文件。")
+    return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
+      sourceItemId: item.id,
+      sourceStorageKey: item.storageKey,
+      relativePath: DRIVE_PUBLICATION_INDEX_PATH,
+      contentType: "text/html",
+      size: item.size,
+    }])
+  }
+
+  async disablePublication(userId: string, publicationId: string): Promise<{ readonly ok: true }> {
+    const result = await this.prisma.drivePublication.updateMany({
+      where: { id: publicationId, userId, status: DRIVE_PUBLICATION_STATUS.active },
+      data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: new Date() },
+    })
+    if (result.count === 0) throw new NotFoundException("发布不存在。")
+    return { ok: true }
+  }
+
   async getUsage(userId: string): Promise<DriveUsageDto> {
     const usage = await ensureUsage(this.prisma, userId)
     return {
@@ -508,6 +605,128 @@ export class DriveService {
     throw new Error("Unable to create unique drive share id.")
   }
 
+  private async findOrCreatePublication(userId: string, sourceItemId: string, type: string, name: string): Promise<DrivePublicationRecord> {
+    const existing = await this.prisma.drivePublication.findFirst({
+      where: { userId, sourceItemId, type, status: DRIVE_PUBLICATION_STATUS.active },
+    })
+    if (existing) return existing
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        return await this.prisma.drivePublication.create({
+          data: {
+            userId,
+            sourceItemId,
+            type,
+            name,
+            status: DRIVE_PUBLICATION_STATUS.active,
+            publishId: createDrivePublishId(),
+          },
+        })
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) throw error
+      }
+    }
+    throw new Error("Unable to create unique drive publish id.")
+  }
+
+  private async createDeploymentFromAssets(
+    userId: string,
+    publicationId: string,
+    publicAppUrl: string,
+    assets: readonly PublicationSourceAsset[],
+  ): Promise<DrivePublicationDto> {
+    const publication = await this.prisma.drivePublication.findFirst({ where: { id: publicationId, userId } })
+    if (!publication) throw new NotFoundException("发布不存在。")
+    const deployment = await this.prisma.drivePublicationDeployment.create({
+      data: { publicationId, status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.pending },
+    })
+
+    try {
+      const assetRows: Prisma.DrivePublicationAssetCreateManyInput[] = []
+      const seenPaths = new Set<string>()
+      for (const asset of assets) {
+        const relativePath = normalizePublicationRelativePath(asset.relativePath)
+        const pathKey = relativePath.toLowerCase()
+        if (seenPaths.has(pathKey)) throw new BadRequestException("站点文件路径重复。")
+        seenPaths.add(pathKey)
+        const storageKey = drivePublicationStorageKey({ publicationId, deploymentId: deployment.id, relativePath })
+        await this.storage.copyObject({
+          fromKey: asset.sourceStorageKey,
+          toKey: storageKey,
+          contentType: asset.contentType,
+        })
+        assetRows.push({
+          publicationId,
+          deploymentId: deployment.id,
+          sourceItemId: asset.sourceItemId,
+          relativePath,
+          storageKey,
+          contentType: asset.contentType,
+          size: asset.size,
+        })
+      }
+
+      const updated = await this.prisma.$transaction(async (tx) => {
+        await tx.drivePublicationAsset.createMany({ data: assetRows })
+        await tx.drivePublicationDeployment.update({
+          where: { id: deployment.id },
+          data: { status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.active, activatedAt: new Date() },
+        })
+        return tx.drivePublication.update({
+          where: { id: publicationId },
+          data: { currentDeploymentId: deployment.id, status: DRIVE_PUBLICATION_STATUS.active },
+          include: { sourceItem: { select: { deletedAt: true } } },
+        })
+      })
+      return toDrivePublicationDto(updated, publicAppUrl)
+    } catch (error) {
+      await this.prisma.drivePublicationDeployment.update({
+        where: { id: deployment.id },
+        data: {
+          status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.failed,
+          error: error instanceof Error ? error.message : "Publication failed.",
+        },
+      })
+      throw error
+    }
+  }
+
+  private async collectPublicationSiteFiles(userId: string, rootId: string): Promise<PublicationSourceAsset[]> {
+    const result: PublicationSourceAsset[] = []
+    const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: rootId, prefix: "" }]
+    const seenPaths = new Set<string>()
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const children = await this.prisma.driveItem.findMany({
+        where: { userId, parentId: current.parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+        orderBy: [{ type: "asc" }, { name: "asc" }],
+      })
+      for (const child of children) {
+        const relativePath = current.prefix ? `${current.prefix}/${child.name}` : child.name
+        const normalized = normalizePublicationRelativePath(relativePath)
+        if (child.type === DRIVE_ITEM_TYPE.folder) {
+          queue.push({ parentId: child.id, prefix: normalized })
+          continue
+        }
+        if (!child.storageKey) continue
+        const pathKey = normalized.toLowerCase()
+        if (seenPaths.has(pathKey)) throw new BadRequestException("站点文件路径重复。")
+        seenPaths.add(pathKey)
+        result.push({
+          sourceItemId: child.id,
+          sourceStorageKey: child.storageKey,
+          relativePath: normalized,
+          contentType: child.mimeType,
+          size: child.size,
+        })
+      }
+    }
+
+    return result
+  }
+
   private async deleteItemInternal(input: {
     readonly itemId: string
     readonly userId?: string
@@ -619,6 +838,11 @@ function normalizeRelativePath(value: string): string[] {
     throw new BadRequestException("文件路径无效。")
   }
   return parts
+}
+
+function isHtmlDriveItem(name: string, mimeType: string | null): boolean {
+  const lowerName = name.toLowerCase()
+  return lowerName.endsWith(".html") || lowerName.endsWith(".htm") || mimeType === "text/html"
 }
 
 function toDriveShareDto(share: { id: string; shareId: string; itemId: string; enabled: boolean; createdAt: Date }, publicAppUrl: string): DriveShareDto {

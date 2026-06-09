@@ -124,6 +124,99 @@ describe("DriveService", () => {
     await expect(service.resolvePublicShare(share.shareId)).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it("publishes an html file as a snapshot page", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    expect(publication.type).toBe("page")
+    expect(publication.url).toMatch(/^https:\/\/synapse\.test\/pages\/pub_/u)
+    const assets = await prisma.drivePublicationAsset.findMany({ where: { publicationId: publication.id } })
+    expect(assets).toMatchObject([{ relativePath: "index.html", sourceItemId: file.id, contentType: "text/html" }])
+    expect(publication.currentDeploymentId).toBe(assets[0]?.deploymentId)
+  })
+
+  it("rejects non-html page publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "notes.txt",
+      mimeType: "text/plain",
+    })
+
+    await expect(service.publishPage("user-1", file.id, "https://synapse.test"))
+      .rejects.toThrow("只能发布 HTML 文件。")
+  })
+
+  it("publishes a folder with index html as a snapshot site", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    const index = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const assetsFolder = await service.createFolder("user-1", { parentId: folder.id, name: "assets" })
+    const css = await createCompletedUpload(service, "user-1", {
+      parentId: assetsFolder.id,
+      name: "style.css",
+      mimeType: "text/css",
+    })
+
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+    const assets = await prisma.drivePublicationAsset.findMany({
+      where: { publicationId: publication.id },
+      orderBy: { relativePath: "asc" },
+    })
+
+    expect(publication.url).toMatch(/^https:\/\/synapse\.test\/sites\/pub_.+\/$/u)
+    expect(assets.map((asset: any) => [asset.relativePath, asset.sourceItemId])).toEqual([
+      ["assets/style.css", css.id],
+      ["index.html", index.id],
+    ])
+  })
+
+  it("requires root index html for site publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
+      .rejects.toThrow("站点根目录需要 index.html。")
+  })
+
+  it("keeps the previous deployment active when redeploy copy fails", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const first = await service.publishPage("user-1", file.id, "https://synapse.test")
+    const firstDeploymentId = first.currentDeploymentId
+    vi.mocked(storageMock.copyObject).mockRejectedValueOnce(new Error("copy failed"))
+
+    await expect(service.redeployPublication("user-1", first.id, "https://synapse.test")).rejects.toThrow("copy failed")
+    const current = await prisma.drivePublication.findUniqueOrThrow({ where: { id: first.id } })
+    const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: first.id } })
+    expect(current.currentDeploymentId).toBe(firstDeploymentId)
+    expect(deployments.map((deployment: any) => deployment.status).sort()).toEqual(["active", "failed"])
+  })
+
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -232,6 +325,22 @@ describe("DriveService", () => {
   })
 })
 
+async function createCompletedUpload(
+  service: DriveService,
+  userId: string,
+  input: { readonly parentId: string | null; readonly name: string; readonly mimeType: string | null },
+) {
+  const prepared = await service.prepareUpload(userId, {
+    parentId: input.parentId,
+    name: input.name,
+    size: "11",
+    mimeType: input.mimeType,
+    publicAppUrl: "https://synapse.test",
+  })
+  await service.completeUpload(userId, prepared.sessionId)
+  return service.getItem(userId, prepared.item.id)
+}
+
 function createPrismaMemory() {
   let nextId = 1
   const users = new Map<string, { id: string; email: string; passwordHash: string }>()
@@ -239,11 +348,18 @@ function createPrismaMemory() {
   const usages = new Map<string, any>()
   const sessions = new Map<string, any>()
   const shares = new Map<string, any>()
+  const publications = new Map<string, any>()
+  const publicationDeployments = new Map<string, any>()
+  const publicationAssets = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
     ...item,
     shares: [...shares.values()].filter((share) => share.itemId === item.id && share.enabled).map((share) => ({ enabled: share.enabled })),
+  })
+  const withSourceItem = (publication: any) => ({
+    ...publication,
+    sourceItem: publication.sourceItemId ? { deletedAt: items.get(publication.sourceItemId)?.deletedAt ?? null } : null,
   })
 
   const prisma: any = {
@@ -369,6 +485,87 @@ function createPrismaMemory() {
         return { count }
       },
     },
+    drivePublication: {
+      create: async ({ data }: any) => {
+        const publication = {
+          id: id("publication"),
+          currentDeploymentId: null,
+          disabledAt: null,
+          createdAt: now(),
+          updatedAt: now(),
+          ...data,
+        }
+        publications.set(publication.id, publication)
+        return publication
+      },
+      findFirst: async ({ where, include }: any) => {
+        const publication = [...publications.values()].find((item) => matchesWhere(item, where))
+        if (!publication) return null
+        return include?.sourceItem ? withSourceItem(publication) : publication
+      },
+      findMany: async ({ where, include, orderBy }: any = {}) => {
+        let found = [...publications.values()].filter((publication) => matchesWhere(publication, where ?? {}))
+        found = orderRows(found, orderBy)
+        return include?.sourceItem ? found.map(withSourceItem) : found
+      },
+      findUniqueOrThrow: async ({ where, include }: any) => {
+        const publication = publications.get(where.id)
+        if (!publication) throw new Error("publication not found")
+        return include?.sourceItem ? withSourceItem(publication) : publication
+      },
+      update: async ({ where, data, include }: any) => {
+        const publication = publications.get(where.id)
+        if (!publication) throw new Error("publication not found")
+        Object.assign(publication, data, { updatedAt: now() })
+        return include?.sourceItem ? withSourceItem(publication) : publication
+      },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0
+        for (const publication of publications.values()) {
+          if (matchesWhere(publication, where)) {
+            Object.assign(publication, data, { updatedAt: now() })
+            count += 1
+          }
+        }
+        return { count }
+      },
+    },
+    drivePublicationDeployment: {
+      create: async ({ data }: any) => {
+        const deployment = {
+          id: id("deployment"),
+          activatedAt: null,
+          error: null,
+          createdAt: now(),
+          ...data,
+        }
+        publicationDeployments.set(deployment.id, deployment)
+        return deployment
+      },
+      findMany: async ({ where, orderBy }: any = {}) => orderRows(
+        [...publicationDeployments.values()].filter((deployment) => matchesWhere(deployment, where ?? {})),
+        orderBy,
+      ),
+      update: async ({ where, data }: any) => {
+        const deployment = publicationDeployments.get(where.id)
+        if (!deployment) throw new Error("deployment not found")
+        Object.assign(deployment, data)
+        return deployment
+      },
+    },
+    drivePublicationAsset: {
+      createMany: async ({ data }: any) => {
+        for (const row of data) {
+          const asset = { id: id("asset"), sha256: null, ...row }
+          publicationAssets.set(asset.id, asset)
+        }
+        return { count: data.length }
+      },
+      findMany: async ({ where, orderBy }: any = {}) => orderRows(
+        [...publicationAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})),
+        orderBy,
+      ),
+    },
   }
   return prisma
 }
@@ -393,4 +590,18 @@ function selectFields(row: any, select: any) {
     if (select[key]) result[key] = row[key]
   }
   return result
+}
+
+function orderRows(rows: any[], orderBy: any): any[] {
+  if (!orderBy) return rows
+  const entries = Array.isArray(orderBy) ? orderBy : [orderBy]
+  return [...rows].sort((left, right) => {
+    for (const entry of entries) {
+      const [key, direction] = Object.entries(entry)[0] as [string, "asc" | "desc"]
+      if (left[key] === right[key]) continue
+      const comparison = left[key] > right[key] ? 1 : -1
+      return direction === "desc" ? -comparison : comparison
+    }
+    return 0
+  })
 }
