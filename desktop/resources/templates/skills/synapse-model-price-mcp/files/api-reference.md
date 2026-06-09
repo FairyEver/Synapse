@@ -58,6 +58,24 @@ Input:
 
 Returns all rules, including disabled rules.
 
+Each rule has an `id` field. Treat that field as the rule ID and pass it as `ruleId` for get, update, enable, disable, or delete. It is not a model name. Use `modelPattern` when describing the rule to users.
+
+Example rule:
+
+```json
+{
+  "id": "mpr_123456789abc",
+  "modelPattern": "local-model",
+  "inputPer1M": 14.4,
+  "outputPer1M": 57.6,
+  "cacheReadPer1M": 0,
+  "cacheWritePer1M": 0,
+  "reasoningPer1M": 57.6,
+  "currency": "CNY",
+  "enabled": true
+}
+```
+
 ### model_price_rule_get
 
 Canonical action: `model_price.rule.get`
@@ -65,7 +83,7 @@ Canonical action: `model_price.rule.get`
 Input:
 
 ```json
-{ "ruleId": "local-model" }
+{ "ruleId": "mpr_123456789abc" }
 ```
 
 Returns one rule.
@@ -98,7 +116,7 @@ Input:
 
 ```json
 {
-  "ruleId": "local-model",
+  "ruleId": "mpr_123456789abc",
   "outputPer1M": 72
 }
 ```
@@ -112,7 +130,7 @@ Canonical action: `model_price.rule.enable`
 Input:
 
 ```json
-{ "ruleId": "local-model" }
+{ "ruleId": "mpr_123456789abc" }
 ```
 
 Returns the enabled rule.
@@ -124,7 +142,7 @@ Canonical action: `model_price.rule.disable`
 Input:
 
 ```json
-{ "ruleId": "local-model" }
+{ "ruleId": "mpr_123456789abc" }
 ```
 
 Returns the disabled rule.
@@ -136,13 +154,13 @@ Canonical action: `model_price.rule.delete`
 Input:
 
 ```json
-{ "ruleId": "local-model" }
+{ "ruleId": "mpr_123456789abc" }
 ```
 
 Returns:
 
 ```json
-{ "deleted": true, "ruleId": "local-model" }
+{ "deleted": true, "ruleId": "mpr_123456789abc" }
 ```
 
 ## Common Flows
@@ -157,7 +175,7 @@ Returns:
 ### Update one price
 
 1. Call `model_price_rule_list`.
-2. Find the intended rule id.
+2. Find the intended rule ID from the returned `id` field.
 3. If multiple rules could match, ask the user to choose.
 4. Call `model_price_rule_update` with only the changed price field.
 

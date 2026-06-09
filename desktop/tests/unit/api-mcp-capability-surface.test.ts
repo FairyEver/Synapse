@@ -49,6 +49,21 @@ describe("API and MCP capability surface", () => {
     expect(mappedActionIds).toEqual(actionIds)
   })
 
+  it("documents model price rule IDs as opaque rule IDs", () => {
+    const tools = buildAllMcpTools()
+    const updateTool = tools.find((tool) => tool.name === "model_price_rule_update")
+    const listTool = tools.find((tool) => tool.name === "model_price_rule_list")
+    const ruleIdProperty = updateTool?.inputSchema.properties.ruleId as { description?: string } | undefined
+
+    const listDescription = listTool?.description.toLowerCase() ?? ""
+    const ruleIdDescription = ruleIdProperty?.description.toLowerCase() ?? ""
+
+    expect(listDescription).toContain("opaque rule id")
+    expect(ruleIdDescription).toContain("opaque model price rule id")
+    expect(ruleIdDescription).toContain("not a model name")
+    expect(ruleIdDescription).toContain("not modelpattern")
+  })
+
   it("routes every registered API action to its owning domain dispatcher", async () => {
     const dispatchers = {
       automation: vi.fn(async () => ({ ok: true as const })),
