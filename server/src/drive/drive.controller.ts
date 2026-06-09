@@ -366,7 +366,24 @@ function createResponseWritable(response: Response): Writable {
         callback()
         return
       }
-      response.once("drain", callback)
+      let settled = false
+      const cleanup = () => {
+        response.off("close", onClose)
+        response.off("drain", onDrain)
+        response.off("error", onError)
+      }
+      const settle = (error?: Error | null) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        callback(error ?? undefined)
+      }
+      const onClose = () => settle(new Error("Response closed before published asset finished streaming."))
+      const onDrain = () => settle()
+      const onError = (error: Error) => settle(error)
+      response.once("close", onClose)
+      response.once("drain", onDrain)
+      response.once("error", onError)
     },
     final(callback) {
       response.end(callback)
