@@ -58,6 +58,8 @@ export type DrivePublicationRecord = {
   readonly sourceItemId: string | null
   readonly currentDeploymentId: string | null
   readonly passwordEnabled?: boolean
+  readonly passwordHash?: string | null
+  readonly passwordEncrypted?: string | null
   readonly expiresAt?: Date | null
   readonly createdAt: Date
   readonly updatedAt: Date
@@ -80,9 +82,10 @@ export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
   }
 }
 
-export function toDrivePublicationDto(item: DrivePublicationRecord, publicAppUrl: string): DrivePublicationDto {
+export function toDrivePublicationDto(item: DrivePublicationRecord, publicAppUrl: string, password: string | null = null): DrivePublicationDto {
   const type = item.type === "site" ? "site" : "page"
   const url = buildDrivePublicationUrl({ publicAppUrl, publishId: item.publishId, type })
+  const passwordEnabled = item.passwordEnabled ?? false
   return {
     id: item.id,
     publishId: item.publishId,
@@ -92,9 +95,9 @@ export function toDrivePublicationDto(item: DrivePublicationRecord, publicAppUrl
     sourceItemId: item.sourceItemId,
     sourceDeleted: item.sourceItem?.deletedAt !== null && item.sourceItem?.deletedAt !== undefined,
     url,
-    urlWithPassword: buildDriveUrlWithPassword(url, null),
-    passwordEnabled: item.passwordEnabled ?? false,
-    password: null,
+    urlWithPassword: buildDriveUrlWithPassword(url, passwordEnabled ? password : null),
+    passwordEnabled,
+    password: passwordEnabled ? password : null,
     expiresAt: item.expiresAt?.toISOString() ?? null,
     currentDeploymentId: item.currentDeploymentId,
     createdAt: item.createdAt.toISOString(),

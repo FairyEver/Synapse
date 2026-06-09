@@ -1,9 +1,11 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import {
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
+  DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveDeleteImpactDto,
+  type DriveAccessSettingsInput,
   type DriveFolderUploadPrepareResult,
   type DriveItemDto,
   type DrivePublicationDto,
@@ -14,7 +16,9 @@ import {
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
+import { loadEnv } from "../config/env"
 import { PrismaService } from "../prisma/prisma.service"
+import { createDrivePasswordMaterial, decryptDrivePassword, type DrivePasswordMaterial } from "./drive-access-protection"
 import {
   DRIVE_ITEM_TYPE,
   DRIVE_PUBLICATION_DEPLOYMENT_STATUS,
@@ -68,12 +72,18 @@ const driveItemWithShares = {
 } as const
 
 @Injectable()
-export class DriveService {
+export class DriveService implements OnApplicationBootstrap {
+  private readonly accessSecret = loadEnv(process.env).userAccessJwtSecret
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    await this.backfillLegacyDriveAccessProtection()
+  }
 
   async listItems(userId: string, parentId: string | null): Promise<DriveItemDto[]> {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
@@ -324,13 +334,24 @@ export class DriveService {
     return { ok: true }
   }
 
-  async createShare(userId: string, itemId: string, publicAppUrl: string): Promise<DriveShareDto> {
+  async createShare(
+    userId: string,
+    itemId: string,
+    publicAppUrl: string,
+    settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
+  ): Promise<DriveShareDto> {
     const item = await this.requireOwnedItem(userId, itemId)
+    const material = await createDrivePasswordMaterial(settings, this.accessSecret)
     const existing = await this.prisma.driveShare.findFirst({
       where: { itemId: item.id, userId, enabled: true },
     })
-    const share = existing ?? await this.createUniqueShare(item.id, userId, item.type)
-    return toDriveShareDto(share, publicAppUrl)
+    const share = existing
+      ? await this.prisma.driveShare.update({
+        where: { id: existing.id },
+        data: toDrivePasswordUpdateData(material),
+      })
+      : await this.createUniqueShare(item.id, userId, item.type, material)
+    return toDriveShareDto(share, publicAppUrl, material.password)
   }
 
   async disableShare(userId: string, shareId: string): Promise<{ readonly ok: true }> {
@@ -358,9 +379,9 @@ export class DriveService {
         itemType: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
         sourceDeleted: share.item.deletedAt !== null,
         url,
-        urlWithPassword: buildDriveUrlWithPassword(url, null),
+        urlWithPassword: buildDriveUrlWithPassword(url, share.passwordEnabled ? this.decryptStoredPassword(share.passwordEncrypted) : null),
         passwordEnabled: share.passwordEnabled,
-        password: null,
+        password: share.passwordEnabled ? this.decryptStoredPassword(share.passwordEncrypted) : null,
         expiresAt: share.expiresAt?.toISOString() ?? null,
         createdAt: share.createdAt.toISOString(),
       }
@@ -373,7 +394,11 @@ export class DriveService {
       include: { sourceItem: { select: { deletedAt: true } } },
       orderBy: { updatedAt: "desc" },
     })
-    return publications.map((publication) => toDrivePublicationDto(publication, publicAppUrl))
+    return publications.map((publication) => toDrivePublicationDto(
+      publication,
+      publicAppUrl,
+      this.decryptStoredPassword(publication.passwordEncrypted),
+    ))
   }
 
   async getDeleteImpact(userId: string, itemId: string, publicAppUrl: string): Promise<DriveDeleteImpactDto> {
@@ -381,17 +406,29 @@ export class DriveService {
     const items = root.type === DRIVE_ITEM_TYPE.folder ? await this.collectSubtree(root.id) : [root]
     const itemIds = items.map((item) => item.id)
     const publications = await this.findActivePublicationsReferencingItems(userId, itemIds)
-    return { publications: publications.map((publication) => toDrivePublicationDto(publication, publicAppUrl)) }
+    return {
+      publications: publications.map((publication) => toDrivePublicationDto(
+        publication,
+        publicAppUrl,
+        this.decryptStoredPassword(publication.passwordEncrypted),
+      )),
+    }
   }
 
-  async publishPage(userId: string, itemId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
+  async publishPage(
+    userId: string,
+    itemId: string,
+    publicAppUrl: string,
+    settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
+  ): Promise<DrivePublicationDto> {
     const item = await this.requireOwnedItem(userId, itemId)
     if (item.type !== DRIVE_ITEM_TYPE.file || item.storageStatus !== DRIVE_STORAGE_STATUS.active || !item.storageKey) {
       throw new BadRequestException("只能发布 HTML 文件。")
     }
     if (!isHtmlDriveItem(item.name, item.mimeType)) throw new BadRequestException("只能发布 HTML 文件。")
 
-    const publication = await this.findOrCreatePublication(userId, item.id, DRIVE_PUBLICATION_TYPE.page, item.name)
+    const material = await createDrivePasswordMaterial(settings, this.accessSecret)
+    const publication = await this.findOrCreatePublication(userId, item.id, DRIVE_PUBLICATION_TYPE.page, item.name, material)
     return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
       sourceItemId: item.id,
       sourceStorageKey: item.storageKey,
@@ -401,7 +438,12 @@ export class DriveService {
     }])
   }
 
-  async publishSite(userId: string, itemId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
+  async publishSite(
+    userId: string,
+    itemId: string,
+    publicAppUrl: string,
+    settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
+  ): Promise<DrivePublicationDto> {
     const folder = await this.requireOwnedFolder(userId, itemId)
     if (folder.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new BadRequestException("站点文件夹不可发布。")
     const files = await this.collectPublicationSiteFiles(userId, folder.id)
@@ -409,7 +451,8 @@ export class DriveService {
       throw new BadRequestException("站点根目录需要 index.html。")
     }
 
-    const publication = await this.findOrCreatePublication(userId, folder.id, DRIVE_PUBLICATION_TYPE.site, folder.name)
+    const material = await createDrivePasswordMaterial(settings, this.accessSecret)
+    const publication = await this.findOrCreatePublication(userId, folder.id, DRIVE_PUBLICATION_TYPE.site, folder.name, material)
     return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files)
   }
 
@@ -620,6 +663,34 @@ export class DriveService {
     return { expired: sessions.length }
   }
 
+  async backfillLegacyDriveAccessProtection(now = new Date()): Promise<{ readonly shares: number; readonly publications: number }> {
+    const legacyShares = await this.prisma.driveShare.findMany({
+      where: { enabled: true, passwordEnabled: false, passwordHash: null },
+      select: { id: true },
+    })
+    const legacyPublications = await this.prisma.drivePublication.findMany({
+      where: { status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null },
+      select: { id: true },
+    })
+
+    for (const share of legacyShares) {
+      const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn: "7d" }, this.accessSecret, now)
+      await this.prisma.driveShare.update({
+        where: { id: share.id },
+        data: toDrivePasswordUpdateData(material),
+      })
+    }
+    for (const publication of legacyPublications) {
+      const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn: "7d" }, this.accessSecret, now)
+      await this.prisma.drivePublication.update({
+        where: { id: publication.id },
+        data: toDrivePasswordUpdateData(material),
+      })
+    }
+
+    return { shares: legacyShares.length, publications: legacyPublications.length }
+  }
+
   private async requireOwnedItem(userId: string, itemId: string) {
     const item = await this.prisma.driveItem.findFirst({
       where: { id: itemId, userId, deletedAt: null },
@@ -686,11 +757,11 @@ export class DriveService {
     ])
   }
 
-  private async createUniqueShare(itemId: string, userId: string, type: string) {
+  private async createUniqueShare(itemId: string, userId: string, type: string, material: DrivePasswordMaterial) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
         return await this.prisma.driveShare.create({
-          data: { itemId, userId, type, shareId: createDriveShareId() },
+          data: { itemId, userId, type, shareId: createDriveShareId(), ...toDrivePasswordUpdateData(material) },
         })
       } catch (error) {
         if (!isUniqueConstraintError(error)) throw error
@@ -699,10 +770,21 @@ export class DriveService {
     throw new Error("Unable to create unique drive share id.")
   }
 
-  private async findOrCreatePublication(userId: string, sourceItemId: string, type: string, name: string): Promise<DrivePublicationRecord> {
+  private async findOrCreatePublication(
+    userId: string,
+    sourceItemId: string,
+    type: string,
+    name: string,
+    material: DrivePasswordMaterial,
+  ): Promise<DrivePublicationRecord> {
     const activeSourceWhere = { userId, sourceItemId, type, status: DRIVE_PUBLICATION_STATUS.active }
     const existing = await this.prisma.drivePublication.findFirst({ where: activeSourceWhere })
-    if (existing) return existing
+    if (existing) {
+      return this.prisma.drivePublication.update({
+        where: { id: existing.id },
+        data: toDrivePasswordUpdateData(material),
+      })
+    }
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
@@ -714,12 +796,18 @@ export class DriveService {
             name,
             status: DRIVE_PUBLICATION_STATUS.active,
             publishId: createDrivePublishId(),
+            ...toDrivePasswordUpdateData(material),
           },
         })
       } catch (error) {
         if (!isUniqueConstraintError(error)) throw error
         const racedPublication = await this.prisma.drivePublication.findFirst({ where: activeSourceWhere })
-        if (racedPublication) return racedPublication
+        if (racedPublication) {
+          return this.prisma.drivePublication.update({
+            where: { id: racedPublication.id },
+            data: toDrivePasswordUpdateData(material),
+          })
+        }
       }
     }
     throw new Error("Unable to create unique drive publish id.")
@@ -774,7 +862,7 @@ export class DriveService {
           include: { sourceItem: { select: { deletedAt: true } } },
         })
       })
-      return toDrivePublicationDto(updated, publicAppUrl)
+      return toDrivePublicationDto(updated, publicAppUrl, this.decryptStoredPassword(updated.passwordEncrypted))
     } catch (error) {
       await this.prisma.drivePublicationDeployment.update({
         where: { id: deployment.id },
@@ -820,6 +908,11 @@ export class DriveService {
     }
 
     return result
+  }
+
+  private decryptStoredPassword(value: string | null | undefined): string | null {
+    if (!value) return null
+    return decryptDrivePassword(value, this.accessSecret)
   }
 
   private async findActivePublicationsReferencingItems(userId: string, itemIds: readonly string[]): Promise<DrivePublicationWithImpactAssets[]> {
@@ -990,19 +1083,30 @@ function toDriveShareDto(
     createdAt: Date
   },
   publicAppUrl: string,
+  password: string | null = null,
 ): DriveShareDto {
   const url = buildDriveShareUrl({ publicAppUrl, shareId: share.shareId })
+  const passwordEnabled = share.passwordEnabled ?? false
   return {
     id: share.id,
     shareId: share.shareId,
     itemId: share.itemId,
     enabled: share.enabled,
     url,
-    urlWithPassword: buildDriveUrlWithPassword(url, null),
-    passwordEnabled: share.passwordEnabled ?? false,
-    password: null,
+    urlWithPassword: buildDriveUrlWithPassword(url, passwordEnabled ? password : null),
+    passwordEnabled,
+    password: passwordEnabled ? password : null,
     expiresAt: share.expiresAt?.toISOString() ?? null,
     createdAt: share.createdAt.toISOString(),
+  }
+}
+
+function toDrivePasswordUpdateData(material: DrivePasswordMaterial) {
+  return {
+    passwordEnabled: material.passwordEnabled,
+    passwordHash: material.passwordHash,
+    passwordEncrypted: material.passwordEncrypted,
+    expiresAt: material.expiresAt,
   }
 }
 
