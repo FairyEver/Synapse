@@ -513,6 +513,46 @@ describe("DriveModule", () => {
     expect(menuItemTexts()).toContain("发布站点")
   })
 
+  it("shows redeploy and cancel publication for active html pages", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "html-1", name: "report.html", type: "file", mimeType: "text/html" }),
+    ])
+    mocks.listDrivePublications.mockResolvedValue([
+      createDrivePublication({ id: "pub-row-1", sourceItemId: "html-1", name: "report.html", type: "page" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.html")
+
+    expect(menuItemTexts()).toContain("重新发布网页")
+    expect(menuItemTexts()).not.toContain("发布网页")
+    expect(menuItemTexts()).toContain("取消发布")
+
+    await clickText("取消发布")
+
+    expect(mocks.disableDrivePublication).toHaveBeenCalledWith({ publicationId: "pub-row-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
+  })
+
+  it("shows redeploy and cancel publication for active sites", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+    ])
+    mocks.listDrivePublications.mockResolvedValue([
+      createDrivePublication({ id: "pub-site-1", sourceItemId: "folder-1", name: "site", type: "site" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("site")
+
+    expect(menuItemTexts()).toContain("重新发布站点")
+    expect(menuItemTexts()).not.toContain("发布站点")
+    expect(menuItemTexts()).toContain("取消发布")
+  })
+
   it("publishes html files and copies the page URL", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "html-1", name: "report.html", type: "file", mimeType: "text/html" }),
@@ -621,6 +661,8 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("网页")
     expect(document.body.textContent).toContain("site")
     expect(document.body.textContent).toContain("站点")
+    expect(document.body.textContent).toContain("已发布")
+    expect(document.body.textContent).toContain("2026")
     expect(document.body.textContent).toContain("来源正常")
     expect(document.body.textContent).toContain("deleted.html")
     expect(document.body.textContent).toContain("来源已删除")
@@ -640,7 +682,7 @@ describe("DriveModule", () => {
     await clickButtonByLabel("取消发布 report.html")
 
     expect(mocks.listDrivePublications).toHaveBeenCalled()
-    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(3)
+    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(4)
     expect(mocks.disableDrivePublication).toHaveBeenCalledWith({ publicationId: "pub-row-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
@@ -658,6 +700,7 @@ describe("DriveModule", () => {
 
     expect(document.body.textContent).toContain("report.txt")
     expect(document.body.textContent).toContain("文件")
+    expect(document.body.textContent).toContain("2026")
     expect(document.body.textContent).toContain("来源正常")
     expect(document.body.textContent).toContain("folder")
     expect(document.body.textContent).toContain("文件夹")

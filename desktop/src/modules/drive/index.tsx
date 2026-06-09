@@ -87,6 +87,11 @@ type DriveLoadError =
   | { readonly type: "auth" }
   | { readonly type: "load"; readonly message: string }
 
+type DriveItemPublicationActions = {
+  readonly page: DrivePublicationDto | null
+  readonly site: DrivePublicationDto | null
+}
+
 const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 
@@ -97,6 +102,7 @@ function driveMoveTreeKey(parentId: string | null): string {
 function DriveModule() {
   const { pendingAction, startLogin, state: accountState } = useAccount()
   const [items, setItems] = useState<DriveItemDto[]>([])
+  const [publications, setPublications] = useState<DrivePublicationDto[]>([])
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [loading, setLoading] = useState(false)
   const [openingFolderId, setOpeningFolderId] = useState<string | null>(null)
@@ -122,8 +128,13 @@ function DriveModule() {
     setLoading(true)
     setError(null)
     try {
-      const nextItems = await requireSynapseBridge().account.listDriveItems({ parentId })
+      const bridge = requireSynapseBridge()
+      const [nextItems, nextPublications] = await Promise.all([
+        bridge.account.listDriveItems({ parentId }),
+        bridge.account.listDrivePublications(),
+      ])
       setItems(nextItems)
+      setPublications(nextPublications)
     } catch (rawError) {
       setError(driveLoadError(rawError))
     } finally {
@@ -134,6 +145,7 @@ function DriveModule() {
   useEffect(() => {
     if (!accountAuthenticated) {
       setItems([])
+      setPublications([])
       setLoading(false)
       setOpeningFolderId(null)
       setError(null)
@@ -148,6 +160,19 @@ function DriveModule() {
   }, [accountAuthenticated, loadItems, parentId])
 
   const actionsDisabled = !accountAuthenticated || loading || openingFolderId !== null || error !== null
+
+  const activePublicationsBySourceItemId = useMemo(() => {
+    const result = new Map<string, DriveItemPublicationActions>()
+    for (const publication of publications) {
+      if (publication.status !== "active" || publication.sourceDeleted || !publication.sourceItemId) continue
+      const current = result.get(publication.sourceItemId) ?? { page: null, site: null }
+      result.set(publication.sourceItemId, {
+        page: publication.type === "page" ? publication : current.page,
+        site: publication.type === "site" ? publication : current.site,
+      })
+    }
+    return result
+  }, [publications])
 
   const visibleItems = useMemo(() => {
     const keyword = query.trim().toLowerCase()
@@ -327,6 +352,10 @@ function DriveModule() {
     }
   }, [loadItems])
 
+  const handleDisablePublication = useCallback(async (publicationId: string) => {
+    await disableDrivePublication(publicationId, loadItems)
+  }, [loadItems])
+
   const content = (() => {
     if (!accountAuthenticated) {
       if (accountState.status === "authenticating") {
@@ -400,8 +429,10 @@ function DriveModule() {
         onDelete={handleDelete}
         onShare={handleShare}
         onDisableShare={handleDisableShare}
+        publicationActionsByItemId={activePublicationsBySourceItemId}
         onPublishPage={handlePublishPage}
         onPublishSite={handlePublishSite}
+        onDisablePublication={handleDisablePublication}
       />
     )
   })()
@@ -848,8 +879,10 @@ function DriveFileList({
   onDelete,
   onShare,
   onDisableShare,
+  publicationActionsByItemId,
   onPublishPage,
   onPublishSite,
+  onDisablePublication,
 }: {
   readonly items: readonly DriveItemDto[]
   readonly loading: boolean
@@ -864,8 +897,10 @@ function DriveFileList({
   readonly onDelete: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly publicationActionsByItemId: ReadonlyMap<string, DriveItemPublicationActions>
   readonly onPublishPage: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
+  readonly onDisablePublication: (publicationId: string) => void
 }) {
   const emptyTitle = query.trim() ? "没有匹配项" : "暂无文件"
 
@@ -912,8 +947,10 @@ function DriveFileList({
                   onDelete={onDelete}
                   onShare={onShare}
                   onDisableShare={onDisableShare}
+                  publicationActions={publicationActionsByItemId.get(item.id) ?? { page: null, site: null }}
                   onPublishPage={onPublishPage}
                   onPublishSite={onPublishSite}
+                  onDisablePublication={onDisablePublication}
                 />
               ))}
             </TableBody>
@@ -1023,8 +1060,10 @@ function DriveFileListRow({
   onDelete,
   onShare,
   onDisableShare,
+  publicationActions,
   onPublishPage,
   onPublishSite,
+  onDisablePublication,
 }: {
   readonly item: DriveItemDto
   readonly opening: boolean
@@ -1034,8 +1073,10 @@ function DriveFileListRow({
   readonly onDelete: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly publicationActions: DriveItemPublicationActions
   readonly onPublishPage: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
+  readonly onDisablePublication: (publicationId: string) => void
 }) {
   const status = driveStatusLabel(item)
   const statusVariant = driveStatusBadgeVariant(item)
@@ -1106,8 +1147,10 @@ function DriveFileListRow({
             onRename={onRename}
             onMove={onMove}
             onDisableShare={onDisableShare}
+            publicationActions={publicationActions}
             onPublishPage={onPublishPage}
             onPublishSite={onPublishSite}
+            onDisablePublication={onDisablePublication}
           />
         </div>
       </TableCell>
@@ -1120,16 +1163,23 @@ function DriveItemMenu({
   onRename,
   onMove,
   onDisableShare,
+  publicationActions,
   onPublishPage,
   onPublishSite,
+  onDisablePublication,
 }: {
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
+  readonly publicationActions: DriveItemPublicationActions
   readonly onPublishPage: (item: DriveItemDto) => void
   readonly onPublishSite: (item: DriveItemDto) => void
+  readonly onDisablePublication: (publicationId: string) => void
 }) {
+  const pagePublication = publicationActions.page
+  const sitePublication = publicationActions.site
+  const activePublication = item.type === "folder" ? sitePublication : pagePublication
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -1142,13 +1192,19 @@ function DriveItemMenu({
           {isHtmlDriveItem(item) ? (
             <DropdownMenuItem onClick={() => onPublishPage(item)}>
               <Globe2 data-icon="inline-start" />
-              发布网页
+              {pagePublication ? "重新发布网页" : "发布网页"}
             </DropdownMenuItem>
           ) : null}
           {item.type === "folder" ? (
             <DropdownMenuItem onClick={() => onPublishSite(item)}>
               <Globe2 data-icon="inline-start" />
-              发布站点
+              {sitePublication ? "重新发布站点" : "发布站点"}
+            </DropdownMenuItem>
+          ) : null}
+          {activePublication ? (
+            <DropdownMenuItem onClick={() => onDisablePublication(activePublication.id)}>
+              <X data-icon="inline-start" />
+              取消发布
             </DropdownMenuItem>
           ) : null}
           {item.activeShareId ? (
@@ -1273,8 +1329,14 @@ function DrivePublicationSummary({ item }: { readonly item: DrivePublicationDto 
       <div className="truncate text-sm font-medium">{item.name}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1">
         <Badge variant="outline">{item.type === "site" ? "站点" : "网页"}</Badge>
+        <Badge variant={item.status === "active" ? "secondary" : "outline"}>
+          {item.status === "active" ? "已发布" : "已取消"}
+        </Badge>
         <span className="text-xs text-muted-foreground">
           {item.sourceDeleted ? "来源已删除" : "来源正常"}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {formatDriveDateTime(item.updatedAt)}
         </span>
       </div>
     </div>
@@ -1381,6 +1443,9 @@ function DriveShareSummary({ item }: { readonly item: DriveShareListItemDto }) {
         <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>
         <span className="text-xs text-muted-foreground">
           {item.sourceDeleted ? "来源已删除" : "来源正常"}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {formatDriveDateTime(item.createdAt)}
         </span>
       </div>
     </div>
