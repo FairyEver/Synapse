@@ -1201,7 +1201,7 @@ describe("DriveModule", () => {
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
 
-    await clickButtonByLabel("复制密码")
+    await clickButtonByLabel("复制 report.html 密码")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
 
     await clickButtonByLabel("打开 report.html")
@@ -1299,7 +1299,7 @@ describe("DriveModule", () => {
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
 
-    await clickButtonByLabel("复制密码")
+    await clickButtonByLabel("复制 report.txt 密码")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
 
     await clickButtonByLabel("打开 report.txt")

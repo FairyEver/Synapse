@@ -408,54 +408,65 @@ function DriveModule() {
   }, [])
 
   const handleAccessSettingsConfirm = useCallback(async (settings: DriveAccessSettingsInput) => {
-    if (!accessSettingsTarget) return
+    const target = accessSettingsTarget
+    if (!target) return
+    let afterCreate: (() => Promise<void>) | null = null
     setSubmitting(true)
     try {
       const bridge = requireSynapseBridge()
-      if (accessSettingsTarget.kind === "share") {
+      if (target.kind === "share") {
         const share = await bridge.account.shareDriveItem({
-          itemId: accessSettingsTarget.item.id,
+          itemId: target.item.id,
           ...settings,
         })
         setAccessSettingsTarget(null)
         setShareSuccess({
-          name: accessSettingsTarget.item.name,
-          type: accessSettingsTarget.item.type,
+          name: target.item.name,
+          type: target.item.type,
           url: share.url,
           urlWithPassword: share.urlWithPassword,
           passwordEnabled: share.passwordEnabled,
           password: share.password,
           expiresAt: share.expiresAt,
         })
-        await copySharedUrlAfterShare(getDriveAccessUrl(share))
-      } else if (accessSettingsTarget.kind === "page") {
+        afterCreate = async () => {
+          await copySharedUrlAfterShare(getDriveAccessUrl(share))
+          await reloadDriveItemsAfterAccessChange(loadItems)
+        }
+      } else if (target.kind === "page") {
         const publication = await bridge.account.publishDrivePage({
-          itemId: accessSettingsTarget.item.id,
+          itemId: target.item.id,
           ...settings,
         })
         setAccessSettingsTarget(null)
         setPublicationSuccess(publication)
-        await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
+        afterCreate = async () => {
+          await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
+          await reloadDriveItemsAfterAccessChange(loadItems)
+        }
       } else {
         const publication = await bridge.account.publishDriveSite({
-          itemId: accessSettingsTarget.item.id,
+          itemId: target.item.id,
           ...settings,
         })
         setAccessSettingsTarget(null)
         setPublicationSuccess(publication)
-        await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
+        afterCreate = async () => {
+          await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
+          await reloadDriveItemsAfterAccessChange(loadItems)
+        }
       }
-      await loadItems()
     } catch (rawError) {
-      const fallback = accessSettingsTarget.kind === "share"
+      const fallback = target.kind === "share"
         ? "分享失败"
-        : accessSettingsTarget.kind === "page"
+        : target.kind === "page"
           ? "发布网页失败"
           : "发布站点失败"
       toast(errorMessage(rawError, fallback))
     } finally {
       setSubmitting(false)
     }
+    if (afterCreate) await afterCreate()
   }, [accessSettingsTarget, loadItems])
 
   const handleDisableShare = useCallback(async (item: DriveItemDto) => {
@@ -1697,7 +1708,7 @@ function DrivePublicationActions({
       </DriveIconAction>
       {password ? (
         <DriveIconAction
-          label="复制密码"
+          label={`复制 ${item.name} 密码`}
           tooltip="复制密码"
           onClick={() => { void copyDrivePassword(password) }}
         >
@@ -1754,7 +1765,7 @@ function DriveShareActions({
       </DriveIconAction>
       {password ? (
         <DriveIconAction
-          label="复制密码"
+          label={`复制 ${item.itemName} 密码`}
           tooltip="复制密码"
           onClick={() => { void copyDrivePassword(password) }}
         >
@@ -2387,6 +2398,14 @@ async function copySharedUrlAfterShare(url: string): Promise<void> {
     toast("链接已复制")
   } catch (_rawError) {
     toast("分享成功，复制失败")
+  }
+}
+
+async function reloadDriveItemsAfterAccessChange(loadItems: () => Promise<void>): Promise<void> {
+  try {
+    await loadItems()
+  } catch (rawError) {
+    toast(errorMessage(rawError, "刷新失败"))
   }
 }
 
