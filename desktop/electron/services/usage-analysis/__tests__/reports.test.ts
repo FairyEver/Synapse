@@ -48,18 +48,68 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
       ) VALUES ('cx-usage-1', 'session-2', 1779847200000, '2026-05-27', '2026-05-27 10', '-repo', '/repo', 'local-model', 'openai')
     `)
 
-    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
+    const [savedRule] = service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
 
     expect(logger.info).toHaveBeenCalledWith("Usage pricing rules saved.", expect.objectContaining({
       oldRuleCount: expect.any(Number),
       newRuleCount: 1,
       oldRulesHash: expect.any(String),
       newRulesHash: expect.any(String),
-      addedRuleIds: ["local-model"],
+      addedRuleIds: [savedRule?.id],
       removedRuleIds: expect.any(Array),
       changedRuleIds: expect.any(Array),
       affectedEvents: { cc: 1, cx: 1 },
       elapsedMs: expect.any(Number),
+    }))
+  })
+
+  it("does not log legacy readable ids as added or removed when only save normalization re-ids a rule", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const logger = createRecordingLogger()
+    const service = new CcUsageAnalysisService({ db, roots: [], logger })
+    db.exec(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, cache_read_per_1m, cache_write_per_1m,
+        reasoning_per_1m, currency, enabled, source, sort_index, updated_at
+      ) VALUES (
+        'legacy-local-model', 'Local-Model', 14.4, 57.6, 0, 0,
+        0, 'CNY', 1, 'user', 0, '2026-06-09T00:00:00.000Z'
+      )
+    `)
+
+    service.savePricingRules([{ id: "legacy-local-model", modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 57.6 }])
+
+    expect(logger.info).toHaveBeenCalledWith("Usage pricing rules saved.", expect.objectContaining({
+      addedRuleIds: [],
+      removedRuleIds: [],
+      changedRuleIds: [],
+    }))
+  })
+
+  it("logs a changed rule when the same model pattern keeps semantic identity but prices change", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const logger = createRecordingLogger()
+    const service = new CcUsageAnalysisService({ db, roots: [], logger })
+    db.exec(`
+      INSERT INTO model_price_rules (
+        id, model_pattern, input_per_1m, output_per_1m, cache_read_per_1m, cache_write_per_1m,
+        reasoning_per_1m, currency, enabled, source, sort_index, updated_at
+      ) VALUES (
+        'legacy-local-model', 'local-model', 14.4, 57.6, 0, 0,
+        0, 'CNY', 1, 'user', 0, '2026-06-09T00:00:00.000Z'
+      )
+    `)
+
+    const [savedRule] = service.savePricingRules([{ id: "legacy-local-model", modelPattern: "local-model", inputPer1M: 18, outputPer1M: 57.6 }])
+
+    expect(logger.info).toHaveBeenCalledWith("Usage pricing rules saved.", expect.objectContaining({
+      addedRuleIds: [],
+      removedRuleIds: [],
+      changedRuleIds: [savedRule?.id],
     }))
   })
 

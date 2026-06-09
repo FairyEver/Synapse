@@ -114,6 +114,28 @@ describe("model price service", () => {
     db.close()
   })
 
+  it("generates hash-like internal ids for new rules", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const created = service.createRule({ modelPattern: "qwen3.7-plus", inputPer1M: 2 })
+
+    expect(created.id).toMatch(/^mpr_[a-f0-9]{12}$/)
+    expect(created.id).not.toContain("qwen")
+    expect(created.modelPattern).toBe("qwen3.7-plus")
+    db.close()
+  })
+
+  it("preserves existing hash-like ids during manual saves", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+
+    const saved = service.saveRules([{ id: "mpr_123456789abc", modelPattern: "local-model", inputPer1M: 1 }])
+
+    expect(saved[0]?.id).toBe("mpr_123456789abc")
+    db.close()
+  })
+
   it("creates updates disables enables deletes and clears rules in model_price_rules", () => {
     const db = createDb()
     const service = new ModelPriceService(db)

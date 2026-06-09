@@ -50,7 +50,7 @@ describe("model price coverage", () => {
   it("merges used CC and Codex models and reports current rule matches", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
-    service.saveRules([{ id: "local", modelPattern: "local-model", inputPer1M: 1 }])
+    const [savedRule] = service.saveRules([{ id: "local", modelPattern: "local-model", inputPer1M: 1 }])
     insertUsageEvent(db, "cc", { id: "cc-1", model: "local-model", inputTokens: 100, priceKnown: true, totalCost: 0.001 })
     insertUsageEvent(db, "cx", { id: "cx-1", model: "local-model", inputTokens: 50, priceKnown: false })
     insertUsageEvent(db, "cx", { id: "cx-2", model: "other-model", inputTokens: 25, priceKnown: false })
@@ -64,7 +64,7 @@ describe("model price coverage", () => {
         pricedTokens: 100,
         unpricedTokens: 50,
         priceKnown: true,
-        matchedRuleId: "local",
+        matchedRuleId: savedRule?.id,
         matchedRulePattern: "local-model",
       }),
       expect.objectContaining({
