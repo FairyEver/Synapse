@@ -1,14 +1,22 @@
 import type { DatabaseSync } from "node:sqlite"
 import { SYNAPSE_COST_CURRENCY, USD_TO_CNY_RATE } from "../../../action-packages/shared/cost-currency"
 import { seedDefaultUsagePriceRules } from "./pricing"
-import { createMainLogger } from "../log-store"
 
 export const RMB_MIGRATION_META_KEY = "cost_currency_migrated_to_cny_v1"
 
 const RMB_MIGRATION_VERSION = "fixed-usd-to-cny-7.2-v1"
-const logger = createMainLogger("service.usage-analysis.currency-migration")
 
 type UsagePrefix = "cc" | "cx"
+
+export interface UsageAnalysisMigrationLogger {
+  info(message: string, details?: Record<string, unknown>): void
+  error(message: string, details?: Record<string, unknown>): void
+}
+
+const noopUsageAnalysisMigrationLogger: UsageAnalysisMigrationLogger = {
+  info: () => undefined,
+  error: () => undefined,
+}
 
 interface CurrencyMigrationAffectedRows {
   usageModelPrices: number
@@ -17,7 +25,10 @@ interface CurrencyMigrationAffectedRows {
   hourlyUsage: Record<UsagePrefix, number>
 }
 
-export function migrateUsageAnalysisCostsToCny(database: DatabaseSync): void {
+export function migrateUsageAnalysisCostsToCny(
+  database: DatabaseSync,
+  logger: UsageAnalysisMigrationLogger = noopUsageAnalysisMigrationLogger,
+): void {
   const marker = database.prepare("SELECT value FROM usage_pricing_meta WHERE key = ?").get(RMB_MIGRATION_META_KEY) as { value?: string } | undefined
   if (marker?.value) return
 

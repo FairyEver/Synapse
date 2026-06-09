@@ -13,17 +13,21 @@ import type {
   CcRecordListInput,
   CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
-import { sanitizeError } from "../error-sanitize"
-import { createMainLogger } from "../log-store"
+import { sanitizeError } from "../../../src/lib/error-sanitize"
 import { parseCcConversationFile } from "./cc-conversation-parser"
 import { roundUsageCost } from "./pricing"
 import { createUsageRangeFilter } from "./range"
 
 type ServiceOptions = {
   readonly db: DatabaseSync
+  readonly logger?: CcConversationLogger
 }
 
-type CcConversationLogger = Pick<ReturnType<typeof createMainLogger>, "error" | "info" | "warn">
+type CcConversationLogger = {
+  info(message: string, details?: Record<string, unknown>): void
+  warn(message: string, details?: Record<string, unknown>): void
+  error(message: string, details?: Record<string, unknown>): void
+}
 
 type SessionRow = {
   readonly session_id: string
@@ -48,7 +52,11 @@ type RecordAggregateRow = AggregateRow & {
 }
 
 const MAX_QUERY_LIMIT = 5000
-const logger: CcConversationLogger = createMainLogger("service.cc-conversation")
+const noopCcConversationLogger: CcConversationLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+}
 
 function toNumber(value: unknown): number {
   const numberValue = Number(value)
@@ -123,9 +131,11 @@ function conversationFilterSummary(input: CcConversationListInput): Record<strin
 
 export class CcConversationService {
   private readonly db: DatabaseSync
+  private readonly logger: CcConversationLogger
 
   constructor(options: ServiceOptions) {
     this.db = options.db
+    this.logger = options.logger ?? noopCcConversationLogger
   }
 
   listConversations(input: CcConversationListInput): CcConversationListResult {
@@ -189,7 +199,7 @@ export class CcConversationService {
         total: toNumber(count?.total),
         partial: false,
       }
-      logger.info("CC conversations listed.", {
+      this.logger.info("CC conversations listed.", {
         limit,
         offset,
         total: result.total,
@@ -198,7 +208,7 @@ export class CcConversationService {
       })
       return result
     } catch (error) {
-      logger.error("CC conversations list failed.", {
+      this.logger.error("CC conversations list failed.", {
         limit,
         offset,
         filters: conversationFilterSummary(input),
@@ -211,11 +221,11 @@ export class CcConversationService {
   async getConversation(sessionId: string): Promise<CcConversationDetail> {
     const row = this.getSessionRow(sessionId)
     if (!row) {
-      logger.error("CC conversation session row missing.", { sessionId })
+      this.logger.error("CC conversation session row missing.", { sessionId })
       throw new Error(`Claude Code session not found: ${sessionId}`)
     }
     if (!fs.existsSync(row.file_path)) {
-      logger.error("CC conversation source file missing.", {
+      this.logger.error("CC conversation source file missing.", {
         sessionId,
         filePath: row.file_path,
       })
@@ -226,7 +236,7 @@ export class CcConversationService {
     try {
       fileSizeBytes = fs.statSync(row.file_path).size
       const parsed = await parseCcConversationFile(row.file_path)
-      logger.info("CC conversation loaded.", {
+      this.logger.info("CC conversation loaded.", {
         sessionId,
         filePath: row.file_path,
         fileSizeBytes,
@@ -240,7 +250,7 @@ export class CcConversationService {
         hasMore: false,
       }
     } catch (error) {
-      logger.error("CC conversation load failed.", {
+      this.logger.error("CC conversation load failed.", {
         sessionId,
         filePath: row.file_path,
         fileSizeBytes,
@@ -262,7 +272,7 @@ export class CcConversationService {
     for (const candidate of candidates) {
       if (!fs.existsSync(candidate.sourceFilePath)) {
         missingFileCount += 1
-        logger.warn("CC conversation search skipped missing source file.", {
+        this.logger.warn("CC conversation search skipped missing source file.", {
           sessionId: candidate.sessionId,
           filePath: candidate.sourceFilePath,
         })
@@ -274,7 +284,7 @@ export class CcConversationService {
         parsed = await parseCcConversationFile(candidate.sourceFilePath)
         parseErrorCount += parsed.parseErrors.length
       } catch (error) {
-        logger.error("CC conversation search parse failed.", {
+        this.logger.error("CC conversation search parse failed.", {
           sessionId: candidate.sessionId,
           filePath: candidate.sourceFilePath,
           ...errorLogMeta(error),
@@ -305,7 +315,7 @@ export class CcConversationService {
     }
 
     const result = { items: matches, total: matches.length, partial: candidates.length >= 100 }
-    logger.info("CC conversation raw text search completed.", {
+    this.logger.info("CC conversation raw text search completed.", {
       candidateCount: candidates.length,
       matchedCount: matches.length,
       missingFileCount,
@@ -339,7 +349,7 @@ export class CcConversationService {
         total: toNumber(count?.total),
         partial: false,
       }
-      logger.info("CC records listed.", {
+      this.logger.info("CC records listed.", {
         limit,
         offset,
         total: result.total,
@@ -348,7 +358,7 @@ export class CcConversationService {
       })
       return result
     } catch (error) {
-      logger.error("CC records list failed.", {
+      this.logger.error("CC records list failed.", {
         limit,
         offset,
         filters: conversationFilterSummary(input),
@@ -399,7 +409,7 @@ export class CcConversationService {
         rows: rows.map(toRecordDetailRow),
         total: toNumber(count?.total),
       }
-      logger.info("CC record details listed.", {
+      this.logger.info("CC record details listed.", {
         sessionId,
         limit,
         offset,
@@ -408,7 +418,7 @@ export class CcConversationService {
       })
       return result
     } catch (error) {
-      logger.error("CC record details list failed.", {
+      this.logger.error("CC record details list failed.", {
         sessionId,
         limit,
         offset,
