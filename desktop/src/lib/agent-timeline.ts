@@ -1,5 +1,6 @@
 import type {
   SynapseAgentEvent,
+  SynapseAgentErrorKind,
   SynapseAgentMessageTimelineItem,
   SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
@@ -84,7 +85,13 @@ export function agentEventToTimelineItem(
         metadata: resultMetadata(event),
       }
     case "error":
-      return { ...base, kind: "error", message: event.message }
+      return {
+        ...base,
+        kind: "error",
+        message: event.message,
+        errorKind: event.errorKind,
+        recoverable: event.recoverable,
+      }
     case "sessionInit":
       return {
         ...base,
@@ -184,7 +191,13 @@ export function historyRecordToTimelineItem(
         questions: questionsMetadata(metadata, "questions"),
       }
     case "error":
-      return { ...base, kind: "error", message: entry.content }
+      return {
+        ...base,
+        kind: "error",
+        message: entry.content,
+        errorKind: errorKindMetadata(metadata, "errorKind"),
+        recoverable: booleanMetadata(metadata, "recoverable"),
+      }
     case "sdkEvent":
       return {
         ...base,
@@ -561,4 +574,16 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined
+}
+
+function errorKindMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): SynapseAgentErrorKind | undefined {
+  const value = stringMetadata(metadata, key)
+  return value === "execution_failed"
+    || value === "tool_use_interrupted"
+    || value === "webfetch_preflight_failed"
+    ? value
+    : undefined
 }

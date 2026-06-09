@@ -1,7 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 
 import { SYNAPSE_COST_CURRENCY, usdToCny } from "../../../action-packages/shared/cost-currency"
-import { sdkResultErrorMessage } from "./agent-error-messages"
+import { sdkResultErrorPresentation } from "./agent-error-messages"
 import type { AgentEvent } from "./types"
 import { isSensitiveKey, redactSensitiveText, REDACTED } from "./redaction"
 
@@ -33,14 +33,16 @@ export function bridgeSdkMessage(
       const errors = Array.isArray(raw.errors)
         ? raw.errors.filter((error): error is string => typeof error === "string")
         : []
-      const message = sdkResultErrorMessage(
+      const presentation = sdkResultErrorPresentation(
         stringValue(raw.subtype),
         errors.map(sanitizeDiagnosticText),
       )
-      if (message) {
+      if (presentation) {
         return {
           type: "error",
-          message,
+          message: presentation.message,
+          errorKind: presentation.errorKind,
+          recoverable: presentation.recoverable,
           sdkSessionId,
           usage,
           modelUsage,

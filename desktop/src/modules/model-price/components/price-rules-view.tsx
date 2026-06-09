@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { Plus, RotateCcw, Trash2 } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { ModuleContentPanel } from "@/components/module-page"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -170,10 +171,20 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <Table>
+      <ModuleContentPanel className="overflow-x-auto">
+        <Table className="min-w-[60rem] table-fixed">
+          <colgroup>
+            <col className="w-20" />
+            <col className="w-auto" />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-28" />
+            <col className="w-20" />
+          </colgroup>
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               <TableHead>启用</TableHead>
               {PRICE_COLUMNS.map((column) => (
                 <TableHead key={column.key} className={column.key === "modelPattern" ? undefined : "text-right"}>{column.label}</TableHead>
@@ -219,7 +230,7 @@ export function PriceRulesView({ state, onSaved }: PriceRulesViewProps) {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </ModuleContentPanel>
     </div>
   )
 }

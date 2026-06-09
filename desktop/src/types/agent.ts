@@ -93,6 +93,8 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
       type: "error"
       message: string
+      errorKind?: SynapseAgentErrorKind
+      recoverable?: boolean
       usage?: Record<string, unknown>
       modelUsage?: Record<string, unknown>
       sdkResultUuid?: string
@@ -151,6 +153,11 @@ export type SynapseAgentPhaseValue =
   | "cancelled"
 
 export type SynapseAgentPhaseStatus = "in-progress" | "done" | "failed"
+
+export type SynapseAgentErrorKind =
+  | "execution_failed"
+  | "tool_use_interrupted"
+  | "webfetch_preflight_failed"
 
 export type SynapseAgentTimelineKind =
   | "message"
@@ -237,6 +244,8 @@ export interface SynapseAgentPermissionRequestTimelineItem extends SynapseAgentT
 export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "error"
   readonly message: string
+  readonly errorKind?: SynapseAgentErrorKind
+  readonly recoverable?: boolean
 }
 
 export interface SynapseAgentResultTimelineItem extends SynapseAgentTimelineBase {
@@ -257,6 +266,8 @@ export interface SynapseAgentPhaseTimelineItem extends SynapseAgentTimelineBase 
   readonly startedAt: string
   readonly completedAt?: string
   readonly errorMessage?: string
+  readonly errorKind?: SynapseAgentErrorKind
+  readonly recoverable?: boolean
 }
 
 export interface SynapseAgentSdkEventTimelineItem extends SynapseAgentTimelineBase {
@@ -482,6 +493,8 @@ export interface SynapseAgentPhaseUpdatePayload {
   readonly startedAt: string
   readonly completedAt?: string
   readonly errorMessage?: string
+  readonly errorKind?: SynapseAgentErrorKind
+  readonly recoverable?: boolean
 }
 
 export interface SynapseAgentPhaseUpdateDomainEvent extends SynapseAgentDomainEventBase {

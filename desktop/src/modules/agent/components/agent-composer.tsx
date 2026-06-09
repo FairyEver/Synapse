@@ -9,6 +9,7 @@ import {
   useState,
 } from "react"
 import { ArrowUp, ChevronDown, CornerDownRight, FileIcon, FolderIcon, ImageIcon, RotateCcw, Square, Trash2, X } from "lucide-react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
@@ -339,16 +340,26 @@ function AgentComposer({
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(event.clipboardData.items ?? [])
-    const imageFiles = items
-      .filter((item) => item.kind === "file" && isSupportedImageMimeType(item.type))
+    const files = items
+      .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
       .filter((file): file is File => Boolean(file))
 
-    if (imageFiles.length > 0) {
+    if (files.length > 0) {
       event.preventDefault()
-      void addImageFiles(imageFiles, addAttachments).catch((error) => {
-        logger.warn("Agent attachment image read failed.", { error })
-      })
+      const imageFiles = files.filter((file) => isSupportedImageMimeType(file.type))
+      if (imageFiles.length > 0) {
+        void addImageFiles(imageFiles, addAttachments).catch((error) => {
+          logger.warn("Agent attachment image read failed.", { error })
+        })
+      }
+      const { attachments: pathAttachments, unresolvedCount } = pathAttachmentsFromPastedFiles(
+        files.filter((file) => !isSupportedImageMimeType(file.type)),
+      )
+      addAttachments(pathAttachments)
+      if (unresolvedCount > 0) {
+        toast("无法读取文件完整路径")
+      }
       return
     }
 
@@ -660,6 +671,28 @@ async function addDroppedFiles(
     })
   }))
   addAttachments(next)
+}
+
+function pathAttachmentsFromPastedFiles(files: readonly File[]): {
+  readonly attachments: readonly AgentDraftAttachment[]
+  readonly unresolvedCount: number
+} {
+  const attachments: AgentDraftAttachment[] = []
+  let unresolvedCount = 0
+  for (const file of files) {
+    const path = requireSynapseBridge().tools.filePathForDroppedFile(file)
+    if (!path || !isAbsolutePathLine(path)) {
+      unresolvedCount += 1
+      continue
+    }
+    attachments.push(createPathAttachment({
+      id: createDraftAttachmentId(),
+      path,
+      entryType: inferDroppedEntryType(file),
+      name: file.name || undefined,
+    }))
+  }
+  return { attachments, unresolvedCount }
 }
 
 async function createImageAttachmentFromFile(file: File): Promise<AgentDraftImageAttachment> {

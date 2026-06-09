@@ -82,6 +82,14 @@ function AgentTimelineItem({
     }
     case "error":
       if (!item.message || item.message.trim().length === 0) return null
+      if (item.recoverable) {
+        return (
+          <Alert>
+            <Info data-icon="inline-start" />
+            <AlertDescription className="whitespace-pre-wrap break-words">{item.message}</AlertDescription>
+          </Alert>
+        )
+      }
       return (
         <Alert variant="destructive">
           <AlertCircle data-icon="inline-start" />

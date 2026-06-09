@@ -435,6 +435,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           ? await agent.sendToConversation(message, request.conversationId)
           : await agent.send(message)
         const t_done = new Date().toISOString()
+        const errorEvent = latestAgentErrorEvent(result.events as AgentEvent[])
         eventBus.emit({
           domain: "agent",
           type: "phase.update",
@@ -464,6 +465,8 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             startedAt: t_recv,
             completedAt: t_done,
             errorMessage: result.error,
+            errorKind: errorEvent?.errorKind,
+            recoverable: errorEvent?.recoverable,
           },
           scope: { projectId: request.projectId },
           timestamp: t_done,
@@ -571,6 +574,14 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       return agent.forceKillTurn(request.conversationId)
     },
   },
+}
+
+function latestAgentErrorEvent(events: readonly AgentEvent[]): Extract<AgentEvent, { type: "error" }> | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type === "error") return event
+  }
+  return undefined
 }
 
 function timelineLookupErrorMeta(rawError: unknown): {

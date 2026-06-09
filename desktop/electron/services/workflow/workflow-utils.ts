@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import { sanitizeError } from "../../../src/lib/error-sanitize"
+import { agentDiagnosticPresentation } from "../agent-runtime/agent-error-messages"
 export { errorCode } from "../error-utils"
 
 export function truncateWithEllipsis(value: string, maxLength: number): string {
@@ -22,6 +23,8 @@ export function sanitizeAgentError(error: string | undefined): string {
 }
 
 export function agentFailureMessage(error: string | undefined): string {
+  const presentation = agentDiagnosticPresentation(error)
+  if (presentation.recoverable) return presentation.message
   const sanitized = sanitizeAgentError(error)
   if (!sanitized) return "Agent 调用失败"
   return `Agent 调用失败：${truncateWithEllipsis(sanitized, 120)}`

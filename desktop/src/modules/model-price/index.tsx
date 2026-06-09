@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { RefreshCw } from "lucide-react"
+import { ModulePage } from "@/components/module-page"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -47,19 +47,19 @@ export function ModelPriceModule() {
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-surface">
-      <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="shrink-0 text-sm font-medium">价格</h2>
-          <Tabs value={view} onValueChange={(next) => setView(next as ModelPriceViewId)}>
-            <TabsList>
-              {MODEL_PRICE_VIEWS.map((item) => (
-                <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-        <div className="flex items-center gap-2">
+    <ModulePage
+      title="价格"
+      titleAddon={(
+        <Tabs value={view} onValueChange={(next) => setView(next as ModelPriceViewId)}>
+          <TabsList>
+            {MODEL_PRICE_VIEWS.map((item) => (
+              <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+      actions={(
+        <>
           {view === "coverage" ? (
             <>
               <Select value={source} onValueChange={(next) => setSource(next as ModelPriceCoverageSource)}>
@@ -95,19 +95,16 @@ export function ModelPriceModule() {
             <RefreshCw data-icon="inline-start" className={activeState.loading ? "animate-spin" : undefined} />
             {activeState.loading ? "刷新中" : "刷新"}
           </Button>
-        </div>
-      </div>
-      <ScrollArea className="min-h-0 min-w-0 max-w-full flex-1" viewportClassName="min-w-0 max-w-full">
-        <div className="min-h-full min-w-full w-0 max-w-full overflow-x-hidden px-2 pb-2 pt-0">
-          {view === "coverage" ? <ModelCoverageView state={coverageState} /> : null}
-          {view === "rules" ? (
-            <PriceRulesView
-              state={rulesState}
-              onSaved={refresh}
-            />
-          ) : null}
-        </div>
-      </ScrollArea>
-    </div>
+        </>
+      )}
+    >
+      {view === "coverage" ? <ModelCoverageView state={coverageState} /> : null}
+      {view === "rules" ? (
+        <PriceRulesView
+          state={rulesState}
+          onSaved={refresh}
+        />
+      ) : null}
+    </ModulePage>
   )
 }

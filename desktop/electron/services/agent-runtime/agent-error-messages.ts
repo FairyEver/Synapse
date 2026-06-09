@@ -41,28 +41,80 @@ export const AGENT_RELAY_QUESTION_ERROR_MESSAGE = "中继会话请求了用户�
 
 const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
 const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
+export const AGENT_TOOL_USE_INTERRUPTED_MESSAGE = "Agent 在工具调用后中断，发送“继续”可接着执行。"
+
+export type AgentErrorKind =
+  | "execution_failed"
+  | "tool_use_interrupted"
+  | "webfetch_preflight_failed"
+
+export interface AgentErrorPresentation {
+  readonly message: string
+  readonly errorKind: AgentErrorKind
+  readonly recoverable: boolean
+}
 
 export function sdkResultErrorMessage(subtype: string | undefined, errors: readonly string[]): string | undefined {
+  return sdkResultErrorPresentation(subtype, errors)?.message
+}
+
+export function sdkResultErrorPresentation(subtype: string | undefined, errors: readonly string[]): AgentErrorPresentation | undefined {
   if (errors.length > 0) {
     const diagnostic = errors.join("\n")
-    if (isWebFetchPreflightFailure(diagnostic)) return WEBFETCH_PREFLIGHT_FAILED_MESSAGE
-    return agentDiagnosticMessage(AGENT_EXECUTION_FAILED_MESSAGE, diagnostic)
+    return agentDiagnosticPresentation(diagnostic)
   }
   if (subtype === "error_max_turns") {
-    return `已达到本轮执行上限（${DEFAULT_CLAUDE_SDK_MAX_TURNS}），任务尚未完成；发送“继续”可接着执行。`
+    return {
+      message: `已达到本轮执行上限（${DEFAULT_CLAUDE_SDK_MAX_TURNS}），任务尚未完成；发送“继续”可接着执行。`,
+      errorKind: "execution_failed",
+      recoverable: false,
+    }
   }
   if (subtype === "error_max_budget_usd") {
-    return "已达到本轮费用上限，任务尚未完成；调整预算后可继续执行。"
+    return {
+      message: "已达到本轮费用上限，任务尚未完成；调整预算后可继续执行。",
+      errorKind: "execution_failed",
+      recoverable: false,
+    }
   }
   if (subtype?.startsWith("error_")) {
-    return agentDiagnosticMessage("Agent 已停止，任务尚未完成。", subtype)
+    return {
+      message: agentDiagnosticMessage("Agent 已停止，任务尚未完成。", subtype),
+      errorKind: "execution_failed",
+      recoverable: false,
+    }
   }
   return undefined
 }
 
 export function sdkQueryErrorMessage(diagnostic: string | undefined): string {
-  if (isWebFetchPreflightFailure(diagnostic)) return WEBFETCH_PREFLIGHT_FAILED_MESSAGE
-  return agentDiagnosticMessage(AGENT_EXECUTION_FAILED_MESSAGE, diagnostic)
+  return sdkQueryErrorPresentation(diagnostic).message
+}
+
+export function sdkQueryErrorPresentation(diagnostic: string | undefined): AgentErrorPresentation {
+  return agentDiagnosticPresentation(diagnostic)
+}
+
+export function agentDiagnosticPresentation(diagnostic: string | undefined): AgentErrorPresentation {
+  if (isToolUseInterruptedDiagnostic(diagnostic)) {
+    return {
+      message: AGENT_TOOL_USE_INTERRUPTED_MESSAGE,
+      errorKind: "tool_use_interrupted",
+      recoverable: true,
+    }
+  }
+  if (isWebFetchPreflightFailure(diagnostic)) {
+    return {
+      message: WEBFETCH_PREFLIGHT_FAILED_MESSAGE,
+      errorKind: "webfetch_preflight_failed",
+      recoverable: false,
+    }
+  }
+  return {
+    message: agentDiagnosticMessage(AGENT_EXECUTION_FAILED_MESSAGE, diagnostic),
+    errorKind: "execution_failed",
+    recoverable: false,
+  }
 }
 
 export function webFetchPreflightFailureMeta(diagnostic: string | undefined): Record<string, unknown> {
@@ -106,6 +158,12 @@ function isWebFetchPreflightFailure(diagnostic: string | undefined): boolean {
   if (!diagnostic) return false
   return /DomainCheckFailedError/i.test(diagnostic)
     || /Unable to verify if domain .+ is safe to fetch/i.test(diagnostic)
+}
+
+function isToolUseInterruptedDiagnostic(diagnostic: string | undefined): boolean {
+  if (!diagnostic) return false
+  return /\bstop_reason=tool_use\b/.test(diagnostic)
+    && /\bresult_type=user\b/.test(diagnostic)
 }
 
 function webFetchPreflightDomain(diagnostic: string | undefined): string | undefined {

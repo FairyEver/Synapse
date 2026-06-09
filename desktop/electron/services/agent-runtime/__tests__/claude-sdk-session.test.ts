@@ -907,6 +907,23 @@ describe("ClaudeSDKSession", () => {
     await expect(session.nextEvent()).resolves.toBeNull()
   })
 
+  it("marks tool-use interrupted SDK query rejections as recoverable", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    const event = session.nextEvent()
+    query.rejectNext(new Error("[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use"))
+
+    await expect(event).resolves.toMatchObject({
+      type: "error",
+      message: "Agent 在工具调用后中断，发送“继续”可接着执行。",
+      errorKind: "tool_use_interrupted",
+      recoverable: true,
+      conversationId: "conversation-1",
+      providerId: "claude-sdk",
+    })
+  })
+
   it("sanitizes SDK query rejection messages before publishing error events", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory, { sdkSessionId: "sdk-1" })

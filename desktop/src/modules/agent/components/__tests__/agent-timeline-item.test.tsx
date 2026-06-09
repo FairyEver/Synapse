@@ -42,6 +42,28 @@ describe("AgentTimelineItem", () => {
     expect(html).toContain("[path redacted]/very-long-segment-without-spaces")
   })
 
+  it("renders recoverable Agent interruptions as neutral guidance", () => {
+    const html = renderToStaticMarkup(
+      <AgentTimelineItem
+        item={{
+          id: "error-2",
+          kind: "error",
+          message: "Agent 在工具调用后中断，发送“继续”可接着执行。",
+          errorKind: "tool_use_interrupted",
+          recoverable: true,
+          timestamp: "2026-05-14T00:00:00.000Z",
+        }}
+        profile={profile}
+        pendingPermissions={[]}
+        onOpenReference={vi.fn()}
+        onRespondPermission={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("Agent 在工具调用后中断")
+    expect(html).not.toContain("text-destructive")
+  })
+
   it("renders AskUserQuestion as a user question instead of a permission approval", () => {
     const item = {
       id: "question-1",

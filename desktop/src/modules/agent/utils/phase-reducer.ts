@@ -15,6 +15,8 @@ export interface PhaseReducerEvent {
   readonly startedAt: string
   readonly completedAt?: string
   readonly errorMessage?: string
+  readonly errorKind?: SynapseAgentPhaseTimelineItem["errorKind"]
+  readonly recoverable?: boolean
   readonly eventTimestamp: string
 }
 
@@ -36,8 +38,17 @@ function closeItem(
   status: SynapseAgentPhaseStatus,
   completedAt: string,
   errorMessage?: string,
+  errorKind?: SynapseAgentPhaseTimelineItem["errorKind"],
+  recoverable?: boolean,
 ): SynapseAgentPhaseTimelineItem {
-  return { ...item, status, completedAt, errorMessage: errorMessage ?? item.errorMessage }
+  return {
+    ...item,
+    status,
+    completedAt,
+    errorMessage: errorMessage ?? item.errorMessage,
+    errorKind: errorKind ?? item.errorKind,
+    recoverable: recoverable ?? item.recoverable,
+  }
 }
 
 function matchesTerminalScope(item: SynapseAgentPhaseTimelineItem, event: PhaseReducerEvent): boolean {
@@ -57,7 +68,7 @@ export function reducePhaseEvent(
       if (item.runId !== event.runId) return item
       if (item.phase !== aliasFor) return item
       if (item.status !== "in-progress") return item
-      return closeItem(item, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage)
+      return closeItem(item, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage, event.errorKind, event.recoverable)
     })
   }
 
@@ -67,7 +78,7 @@ export function reducePhaseEvent(
       if (!isPhaseItem(item)) return item
       if (!matchesTerminalScope(item, event)) return item
       if (item.status !== "in-progress") return item
-      return closeItem(item, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage)
+      return closeItem(item, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage, event.errorKind, event.recoverable)
     })
   }
 
@@ -77,7 +88,7 @@ export function reducePhaseEvent(
       if (!isPhaseItem(item)) return item
       if (!matchesTerminalScope(item, event)) return item
       if (item.status !== "in-progress") return item
-      return closeItem(item, "failed", event.completedAt ?? event.eventTimestamp, event.errorMessage)
+      return closeItem(item, "failed", event.completedAt ?? event.eventTimestamp, event.errorMessage, event.errorKind, event.recoverable)
     })
     const existingFailedIndex = closed.findIndex(
       (item) =>
@@ -93,6 +104,8 @@ export function reducePhaseEvent(
         status: "failed",
         completedAt: event.completedAt ?? event.eventTimestamp,
         errorMessage: event.errorMessage ?? target.errorMessage,
+        errorKind: event.errorKind ?? target.errorKind,
+        recoverable: event.recoverable ?? target.recoverable,
       }
       return closed
     }
@@ -106,6 +119,8 @@ export function reducePhaseEvent(
       startedAt: event.startedAt,
       completedAt: event.completedAt ?? event.eventTimestamp,
       errorMessage: event.errorMessage,
+      errorKind: event.errorKind,
+      recoverable: event.recoverable,
     })
     return closed
   }
@@ -151,7 +166,7 @@ export function reducePhaseEvent(
   )
   if (idx >= 0) {
     const target = items[idx] as SynapseAgentPhaseTimelineItem
-    items[idx] = closeItem(target, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage)
+    items[idx] = closeItem(target, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage, event.errorKind, event.recoverable)
     return items
   }
   items.push({
@@ -164,6 +179,8 @@ export function reducePhaseEvent(
     startedAt: event.startedAt,
     completedAt: event.completedAt ?? event.eventTimestamp,
     errorMessage: event.errorMessage,
+    errorKind: event.errorKind,
+    recoverable: event.recoverable,
   })
   return items
 }

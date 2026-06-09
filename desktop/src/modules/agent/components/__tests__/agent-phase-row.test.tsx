@@ -14,6 +14,8 @@ function mk(item: Partial<SynapseAgentPhaseTimelineItem>): SynapseAgentPhaseTime
     startedAt: item.startedAt ?? "2026-05-10T00:00:00.000Z",
     completedAt: item.completedAt,
     errorMessage: item.errorMessage,
+    errorKind: item.errorKind,
+    recoverable: item.recoverable,
   }
 }
 
@@ -109,6 +111,26 @@ describe("AgentPhaseRow", () => {
       />,
     )
     expect(html).toContain("text-destructive")
+  })
+
+  it("renders recoverable failed phases as interrupted instead of destructive failure", () => {
+    const html = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({
+          phase: "failed",
+          status: "failed",
+          errorMessage: "Agent 在工具调用后中断，发送“继续”可接着执行。",
+          errorKind: "tool_use_interrupted",
+          recoverable: true,
+          completedAt: "2026-05-10T00:00:01.000Z",
+        })}
+        now={Date.parse("2026-05-10T00:00:02.000Z")}
+      />,
+    )
+
+    expect(html).toContain("已中断")
+    expect(html).not.toContain("text-destructive")
+    expect(html).not.toContain("失败")
   })
 
   it("computes elapsed seconds for in-progress with one decimal", () => {

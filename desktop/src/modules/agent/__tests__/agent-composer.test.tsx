@@ -18,6 +18,7 @@ import { getPermissionModeCapability } from "../permission-mode-capability"
 }
 
 const track = vi.hoisted(() => vi.fn())
+const toast = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/ui-tracking", () => ({
   extractLabel: () => "button",
@@ -28,6 +29,10 @@ vi.mock("@/lib/ui-tracking", () => ({
     }
   },
   track,
+}))
+
+vi.mock("sonner", () => ({
+  toast,
 }))
 
 let roots: Root[] = []
@@ -517,6 +522,168 @@ describe("AgentComposer", () => {
     })
 
     expect(container.textContent).not.toContain("[Image #1]")
+  })
+
+  it("renders pasted non-image files as full path attachments", async () => {
+    const filePathForDroppedFile = installToolsBridge((file) =>
+      file.name === "课堂内容.md" ? "/Users/liyang/Desktop/课堂内容.md" : null)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    const file = new File(["content"], "课堂内容.md", { type: "text/markdown" })
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "text/markdown",
+          getAsFile: () => file,
+        }],
+        text: "课堂内容.md",
+      }))
+      await wait(0)
+    })
+
+    expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
+    expect(container.textContent).toContain("/Users/liyang/Desktop/课堂内容.md")
+    expect(container.textContent).not.toContain("课堂内容.md片段")
+    expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(1)
+  })
+
+  it("submits pasted non-image files with their resolved full paths", async () => {
+    installToolsBridge((file) =>
+      file.name === "课堂内容.md" ? "/Users/liyang/Desktop/课堂内容.md" : null)
+    const onSubmit = vi.fn((
+      event: FormEvent,
+      _attachments: readonly AgentDraftAttachment[],
+    ) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "text/markdown",
+          getAsFile: () => new File(["content"], "课堂内容.md", { type: "text/markdown" }),
+        }],
+        text: "课堂内容.md",
+      }))
+      await wait(0)
+    })
+
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+
+    await act(async () => {
+      sendButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual([
+      expect.objectContaining({
+        kind: "path",
+        path: "/Users/liyang/Desktop/课堂内容.md",
+        entryType: "file",
+        name: "课堂内容.md",
+      }),
+    ])
+  })
+
+  it("does not create pasted file attachments when the full path cannot be resolved", async () => {
+    const filePathForDroppedFile = installToolsBridge(() => null)
+    const onSubmit = vi.fn((
+      event: FormEvent,
+      _attachments: readonly AgentDraftAttachment[],
+    ) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    const file = new File(["content"], "课堂内容.md", { type: "text/markdown" })
+
+    await act(async () => {
+      textarea!.dispatchEvent(createPasteEvent({
+        items: [{
+          kind: "file",
+          type: "text/markdown",
+          getAsFile: () => file,
+        }],
+        text: "课堂内容.md",
+      }))
+      await wait(0)
+    })
+
+    expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
+    expect(toast).toHaveBeenCalledWith("无法读取文件完整路径")
+    expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(0)
+    expect(container.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("")
+
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton?.disabled).toBe(true)
   })
 
   it("renders dropped path files and folders as path context", async () => {

@@ -36,6 +36,7 @@ describe("usage analysis refresh runner", () => {
     }
 
     expect(packageJson.build?.asarUnpack).toContain("dist-electron/electron/services/usage-analysis/**")
+    expect(packageJson.build?.asarUnpack).toContain("dist-electron/electron/services/model-price/**")
     expect(packageJson.build?.asarUnpack).toContain("dist-electron/src/**")
     expect(packageJson.build?.asarUnpack).toContain("dist-electron/action-packages/shared/**")
     expect(packageJson.build?.asarUnpack).not.toContain("dist-electron/electron/services/usage-analysis/refresh-worker.js")

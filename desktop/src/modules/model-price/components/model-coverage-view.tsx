@@ -1,3 +1,4 @@
+import { ModuleContentPanel } from "@/components/module-page"
 import { Badge } from "@/components/ui/badge"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -51,10 +52,19 @@ export function ModelCoverageView({ state }: ModelCoverageViewProps) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-card">
-      <Table>
+    <ModuleContentPanel className="overflow-x-auto">
+      <Table className="min-w-[60rem] table-fixed">
+        <colgroup>
+          <col className="w-auto" />
+          <col className="w-32" />
+          <col className="w-64" />
+          <col className="w-40" />
+          <col className="w-28" />
+          <col className="w-32" />
+          <col className="w-36" />
+        </colgroup>
         <TableHeader>
-          <TableRow>
+          <TableRow className="hover:bg-transparent">
             <TableHead>模型</TableHead>
             <TableHead>来源</TableHead>
             <TableHead>规则</TableHead>
@@ -84,7 +94,7 @@ export function ModelCoverageView({ state }: ModelCoverageViewProps) {
           ))}
         </TableBody>
       </Table>
-    </div>
+    </ModuleContentPanel>
   )
 }
 

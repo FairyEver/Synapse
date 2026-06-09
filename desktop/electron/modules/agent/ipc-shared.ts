@@ -61,6 +61,11 @@ const timelineBaseSchema = {
 }
 
 const jsonRecordSchema = z.record(z.string(), z.unknown())
+const agentErrorKindSchema = z.enum([
+  "execution_failed",
+  "tool_use_interrupted",
+  "webfetch_preflight_failed",
+])
 export const agentUserQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string().optional(),
@@ -134,6 +139,8 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     ...timelineBaseSchema,
     kind: z.literal("error"),
     message: z.string(),
+    errorKind: agentErrorKindSchema.optional(),
+    recoverable: z.boolean().optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -162,6 +169,8 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     startedAt: z.string(),
     completedAt: z.string().optional(),
     errorMessage: z.string().optional(),
+    errorKind: agentErrorKindSchema.optional(),
+    recoverable: z.boolean().optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -438,7 +447,13 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     costCny: z.number().optional(),
     costCurrency: z.literal("CNY").optional(),
   }),
-  z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("error"),
+    message: z.string(),
+    errorKind: agentErrorKindSchema.optional(),
+    recoverable: z.boolean().optional(),
+  }),
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("sessionInit"),
@@ -516,6 +531,8 @@ export const agentPhaseUpdatePayloadSchema = z.object({
   startedAt: z.string(),
   completedAt: z.string().optional(),
   errorMessage: z.string().optional(),
+  errorKind: agentErrorKindSchema.optional(),
+  recoverable: z.boolean().optional(),
 })
 
 export type AgentPhaseUpdatePayload = z.infer<typeof agentPhaseUpdatePayloadSchema>

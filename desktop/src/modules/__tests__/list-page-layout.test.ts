@@ -46,4 +46,19 @@ describe("list page layout surfaces", () => {
     expect(cardSource).not.toContain("<Item")
     expect(cardSource).not.toContain("hover:bg-muted/50")
   })
+
+  it("keeps model price pages aligned with the shared module page shell", async () => {
+    const moduleSource = await readModuleSource("../model-price/index.tsx")
+    const coverageSource = await readModuleSource("../model-price/components/model-coverage-view.tsx")
+    const rulesSource = await readModuleSource("../model-price/components/price-rules-view.tsx")
+
+    expect(moduleSource).toContain("<ModulePage")
+    expect(moduleSource).toContain('title="价格"')
+    expect(moduleSource).toContain("titleAddon={(")
+    expect(moduleSource).not.toContain("bg-surface")
+    expect(coverageSource).toContain('<ModuleContentPanel className="overflow-x-auto">')
+    expect(coverageSource).toContain('<Table className="min-w-[60rem] table-fixed">')
+    expect(rulesSource).toContain('<ModuleContentPanel className="overflow-x-auto">')
+    expect(rulesSource).toContain('<Table className="min-w-[60rem] table-fixed">')
+  })
 })

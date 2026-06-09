@@ -126,6 +126,7 @@ const usageAnalysisWorkerEntries = [
 ]
 const usageAnalysisAllowedUnpackedPrefixes = [
   "dist-electron/electron/services/usage-analysis/",
+  "dist-electron/electron/services/model-price/",
   "dist-electron/src/",
   "dist-electron/action-packages/shared/",
 ]
@@ -134,7 +135,7 @@ function isAllowedUsageAnalysisUnpackedDependency(relativePath) {
   return usageAnalysisAllowedUnpackedPrefixes.some((prefix) => relativePath.startsWith(prefix))
 }
 
-function resolveRelativeRequire(importerPath, request) {
+function resolveRelativeRequire(header, importerPath, request) {
   if (!request.startsWith(".")) {
     return null
   }
@@ -143,7 +144,15 @@ function resolveRelativeRequire(importerPath, request) {
   if (path.posix.extname(normalized)) {
     return normalized
   }
-  return `${normalized}.js`
+  const filePath = `${normalized}.js`
+  if (findNode(header, filePath)) {
+    return filePath
+  }
+  const indexPath = `${normalized}/index.js`
+  if (findNode(header, indexPath)) {
+    return indexPath
+  }
+  return filePath
 }
 
 function readUnpackedText(header, unpackedPath, relativePath, failures) {
@@ -193,7 +202,7 @@ function verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures) {
 
     for (const match of source.matchAll(/require\(["']([^"']+)["']\)/g)) {
       const request = match[1]
-      const dependencyPath = resolveRelativeRequire(relativePath, request)
+      const dependencyPath = resolveRelativeRequire(header, relativePath, request)
       if (!dependencyPath) {
         continue
       }

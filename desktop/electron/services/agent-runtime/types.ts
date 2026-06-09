@@ -141,6 +141,11 @@ export interface AgentResultMetadata {
   readonly estimatedCost?: boolean
 }
 
+export type AgentErrorKind =
+  | "execution_failed"
+  | "tool_use_interrupted"
+  | "webfetch_preflight_failed"
+
 export interface AgentResultEvent extends AgentEventBase {
   readonly type: "result"
   readonly content: string
@@ -158,6 +163,8 @@ export interface AgentResultEvent extends AgentEventBase {
 export interface AgentErrorEvent extends AgentEventBase {
   readonly type: "error"
   readonly message: string
+  readonly errorKind?: AgentErrorKind
+  readonly recoverable?: boolean
   readonly usage?: Record<string, unknown>
   readonly modelUsage?: Record<string, unknown>
   readonly sdkResultUuid?: string

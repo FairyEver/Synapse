@@ -5,16 +5,20 @@ import { cn } from "@/lib/utils"
 
 type ModulePageProps = {
   readonly title: string
+  readonly titleAddon?: ReactNode
   readonly actions?: ReactNode
   readonly children: ReactNode
   readonly afterContent?: ReactNode
 }
 
-function ModulePage({ title, actions, children, afterContent }: ModulePageProps) {
+function ModulePage({ title, titleAddon, actions, children, afterContent }: ModulePageProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="shrink-0 text-sm font-semibold">{title}</h2>
+          {titleAddon}
+        </div>
         {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
       </div>
       <ScrollArea className="min-h-0 flex-1">

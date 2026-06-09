@@ -168,6 +168,20 @@ describe("promptNodeExecutor", () => {
     expect(r.error).toContain("[path]")
   })
 
+  it("returns recoverable Agent interruption guidance without SDK diagnostics", async () => {
+    const error = "Agent 执行失败。诊断信息：[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use"
+    const r = await promptNodeExecutor.execute({
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" },
+      resolvedVariables: {}, context: ctx,
+      agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error, durationMs: 100 }) },
+    })
+
+    expect(r.status).toBe("failed")
+    expect(r.error).toBe("Agent 在工具调用后中断，发送“继续”可接着执行。")
+    expect(r.error).not.toContain("ede_diagnostic")
+    expect(r.error).not.toContain("stop_reason")
+  })
+
   it("treats provider API error text as failure even when Agent reports success", async () => {
     const r = await promptNodeExecutor.execute({
       config: { providerId: "deepseek", modelTier: "default", variables: [], prompt: "test" },

@@ -45,6 +45,7 @@ const PHASE_LABEL_FAILED: Partial<Record<SynapseAgentPhaseValue, string>> = {
 
 function pickLabel(item: SynapseAgentPhaseTimelineItem): string {
   if (item.status === "in-progress") return PHASE_LABEL_IN_PROGRESS[item.phase] ?? item.phase
+  if (item.recoverable && item.status === "failed") return "已中断"
   if (item.status === "failed") return PHASE_LABEL_FAILED[item.phase] ?? item.phase
   return PHASE_LABEL_DONE[item.phase] ?? item.phase
 }
@@ -73,6 +74,7 @@ function AgentPhaseRow({
   readonly now: number
 }) {
   const failed = item.status === "failed"
+  const recoverable = item.recoverable === true
   const inProgress = item.status === "in-progress"
   const label = pickLabel(item)
   const elapsed = elapsedSeconds(item, now)
@@ -81,7 +83,7 @@ function AgentPhaseRow({
     <div
       className={cn(
         "flex flex-col gap-0.5 px-1 py-1 text-xs",
-        failed ? "text-destructive" : "text-muted-foreground",
+        failed && !recoverable ? "text-destructive" : "text-muted-foreground",
       )}
       aria-live={inProgress ? "polite" : undefined}
     >
@@ -89,7 +91,7 @@ function AgentPhaseRow({
         <span className="inline-flex w-3 items-center justify-center">
           {inProgress ? (
             <span className="size-1.5 rounded-full bg-current animate-pulse" aria-hidden />
-          ) : failed ? (
+          ) : failed && !recoverable ? (
             <X size={12} strokeWidth={2.5} aria-hidden />
           ) : (
             <Check size={12} strokeWidth={2.5} aria-hidden />
@@ -99,7 +101,14 @@ function AgentPhaseRow({
         <span className="tabular-nums">{formatElapsed(elapsed)}</span>
       </div>
       {failed && item.errorMessage ? (
-        <div className="whitespace-pre-wrap break-words pl-5 text-destructive">{item.errorMessage}</div>
+        <div
+          className={cn(
+            "whitespace-pre-wrap break-words pl-5",
+            recoverable ? "text-muted-foreground" : "text-destructive",
+          )}
+        >
+          {item.errorMessage}
+        </div>
       ) : null}
     </div>
   )

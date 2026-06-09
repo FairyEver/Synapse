@@ -155,6 +155,8 @@ function useChatEvents(
           startedAt: payload.startedAt,
           completedAt: payload.completedAt,
           errorMessage: payload.errorMessage,
+          errorKind: payload.errorKind,
+          recoverable: payload.recoverable,
           eventTimestamp: domainEvent.timestamp,
         }))
         if (payload.phase === "cancel_pending") {

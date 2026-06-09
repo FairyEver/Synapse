@@ -194,6 +194,15 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                     : {}),
                   ...(includeUsageAnalysisWorkers
                     ? {
+                        "model-price": {
+                          files: {
+                            "index.js": {
+                              size: 1,
+                              offset: "0",
+                              unpacked: true,
+                            },
+                          },
+                        },
                         "usage-analysis": {
                           files: {
                             "conversation-worker.js": {
@@ -202,6 +211,11 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                               unpacked: true,
                             },
                             "cc-conversation-service.js": {
+                              size: 1,
+                              offset: "0",
+                              unpacked: true,
+                            },
+                            "cc-service.js": {
                               size: 1,
                               offset: "0",
                               unpacked: true,
@@ -502,6 +516,58 @@ describe("packaged asar verification", () => {
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("usage analysis worker dependency escapes unpacked closure"),
       })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("accepts unpacked usage analysis workers with model price directory dependencies", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
+      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
+        "module.exports = {}\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-conversation-service.js"],
+        "module.exports = {}\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "refresh-worker.js"],
+        "require('./cc-service')\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-service.js"],
+        "require('../model-price')\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "db-schema.js"],
+        "module.exports = {}\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "model-price", "index.js"],
+        "module.exports = {}\n",
+      )
+
+      const result = await execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])
+
+      expect(result.stdout).toContain("Verified resources")
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -16,6 +16,8 @@ const mkItem = (overrides: Partial<SynapseAgentPhaseTimelineItem>): SynapseAgent
   startedAt: overrides.startedAt ?? "2026-05-10T00:00:00.000Z",
   completedAt: overrides.completedAt,
   errorMessage: overrides.errorMessage,
+  errorKind: overrides.errorKind,
+  recoverable: overrides.recoverable,
 })
 
 const mkEvent = (overrides: {
@@ -25,6 +27,8 @@ const mkEvent = (overrides: {
   startedAt?: string
   completedAt?: string
   errorMessage?: string
+  errorKind?: SynapseAgentPhaseTimelineItem["errorKind"]
+  recoverable?: boolean
   timestamp?: string
 }) => ({
   runId: overrides.runId ?? "run-1",
@@ -36,6 +40,8 @@ const mkEvent = (overrides: {
   startedAt: overrides.startedAt ?? "2026-05-10T00:00:00.000Z",
   completedAt: overrides.completedAt,
   errorMessage: overrides.errorMessage,
+  errorKind: overrides.errorKind,
+  recoverable: overrides.recoverable,
   eventTimestamp: overrides.timestamp ?? "2026-05-10T00:00:00.500Z",
 })
 
@@ -110,6 +116,32 @@ describe("reducePhaseEvent", () => {
     expect(next).toHaveLength(2)
     expect(findPhase(next, "runtime_starting")).toMatchObject({ status: "failed", errorMessage: "boom" })
     expect(findPhase(next, "failed")).toMatchObject({ status: "failed", errorMessage: "boom" })
+  })
+
+  it("preserves recoverable metadata on failed terminal rows", () => {
+    const start: SynapseAgentTimelineItem[] = [mkItem({ id: "p1", phase: "runtime_starting", status: "in-progress" })]
+    const next = reducePhaseEvent(
+      start,
+      mkEvent({
+        phase: "failed",
+        status: "failed",
+        errorMessage: "Agent 在工具调用后中断，发送“继续”可接着执行。",
+        errorKind: "tool_use_interrupted",
+        recoverable: true,
+        timestamp: "2026-05-10T00:00:04.000Z",
+      }),
+    )
+
+    expect(findPhase(next, "runtime_starting")).toMatchObject({
+      status: "failed",
+      errorKind: "tool_use_interrupted",
+      recoverable: true,
+    })
+    expect(findPhase(next, "failed")).toMatchObject({
+      status: "failed",
+      errorKind: "tool_use_interrupted",
+      recoverable: true,
+    })
   })
 
   it("keeps duplicate failed terminal events idempotent for the same run", () => {

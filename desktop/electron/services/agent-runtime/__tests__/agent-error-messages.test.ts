@@ -36,4 +36,14 @@ describe("agent error messages", () => {
     expect(sdkResultErrorMessage("error_max_turns", [])).toContain("已达到本轮执行上限")
     expect(sdkQueryErrorMessage("plain failure")).toBe("Agent 执行失败。诊断信息：plain failure")
   })
+
+  it("maps tool-use interrupted diagnostics to a recoverable user message", () => {
+    const raw = "[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use"
+
+    const message = sdkQueryErrorMessage(raw)
+
+    expect(message).toBe("Agent 在工具调用后中断，发送“继续”可接着执行。")
+    expect(message).not.toContain("ede_diagnostic")
+    expect(message).not.toContain("stop_reason")
+  })
 })

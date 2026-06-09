@@ -448,6 +448,7 @@ export class ConversationRouter {
 
         if (isBackgroundPlatform) {
           const tDone = this.isoNow()
+          const errorEvent = latestAgentErrorEvent(result.events)
           this.emitPhase(message, conversation.id, phaseRunId, "received", "done", tRecv, tDone)
           this.emitPhase(
             message,
@@ -458,6 +459,10 @@ export class ConversationRouter {
             tRecv,
             tDone,
             result.error,
+            {
+              errorKind: errorEvent?.errorKind,
+              recoverable: errorEvent?.recoverable,
+            },
           )
         }
 
@@ -1347,6 +1352,10 @@ export class ConversationRouter {
     startedAt: string,
     completedAt?: string,
     errorMessage?: string,
+    errorMeta?: {
+      readonly errorKind?: Extract<AgentEvent, { type: "error" }>["errorKind"]
+      readonly recoverable?: boolean
+    },
   ): void {
     this.deps.eventBus?.emit({
       domain: "agent",
@@ -1361,6 +1370,8 @@ export class ConversationRouter {
         startedAt,
         completedAt,
         errorMessage,
+        errorKind: errorMeta?.errorKind,
+        recoverable: errorMeta?.recoverable,
       },
       scope: { sessionId: conversationId },
       timestamp: this.isoNow(),
@@ -1546,6 +1557,8 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
+          errorKind: event.errorKind,
+          recoverable: event.recoverable,
         }),
       }
     case "text":
@@ -1601,6 +1614,14 @@ function resultUsageFromEvent(event: Extract<AgentEvent, { type: "result" }>): R
 
 function sdkResultUsageFromError(event: Extract<AgentEvent, { type: "error" }>): Record<string, unknown> | undefined {
   return event.usage
+}
+
+function latestAgentErrorEvent(events: readonly AgentEvent[]): Extract<AgentEvent, { type: "error" }> | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type === "error") return event
+  }
+  return undefined
 }
 
 function resultModelUsageFromEvent(event: Extract<AgentEvent, { type: "result" }>): Record<string, unknown> | undefined {

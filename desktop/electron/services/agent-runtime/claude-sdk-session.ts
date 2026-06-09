@@ -28,7 +28,7 @@ import {
   AGENT_QUERY_FINISHED_PERMISSION_MESSAGE,
   AGENT_SESSION_CLOSED_MESSAGE,
   AGENT_TURN_PERMISSION_CANCELLED_MESSAGE,
-  sdkQueryErrorMessage,
+  sdkQueryErrorPresentation,
   webFetchPreflightFailureMeta,
 } from "./agent-error-messages"
 import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
@@ -577,9 +577,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
   }
 
   private errorEvent(error: unknown): AgentEvent {
+    const presentation = sdkQueryErrorPresentation(errorDiagnosticMessage(error))
     return {
       type: "error",
-      message: sdkQueryErrorMessage(errorDiagnosticMessage(error)),
+      message: presentation.message,
+      errorKind: presentation.errorKind,
+      recoverable: presentation.recoverable,
       conversationId: this.conversationId,
       providerId: this.providerId,
       sdkSessionId: this.sdkSessionId,
