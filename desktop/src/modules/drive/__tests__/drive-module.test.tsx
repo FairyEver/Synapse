@@ -5,7 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { DriveItemDto } from "@synapse/shared"
+import type { DriveItemDto, DrivePublicationDto, DriveShareListItemDto } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
 
 import { DriveModule } from "../index"
@@ -16,10 +16,17 @@ const mocks = vi.hoisted(() => ({
   completeDriveUpload: vi.fn(),
   createDriveFolder: vi.fn(),
   deleteDriveItem: vi.fn(),
+  disableDrivePublication: vi.fn(),
   disableDriveShare: vi.fn(),
+  getDriveDeleteImpact: vi.fn(),
+  listDrivePublications: vi.fn(),
   listDriveItems: vi.fn(),
+  listDriveShares: vi.fn(),
   moveDriveItem: vi.fn(),
   prepareDriveUpload: vi.fn(),
+  publishDrivePage: vi.fn(),
+  publishDriveSite: vi.fn(),
+  redeployDrivePublication: vi.fn(),
   renameDriveItem: vi.fn(),
   shareDriveItem: vi.fn(),
   toast: vi.fn(),
@@ -71,14 +78,24 @@ vi.mock("@/lib/electron-bridge", () => ({
       completeDriveUpload: mocks.completeDriveUpload,
       createDriveFolder: mocks.createDriveFolder,
       deleteDriveItem: mocks.deleteDriveItem,
+      disableDrivePublication: mocks.disableDrivePublication,
       disableDriveShare: mocks.disableDriveShare,
+      getDriveDeleteImpact: mocks.getDriveDeleteImpact,
+      listDrivePublications: mocks.listDrivePublications,
       listDriveItems: mocks.listDriveItems,
+      listDriveShares: mocks.listDriveShares,
       moveDriveItem: mocks.moveDriveItem,
       prepareDriveFolderUpload: vi.fn(),
       prepareDriveUpload: mocks.prepareDriveUpload,
+      publishDrivePage: mocks.publishDrivePage,
+      publishDriveSite: mocks.publishDriveSite,
+      redeployDrivePublication: mocks.redeployDrivePublication,
       renameDriveItem: mocks.renameDriveItem,
       shareDriveItem: mocks.shareDriveItem,
       uploadDrivePreparedFile: mocks.uploadDrivePreparedFile,
+    },
+    shell: {
+      openExternal: vi.fn(),
     },
   }),
 }))
@@ -97,8 +114,12 @@ beforeEach(() => {
   mocks.completeDriveUpload.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file", size: "6" }))
   mocks.createDriveFolder.mockResolvedValue(createDriveItem({ id: "folder-1", name: "E2E" }))
   mocks.deleteDriveItem.mockResolvedValue({ ok: true })
+  mocks.disableDrivePublication.mockResolvedValue({ ok: true })
   mocks.disableDriveShare.mockResolvedValue({ ok: true })
+  mocks.getDriveDeleteImpact.mockResolvedValue({ publications: [] })
+  mocks.listDrivePublications.mockResolvedValue([])
   mocks.listDriveItems.mockResolvedValue([])
+  mocks.listDriveShares.mockResolvedValue([])
   mocks.moveDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file" }))
   mocks.prepareDriveUpload.mockResolvedValue({
     item: createDriveItem({ id: "file-1", name: "report.txt", type: "file", size: "6" }),
@@ -110,6 +131,9 @@ beforeEach(() => {
       url: "https://upload.example.test/object",
     },
   })
+  mocks.publishDrivePage.mockResolvedValue(createDrivePublication({ id: "pub-page-1", publishId: "pub_page", name: "report.html", type: "page", url: "https://synapse.test/pages/pub_page" }))
+  mocks.publishDriveSite.mockResolvedValue(createDrivePublication({ id: "pub-site-1", publishId: "pub_site", name: "site", type: "site", url: "https://synapse.test/sites/pub_site/" }))
+  mocks.redeployDrivePublication.mockResolvedValue(createDrivePublication())
   mocks.renameDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "renamed.txt", type: "file" }))
   mocks.shareDriveItem.mockResolvedValue({ id: "share-row-1", shareId: "shr_test", itemId: "file-1", enabled: true, url: "https://synapse.test/files/shr_test", createdAt: "2026-06-07T00:00:00.000Z" })
   mocks.uploadDrivePreparedFile.mockResolvedValue({ ok: true })
@@ -132,10 +156,20 @@ describe("DriveModule", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
     expect(html).toContain("云盘")
+    expect(html).toContain("已分享")
+    expect(html).toContain("已发布")
     expect(html).toContain("上传文件")
     expect(html).toContain("上传文件夹")
     expect(html).toContain("新建文件夹")
     expect(html).toContain("刷新")
+  })
+
+  it("shows share and publication management actions in the drive top bar", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(getButton("已分享")).not.toBeNull()
+    expect(getButton("已发布")).not.toBeNull()
   })
 
   it("shows an account login state without listing drive items when unauthenticated", async () => {
@@ -428,6 +462,63 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
   })
 
+  it("shows publish page only for html files", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "html-1", name: "report.html", type: "file", mimeType: "text/html" }),
+      createDriveItem({ id: "txt-1", name: "notes.txt", type: "file", mimeType: "text/plain" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.html")
+    expect(menuItemTexts()).toContain("发布网页")
+    await closeMenus()
+    await openRowMenu("notes.txt")
+    expect(menuItemTexts()).not.toContain("发布网页")
+  })
+
+  it("shows publish site for folders", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("site")
+
+    expect(menuItemTexts()).toContain("发布站点")
+  })
+
+  it("publishes html files and copies the page URL", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "html-1", name: "report.html", type: "file", mimeType: "text/html" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.html")
+    await clickText("发布网页")
+
+    expect(mocks.publishDrivePage).toHaveBeenCalledWith({ itemId: "html-1" })
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_page")
+    expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
+  })
+
+  it("publishes folders and copies the site URL", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("site")
+    await clickText("发布站点")
+
+    expect(mocks.publishDriveSite).toHaveBeenCalledWith({ itemId: "folder-1" })
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/sites/pub_site/")
+    expect(mocks.toast).toHaveBeenCalledWith("发布链接已复制")
+  })
+
   it("keeps rename and move in the more menu without share or delete", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "shared.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
@@ -455,8 +546,59 @@ describe("DriveModule", () => {
 
     await clickAlertDialogButton("删除")
 
-    expect(mocks.deleteDriveItem).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.getDriveDeleteImpact).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.deleteDriveItem).toHaveBeenCalledWith({ itemId: "file-1", disablePublications: false })
     expect(mocks.toast).toHaveBeenCalledWith("已删除")
+  })
+
+  it("passes disablePublications when the delete checkbox is selected", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.html", type: "file", mimeType: "text/html" }),
+    ])
+    mocks.getDriveDeleteImpact.mockResolvedValue({
+      publications: [createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" })],
+    })
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("删除")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("会影响 1 个已发布内容")
+    await clickCheckboxByLabel("同时取消相关发布")
+    await clickAlertDialogButton("删除")
+
+    expect(mocks.deleteDriveItem).toHaveBeenCalledWith({ itemId: "file-1", disablePublications: true })
+  })
+
+  it("opens the publications dialog and disables a publication", async () => {
+    mocks.listDrivePublications.mockResolvedValue([
+      createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("已发布")
+    await flushAct()
+    await clickButtonByLabel("取消发布 report.html")
+
+    expect(mocks.listDrivePublications).toHaveBeenCalled()
+    expect(mocks.disableDrivePublication).toHaveBeenCalledWith({ publicationId: "pub-row-1" })
+  })
+
+  it("opens the shares dialog and disables a share", async () => {
+    mocks.listDriveShares.mockResolvedValue([
+      createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("已分享")
+    await flushAct()
+    await clickButtonByLabel("取消分享 report.txt")
+
+    expect(mocks.listDriveShares).toHaveBeenCalled()
+    expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "shr_test" })
   })
 
   it("moves an item to a nested folder selected from the tree", async () => {
@@ -612,6 +754,22 @@ async function openFirstMenu(): Promise<void> {
   })
 }
 
+async function openRowMenu(name: string): Promise<void> {
+  await act(async () => {
+    const trigger = document.querySelector<HTMLButtonElement>(`button[aria-label="更多 ${name}"]`)
+    if (!trigger) throw new Error(`More menu button not found: ${name}`)
+    trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    await flushPromises()
+  })
+}
+
+async function closeMenus(): Promise<void> {
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+    await flushPromises()
+  })
+}
+
 async function clickButtonText(text: string): Promise<void> {
   const element = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => candidate.textContent?.trim() === text)
@@ -652,6 +810,17 @@ async function clickButtonByLabel(label: string): Promise<void> {
   })
 }
 
+async function clickCheckboxByLabel(label: string): Promise<void> {
+  const labelElement = Array.from(document.body.querySelectorAll<HTMLLabelElement>("label"))
+    .find((candidate) => candidate.textContent?.trim() === label)
+  const checkbox = labelElement?.querySelector<HTMLButtonElement>("[role='checkbox']")
+  if (!checkbox) throw new Error(`Checkbox not found: ${label}`)
+  await act(async () => {
+    checkbox.click()
+    await flushPromises()
+  })
+}
+
 function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
   return {
     activeShareId: null,
@@ -665,6 +834,37 @@ function createDriveItem(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
     storageStatus: "active" as const,
     type: "folder" as const,
     updatedAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+function createDrivePublication(overrides: Partial<DrivePublicationDto> = {}): DrivePublicationDto {
+  return {
+    createdAt: "2026-06-07T00:00:00.000Z",
+    currentDeploymentId: "dep-1",
+    id: "pub-row-1",
+    name: "report.html",
+    publishId: "pub_test",
+    sourceDeleted: false,
+    sourceItemId: "file-1",
+    status: "active",
+    type: "page",
+    updatedAt: "2026-06-07T00:00:00.000Z",
+    url: "https://synapse.test/pages/pub_test",
+    ...overrides,
+  }
+}
+
+function createDriveShare(overrides: Partial<DriveShareListItemDto> = {}): DriveShareListItemDto {
+  return {
+    createdAt: "2026-06-07T00:00:00.000Z",
+    id: "share-row-1",
+    itemId: "file-1",
+    itemName: "report.txt",
+    itemType: "file",
+    shareId: "shr_test",
+    sourceDeleted: false,
+    url: "https://synapse.test/files/shr_test",
     ...overrides,
   }
 }
