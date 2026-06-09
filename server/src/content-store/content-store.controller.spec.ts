@@ -12,7 +12,7 @@ describe("ContentStoreUserController", () => {
     const request = userRequest("user-1")
 
     await controller.listStore({ page: "2", pageSize: "10", sortBy: "updatedAt", type: "skill", query: "sync" }, request)
-    await controller.listMine({ sortBy: "createdAt", type: "prompt" }, request)
+    await controller.listMine({ type: "prompt" }, request)
 
     expect(service.listStore).toHaveBeenCalledWith("user-1", {
       page: 2,
@@ -25,7 +25,7 @@ describe("ContentStoreUserController", () => {
     expect(service.listMine).toHaveBeenCalledWith("user-1", {
       page: 1,
       pageSize: 20,
-      sortBy: "createdAt",
+      sortBy: "updatedAt",
       sortOrder: "desc",
       type: "prompt",
       query: undefined,
@@ -42,14 +42,15 @@ describe("ContentStoreUserController", () => {
     const request = userRequest("user-1")
     const file = { path: "SKILL.md", contentBase64: Buffer.from("# Skill").toString("base64") }
 
-    await controller.createDraft({ type: "skill", title: "  Skill  ", files: [file] }, request)
-    await controller.saveDraft("item-1", { baseRevision: 2, title: "Rule", body: "body" }, request)
+    await controller.createDraft({ type: "skill", title: "  Skill  ", localSourceFingerprint: " local-1 ", files: [file] }, request)
+    await controller.saveDraft("item-1", { type: "rule", baseRevision: 2, title: "Rule", body: "body" }, request)
     await controller.publishDraft("item-1", { baseRevision: 3 }, request)
 
     expect(service.createDraft).toHaveBeenCalledWith("user-1", {
       type: "skill",
       title: "Skill",
       description: null,
+      localSourceFingerprint: "local-1",
       body: null,
       files: [file],
     })
@@ -99,6 +100,7 @@ describe("ContentStoreUserController", () => {
     const request = userRequest("user-1")
 
     expect(() => controller.createDraft({ type: "skill", title: "" }, request)).toThrow(BadRequestException)
+    expect(() => controller.createDraft({ type: "skill", title: "Skill", files: [{ path: "SKILL.md", contentBase64: "not-base64" }] }, request)).toThrow(BadRequestException)
     expect(() => controller.setVisibility("item-1", { visibility: "team" }, request)).toThrow(BadRequestException)
     expect(() => controller.recordInstall("session-1", { clientInstanceId: "" }, request)).toThrow(BadRequestException)
 
@@ -136,13 +138,13 @@ describe("ContentStoreAdminController", () => {
     }
     const controller = new ContentStoreAdminController(service as never)
 
-    await controller.listAdmin({ type: "rule", visibility: "public", moderationStatus: "normal", query: "hook" })
+    await controller.listAdmin({ sortBy: "installCount", type: "rule", visibility: "public", moderationStatus: "normal", query: "hook" })
     await controller.getAdminDetail("item-1")
 
     expect(service.listAdmin).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
-      sortBy: "createdAt",
+      sortBy: "installCount",
       sortOrder: "desc",
       type: "rule",
       visibility: "public",

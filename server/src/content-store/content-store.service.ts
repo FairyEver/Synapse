@@ -22,7 +22,7 @@ import type { ContentStoreStoragePort } from "./content-store-storage"
 import type { ContentStoreFileInput, NormalizedContentStoreFile } from "./content-store.types"
 
 const revisionMismatchMessage = "草稿已在其它页面更新，请刷新后继续。"
-const listSortFields = ["createdAt", "updatedAt", "title"] as const
+const listSortFields = ["createdAt", "updatedAt", "installCount"] as const
 
 export type ContentStoreDraftFileInput = {
   readonly path: string
@@ -34,6 +34,7 @@ export type CreateContentStoreDraftInput = {
   readonly type: ContentStoreType
   readonly title: string
   readonly description?: string | null
+  readonly localSourceFingerprint?: string | null
   readonly body?: string | null
   readonly files?: readonly ContentStoreDraftFileInput[]
 }
@@ -163,13 +164,52 @@ export class ContentStoreService {
     this.assertTitle(input.title)
     const normalized = this.normalizeDraftPayload(input.type, input)
     const draftId = randomUUID()
+    const localSourceFingerprint = input.type === "skill" ? normalizeLocalSourceFingerprint(input.localSourceFingerprint) : null
 
     return this.prisma.$transaction(async (tx) => {
+      if (localSourceFingerprint) {
+        const existingItem = await tx.contentStoreItem.findFirst({
+          where: {
+            type: "skill",
+            ownerUserId: userId,
+            localSourceFingerprint,
+            latestVersionId: null,
+          },
+        }) as ContentStoreItemRow | null
+        if (existingItem) {
+          const existingDraft = await tx.contentStoreDraft.findFirst({
+            where: { itemId: existingItem.id, ownerUserId: userId },
+          }) as ContentStoreDraftRow | null
+          if (existingDraft) {
+            await tx.contentStoreItem.update({
+              where: { id: existingItem.id },
+              data: {
+                title: input.title.trim(),
+                description: normalizeDescription(input.description),
+                localSourceFingerprint,
+              },
+            })
+            await tx.contentStoreDraft.update({
+              where: { itemId: existingItem.id },
+              data: {
+                title: input.title.trim(),
+                description: normalizeDescription(input.description),
+                body: normalized.body,
+                revision: { increment: 1 },
+              },
+            })
+            await this.replaceDraftFiles(tx, userId, existingDraft.id, normalized.files)
+            return this.getDraftDto(tx, userId, existingItem.id)
+          }
+        }
+      }
+
       const item = await tx.contentStoreItem.create({
         data: {
           type: input.type,
           title: input.title.trim(),
           description: normalizeDescription(input.description),
+          localSourceFingerprint,
           ownerUserId: userId,
           visibility: "private",
           moderationStatus: "normal",
@@ -290,11 +330,7 @@ export class ContentStoreService {
       ...(options.type ? { type: options.type } : {}),
       ...buildSearchWhere(options.query, "public"),
     }
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.contentStoreItem.findMany({ where, include: { owner: { select: { id: true, displayName: true } } }, ...toPrismaArgs(pagination) }),
-      this.prisma.contentStoreItem.count({ where }),
-    ]) as [ContentStoreItemRow[], number]
-    return this.paginatedItems(this.prisma, items, total, pagination)
+    return this.listItems(where, pagination)
   }
 
   async listMine(userId: string, options: ListContentStoreOptions): Promise<PaginatedResponse<ContentStoreItemDto>> {
@@ -304,11 +340,7 @@ export class ContentStoreService {
       ...(options.type ? { type: options.type } : {}),
       ...buildSearchWhere(options.query, "mine"),
     }
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.contentStoreItem.findMany({ where, include: { owner: { select: { id: true, displayName: true } } }, ...toPrismaArgs(pagination) }),
-      this.prisma.contentStoreItem.count({ where }),
-    ]) as [ContentStoreItemRow[], number]
-    return this.paginatedItems(this.prisma, items, total, pagination)
+    return this.listItems(where, pagination)
   }
 
   async getDetail(userId: string, itemId: string): Promise<ContentStoreDetailDto> {
@@ -521,11 +553,7 @@ export class ContentStoreService {
       ...(options.moderationStatus ? { moderationStatus: options.moderationStatus } : {}),
       ...buildSearchWhere(options.query, "admin"),
     }
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.contentStoreItem.findMany({ where, include: { owner: { select: { id: true, displayName: true } } }, ...toPrismaArgs(pagination) }),
-      this.prisma.contentStoreItem.count({ where }),
-    ]) as [ContentStoreItemRow[], number]
-    return this.paginatedItems(this.prisma, items, total, pagination)
+    return this.listItems(where, pagination)
   }
 
   async getAdminDetail(itemId: string): Promise<ContentStoreDetailDto> {
@@ -655,6 +683,52 @@ export class ContentStoreService {
     return draftDto(draft)
   }
 
+  private async listItems(
+    where: Prisma.ContentStoreItemWhereInput,
+    pagination: PaginationQuery,
+  ): Promise<PaginatedResponse<ContentStoreItemDto>> {
+    if (pagination.sortBy === "installCount") {
+      return this.listItemsByInstallCount(where, pagination)
+    }
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.contentStoreItem.findMany({
+        where,
+        include: { owner: { select: { id: true, displayName: true } } },
+        ...toPrismaArgs({ ...pagination, sortBy: pagination.sortBy === "createdAt" ? "createdAt" : pagination.sortBy }),
+        orderBy: [{ featured: "desc" }, { [pagination.sortBy]: pagination.sortOrder }],
+      }),
+      this.prisma.contentStoreItem.count({ where }),
+    ]) as [ContentStoreItemRow[], number]
+    return this.paginatedItems(this.prisma, items, total, pagination)
+  }
+
+  private async listItemsByInstallCount(
+    where: Prisma.ContentStoreItemWhereInput,
+    pagination: PaginationQuery,
+  ): Promise<PaginatedResponse<ContentStoreItemDto>> {
+    const items = await this.prisma.contentStoreItem.findMany({
+      where,
+      include: { owner: { select: { id: true, displayName: true } } },
+    }) as ContentStoreItemRow[]
+    const counts = await Promise.all(items.map((item) => this.prisma.contentStoreInstallEvent.count({ where: { itemId: item.id } })))
+    const rows = items.map((item, index) => ({ item, installCount: counts[index] ?? 0 }))
+    const direction = pagination.sortOrder === "asc" ? 1 : -1
+    rows.sort((left, right) => {
+      if (left.item.featured !== right.item.featured) return left.item.featured ? -1 : 1
+      const installDiff = (left.installCount - right.installCount) * direction
+      if (installDiff !== 0) return installDiff
+      return right.item.updatedAt.getTime() - left.item.updatedAt.getTime()
+    })
+    const start = (pagination.page - 1) * pagination.pageSize
+    const pageRows = rows.slice(start, start + pagination.pageSize)
+    return {
+      data: await Promise.all(pageRows.map((row) => this.itemDto(this.prisma, row.item, row.installCount))),
+      total: items.length,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    }
+  }
+
   private async paginatedItems(
     db: ContentStoreDb,
     items: readonly ContentStoreItemRow[],
@@ -669,8 +743,8 @@ export class ContentStoreService {
     }
   }
 
-  private async itemDto(db: ContentStoreDb, item: ContentStoreItemRow): Promise<ContentStoreItemDto> {
-    const installCount = await db.contentStoreInstallEvent.count({ where: { itemId: item.id } })
+  private async itemDto(db: ContentStoreDb, item: ContentStoreItemRow, knownInstallCount?: number): Promise<ContentStoreItemDto> {
+    const installCount = knownInstallCount ?? await db.contentStoreInstallEvent.count({ where: { itemId: item.id } })
     const latestVersion = item.latestVersionId
       ? await db.contentStoreVersion.findFirst({
         where: { id: item.latestVersionId, itemId: item.id },
@@ -710,6 +784,11 @@ function decodeFiles(files: readonly ContentStoreDraftFileInput[]): ContentStore
 
 function normalizeDescription(description: string | null | undefined): string | null {
   const trimmed = description?.trim()
+  return trimmed ? trimmed : null
+}
+
+function normalizeLocalSourceFingerprint(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
   return trimmed ? trimmed : null
 }
 

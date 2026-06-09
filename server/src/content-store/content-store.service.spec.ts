@@ -47,6 +47,41 @@ describe("ContentStoreService", () => {
     }))
   })
 
+  it("overwrites the existing same-source unpublished skill draft", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      type: "skill",
+      latestVersionId: null,
+      localSourceFingerprint: "local-1",
+    }))
+    prisma.contentStoreDraft.findFirst
+      .mockResolvedValueOnce(draft({ id: "draft-1", itemId: "item-1", revision: 1 }))
+      .mockResolvedValueOnce(draft({
+        id: "draft-1",
+        itemId: "item-1",
+        title: "Updated Skill",
+        revision: 2,
+        files: [file({ storageKey: "content-store/drafts/user-1/draft-1/sha" })],
+      }))
+    prisma.contentStoreItem.update.mockResolvedValue(item({ id: "item-1", title: "Updated Skill" }))
+    prisma.contentStoreDraft.update.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1", revision: 2 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+
+    const result = await service.createDraft("user-1", {
+      type: "skill",
+      title: "Updated Skill",
+      localSourceFingerprint: " local-1 ",
+      files: [{ path: "SKILL.md", contentBase64: Buffer.from("# Updated").toString("base64") }],
+    })
+
+    expect(result).toMatchObject({ id: "draft-1", itemId: "item-1", title: "Updated Skill" })
+    expect(prisma.contentStoreItem.create).not.toHaveBeenCalled()
+    expect(prisma.contentStoreDraft.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { itemId: "item-1" },
+      data: expect.objectContaining({ revision: { increment: 1 } }),
+    }))
+  })
+
   it("rejects a stale draft save when the revision changed during the write", async () => {
     prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
       id: "draft-1",
@@ -198,6 +233,21 @@ describe("ContentStoreService", () => {
         ]),
       }),
     }))
+  })
+
+  it("sorts list results by install count", async () => {
+    prisma.contentStoreItem.findMany.mockResolvedValue([
+      item({ id: "item-low", title: "Low", updatedAt: new Date("2026-06-08T00:00:00.000Z") }),
+      item({ id: "item-high", title: "High", updatedAt: new Date("2026-06-09T00:00:00.000Z") }),
+    ])
+    prisma.contentStoreInstallEvent.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(3)
+
+    const result = await service.listStore("user-1", { sortBy: "installCount" })
+
+    expect(result.data.map((row) => row.id)).toEqual(["item-high", "item-low"])
+    expect(result.data.map((row) => row.installCount)).toEqual([3, 1])
   })
 
   it("rejects install sessions for prompt content", async () => {

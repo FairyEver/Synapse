@@ -7,7 +7,7 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import { ContentStoreService } from "./content-store.service"
 
 const defaultInstallDeepLinkBase = "synapse://content-install"
-const listSortFields = ["createdAt", "updatedAt", "title"] as const
+const listSortFields = ["createdAt", "updatedAt", "installCount"] as const
 
 const contentTypeSchema = z.enum(["skill", "rule", "prompt"])
 const visibilityValueSchema = z.enum(["private", "public"])
@@ -25,7 +25,7 @@ const adminListQuerySchema = listQuerySchema.extend({
 
 const fileSchema = z.object({
   path: z.string().trim().min(1).max(1024),
-  contentBase64: z.string().min(1),
+  contentBase64: z.string().min(1).refine(isStrictBase64, "必须是有效的 base64 内容"),
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
 
@@ -51,13 +51,29 @@ const createDraftSchema = z.discriminatedUnion("type", [
   }).strict(),
 ])
 
-const saveDraftSchema = z.object({
-  baseRevision: z.number().int().positive(),
-  title: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(2000).nullable().optional(),
-  body: z.string().optional(),
-  files: z.array(fileSchema).min(1).max(200).optional(),
-}).strict()
+const saveDraftSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("skill"),
+    baseRevision: z.number().int().positive(),
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(2000).nullable().optional(),
+    files: z.array(fileSchema).min(1).max(200),
+  }).strict(),
+  z.object({
+    type: z.literal("rule"),
+    baseRevision: z.number().int().positive(),
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(2000).nullable().optional(),
+    body: z.string().min(1),
+  }).strict(),
+  z.object({
+    type: z.literal("prompt"),
+    baseRevision: z.number().int().positive(),
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(2000).nullable().optional(),
+    body: z.string().min(1),
+  }).strict(),
+])
 
 const publishDraftSchema = z.object({ baseRevision: z.number().int().positive() }).strict()
 const visibilitySchema = z.object({ visibility: visibilityValueSchema }).strict()
@@ -89,6 +105,7 @@ export class ContentStoreUserController {
       type: parsed.type,
       title: parsed.title,
       description: parsed.description ?? null,
+      localSourceFingerprint: "localSourceFingerprint" in parsed ? parsed.localSourceFingerprint : null,
       body: "body" in parsed ? parsed.body : null,
       files: "files" in parsed ? parsed.files : undefined,
     })
@@ -100,8 +117,8 @@ export class ContentStoreUserController {
     return this.service.saveDraft(request.user!.id, id, parsed.baseRevision, {
       title: parsed.title,
       description: parsed.description ?? null,
-      body: parsed.body,
-      files: parsed.files,
+      body: "body" in parsed ? parsed.body : undefined,
+      files: "files" in parsed ? parsed.files : undefined,
     })
   }
 
@@ -157,7 +174,7 @@ export class ContentStoreAdminController {
 
   @Get("/items")
   listAdmin(@Query() query: Record<string, unknown>) {
-    const pagination = parsePagination(query, { allowedSortFields: listSortFields })
+    const pagination = parseContentStorePagination(query)
     const filters = parseQuery(adminListQuerySchema, pickQuery(query, "type", "query", "visibility", "moderationStatus"), "查询参数无效。")
     return this.service.listAdmin({ ...pagination, ...filters })
   }
@@ -181,9 +198,14 @@ export class ContentStoreAdminController {
 }
 
 function parseListOptions(query: Record<string, unknown>) {
-  const pagination = parsePagination(query, { allowedSortFields: listSortFields })
+  const pagination = parseContentStorePagination(query)
   const filters = parseQuery(listQuerySchema, pickQuery(query, "type", "query"), "查询参数无效。")
   return { ...pagination, ...filters }
+}
+
+function parseContentStorePagination(query: Record<string, unknown>) {
+  const paginationQuery = "sortBy" in query ? query : { ...query, sortBy: "updatedAt" }
+  return parsePagination(paginationQuery, { allowedSortFields: listSortFields })
 }
 
 function pickQuery(query: Record<string, unknown>, ...keys: readonly string[]): Record<string, unknown> {
@@ -204,4 +226,9 @@ function parseQuery<T extends z.ZodType>(schema: T, query: Record<string, unknow
   const result = schema.safeParse(query)
   if (!result.success) throw badRequestFromZodError(result.error, message)
   return result.data
+}
+
+function isStrictBase64(value: string): boolean {
+  if (value.length % 4 !== 0) return false
+  return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value)
 }
