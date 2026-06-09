@@ -47,6 +47,7 @@ import {
   deleteTask,
   exportTasksToFile,
   importTasksFromFile,
+  migrateTaskToAutomation,
   runTask,
   setTaskEnabled,
   stopRun,
@@ -76,6 +77,17 @@ function errorLogMeta(error: unknown): { readonly errorName: string; readonly er
   }
 }
 
+function getMigrationDescription(task: ScheduledTask | null): string {
+  if (!task) return ""
+  if (task.validation?.status === "needs_update") {
+    return "新自动化会保持停用。迁移成功后，此任务会被删除。运行历史不会迁移。"
+  }
+  if (task.activeRun?.status === "running") {
+    return "将先停止当前运行。迁移成功后，此任务会被删除。运行历史不会迁移。"
+  }
+  return "迁移成功后，此任务会被删除。运行历史不会迁移。"
+}
+
 async function stopRunOrThrow(runId: string): Promise<{ readonly stopped: boolean }> {
   const result = await stopRun(runId)
   if (!result.stopped) throw new Error("Task run was not active")
@@ -97,6 +109,8 @@ function TaskSchedulerModule() {
 const [isExporting, setIsExporting] = useState(false)
   const [importEntries, setImportEntries] = useState<TaskExportEntry[] | null>(null)
   const [importing, setImporting] = useState(false)
+  const [migrateTarget, setMigrateTarget] = useState<ScheduledTask | null>(null)
+  const [migratingTaskIds, setMigratingTaskIds] = useState<Set<string>>(() => new Set())
 
   async function runMutation<T>(
     operation: () => Promise<T>,
@@ -164,6 +178,45 @@ const [isExporting, setIsExporting] = useState(false)
     )
     if (result !== null) {
       setDeleteTarget(null)
+    }
+  }
+
+  async function handleMigrateTask() {
+    if (!migrateTarget) return
+    const task = migrateTarget
+    setMigratingTaskIds((prev) => new Set(prev).add(task.id))
+    try {
+      await promise(
+        async () => {
+          const result = await migrateTaskToAutomation(task.id)
+          logger.info("Task migrated to automation.", {
+            taskId: result.deletedTaskId,
+            automationId: result.automationId,
+            taskNameLength: task.name.length,
+            actionType: task.action.type,
+            triggerType: task.trigger.type,
+          })
+          return result
+        },
+        { loading: "正在迁移...", success: "已迁移到自动化", error: "迁移失败" },
+      )
+      setMigrateTarget(null)
+      await refresh()
+    } catch (migrationError) {
+      logger.warn("Task migration failed.", {
+        boundary: "renderer.task-scheduler.migrate",
+        taskId: task.id,
+        taskNameLength: task.name.length,
+        actionType: task.action.type,
+        triggerType: task.trigger.type,
+        ...errorLogMeta(migrationError),
+      })
+    } finally {
+      setMigratingTaskIds((prev) => {
+        const next = new Set(prev)
+        next.delete(task.id)
+        return next
+      })
     }
   }
 
@@ -391,6 +444,7 @@ const [isExporting, setIsExporting] = useState(false)
               <TaskCardGrid
                 busy={busy}
                 runningTaskIds={runningTaskIds}
+                migratingTaskIds={migratingTaskIds}
                 projects={config.global.projects}
                 tasks={tasks}
                 onCreateNew={() => {
@@ -403,6 +457,7 @@ const [isExporting, setIsExporting] = useState(false)
                   setIsFormOpen(true)
                 }}
                 onHistory={(task) => setHistoryTask(task)}
+                onMigrate={(task) => setMigrateTarget(task)}
                 onRun={(task) => {
                   void handleRunTask(task)
                 }}
@@ -477,6 +532,29 @@ const [isExporting, setIsExporting] = useState(false)
                 }}
               >
                 {busy ? "正在删除..." : "删除"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={migrateTarget !== null} onOpenChange={(open) => !open && setMigrateTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>迁移到自动化</AlertDialogTitle>
+              <AlertDialogDescription>
+                {getMigrationDescription(migrateTarget)}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={migrateTarget ? migratingTaskIds.has(migrateTarget.id) : false}
+                onClick={(event) => {
+                  event.preventDefault()
+                  void handleMigrateTask()
+                }}
+              >
+                {migrateTarget && migratingTaskIds.has(migrateTarget.id) ? "迁移中..." : "迁移"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
