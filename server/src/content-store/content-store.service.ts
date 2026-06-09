@@ -67,6 +67,8 @@ export interface ResolvedContentStoreInstallSession {
   readonly expiresAt: string
 }
 
+type ContentStoreSearchScope = "public" | "mine" | "admin"
+
 type ContentStoreDb = Pick<
   PrismaService,
   | "auditLog"
@@ -201,8 +203,8 @@ export class ContentStoreService {
       if (draft.revision !== baseRevision) throw new BadRequestException(revisionMismatchMessage)
 
       const normalized = this.normalizeDraftPayload(toContentStoreType(draft.item.type), input)
-      await tx.contentStoreDraft.update({
-        where: { itemId },
+      const updated = await tx.contentStoreDraft.updateMany({
+        where: { itemId, ownerUserId: userId, revision: baseRevision },
         data: {
           title: input.title.trim(),
           description: normalizeDescription(input.description),
@@ -210,6 +212,7 @@ export class ContentStoreService {
           revision: { increment: 1 },
         },
       })
+      if (updated.count !== 1) throw new BadRequestException(revisionMismatchMessage)
       await this.replaceDraftFiles(tx, userId, draft.id, normalized.files)
       return this.getDraftDto(tx, userId, itemId)
     })
@@ -236,7 +239,7 @@ export class ContentStoreService {
           packageKey: null,
           packageSha256: null,
           packageSize: null,
-          searchText: buildSearchText(draft.title, draft.description, draft.body, draft.files ?? []),
+          searchText: buildSearchText(type, draft.title, draft.description, draft.body, draft.files ?? []),
         },
       }) as ContentStoreVersionRow
 
@@ -285,7 +288,7 @@ export class ContentStoreService {
       visibility: "public",
       moderationStatus: "normal",
       ...(options.type ? { type: options.type } : {}),
-      ...(options.query ? { title: { contains: options.query, mode: "insensitive" as const } } : {}),
+      ...buildSearchWhere(options.query, "public"),
     }
     const [items, total] = await this.prisma.$transaction([
       this.prisma.contentStoreItem.findMany({ where, include: { owner: { select: { id: true, displayName: true } } }, ...toPrismaArgs(pagination) }),
@@ -299,7 +302,7 @@ export class ContentStoreService {
     const where: Prisma.ContentStoreItemWhereInput = {
       ownerUserId: userId,
       ...(options.type ? { type: options.type } : {}),
-      ...(options.query ? { title: { contains: options.query, mode: "insensitive" as const } } : {}),
+      ...buildSearchWhere(options.query, "mine"),
     }
     const [items, total] = await this.prisma.$transaction([
       this.prisma.contentStoreItem.findMany({ where, include: { owner: { select: { id: true, displayName: true } } }, ...toPrismaArgs(pagination) }),
@@ -343,6 +346,7 @@ export class ContentStoreService {
       }) as ContentStoreVersionRow | null
       if (!sourceVersion) throw new NotFoundException("内容版本不存在。")
 
+      const type = toContentStoreType(source.type)
       const newItem = await tx.contentStoreItem.create({
         data: {
           type: source.type,
@@ -365,12 +369,11 @@ export class ContentStoreService {
           packageKey: null,
           packageSha256: null,
           packageSize: null,
-          searchText: buildSearchText(sourceVersion.title, sourceVersion.description, sourceVersion.body, sourceVersion.files ?? []),
+          searchText: buildSearchText(type, sourceVersion.title, sourceVersion.description, sourceVersion.body, sourceVersion.files ?? []),
         },
       }) as ContentStoreVersionRow
       await this.createVersionFiles(tx, newVersion.id, sourceVersion.files ?? [])
 
-      const type = toContentStoreType(source.type)
       if (type === "skill" || type === "rule") {
         const packageFiles = await this.filesWithBytes(sourceVersion.files ?? [])
         const packageResult = await buildContentStorePackage({ contentId: newItem.id, versionId: newVersion.id, type, title: newVersion.title, files: packageFiles })
@@ -516,7 +519,7 @@ export class ContentStoreService {
       ...(options.type ? { type: options.type } : {}),
       ...(options.visibility ? { visibility: options.visibility } : {}),
       ...(options.moderationStatus ? { moderationStatus: options.moderationStatus } : {}),
-      ...(options.query ? { title: { contains: options.query, mode: "insensitive" as const } } : {}),
+      ...buildSearchWhere(options.query, "admin"),
     }
     const [items, total] = await this.prisma.$transaction([
       this.prisma.contentStoreItem.findMany({ where, include: { owner: { select: { id: true, displayName: true } } }, ...toPrismaArgs(pagination) }),
@@ -782,8 +785,36 @@ function fileDto(file: ContentStoreFileRow): ContentStoreFileDto {
   }
 }
 
-function buildSearchText(title: string, description: string | null, body: string | null, files: readonly ContentStoreFileRow[]): string {
-  return [title, description, body, ...files.map((file) => file.text)].filter((value): value is string => Boolean(value)).join("\n")
+function buildSearchWhere(query: string | undefined, scope: ContentStoreSearchScope): Prisma.ContentStoreItemWhereInput {
+  const normalizedQuery = query?.trim()
+  if (!normalizedQuery) return {}
+  const searchVersionWhere = scope === "mine"
+    ? { searchText: { contains: normalizedQuery, mode: "insensitive" as const } }
+    : {
+      searchText: { contains: normalizedQuery, mode: "insensitive" as const },
+      item: scope === "public" ? { visibility: "public", moderationStatus: "normal" } : undefined,
+    }
+  return {
+    OR: [
+      { title: { contains: normalizedQuery, mode: "insensitive" } },
+      { description: { contains: normalizedQuery, mode: "insensitive" } },
+      { owner: { displayName: { contains: normalizedQuery, mode: "insensitive" } } },
+      { versions: { some: searchVersionWhere } },
+    ],
+  }
+}
+
+function buildSearchText(
+  type: ContentStoreType,
+  title: string,
+  description: string | null,
+  body: string | null,
+  files: readonly ContentStoreFileRow[],
+): string {
+  const bodyText = type === "prompt"
+    ? body
+    : files.find((file) => file.path === (type === "skill" ? "SKILL.md" : "RULE.md"))?.text
+  return [title, description, bodyText].filter((value): value is string => Boolean(value)).join("\n")
 }
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {

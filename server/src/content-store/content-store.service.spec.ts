@@ -47,6 +47,25 @@ describe("ContentStoreService", () => {
     }))
   })
 
+  it("rejects a stale draft save when the revision changed during the write", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 1,
+      item: item({ id: "item-1", type: "prompt" }),
+      files: [],
+    }))
+    prisma.contentStoreDraft.updateMany.mockResolvedValue({ count: 0 })
+
+    await expect(service.saveDraft("user-1", "item-1", 1, {
+      title: "Next",
+      body: "Prompt",
+    })).rejects.toThrow(BadRequestException)
+
+    expect(prisma.contentStoreFile.deleteMany).not.toHaveBeenCalled()
+  })
+
   it("rejects public visibility without description", async () => {
     prisma.contentStoreItem.findFirst.mockResolvedValue(item({ id: "item-1", ownerUserId: "user-1", description: "   " }))
 
@@ -114,6 +133,70 @@ describe("ContentStoreService", () => {
     expect(storage.putObject).not.toHaveBeenCalled()
     expect(prisma.contentStoreVersion.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ body: "Prompt body", packageKey: null, packageSha256: null, packageSize: null }),
+    }))
+  })
+
+  it("builds Skill search text from SKILL.md only", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 1,
+      item: item({ id: "item-1", type: "skill" }),
+      files: [
+        file({
+          path: "SKILL.md",
+          sha256: "5c01bdbb26f358bab27f267924aa2c9a03fcfdb8c2a8eb01ec6a57bf54e0629e",
+          text: "Primary searchable text",
+          storageKey: "content-store/drafts/user-1/draft-1/5c01",
+        }),
+        file({
+          path: "references/notes.md",
+          sha256: "7a38b7ed34aa5a7cd9afd2351353a12990d72581f70169c696000687193b3f28",
+          text: "Hidden attachment text",
+          storageKey: "content-store/drafts/user-1/draft-1/7a38",
+        }),
+      ],
+    }))
+    storage.getObjectStream
+      .mockResolvedValueOnce({ stream: bufferStream("Primary searchable text") })
+      .mockResolvedValueOnce({ stream: bufferStream("Hidden attachment text") })
+    prisma.contentStoreVersion.count.mockResolvedValue(0)
+    prisma.contentStoreVersion.create.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreVersion.update.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 2 })
+    prisma.contentStoreItem.update.mockResolvedValue(item({ id: "item-1", latestVersionId: "version-1" }))
+    prisma.contentStoreDraft.delete.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1" }))
+
+    await service.publishDraft("user-1", "item-1", 1)
+
+    expect(prisma.contentStoreVersion.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        searchText: expect.stringContaining("Primary searchable text"),
+      }),
+    }))
+    expect(prisma.contentStoreVersion.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        searchText: expect.not.stringContaining("Hidden attachment text"),
+      }),
+    }))
+  })
+
+  it("searches store items by title, description, author display name and version text", async () => {
+    prisma.contentStoreItem.findMany.mockResolvedValue([])
+    prisma.contentStoreItem.count.mockResolvedValue(0)
+
+    await service.listStore("user-1", { query: "needle" })
+
+    expect(prisma.contentStoreItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          { title: { contains: "needle", mode: "insensitive" } },
+          { description: { contains: "needle", mode: "insensitive" } },
+          { owner: { displayName: { contains: "needle", mode: "insensitive" } } },
+          { versions: { some: expect.objectContaining({ searchText: { contains: "needle", mode: "insensitive" } }) } },
+        ]),
+      }),
     }))
   })
 
@@ -233,6 +316,7 @@ interface PrismaMock {
   contentStoreDraft: {
     create: MockFn
     update: MockFn
+    updateMany: MockFn
     delete: MockFn
     findFirst: MockFn
     upsert: MockFn
@@ -272,7 +356,7 @@ function createPrismaMock(): PrismaMock {
   return {
     $transaction: vi.fn(),
     contentStoreItem: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
-    contentStoreDraft: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), upsert: vi.fn() },
+    contentStoreDraft: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), upsert: vi.fn() },
     contentStoreVersion: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
     contentStoreFile: { createMany: vi.fn(), deleteMany: vi.fn() },
     contentStoreInstallSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
