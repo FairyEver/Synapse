@@ -1,6 +1,21 @@
 import { BadRequestException } from "@nestjs/common"
+import { type INestApplication } from "@nestjs/common"
+import { Test } from "@nestjs/testing"
 import { describe, expect, it, vi } from "vitest"
+import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
+import { UserAuthGuard } from "../auth/user-auth.guard"
 import { ContentStoreAdminController, ContentStoreUserController } from "./content-store.controller"
+import { ContentStoreService } from "./content-store.service"
+
+type SupertestResponse = { readonly body: unknown; readonly text: string }
+type SupertestRequest = {
+  readonly send: (body: unknown) => SupertestRequest
+  readonly expect: (status: number) => Promise<SupertestResponse>
+}
+const request = require("supertest") as (server: unknown) => {
+  readonly get: (path: string) => SupertestRequest
+  readonly post: (path: string) => SupertestRequest
+}
 
 describe("ContentStoreUserController", () => {
   it("passes authenticated user identity and parsed filters to list routes", async () => {
@@ -179,10 +194,127 @@ describe("ContentStoreAdminController", () => {
   })
 })
 
+describe("ContentStore HTTP routes", () => {
+  it("mounts user list routes and passes authenticated identity", async () => {
+    const service = createHttpServiceMock()
+    service.listStore.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const app = await createUserHttpApp(service)
+    try {
+      await request(app.getHttpServer())
+        .get("/api/content-store/items?type=skill&sortBy=installCount&query=sync")
+        .expect(200)
+
+      expect(service.listStore).toHaveBeenCalledWith("user-http", expect.objectContaining({
+        type: "skill",
+        sortBy: "installCount",
+        query: "sync",
+      }))
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("rejects invalid user request bodies before calling the service", async () => {
+    const service = createHttpServiceMock()
+    const app = await createUserHttpApp(service)
+    try {
+      const response = await request(app.getHttpServer())
+        .post("/api/content-store/drafts")
+        .send({ type: "skill", title: "Skill", files: [{ path: "SKILL.md", contentBase64: "not-base64" }] })
+        .expect(400)
+
+      expect(response.text).toContain("草稿请求无效")
+      expect(service.createDraft).not.toHaveBeenCalled()
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("mounts install session routes", async () => {
+    const service = createHttpServiceMock()
+    service.createInstallSession.mockResolvedValue({ id: "session-1" })
+    service.recordInstall.mockResolvedValue({ ok: true })
+    const app = await createUserHttpApp(service)
+    try {
+      await request(app.getHttpServer())
+        .post("/api/content-store/items/item-1/install-sessions")
+        .send({ deepLinkBase: "synapse://content-install" })
+        .expect(201)
+      await request(app.getHttpServer())
+        .post("/api/content-store/install-sessions/session-1/complete")
+        .send({ clientInstanceId: "desktop-1" })
+        .expect(201)
+
+      expect(service.createInstallSession).toHaveBeenCalledWith("user-http", "item-1", "synapse://content-install")
+      expect(service.recordInstall).toHaveBeenCalledWith("user-http", "session-1", "desktop-1")
+    } finally {
+      await app.close()
+    }
+  })
+
+  it("mounts admin moderation routes and passes admin identity", async () => {
+    const service = createHttpServiceMock()
+    service.setRemovedAsAdmin.mockResolvedValue({ id: "item-1" })
+    const app = await createAdminHttpApp(service)
+    try {
+      await request(app.getHttpServer())
+        .post("/api/admin/content-store/items/item-1/removed")
+        .send({ value: true })
+        .expect(201)
+
+      expect(service.setRemovedAsAdmin).toHaveBeenCalledWith("admin@example.com", expect.any(String), "item-1", true)
+    } finally {
+      await app.close()
+    }
+  })
+})
+
 function userRequest(userId: string) {
   return { user: { id: userId }, ip: "127.0.0.1" } as never
 }
 
 function adminRequest(email: string, ip = "system") {
   return { admin: { id: "admin-1", email }, ip } as never
+}
+
+function createHttpServiceMock() {
+  return {
+    listStore: vi.fn(),
+    createDraft: vi.fn(),
+    createInstallSession: vi.fn(),
+    recordInstall: vi.fn(),
+    setRemovedAsAdmin: vi.fn(),
+  }
+}
+
+async function createUserHttpApp(service: ReturnType<typeof createHttpServiceMock>): Promise<INestApplication> {
+  const moduleRef = await Test.createTestingModule({
+    controllers: [ContentStoreUserController],
+    providers: [{ provide: ContentStoreService, useValue: service }],
+  })
+    .overrideGuard(UserAuthGuard)
+    .useValue({ canActivate: vi.fn((context) => {
+      context.switchToHttp().getRequest().user = { id: "user-http" }
+      return true
+    }) })
+    .compile()
+  const app = moduleRef.createNestApplication()
+  await app.init()
+  return app
+}
+
+async function createAdminHttpApp(service: ReturnType<typeof createHttpServiceMock>): Promise<INestApplication> {
+  const moduleRef = await Test.createTestingModule({
+    controllers: [ContentStoreAdminController],
+    providers: [{ provide: ContentStoreService, useValue: service }],
+  })
+    .overrideGuard(AdminAuthGuard)
+    .useValue({ canActivate: vi.fn((context) => {
+      context.switchToHttp().getRequest().admin = { id: "admin-1", email: "admin@example.com" }
+      return true
+    }) })
+    .compile()
+  const app = moduleRef.createNestApplication()
+  await app.init()
+  return app
 }
