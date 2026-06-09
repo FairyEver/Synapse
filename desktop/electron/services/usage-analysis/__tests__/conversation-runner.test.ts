@@ -1,4 +1,5 @@
 import path from "node:path"
+import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import {
   resolveCcConversationWorkerPath,
@@ -17,6 +18,20 @@ describe("CC conversation query runner", () => {
     expect(resolveCcConversationWorkerPath("/Applications/Synapse.app/Contents/Resources/app.asar/dist-electron/electron/services/usage-analysis")).toBe(
       path.join("/Applications/Synapse.app/Contents/Resources/app.asar.unpacked/dist-electron/electron/services/usage-analysis", "conversation-worker.js"),
     )
+  })
+
+  it("keeps the conversation worker closure independent from main-process services", () => {
+    const workerSources = [
+      "../conversation-worker.ts",
+      "../cc-conversation-service.ts",
+      "../db-schema.ts",
+      "../currency-migration.ts",
+    ].map((relativePath) => readFileSync(path.join(__dirname, relativePath), "utf8"))
+
+    for (const source of workerSources) {
+      expect(source).not.toContain("../error-sanitize")
+      expect(source).not.toContain("../log-store")
+    }
   })
 
   it("delegates conversation list queries to an injected runner", async () => {

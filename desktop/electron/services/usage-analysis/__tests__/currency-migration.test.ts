@@ -13,10 +13,6 @@ const logger = vi.hoisted(() => ({
   error: vi.fn(),
 }))
 
-vi.mock("../../log-store", () => ({
-  createMainLogger: () => logger,
-}))
-
 afterEach(() => {
   logger.info.mockClear()
   logger.warn.mockClear()
@@ -27,7 +23,7 @@ describe("migrateUsageAnalysisCostsToCny", () => {
   it("logs migration start and completed row counts", () => {
     const db = createLegacyUsageDatabase()
 
-    migrateUsageAnalysisCostsToCny(db)
+    migrateUsageAnalysisCostsToCny(db, logger)
 
     expect(logger.info).toHaveBeenCalledWith("Usage CNY cost migration started.", {
       rate: USD_TO_CNY_RATE,
@@ -51,7 +47,7 @@ describe("migrateUsageAnalysisCostsToCny", () => {
     const db = createLegacyUsageDatabase()
     db.exec("DROP TABLE cx_usage_events")
 
-    expect(() => migrateUsageAnalysisCostsToCny(db)).toThrow()
+    expect(() => migrateUsageAnalysisCostsToCny(db, logger)).toThrow()
 
     expect(logger.error).toHaveBeenCalledWith("Usage CNY cost migration failed.", expect.objectContaining({
       rate: USD_TO_CNY_RATE,

@@ -1,8 +1,12 @@
 import type { DatabaseSync } from "node:sqlite"
-import { migrateUsageAnalysisCostsToCny } from "./currency-migration"
+import { migrateUsageAnalysisCostsToCny, type UsageAnalysisMigrationLogger } from "./currency-migration"
 import { migrateDefaultUsagePriceRules } from "./pricing"
 
-export function initUsageAnalysisSchema(database: DatabaseSync): void {
+interface UsageAnalysisSchemaOptions {
+  readonly logger?: UsageAnalysisMigrationLogger
+}
+
+export function initUsageAnalysisSchema(database: DatabaseSync, options: UsageAnalysisSchemaOptions = {}): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS usage_model_prices (
       id TEXT PRIMARY KEY,
@@ -223,7 +227,7 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
       database.exec("CREATE INDEX IF NOT EXISTS idx_cc_sessions_activity ON cc_sessions(COALESCE(NULLIF(ended_at, ''), started_at) DESC)")
     }
   }
-  migrateUsageAnalysisCostsToCny(database)
+  migrateUsageAnalysisCostsToCny(database, options.logger)
   migrateDefaultUsagePriceRules(database)
 }
 

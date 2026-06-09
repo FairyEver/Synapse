@@ -60,6 +60,7 @@ interface CreateAsarBufferOptions {
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
   readonly includeSharedPackage?: boolean
+  readonly includeUsageAnalysisWorkers?: boolean
 }
 
 function createPackedFileNode(offset: number, content: Buffer, unpacked = false) {
@@ -79,6 +80,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
     includeSharedPackage = true,
+    includeUsageAnalysisWorkers = false,
   } = options
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
@@ -186,6 +188,34 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                         "file-conversion": {
                           files: {
                             "index.js": serviceNode,
+                          },
+                        },
+                      }
+                    : {}),
+                  ...(includeUsageAnalysisWorkers
+                    ? {
+                        "usage-analysis": {
+                          files: {
+                            "conversation-worker.js": {
+                              size: 1,
+                              offset: "0",
+                              unpacked: true,
+                            },
+                            "cc-conversation-service.js": {
+                              size: 1,
+                              offset: "0",
+                              unpacked: true,
+                            },
+                            "refresh-worker.js": {
+                              size: 1,
+                              offset: "0",
+                              unpacked: true,
+                            },
+                            "db-schema.js": {
+                              size: 1,
+                              offset: "0",
+                              unpacked: true,
+                            },
                           },
                         },
                       }
@@ -429,6 +459,48 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("node_modules/@synapse/shared/dist/index.js"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects unpacked usage analysis workers with dependencies outside their unpacked closure", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
+      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
+        "require('./cc-conversation-service')\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-conversation-service.js"],
+        "require('../error-sanitize')\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "refresh-worker.js"],
+        "require('./db-schema')\n",
+      )
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "db-schema.js"],
+        "module.exports = {}\n",
+      )
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("usage analysis worker dependency escapes unpacked closure"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })

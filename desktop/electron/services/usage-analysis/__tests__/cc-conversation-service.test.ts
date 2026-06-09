@@ -12,10 +12,6 @@ const logger = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 
-vi.mock("../../log-store", () => ({
-  createMainLogger: () => logger,
-}))
-
 type Fixture = {
   readonly db: DatabaseSync
   readonly dir: string
@@ -149,7 +145,7 @@ afterEach(() => {
 describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
   it("lists conversations from the usage index", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const { db } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
 
     const result = service.listConversations({ preset: "all", limit: 20 })
 
@@ -185,7 +181,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
 
   it("returns record rows with request counts", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     const { db } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
     insertUsage(db, {
       id: "usage-2",
       sessionId: "session-1",
@@ -205,7 +201,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
 
   it("returns batched record aggregates for visible sessions", () => {
     const { db } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
     insertUsage(db, {
       id: "usage-2",
       sessionId: "session-1",
@@ -247,7 +243,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
 
   it("allows record batches beyond the initial 200 rows", () => {
     const { db } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
 
     db.exec("BEGIN IMMEDIATE")
     try {
@@ -276,7 +272,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
 
   it("lists request details for one session only", () => {
     const { db } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
     insertSession(db, { sessionId: "session-2", filePath: "/tmp/session-2.jsonl", workspaceLabel: "/repo" })
     insertUsage(db, {
       id: "usage-2",
@@ -301,7 +297,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
 
   it("searches raw record text with request counts", async () => {
     const { db } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
 
     const result = await service.searchRecordsText({ preset: "all", query: "登录", rawText: true })
 
@@ -313,7 +309,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
 
   it("opens a conversation by reading raw JSONL on demand", async () => {
     const { db, filePath } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
 
     const detail = await service.getConversation("session-1")
 
@@ -331,7 +327,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
 
   it("searches raw text only when requested", async () => {
     const { db } = setupFixture()
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
 
     expect(service.listConversations({ preset: "all", query: "登录", rawText: false }).items).toEqual([])
     const result = await service.searchConversationText({ preset: "all", query: "登录", rawText: true })
@@ -368,7 +364,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
         ].join(" "),
       },
     })}`)
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
 
     const detail = await service.getConversation("session-1")
     const serializedDetail = JSON.stringify(detail.events)
@@ -401,7 +397,7 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
   it("returns an explicit error for a missing source file", async () => {
     const { db, filePath } = setupFixture()
     fs.rmSync(filePath)
-    const service = new CcConversationService({ db })
+    const service = new CcConversationService({ db, logger })
 
     await expect(service.getConversation("session-1")).rejects.toThrow("Claude Code transcript file is missing")
     expect(logger.error).toHaveBeenCalledWith("CC conversation source file missing.", {
