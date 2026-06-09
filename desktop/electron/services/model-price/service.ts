@@ -132,7 +132,7 @@ export function listModelPriceRules(database: DatabaseSync): ModelPriceRule[] {
     source: row.source === "builtin" ? "builtin" : "user",
     sortIndex: Number(row.sort_index),
     updatedAt: row.updated_at,
-  })).sort(compareModelPriceRules)
+  } satisfies ModelPriceRule)).sort(compareModelPriceRules)
 }
 
 export function replaceModelPriceRules(database: DatabaseSync, rules: readonly ModelPriceRule[]): void {
