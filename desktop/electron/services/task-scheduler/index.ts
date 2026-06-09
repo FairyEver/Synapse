@@ -20,6 +20,11 @@ export {
   TaskSchedulerService,
 } from "./task-scheduler-service"
 export {
+  buildAutomationCreateInputFromTask,
+  migrateTaskToAutomation,
+  type ScheduledTaskMigrationResult,
+} from "./task-automation-migration"
+export {
   dispatchSchedulerAction,
   toPublicTaskSummary,
   type SchedulerTaskSummary,

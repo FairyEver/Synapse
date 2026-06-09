@@ -81,6 +81,11 @@ export type ScheduledTaskRun = {
   triggeredBy: ScheduledTaskRunTrigger
 }
 
+export type ScheduledTaskMigrationResult = {
+  automationId: string
+  deletedTaskId: string
+}
+
 export type ScheduledTaskChangedEvent = {
   taskId?: string
   runId?: string
