@@ -478,9 +478,9 @@ model ContentStoreVersion {
   installEvents   ContentStoreInstallEvent[]
   createdAt       DateTime                     @default(now())
 
+  @@unique([id, itemId])
   @@unique([itemId, versionNumber])
   @@index([itemId, createdAt])
-  @@index([searchText])
 }
 
 model ContentStoreFile {
@@ -510,7 +510,7 @@ model ContentStoreInstallSession {
   itemId     String
   item       ContentStoreItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   versionId  String
-  version    ContentStoreVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  version    ContentStoreVersion @relation(fields: [versionId, itemId], references: [id, itemId], onDelete: Cascade)
   type       String              @db.VarChar(16)
   status     String              @db.VarChar(16)
   expiresAt  DateTime
@@ -528,7 +528,7 @@ model ContentStoreInstallEvent {
   itemId           String
   item             ContentStoreItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   versionId        String
-  version          ContentStoreVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  version          ContentStoreVersion @relation(fields: [versionId, itemId], references: [id, itemId], onDelete: Cascade)
   clientInstanceId String              @db.VarChar(120)
   createdAt        DateTime            @default(now())
 

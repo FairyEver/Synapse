@@ -57,6 +57,7 @@ CREATE TABLE "ContentStoreFile" (
   "storageKey" TEXT,
   "text" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "ContentStoreFile_exactly_one_parent_check" CHECK (("draftId" IS NOT NULL AND "versionId" IS NULL) OR ("draftId" IS NULL AND "versionId" IS NOT NULL)),
   CONSTRAINT "ContentStoreFile_pkey" PRIMARY KEY ("id")
 );
 
@@ -101,14 +102,17 @@ CREATE INDEX "ContentStoreDraft_ownerUserId_updatedAt_idx"
 CREATE UNIQUE INDEX "ContentStoreVersion_packageKey_key"
   ON "ContentStoreVersion"("packageKey");
 
+CREATE UNIQUE INDEX "ContentStoreVersion_id_itemId_key"
+  ON "ContentStoreVersion"("id", "itemId");
+
 CREATE UNIQUE INDEX "ContentStoreVersion_itemId_versionNumber_key"
   ON "ContentStoreVersion"("itemId", "versionNumber");
 
 CREATE INDEX "ContentStoreVersion_itemId_createdAt_idx"
   ON "ContentStoreVersion"("itemId", "createdAt");
 
-CREATE INDEX "ContentStoreVersion_searchText_idx"
-  ON "ContentStoreVersion"("searchText");
+CREATE INDEX "ContentStoreVersion_searchText_fts_idx"
+  ON "ContentStoreVersion" USING GIN (to_tsvector('simple', "searchText"));
 
 CREATE UNIQUE INDEX "ContentStoreFile_draftId_path_key"
   ON "ContentStoreFile"("draftId", "path");
@@ -165,7 +169,7 @@ ALTER TABLE "ContentStoreInstallSession"
 
 ALTER TABLE "ContentStoreInstallSession"
   ADD CONSTRAINT "ContentStoreInstallSession_versionId_fkey"
-  FOREIGN KEY ("versionId") REFERENCES "ContentStoreVersion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("versionId", "itemId") REFERENCES "ContentStoreVersion"("id", "itemId") ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "ContentStoreInstallEvent"
   ADD CONSTRAINT "ContentStoreInstallEvent_userId_fkey"
@@ -177,4 +181,4 @@ ALTER TABLE "ContentStoreInstallEvent"
 
 ALTER TABLE "ContentStoreInstallEvent"
   ADD CONSTRAINT "ContentStoreInstallEvent_versionId_fkey"
-  FOREIGN KEY ("versionId") REFERENCES "ContentStoreVersion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("versionId", "itemId") REFERENCES "ContentStoreVersion"("id", "itemId") ON DELETE CASCADE ON UPDATE CASCADE;
