@@ -949,6 +949,90 @@ describe("AccountService", () => {
     ])
   })
 
+  it("calls drive publication, share list, and delete impact APIs with the authenticated desktop token", async () => {
+    const calls: Array<{ url: string; method: string; body?: unknown }> = []
+    const publication = {
+      id: "pub-row-1",
+      publishId: "pub_public",
+      type: "page",
+      name: "report.html",
+      status: "active",
+      sourceItemId: "item-1",
+      sourceDeleted: false,
+      url: "https://synapse.test/pages/pub_public",
+      currentDeploymentId: "dep-1",
+      createdAt: "2026-06-09T00:00:00.000Z",
+      updatedAt: "2026-06-09T00:00:00.000Z",
+    }
+    const share = {
+      id: "share-row-1",
+      shareId: "share_public",
+      itemId: "item-1",
+      itemName: "report.html",
+      itemType: "file",
+      sourceDeleted: false,
+      url: "https://synapse.test/share/share_public",
+      createdAt: "2026-06-09T00:00:00.000Z",
+    }
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        const method = init?.method ?? "GET"
+        calls.push({
+          url: String(url),
+          method,
+          body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        })
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+        if (String(url).endsWith("/drive/publications")) return jsonResponse([publication])
+        if (String(url).endsWith("/drive/items/item-1/publications/page")) return jsonResponse(publication)
+        if (String(url).endsWith("/drive/items/folder-1/publications/site")) return jsonResponse({ ...publication, type: "site" })
+        if (String(url).endsWith("/drive/publications/pub-row-1/redeploy")) return jsonResponse(publication)
+        if (String(url).endsWith("/drive/publications/pub-row-1")) return jsonResponse({ ok: true })
+        if (String(url).endsWith("/drive/items/item-1/delete-impact")) return jsonResponse({ publications: [publication] })
+        if (String(url).endsWith("/drive/shares")) return jsonResponse([share])
+        if (String(url).endsWith("/drive/items/item-1")) return jsonResponse({ ok: true })
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+    await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
+
+    await expect(service.listDrivePublications()).resolves.toEqual([publication])
+    await expect(service.publishDrivePage("item-1")).resolves.toEqual(publication)
+    await expect(service.publishDriveSite("folder-1")).resolves.toEqual({ ...publication, type: "site" })
+    await expect(service.redeployDrivePublication("pub-row-1")).resolves.toEqual(publication)
+    await expect(service.disableDrivePublication("pub-row-1")).resolves.toEqual({ ok: true })
+    await expect(service.getDriveDeleteImpact("item-1")).resolves.toEqual({ publications: [publication] })
+    await expect(service.listDriveShares()).resolves.toEqual([share])
+    await expect(service.deleteDriveItem("item-1", { disablePublications: true })).resolves.toEqual({ ok: true })
+
+    expect(calls).toEqual([
+      { url: expectedApiUrl("/auth/desktop/token"), method: "POST", body: expect.any(Object) },
+      { url: expectedApiUrl("/auth/me"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/publications"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/items/item-1/publications/page"), method: "POST", body: undefined },
+      { url: expectedApiUrl("/drive/items/folder-1/publications/site"), method: "POST", body: undefined },
+      { url: expectedApiUrl("/drive/publications/pub-row-1/redeploy"), method: "POST", body: undefined },
+      { url: expectedApiUrl("/drive/publications/pub-row-1"), method: "DELETE", body: undefined },
+      { url: expectedApiUrl("/drive/items/item-1/delete-impact"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/shares"), method: "GET", body: undefined },
+      {
+        url: expectedApiUrl("/drive/items/item-1"),
+        method: "DELETE",
+        body: { disablePublications: true },
+      },
+    ])
+  })
+
   it("refreshes and retries account webhook list when the access token expires", async () => {
     const calls: string[] = []
     const { namespace, service } = await createTestAccountService({

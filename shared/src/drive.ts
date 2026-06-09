@@ -1,6 +1,11 @@
 export const DRIVE_PUBLIC_PATH_PREFIX = "/files"
+export const DRIVE_PAGE_PUBLIC_PATH_PREFIX = "/pages"
+export const DRIVE_SITE_PUBLIC_PATH_PREFIX = "/sites"
 
 export type DriveItemType = "file" | "folder"
+export type DrivePublicationType = "page" | "site"
+export type DrivePublicationStatus = "active" | "disabled"
+export type DriveShareItemType = "file" | "folder"
 export type DriveStorageStatus = "pending" | "active" | "delete_pending" | "deleted" | "failed"
 export type DriveUploadSessionStatus = "pending" | "completed" | "cancelled" | "expired" | "failed"
 
@@ -54,6 +59,35 @@ export interface DriveShareDto {
   readonly createdAt: string
 }
 
+export interface DrivePublicationDto {
+  readonly id: string
+  readonly publishId: string
+  readonly type: DrivePublicationType
+  readonly name: string
+  readonly status: DrivePublicationStatus
+  readonly sourceItemId: string | null
+  readonly sourceDeleted: boolean
+  readonly url: string
+  readonly currentDeploymentId: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface DriveDeleteImpactDto {
+  readonly publications: DrivePublicationDto[]
+}
+
+export interface DriveShareListItemDto {
+  readonly id: string
+  readonly shareId: string
+  readonly itemId: string
+  readonly itemName: string
+  readonly itemType: DriveShareItemType
+  readonly sourceDeleted: boolean
+  readonly url: string
+  readonly createdAt: string
+}
+
 export interface DriveUsageDto {
   readonly usedBytes: string
   readonly reservedBytes: string
@@ -65,6 +99,18 @@ export function buildDriveShareUrl(input: {
   readonly shareId: string
 }): string {
   return `${normalizePublicAppUrl(input.publicAppUrl)}${DRIVE_PUBLIC_PATH_PREFIX}/${encodeURIComponent(input.shareId)}`
+}
+
+export function buildDrivePublicationUrl(input: {
+  readonly publicAppUrl: string
+  readonly publishId: string
+  readonly type: DrivePublicationType
+}): string {
+  const base = normalizePublicAppUrl(input.publicAppUrl)
+  const encoded = encodeURIComponent(input.publishId)
+  return input.type === "site"
+    ? `${base}${DRIVE_SITE_PUBLIC_PATH_PREFIX}/${encoded}/`
+    : `${base}${DRIVE_PAGE_PUBLIC_PATH_PREFIX}/${encoded}`
 }
 
 export function maskDriveShareUrl(value: string): string {
@@ -80,6 +126,25 @@ export function maskDriveShareUrl(value: string): string {
     return value.replace(/\/files\/[^/?#]+/u, "/files/***")
   }
   return value.replace(/\/files\/[^/?#]+/u, "/files/***")
+}
+
+export function maskDrivePublicUrl(value: string): string {
+  try {
+    const parsed = new URL(value)
+    const parts = parsed.pathname.split("/")
+    if (parts.length >= 3 && (parts[1] === "pages" || parts[1] === "sites")) {
+      parts[2] = "***"
+      parsed.pathname = parts.join("/")
+      return parsed.toString()
+    }
+  } catch {
+    return value
+      .replace(/\/pages\/[^/?#]+/u, "/pages/***")
+      .replace(/\/sites\/[^/?#]+/u, "/sites/***")
+  }
+  return value
+    .replace(/\/pages\/[^/?#]+/u, "/pages/***")
+    .replace(/\/sites\/[^/?#]+/u, "/sites/***")
 }
 
 function normalizePublicAppUrl(value: string): string {

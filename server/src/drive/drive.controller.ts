@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
+import { Writable } from "node:stream"
+import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
@@ -35,6 +37,7 @@ const folderSchema = z.object({
 
 const renameSchema = z.object({ name: z.string().trim().min(1).max(255) }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
+const deleteItemSchema = z.object({ disablePublications: z.boolean().optional() }).strict()
 const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatus"] as const
 
 @UseGuards(UserAuthGuard)
@@ -50,6 +53,11 @@ export class DriveUserController {
   @Get("/items/:id")
   getItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.getItem(request.user!.id, id)
+  }
+
+  @Get("/items/:id/delete-impact")
+  getDeleteImpact(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.getDeleteImpact(request.user!.id, id, resolveRequestPagesPublicUrl(request))
   }
 
   @Post("/uploads/prepare")
@@ -106,8 +114,12 @@ export class DriveUserController {
   }
 
   @Delete("/items/:id")
-  deleteItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip)
+  deleteItem(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = body === undefined ? { disablePublications: false } : parseBody(deleteItemSchema, body, "删除请求无效。")
+    return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip, {
+      disablePublications: parsed.disablePublications ?? false,
+      publicAppUrl: resolveRequestPagesPublicUrl(request),
+    })
   }
 
   @Post("/items/:id/share")
@@ -115,9 +127,39 @@ export class DriveUserController {
     return this.drive.createShare(request.user!.id, id, resolveRequestPublicAppUrl(request))
   }
 
+  @Get("/publications")
+  listPublications(@Req() request: AuthenticatedUserRequest) {
+    return this.drive.listPublications(request.user!.id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Post("/items/:id/publications/page")
+  publishPage(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.publishPage(request.user!.id, id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Post("/items/:id/publications/site")
+  publishSite(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.publishSite(request.user!.id, id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Post("/publications/:id/redeploy")
+  redeployPublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.redeployPublication(request.user!.id, id, resolveRequestPagesPublicUrl(request))
+  }
+
+  @Delete("/publications/:id")
+  disablePublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.disablePublication(request.user!.id, id)
+  }
+
   @Delete("/shares/:id")
   disableShare(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.disableShare(request.user!.id, id)
+  }
+
+  @Get("/shares")
+  listShares(@Req() request: AuthenticatedUserRequest) {
+    return this.drive.listShares(request.user!.id, resolveRequestPublicAppUrl(request))
   }
 
   @Get("/usage")
@@ -154,6 +196,39 @@ export class DriveAdminController {
 @Controller()
 export class DrivePublicController {
   constructor(private readonly drive: DriveService) {}
+
+  @Get("/pages/:publishId")
+  async openPublishedPage(@Param("publishId") publishId: string, @Res() response: Response) {
+    await this.sendPublishedAsset(response, {
+      publishId,
+      type: "page",
+      relativePath: "index.html",
+    })
+  }
+
+  @Get("/sites/:publishId")
+  async openPublishedSiteRoot(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
+    if (request.path.endsWith("/")) {
+      await this.sendPublishedAsset(response, {
+        publishId,
+        type: "site",
+        relativePath: "index.html",
+      })
+      return
+    }
+    response.redirect(302, `/sites/${encodeURIComponent(publishId)}/`)
+  }
+
+  @Get(["/sites/:publishId/", "/sites/:publishId/*"])
+  async openPublishedSiteAsset(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
+    const prefix = `/sites/${encodeURIComponent(publishId)}/`
+    const relativePath = safeDecodeURIComponent(request.path.startsWith(prefix) ? request.path.slice(prefix.length) : "")
+    await this.sendPublishedAsset(response, {
+      publishId,
+      type: "site",
+      relativePath: relativePath || "index.html",
+    })
+  }
 
   @Get("/files/:shareId")
   async openShare(@Param("shareId") shareId: string, @Res() response: Response) {
@@ -199,6 +274,23 @@ export class DrivePublicController {
     }
     await archive.finalize()
   }
+
+  private async sendPublishedAsset(response: Response, input: {
+    readonly publishId: string
+    readonly type: "page" | "site"
+    readonly relativePath: string
+  }): Promise<void> {
+    try {
+      await sendPublishedAsset(response, await this.drive.resolvePublishedAsset(input))
+    } catch (error) {
+      if (response.headersSent) {
+        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+        return
+      }
+      if (response.destroyed) return
+      sendPublicNotFound(response)
+    }
+  }
 }
 
 @Controller("/api/drive")
@@ -229,8 +321,84 @@ function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
   return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
 }
 
+function resolveRequestPagesPublicUrl(request: AuthenticatedUserRequest): string {
+  return resolvePublicAppUrl({ configuredPublicAppUrl: firstConfiguredUrl(process.env.PAGES_PUBLIC_URL, process.env.APP_PUBLIC_URL), request })
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function firstConfiguredUrl(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value !== undefined && value.trim().length > 0)
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return ""
+  }
+}
+
+async function sendPublishedAsset(response: Response, asset: {
+  readonly stream: NodeJS.ReadableStream
+  readonly contentType: string
+  readonly size?: bigint
+}) {
+  response.setHeader("Content-Type", asset.contentType)
+  response.setHeader("X-Content-Type-Options", "nosniff")
+  response.setHeader("Referrer-Policy", "no-referrer")
+  response.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'none';",
+  )
+  if (asset.size !== undefined) response.setHeader("Content-Length", asset.size.toString())
+  await pipeline(asset.stream, createResponseWritable(response))
+}
+
+function createResponseWritable(response: Response): Writable {
+  let wroteBody = false
+  return new Writable({
+    write(chunk, encoding, callback) {
+      wroteBody = true
+      if (response.write(chunk, encoding)) {
+        callback()
+        return
+      }
+      let settled = false
+      const cleanup = () => {
+        response.off("close", onClose)
+        response.off("drain", onDrain)
+        response.off("error", onError)
+      }
+      const settle = (error?: Error | null) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        callback(error ?? undefined)
+      }
+      const onClose = () => settle(new Error("Response closed before published asset finished streaming."))
+      const onDrain = () => settle()
+      const onError = (error: Error) => settle(error)
+      response.once("close", onClose)
+      response.once("drain", onDrain)
+      response.once("error", onError)
+    },
+    final(callback) {
+      response.end(callback)
+    },
+    destroy(error, callback) {
+      if (error && wroteBody && !response.destroyed) {
+        response.destroy(error instanceof Error ? error : undefined)
+      }
+      callback(error)
+    },
+  })
+}
+
+function sendPublicNotFound(response: Response) {
+  response.status(404).type("text/plain; charset=utf-8").send("网页未找到")
 }
 
 function escapeHtml(value: string): string {

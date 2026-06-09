@@ -1,4 +1,6 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
+import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { DriveService } from "./drive.service"
@@ -16,6 +18,8 @@ const storageMock: DriveStoragePort = {
     expiresAt: new Date("2026-06-07T12:05:00.000Z"),
   })),
   headObject: vi.fn(async () => ({ key: "drive/item-file", size: 11n, etag: "etag" })),
+  copyObject: vi.fn(async () => undefined),
+  getObjectStream: vi.fn(async () => ({ stream: Readable.from(""), size: 0n, contentType: null })),
   deleteObject: vi.fn(async () => undefined),
 }
 
@@ -119,6 +123,320 @@ describe("DriveService", () => {
     expect(share.url).toMatch(/^https:\/\/synapse\.test\/files\/shr_/u)
     await service.disableShare("user-1", share.id)
     await expect(service.resolvePublicShare(share.shareId)).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("publishes an html file as a snapshot page", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    expect(publication.type).toBe("page")
+    expect(publication.url).toMatch(/^https:\/\/synapse\.test\/pages\/pub_/u)
+    const assets = await prisma.drivePublicationAsset.findMany({ where: { publicationId: publication.id } })
+    expect(assets).toMatchObject([{ relativePath: "index.html", sourceItemId: file.id, contentType: "text/html" }])
+    expect(publication.currentDeploymentId).toBe(assets[0]?.deploymentId)
+  })
+
+  it("does not serve assets from an inactive current deployment", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+    await prisma.drivePublicationDeployment.update({
+      where: { id: publication.currentDeploymentId },
+      data: { status: "failed" },
+    })
+
+    await expect(service.resolvePublishedAsset({
+      publishId: publication.publishId,
+      type: "page",
+      relativePath: "index.html",
+    })).rejects.toThrow("网页未找到")
+    expect(storageMock.getObjectStream).not.toHaveBeenCalledWith(expect.objectContaining({
+      key: expect.stringContaining(publication.currentDeploymentId ?? ""),
+    }))
+  })
+
+  it("uses asset content type before storage content type for published assets", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "asset.bin",
+      mimeType: "application/x-synapse-asset",
+    })
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+    vi.mocked(storageMock.getObjectStream).mockResolvedValueOnce({
+      stream: Readable.from(["payload"]),
+      size: 7n,
+      contentType: "text/plain",
+    })
+
+    const asset = await service.resolvePublishedAsset({
+      publishId: publication.publishId,
+      type: "site",
+      relativePath: "asset.bin",
+    })
+
+    expect(asset.contentType).toBe("application/x-synapse-asset")
+  })
+
+  it("returns the existing active publication when source uniqueness races", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const existing = await prisma.drivePublication.create({
+      data: {
+        userId: "user-1",
+        sourceItemId: file.id,
+        type: "page",
+        name: "report.html",
+        status: "active",
+        publishId: "pub_existing",
+      },
+    })
+    const findFirst = prisma.drivePublication.findFirst
+    let activeLookupCount = 0
+    prisma.drivePublication.findFirst = async (args: any) => {
+      if (args.where?.sourceItemId === file.id && args.where?.type === "page" && args.where?.status === "active") {
+        activeLookupCount += 1
+        if (activeLookupCount === 1) return null
+      }
+      return findFirst(args)
+    }
+    const create = prisma.drivePublication.create
+    prisma.drivePublication.create = async (args: any) => {
+      if (args.data?.sourceItemId === file.id && args.data?.type === "page") {
+        throw uniqueConstraintError(["userId", "sourceItemId", "type"])
+      }
+      return create(args)
+    }
+
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    expect(publication.id).toBe(existing.id)
+    expect(publication.publishId).toBe("pub_existing")
+    const publications = await prisma.drivePublication.findMany({ where: { userId: "user-1", sourceItemId: file.id, type: "page" } })
+    expect(publications).toHaveLength(1)
+  })
+
+  it("retries publication creation when only the publish id collides", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const create = prisma.drivePublication.create
+    let createCount = 0
+    prisma.drivePublication.create = async (args: any) => {
+      createCount += 1
+      if (createCount === 1) throw uniqueConstraintError(["publishId"])
+      return create(args)
+    }
+
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    expect(publication.id).toMatch(/^publication-/u)
+    expect(createCount).toBe(2)
+  })
+
+  it("rejects non-html page publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "notes.txt",
+      mimeType: "text/plain",
+    })
+
+    await expect(service.publishPage("user-1", file.id, "https://synapse.test"))
+      .rejects.toThrow("只能发布 HTML 文件。")
+  })
+
+  it("publishes a folder with index html as a snapshot site", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    const index = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const assetsFolder = await service.createFolder("user-1", { parentId: folder.id, name: "assets" })
+    const css = await createCompletedUpload(service, "user-1", {
+      parentId: assetsFolder.id,
+      name: "style.css",
+      mimeType: "text/css",
+    })
+
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+    const assets = await prisma.drivePublicationAsset.findMany({
+      where: { publicationId: publication.id },
+      orderBy: { relativePath: "asc" },
+    })
+
+    expect(publication.url).toMatch(/^https:\/\/synapse\.test\/sites\/pub_.+\/$/u)
+    expect(assets.map((asset: any) => [asset.relativePath, asset.sourceItemId])).toEqual([
+      ["assets/style.css", css.id],
+      ["index.html", index.id],
+    ])
+  })
+
+  it("requires root index html for site publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
+      .rejects.toThrow("站点根目录需要 index.html。")
+  })
+
+  it("rejects inactive folder root for site publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await prisma.driveItem.update({
+      where: { id: folder.id },
+      data: { storageStatus: "pending" },
+    })
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
+      .rejects.toThrow("站点文件夹不可发布。")
+  })
+
+  it("requires lowercase root index html for site publication", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "INDEX.HTML",
+      mimeType: "text/html",
+    })
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
+      .rejects.toThrow("站点根目录需要 index.html。")
+  })
+
+  it("keeps the previous deployment active when redeploy copy fails", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const first = await service.publishPage("user-1", file.id, "https://synapse.test")
+    const firstDeploymentId = first.currentDeploymentId
+    vi.mocked(storageMock.copyObject).mockRejectedValueOnce(new Error("copy failed"))
+
+    await expect(service.redeployPublication("user-1", first.id, "https://synapse.test")).rejects.toThrow("copy failed")
+    const current = await prisma.drivePublication.findUniqueOrThrow({ where: { id: first.id } })
+    const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: first.id } })
+    expect(current.currentDeploymentId).toBe(firstDeploymentId)
+    expect(deployments.map((deployment: any) => deployment.status).sort()).toEqual(["active", "failed"])
+  })
+
+  it("detects a published site child resource when deleting one file", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const logo = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "logo.png",
+      mimeType: "image/png",
+    })
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+
+    const impact = await service.getDeleteImpact("user-1", logo.id, "https://synapse.test")
+
+    expect(impact.publications.map((item) => item.id)).toEqual([publication.id])
+  })
+
+  it("disables affected publications when deleting with disablePublications", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
+
+    await service.deleteItem("user-1", file.id, "user-1", "127.0.0.1", {
+      disablePublications: true,
+      publicAppUrl: "https://synapse.test",
+    })
+
+    const updatedPublication = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
+    const deletedItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: file.id } })
+    expect(updatedPublication).toMatchObject({ status: "disabled" })
+    expect(updatedPublication.disabledAt).toEqual(deletedItem.deletedAt)
+  })
+
+  it("lists enabled shares with source metadata", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+
+    const shares = await service.listShares("user-1", "https://synapse.test")
+
+    expect(shares).toEqual([{
+      id: share.id,
+      shareId: share.shareId,
+      itemId: file.id,
+      itemName: "report.html",
+      itemType: "file",
+      sourceDeleted: false,
+      url: share.url,
+      createdAt: share.createdAt,
+    }])
   })
 
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
@@ -229,6 +547,22 @@ describe("DriveService", () => {
   })
 })
 
+async function createCompletedUpload(
+  service: DriveService,
+  userId: string,
+  input: { readonly parentId: string | null; readonly name: string; readonly mimeType: string | null },
+) {
+  const prepared = await service.prepareUpload(userId, {
+    parentId: input.parentId,
+    name: input.name,
+    size: "11",
+    mimeType: input.mimeType,
+    publicAppUrl: "https://synapse.test",
+  })
+  await service.completeUpload(userId, prepared.sessionId)
+  return service.getItem(userId, prepared.item.id)
+}
+
 function createPrismaMemory() {
   let nextId = 1
   const users = new Map<string, { id: string; email: string; passwordHash: string }>()
@@ -236,16 +570,61 @@ function createPrismaMemory() {
   const usages = new Map<string, any>()
   const sessions = new Map<string, any>()
   const shares = new Map<string, any>()
+  const publications = new Map<string, any>()
+  const publicationDeployments = new Map<string, any>()
+  const publicationAssets = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
     ...item,
     shares: [...shares.values()].filter((share) => share.itemId === item.id && share.enabled).map((share) => ({ enabled: share.enabled })),
   })
+  const withSourceItem = (publication: any) => ({
+    ...publication,
+    sourceItem: publication.sourceItemId ? { deletedAt: items.get(publication.sourceItemId)?.deletedAt ?? null } : null,
+  })
+  const withPublicationIncludes = (publication: any, include: any) => {
+    let result = publication
+    if (include?.sourceItem) result = withSourceItem(result)
+    if (include?.assets) {
+      const assetWhere = include.assets.where ?? {}
+      result = {
+        ...result,
+        assets: [...publicationAssets.values()]
+          .filter((asset) => asset.publicationId === publication.id && matchesWhere(asset, assetWhere))
+          .map((asset) => include.assets.select ? selectFields(asset, include.assets.select) : asset),
+      }
+    }
+    return result
+  }
+  const withShareIncludes = (share: any, include: any) => {
+    if (!include?.item) return share
+    const item = items.get(share.itemId)
+    return {
+      ...share,
+      item: include.item.select ? selectFields(item, include.item.select) : withShares(item),
+    }
+  }
 
   const prisma: any = {
     $transaction: async (input: any) => {
-      if (typeof input === "function") return input(prisma)
+      if (typeof input === "function") {
+        const snapshots = [
+          [items, cloneMap(items)],
+          [usages, cloneMap(usages)],
+          [sessions, cloneMap(sessions)],
+          [shares, cloneMap(shares)],
+          [publications, cloneMap(publications)],
+          [publicationDeployments, cloneMap(publicationDeployments)],
+          [publicationAssets, cloneMap(publicationAssets)],
+        ] as const
+        try {
+          return await input(prisma)
+        } catch (error) {
+          for (const [target, snapshot] of snapshots) restoreMap(target, snapshot)
+          throw error
+        }
+      }
       return Promise.all(input)
     },
     user: {
@@ -353,7 +732,11 @@ function createPrismaMemory() {
       findFirst: async ({ where, include }: any) => {
         const share = [...shares.values()].find((item) => matchesWhere(item, where))
         if (!share) return null
-        return include?.item ? { ...share, item: withShares(items.get(share.itemId)) } : share
+        return withShareIncludes(share, include)
+      },
+      findMany: async ({ where, include, orderBy }: any = {}) => {
+        const found = orderRows([...shares.values()].filter((share) => matchesWhere(share, where ?? {})), orderBy)
+        return found.map((share) => withShareIncludes(share, include))
       },
       updateMany: async ({ where, data }: any) => {
         let count = 0
@@ -365,6 +748,97 @@ function createPrismaMemory() {
         }
         return { count }
       },
+    },
+    drivePublication: {
+      create: async ({ data }: any) => {
+        const publication = {
+          id: id("publication"),
+          currentDeploymentId: null,
+          disabledAt: null,
+          createdAt: now(),
+          updatedAt: now(),
+          ...data,
+        }
+        publications.set(publication.id, publication)
+        return publication
+      },
+      findFirst: async ({ where, include }: any) => {
+        const publication = [...publications.values()].find((item) => matchesWhere(item, where))
+        if (!publication) return null
+        return withPublicationIncludes(publication, include)
+      },
+      findMany: async ({ where, include, orderBy }: any = {}) => {
+        let found = [...publications.values()].filter((publication) => matchesWhere(publication, where ?? {}))
+        found = orderRows(found, orderBy)
+        return found.map((publication) => withPublicationIncludes(publication, include))
+      },
+      findUniqueOrThrow: async ({ where, include }: any) => {
+        const publication = publications.get(where.id)
+        if (!publication) throw new Error("publication not found")
+        return withPublicationIncludes(publication, include)
+      },
+      update: async ({ where, data, include }: any) => {
+        const publication = publications.get(where.id)
+        if (!publication) throw new Error("publication not found")
+        Object.assign(publication, data, { updatedAt: now() })
+        return withPublicationIncludes(publication, include)
+      },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0
+        for (const publication of publications.values()) {
+          if (matchesWhere(publication, where)) {
+            Object.assign(publication, data, { updatedAt: now() })
+            count += 1
+          }
+        }
+        return { count }
+      },
+    },
+    drivePublicationDeployment: {
+      create: async ({ data }: any) => {
+        const deployment = {
+          id: id("deployment"),
+          activatedAt: null,
+          error: null,
+          createdAt: now(),
+          ...data,
+        }
+        publicationDeployments.set(deployment.id, deployment)
+        return deployment
+      },
+      findFirst: async ({ where }: any) => [...publicationDeployments.values()].find((deployment) => matchesWhere(deployment, where)) ?? null,
+      findMany: async ({ where, orderBy }: any = {}) => orderRows(
+        [...publicationDeployments.values()].filter((deployment) => matchesWhere(deployment, where ?? {})),
+        orderBy,
+      ),
+      update: async ({ where, data }: any) => {
+        const deployment = publicationDeployments.get(where.id)
+        if (!deployment) throw new Error("deployment not found")
+        Object.assign(deployment, data)
+        return deployment
+      },
+    },
+    drivePublicationAsset: {
+      createMany: async ({ data }: any) => {
+        for (const row of data) {
+          const asset = { id: id("asset"), sha256: null, ...row }
+          publicationAssets.set(asset.id, asset)
+        }
+        return { count: data.length }
+      },
+      findUnique: async ({ where }: any) => {
+        if (where.deploymentId_relativePath) {
+          return [...publicationAssets.values()].find((asset) => (
+            asset.deploymentId === where.deploymentId_relativePath.deploymentId
+            && asset.relativePath === where.deploymentId_relativePath.relativePath
+          )) ?? null
+        }
+        return publicationAssets.get(where.id) ?? null
+      },
+      findMany: async ({ where, orderBy }: any = {}) => orderRows(
+        [...publicationAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})),
+        orderBy,
+      ),
     },
   }
   return prisma
@@ -390,4 +864,35 @@ function selectFields(row: any, select: any) {
     if (select[key]) result[key] = row[key]
   }
   return result
+}
+
+function cloneMap<T>(value: Map<string, T>): Map<string, T> {
+  return new Map([...value.entries()].map(([key, row]) => [key, typeof row === "object" && row !== null ? { ...row } as T : row]))
+}
+
+function restoreMap<T>(target: Map<string, T>, snapshot: Map<string, T>): void {
+  target.clear()
+  for (const [key, value] of snapshot.entries()) target.set(key, value)
+}
+
+function orderRows(rows: any[], orderBy: any): any[] {
+  if (!orderBy) return rows
+  const entries = Array.isArray(orderBy) ? orderBy : [orderBy]
+  return [...rows].sort((left, right) => {
+    for (const entry of entries) {
+      const [key, direction] = Object.entries(entry)[0] as [string, "asc" | "desc"]
+      if (left[key] === right[key]) continue
+      const comparison = left[key] > right[key] ? 1 : -1
+      return direction === "desc" ? -comparison : comparison
+    }
+    return 0
+  })
+}
+
+function uniqueConstraintError(target: readonly string[]): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+    code: "P2002",
+    clientVersion: "test",
+    meta: { target },
+  })
 }

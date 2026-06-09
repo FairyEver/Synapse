@@ -17,9 +17,12 @@ import type {
 } from "../../src/types/bridge"
 import type {
   DashboardWebhookDto,
+  DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DrivePublicationDto,
   DriveShareDto,
+  DriveShareListItemDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -270,8 +273,8 @@ export class AccountService {
     return this.requestAuthenticatedJson<DriveItemDto>("PATCH", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, { parentId }, "移动失败。")
   }
 
-  async deleteDriveItem(itemId: string): Promise<{ ok: true }> {
-    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, undefined, "删除失败。")
+  async deleteDriveItem(itemId: string, input: { readonly disablePublications?: boolean } = {}): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, input, "删除失败。")
   }
 
   async shareDriveItem(itemId: string): Promise<DriveShareDto> {
@@ -445,6 +448,34 @@ export class AccountService {
         errorName: error instanceof Error ? error.name : typeof error,
       })
     })
+  }
+
+  async listDrivePublications(): Promise<DrivePublicationDto[]> {
+    return this.getAuthenticatedJson<DrivePublicationDto[]>(`${apiBaseUrl()}/drive/publications`, "发布列表加载失败。")
+  }
+
+  async publishDrivePage(itemId: string): Promise<DrivePublicationDto> {
+    return this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, undefined, "发布网页失败。")
+  }
+
+  async publishDriveSite(itemId: string): Promise<DrivePublicationDto> {
+    return this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, undefined, "发布站点失败。")
+  }
+
+  async redeployDrivePublication(publicationId: string): Promise<DrivePublicationDto> {
+    return this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/publications/${encodeURIComponent(publicationId)}/redeploy`, undefined, "重新发布失败。")
+  }
+
+  async disableDrivePublication(publicationId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/publications/${encodeURIComponent(publicationId)}`, undefined, "取消发布失败。")
+  }
+
+  async getDriveDeleteImpact(itemId: string): Promise<DriveDeleteImpactDto> {
+    return this.getAuthenticatedJson<DriveDeleteImpactDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/delete-impact`, "删除影响加载失败。")
+  }
+
+  async listDriveShares(): Promise<DriveShareListItemDto[]> {
+    return this.getAuthenticatedJson<DriveShareListItemDto[]>(`${apiBaseUrl()}/drive/shares`, "分享列表加载失败。")
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {

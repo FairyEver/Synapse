@@ -102,6 +102,33 @@ const driveShareSchema = z.object({
   createdAt: z.string(),
 })
 
+const drivePublicationSchema = z.object({
+  id: z.string(),
+  publishId: z.string(),
+  type: z.enum(["page", "site"]),
+  name: z.string(),
+  status: z.enum(["active", "disabled"]),
+  sourceItemId: z.string().nullable(),
+  sourceDeleted: z.boolean(),
+  url: z.string(),
+  currentDeploymentId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+const driveDeleteImpactSchema = z.object({ publications: z.array(drivePublicationSchema) })
+
+const driveShareListItemSchema = z.object({
+  id: z.string(),
+  shareId: z.string(),
+  itemId: z.string(),
+  itemName: z.string(),
+  itemType: z.enum(["file", "folder"]),
+  sourceDeleted: z.boolean(),
+  url: z.string(),
+  createdAt: z.string(),
+})
+
 const driveUsageSchema = z.object({
   usedBytes: z.string(),
   reservedBytes: z.string(),
@@ -173,7 +200,9 @@ const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optio
 const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
 const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
 const driveItemIdSchema = z.object({ itemId: z.string() })
+const driveDeleteItemSchema = z.object({ itemId: z.string(), disablePublications: z.boolean().optional() })
 const driveShareIdSchema = z.object({ shareId: z.string() })
+const drivePublicationIdSchema = z.object({ publicationId: z.string() })
 const okSchema = z.object({ ok: z.literal(true) })
 
 const accountStateSchema = z.discriminatedUnion("status", [
@@ -411,9 +440,14 @@ export const accountIpcModule: IpcModule = {
     deleteDriveItem: {
       kind: "invoke",
       channel: "synapse:account:drive:items:delete",
-      request: driveItemIdSchema,
+      request: driveDeleteItemSchema,
       response: okSchema,
-      handler: async (_ctx, input) => accountService.deleteDriveItem(driveItemIdSchema.parse(input).itemId),
+      handler: async (_ctx, input) => {
+        const parsed = driveDeleteItemSchema.parse(input)
+        return accountService.deleteDriveItem(parsed.itemId, {
+          disablePublications: parsed.disablePublications,
+        })
+      },
     },
     shareDriveItem: {
       kind: "invoke",
@@ -435,6 +469,59 @@ export const accountIpcModule: IpcModule = {
       request: z.void(),
       response: driveUsageSchema,
       handler: async () => accountService.getDriveUsage(),
+    },
+    listDrivePublications: {
+      kind: "invoke",
+      channel: "synapse:account:drive:publications:list",
+      request: z.void(),
+      response: z.array(drivePublicationSchema),
+      handler: async () => accountService.listDrivePublications(),
+    },
+    publishDrivePage: {
+      kind: "invoke",
+      channel: "synapse:account:drive:publications:page",
+      request: driveItemIdSchema,
+      response: drivePublicationSchema,
+      handler: async (_ctx, input) => accountService.publishDrivePage(driveItemIdSchema.parse(input).itemId),
+    },
+    publishDriveSite: {
+      kind: "invoke",
+      channel: "synapse:account:drive:publications:site",
+      request: driveItemIdSchema,
+      response: drivePublicationSchema,
+      handler: async (_ctx, input) => accountService.publishDriveSite(driveItemIdSchema.parse(input).itemId),
+    },
+    redeployDrivePublication: {
+      kind: "invoke",
+      channel: "synapse:account:drive:publications:redeploy",
+      request: drivePublicationIdSchema,
+      response: drivePublicationSchema,
+      handler: async (_ctx, input) => accountService.redeployDrivePublication(
+        drivePublicationIdSchema.parse(input).publicationId,
+      ),
+    },
+    disableDrivePublication: {
+      kind: "invoke",
+      channel: "synapse:account:drive:publications:disable",
+      request: drivePublicationIdSchema,
+      response: okSchema,
+      handler: async (_ctx, input) => accountService.disableDrivePublication(
+        drivePublicationIdSchema.parse(input).publicationId,
+      ),
+    },
+    getDriveDeleteImpact: {
+      kind: "invoke",
+      channel: "synapse:account:drive:items:delete-impact",
+      request: driveItemIdSchema,
+      response: driveDeleteImpactSchema,
+      handler: async (_ctx, input) => accountService.getDriveDeleteImpact(driveItemIdSchema.parse(input).itemId),
+    },
+    listDriveShares: {
+      kind: "invoke",
+      channel: "synapse:account:drive:shares:list",
+      request: z.void(),
+      response: z.array(driveShareListItemSchema),
+      handler: async () => accountService.listDriveShares(),
     },
   },
   events: {
