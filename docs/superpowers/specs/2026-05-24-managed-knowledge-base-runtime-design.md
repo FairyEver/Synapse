@@ -2,6 +2,8 @@
 
 > Template naming update: `docs/superpowers/specs/2026-06-05-synapse-knowledge-base-white-label-design.md` supersedes the `claude-obsidian-template` path and branding in this historical design. Current implementation work should use `synapse-knowledge-base-template` and keep upstream references isolated to sync metadata and attribution.
 
+> Storage update: `docs/superpowers/specs/2026-06-10-knowledge-base-custom-storage-root-design.md` refines this historical design. Users still do not choose or see an individual knowledge base backing path, but Synapse may provide one global Knowledge Base storage root setting. Runtime directories remain Synapse-owned under `<storage-root>/knowledge-bases/<runtimeId>/`.
+
 ## Summary
 
 Synapse will change Knowledge Base from a user-selected visible vault into a Synapse-managed project type.
@@ -35,7 +37,7 @@ The product promise is:
 
 ## Non-Goals
 
-- No user-selected folder for new knowledge bases in this migration.
+- No user-selected folder for individual knowledge bases in this migration. The storage update design allows one global Synapse-managed Knowledge Base storage root.
 - No import/export in the first implementation slice.
 - No attempt to make the managed backing directory cryptographically inaccessible to advanced users with local filesystem knowledge.
 - No rewrite of upstream `claude-obsidian` behavior into Synapse-owned coordinator/finalizer code unless a behavior cannot be handled by the template runtime.
@@ -45,7 +47,7 @@ The product promise is:
 
 ## Hard Rules
 
-- New knowledge bases must be created in a Synapse-owned application data directory, not in a user-selected folder.
+- New knowledge bases must be created in a Synapse-owned managed storage directory, not in a per-project user-selected folder. The managed storage root defaults to Electron `userData` and may be globally user-configurable through the storage update design.
 - The UI must not show the real backing path or offer "open real folder" for managed knowledge bases.
 - Managed knowledge base projects must still be selectable in the existing Agent conversation project selector.
 - Knowledge Base-specific UI remains allowed only when the selected project is a managed knowledge base.
@@ -98,10 +100,10 @@ Renderer UI should not render `backingPath`.
 
 ## Managed Runtime Layout
 
-Synapse creates backing directories under app-managed storage, for example:
+Synapse creates backing directories under managed storage, for example:
 
 ```text
-<userData>/knowledge-bases/<kbId>/
+<storage-root>/knowledge-bases/<kbId>/
 ```
 
 The backing directory may include the full internal runtime layout required by `claude-obsidian`, including:

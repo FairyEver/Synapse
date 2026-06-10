@@ -52,7 +52,7 @@
 
 ### 模块硬边界摘要
 
-- Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 app-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。
+- Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 Synapse-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。Synapse-managed storage 默认位于 Electron `userData`，也允许用户配置一个全局知识库存储根；实际运行目录始终由 Synapse 创建为 `<storage-root>/knowledge-bases/<runtimeId>/`，不得暴露为逐库自选项目路径。
 - Knowledge Base 托管运行目录可以包含来自内置 Synapse Knowledge Base 模板的 Claude Code plugin、skill、command、hook、脚本、提示词和 `CLAUDE.md`，因为它不是用户选择的可见项目目录。
 - Knowledge Base 不再通过临时 SDK 注入把资源拼装到用户可见 vault；但托管知识库会话可以、且应当把自身 backing directory 作为 Claude Code SDK local plugin 加载，以激活内置 Synapse Knowledge Base runtime 的 plugin、skill、command 与允许的 hook。Agent 会话仍必须把托管知识库项目解析到其 backing directory，普通项目不得加载知识库 runtime 行为。
 - Knowledge Base 专用逻辑必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 和最小 renderer 项目能力 UI。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook、prompt 或快捷动作。
@@ -71,7 +71,9 @@
 
 ### 产品与运行边界
 
-- Knowledge Base 是 Synapse 托管项目，不是用户可见普通目录。用户只看到 `synapse-kb://<id>`，真实 backing directory 存在 app-managed storage 中。
+- Knowledge Base 是 Synapse 托管项目，不是用户可见普通目录。用户只看到 `synapse-kb://<id>`，真实 backing directory 存在 Synapse-managed storage 中。该 storage 默认使用 Electron `userData`，也可以通过全局设置迁移到用户选择的根目录；每个知识库的真实目录仍由 Synapse 管理，不能成为 renderer 可编辑的项目路径。
+- 更改全局 Knowledge Base storage root 必须通过显式迁移入口完成：阻止新的知识库会话和写入，拒绝在有运行中知识库会话时迁移，完整复制并校验所有 managed runtime 后再切换配置，成功后才把旧 `knowledge-bases` 目录移入系统废纸篓/回收站。失败时必须保留旧配置和旧数据，不得自动分叉到默认目录。
+- 自定义 Knowledge Base storage root 不可访问时，知识库创建、资料管理和 Agent 会话启动必须停止并提示用户恢复磁盘、更改位置或恢复默认位置；不得自动回退默认目录写入新数据。
 - Knowledge Base renderer Agent 会话必须把 backing directory 作为 Claude Code SDK local plugin 加载，并允许该知识库模板内已启用的 plugin hooks。普通项目不得加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Scheduler、Workflow 或其它非 renderer Agent 入口不得默认获得知识库 plugin runtime。只有明确绑定托管 Knowledge Base 且入口策略允许时，才加载 Knowledge Base 专用行为。
 - Agent composer slash menu 只负责插入 `/<name>`，不得改成自动执行命令，也不要在 renderer 侧新增目录扫描器来替代后端 command/skill 解析。
