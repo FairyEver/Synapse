@@ -1,6 +1,7 @@
-import { type ReactNode } from 'react'
+import { type HTMLAttributes, type ReactNode } from 'react'
 import {
   type ColumnDef,
+  type Row,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -33,6 +34,7 @@ type ServerDataTableProps<TData, TValue> = {
   error?: unknown
   onRetry?: () => void
   className?: string
+  getRowProps?: (row: Row<TData>) => HTMLAttributes<HTMLTableRowElement>
 }
 
 export function getServerDataTableErrorMessage(error: unknown) {
@@ -68,6 +70,7 @@ export function ServerDataTable<TData, TValue>({
   error,
   onRetry,
   className,
+  getRowProps,
 }: ServerDataTableProps<TData, TValue>) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
   const pagination = {
@@ -152,24 +155,32 @@ export function ServerDataTable<TData, TValue>({
                 </TableCell>
               </TableRow>
             ) : table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={cn(
-                        cell.column.columnDef.meta?.className,
-                        cell.column.columnDef.meta?.tdClassName
-                      )}
-                    >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const rowProps = getRowProps?.(row)
+
+                return (
+                  <TableRow
+                    key={row.id}
+                    {...rowProps}
+                    className={cn(rowProps?.className)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          cell.column.columnDef.meta?.className,
+                          cell.column.columnDef.meta?.tdClassName
+                        )}
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                )
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className='h-24 text-center'>

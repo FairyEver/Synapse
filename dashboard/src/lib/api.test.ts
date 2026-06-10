@@ -160,6 +160,94 @@ describe('dashboardApi.devices', () => {
   })
 })
 
+describe('dashboardApi.contentStore', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('serializes content store list queries and item actions', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        )
+      )
+    )
+
+    await dashboardApi.listContentStoreItems({
+      page: 2,
+      pageSize: 20,
+      sortBy: 'installCount',
+      sortOrder: 'desc',
+      type: 'skill',
+      query: 'sync',
+    })
+    await dashboardApi.listMyContentStoreItems({ type: 'prompt', query: 'memo' })
+    await dashboardApi.copyContentStoreItem('item/id')
+    await dashboardApi.setContentStoreVisibility('item/id', 'public')
+    await dashboardApi.createContentStoreInstallSession('item/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/content-store/items?page=2&pageSize=20&sortBy=installCount&sortOrder=desc&type=skill&query=sync',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/content-store/mine?type=prompt&query=memo',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/content-store/items/item%2Fid/copy',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/content-store/items/item%2Fid/visibility',
+      expect.objectContaining({
+        body: JSON.stringify({ visibility: 'public' }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      '/api/content-store/items/item%2Fid/install-sessions',
+      expect.objectContaining({
+        body: JSON.stringify({}),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+  })
+
+  it('notifies auth expiration for content store user requests', async () => {
+    const authExpired = vi.fn()
+    const unsubscribe = subscribeAuthExpired(authExpired)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: '会话已过期。' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    )
+
+    try {
+      await expect(dashboardApi.listContentStoreItems()).rejects.toMatchObject({
+        status: 401,
+      })
+      expect(authExpired).toHaveBeenCalledOnce()
+    } finally {
+      unsubscribe()
+    }
+  })
+})
+
 describe('adminApi.devices', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -184,6 +272,70 @@ describe('adminApi.devices', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/admin/devices?page=2&pageSize=10&sortBy=lastSeenAt&sortOrder=desc',
       expect.objectContaining({ credentials: 'include' })
+    )
+  })
+})
+
+describe('adminApi.contentStore', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('serializes admin content store filters and moderation actions', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        )
+      )
+    )
+
+    await adminApi.listContentStoreItems({
+      page: 3,
+      pageSize: 10,
+      sortBy: 'updatedAt',
+      sortOrder: 'asc',
+      type: 'rule',
+      visibility: 'public',
+      moderationStatus: 'normal',
+      query: 'deploy',
+    })
+    await adminApi.getContentStoreDetail('item/id')
+    await adminApi.setContentStoreFeatured('item/id', true)
+    await adminApi.setContentStoreRemoved('item/id', false)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/admin/content-store/items?page=3&pageSize=10&sortBy=updatedAt&sortOrder=asc&type=rule&query=deploy&visibility=public&moderationStatus=normal',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/admin/content-store/items/item%2Fid',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/admin/content-store/items/item%2Fid/featured',
+      expect.objectContaining({
+        body: JSON.stringify({ value: true }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/admin/content-store/items/item%2Fid/removed',
+      expect.objectContaining({
+        body: JSON.stringify({ value: false }),
+        credentials: 'include',
+        method: 'POST',
+      })
     )
   })
 })

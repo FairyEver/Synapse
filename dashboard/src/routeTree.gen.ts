@@ -24,13 +24,19 @@ import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedSystemIndexRouteImport } from './routes/_authenticated/system/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
+import { Route as AuthenticatedMyContentIndexRouteImport } from './routes/_authenticated/my-content/index'
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_authenticated/invitations/index'
 import { Route as AuthenticatedDriveIndexRouteImport } from './routes/_authenticated/drive/index'
 import { Route as AuthenticatedDevicesIndexRouteImport } from './routes/_authenticated/devices/index'
+import { Route as AuthenticatedContentStoreIndexRouteImport } from './routes/_authenticated/content-store/index'
+import { Route as AuthenticatedContentStoreAdminIndexRouteImport } from './routes/_authenticated/content-store-admin/index'
 import { Route as AuthenticatedBackupIndexRouteImport } from './routes/_authenticated/backup/index'
 import { Route as AuthenticatedAuditLogsIndexRouteImport } from './routes/_authenticated/audit-logs/index'
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
+import { Route as AuthenticatedMyContentContentIdRouteImport } from './routes/_authenticated/my-content/$contentId'
+import { Route as AuthenticatedContentStoreInstallRouteImport } from './routes/_authenticated/content-store/install'
+import { Route as AuthenticatedContentStoreContentIdRouteImport } from './routes/_authenticated/content-store/$contentId'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -113,6 +119,12 @@ const AuthenticatedMyDevicesIndexRoute =
     path: '/my-devices/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedMyContentIndexRoute =
+  AuthenticatedMyContentIndexRouteImport.update({
+    id: '/my-content/',
+    path: '/my-content/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedLogsIndexRoute = AuthenticatedLogsIndexRouteImport.update({
   id: '/logs/',
   path: '/logs/',
@@ -135,6 +147,18 @@ const AuthenticatedDevicesIndexRoute =
     path: '/devices/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedContentStoreIndexRoute =
+  AuthenticatedContentStoreIndexRouteImport.update({
+    id: '/content-store/',
+    path: '/content-store/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedContentStoreAdminIndexRoute =
+  AuthenticatedContentStoreAdminIndexRouteImport.update({
+    id: '/content-store-admin/',
+    path: '/content-store-admin/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedBackupIndexRoute =
   AuthenticatedBackupIndexRouteImport.update({
     id: '/backup/',
@@ -153,6 +177,24 @@ const AuthenticatedWebhooksWebhookIdRoute =
     path: '/webhooks/$webhookId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedMyContentContentIdRoute =
+  AuthenticatedMyContentContentIdRouteImport.update({
+    id: '/my-content/$contentId',
+    path: '/my-content/$contentId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedContentStoreInstallRoute =
+  AuthenticatedContentStoreInstallRouteImport.update({
+    id: '/content-store/install',
+    path: '/content-store/install',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedContentStoreContentIdRoute =
+  AuthenticatedContentStoreContentIdRouteImport.update({
+    id: '/content-store/$contentId',
+    path: '/content-store/$contentId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
   id: '/(auth)/auth/desktop',
   path: '/auth/desktop',
@@ -168,13 +210,19 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof authSignUpRoute
   '/team-invite': typeof authTeamInviteRoute
   '/auth/desktop': typeof authAuthDesktopRoute
+  '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
+  '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
+  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/backup/': typeof AuthenticatedBackupIndexRoute
+  '/content-store-admin/': typeof AuthenticatedContentStoreAdminIndexRoute
+  '/content-store/': typeof AuthenticatedContentStoreIndexRoute
   '/devices/': typeof AuthenticatedDevicesIndexRoute
   '/drive/': typeof AuthenticatedDriveIndexRoute
   '/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
+  '/my-content/': typeof AuthenticatedMyContentIndexRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/system/': typeof AuthenticatedSystemIndexRoute
@@ -191,13 +239,19 @@ export interface FileRoutesByTo {
   '/team-invite': typeof authTeamInviteRoute
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
+  '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
+  '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
+  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
   '/backup': typeof AuthenticatedBackupIndexRoute
+  '/content-store-admin': typeof AuthenticatedContentStoreAdminIndexRoute
+  '/content-store': typeof AuthenticatedContentStoreIndexRoute
   '/devices': typeof AuthenticatedDevicesIndexRoute
   '/drive': typeof AuthenticatedDriveIndexRoute
   '/invitations': typeof AuthenticatedInvitationsIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
+  '/my-content': typeof AuthenticatedMyContentIndexRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/system': typeof AuthenticatedSystemIndexRoute
@@ -217,13 +271,19 @@ export interface FileRoutesById {
   '/(auth)/team-invite': typeof authTeamInviteRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
+  '/_authenticated/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
+  '/_authenticated/content-store/install': typeof AuthenticatedContentStoreInstallRoute
+  '/_authenticated/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/_authenticated/backup/': typeof AuthenticatedBackupIndexRoute
+  '/_authenticated/content-store-admin/': typeof AuthenticatedContentStoreAdminIndexRoute
+  '/_authenticated/content-store/': typeof AuthenticatedContentStoreIndexRoute
   '/_authenticated/devices/': typeof AuthenticatedDevicesIndexRoute
   '/_authenticated/drive/': typeof AuthenticatedDriveIndexRoute
   '/_authenticated/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
+  '/_authenticated/my-content/': typeof AuthenticatedMyContentIndexRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/system/': typeof AuthenticatedSystemIndexRoute
@@ -243,13 +303,19 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/team-invite'
     | '/auth/desktop'
+    | '/content-store/$contentId'
+    | '/content-store/install'
+    | '/my-content/$contentId'
     | '/webhooks/$webhookId'
     | '/audit-logs/'
     | '/backup/'
+    | '/content-store-admin/'
+    | '/content-store/'
     | '/devices/'
     | '/drive/'
     | '/invitations/'
     | '/logs/'
+    | '/my-content/'
     | '/my-devices/'
     | '/settings/'
     | '/system/'
@@ -266,13 +332,19 @@ export interface FileRouteTypes {
     | '/team-invite'
     | '/'
     | '/auth/desktop'
+    | '/content-store/$contentId'
+    | '/content-store/install'
+    | '/my-content/$contentId'
     | '/webhooks/$webhookId'
     | '/audit-logs'
     | '/backup'
+    | '/content-store-admin'
+    | '/content-store'
     | '/devices'
     | '/drive'
     | '/invitations'
     | '/logs'
+    | '/my-content'
     | '/my-devices'
     | '/settings'
     | '/system'
@@ -291,13 +363,19 @@ export interface FileRouteTypes {
     | '/(auth)/team-invite'
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
+    | '/_authenticated/content-store/$contentId'
+    | '/_authenticated/content-store/install'
+    | '/_authenticated/my-content/$contentId'
     | '/_authenticated/webhooks/$webhookId'
     | '/_authenticated/audit-logs/'
     | '/_authenticated/backup/'
+    | '/_authenticated/content-store-admin/'
+    | '/_authenticated/content-store/'
     | '/_authenticated/devices/'
     | '/_authenticated/drive/'
     | '/_authenticated/invitations/'
     | '/_authenticated/logs/'
+    | '/_authenticated/my-content/'
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
     | '/_authenticated/system/'
@@ -424,6 +502,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyDevicesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/my-content/': {
+      id: '/_authenticated/my-content/'
+      path: '/my-content'
+      fullPath: '/my-content/'
+      preLoaderRoute: typeof AuthenticatedMyContentIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/logs/': {
       id: '/_authenticated/logs/'
       path: '/logs'
@@ -452,6 +537,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDevicesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/content-store/': {
+      id: '/_authenticated/content-store/'
+      path: '/content-store'
+      fullPath: '/content-store/'
+      preLoaderRoute: typeof AuthenticatedContentStoreIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/content-store-admin/': {
+      id: '/_authenticated/content-store-admin/'
+      path: '/content-store-admin'
+      fullPath: '/content-store-admin/'
+      preLoaderRoute: typeof AuthenticatedContentStoreAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/backup/': {
       id: '/_authenticated/backup/'
       path: '/backup'
@@ -471,6 +570,27 @@ declare module '@tanstack/react-router' {
       path: '/webhooks/$webhookId'
       fullPath: '/webhooks/$webhookId'
       preLoaderRoute: typeof AuthenticatedWebhooksWebhookIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/my-content/$contentId': {
+      id: '/_authenticated/my-content/$contentId'
+      path: '/my-content/$contentId'
+      fullPath: '/my-content/$contentId'
+      preLoaderRoute: typeof AuthenticatedMyContentContentIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/content-store/install': {
+      id: '/_authenticated/content-store/install'
+      path: '/content-store/install'
+      fullPath: '/content-store/install'
+      preLoaderRoute: typeof AuthenticatedContentStoreInstallRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/content-store/$contentId': {
+      id: '/_authenticated/content-store/$contentId'
+      path: '/content-store/$contentId'
+      fullPath: '/content-store/$contentId'
+      preLoaderRoute: typeof AuthenticatedContentStoreContentIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/(auth)/auth/desktop': {
@@ -500,13 +620,19 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedContentStoreContentIdRoute: typeof AuthenticatedContentStoreContentIdRoute
+  AuthenticatedContentStoreInstallRoute: typeof AuthenticatedContentStoreInstallRoute
+  AuthenticatedMyContentContentIdRoute: typeof AuthenticatedMyContentContentIdRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
   AuthenticatedAuditLogsIndexRoute: typeof AuthenticatedAuditLogsIndexRoute
   AuthenticatedBackupIndexRoute: typeof AuthenticatedBackupIndexRoute
+  AuthenticatedContentStoreAdminIndexRoute: typeof AuthenticatedContentStoreAdminIndexRoute
+  AuthenticatedContentStoreIndexRoute: typeof AuthenticatedContentStoreIndexRoute
   AuthenticatedDevicesIndexRoute: typeof AuthenticatedDevicesIndexRoute
   AuthenticatedDriveIndexRoute: typeof AuthenticatedDriveIndexRoute
   AuthenticatedInvitationsIndexRoute: typeof AuthenticatedInvitationsIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
+  AuthenticatedMyContentIndexRoute: typeof AuthenticatedMyContentIndexRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
   AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
   AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
@@ -518,13 +644,21 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedContentStoreContentIdRoute:
+    AuthenticatedContentStoreContentIdRoute,
+  AuthenticatedContentStoreInstallRoute: AuthenticatedContentStoreInstallRoute,
+  AuthenticatedMyContentContentIdRoute: AuthenticatedMyContentContentIdRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
   AuthenticatedAuditLogsIndexRoute: AuthenticatedAuditLogsIndexRoute,
   AuthenticatedBackupIndexRoute: AuthenticatedBackupIndexRoute,
+  AuthenticatedContentStoreAdminIndexRoute:
+    AuthenticatedContentStoreAdminIndexRoute,
+  AuthenticatedContentStoreIndexRoute: AuthenticatedContentStoreIndexRoute,
   AuthenticatedDevicesIndexRoute: AuthenticatedDevicesIndexRoute,
   AuthenticatedDriveIndexRoute: AuthenticatedDriveIndexRoute,
   AuthenticatedInvitationsIndexRoute: AuthenticatedInvitationsIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
+  AuthenticatedMyContentIndexRoute: AuthenticatedMyContentIndexRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
   AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,
   AuthenticatedTeamsIndexRoute: AuthenticatedTeamsIndexRoute,

@@ -8,8 +8,10 @@ import {
   History,
   ScrollText,
   Settings,
+  Store,
   Webhook,
   MonitorSmartphone,
+  FolderKanban,
 } from 'lucide-react'
 import { Logo } from '@/assets/logo'
 import type { AuthUser } from '@/stores/auth-store'
@@ -18,6 +20,11 @@ import { type SidebarData } from '../types'
 const adminNavGroup = {
   title: '管理',
   items: [
+    {
+      title: '内容商店',
+      url: '/content-store-admin',
+      icon: Store,
+    },
     {
       title: '系统概览',
       url: '/system',
@@ -74,6 +81,16 @@ const adminNavGroup = {
 const userAccountNavGroup = {
   title: '账户',
   items: [
+    {
+      title: '内容商店',
+      url: '/content-store',
+      icon: Store,
+    },
+    {
+      title: '我的内容',
+      url: '/my-content',
+      icon: FolderKanban,
+    },
     {
       title: 'Webhooks',
       url: '/webhooks',

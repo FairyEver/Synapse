@@ -1,4 +1,10 @@
 import type {
+  ContentStoreDetailDto,
+  ContentStoreInstallSessionDto,
+  ContentStoreItemDto,
+  ContentStoreModerationStatus,
+  ContentStoreType,
+  ContentStoreVisibility,
   DashboardWebhookDto,
   DashboardWebhookSecretResult,
   WebhookDeliveryDto,
@@ -244,6 +250,7 @@ type RequestOptions = RequestInit
 
 const dashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
+const contentStoreApiBasePath = '/api/content-store'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
 const authExpiredListeners = new Set<() => void>()
 
@@ -326,7 +333,8 @@ function shouldNotifyAuthExpired(path: string, status: number) {
   if (status !== 401) return false
   if (
     !path.startsWith(adminApiBasePath) &&
-    !path.startsWith(dashboardApiBasePath)
+    !path.startsWith(dashboardApiBasePath) &&
+    !path.startsWith(contentStoreApiBasePath)
   ) {
     return false
   }
@@ -353,6 +361,28 @@ export type WebhookDeliveryHistoryQuery = PaginationOptions & {
   user?: string
 }
 
+export type ContentStoreListQuery = PaginationOptions & {
+  type?: ContentStoreType
+  query?: string
+}
+
+export type AdminContentStoreListQuery = ContentStoreListQuery & {
+  visibility?: ContentStoreVisibility
+  moderationStatus?: ContentStoreModerationStatus
+}
+
+export type CreateContentStoreInstallSessionInput = {
+  deepLinkBase?: string
+}
+
+type ContentStoreVisibilityInput = {
+  visibility: ContentStoreVisibility
+}
+
+type ContentStoreBooleanInput = {
+  value: boolean
+}
+
 function paginationSuffix(options: PaginationOptions) {
   const query = new URLSearchParams()
   if (options.page) query.set('page', String(options.page))
@@ -361,6 +391,19 @@ function paginationSuffix(options: PaginationOptions) {
   if (options.sortOrder) query.set('sortOrder', options.sortOrder)
   const value = query.toString()
   return value ? `?${value}` : ''
+}
+
+function contentStoreQuerySuffix(options: AdminContentStoreListQuery = {}) {
+  return querySuffix({
+    page: options.page,
+    pageSize: options.pageSize,
+    sortBy: options.sortBy,
+    sortOrder: options.sortOrder,
+    type: options.type,
+    query: options.query,
+    visibility: options.visibility,
+    moderationStatus: options.moderationStatus,
+  })
 }
 
 function querySuffix(options: Record<string, string | number | undefined>) {
@@ -511,6 +554,50 @@ export const dashboardApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  listContentStoreItems: (options: ContentStoreListQuery = {}) =>
+    request<PaginatedResponse<ContentStoreItemDto>>(
+      `${contentStoreApiBasePath}/items${contentStoreQuerySuffix(options)}`
+    ),
+  listMyContentStoreItems: (options: ContentStoreListQuery = {}) =>
+    request<PaginatedResponse<ContentStoreItemDto>>(
+      `${contentStoreApiBasePath}/mine${contentStoreQuerySuffix(options)}`
+    ),
+  getContentStoreDetail: (id: string) =>
+    request<ContentStoreDetailDto>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}`
+    ),
+  copyContentStoreItem: (id: string) =>
+    request<ContentStoreItemDto>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/copy`,
+      { method: 'POST' }
+    ),
+  setContentStoreVisibility: (
+    id: string,
+    visibility: ContentStoreVisibility
+  ) =>
+    request<ContentStoreItemDto>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/visibility`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ visibility } satisfies ContentStoreVisibilityInput),
+      }
+    ),
+  deleteContentStoreItem: (id: string) =>
+    request<{ ok: true }>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    ),
+  createContentStoreInstallSession: (
+    id: string,
+    input: CreateContentStoreInstallSessionInput = {}
+  ) =>
+    request<ContentStoreInstallSessionDto>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/install-sessions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    ),
 }
 
 export const adminApi = {
@@ -639,6 +726,30 @@ export const adminApi = {
     request<{ ok: true }>(
       `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}`,
       { method: 'DELETE' }
+    ),
+  listContentStoreItems: (options: AdminContentStoreListQuery = {}) =>
+    request<PaginatedResponse<ContentStoreItemDto>>(
+      `${adminApiBasePath}/content-store/items${contentStoreQuerySuffix(options)}`
+    ),
+  getContentStoreDetail: (id: string) =>
+    request<ContentStoreDetailDto>(
+      `${adminApiBasePath}/content-store/items/${encodeURIComponent(id)}`
+    ),
+  setContentStoreFeatured: (id: string, value: boolean) =>
+    request<ContentStoreItemDto>(
+      `${adminApiBasePath}/content-store/items/${encodeURIComponent(id)}/featured`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ value } satisfies ContentStoreBooleanInput),
+      }
+    ),
+  setContentStoreRemoved: (id: string, value: boolean) =>
+    request<ContentStoreItemDto>(
+      `${adminApiBasePath}/content-store/items/${encodeURIComponent(id)}/removed`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ value } satisfies ContentStoreBooleanInput),
+      }
     ),
 }
 
