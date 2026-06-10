@@ -19,6 +19,7 @@ The default storage root is the current Electron `userData` path, which keeps ex
 - If migration fails, keep the old root and old data.
 - If a custom root is unavailable, block Knowledge Base operations instead of silently falling back to the default root.
 - After a successful migration and verification, move the old `knowledge-bases` directory to the system trash or recycle bin.
+- If moving the old directory to trash fails after the new location is verified, keep the new location active and report that the old copy remains.
 - Do not expose an "open real folder" action, and do not show real runtime paths in project records.
 
 ## Goals
@@ -50,7 +51,9 @@ The default storage root is the current Electron `userData` path, which keeps ex
 - A running Knowledge Base Agent session blocks migration.
 - Migration must hold the app UI in a blocking modal until it completes, fails, or reaches a safely cancelled state.
 - Cancellation is allowed only during copy and verification. It is disabled once configuration switching begins.
+- Migration must be recoverable after a crash, power loss, or forced process termination.
 - Custom-root unavailability blocks Knowledge Base create, raw/source management, and Knowledge Base Agent launch.
+- When the configured custom root is unavailable, only re-detection is allowed. Moving to another root or restoring the default requires the source root to become readable again.
 - Old absolute path references may be diagnosed, but must not be rewritten without a future explicit user action.
 
 ## Configuration Model
@@ -78,28 +81,36 @@ Changing the root and restoring the default root use the same transaction:
 
 1. Acquire a Knowledge Base storage migration lock.
 2. Reject if any Knowledge Base Agent session is running or queued.
-3. Block new Knowledge Base creation, raw/source writes, source-manager operations, and Knowledge Base Agent launches.
-4. Validate the target root:
+3. Inspect Knowledge Base source-manager windows:
+   - reject migration if an upload, move, rename, create-folder, or trash operation is active,
+   - close idle source-manager windows before migration.
+4. Block new Knowledge Base creation, raw/source writes, source-manager operations, source-manager window opening, and Knowledge Base Agent launches.
+5. Validate the target root:
    - path is absolute,
    - target is writable or can be created,
+   - target is not the currently configured root,
    - target is not a dangerous system path,
    - target is not inside the current `knowledge-bases` tree,
    - target does not already contain a non-empty `knowledge-bases` directory that was not created by this migration,
-   - target has enough free space for the current runtime data plus margin where the platform exposes free-space data.
-5. Copy current `<old-root>/knowledge-bases` to a temporary directory under the target root.
-6. Verify copied file counts and total size.
-7. Verify each managed runtime has required files and directories:
+   - when free-space data is available, target space exceeds current runtime bytes plus the greater of 10% or 1 GB,
+   - when free-space data is unavailable, record that the check is unknown and allow the guarded copy to proceed.
+6. Persist a migration journal before copying.
+7. Copy current `<old-root>/knowledge-bases` to a temporary directory under the target root.
+8. Verify copied file counts and total size.
+9. Verify each managed runtime has required files and directories:
    - `.claude-plugin/`
    - `skills/`
    - `commands/`
    - `CLAUDE.md`
    - `.raw/.manifest.json`
    - `wiki/index.md`
-8. Atomically move the temporary copy into `<new-root>/knowledge-bases`.
-9. Persist the new storage root configuration.
-10. Resolve every managed project through the new root and verify the runtime is readable.
-11. Move the old `<old-root>/knowledge-bases` directory to system trash or recycle bin.
-12. Release the migration lock.
+10. Atomically move the temporary copy into `<new-root>/knowledge-bases`.
+11. Mark the journal as entering the non-cancellable switch phase.
+12. Persist the new storage root configuration.
+13. Resolve every managed project through the new root and verify the runtime is readable.
+14. Mark the journal as new-root verified. The new root is now authoritative.
+15. Move the old `<old-root>/knowledge-bases` directory to system trash or recycle bin.
+16. Clear the migration journal and release the migration lock.
 
 Cancellation handling:
 
@@ -110,12 +121,22 @@ Cancellation handling:
 - The renderer app shell subscribes to main-process migration state and owns the blocking dialog, so routing or settings-page unmounting cannot remove it.
 - The existing app `before-quit` flow must check the migration gate before pending-push handling. While migration is active, it must not enter a timeout path that force-quits the app.
 
+Crash recovery:
+
+- The migration journal records the old root, target root, temporary path, current phase, whether config switching began, and whether the new root was verified. It must not contain document content or secrets.
+- On startup, recovery runs before Knowledge Base operations are enabled.
+- If interruption occurred before config switching, keep or restore the old config and remove the target temporary directory best effort.
+- If interruption occurred after config switching but before new-root verification, verify the new root and every managed runtime. Keep the new config when verification succeeds; restore the old config when it fails.
+- If interruption occurred after new-root verification, the new root remains authoritative. Recovery must not roll back to the old root because cleanup may already have moved it to trash. Resume or reconcile old-root cleanup and complete with a warning if the old copy remains.
+- Recovery holds the same app-shell blocking dialog until it reaches a terminal success or failure state.
+
 Failure handling:
 
 - Before config persistence: leave config unchanged and keep old data.
 - After config persistence but before final verification: restore the previous config and keep old data.
 - Temporary directories are cleaned up best effort with structured warnings on cleanup failure.
 - Old runtime data is never permanently deleted by the migration.
+- Failure to trash the old directory after successful switch and verification does not roll back the new root. Complete with a warning that the old copy remains.
 
 ## Claude Code And Runtime Loading
 
@@ -179,7 +200,10 @@ Errors should be actionable and concise:
 - target is unsafe,
 - not enough disk space,
 - a Knowledge Base session is running,
+- a source operation is still running,
 - migration failed and the old location is still in use.
+
+When free space cannot be confirmed, show a warning before migration rather than treating it as an error.
 
 Use `impeccable` product-UI guidance together with the existing shadcn/Radix settings components and theme tokens. Keep the dialog compact, familiar, and operational. Do not add custom colors, gradients, nested cards, ornamental motion, or explanatory marketing text.
 
@@ -196,6 +220,8 @@ Diagnostics should report:
 
 Diagnostics must be read-only. They must not rewrite wiki content, manifests, config, or runtime files.
 
+When a custom root is unavailable, the settings surface should show only `Recheck`. `Change location` and `Restore default` stay unavailable because the source data cannot be migrated safely. The feature does not provide a destructive "start empty" recovery path.
+
 ## Security And Audit
 
 Selecting a custom storage root and moving runtime data outside default `userData` are sensitive filesystem operations. Main-process handlers must use the existing `PermissionGuard` and `AuditSink` patterns for external writes and trash operations.
@@ -208,16 +234,26 @@ Audit metadata should include operation name, old root category, new root catego
 - Custom resolver uses `<custom-root>/knowledge-bases/<runtimeId>`.
 - New managed Knowledge Base creation writes to the configured root.
 - Target validation rejects relative paths, dangerous paths, and paths inside the current `knowledge-bases` tree.
+- Selecting the currently configured root is treated as a no-op and does not start migration.
 - Migration rejects when a Knowledge Base Agent session is running.
+- Migration rejects while a source-manager mutation is active and closes idle source-manager windows.
+- Source-manager windows cannot reopen during migration.
 - Migration UI cannot be closed through overlay, `Esc`, navigation, window close, or app quit while work is active.
 - The app-shell dialog survives settings-page unmounting and restores from main-process migration state after renderer reload.
 - Existing before-quit timeout handling cannot force-quit during migration.
 - Cancellation during copy or verification keeps old config and data and cleans up the target temporary directory best effort.
 - Cancellation is disabled during switching and cleanup.
+- Available-space validation requires runtime bytes plus the greater of 10% or 1 GB.
+- Unknown free space allows migration with an explicit warning and still rolls back safely on copy failure.
+- Startup recovery before config switching keeps the old root and cleans temporary data.
+- Startup recovery after config switching but before verification keeps a verified new root or restores the old root.
+- Startup recovery after new-root verification never rolls back and reconciles old-root cleanup.
 - Copy failure keeps old config and old data.
 - Verification failure keeps or restores old config and old data.
 - Successful migration switches config, resolves all runtimes from the new root, and trashes the old `knowledge-bases` directory.
+- Trash failure after a successful switch keeps the new root active and reports that the old copy remains.
 - Custom-root unavailability blocks create, raw/source management, and Knowledge Base Agent launch.
+- Custom-root unavailability exposes re-detection only and does not permit restore-default migration until the source returns.
 - Claude Code session creation receives the new resolved backing directory after migration.
 - Relative links remain unchanged.
 - Old absolute path references are reported by diagnostics but not rewritten.

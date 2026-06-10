@@ -74,7 +74,8 @@
 - Knowledge Base 是 Synapse 托管项目，不是用户可见普通目录。用户只看到 `synapse-kb://<id>`，真实 backing directory 存在 Synapse-managed storage 中。该 storage 默认使用 Electron `userData`，也可以通过全局设置迁移到用户选择的根目录；每个知识库的真实目录仍由 Synapse 管理，不能成为 renderer 可编辑的项目路径。
 - 更改全局 Knowledge Base storage root 必须通过显式迁移入口完成：阻止新的知识库会话和写入，拒绝在有运行中知识库会话时迁移，完整复制并校验所有 managed runtime 后再切换配置，成功后才把旧 `knowledge-bases` 目录移入系统废纸篓/回收站。失败时必须保留旧配置和旧数据，不得自动分叉到默认目录。
 - Knowledge Base storage root 迁移期间必须用不可通过遮罩、`Esc`、关闭按钮或页面切换关闭的阻塞模态框控制界面。复制和校验阶段允许取消；进入配置切换和旧目录清理阶段后必须禁用取消。应用退出请求也必须被拦截，直到迁移完成或安全取消。
-- 自定义 Knowledge Base storage root 不可访问时，知识库创建、资料管理和 Agent 会话启动必须停止并提示用户恢复磁盘、更改位置或恢复默认位置；不得自动回退默认目录写入新数据。
+- Knowledge Base storage root 迁移必须持久化恢复状态。切换配置前异常中断时继续使用旧位置；切换后但新位置未验证前中断时启动阶段先验证新位置，验证失败再回滚旧位置；新位置验证成功后即为权威位置，后续旧目录清理失败或中断不得回滚。恢复完成前必须阻止知识库操作并显示阻塞模态框。
+- 自定义 Knowledge Base storage root 不可访问时，知识库创建、资料管理和 Agent 会话启动必须停止，只允许重新检测；源数据恢复可访问前不得更改位置或恢复默认位置，不得自动回退默认目录写入新数据。
 - Knowledge Base renderer Agent 会话必须把 backing directory 作为 Claude Code SDK local plugin 加载，并允许该知识库模板内已启用的 plugin hooks。普通项目不得加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Scheduler、Workflow 或其它非 renderer Agent 入口不得默认获得知识库 plugin runtime。只有明确绑定托管 Knowledge Base 且入口策略允许时，才加载 Knowledge Base 专用行为。
 - Agent composer slash menu 只负责插入 `/<name>`，不得改成自动执行命令，也不要在 renderer 侧新增目录扫描器来替代后端 command/skill 解析。
