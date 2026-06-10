@@ -1,0 +1,504 @@
+import { BadRequestException, ForbiddenException } from "@nestjs/common"
+import { Readable } from "node:stream"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { PrismaService } from "../prisma/prisma.service"
+import { ContentStoreService } from "./content-store.service"
+import type { ContentStoreStoragePort } from "./content-store-storage"
+
+describe("ContentStoreService", () => {
+  let prisma: PrismaMock
+  let storage: StorageMock
+  let service: ContentStoreService
+
+  beforeEach(() => {
+    prisma = createPrismaMock()
+    storage = createStorageMock()
+    prisma.$transaction.mockImplementation(async (input: TransactionInput) => {
+      if (typeof input === "function") return input(prisma)
+      return Promise.all(input)
+    })
+    service = new ContentStoreService(prisma as unknown as PrismaService, storage as unknown as ContentStoreStoragePort)
+  })
+
+  it("creates a private skill draft with stored files", async () => {
+    prisma.contentStoreItem.create.mockResolvedValue(item({ id: "item-1", type: "skill", title: "My Skill" }))
+    prisma.contentStoreDraft.create.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1", title: "My Skill" }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      title: "My Skill",
+      files: [file({ storageKey: "content-store/drafts/user-1/draft-1/sha" })],
+    }))
+
+    const result = await service.createDraft("user-1", {
+      type: "skill",
+      title: "My Skill",
+      description: null,
+      files: [{ path: "SKILL.md", contentBase64: Buffer.from("# Skill").toString("base64") }],
+    })
+
+    expect(result).toMatchObject({ id: "draft-1", itemId: "item-1", title: "My Skill", revision: 1 })
+    expect(prisma.contentStoreItem.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ ownerUserId: "user-1", visibility: "private", moderationStatus: "normal" }),
+    }))
+    expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({
+      key: expect.stringMatching(/^content-store\/drafts\/user-1\/draft-1\/[a-f0-9]{64}$/u),
+    }))
+  })
+
+  it("overwrites the existing same-source unpublished skill draft", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      type: "skill",
+      latestVersionId: null,
+      localSourceFingerprint: "local-1",
+    }))
+    prisma.contentStoreDraft.findFirst
+      .mockResolvedValueOnce(draft({ id: "draft-1", itemId: "item-1", revision: 1 }))
+      .mockResolvedValueOnce(draft({
+        id: "draft-1",
+        itemId: "item-1",
+        title: "Updated Skill",
+        revision: 2,
+        files: [file({ storageKey: "content-store/drafts/user-1/draft-1/sha" })],
+      }))
+    prisma.contentStoreItem.update.mockResolvedValue(item({ id: "item-1", title: "Updated Skill" }))
+    prisma.contentStoreDraft.update.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1", revision: 2 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+
+    const result = await service.createDraft("user-1", {
+      type: "skill",
+      title: "Updated Skill",
+      localSourceFingerprint: " local-1 ",
+      files: [{ path: "SKILL.md", contentBase64: Buffer.from("# Updated").toString("base64") }],
+    })
+
+    expect(result).toMatchObject({ id: "draft-1", itemId: "item-1", title: "Updated Skill" })
+    expect(prisma.contentStoreItem.create).not.toHaveBeenCalled()
+    expect(prisma.contentStoreDraft.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { itemId: "item-1" },
+      data: expect.objectContaining({ revision: { increment: 1 } }),
+    }))
+  })
+
+  it("rejects a stale draft save when the revision changed during the write", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 1,
+      item: item({ id: "item-1", type: "prompt" }),
+      files: [],
+    }))
+    prisma.contentStoreDraft.updateMany.mockResolvedValue({ count: 0 })
+
+    await expect(service.saveDraft("user-1", "item-1", 1, {
+      title: "Next",
+      body: "Prompt",
+    })).rejects.toThrow(BadRequestException)
+
+    expect(prisma.contentStoreFile.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("rejects public visibility without description", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({ id: "item-1", ownerUserId: "user-1", description: "   " }))
+
+    await expect(service.setVisibility("user-1", "item-1", "public")).rejects.toThrow(BadRequestException)
+  })
+
+  it("publishes skill drafts by creating an immutable package", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 1,
+      item: item({ id: "item-1", type: "skill" }),
+      files: [file({
+        path: "SKILL.md",
+        sha256: "5c01bdbb26f358bab27f267924aa2c9a03fcfdb8c2a8eb01ec6a57bf54e0629e",
+        text: "# Skill",
+        storageKey: "content-store/drafts/user-1/draft-1/5c01",
+      })],
+    }))
+    storage.getObjectStream.mockResolvedValue({ stream: bufferStream("# Skill") })
+    prisma.contentStoreVersion.count.mockResolvedValue(0)
+    prisma.contentStoreVersion.create.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreVersion.update.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+    prisma.contentStoreItem.update.mockResolvedValue(item({ id: "item-1", latestVersionId: "version-1" }))
+    prisma.contentStoreDraft.delete.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1" }))
+
+    const result = await service.publishDraft("user-1", "item-1", 1)
+
+    expect(result).toMatchObject({ id: "version-1", itemId: "item-1", versionNumber: 1 })
+    expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({
+      key: "content-store/packages/item-1/version-1.zip",
+      contentType: "application/zip",
+    }))
+    expect(prisma.contentStoreItem.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ latestVersionId: "version-1" }),
+    }))
+  })
+
+  it("publishes prompt drafts without storing a package", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      revision: 1,
+      body: "Prompt body",
+      item: item({ id: "item-1", type: "prompt" }),
+      files: [],
+    }))
+    prisma.contentStoreVersion.count.mockResolvedValue(0)
+    prisma.contentStoreVersion.create.mockResolvedValue(version({
+      id: "version-1",
+      itemId: "item-1",
+      versionNumber: 1,
+      body: "Prompt body",
+      packageKey: null,
+      packageSha256: null,
+      packageSize: null,
+    }))
+    prisma.contentStoreItem.update.mockResolvedValue(item({ id: "item-1", latestVersionId: "version-1" }))
+    prisma.contentStoreDraft.delete.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1" }))
+
+    await service.publishDraft("user-1", "item-1", 1)
+
+    expect(storage.putObject).not.toHaveBeenCalled()
+    expect(prisma.contentStoreVersion.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ body: "Prompt body", packageKey: null, packageSha256: null, packageSize: null }),
+    }))
+  })
+
+  it("builds Skill search text from SKILL.md only", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 1,
+      item: item({ id: "item-1", type: "skill" }),
+      files: [
+        file({
+          path: "SKILL.md",
+          sha256: "5c01bdbb26f358bab27f267924aa2c9a03fcfdb8c2a8eb01ec6a57bf54e0629e",
+          text: "Primary searchable text",
+          storageKey: "content-store/drafts/user-1/draft-1/5c01",
+        }),
+        file({
+          path: "references/notes.md",
+          sha256: "7a38b7ed34aa5a7cd9afd2351353a12990d72581f70169c696000687193b3f28",
+          text: "Hidden attachment text",
+          storageKey: "content-store/drafts/user-1/draft-1/7a38",
+        }),
+      ],
+    }))
+    storage.getObjectStream
+      .mockResolvedValueOnce({ stream: bufferStream("Primary searchable text") })
+      .mockResolvedValueOnce({ stream: bufferStream("Hidden attachment text") })
+    prisma.contentStoreVersion.count.mockResolvedValue(0)
+    prisma.contentStoreVersion.create.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreVersion.update.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 2 })
+    prisma.contentStoreItem.update.mockResolvedValue(item({ id: "item-1", latestVersionId: "version-1" }))
+    prisma.contentStoreDraft.delete.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1" }))
+
+    await service.publishDraft("user-1", "item-1", 1)
+
+    expect(prisma.contentStoreVersion.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        searchText: expect.stringContaining("Primary searchable text"),
+      }),
+    }))
+    expect(prisma.contentStoreVersion.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        searchText: expect.not.stringContaining("Hidden attachment text"),
+      }),
+    }))
+  })
+
+  it("searches store items by title, description, author display name and version text", async () => {
+    prisma.contentStoreItem.findMany.mockResolvedValue([])
+    prisma.contentStoreItem.count.mockResolvedValue(0)
+
+    await service.listStore("user-1", { query: "needle" })
+
+    expect(prisma.contentStoreItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          { title: { contains: "needle", mode: "insensitive" } },
+          { description: { contains: "needle", mode: "insensitive" } },
+          { owner: { displayName: { contains: "needle", mode: "insensitive" } } },
+          { versions: { some: expect.objectContaining({ searchText: { contains: "needle", mode: "insensitive" } }) } },
+        ]),
+      }),
+    }))
+  })
+
+  it("sorts list results by install count", async () => {
+    prisma.contentStoreItem.findMany.mockResolvedValue([
+      item({ id: "item-low", title: "Low", updatedAt: new Date("2026-06-08T00:00:00.000Z") }),
+      item({ id: "item-high", title: "High", updatedAt: new Date("2026-06-09T00:00:00.000Z") }),
+    ])
+    prisma.contentStoreInstallEvent.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(3)
+
+    const result = await service.listStore("user-1", { sortBy: "installCount" })
+
+    expect(result.data.map((row) => row.id)).toEqual(["item-high", "item-low"])
+    expect(result.data.map((row) => row.installCount)).toEqual([3, 1])
+  })
+
+  it("rejects install sessions for prompt content", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      type: "prompt",
+      visibility: "public",
+      latestVersionId: "version-1",
+      latestVersion: version({ id: "version-1", itemId: "item-1" }),
+    }))
+
+    await expect(service.createInstallSession("user-1", "item-1", "synapse://content-install")).rejects.toThrow(BadRequestException)
+  })
+
+  it("requires the install session user to match", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      itemId: "item-1",
+      versionId: "version-1",
+      type: "skill",
+      status: "pending",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      createdAt: new Date("2026-06-09T00:00:00.000Z"),
+      item: item({ id: "item-1", type: "skill" }),
+      version: version({
+        id: "version-1",
+        itemId: "item-1",
+        packageKey: "content-store/packages/item-1/version-1.zip",
+        packageSha256: "a".repeat(64),
+      }),
+    })
+
+    await expect(service.resolveInstallSession("user-2", "session-1")).rejects.toThrow(ForbiddenException)
+  })
+
+  it("rejects deleting public items", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({ id: "item-1", visibility: "public" }))
+
+    await expect(service.deletePrivateItem("user-1", "item-1")).rejects.toThrow(BadRequestException)
+  })
+
+  it("records installs with an install event upsert", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      itemId: "item-1",
+      versionId: "version-1",
+      type: "skill",
+      status: "pending",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      createdAt: new Date("2026-06-09T00:00:00.000Z"),
+      item: item({ id: "item-1", type: "skill" }),
+      version: version({
+        id: "version-1",
+        itemId: "item-1",
+        packageKey: "content-store/packages/item-1/version-1.zip",
+        packageSha256: "a".repeat(64),
+      }),
+    })
+    prisma.contentStoreInstallEvent.upsert.mockResolvedValue({ id: "event-1" })
+    prisma.contentStoreInstallSession.update.mockResolvedValue({ id: "session-1", status: "consumed" })
+
+    await expect(service.recordInstall("user-1", "session-1", "client-1")).resolves.toEqual({ ok: true })
+    expect(prisma.contentStoreInstallEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        userId_itemId_versionId_clientInstanceId: {
+          userId: "user-1",
+          itemId: "item-1",
+          versionId: "version-1",
+          clientInstanceId: "client-1",
+        },
+      },
+    }))
+  })
+
+  it("writes audit actions when admin featured and removed state changes", async () => {
+    prisma.$transaction.mockImplementation(async (callback: TransactionInput) => {
+      if (typeof callback !== "function") return Promise.all(callback)
+      return callback(prisma)
+    })
+    prisma.contentStoreItem.update
+      .mockResolvedValueOnce(item({ id: "item-1", featured: true }))
+      .mockResolvedValueOnce(item({ id: "item-1", moderationStatus: "removed" }))
+    prisma.contentStoreInstallEvent.count.mockResolvedValue(0)
+    prisma.auditLog.create.mockResolvedValue({ id: "audit-1" })
+
+    await service.setFeaturedAsAdmin("admin@example.com", "127.0.0.1", "item-1", true)
+    await service.setRemovedAsAdmin("admin@example.com", "127.0.0.1", "item-1", true)
+
+    expect(prisma.auditLog.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.objectContaining({ action: "content_store.feature", targetType: "content_store_item", targetId: "item-1" }),
+    }))
+    expect(prisma.auditLog.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      data: expect.objectContaining({ action: "content_store.remove", targetType: "content_store_item", targetId: "item-1" }),
+    }))
+  })
+})
+
+type TransactionInput = ((tx: PrismaMock) => unknown) | readonly unknown[]
+
+type MockFn = ReturnType<typeof vi.fn>
+
+interface PrismaMock {
+  $transaction: MockFn
+  contentStoreItem: {
+    create: MockFn
+    update: MockFn
+    delete: MockFn
+    findFirst: MockFn
+    findMany: MockFn
+    count: MockFn
+  }
+  contentStoreDraft: {
+    create: MockFn
+    update: MockFn
+    updateMany: MockFn
+    delete: MockFn
+    findFirst: MockFn
+    upsert: MockFn
+  }
+  contentStoreVersion: {
+    create: MockFn
+    update: MockFn
+    findFirst: MockFn
+    count: MockFn
+  }
+  contentStoreFile: {
+    createMany: MockFn
+    deleteMany: MockFn
+  }
+  contentStoreInstallSession: {
+    create: MockFn
+    findFirst: MockFn
+    update: MockFn
+  }
+  contentStoreInstallEvent: {
+    upsert: MockFn
+    count: MockFn
+  }
+  auditLog: {
+    create: MockFn
+  }
+}
+
+interface StorageMock {
+  putObject: MockFn
+  getObjectStream: MockFn
+  headObject: MockFn
+  deleteObject: MockFn
+}
+
+function createPrismaMock(): PrismaMock {
+  return {
+    $transaction: vi.fn(),
+    contentStoreItem: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+    contentStoreDraft: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), upsert: vi.fn() },
+    contentStoreVersion: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
+    contentStoreFile: { createMany: vi.fn(), deleteMany: vi.fn() },
+    contentStoreInstallSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    contentStoreInstallEvent: { upsert: vi.fn(), count: vi.fn() },
+    auditLog: { create: vi.fn() },
+  }
+}
+
+function createStorageMock(): StorageMock {
+  return {
+    putObject: vi.fn().mockResolvedValue(undefined),
+    getObjectStream: vi.fn(),
+    headObject: vi.fn(),
+    deleteObject: vi.fn(),
+  }
+}
+
+function item(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "item-1",
+    type: "skill",
+    title: "Title",
+    description: "Description",
+    ownerUserId: "user-1",
+    owner: { id: "user-1", displayName: "User" },
+    visibility: "private",
+    moderationStatus: "normal",
+    featured: false,
+    copiedFromContentId: null,
+    copiedFromVersionId: null,
+    localSourceFingerprint: null,
+    latestVersionId: null,
+    latestVersion: null,
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-09T00:00:00.000Z"),
+    ...overrides,
+  }
+}
+
+function draft(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "draft-1",
+    itemId: "item-1",
+    ownerUserId: "user-1",
+    baseVersionId: null,
+    revision: 1,
+    title: "Title",
+    description: "Description",
+    body: null,
+    files: [],
+    item: item(),
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-09T00:00:00.000Z"),
+    ...overrides,
+  }
+}
+
+function version(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "version-1",
+    itemId: "item-1",
+    versionNumber: 1,
+    title: "Title",
+    description: "Description",
+    body: null,
+    packageKey: "content-store/packages/item-1/version-1.zip",
+    packageSha256: "b".repeat(64),
+    packageSize: 100n,
+    searchText: "Title Description",
+    files: [],
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    ...overrides,
+  }
+}
+
+function file(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "file-1",
+    draftId: "draft-1",
+    versionId: null,
+    path: "SKILL.md",
+    size: 7n,
+    sha256: "5c01bdbb26f358bab27f267924aa2c9a03fcfdb8c2a8eb01ec6a57bf54e0629e",
+    kind: "text",
+    mimeType: "text/markdown",
+    storageKey: "content-store/drafts/user-1/draft-1/sha",
+    text: "# Skill",
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    ...overrides,
+  }
+}
+
+function bufferStream(input: string): NodeJS.ReadableStream {
+  return Readable.from([Buffer.from(input)])
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isBackupCosConfigured, isDriveCosConfigured, loadEnv } from "./env"
+import { isBackupCosConfigured, isContentStoreCosConfigured, isDriveCosConfigured, loadEnv } from "./env"
 
 describe("loadEnv", () => {
   it("parses required production settings", () => {
@@ -106,6 +106,25 @@ describe("loadEnv", () => {
     expect(isBackupCosConfigured(env)).toBe(true)
   })
 
+  it("loads Content Store COS settings independently", () => {
+    const env = loadEnv({
+      ...baseEnv,
+      CONTENT_STORE_COS_SECRET_ID: "content-store-secret-id",
+      CONTENT_STORE_COS_SECRET_KEY: "content-store-secret-key",
+      CONTENT_STORE_COS_BUCKET: "content-store-bucket",
+      CONTENT_STORE_COS_REGION: "ap-beijing",
+      DRIVE_COS_SECRET_ID: "drive-secret-id",
+      DRIVE_COS_SECRET_KEY: "drive-secret-key",
+      DRIVE_COS_BUCKET: "drive-bucket",
+      DRIVE_COS_REGION: "ap-guangzhou",
+    })
+
+    expect(env.contentStoreCosBucket).toBe("content-store-bucket")
+    expect(env.driveCosBucket).toBe("drive-bucket")
+    expect(isContentStoreCosConfigured(env)).toBe(true)
+    expect(isDriveCosConfigured(env)).toBe(true)
+  })
+
   it("ignores legacy COS settings", () => {
     const env = loadEnv({
       ...baseEnv,
@@ -117,6 +136,7 @@ describe("loadEnv", () => {
 
     expect(isDriveCosConfigured(env)).toBe(false)
     expect(isBackupCosConfigured(env)).toBe(false)
+    expect(isContentStoreCosConfigured(env)).toBe(false)
   })
 })
 
