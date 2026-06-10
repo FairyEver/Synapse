@@ -21,6 +21,7 @@ Older visible-vault docs are superseded for new knowledge bases.
 - New knowledge bases are managed black-box projects; users do not choose or see the real backing path for an individual knowledge base.
 - Synapse may expose one global Knowledge Base storage root setting. Runtime directories must still be created as `<storage-root>/knowledge-bases/<runtimeId>/`, and the renderer project path must remain `synapse-kb://<id>`.
 - Changing the global storage root must migrate all existing managed runtimes transactionally. Failure keeps the old root and old data.
+- Storage migration must hold the UI in a blocking modal. Copy and verification phases may be cancelled safely; switching configuration and cleaning up the old root may not be cancelled.
 - If a custom storage root is unavailable, Knowledge Base creation, raw/source management, and Knowledge Base Agent sessions must be blocked until the root is restored or migrated through the explicit settings action.
 - Do not reintroduce SDK session injection for Knowledge Base plugins, skills, hooks, commands, agents, or prompts. The managed backing directory already carries the runtime assets.
 - Ordinary projects must not load Knowledge Base runtime files or quick actions.

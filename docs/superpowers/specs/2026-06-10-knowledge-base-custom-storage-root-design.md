@@ -48,6 +48,8 @@ The default storage root is the current Electron `userData` path, which keeps ex
 - The settings UI must not expose an action to open a managed runtime directory.
 - Migration must be all-or-nothing from the user's perspective.
 - A running Knowledge Base Agent session blocks migration.
+- Migration must hold the app UI in a blocking modal until it completes, fails, or reaches a safely cancelled state.
+- Cancellation is allowed only during copy and verification. It is disabled once configuration switching begins.
 - Custom-root unavailability blocks Knowledge Base create, raw/source management, and Knowledge Base Agent launch.
 - Old absolute path references may be diagnosed, but must not be rewritten without a future explicit user action.
 
@@ -99,6 +101,15 @@ Changing the root and restoring the default root use the same transaction:
 11. Move the old `<old-root>/knowledge-bases` directory to system trash or recycle bin.
 12. Release the migration lock.
 
+Cancellation handling:
+
+- The migration exposes a cancellable state only during copy and verification.
+- A cancellation request stops further copy or verification work, removes the target temporary directory best effort, keeps the old config and data, and resolves the migration as cancelled.
+- Once atomic placement or config switching begins, the migration becomes non-cancellable through completion or rollback.
+- The main process owns cancellation state. Closing or rerendering the settings page must not abandon a running migration.
+- The renderer app shell subscribes to main-process migration state and owns the blocking dialog, so routing or settings-page unmounting cannot remove it.
+- The existing app `before-quit` flow must check the migration gate before pending-push handling. While migration is active, it must not enter a timeout path that force-quits the app.
+
 Failure handling:
 
 - Before config persistence: leave config unchanged and keep old data.
@@ -138,6 +149,19 @@ Add a restrained Knowledge Base storage section near project management:
 
 The confirmation dialog for changing location should say that all knowledge bases will be migrated and Knowledge Base operations cannot run during migration. It should not explain implementation internals.
 
+After migration starts, show a blocking migration dialog:
+
+- Use the existing shadcn/Radix `Dialog` and shared `Progress` component.
+- Mount the dialog at app-shell level and drive it from main-process migration state.
+- Do not show a close button.
+- Prevent closing through the overlay, `Esc`, routing, settings navigation, or window close.
+- Intercept app quit requests while migration is active. A quit request should focus the migration dialog instead of hiding or closing the main window.
+- Show one title, the current phase, progress where measurable, and one footer action.
+- During copy and verification, the footer action is `Cancel migration`.
+- During switching and cleanup, disable cancellation and show the current phase.
+- After success, failure, or safe cancellation, replace the footer action with `Close`.
+- Preserve keyboard focus inside the dialog and announce phase changes through accessible status semantics.
+
 Progress states should be short:
 
 - preparing,
@@ -145,6 +169,8 @@ Progress states should be short:
 - verifying,
 - switching,
 - cleaning up.
+
+Copy should show determinate progress when total bytes are known. Other phases may use the existing indeterminate treatment. Motion must communicate state only and respect reduced-motion behavior.
 
 Errors should be actionable and concise:
 
@@ -155,7 +181,7 @@ Errors should be actionable and concise:
 - a Knowledge Base session is running,
 - migration failed and the old location is still in use.
 
-Use existing shadcn/Radix settings components and theme tokens. Do not add custom colors, gradients, nested cards, or explanatory marketing text.
+Use `impeccable` product-UI guidance together with the existing shadcn/Radix settings components and theme tokens. Keep the dialog compact, familiar, and operational. Do not add custom colors, gradients, nested cards, ornamental motion, or explanatory marketing text.
 
 ## Diagnostics
 
@@ -183,6 +209,11 @@ Audit metadata should include operation name, old root category, new root catego
 - New managed Knowledge Base creation writes to the configured root.
 - Target validation rejects relative paths, dangerous paths, and paths inside the current `knowledge-bases` tree.
 - Migration rejects when a Knowledge Base Agent session is running.
+- Migration UI cannot be closed through overlay, `Esc`, navigation, window close, or app quit while work is active.
+- The app-shell dialog survives settings-page unmounting and restores from main-process migration state after renderer reload.
+- Existing before-quit timeout handling cannot force-quit during migration.
+- Cancellation during copy or verification keeps old config and data and cleans up the target temporary directory best effort.
+- Cancellation is disabled during switching and cleanup.
 - Copy failure keeps old config and old data.
 - Verification failure keeps or restores old config and old data.
 - Successful migration switches config, resolves all runtimes from the new root, and trashes the old `knowledge-bases` directory.
