@@ -54,21 +54,21 @@ const createDraftSchema = z.discriminatedUnion("type", [
 const saveDraftSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("skill"),
-    baseRevision: z.number().int().positive(),
+    baseRevision: z.number().int().nonnegative(),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
     files: z.array(fileSchema).min(1).max(200),
   }).strict(),
   z.object({
     type: z.literal("rule"),
-    baseRevision: z.number().int().positive(),
+    baseRevision: z.number().int().nonnegative(),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
     body: z.string().min(1),
   }).strict(),
   z.object({
     type: z.literal("prompt"),
-    baseRevision: z.number().int().positive(),
+    baseRevision: z.number().int().nonnegative(),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
     body: z.string().min(1),
@@ -126,6 +126,11 @@ export class ContentStoreUserController {
   publishDraft(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(publishDraftSchema, body, "发布请求无效。")
     return this.service.publishDraft(request.user!.id, id, parsed.baseRevision)
+  }
+
+  @Get("/items/:id/draft")
+  getDraft(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.service.getDraft(request.user!.id, id)
   }
 
   @Get("/items/:id")

@@ -1,9 +1,11 @@
 import type {
   ContentStoreDetailDto,
+  ContentStoreDraftDto,
   ContentStoreInstallSessionDto,
   ContentStoreItemDto,
   ContentStoreModerationStatus,
   ContentStoreType,
+  ContentStoreVersionDto,
   ContentStoreVisibility,
   DashboardWebhookDto,
   DashboardWebhookSecretResult,
@@ -375,6 +377,47 @@ export type CreateContentStoreInstallSessionInput = {
   deepLinkBase?: string
 }
 
+export type ContentStoreDraftFileInput = {
+  path: string
+  contentBase64: string
+  mimeType?: string | null
+}
+
+export type CreateContentStoreDraftInput =
+  | {
+      type: 'skill'
+      title: string
+      description?: string | null
+      localSourceFingerprint?: string | null
+      files: ContentStoreDraftFileInput[]
+    }
+  | {
+      type: 'rule' | 'prompt'
+      title: string
+      description?: string | null
+      body: string
+    }
+
+export type SaveContentStoreDraftInput =
+  | {
+      type: 'skill'
+      baseRevision: number
+      title: string
+      description?: string | null
+      files: ContentStoreDraftFileInput[]
+    }
+  | {
+      type: 'rule' | 'prompt'
+      baseRevision: number
+      title: string
+      description?: string | null
+      body: string
+    }
+
+export type PublishContentStoreDraftInput = {
+  baseRevision: number
+}
+
 type ContentStoreVisibilityInput = {
   visibility: ContentStoreVisibility
 }
@@ -565,6 +608,34 @@ export const dashboardApi = {
   getContentStoreDetail: (id: string) =>
     request<ContentStoreDetailDto>(
       `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}`
+    ),
+  getContentStoreDraft: (id: string) =>
+    request<ContentStoreDraftDto>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/draft`
+    ),
+  createContentStoreDraft: (input: CreateContentStoreDraftInput) =>
+    request<ContentStoreDraftDto>(`${contentStoreApiBasePath}/drafts`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  saveContentStoreDraft: (id: string, input: SaveContentStoreDraftInput) =>
+    request<ContentStoreDraftDto>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/draft`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(input),
+      }
+    ),
+  publishContentStoreDraft: (
+    id: string,
+    input: PublishContentStoreDraftInput
+  ) =>
+    request<ContentStoreVersionDto>(
+      `${contentStoreApiBasePath}/items/${encodeURIComponent(id)}/publish`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
     ),
   copyContentStoreItem: (id: string) =>
     request<ContentStoreItemDto>(

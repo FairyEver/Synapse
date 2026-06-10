@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
 import { Header } from '@/components/layout/header'
@@ -75,7 +76,21 @@ export default function MyContentDetailPage({
   return (
     <>
       <Header fixed>
-        <h1 className='text-lg font-semibold'>我的内容</h1>
+        <div className='flex items-center justify-between gap-3'>
+          <h1 className='text-lg font-semibold'>我的内容</h1>
+          <Button
+            variant='outline'
+            onClick={() =>
+              void navigate({
+                to: '/my-content/$contentId/edit',
+                params: { contentId },
+              })
+            }
+          >
+            <Pencil data-icon='inline-start' />
+            编辑
+          </Button>
+        </div>
       </Header>
       <Main className='flex flex-col gap-4'>
         <ContentStoreDetailView

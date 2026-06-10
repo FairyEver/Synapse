@@ -227,6 +227,77 @@ describe('dashboardApi.contentStore', () => {
     )
   })
 
+  it('serializes content store draft authoring requests', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: 'draft-1', revision: 2 }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+
+    await dashboardApi.createContentStoreDraft({
+      type: 'skill',
+      title: 'Skill',
+      description: null,
+      files: [{ path: 'SKILL.md', contentBase64: 'IyBTa2lsbA==', mimeType: 'text/markdown' }],
+    })
+    await dashboardApi.getContentStoreDraft('item/id')
+    await dashboardApi.saveContentStoreDraft('item/id', {
+      type: 'rule',
+      baseRevision: 2,
+      title: 'Rule',
+      description: 'Deploy',
+      body: 'body',
+    })
+    await dashboardApi.publishContentStoreDraft('item/id', { baseRevision: 3 })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/content-store/drafts',
+      expect.objectContaining({
+        body: JSON.stringify({
+          type: 'skill',
+          title: 'Skill',
+          description: null,
+          files: [{ path: 'SKILL.md', contentBase64: 'IyBTa2lsbA==', mimeType: 'text/markdown' }],
+        }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/content-store/items/item%2Fid/draft',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/content-store/items/item%2Fid/draft',
+      expect.objectContaining({
+        body: JSON.stringify({
+          type: 'rule',
+          baseRevision: 2,
+          title: 'Rule',
+          description: 'Deploy',
+          body: 'body',
+        }),
+        credentials: 'include',
+        method: 'PUT',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/content-store/items/item%2Fid/publish',
+      expect.objectContaining({
+        body: JSON.stringify({ baseRevision: 3 }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+  })
+
   it('notifies auth expiration for content store user requests', async () => {
     const authExpired = vi.fn()
     const unsubscribe = subscribeAuthExpired(authExpired)

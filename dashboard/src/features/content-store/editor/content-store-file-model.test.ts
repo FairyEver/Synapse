@@ -1,0 +1,67 @@
+import { describe, expect, it } from 'vitest'
+import {
+  addSkillTextFile,
+  createInitialSkillFiles,
+  deleteSkillFile,
+  normalizeSkillFilePath,
+  renameSkillFile,
+  replaceSkillFileFromUpload,
+  skillHasEntryFile,
+  updateSkillTextFile,
+} from './content-store-file-model'
+
+describe('content store Skill file model', () => {
+  it('normalizes safe relative paths', () => {
+    expect(normalizeSkillFilePath(' docs\\guide.md ')).toBe('docs/guide.md')
+    expect(() => normalizeSkillFilePath('/SKILL.md')).toThrow('文件路径无效')
+    expect(() => normalizeSkillFilePath('../SKILL.md')).toThrow('文件路径无效')
+    expect(() => normalizeSkillFilePath('docs//guide.md')).toThrow('文件路径无效')
+  })
+
+  it('initializes Skill drafts with one SKILL.md file', async () => {
+    const files = await createInitialSkillFiles()
+
+    expect(files).toHaveLength(1)
+    expect(files[0]).toMatchObject({
+      path: 'SKILL.md',
+      kind: 'text',
+      mimeType: 'text/markdown',
+    })
+    expect(skillHasEntryFile(files)).toBe(true)
+  })
+
+  it('prevents duplicate paths and SKILL.md removal', async () => {
+    const files = await createInitialSkillFiles()
+
+    await expect(addSkillTextFile(files, 'SKILL.md')).rejects.toThrow('文件已存在')
+    expect(() => deleteSkillFile(files, 'SKILL.md')).toThrow('不能删除 SKILL.md')
+  })
+
+  it('updates and renames text files except SKILL.md', async () => {
+    const withFile = await addSkillTextFile(await createInitialSkillFiles(), 'docs/guide.md')
+    const updated = await updateSkillTextFile(withFile, 'docs/guide.md', 'hello')
+    const renamed = renameSkillFile(updated, 'docs/guide.md', 'docs/readme.md')
+
+    expect(renamed.find((file) => file.path === 'docs/readme.md')).toMatchObject({
+      kind: 'text',
+      text: 'hello',
+    })
+    expect(() => renameSkillFile(renamed, 'SKILL.md', 'README.md')).toThrow('不能重命名 SKILL.md')
+  })
+
+  it('uploads and replaces binary files without text preview', async () => {
+    const files = await createInitialSkillFiles()
+    const uploaded = await replaceSkillFileFromUpload(files, new File([new Uint8Array([0, 1, 2])], 'asset.bin', {
+      type: 'application/octet-stream',
+    }))
+
+    const asset = uploaded.find((file) => file.path === 'asset.bin')
+    expect(asset).toMatchObject({
+      path: 'asset.bin',
+      kind: 'binary',
+      bytesBase64: 'AAEC',
+      size: 3,
+      text: '',
+    })
+  })
+})

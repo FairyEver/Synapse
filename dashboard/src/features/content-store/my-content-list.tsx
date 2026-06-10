@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { ContentStoreItemDto, ContentStoreType } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { Plus } from 'lucide-react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
@@ -174,8 +175,13 @@ export default function MyContentListPage({
             <Button
               variant='ghost'
               className='h-8 px-2'
-              disabled
-              onClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation()
+                void navigate({
+                  to: '/my-content/$contentId/edit',
+                  params: { contentId: row.original.id },
+                })
+              }}
             >
               编辑
             </Button>
@@ -222,7 +228,15 @@ export default function MyContentListPage({
   return (
     <>
       <Header fixed>
-        <h1 className='text-lg font-semibold'>我的内容</h1>
+        <div className='flex items-center justify-between gap-3'>
+          <h1 className='text-lg font-semibold'>我的内容</h1>
+          <Button asChild>
+            <Link to='/my-content/new'>
+              <Plus data-icon='inline-start' />
+              新建
+            </Link>
+          </Button>
+        </div>
       </Header>
       <Main>
         {itemsQuery.isLoading ? (

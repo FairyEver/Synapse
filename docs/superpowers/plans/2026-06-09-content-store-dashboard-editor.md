@@ -1,6 +1,6 @@
 # Content Store Dashboard Editor Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add Dashboard authoring flows for Content Store drafts and publishing: Skill file-tree editor with Monaco, Rule/Prompt textarea editors, draft save, publish, and public/private control.
 
@@ -69,9 +69,9 @@ This plan depends on:
 - Modify: `dashboard/package.json`
 - Modify: `pnpm-lock.yaml`
 
-- [ ] Add `@monaco-editor/react` and `monaco-editor` to `@synapse/dashboard` dependencies.
-- [ ] Run `pnpm install --lockfile-only` from the repository root if the package manager requires lockfile updates.
-- [ ] Do not add a second code editor library.
+- [x] Add `@monaco-editor/react` and `monaco-editor` to `@synapse/dashboard` dependencies.
+- [x] Run `pnpm install --lockfile-only` from the repository root if the package manager requires lockfile updates.
+- [x] Do not add a second code editor library.
 
 ### Task 2: API Client Methods
 
@@ -79,23 +79,23 @@ This plan depends on:
 - Modify: `dashboard/src/lib/api.ts`
 - Modify: `dashboard/src/lib/api.test.ts`
 
-- [ ] Add request types:
+- [x] Add request types:
   - `CreateContentStoreDraftInput`
   - `SaveContentStoreDraftInput`
   - `PublishContentStoreDraftInput`
   - `ContentStoreDraftFileInput`
-- [ ] Add `dashboardApi.createContentStoreDraft(input)`.
-- [ ] Add `dashboardApi.saveContentStoreDraft(id, input)`.
-- [ ] Add `dashboardApi.publishContentStoreDraft(id, input)`.
-- [ ] Ensure file payloads use `contentBase64`, `path`, and optional `mimeType`.
-- [ ] Test request paths and JSON body serialization for Skill, Rule, and Prompt.
+- [x] Add `dashboardApi.createContentStoreDraft(input)`.
+- [x] Add `dashboardApi.saveContentStoreDraft(id, input)`.
+- [x] Add `dashboardApi.publishContentStoreDraft(id, input)`.
+- [x] Ensure file payloads use `contentBase64`, `path`, and optional `mimeType`.
+- [x] Test request paths and JSON body serialization for Skill, Rule, and Prompt.
 
 ### Task 3: File Model and Serialization
 
 **Files:**
 - Create files under `dashboard/src/features/content-store/editor/`.
 
-- [ ] Implement a `SkillEditorFile` model with:
+- [x] Implement a `SkillEditorFile` model with:
   - `path`
   - `kind: "text" | "binary"`
   - `text`
@@ -103,34 +103,34 @@ This plan depends on:
   - `size`
   - `mimeType`
   - `sha256`
-- [ ] Implement path normalization for UI-created files:
+- [x] Implement path normalization for UI-created files:
   - slash separators
   - no empty segments
   - no `.` or `..`
   - no absolute paths
   - no duplicate paths
-- [ ] Keep `SKILL.md` immutable as a root file name in the initial template. User may edit its content but not remove or rename it.
-- [ ] For Dashboard-created Skill, initialize a virtual folder with exactly one text file: `SKILL.md`.
-- [ ] Serialize text and binary files to strict base64 for server payloads.
-- [ ] Use browser `File` APIs for upload/replace and classify text/binary consistently with the server rule where practical. Server validation remains authoritative.
-- [ ] Binary files are uploadable and replaceable, but not previewed or edited in Monaco.
-- [ ] Test normalization, duplicate detection, `SKILL.md` presence, text base64 serialization, binary base64 serialization, upload, and replace behavior.
+- [x] Keep `SKILL.md` immutable as a root file name in the initial template. User may edit its content but not remove or rename it.
+- [x] For Dashboard-created Skill, initialize a virtual folder with exactly one text file: `SKILL.md`.
+- [x] Serialize text and binary files to strict base64 for server payloads.
+- [x] Use browser `File` APIs for upload/replace and classify text/binary consistently with the server rule where practical. Server validation remains authoritative.
+- [x] Binary files are uploadable and replaceable, but not previewed or edited in Monaco.
+- [x] Test normalization, duplicate detection, `SKILL.md` presence, text base64 serialization, binary base64 serialization, upload, and replace behavior.
 
 ### Task 4: Draft Editor Hook
 
 **Files:**
 - Create: `dashboard/src/features/content-store/editor/use-content-store-draft-editor.ts`
 
-- [ ] Implement loading existing item detail by id.
-- [ ] Implement local editor dirty state without autosave.
-- [ ] Track server draft `revision` and require it for save/publish.
-- [ ] Handle revision mismatch by showing the server message and requiring refresh.
-- [ ] Expose actions:
+- [x] Implement loading existing item detail by id.
+- [x] Implement local editor dirty state without autosave.
+- [x] Track server draft `revision` and require it for save/publish.
+- [x] Handle revision mismatch by showing the server message and requiring refresh.
+- [x] Expose actions:
   - `createDraft`
   - `saveDraft`
   - `publishDraft`
   - `setVisibility`
-- [ ] Keep async errors explicit and user-visible via existing toast/error patterns.
+- [x] Keep async errors explicit and user-visible via existing toast/error patterns.
 
 ### Task 5: Skill Editor UI
 
@@ -138,10 +138,10 @@ This plan depends on:
 - Create: `dashboard/src/features/content-store/editor/skill-file-tree.tsx`
 - Create: `dashboard/src/features/content-store/editor/skill-file-editor.tsx`
 
-- [ ] Use a restrained two-pane layout: file tree left, editor right.
-- [ ] Use Monaco only for text files.
-- [ ] Use existing buttons, inputs, dialogs, scroll areas, and separators.
-- [ ] Actions:
+- [x] Use a restrained two-pane layout: file tree left, editor right.
+- [x] Use Monaco only for text files.
+- [x] Use existing buttons, inputs, dialogs, scroll areas, and separators.
+- [x] Actions:
   - create text file
   - create folder by path
   - upload file
@@ -149,23 +149,23 @@ This plan depends on:
   - rename text file except `SKILL.md`
   - delete file except `SKILL.md`
   - edit file content
-- [ ] Binary files display path and size only.
-- [ ] Do not add terminal, run button, zip import, or icon controls.
-- [ ] Avoid custom styles and arbitrary colors.
+- [x] Binary files display path and size only.
+- [x] Do not add terminal, run button, zip import, or icon controls.
+- [x] Avoid custom styles and arbitrary colors.
 
 ### Task 6: Rule and Prompt Editors
 
 **Files:**
 - Create: `dashboard/src/features/content-store/editor/rule-prompt-editor.tsx`
 
-- [ ] Use ordinary `Textarea` for body.
-- [ ] Shared metadata fields:
+- [x] Use ordinary `Textarea` for body.
+- [x] Shared metadata fields:
   - title
   - description
   - type
-- [ ] Prompt editor has copy-oriented language only. Do not add install controls.
-- [ ] Rule editor can publish and later be installed through store detail after publish.
-- [ ] Keep helper text minimal.
+- [x] Prompt editor has copy-oriented language only. Do not add install controls.
+- [x] Rule editor can publish and later be installed through store detail after publish.
+- [x] Keep helper text minimal.
 
 ### Task 7: Create and Edit Routes
 
@@ -177,13 +177,13 @@ This plan depends on:
 - Modify: `dashboard/src/features/content-store/my-content-list.tsx`
 - Modify: `dashboard/src/features/content-store/my-content-detail.tsx`
 
-- [ ] `/my-content/new` lets the user choose Skill, Rule, or Prompt and then creates the initial draft.
-- [ ] Skill new draft initializes with `SKILL.md`.
-- [ ] Rule/Prompt new draft initializes with an empty multiline body after the user enters a title and body.
-- [ ] `/my-content/$contentId/edit` loads current detail and current draft state from `GET /api/content-store/items/:id/draft`.
-- [ ] My Content list/detail edit buttons link to the edit route.
-- [ ] Save updates the draft and stays on edit route.
-- [ ] Publish calls publish API and navigates to `/my-content/$contentId`.
+- [x] `/my-content/new` lets the user choose Skill, Rule, or Prompt and then creates the initial draft.
+- [x] Skill new draft initializes with `SKILL.md`.
+- [x] Rule/Prompt new draft initializes with an empty multiline body after the user enters a title and body.
+- [x] `/my-content/$contentId/edit` loads current detail and current draft state from `GET /api/content-store/items/:id/draft`.
+- [x] My Content list/detail edit buttons link to the edit route.
+- [x] Save updates the draft and stays on edit route.
+- [x] Publish calls publish API and navigates to `/my-content/$contentId`.
 
 ### Task 8: Publish and Visibility Flow
 
@@ -191,11 +191,11 @@ This plan depends on:
 - Create: `dashboard/src/features/content-store/editor/content-store-publish-dialog.tsx`
 - Modify editor page files.
 
-- [ ] Publish dialog shows title, type, current visibility, and description field if needed.
-- [ ] Publish calls `publishDraft` with current `revision`.
-- [ ] Public toggle calls `setVisibility` after publish. If description is missing, surface server validation.
-- [ ] Do not ask for release notes.
-- [ ] Do not show historical versions after publish.
+- [x] Publish dialog shows title, type, current visibility, and description field if needed.
+- [x] Publish calls `publishDraft` with current `revision`.
+- [x] Public toggle calls `setVisibility` after publish. If description is missing, surface server validation.
+- [x] Do not ask for release notes.
+- [x] Do not show historical versions after publish.
 
 ### Task 9: Server Draft Read Endpoint
 
@@ -207,14 +207,14 @@ This plan depends on:
 - Modify: `server/src/content-store/content-store.controller.spec.ts`
 - Modify: `dashboard/src/lib/api.ts`
 
-- [ ] Add `GET /api/content-store/items/:id/draft` returning `ContentStoreDraftDto`.
-- [ ] Require ownership for the draft endpoint.
-- [ ] Return 404 when no current draft exists.
-- [ ] Add service and controller tests for owner-only access and revision values.
+- [x] Add `GET /api/content-store/items/:id/draft` returning `ContentStoreDraftDto`.
+- [x] Require ownership for the draft endpoint.
+- [x] Return 404 when no current draft exists.
+- [x] Add service and controller tests for owner-only access and revision values.
 
 ### Task 10: Verification
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 pnpm --filter @synapse/shared run build
@@ -225,14 +225,14 @@ pnpm --filter @synapse/dashboard run build
 pnpm --filter @synapse/dashboard exec vitest run src/lib/api.test.ts src/features/content-store
 ```
 
-- [ ] Inspect forbidden UI patterns:
+- [x] Inspect forbidden UI patterns:
 
 ```bash
 rg "style=\\{\\{|#[0-9A-Fa-f]{3,8}|rgb\\(|hsl\\(|from-|to-|via-|✨|🚀|⚡" dashboard/src/features/content-store dashboard/src/routes/_authenticated/my-content
 ```
 
-- [ ] Update `RELEASE_NOTES_PENDING.md`.
-- [ ] Commit:
+- [x] Update `RELEASE_NOTES_PENDING.md`.
+- [x] Commit:
 
 ```bash
 git add dashboard package.json pnpm-lock.yaml shared/src/content-store.ts server/src/content-store RELEASE_NOTES_PENDING.md

@@ -4,3 +4,5 @@ export { default as ContentStoreInstallFallbackPage } from './content-store-inst
 export { default as ContentStoreListPage } from './content-store-list'
 export { default as MyContentDetailPage } from './my-content-detail'
 export { default as MyContentListPage } from './my-content-list'
+export { ContentStoreCreatePage } from './editor/content-store-create-page'
+export { ContentStoreEditorPage } from './editor/content-store-editor-page'

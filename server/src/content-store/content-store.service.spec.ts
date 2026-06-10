@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common"
 import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
@@ -99,6 +99,79 @@ describe("ContentStoreService", () => {
     })).rejects.toThrow(BadRequestException)
 
     expect(prisma.contentStoreFile.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("creates a current draft from owned content when saving with revision zero", async () => {
+    prisma.contentStoreDraft.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(draft({
+        id: "draft-2",
+        itemId: "item-1",
+        revision: 1,
+        baseVersionId: "version-1",
+        title: "Draft title",
+        files: [file({ path: "SKILL.md" })],
+      }))
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      type: "skill",
+      ownerUserId: "user-1",
+      latestVersionId: "version-1",
+    }))
+    prisma.contentStoreDraft.create.mockResolvedValue(draft({ id: "draft-2", itemId: "item-1", revision: 1 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+
+    const result = await service.saveDraft("user-1", "item-1", 0, {
+      title: "Draft title",
+      files: [{ path: "SKILL.md", contentBase64: Buffer.from("# Next").toString("base64") }],
+    })
+
+    expect(result).toMatchObject({
+      id: "draft-2",
+      revision: 1,
+      baseVersionId: "version-1",
+    })
+    expect(prisma.contentStoreDraft.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        itemId: "item-1",
+        ownerUserId: "user-1",
+        baseVersionId: "version-1",
+        revision: 1,
+      }),
+    }))
+  })
+
+  it("reads the current draft for its owner", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 4,
+      files: [file({ path: "SKILL.md" })],
+    }))
+
+    const result = await service.getDraft("user-1", "item-1")
+
+    expect(result).toMatchObject({
+      id: "draft-1",
+      itemId: "item-1",
+      revision: 4,
+      files: [expect.objectContaining({ path: "SKILL.md" })],
+    })
+    expect(prisma.contentStoreDraft.findFirst).toHaveBeenCalledWith({
+      where: { itemId: "item-1", ownerUserId: "user-1" },
+      include: { files: { orderBy: { path: "asc" } } },
+    })
+  })
+
+  it("returns not found when another user reads a draft", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(null)
+
+    await expect(service.getDraft("user-2", "item-1")).rejects.toThrow(NotFoundException)
+
+    expect(prisma.contentStoreDraft.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { itemId: "item-1", ownerUserId: "user-2" },
+    }))
   })
 
   it("rejects public visibility without description", async () => {

@@ -50,6 +50,7 @@ describe("ContentStoreUserController", () => {
   it("parses draft payloads and forwards draft mutations", async () => {
     const service = {
       createDraft: vi.fn().mockResolvedValue({ id: "draft-1" }),
+      getDraft: vi.fn().mockResolvedValue({ id: "draft-1", revision: 3 }),
       saveDraft: vi.fn().mockResolvedValue({ id: "draft-1", revision: 3 }),
       publishDraft: vi.fn().mockResolvedValue({ id: "version-1" }),
     }
@@ -58,6 +59,7 @@ describe("ContentStoreUserController", () => {
     const file = { path: "SKILL.md", contentBase64: Buffer.from("# Skill").toString("base64") }
 
     await controller.createDraft({ type: "skill", title: "  Skill  ", localSourceFingerprint: " local-1 ", files: [file] }, request)
+    await controller.getDraft("item-1", request)
     await controller.saveDraft("item-1", { type: "rule", baseRevision: 2, title: "Rule", body: "body" }, request)
     await controller.publishDraft("item-1", { baseRevision: 3 }, request)
 
@@ -69,6 +71,7 @@ describe("ContentStoreUserController", () => {
       body: null,
       files: [file],
     })
+    expect(service.getDraft).toHaveBeenCalledWith("user-1", "item-1")
     expect(service.saveDraft).toHaveBeenCalledWith("user-1", "item-1", 2, {
       title: "Rule",
       description: null,
@@ -252,6 +255,21 @@ describe("ContentStore HTTP routes", () => {
     }
   })
 
+  it("mounts the current draft route", async () => {
+    const service = createHttpServiceMock()
+    service.getDraft.mockResolvedValue({ id: "draft-1", revision: 2 })
+    const app = await createUserHttpApp(service)
+    try {
+      await request(app.getHttpServer())
+        .get("/api/content-store/items/item-1/draft")
+        .expect(200)
+
+      expect(service.getDraft).toHaveBeenCalledWith("user-http", "item-1")
+    } finally {
+      await app.close()
+    }
+  })
+
   it("mounts admin moderation routes and passes admin identity", async () => {
     const service = createHttpServiceMock()
     service.setRemovedAsAdmin.mockResolvedValue({ id: "item-1" })
@@ -281,6 +299,7 @@ function createHttpServiceMock() {
   return {
     listStore: vi.fn(),
     createDraft: vi.fn(),
+    getDraft: vi.fn(),
     createInstallSession: vi.fn(),
     recordInstall: vi.fn(),
     setRemovedAsAdmin: vi.fn(),

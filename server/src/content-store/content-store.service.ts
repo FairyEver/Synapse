@@ -239,7 +239,28 @@ export class ContentStoreService {
         where: { itemId, ownerUserId: userId },
         include: { item: true, files: true },
       }) as ContentStoreDraftRow | null
-      if (!draft?.item) throw new NotFoundException("草稿不存在。")
+      if (!draft?.item) {
+        if (baseRevision !== 0) throw new NotFoundException("草稿不存在。")
+        const item = await tx.contentStoreItem.findFirst({
+          where: { id: itemId, ownerUserId: userId },
+        }) as ContentStoreItemRow | null
+        if (!item) throw new NotFoundException("内容不存在。")
+        const normalized = this.normalizeDraftPayload(toContentStoreType(item.type), input)
+        const created = await tx.contentStoreDraft.create({
+          data: {
+            id: randomUUID(),
+            itemId,
+            ownerUserId: userId,
+            baseVersionId: item.latestVersionId,
+            revision: 1,
+            title: input.title.trim(),
+            description: normalizeDescription(input.description),
+            body: normalized.body,
+          },
+        }) as ContentStoreDraftRow
+        await this.replaceDraftFiles(tx, userId, created.id, normalized.files)
+        return this.getDraftDto(tx, userId, itemId)
+      }
       if (draft.revision !== baseRevision) throw new BadRequestException(revisionMismatchMessage)
 
       const normalized = this.normalizeDraftPayload(toContentStoreType(draft.item.type), input)
@@ -320,6 +341,10 @@ export class ContentStoreService {
       await tx.contentStoreDraft.delete({ where: { itemId } })
       return versionDto(version)
     })
+  }
+
+  async getDraft(userId: string, itemId: string): Promise<ContentStoreDraftDto> {
+    return this.getDraftDto(this.prisma, userId, itemId)
   }
 
   async listStore(_userId: string, options: ListContentStoreOptions): Promise<PaginatedResponse<ContentStoreItemDto>> {
