@@ -31,8 +31,10 @@ import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { parseCcConversationWindowRequest } from "@/lib/cc-conversation-window"
+import { parseContentStoreInstallWindowRequest } from "@/lib/content-store-install-window"
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentWindowPage } from "@/modules/content/components/content-window-page"
+import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
 import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { PromptsModule } from "@/modules/prompts"
@@ -422,10 +424,12 @@ function MainApp() {
 function App() {
   const { resetKey } = useAppConfig()
   const [ccConversationWindowRequest, setCcConversationWindowRequest] = useState<ReturnType<typeof parseCcConversationWindowRequest>>(null)
+  const [contentStoreInstallWindowRequest, setContentStoreInstallWindowRequest] = useState<ReturnType<typeof parseContentStoreInstallWindowRequest>>(null)
   const [standaloneContentWindowRequest, setStandaloneContentWindowRequest] = useState<ReturnType<typeof parseContentWindowRequest>>(null)
 
   useEffect(() => {
     setCcConversationWindowRequest(parseCcConversationWindowRequest(window.location.search))
+    setContentStoreInstallWindowRequest(parseContentStoreInstallWindowRequest(window.location.search))
     setStandaloneContentWindowRequest(parseContentWindowRequest(window.location.search))
   }, [])
 
@@ -444,6 +448,16 @@ function App() {
       <IdentityGate>
         <ErrorBoundary fallbackTitle="内容窗口出现问题">
           <ContentWindowPage request={standaloneContentWindowRequest} />
+        </ErrorBoundary>
+      </IdentityGate>
+    )
+  }
+
+  if (contentStoreInstallWindowRequest) {
+    return (
+      <IdentityGate>
+        <ErrorBoundary fallbackTitle="安装窗口出现问题">
+          <ContentStoreInstallWindowPage request={contentStoreInstallWindowRequest} />
         </ErrorBoundary>
       </IdentityGate>
     )

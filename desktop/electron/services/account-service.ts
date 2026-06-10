@@ -71,6 +71,13 @@ type AccountServiceDeps = {
   isPackaged?: boolean
 }
 
+export class AccountAuthenticationRequiredError extends Error {
+  constructor() {
+    super("账号未登录。")
+    this.name = "AccountAuthenticationRequiredError"
+  }
+}
+
 function createState(): string {
   return randomBytes(32).toString("base64url")
 }
@@ -97,6 +104,30 @@ export function getAccountApiBaseUrl(): string {
 
 function apiMode(): "production" | "development" {
   return isLocalApiBaseUrl(apiBaseUrl()) ? "development" : "production"
+}
+
+function toMutableHeadersRecord(headersInit: RequestInit["headers"] | undefined): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (!headersInit) return headers
+
+  if (headersInit instanceof Headers) {
+    headersInit.forEach((value, key) => {
+      headers[key] = value
+    })
+    return headers
+  }
+
+  if (Array.isArray(headersInit)) {
+    for (const [key, value] of headersInit) {
+      headers[key] = value
+    }
+    return headers
+  }
+
+  for (const [key, value] of Object.entries(headersInit) as Array<[string, string]>) {
+    headers[key] = value
+  }
+  return headers
 }
 
 async function dashboardLoginUrl(baseUrl: string, state: string, codeChallenge: string): Promise<string> {
@@ -207,6 +238,40 @@ export class AccountService {
 
   getApiBaseUrlForLive(): string {
     return apiBaseUrl()
+  }
+
+  async fetchAuthenticated(
+    pathOrUrl: string,
+    init: RequestInit = {},
+    errorMessage = "请求失败。",
+  ): Promise<Response> {
+    const url = pathOrUrl.startsWith("/") ? `${apiBaseUrl()}${pathOrUrl}` : pathOrUrl
+    let token = this.accessToken
+    if (!token) {
+      await this.refreshFromStorage()
+      token = this.accessToken
+    }
+    if (!token) throw new AccountAuthenticationRequiredError()
+
+    const request = () => {
+      const headers = toMutableHeadersRecord(init.headers)
+      headers.Authorization = `Bearer ${token}`
+      return this.fetchImpl(url, { ...init, headers })
+    }
+
+    let response = await request()
+    if (response.status === 401 || response.status === 403) {
+      await this.refreshFromStorage()
+      token = this.accessToken
+      if (!token) {
+        throw await createHttpError(init.method ?? "GET", url, response, errorMessage)
+      }
+      response = await request()
+    }
+    if (!response.ok) {
+      throw await createHttpError(init.method ?? "GET", url, response, errorMessage)
+    }
+    return response
   }
 
   async listWebhooks(): Promise<DashboardWebhookDto[]> {
@@ -917,31 +982,13 @@ export class AccountService {
   }
 
   private async requestAuthenticatedJson<T>(method: string, url: string, body: unknown, errorMessage: string): Promise<T> {
-    let token = this.accessToken
-    if (!token) {
-      await this.refreshFromStorage()
-      token = this.accessToken
-    }
-    if (!token) throw new Error("账号未登录。")
-
-    const request = () => this.fetchImpl(url, {
+    const response = await this.fetchAuthenticated(url, {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-    })
-
-    let response = await request()
-    if (response.status === 401 || response.status === 403) {
-      await this.refreshFromStorage()
-      token = this.accessToken
-      if (token) {
-        response = await request()
-      }
-    }
-    if (!response.ok) throw await createHttpError(method, url, response, errorMessage)
+    }, errorMessage)
     const text = await response.text()
     return (text ? JSON.parse(text) : undefined) as T
   }

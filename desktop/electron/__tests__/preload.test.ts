@@ -227,6 +227,27 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps content store install methods to narrow IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.contentStoreInstall.resolve("session-1")
+    await bridge.contentStoreInstall.prepare("session-1")
+    await bridge.contentStoreInstall.recordComplete("session-1")
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:content-store-install:resolve",
+      { sessionId: "session-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:content-store-install:prepare",
+      { sessionId: "session-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:content-store-install:record-complete",
+      { sessionId: "session-1" },
+    )
+  })
+
   it("maps account drive methods to account IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

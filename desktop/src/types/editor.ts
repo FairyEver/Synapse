@@ -24,6 +24,11 @@ export type SynapseResolveEditorTargetPayload = {
   scope: SynapseEditorInstallScope
   contentType: SynapseContentType
   contentId: string
+  /**
+   * Opaque main-process handle for a validated Content Store package.
+   * Renderer never receives the underlying temporary path or package bytes.
+   */
+  preparedSourceId?: string
   projectPath?: string
   /**
    * Skill's explicit ASCII identifier (the new `name` field). When present, it

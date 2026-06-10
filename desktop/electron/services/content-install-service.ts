@@ -14,6 +14,7 @@ import type {
   SynapseReadEditorInstallFormValuesResult,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
+import type { SynapseContentDetail } from "../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import { configStore } from "./config-store"
@@ -21,7 +22,10 @@ import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
 import { editorAdapterById } from "./editor-adapters"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
-import { findSkillDirectoryByContentId } from "./editor-adapters/skill-identity"
+import {
+  findSkillDirectoryByContentId,
+  SYNAPSE_SKILL_ID_FILE_NAME,
+} from "./editor-adapters/skill-identity"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
 import { builtinContentService } from "./builtin-content-service"
 import { createMainLogger } from "./log-store"
@@ -45,6 +49,45 @@ type EditorReadSecurityDeps = {
   actor: ActorIdentity
   auditSink: AuditSink
   permissionGuard: PermissionGuard
+}
+
+type PreparedContentInstallSourceProvider = {
+  readPreparedRule(sourceId: string, contentId: string): Promise<string>
+  readPreparedSkill(sourceId: string, contentId: string): Promise<SynapseContentDetail<"skill">>
+  beginPreparedInstall(sourceId: string, contentId: string): Promise<void>
+  endPreparedInstall(sourceId: string, contentId: string): Promise<void>
+  copyPreparedSkillAttachment(
+    sourceId: string,
+    contentId: string,
+    relativePath: string,
+    targetPath: string,
+  ): Promise<void>
+  markPreparedInstalled(sourceId: string, contentId: string): Promise<void>
+}
+
+type ContentInstallServiceDeps = {
+  readonly preparedSourceProvider?: PreparedContentInstallSourceProvider
+}
+
+const unavailablePreparedSourceProvider: PreparedContentInstallSourceProvider = {
+  async readPreparedRule() {
+    throw new Error("Content Store 安装源尚未初始化。")
+  },
+  async readPreparedSkill() {
+    throw new Error("Content Store 安装源尚未初始化。")
+  },
+  async beginPreparedInstall() {
+    throw new Error("Content Store 安装源尚未初始化。")
+  },
+  async endPreparedInstall() {
+    throw new Error("Content Store 安装源尚未初始化。")
+  },
+  async copyPreparedSkillAttachment() {
+    throw new Error("Content Store 安装源尚未初始化。")
+  },
+  async markPreparedInstalled() {
+    throw new Error("Content Store 安装源尚未初始化。")
+  },
 }
 
 const UNTRUSTED_PROJECT_PATH_ERROR = "项目路径不在已配置项目中。"
@@ -240,6 +283,16 @@ async function assertTrustedInstallFormTarget(
 }
 
 export class ContentInstallService {
+  private preparedSourceProvider: PreparedContentInstallSourceProvider
+
+  constructor(deps: ContentInstallServiceDeps = {}) {
+    this.preparedSourceProvider = deps.preparedSourceProvider ?? unavailablePreparedSourceProvider
+  }
+
+  setPreparedSourceProvider(provider: PreparedContentInstallSourceProvider): void {
+    this.preparedSourceProvider = provider
+  }
+
   async resolveEditorInstallTarget(
     payload: SynapseResolveEditorTargetPayload,
   ): Promise<SynapseEditorResolvedTarget> {
@@ -271,6 +324,11 @@ export class ContentInstallService {
     await checkEditorWritePermission(security, target.targetPath, auditMetadata)
 
     let installWarning: string | undefined
+    let preparedInstallStarted = false
+    if (payload.preparedSourceId) {
+      await this.preparedSourceProvider.beginPreparedInstall(payload.preparedSourceId, payload.contentId)
+      preparedInstallStarted = true
+    }
 
     try {
 
@@ -282,8 +340,9 @@ export class ContentInstallService {
             throw new Error(`当前编辑器没有返回合法的 ${definition.singularLabel} 安装目标。`)
           }
 
-          const file = await contentService.getContent(payload.contentType, payload.contentId)
-          let ruleBody = file.content
+          let ruleBody = payload.preparedSourceId
+            ? await this.preparedSourceProvider.readPreparedRule(payload.preparedSourceId, payload.contentId)
+            : (await contentService.getContent(payload.contentType, payload.contentId)).content
 
           if (payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0) {
             ruleBody = applyVariableSubstitutions(ruleBody, payload.variableSubstitutions, { includeCodeBlocks: true })
@@ -322,8 +381,12 @@ export class ContentInstallService {
           }
 
           const prepareSkillDirectory = installStrategy.prepareSkillDirectory
-          const detail = await contentService.getSkillDetail(payload.contentId)
-          const repositoryRootPath = detail.source === "builtin" ? null : await getActiveRepositoryRootPath()
+          const detail = payload.preparedSourceId
+            ? await this.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
+            : await contentService.getSkillDetail(payload.contentId)
+          const repositoryRootPath = payload.preparedSourceId || !detail || detail.source === "builtin"
+            ? null
+            : await getActiveRepositoryRootPath()
           const parentDirectoryPath = path.dirname(target.targetPath)
           let backupPathForRestore: string | null = null
           const previousSkillDirectoryPath = payload.contentType === "skill"
@@ -347,7 +410,7 @@ export class ContentInstallService {
             }
           }
 
-          const detailWithSubstitutions = payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0
+          const detailWithSubstitutions = detail && payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0
             ? {
                 ...detail,
                 content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions, { includeCodeBlocks: true }),
@@ -356,6 +419,9 @@ export class ContentInstallService {
 
           try {
             await replaceDirectoryAtomically(target.targetPath, async (stagingDirectoryPath) => {
+              if (!detailWithSubstitutions) {
+                throw new Error("Skill 安装源不可用。")
+              }
               await prepareSkillDirectory({
                 payload,
                 targetPath: target.targetPath,
@@ -367,7 +433,14 @@ export class ContentInstallService {
                   logger.info("Staged skill file.", { filePath: path.basename(filePath) })
                 },
                 copyAttachment: async (attachment, attachmentTargetPath) => {
-                  if (detail.source === "builtin") {
+                  if (payload.preparedSourceId) {
+                    await this.preparedSourceProvider.copyPreparedSkillAttachment(
+                      payload.preparedSourceId,
+                      payload.contentId,
+                      attachment.originalName,
+                      attachmentTargetPath,
+                    )
+                  } else if (detailWithSubstitutions.source === "builtin") {
                     await builtinContentService.copyAttachmentToPath(
                       payload.contentType,
                       payload.contentId,
@@ -427,9 +500,24 @@ export class ContentInstallService {
         default:
           throw new Error(`不支持 ${definition.singularLabel} 的安装方式。`)
       }
+
+      if (payload.preparedSourceId) {
+        await this.preparedSourceProvider.markPreparedInstalled(payload.preparedSourceId, payload.contentId)
+      }
     } catch (error) {
       recordEditorWriteAudit(security, target.targetPath, "failed", auditMetadata)
       throw formatInstallFailure(error, target.targetPath)
+    } finally {
+      if (preparedInstallStarted && payload.preparedSourceId) {
+        try {
+          await this.preparedSourceProvider.endPreparedInstall(payload.preparedSourceId, payload.contentId)
+        } catch (error) {
+          logger.warn("Failed to release prepared install lock.", {
+            contentId: payload.contentId,
+            error,
+          })
+        }
+      }
     }
 
     recordEditorWriteAudit(security, target.targetPath, "allowed", auditMetadata)

@@ -1,4 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import type { Response } from "express"
+import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
@@ -165,6 +167,24 @@ export class ContentStoreUserController {
     return this.service.resolveInstallSession(request.user!.id, id)
   }
 
+  @Get("/install-sessions/:id/package")
+  async downloadInstallPackage(
+    @Param("id") id: string,
+    @Req() request: AuthenticatedUserRequest,
+    @Res() response: Response,
+  ) {
+    try {
+      const download = await this.service.openInstallPackage(request.user!.id, id)
+      response.setHeader("Content-Type", "application/zip")
+      if (download.size !== undefined) response.setHeader("Content-Length", download.size.toString())
+      response.setHeader("Content-Disposition", `attachment; filename="${safeDownloadFilename(id)}.zip"`)
+      await pipeline(download.stream, response)
+    } catch (error: unknown) {
+      if (!response.headersSent) throw error
+      if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+    }
+  }
+
   @Post("/install-sessions/:id/complete")
   recordInstall(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(installCompleteSchema, body, "安装完成请求无效。")
@@ -236,4 +256,8 @@ function parseQuery<T extends z.ZodType>(schema: T, query: Record<string, unknow
 function isStrictBase64(value: string): boolean {
   if (value.length % 4 !== 0) return false
   return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value)
+}
+
+function safeDownloadFilename(value: string): string {
+  return value.replace(/[^\x20-\x7E]|["\\;,\r\n]/gu, "_")
 }

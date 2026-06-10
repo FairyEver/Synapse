@@ -158,6 +158,7 @@ const resolveEditorTargetPayloadSchema = z.object({
   contentId: z.string(),
   contentType: contentTypeSchema,
   editorId: z.string(),
+  preparedSourceId: z.string().optional(),
   projectPath: z.string().optional(),
   ruleName: z.string().optional(),
   scope: editorInstallScopeSchema,

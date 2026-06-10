@@ -21,6 +21,7 @@ import { editorIpcModule } from "../modules/editor/ipc"
 import { configIpcModule } from "../modules/config/ipc"
 import { repositoryIpcModule } from "../modules/repository/ipc"
 import { contentIpcModule } from "../modules/content/ipc"
+import { contentStoreInstallIpcModule } from "../modules/content-store-install/ipc"
 import { agentIpcModule } from "../modules/agent/ipc"
 import { opsIpcModule } from "../modules/ops/ipc"
 import { taskSchedulerIpcModule } from "../modules/task-scheduler/ipc"
@@ -54,6 +55,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(configIpcModule, ctx)
   registry.register(repositoryIpcModule, ctx)
   registry.register(contentIpcModule, ctx)
+  registry.register(contentStoreInstallIpcModule, ctx)
   registry.register(agentIpcModule, ctx)
   registry.register(taskSchedulerIpcModule, ctx)
   registry.register(automationIpcModule, ctx)
@@ -85,6 +87,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   configIpcModule,
   repositoryIpcModule,
   contentIpcModule,
+  contentStoreInstallIpcModule,
   agentIpcModule,
   taskSchedulerIpcModule,
   automationIpcModule,

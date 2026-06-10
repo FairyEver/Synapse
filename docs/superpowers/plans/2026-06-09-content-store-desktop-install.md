@@ -78,11 +78,11 @@ The server currently resolves install sessions but does not expose a binary pack
 **Files:**
 - Modify server files listed above.
 
-- [ ] Add a shared DTO if needed for package download metadata. Do not put binary content in DTOs.
-- [ ] Add `ContentStoreService.openInstallPackage(userId, sessionId)` returning stream, size, contentType, packageSha256, and type/title metadata.
-- [ ] Add controller method `GET /api/content-store/install-sessions/:id/package`.
-- [ ] Use `@Res({ passthrough: false })` only if needed for streaming; keep validation and error behavior consistent with existing Nest controllers.
-- [ ] Test:
+- [x] No shared binary DTO was needed for package download metadata.
+- [x] Add `ContentStoreService.openInstallPackage(userId, sessionId)` returning stream, size, contentType, packageSha256, and type/title metadata.
+- [x] Add controller method `GET /api/content-store/install-sessions/:id/package`.
+- [x] Use `@Res({ passthrough: false })` only if needed for streaming; keep validation and error behavior consistent with existing Nest controllers.
+- [x] Test:
   - owner can download pending non-expired session package
   - another user cannot download
   - expired session cannot download
@@ -98,12 +98,12 @@ The server currently resolves install sessions but does not expose a binary pack
 - Create: `desktop/src/lib/content-store-install-window.ts`
 - Create: `desktop/src/lib/content-store-install-window.test.ts`
 
-- [ ] Add pure parser for `synapse://content-install?session=<id>`.
-- [ ] Keep existing auth callback behavior unchanged.
-- [ ] `drainProtocolUrls` must route auth callbacks to `accountService.handleAuthCallback` and content-install URLs to the new install window service.
-- [ ] Second-instance behavior should focus existing app only for generic launches; content-install opens/focuses the independent install window.
-- [ ] Invalid content-install URL should log warn and focus/create main window.
-- [ ] Tests cover auth callback, valid content-install, missing session, malformed URL, and multiple pending URLs.
+- [x] Add pure parser for `synapse://content-install?session=<id>`.
+- [x] Keep existing auth callback behavior unchanged.
+- [x] `drainProtocolUrls` must route auth callbacks to `accountService.handleAuthCallback` and content-install URLs to the new install window service.
+- [x] Second-instance behavior should focus existing app only for generic launches; content-install opens/focuses the independent install window.
+- [x] Invalid content-install URL should log warn and focus/create main window.
+- [x] Tests cover auth callback, valid content-install, missing session, malformed URL, and multiple pending URLs.
 
 ### Task 3: Independent Install Window Service
 
@@ -113,15 +113,15 @@ The server currently resolves install sessions but does not expose a binary pack
 - Modify: `desktop/src/App.tsx`
 - Create: `desktop/src/types/content-store-install.ts`
 
-- [ ] Implement a managed `BrowserWindow` similar to `content-window-service` but keyed by install session id.
-- [ ] Window query params:
+- [x] Implement a managed `BrowserWindow` similar to `content-window-service` but keyed by install session id.
+- [x] Window query params:
   - `synapseWindow=content-store-install`
   - `session=<sessionId>`
-- [ ] Bounds should be suitable for editor selection and install dialog. Use existing content editor bounds as a reference.
-- [ ] Existing same-session window is focused instead of duplicated.
-- [ ] Renderer health tracking follows existing content-window pattern.
-- [ ] `App.tsx` detects the new window kind and renders `ContentStoreInstallWindowPage`.
-- [ ] Tests cover create, focus existing, cleanup on close, and query construction.
+- [x] Bounds should be suitable for editor selection and install dialog. Use existing content editor bounds as a reference.
+- [x] Existing same-session window is focused instead of duplicated.
+- [x] Renderer health tracking follows existing content-window pattern.
+- [x] `App.tsx` detects the new window kind and renders `ContentStoreInstallWindowPage`.
+- [x] Tests cover create, focus existing, cleanup on close, and query construction.
 
 ### Task 4: Authenticated Desktop Install Service
 
@@ -130,15 +130,15 @@ The server currently resolves install sessions but does not expose a binary pack
 - Create: `desktop/electron/services/__tests__/content-store-install-service.test.ts`
 - Modify: `desktop/electron/services/account-service.ts` if a reusable authenticated binary fetch helper is needed.
 
-- [ ] Add methods:
+- [x] Add methods:
   - `resolveInstallSession(sessionId)`
   - `downloadInstallPackage(sessionId)`
   - `recordInstall(sessionId, clientInstanceId)`
-- [ ] Use AccountService credentials and API base URL. If user is not logged in, return a typed unauthenticated state for renderer.
-- [ ] Download package to an app-managed temporary directory.
-- [ ] Compute SHA-256 while streaming and compare with server `packageSha256`.
-- [ ] Extract zip only after package hash matches.
-- [ ] Validate `manifest.json`:
+- [x] Use AccountService credentials and API base URL. If user is not logged in, return a typed unauthenticated state for renderer.
+- [x] Download package to an app-managed temporary directory.
+- [x] Compute SHA-256 while streaming and compare with server `packageSha256`.
+- [x] Extract zip only after package hash matches.
+- [x] Validate `manifest.json`:
   - `schemaVersion === 1`
   - type is `skill` or `rule`
   - contentId/versionId match resolved session
@@ -147,8 +147,8 @@ The server currently resolves install sessions but does not expose a binary pack
   - file hashes and sizes match extracted files
   - Skill main file is `content/SKILL.md`
   - Rule main file is `content/RULE.md`
-- [ ] Return a local install source payload compatible with existing content install components.
-- [ ] Clean temporary files on failure and when the install window closes if no install is in progress.
+- [x] Return a local install source payload compatible with existing content install components.
+- [x] Clean temporary files on failure and when the install window closes if no install is in progress.
 
 ### Task 5: IPC Surface
 
@@ -159,14 +159,14 @@ The server currently resolves install sessions but does not expose a binary pack
 - Modify: `desktop/electron/preload.ts`
 - Modify: `desktop/src/types/bridge.ts`
 
-- [ ] Register IPC through `IpcRegistry`; do not use bare `ipcMain.handle`.
-- [ ] Expose narrow methods:
+- [x] Register IPC through `IpcRegistry`; do not use bare `ipcMain.handle`.
+- [x] Expose narrow methods:
   - `window.synapse.contentStoreInstall.resolve(sessionId)`
   - `window.synapse.contentStoreInstall.prepare(sessionId)`
   - `window.synapse.contentStoreInstall.recordComplete(sessionId)`
-- [ ] Validate all payloads with zod.
-- [ ] Do not expose raw package bytes to renderer.
-- [ ] Tests cover schema validation, unauthenticated error mapping, and service errors.
+- [x] Validate all payloads with zod.
+- [x] Do not expose raw package bytes to renderer.
+- [x] Tests cover schema validation, unauthenticated error mapping, and service errors.
 
 ### Task 6: Renderer Install Window
 
@@ -176,20 +176,20 @@ The server currently resolves install sessions but does not expose a binary pack
 - Create: `desktop/src/modules/content-store-install/use-content-store-install.ts`
 - Create tests.
 
-- [ ] Initial render is a centered spinner/loading state with no extra explanatory copy.
-- [ ] Resolve session and prepare local package through IPC.
-- [ ] If unauthenticated, show a concise state with a login action that uses existing account login bridge.
-- [ ] If package is removed/expired/mismatched, show a concise error and no editor selector.
-- [ ] Once prepared, render the existing `ContentInstallDialog` path with:
+- [x] Initial render is a centered spinner/loading state with no extra explanatory copy.
+- [x] Resolve session and prepare local package through IPC.
+- [x] If unauthenticated, show a concise state with a login action that uses existing account login bridge.
+- [x] If package is removed/expired/mismatched, show a concise error and no editor selector.
+- [x] Once prepared, render the existing `ContentInstallDialog` path with:
   - item metadata from package/session
   - local source files from prepared package
   - initial editor selection empty
-- [ ] From editor selection onward, behavior must match existing local Skill/Rule installation.
-- [ ] After install succeeds, call `recordComplete` and refresh install status cache.
+- [x] From editor selection onward, behavior must match existing local Skill/Rule installation.
+- [x] After install succeeds, call `recordComplete` and refresh install status cache.
 
 ### Task 7: Verification
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 pnpm --filter @synapse/shared run build
@@ -201,14 +201,14 @@ pnpm --filter @synapse/desktop run check:hard-constraints
 pnpm --filter @synapse/desktop run typecheck
 ```
 
-- [ ] Inspect forbidden renderer UI patterns:
+- [x] Inspect forbidden renderer UI patterns:
 
 ```bash
 rg "style=\\{\\{|#[0-9A-Fa-f]{3,8}|rgb\\(|hsl\\(|from-|to-|via-|✨|🚀|⚡" desktop/src/modules/content-store-install
 ```
 
-- [ ] Update `RELEASE_NOTES_PENDING.md`.
-- [ ] Commit:
+- [x] Update `RELEASE_NOTES_PENDING.md`.
+- [x] Commit:
 
 ```bash
 git add shared/src/content-store.ts server/src/content-store desktop/electron desktop/src RELEASE_NOTES_PENDING.md

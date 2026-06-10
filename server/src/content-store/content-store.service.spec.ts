@@ -358,6 +358,74 @@ describe("ContentStoreService", () => {
     await expect(service.resolveInstallSession("user-2", "session-1")).rejects.toThrow(ForbiddenException)
   })
 
+  it("opens an install package stream for the session owner", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession())
+    const stream = bufferStream("package")
+    storage.getObjectStream.mockResolvedValue({
+      stream,
+      size: 7n,
+      contentType: "application/zip",
+    })
+
+    await expect(service.openInstallPackage("user-1", "session-1")).resolves.toEqual({
+      stream,
+      size: 7n,
+      contentType: "application/zip",
+      packageSha256: "a".repeat(64),
+      type: "skill",
+      title: "Title",
+    })
+    expect(storage.getObjectStream).toHaveBeenCalledWith({
+      key: "content-store/packages/item-1/version-1.zip",
+    })
+  })
+
+  it("uses application/zip when storage reports another content type", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession())
+    storage.getObjectStream.mockResolvedValue({
+      stream: bufferStream("package"),
+      contentType: "text/plain",
+    })
+
+    await expect(service.openInstallPackage("user-1", "session-1")).resolves.toMatchObject({
+      contentType: "application/zip",
+    })
+  })
+
+  it("rejects another user opening an install package", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession())
+
+    await expect(service.openInstallPackage("user-2", "session-1")).rejects.toThrow(ForbiddenException)
+
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("rejects expired sessions when opening an install package", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession({
+      expiresAt: new Date(Date.now() - 1),
+    }))
+    prisma.contentStoreInstallSession.update.mockResolvedValue({ id: "session-1", status: "expired" })
+
+    await expect(service.openInstallPackage("user-1", "session-1")).rejects.toThrow(BadRequestException)
+
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("rejects prompt sessions when opening an install package", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession({ type: "prompt" }))
+
+    await expect(service.openInstallPackage("user-1", "session-1")).rejects.toThrow(BadRequestException)
+
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("returns a controlled error when the install package object is missing", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession())
+    storage.getObjectStream.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }))
+
+    await expect(service.openInstallPackage("user-1", "session-1")).rejects.toThrow(NotFoundException)
+  })
+
   it("rejects deleting public items", async () => {
     prisma.contentStoreItem.findFirst.mockResolvedValue(item({ id: "item-1", visibility: "public" }))
 
@@ -551,6 +619,28 @@ function version(overrides: Record<string, unknown> = {}) {
     searchText: "Title Description",
     files: [],
     createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    ...overrides,
+  }
+}
+
+function installSession(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "session-1",
+    userId: "user-1",
+    itemId: "item-1",
+    versionId: "version-1",
+    type: "skill",
+    status: "pending",
+    expiresAt: new Date(Date.now() + 60_000),
+    consumedAt: null,
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    item: item({ id: "item-1", type: "skill" }),
+    version: version({
+      id: "version-1",
+      itemId: "item-1",
+      packageKey: "content-store/packages/item-1/version-1.zip",
+      packageSha256: "a".repeat(64),
+    }),
     ...overrides,
   }
 }

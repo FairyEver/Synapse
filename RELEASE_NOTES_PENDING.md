@@ -5,6 +5,7 @@
 - 新增内容商店后端基础能力，为 Skill、Rule 和 Prompt 的在线发布、草稿保存、版本快照、复制、精选/下架管理，以及 Skill / Rule 通过客户端安装会话安装打下基础。
 - Dashboard 新增内容商店、我的内容和管理员治理入口，用户可以浏览公开 Skill / Rule / Prompt、复制到自己的内容，Skill / Rule 可唤起 Synapse 安装，管理员可以精选、下架和恢复内容。
 - Dashboard 新增内容商店编辑页，可以新建、编辑、保存和发布 Skill、Rule、Prompt 草稿，并支持发布后公开或取消公开。Skill 现在可以在文件树里管理文件，Rule 和 Prompt 使用正文编辑。
+- 从 Dashboard 安装内容商店里的 Skill / Rule 时，Synapse Desktop 会打开独立安装窗口，校验安装包后让用户选择编辑器，并沿用现有安装确认、备份和权限检查流程。
 
 ## 功能优化
 

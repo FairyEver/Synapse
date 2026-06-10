@@ -54,10 +54,12 @@ import {
 type ContentInstallDialogProps = {
   editor: SynapseEditorAdapterSummary | null
   initialSelection?: EditorWriteTargetInitialSelection | null
+  initialContent?: string | null
   item: SynapseContentMeta
   onInstalled?: () => Promise<void> | void
   onOpenChange: (open: boolean) => void
   open: boolean
+  preparedSourceId?: string
   projects: SynapseProjectConfig[]
 }
 
@@ -76,11 +78,13 @@ async function detectInstallPlaceholders(
 
 function ContentInstallDialog({
   editor,
+  initialContent,
   initialSelection,
   item,
   onInstalled,
   onOpenChange,
   open,
+  preparedSourceId,
   projects,
 }: ContentInstallDialogProps) {
   const definition = getContentTypeDefinition(item.type)
@@ -130,7 +134,7 @@ function ContentInstallDialog({
     setIsConflictConfirmOpen(false)
     setIsRuleProjectInstallFormOpen(false)
     setIsRuleGlobalInstallFormOpen(false)
-    setPreloadedContent(null)
+    setPreloadedContent(initialContent ?? null)
     setIsVariableConfirmOpen(false)
     setIsVariableSaveConfirmOpen(false)
     setDetectedPlaceholders([])
@@ -140,10 +144,14 @@ function ContentInstallDialog({
     variableConfirmPassedRef.current = false
     pendingInstallOptionsRef.current = {}
     skipVariableSaveLockRef.current = false
-  }, [editor?.id, open])
+  }, [editor?.id, initialContent, open])
 
   useEffect(() => {
     if (!open) return
+    if (initialContent !== undefined) {
+      setPreloadedContent(initialContent ?? null)
+      return
+    }
 
     let cancelled = false
 
@@ -162,7 +170,7 @@ function ContentInstallDialog({
       })
 
     return () => { cancelled = true }
-  }, [item.id, item.type, open])
+  }, [initialContent, item.id, item.type, open])
 
   const resolveInstallTarget = useCallback((input: ResolveEditorTargetInput) => (
     resolveEditorInstallTarget({
@@ -228,6 +236,7 @@ function ContentInstallDialog({
           installFormValues,
           replaceConfirmed,
           replacedContentId,
+          preparedSourceId,
           variableSubstitutions: pendingSubstitutionsRef.current,
         }),
         {
@@ -358,6 +367,9 @@ function ContentInstallDialog({
     if (!variableConfirmPassedRef.current) {
       try {
         const placeholders = await detectInstallPlaceholders(preloadedContent, async () => {
+          if (initialContent !== undefined) {
+            return initialContent ?? ""
+          }
           const file = await readContent(item.type, item.id)
           setPreloadedContent(file.content)
           return file.content

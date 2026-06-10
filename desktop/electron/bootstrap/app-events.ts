@@ -30,8 +30,12 @@ export function attachProcessLevelLogging(): void {
   })
 }
 
-export function attachSecondInstanceFocus(state: MainWindowState): void {
-  app.on("second-instance", () => {
+export function attachSecondInstanceFocus(
+  state: MainWindowState,
+  shouldFocus: (argv: string[]) => boolean = () => true,
+): void {
+  app.on("second-instance", (_event, argv) => {
+    if (!shouldFocus(argv)) return
     const window = state.current
     if (!window) {
       return
@@ -71,8 +75,9 @@ export function attachOpenUrlHandler(handleUrl: (url: string) => void): void {
 
 export function attachSecondInstanceProtocolHandler(handleUrl: (url: string) => void): void {
   app.on("second-instance", (_event, argv) => {
-    const url = argv.find((item) => item.startsWith("synapse://"))
-    if (url) handleUrl(url)
+    for (const url of argv.filter((item) => item.startsWith("synapse://"))) {
+      handleUrl(url)
+    }
   })
 }
 

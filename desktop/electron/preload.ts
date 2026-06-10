@@ -53,6 +53,11 @@ const IPC_CHANNELS = {
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
     "getIconPromptTemplate": "synapse:content:get-icon-prompt-template",
   },
+  "content-store-install": {
+    "resolve": "synapse:content-store-install:resolve",
+    "prepare": "synapse:content-store-install:prepare",
+    "recordComplete": "synapse:content-store-install:record-complete",
+  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",
@@ -642,6 +647,12 @@ const synapseBridge: SynapseBridge = {
     getIconPromptTemplate: invoke(IPC_CHANNELS.content.getIconPromptTemplate),
     readIconImage: invoke(IPC_CHANNELS.content.readIconImage),
     resolveEditorInstallTarget: invoke(IPC_CHANNELS.content.resolveEditorInstallTarget),
+  },
+  contentStoreInstall: {
+    resolve: (sessionId) => invoke(IPC_CHANNELS["content-store-install"].resolve)({ sessionId }),
+    prepare: (sessionId) => invoke(IPC_CHANNELS["content-store-install"].prepare)({ sessionId }),
+    recordComplete: (sessionId) =>
+      invoke(IPC_CHANNELS["content-store-install"].recordComplete)({ sessionId }),
   },
   config: {
     exportBackup: invoke(IPC_CHANNELS.config.exportBackup),

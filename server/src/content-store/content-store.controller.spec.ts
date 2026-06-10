@@ -1,13 +1,19 @@
 import { BadRequestException } from "@nestjs/common"
 import { type INestApplication } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
+import { Readable, Writable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { ContentStoreAdminController, ContentStoreUserController } from "./content-store.controller"
 import { ContentStoreService } from "./content-store.service"
 
-type SupertestResponse = { readonly body: unknown; readonly text: string }
+type MockFn = ReturnType<typeof vi.fn>
+type SupertestResponse = {
+  readonly body: unknown
+  readonly text: string
+  readonly headers: Record<string, string | undefined>
+}
 type SupertestRequest = {
   readonly send: (body: unknown) => SupertestRequest
   readonly expect: (status: number) => Promise<SupertestResponse>
@@ -146,6 +152,51 @@ describe("ContentStoreUserController", () => {
     expect(service.resolveInstallSession).toHaveBeenCalledWith("user-1", "session-1")
     expect(service.recordInstall).toHaveBeenCalledWith("user-1", "session-1", "desktop-1")
   })
+
+  it("destroys the response without rethrowing when package streaming fails after writing", async () => {
+    const error = new Error("stream failed")
+    const service = {
+      openInstallPackage: vi.fn().mockResolvedValue({
+        stream: Readable.from((async function* () {
+          yield Buffer.from("partial")
+          throw error
+        })()),
+        contentType: "application/zip",
+        packageSha256: "a".repeat(64),
+        type: "skill",
+        title: "Skill",
+      }),
+    }
+    const controller = new ContentStoreUserController(service as never)
+    const response = downloadResponse()
+    const destroy = vi.spyOn(response, "destroy")
+
+    await expect(controller.downloadInstallPackage("session-1", userRequest("user-1"), response as never)).resolves.toBeUndefined()
+
+    expect(response.headersSent).toBe(true)
+    expect(destroy).toHaveBeenCalledWith(error)
+  })
+
+  it("rethrows package streaming failures before headers are sent", async () => {
+    const error = new Error("stream failed")
+    const service = {
+      openInstallPackage: vi.fn().mockResolvedValue({
+        stream: Readable.from((async function* () {
+          throw error
+        })()),
+        contentType: "application/zip",
+        packageSha256: "a".repeat(64),
+        type: "skill",
+        title: "Skill",
+      }),
+    }
+    const controller = new ContentStoreUserController(service as never)
+    const response = downloadResponse()
+
+    await expect(controller.downloadInstallPackage("session-1", userRequest("user-1"), response as never)).rejects.toBe(error)
+
+    expect(response.headersSent).toBe(false)
+  })
 })
 
 describe("ContentStoreAdminController", () => {
@@ -255,6 +306,33 @@ describe("ContentStore HTTP routes", () => {
     }
   })
 
+  it("streams install packages with download headers without completing the session", async () => {
+    const service = createHttpServiceMock()
+    service.openInstallPackage.mockResolvedValue({
+      stream: Readable.from([Buffer.from("package")]),
+      size: 7n,
+      contentType: "text/plain",
+      packageSha256: "a".repeat(64),
+      type: "skill",
+      title: "Skill",
+    })
+    const app = await createUserHttpApp(service)
+    try {
+      const response = await request(app.getHttpServer())
+        .get("/api/content-store/install-sessions/session-1/package")
+        .expect(200)
+
+      expect(response.text).toBe("package")
+      expect(response.headers["content-type"]).toBe("application/zip")
+      expect(response.headers["content-length"]).toBe("7")
+      expect(response.headers["content-disposition"]).toBe("attachment; filename=\"session-1.zip\"")
+      expect(service.openInstallPackage).toHaveBeenCalledWith("user-http", "session-1")
+      expect(service.recordInstall).not.toHaveBeenCalled()
+    } finally {
+      await app.close()
+    }
+  })
+
   it("mounts the current draft route", async () => {
     const service = createHttpServiceMock()
     service.getDraft.mockResolvedValue({ id: "draft-1", revision: 2 })
@@ -295,12 +373,28 @@ function adminRequest(email: string, ip = "system") {
   return { admin: { id: "admin-1", email }, ip } as never
 }
 
+function downloadResponse() {
+  const response = new Writable({
+    write(_chunk, _encoding, callback) {
+      response.headersSent = true
+      callback()
+    },
+  }) as Writable & {
+    headersSent: boolean
+    setHeader: MockFn
+  }
+  response.headersSent = false
+  response.setHeader = vi.fn()
+  return response
+}
+
 function createHttpServiceMock() {
   return {
     listStore: vi.fn(),
     createDraft: vi.fn(),
     getDraft: vi.fn(),
     createInstallSession: vi.fn(),
+    openInstallPackage: vi.fn(),
     recordInstall: vi.fn(),
     setRemovedAsAdmin: vi.fn(),
   }

@@ -63,6 +63,11 @@ export const IPC_CHANNELS = {
     "readEditorInstallFormValues": "synapse:content:read-editor-install-form-values",
     "getIconPromptTemplate": "synapse:content:get-icon-prompt-template",
   },
+  "content-store-install": {
+    "resolve": "synapse:content-store-install:resolve",
+    "prepare": "synapse:content-store-install:prepare",
+    "recordComplete": "synapse:content-store-install:record-complete",
+  },
   "config": {
     "get": "synapse:config:get",
     "update": "synapse:config:update",

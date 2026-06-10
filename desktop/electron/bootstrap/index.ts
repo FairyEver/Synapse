@@ -57,9 +57,16 @@ export {
   registerAuthProtocol,
 } from "./app-events"
 
+export {
+  createProtocolUrlRouter,
+  shouldFocusMainForSecondInstance,
+} from "./protocol-router"
+
 export { registerCoreExtensions, EXTENSION_POINT_IDS } from "./extensions"
 export type {
   BootstrapContentType,
   BootstrapEditorAdapter,
   BootstrapEditorScanProvider,
 } from "./extensions"
+
+export { initializeReadyApp } from "./app-ready"

@@ -20,6 +20,10 @@ import type {
   SynapseAccountStateChangedEvent,
 } from "./account"
 import type {
+  SynapseContentStoreInstallPrepareResult,
+  SynapseContentStoreInstallResolveResult,
+} from "./content-store-install"
+import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
   DriveDeleteImpactDto,
@@ -794,6 +798,11 @@ export type SynapseBridge = {
     resolveEditorInstallTarget: (
       payload: SynapseResolveEditorTargetPayload,
     ) => Promise<SynapseEditorResolvedTarget>
+  }
+  contentStoreInstall: {
+    resolve: (sessionId: string) => Promise<SynapseContentStoreInstallResolveResult>
+    prepare: (sessionId: string) => Promise<SynapseContentStoreInstallPrepareResult>
+    recordComplete: (sessionId: string) => Promise<{ ok: true }>
   }
   config: {
     exportBackup: () => Promise<SynapseConfigBackupExportResult | null>

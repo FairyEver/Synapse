@@ -68,6 +68,15 @@ export interface ResolvedContentStoreInstallSession {
   readonly expiresAt: string
 }
 
+export interface OpenContentStoreInstallPackage {
+  readonly stream: NodeJS.ReadableStream
+  readonly size?: bigint
+  readonly contentType: string
+  readonly packageSha256: string
+  readonly type: Extract<ContentStoreType, "skill" | "rule">
+  readonly title: string
+}
+
 type ContentStoreSearchScope = "public" | "mine" | "admin"
 
 type ContentStoreDb = Pick<
@@ -544,6 +553,24 @@ export class ContentStoreService {
     }
   }
 
+  async openInstallPackage(userId: string, sessionId: string): Promise<OpenContentStoreInstallPackage> {
+    const resolved = await this.resolveInstallSession(userId, sessionId)
+    try {
+      const object = await this.storage.getObjectStream({ key: resolved.packageKey })
+      return {
+        stream: object.stream,
+        size: object.size ?? parseOptionalBigInt(resolved.packageSize),
+        contentType: "application/zip",
+        packageSha256: resolved.packageSha256,
+        type: resolved.type,
+        title: resolved.title,
+      }
+    } catch (error) {
+      if (isStorageObjectNotFound(error)) throw new NotFoundException("内容安装包不存在。")
+      throw error
+    }
+  }
+
   async recordInstall(userId: string, sessionId: string, clientInstanceId: string): Promise<{ ok: true }> {
     const resolved = await this.resolveInstallSession(userId, sessionId)
     await this.prisma.contentStoreInstallEvent.upsert({
@@ -937,6 +964,16 @@ function appendSessionToDeepLink(base: string, sessionId: string): string {
 function formatOptionalBigInt(value: bigint | number | string | null): string | null {
   if (value === null) return null
   return String(value)
+}
+
+function parseOptionalBigInt(value: string | null): bigint | undefined {
+  return value === null ? undefined : BigInt(value)
+}
+
+function isStorageObjectNotFound(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false
+  const value = error as { readonly code?: unknown; readonly statusCode?: unknown }
+  return value.code === "ENOENT" || value.statusCode === 404
 }
 
 function numberFromSize(size: bigint | number): number {
