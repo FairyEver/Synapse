@@ -160,6 +160,8 @@ import type {
 import type {
   EditorScanQuickPublishDraft,
   EditorScanQuickPublishRequest,
+  EditorScanContentStoreUploadRequest,
+  EditorScanContentStoreUploadResult,
   EditorScanResult,
   EditorScanSkillFileEntry,
   EditorScanTrashRequest,
@@ -841,6 +843,9 @@ export type SynapseBridge = {
       request: EditorScanQuickPublishRequest,
     ) => Promise<EditorScanQuickPublishDraft>
     trashItem: (request: EditorScanTrashRequest) => Promise<EditorScanTrashResult>
+    uploadSkillDraftToContentStore: (
+      request: EditorScanContentStoreUploadRequest,
+    ) => Promise<EditorScanContentStoreUploadResult>
   }
   editorCopy: {
     copy: (payload: SynapseCopyToEditorPayload) => Promise<SynapseEditorCopyResult>

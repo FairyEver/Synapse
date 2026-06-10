@@ -135,3 +135,19 @@ export type EditorScanTrashResult = {
   mode: EditorScanTrashMode
   path: string
 }
+
+export type EditorScanContentStoreUploadRequest = {
+  itemType: "skill"
+  itemPath: string
+  itemName: string
+  editorId: SynapseEditorId
+  scope: EditorScanScope
+  projectPath?: string | null
+}
+
+export type EditorScanContentStoreUploadResult = {
+  draftId: string
+  itemId: string
+  revision: number
+  dashboardEditUrl: string
+}

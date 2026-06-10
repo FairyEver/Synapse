@@ -248,6 +248,31 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps editor scan content store upload to the narrow IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.editorScan.uploadSkillDraftToContentStore({
+      itemType: "skill",
+      itemPath: "/tmp/skills/review",
+      itemName: "review",
+      editorId: "claude-code",
+      scope: "project",
+      projectPath: "/tmp/project",
+    })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:editor-scan:upload-skill-draft-to-content-store",
+      {
+        itemType: "skill",
+        itemPath: "/tmp/skills/review",
+        itemName: "review",
+        editorId: "claude-code",
+        scope: "project",
+        projectPath: "/tmp/project",
+      },
+    )
+  })
+
   it("maps account drive methods to account IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

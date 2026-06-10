@@ -180,4 +180,29 @@ describe("scan item detail dialog layout", () => {
     expect(source).not.toContain("getSynapseBridge()?.shell.showItemInFolder")
     expect(source).not.toMatch(/bridge\?\.shell\.showItemInFolder\([^)]*\)\.catch/)
   })
+
+  it("offers content store upload only through the Skill detail action", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("发布到商店")
+    expect(source).toContain('item.type === "skill"')
+    expect(source).toContain("getUploadSkillToContentStoreDisabledReason")
+    expect(source).toContain("handleUploadSkillToContentStore")
+  })
+
+  it("opens Dashboard after uploading a content store Skill draft", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("bridge.editorScan.uploadSkillDraftToContentStore")
+    expect(source).toContain("buildUploadSkillDraftRequest(item)")
+    expect(source).toContain("bridge.shell.openExternal(result.dashboardEditUrl)")
+    expect(source).toContain("setContentStoreEditUrl(result.dashboardEditUrl)")
+    expect(source).toContain("复制链接")
+  })
 })

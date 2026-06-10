@@ -9,6 +9,7 @@ import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
+  EditorScanContentStoreUploadRequest,
   EditorScanQuickPublishRequest,
   EditorScanTrashRequest,
 } from "../../../src/types/editor-scan"
@@ -19,6 +20,7 @@ import {
   prepareQuickPublishDraft,
   trashScanItem,
 } from "../../services/editor-scan-service"
+import { contentStoreUploadService } from "../../services/content-store-upload-service"
 
 // Schemas
 const editorScanItemSourceSchema = z.enum(["synapse", "external"])
@@ -130,6 +132,23 @@ const trashResultSchema = z.object({
   path: z.string(),
 })
 
+const uploadSkillDraftToContentStoreRequestSchema = z.object({
+  itemType: z.enum(["skill", "rule", "prompt"]),
+  itemPath: z.string().min(1),
+  itemName: z.string().min(1),
+  editorId: z.string().min(1),
+  scope: z.enum(["global", "project"]),
+  projectPath: z.string().nullable().optional(),
+}).strict()
+type UploadSkillDraftToContentStoreRequest = z.infer<typeof uploadSkillDraftToContentStoreRequestSchema>
+
+const uploadSkillDraftToContentStoreResultSchema = z.object({
+  draftId: z.string(),
+  itemId: z.string(),
+  revision: z.number().int().nonnegative(),
+  dashboardEditUrl: z.string(),
+})
+
 export const editorScanIpcModule: IpcModule = {
   id: "editor-scan",
   methods: {
@@ -192,6 +211,25 @@ export const editorScanIpcModule: IpcModule = {
           auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
         })
+      },
+    },
+    uploadSkillDraftToContentStore: {
+      kind: "invoke",
+      channel: "synapse:editor-scan:upload-skill-draft-to-content-store",
+      request: uploadSkillDraftToContentStoreRequestSchema,
+      response: uploadSkillDraftToContentStoreResultSchema,
+      handler: async (ctx, request: UploadSkillDraftToContentStoreRequest) => {
+        if (request.itemType !== "skill") {
+          throw new Error("只有 Skill 可以发布到商店。")
+        }
+        return contentStoreUploadService.uploadSkillDraftToContentStore(
+          request as EditorScanContentStoreUploadRequest,
+          {
+            actor: { kind: "user" },
+            auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+            permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          },
+        )
       },
     },
   },

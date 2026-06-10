@@ -6,6 +6,7 @@
 - Dashboard 新增内容商店、我的内容和管理员治理入口，用户可以浏览公开 Skill / Rule / Prompt、复制到自己的内容，Skill / Rule 可唤起 Synapse 安装，管理员可以精选、下架和恢复内容。
 - Dashboard 新增内容商店编辑页，可以新建、编辑、保存和发布 Skill、Rule、Prompt 草稿，并支持发布后公开或取消公开。Skill 现在可以在文件树里管理文件，Rule 和 Prompt 使用正文编辑。
 - 从 Dashboard 安装内容商店里的 Skill / Rule 时，Synapse Desktop 会打开独立安装窗口，校验安装包后让用户选择编辑器，并沿用现有安装确认、备份和权限检查流程。
+- Desktop 本地 Skill 详情里新增“发布到商店”，可以把已安装 Skill 保存为云端草稿，并自动打开 Dashboard 编辑页继续补充和发布。
 
 ## 功能优化
 
