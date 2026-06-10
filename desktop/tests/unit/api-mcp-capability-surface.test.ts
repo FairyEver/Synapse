@@ -56,7 +56,7 @@ describe("API and MCP capability surface", () => {
     const ruleIdProperty = updateTool?.inputSchema.properties.ruleId as { description?: string } | undefined
 
     const listDescription = listTool?.description.toLowerCase() ?? ""
-    const ruleIdDescription = ruleIdProperty?.description.toLowerCase() ?? ""
+    const ruleIdDescription = ruleIdProperty?.description?.toLowerCase() ?? ""
 
     expect(listDescription).toContain("opaque rule id")
     expect(ruleIdDescription).toContain("opaque model price rule id")
