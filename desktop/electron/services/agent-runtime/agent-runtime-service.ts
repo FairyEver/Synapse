@@ -89,6 +89,7 @@ import {
   sanitizePermissionRawInput,
   sanitizePermissionText,
 } from "./permission-sanitize"
+import { markCancelRequested } from "./turn-outcome"
 
 interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
@@ -496,12 +497,26 @@ export class AgentRuntimeService {
     }
 
     state.cancelState = { requestedAt: Date.now() }
+    if (state.activeLifecycle) {
+      markCancelRequested(state.activeLifecycle, {
+        mode: "graceful",
+        source: "user",
+        now: () => this.isoNow(),
+      })
+    }
 
     this.sessionManager.settlePending(state)
 
     if (state.liveSession) {
       const gracefulSent = await this.sessionManager.interrupt(conversationId)
       if (!gracefulSent) {
+        if (state.activeLifecycle) {
+          markCancelRequested(state.activeLifecycle, {
+            mode: "force",
+            source: "user",
+            now: () => this.isoNow(),
+          })
+        }
         state.turnAbortController?.abort("user-cancel")
         const result: CancelTurnResult = { status: "hard-killed" }
         this.logTurnCancellation("cancel", conversationId, state, result, { gracefulSent: false })
@@ -521,6 +536,13 @@ export class AgentRuntimeService {
     }
 
     if (state.turnAbortController) {
+      if (state.activeLifecycle) {
+        markCancelRequested(state.activeLifecycle, {
+          mode: "force",
+          source: "user",
+          now: () => this.isoNow(),
+        })
+      }
       state.turnAbortController.abort("user-cancel")
       const result: CancelTurnResult = { status: "hard-killed" }
       this.logTurnCancellation("cancel", conversationId, state, result)
@@ -540,6 +562,13 @@ export class AgentRuntimeService {
       return result
     }
     this.conversationRouter.clearCancelState(state)
+    if (state.activeLifecycle) {
+      markCancelRequested(state.activeLifecycle, {
+        mode: "force",
+        source: "user",
+        now: () => this.isoNow(),
+      })
+    }
     state.turnAbortController?.abort("force-kill")
     const result: CancelTurnResult = { status: "hard-killed" }
     this.logTurnCancellation("force-kill", conversationId, state, result)

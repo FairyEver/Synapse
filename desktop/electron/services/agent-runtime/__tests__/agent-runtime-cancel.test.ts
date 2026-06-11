@@ -9,6 +9,8 @@ import type {
 import type { ProviderService } from "../../provider"
 import { AGENT_CANCELLED_MESSAGE } from "../agent-error-messages"
 import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
+import type { RuntimeSessionState } from "../session-lifecycle"
+import type { TurnLifecycle } from "../turn-outcome"
 import type {
   AgentEvent,
   AgentLiveSession,
@@ -59,6 +61,55 @@ describe("AgentRuntimeService cancelTurn", () => {
     session.emitResult("stopped")
     const result = await sendPromise
     expect(result.resultText).toBe("stopped")
+  })
+
+  it("records graceful cancel intent on the active lifecycle before interrupting", async () => {
+    const session = new CancellableLiveSession({ graceful: true })
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
+
+    const sendPromise = service.send(baseMessage("hello"))
+    await waitForBusy(service, "hello")
+
+    const convId = conversationId("local", "s1", "active")
+    const state = runtimeState(service, convId)
+    expect(state.activeLifecycle?.cancelIntent).toBeUndefined()
+
+    await service.cancelTurn(convId)
+
+    expect(state.activeLifecycle?.cancelIntent).toMatchObject({
+      mode: "graceful",
+      source: "user",
+    })
+    expect(state.activeLifecycle?.state).toBe("cancelling")
+
+    session.emitResult("stopped")
+    await sendPromise
+  })
+
+  it("upgrades lifecycle cancel intent when force killing", async () => {
+    const session = new CancellableLiveSession({ graceful: true })
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
+
+    const sendPromise = service.send(baseMessage("hello"))
+    await waitForBusy(service, "hello")
+
+    const convId = conversationId("local", "s1", "active")
+    let cancelIntentAtClose: TurnLifecycle["cancelIntent"] | undefined
+    session.onClose = () => {
+      cancelIntentAtClose = runtimeState(service, convId).activeLifecycle?.cancelIntent
+    }
+
+    await service.cancelTurn(convId)
+    await service.forceKillTurn(convId)
+
+    expect(cancelIntentAtClose).toMatchObject({
+      mode: "force",
+      source: "user",
+    })
+
+    await sendPromise
   })
 
   it("is idempotent — second cancelTurn returns current state", async () => {
@@ -257,11 +308,19 @@ async function waitForQueued(service: AgentRuntimeService): Promise<void> {
   throw new Error("Timed out waiting for queued turn")
 }
 
+function runtimeState(service: AgentRuntimeService, conversationIdValue: string): RuntimeSessionState {
+  const states = (service as unknown as { readonly states: Map<string, RuntimeSessionState> }).states
+  const state = states.get(conversationIdValue)
+  if (!state) throw new Error(`Missing runtime state for ${conversationIdValue}`)
+  return state
+}
+
 class CancellableLiveSession implements AgentLiveSession {
   readonly agentType = "claude-code"
   closed = false
   cancelCalled = false
   cancelCurrentTurn?: () => Promise<boolean>
+  onClose?: () => void
   private readonly queue: Array<(v: AgentEvent | null) => void> = []
   private readonly events: AgentEvent[] = []
 
@@ -299,6 +358,7 @@ class CancellableLiveSession implements AgentLiveSession {
 
   async close(): Promise<void> {
     this.closed = true
+    this.onClose?.()
     for (const waiter of this.queue) waiter(null)
     this.queue.length = 0
   }

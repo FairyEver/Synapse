@@ -52,6 +52,7 @@ import type {
   AgentRuntimeTurnResult,
 } from "./types"
 import { redactSensitiveText } from "./redaction"
+import { createTurnLifecycle } from "./turn-outcome"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -272,6 +273,11 @@ export class ConversationRouter {
     }
 
     const turnId = randomUUID()
+    const lifecycle = createTurnLifecycle({
+      turnId,
+      conversationId: conversation.id,
+      now: () => this.isoNow(),
+    })
     let liveMessage = message
     let nativeSlashPassthrough: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> | undefined
     const commandResult = await this.commandRouter?.handle(message, conversation, { turnId })
@@ -298,6 +304,7 @@ export class ConversationRouter {
         message,
         conversationId: conversation.id,
         turnId,
+        lifecycle,
         abortSignal: options.abortSignal,
         liveEventTimeoutMs: options.liveEventTimeoutMs,
         resolve,
@@ -340,6 +347,7 @@ export class ConversationRouter {
         }
         externalSignal?.addEventListener("abort", abort, { once: true })
         state.turnAbortController = ac
+        state.activeLifecycle = turn.lifecycle
         try {
           if (externalSignal?.aborted) ac.abort(externalSignal.reason)
           if (state.closing || ac.signal.aborted) {
@@ -381,6 +389,9 @@ export class ConversationRouter {
           externalSignal?.removeEventListener("abort", abort)
           this.nativeSlashPassthroughs.delete(turn)
           state.turnAbortController = undefined
+          if (state.activeLifecycle?.turnId === turn.turnId) {
+            state.activeLifecycle = undefined
+          }
           this.clearCancelState(state)
         }
       }

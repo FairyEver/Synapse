@@ -4,6 +4,7 @@ import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
 import type { AgentMessage, AgentLiveSession, AgentPendingPermission } from "./types"
 import type { ClaudeSDKRuntimeSettings } from "./claude-sdk-session"
+import type { TurnLifecycle } from "./turn-outcome"
 
 export interface RuntimeSessionState {
   key: string
@@ -22,6 +23,7 @@ export interface RuntimeSessionState {
   additionalDirectories?: readonly string[]
   modeOverride?: string
   closing?: boolean
+  activeLifecycle?: TurnLifecycle
   cancelState?: {
     requestedAt: number
     escalationTimer?: ReturnType<typeof setTimeout>
@@ -32,6 +34,7 @@ export interface QueuedTurn {
   readonly message: AgentMessage
   readonly conversationId: string
   readonly turnId: string
+  readonly lifecycle: TurnLifecycle
   readonly abortSignal?: AbortSignal
   readonly liveEventTimeoutMs?: number
   resolve(result: unknown): void
