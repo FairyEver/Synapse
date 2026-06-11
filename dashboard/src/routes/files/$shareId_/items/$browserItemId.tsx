@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { DriveBrowserPage } from '@/features/drive-browser/drive-browser-page'
 
-export const Route = createFileRoute('/files/$shareId/items/$browserItemId')({
+export const Route = createFileRoute('/files/$shareId_/items/$browserItemId')({
   component: RouteComponent,
 })
 

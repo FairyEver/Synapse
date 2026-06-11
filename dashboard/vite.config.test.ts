@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import config from "./vite.config"
+import config, { isDriveBrowserSpaPath } from "./vite.config"
 
 describe("dashboard Vite dev proxy", () => {
   it("fails instead of opening another port when the dashboard port is occupied", () => {
@@ -26,14 +26,36 @@ describe("dashboard Vite dev proxy", () => {
     }))
   })
 
-  it("proxies public drive share endpoints through /files", () => {
+  it("keeps direct drive responses behind focused proxy rules", () => {
     const proxy = config.server?.proxy
-    const filesProxy = proxy && !Array.isArray(proxy) ? proxy["/files"] : undefined
+    const ownerDownloadProxy = proxy && !Array.isArray(proxy)
+      ? proxy["^/drive/items/[^/]+/(download|zip|render)$"]
+      : undefined
+    const shareDownloadProxy = proxy && !Array.isArray(proxy)
+      ? proxy["^/files/[^/]+/items/[^/]+/(download|zip)$"]
+      : undefined
 
-    expect(filesProxy).toEqual(expect.objectContaining({
+    expect(ownerDownloadProxy).toEqual(expect.objectContaining({
       target: "http://localhost:3001",
       changeOrigin: true,
     }))
+    expect(shareDownloadProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
+    expect(proxy && !Array.isArray(proxy) ? proxy["/files"] : undefined).toBeUndefined()
+  })
+
+  it("serves drive browser page routes through the dashboard app in dev", () => {
+    expect(isDriveBrowserSpaPath("/drive/items/root-id")).toBe(true)
+    expect(isDriveBrowserSpaPath("/drive/items/root-id/items/file-id")).toBe(true)
+    expect(isDriveBrowserSpaPath("/files/share-id")).toBe(true)
+    expect(isDriveBrowserSpaPath("/files/share-id/items/file-id")).toBe(true)
+
+    expect(isDriveBrowserSpaPath("/drive/items/root-id/download")).toBe(false)
+    expect(isDriveBrowserSpaPath("/drive/items/root-id/items/file-id/render")).toBe(false)
+    expect(isDriveBrowserSpaPath("/files/share-id/download")).toBe(false)
+    expect(isDriveBrowserSpaPath("/files/share-id/items/file-id/download")).toBe(false)
   })
 
   it("proxies public drive publication endpoints through /pages and /sites", () => {
