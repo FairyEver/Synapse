@@ -52,7 +52,14 @@ import type {
   AgentRuntimeTurnResult,
 } from "./types"
 import { redactSensitiveText } from "./redaction"
-import { createTurnLifecycle } from "./turn-outcome"
+import {
+  createTurnLifecycle,
+  diagnosticFromAgentError,
+  markTimeoutRequested,
+  normalizeExecutorEvent,
+  outcomeMessage,
+  outcomeToAgentEvent,
+} from "./turn-outcome"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -646,16 +653,6 @@ export class ConversationRouter {
         break
       }
 
-      events.push(event)
-      this.emitEvent(message, conversation.id, event)
-      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-      await this.saveEventSdkSession(conversation.id, event, liveSession)
-      await this.saveEventHistory(conversation.id, event)
-
-      if (event.type === "permissionRequest") {
-        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
-        continue
-      }
       if (event.type === "error") {
         const sdkResultUsage = sdkResultUsageFromError(event)
         if (sdkResultUsage) {
@@ -673,12 +670,49 @@ export class ConversationRouter {
             userMeta: message.userMeta ?? conversation.userMeta,
           })
         }
+        const lifecycle = state.activeLifecycle
+        if (lifecycle) {
+          const outcome = normalizeExecutorEvent(lifecycle, {
+            type: "executor.error",
+            diagnostic: diagnosticFromAgentError(event),
+          })
+          const projected = outcomeToAgentEvent({
+            outcome,
+            conversationId: conversation.id,
+            providerId: message.providerId ?? conversation.providerId,
+            sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+            timestamp: this.isoNow(),
+          })
+          events.push(projected)
+          this.emitEvent(message, conversation.id, projected)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+          await this.saveEventSdkSession(conversation.id, projected, liveSession)
+          await this.saveEventHistory(conversation.id, projected)
+          error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
+          break
+        }
+        events.push(event)
+        this.emitEvent(message, conversation.id, event)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+        await this.saveEventSdkSession(conversation.id, event, liveSession)
+        await this.saveEventHistory(conversation.id, event)
         error = event.message
         break
       }
+
+      events.push(event)
+      this.emitEvent(message, conversation.id, event)
+      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+      await this.saveEventSdkSession(conversation.id, event, liveSession)
+      await this.saveEventHistory(conversation.id, event)
+
+      if (event.type === "permissionRequest") {
+        await this.awaitPendingPermission(state, message, conversation.id, event, liveSession, abortSignal)
+        continue
+      }
     }
 
-    if (error && events[events.length - 1]?.type !== "error") {
+    if (error && events[events.length - 1]?.type !== "error" && !hasTerminalTurnOutcome(events[events.length - 1])) {
       const errorEvent: AgentEvent = {
         type: "error",
         message: sanitizeErrorText(error),
@@ -861,21 +895,6 @@ export class ConversationRouter {
           })
           break
         }
-        events.push(event)
-        partialText = appendRelayText(partialText, event)
-        this.emitEvent(message, conversation.id, event)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-        await this.saveEventSdkSession(conversation.id, event, liveSession)
-        await this.saveEventHistory(conversation.id, event)
-        if (event.type === "permissionRequest") {
-          await liveSession.respondPermission(event.requestId, {
-            behavior: "deny",
-            message: permissionRelayDenyMessage(event),
-          })
-          error = permissionRelayErrorMessage(event)
-          await this.sessionManager.closeCurrentTurn(conversation.id)
-          break
-        }
         if (event.type === "error") {
           const sdkResultUsage = sdkResultUsageFromError(event)
           if (sdkResultUsage) {
@@ -893,11 +912,95 @@ export class ConversationRouter {
               userMeta: message.userMeta ?? conversation.userMeta,
             })
           }
+          const lifecycle = state.activeLifecycle
+          if (lifecycle) {
+            const outcome = normalizeExecutorEvent(lifecycle, {
+              type: "executor.error",
+              diagnostic: diagnosticFromAgentError(event),
+            })
+            const projected = outcomeToAgentEvent({
+              outcome,
+              conversationId: conversation.id,
+              providerId: message.providerId ?? conversation.providerId,
+              sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+              timestamp: this.isoNow(),
+            })
+            events.push(projected)
+            partialText = appendRelayText(partialText, projected)
+            this.emitEvent(message, conversation.id, projected)
+            await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+            await this.saveEventSdkSession(conversation.id, projected, liveSession)
+            await this.saveEventHistory(conversation.id, projected)
+            error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
+            break
+          }
+          events.push(event)
+          partialText = appendRelayText(partialText, event)
+          this.emitEvent(message, conversation.id, event)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+          await this.saveEventSdkSession(conversation.id, event, liveSession)
+          await this.saveEventHistory(conversation.id, event)
           error = event.message
+          break
+        }
+        events.push(event)
+        partialText = appendRelayText(partialText, event)
+        this.emitEvent(message, conversation.id, event)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+        await this.saveEventSdkSession(conversation.id, event, liveSession)
+        await this.saveEventHistory(conversation.id, event)
+        if (event.type === "permissionRequest") {
+          await liveSession.respondPermission(event.requestId, {
+            behavior: "deny",
+            message: permissionRelayDenyMessage(event),
+          })
+          error = permissionRelayErrorMessage(event)
+          await this.sessionManager.closeCurrentTurn(conversation.id)
           break
         }
       }
       if (abortSignal.aborted && !error) {
+        const lifecycle = state.activeLifecycle
+        if (lifecycle) {
+          const reason = String(abortSignal.reason ?? "")
+          if (reason.includes("timeout")) {
+            markTimeoutRequested(lifecycle, {
+              source: "relay",
+              now: () => this.isoNow(),
+            })
+          }
+          const outcome = normalizeExecutorEvent(lifecycle, {
+            type: "executor.aborted",
+            diagnostic: {
+              source: "agent-runtime",
+              kind: "aborted",
+              message: reason || "abort signal",
+            },
+          })
+          const projected = outcomeToAgentEvent({
+            outcome,
+            conversationId: conversation.id,
+            providerId: message.providerId ?? conversation.providerId,
+            sdkSessionId: liveSession.currentSessionId(),
+            timestamp: this.isoNow(),
+          })
+          events.push(projected)
+          this.emitEvent(message, conversation.id, projected)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+          await this.saveEventSdkSession(conversation.id, projected, liveSession)
+          await this.saveEventHistory(conversation.id, projected)
+          await this.sessionManager.closeCurrentTurn(conversation.id)
+          return {
+            conversationId: conversation.id,
+            events,
+            resultText: partialText,
+            partialText,
+            agentSessionId: liveSession.currentSessionId(),
+            threadId: liveSession.currentSessionId(),
+            error: outcome.status === "completed" ? undefined : outcomeMessage(outcome),
+            timedOut: outcome.status === "timed_out",
+          }
+        }
         const errorEvent: AgentEvent = {
           type: "error",
           message: AGENT_RELAY_TIMED_OUT_MESSAGE,
@@ -923,7 +1026,7 @@ export class ConversationRouter {
           timedOut: true,
         }
       }
-      if (error && events[events.length - 1]?.type !== "error") {
+      if (error && events[events.length - 1]?.type !== "error" && !hasTerminalTurnOutcome(events[events.length - 1])) {
         const errorResult = this.finishWithError(message, conversation.id, error)
         const errorEvent = errorResult.events[0]
         if (errorEvent) {
@@ -1913,6 +2016,13 @@ function appendRelayText(current: string, event: AgentEvent): string {
   if (event.type === "result") return current || event.content
   if (event.type === "error" && !current) return event.message
   return current
+}
+
+function hasTerminalTurnOutcome(event: AgentEvent | undefined): boolean {
+  if (!event) return false
+  if (event.type === "result") return Boolean(event.metadata?.turnOutcome)
+  if (event.type === "error") return Boolean(event.turnOutcome)
+  return false
 }
 
 function appendStreamedText(current: string, event: AgentEvent): string {

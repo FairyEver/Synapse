@@ -112,6 +112,37 @@ describe("AgentRuntimeService cancelTurn", () => {
     await sendPromise
   })
 
+  it("normalizes SDK abort error after graceful cancel to cancelled result", async () => {
+    const session = new CancellableLiveSession({ graceful: true })
+    session.cancelCurrentTurn = async () => {
+      session.cancelCalled = true
+      session.emitError("Agent 执行失败。诊断信息：Request was aborted")
+      return true
+    }
+    const factory = new CancellableSessionFactory(session)
+    const service = createService(factory)
+
+    const turn = service.send(baseMessage("hello"))
+    await waitForBusy(service, "hello")
+
+    await service.cancelTurn(conversationId("local", "s1", "active"))
+
+    const result = await turn
+    expect(result.error).toBe("已停止本次执行。")
+    expect(result.events).toContainEqual(expect.objectContaining({
+      type: "result",
+      metadata: expect.objectContaining({
+        cancelled: true,
+        turnOutcome: expect.objectContaining({
+          status: "cancelled",
+          mode: "graceful",
+          reason: "user_cancelled",
+        }),
+      }),
+    }))
+    expect(JSON.stringify(result.events)).not.toContain("Agent 执行失败")
+  })
+
   it("is idempotent — second cancelTurn returns current state", async () => {
     const session = new CancellableLiveSession({ graceful: false })
     const factory = new CancellableSessionFactory(session)
@@ -370,6 +401,22 @@ class CancellableLiveSession implements AgentLiveSession {
       done: true,
       agentSessionId: "test-session-1",
       threadId: "test-session-1",
+    }
+    const waiter = this.queue.shift()
+    if (waiter) {
+      waiter(event)
+    } else {
+      this.events.push(event)
+    }
+  }
+
+  emitError(message: string): void {
+    const event: AgentEvent = {
+      type: "error",
+      message,
+      conversationId: "conversation-a",
+      providerId: "anthropic",
+      timestamp: "2026-05-10T00:00:00.000Z",
     }
     const waiter = this.queue.shift()
     if (waiter) {

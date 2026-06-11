@@ -1,3 +1,5 @@
+import type { AgentErrorEvent, AgentEvent, AgentResultEvent } from "./types"
+
 export type AgentTurnOutcomeStatus =
   | "completed"
   | "cancelled"
@@ -224,4 +226,70 @@ function failureReason(diagnostic: AgentTurnDiagnostic | undefined): AgentTurnFa
 function failedMessage(diagnostic: AgentTurnDiagnostic | undefined): string {
   if (diagnostic?.kind === "aborted") return "请求中断，任务未完成。"
   return diagnostic?.message ? `Agent 执行失败。诊断信息：${diagnostic.message}` : "Agent 执行失败。"
+}
+
+export function diagnosticFromAgentError(event: AgentErrorEvent): AgentTurnDiagnostic {
+  const message = unwrapAgentDiagnosticMessage(event.message)
+  return {
+    source: "claude-sdk",
+    kind: isToolUseInterruptedMessage(message)
+      ? "tool_use_interrupted"
+      : /Request was aborted/i.test(message) ? "aborted" : "error",
+    message,
+  }
+}
+
+function unwrapAgentDiagnosticMessage(message: string): string {
+  const marker = "诊断信息："
+  const index = message.indexOf(marker)
+  return index >= 0 ? message.slice(index + marker.length).trim() : message
+}
+
+export function outcomeToAgentEvent(input: {
+  readonly outcome: AgentTurnOutcome
+  readonly conversationId: string
+  readonly providerId?: string
+  readonly sdkSessionId?: string
+  readonly timestamp: string
+}): AgentEvent {
+  const base = {
+    conversationId: input.conversationId,
+    providerId: input.providerId,
+    sdkSessionId: input.sdkSessionId,
+    timestamp: input.timestamp,
+  }
+  if (input.outcome.status === "cancelled") {
+    return {
+      ...base,
+      type: "result",
+      content: "",
+      done: true,
+      metadata: {
+        cancelled: true,
+        turnOutcome: input.outcome,
+      },
+    } satisfies AgentResultEvent
+  }
+  if (input.outcome.status === "interrupted") {
+    return {
+      ...base,
+      type: "error",
+      message: input.outcome.message,
+      errorKind: "tool_use_interrupted",
+      recoverable: true,
+      turnOutcome: input.outcome,
+    } satisfies AgentErrorEvent
+  }
+  return {
+    ...base,
+    type: "error",
+    message: outcomeMessage(input.outcome),
+    errorKind: "execution_failed",
+    recoverable: false,
+    turnOutcome: input.outcome,
+  } satisfies AgentErrorEvent
+}
+
+function isToolUseInterruptedMessage(message: string): boolean {
+  return /\bstop_reason=tool_use\b/.test(message) && /\bresult_type=user\b/.test(message)
 }
