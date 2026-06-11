@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { useUsageAutoRefresh } from "../shared/auto-refresh"
 import { CC_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
 import { getUsageRefreshWarning } from "../shared/refresh-result"
@@ -21,7 +22,7 @@ export function CcUsagePage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
       const result = await requireSynapseBridge().usageAnalysis.cc.refresh()
@@ -33,7 +34,9 @@ export function CcUsagePage() {
     } finally {
       setRefreshing(false)
     }
-  }
+  }, [showError, showWarning])
+
+  useUsageAutoRefresh("cc", refresh)
 
   return (
     <UsageAnalysisShell
@@ -48,23 +51,24 @@ export function CcUsagePage() {
         void refresh()
       }}
     >
-      {view === "today" ? <CcTodayPage refreshKey={refreshKey} /> : null}
-      {view === "overview" ? <CcOverviewPage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
-      {view === "time" ? <CcTimePage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
-      {view === "models" ? <CcModelsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "projects" ? <CcProjectsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "tools" ? <CcToolsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "records" ? <CcRecordsPage range={range} refreshKey={refreshKey} /> : null}
+      {view === "today" ? <CcTodayPage refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "overview" ? <CcOverviewPage range={range} refreshKey={refreshKey} refreshing={refreshing} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
+      {view === "time" ? <CcTimePage range={range} refreshKey={refreshKey} refreshing={refreshing} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
+      {view === "models" ? <CcModelsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "projects" ? <CcProjectsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "tools" ? <CcToolsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "records" ? <CcRecordsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
     </UsageAnalysisShell>
   )
 }
 
-function CcTodayPage({ refreshKey }: { readonly refreshKey: number }) {
+function CcTodayPage({ refreshKey, refreshing }: { readonly refreshKey: number; readonly refreshing: boolean }) {
   return (
     <TodayReportView
       overviewState={useCcOverview("today", refreshKey)}
       timeState={useCcTime("today", refreshKey)}
       modelsState={useCcModels("today", refreshKey)}
+      refreshing={refreshing}
     />
   )
 }

@@ -127,7 +127,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   }
 
   const addRow = () => {
-    setRows((current) => [...current, newEditableRule()])
+    setRows((current) => [newEditableRule(), ...current])
   }
 
   const save = async () => {

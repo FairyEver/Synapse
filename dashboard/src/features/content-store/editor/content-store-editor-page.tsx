@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import type { ContentStoreType } from '@synapse/shared'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Save } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Header } from '@/components/layout/header'
@@ -20,10 +23,20 @@ type ContentStoreEditorPageProps = {
   contentId: string
 }
 
-export function ContentStoreEditorPage({ contentId }: ContentStoreEditorPageProps) {
+export function ContentStoreEditorPage({
+  contentId,
+}: ContentStoreEditorPageProps) {
   const navigate = useNavigate()
-  const { detail, state, isLoading, error, actions, isSaving, isPublishing, isSettingVisibility } =
-    useContentStoreDraftEditor({ contentId })
+  const {
+    detail,
+    state,
+    isLoading,
+    error,
+    actions,
+    isSaving,
+    isPublishing,
+    isSettingVisibility,
+  } = useContentStoreDraftEditor({ contentId })
   const [publishOpen, setPublishOpen] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
 
@@ -40,12 +53,18 @@ export function ContentStoreEditorPage({ contentId }: ContentStoreEditorPageProp
           <h1 className='text-lg font-semibold'>编辑内容</h1>
         </Header>
         <Main>
-          <div className='flex flex-col gap-3'>
-            <div className='font-medium'>内容不可用</div>
-            <Button variant='outline' className='w-fit' onClick={() => window.location.reload()}>
-              重试
-            </Button>
-          </div>
+          <Alert className='max-w-xl'>
+            <AlertTitle>内容不可用</AlertTitle>
+            <AlertDescription>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => window.location.reload()}
+              >
+                重试
+              </Button>
+            </AlertDescription>
+          </Alert>
         </Main>
       </>
     )
@@ -57,8 +76,12 @@ export function ContentStoreEditorPage({ contentId }: ContentStoreEditorPageProp
         <Header fixed>
           <h1 className='text-lg font-semibold'>编辑内容</h1>
         </Header>
-        <Main>
-          <div className='text-sm text-muted-foreground'>加载中...</div>
+        <Main fixed fluid className='gap-4 pb-4'>
+          <div className='grid min-h-0 flex-1 grid-rows-[20rem_28rem_18rem] gap-4 lg:grid-cols-[20rem_minmax(0,1fr)_18rem] lg:grid-rows-none lg:overflow-hidden'>
+            <Skeleton className='min-h-0 rounded-lg' />
+            <Skeleton className='min-h-0 rounded-lg' />
+            <Skeleton className='min-h-0 rounded-lg' />
+          </div>
         </Main>
       </>
     )
@@ -69,59 +92,66 @@ export function ContentStoreEditorPage({ contentId }: ContentStoreEditorPageProp
   return (
     <>
       <Header fixed>
-        <div className='flex items-center gap-3'>
-          <Button variant='ghost' size='icon' onClick={() => void navigate({ to: '/my-content/$contentId', params: { contentId } })}>
-            <ArrowLeft data-icon='inline-start' />
-          </Button>
-          <h1 className='text-lg font-semibold'>编辑内容</h1>
-        </div>
-      </Header>
-      <Main className='flex flex-col gap-4'>
-        <div className='flex flex-wrap items-center justify-between gap-2'>
-          <div className='flex items-center gap-2 text-sm text-muted-foreground'>
-            <span>{getContentStoreTypeLabel(state.type as ContentStoreType)}</span>
-            <span>·</span>
-            <span>{detail.visibility === 'public' ? '公开' : '私有'}</span>
-          </div>
-          <div className='flex items-center gap-2'>
-            <Button variant='outline' onClick={() => void actions.saveDraft()} disabled={isSaving}>
-              <Save data-icon='inline-start' />
-              保存
+        <div className='flex min-w-0 flex-1 items-center justify-between gap-3'>
+          <div className='flex min-w-0 items-center gap-3'>
+            <Button
+              variant='ghost'
+              size='icon'
+              onClick={() =>
+                void navigate({
+                  to: '/my-content/$contentId',
+                  params: { contentId },
+                })
+              }
+              aria-label='返回内容详情'
+            >
+              <ArrowLeft data-icon='inline-start' />
             </Button>
-            <Button onClick={() => setPublishOpen(true)} disabled={isPublishing}>
-              发布
-            </Button>
-            <div className='flex items-center gap-2 rounded-md border px-3 py-2'>
-              <span className='text-sm'>公开</span>
-              <Switch
-                checked={detail.visibility === 'public'}
-                disabled={isSettingVisibility}
-                onCheckedChange={(checked) => void actions.setVisibility(checked ? 'public' : 'private')}
-              />
+            <div className='flex min-w-0 items-center gap-2'>
+              <h1 className='truncate text-lg font-semibold'>
+                {isSkill ? state.title || '编辑内容' : '编辑内容'}
+              </h1>
+              {isSkill ? (
+                <Badge variant='secondary'>
+                  {getContentStoreTypeLabel(state.type as ContentStoreType)}
+                </Badge>
+              ) : null}
             </div>
           </div>
-        </div>
-
-        <div className='grid gap-4 max-w-3xl'>
-          <div className='grid gap-2'>
-            <Label htmlFor='content-title'>标题</Label>
-            <Input id='content-title' value={state.title} onChange={(event) => actions.setTitle(event.target.value)} />
+          <div className='flex shrink-0 items-center gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => void actions.saveDraft()}
+              disabled={isSaving}
+            >
+              <Save data-icon='inline-start' />
+              {isSaving ? '保存中' : '保存'}
+            </Button>
+            <Button
+              size='sm'
+              onClick={() => setPublishOpen(true)}
+              disabled={isPublishing}
+            >
+              {isPublishing ? '发布中' : '发布'}
+            </Button>
           </div>
-          <div className='grid gap-2'>
-            <Label htmlFor='content-description'>描述</Label>
-            <Textarea id='content-description' value={state.description} onChange={(event) => actions.setDescription(event.target.value)} className='min-h-24 resize-y' />
-          </div>
         </div>
-
+      </Header>
+      <Main fixed fluid className='gap-4 pb-4 max-lg:overflow-auto'>
         {isSkill ? (
-          <div className='grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]'>
+          <section className='grid min-h-0 grid-rows-[32rem_32rem_22rem] gap-4 lg:flex-1 lg:grid-cols-[20rem_minmax(0,1fr)_18rem] lg:grid-rows-none lg:overflow-hidden'>
             <SkillFileTree
               files={state.files}
               selectedPath={selectedPath ?? state.files[0]?.path ?? null}
               onSelect={setSelectedPath}
               onFilesChange={(files) => {
                 actions.setFiles(files)
-                setSelectedPath(files.find((file) => file.path === selectedPath)?.path ?? files[0]?.path ?? null)
+                setSelectedPath(
+                  files.find((file) => file.path === selectedPath)?.path ??
+                    files[0]?.path ??
+                    null
+                )
               }}
             />
             <SkillFileEditor
@@ -129,17 +159,69 @@ export function ContentStoreEditorPage({ contentId }: ContentStoreEditorPageProp
               selectedPath={selectedPath ?? state.files[0]?.path ?? null}
               onFilesChange={(files) => {
                 actions.setFiles(files)
-                setSelectedPath(files.find((file) => file.path === selectedPath)?.path ?? files[0]?.path ?? null)
+                setSelectedPath(
+                  files.find((file) => file.path === selectedPath)?.path ??
+                    files[0]?.path ??
+                    null
+                )
               }}
             />
-          </div>
+            <ContentMetadataPanel
+              title={state.title}
+              description={state.description}
+              visibility={detail.visibility}
+              isSettingVisibility={isSettingVisibility}
+              onTitleChange={actions.setTitle}
+              onDescriptionChange={actions.setDescription}
+              onVisibilityChange={(visibility) =>
+                void actions.setVisibility(visibility)
+              }
+            />
+          </section>
         ) : (
-          <RulePromptEditor
-            id='content-body'
-            label='正文'
-            value={state.body}
-            onChange={actions.setBody}
-          />
+          <>
+            <section className='grid shrink-0 gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)_10rem]'>
+              <div className='grid gap-2'>
+                <Label htmlFor='content-title'>标题</Label>
+                <Input
+                  id='content-title'
+                  value={state.title}
+                  onChange={(event) => actions.setTitle(event.target.value)}
+                />
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='content-description'>描述</Label>
+                <Textarea
+                  id='content-description'
+                  value={state.description}
+                  onChange={(event) => actions.setDescription(event.target.value)}
+                  className='min-h-20 resize-y'
+                />
+              </div>
+              <div className='grid content-end gap-2'>
+                <Label htmlFor='content-visibility'>公开</Label>
+                <div className='flex h-9 items-center justify-between gap-3 rounded-md border px-3'>
+                  <span className='text-sm text-muted-foreground'>
+                    {detail.visibility === 'public' ? '公开' : '私有'}
+                  </span>
+                  <Switch
+                    id='content-visibility'
+                    checked={detail.visibility === 'public'}
+                    disabled={isSettingVisibility}
+                    onCheckedChange={(checked) =>
+                      void actions.setVisibility(checked ? 'public' : 'private')
+                    }
+                  />
+                </div>
+              </div>
+            </section>
+            <RulePromptEditor
+              id='content-body'
+              label='正文'
+              value={state.body}
+              onChange={actions.setBody}
+            />
+          </>
         )}
       </Main>
 
@@ -155,5 +237,61 @@ export function ContentStoreEditorPage({ contentId }: ContentStoreEditorPageProp
         onPublish={(publishPublic) => actions.publishDraft(publishPublic)}
       />
     </>
+  )
+}
+
+type ContentMetadataPanelProps = {
+  title: string
+  description: string
+  visibility: 'private' | 'public'
+  isSettingVisibility: boolean
+  onTitleChange: (title: string) => void
+  onDescriptionChange: (description: string) => void
+  onVisibilityChange: (visibility: 'private' | 'public') => void
+}
+
+function ContentMetadataPanel({
+  title,
+  description,
+  visibility,
+  isSettingVisibility,
+  onTitleChange,
+  onDescriptionChange,
+  onVisibilityChange,
+}: ContentMetadataPanelProps) {
+  return (
+    <aside
+      aria-label='内容属性'
+      className='flex h-full min-h-0 flex-col gap-4 overflow-auto rounded-lg border bg-card p-4'
+    >
+      <div className='text-sm font-semibold'>属性</div>
+      <div className='grid gap-2'>
+        <Label htmlFor='content-title'>标题</Label>
+        <Input
+          id='content-title'
+          value={title}
+          onChange={(event) => onTitleChange(event.target.value)}
+        />
+      </div>
+      <div className='grid gap-2'>
+        <Label htmlFor='content-description'>描述</Label>
+        <Textarea
+          id='content-description'
+          value={description}
+          onChange={(event) => onDescriptionChange(event.target.value)}
+          className='min-h-28 resize-y'
+        />
+      </div>
+      <div className='flex h-9 items-center justify-between gap-3 rounded-md border px-3'>
+        <span className='text-sm font-medium'>公开</span>
+        <Switch
+          checked={visibility === 'public'}
+          disabled={isSettingVisibility}
+          onCheckedChange={(checked) =>
+            onVisibilityChange(checked ? 'public' : 'private')
+          }
+        />
+      </div>
+    </aside>
   )
 }

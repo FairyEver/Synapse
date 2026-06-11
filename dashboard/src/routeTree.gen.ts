@@ -39,7 +39,7 @@ import { Route as AuthenticatedMyContentContentIdRouteImport } from './routes/_a
 import { Route as AuthenticatedContentStoreInstallRouteImport } from './routes/_authenticated/content-store/install'
 import { Route as AuthenticatedContentStoreContentIdRouteImport } from './routes/_authenticated/content-store/$contentId'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
-import { Route as AuthenticatedMyContentContentIdEditRouteImport } from './routes/_authenticated/my-content/$contentId/edit'
+import { Route as AuthenticatedMyContentContentIdEditRouteImport } from './routes/_authenticated/my-content/$contentId_/edit'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -210,9 +210,9 @@ const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
 } as any)
 const AuthenticatedMyContentContentIdEditRoute =
   AuthenticatedMyContentContentIdEditRouteImport.update({
-    id: '/edit',
-    path: '/edit',
-    getParentRoute: () => AuthenticatedMyContentContentIdRoute,
+    id: '/my-content/$contentId_/edit',
+    path: '/my-content/$contentId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -226,7 +226,7 @@ export interface FileRoutesByFullPath {
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
-  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRouteWithChildren
+  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/my-content/new': typeof AuthenticatedMyContentNewRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
@@ -257,7 +257,7 @@ export interface FileRoutesByTo {
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
-  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRouteWithChildren
+  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/my-content/new': typeof AuthenticatedMyContentNewRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
@@ -291,7 +291,7 @@ export interface FileRoutesById {
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/_authenticated/content-store/install': typeof AuthenticatedContentStoreInstallRoute
-  '/_authenticated/my-content/$contentId': typeof AuthenticatedMyContentContentIdRouteWithChildren
+  '/_authenticated/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/_authenticated/my-content/new': typeof AuthenticatedMyContentNewRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
@@ -310,7 +310,7 @@ export interface FileRoutesById {
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
-  '/_authenticated/my-content/$contentId/edit': typeof AuthenticatedMyContentContentIdEditRoute
+  '/_authenticated/my-content/$contentId_/edit': typeof AuthenticatedMyContentContentIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -408,7 +408,7 @@ export interface FileRouteTypes {
     | '/_authenticated/users/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
-    | '/_authenticated/my-content/$contentId/edit'
+    | '/_authenticated/my-content/$contentId_/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -633,12 +633,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authAuthDesktopRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/my-content/$contentId/edit': {
-      id: '/_authenticated/my-content/$contentId/edit'
-      path: '/edit'
+    '/_authenticated/my-content/$contentId_/edit': {
+      id: '/_authenticated/my-content/$contentId_/edit'
+      path: '/my-content/$contentId/edit'
       fullPath: '/my-content/$contentId/edit'
       preLoaderRoute: typeof AuthenticatedMyContentContentIdEditRouteImport
-      parentRoute: typeof AuthenticatedMyContentContentIdRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
@@ -657,27 +657,12 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
-interface AuthenticatedMyContentContentIdRouteChildren {
-  AuthenticatedMyContentContentIdEditRoute: typeof AuthenticatedMyContentContentIdEditRoute
-}
-
-const AuthenticatedMyContentContentIdRouteChildren: AuthenticatedMyContentContentIdRouteChildren =
-  {
-    AuthenticatedMyContentContentIdEditRoute:
-      AuthenticatedMyContentContentIdEditRoute,
-  }
-
-const AuthenticatedMyContentContentIdRouteWithChildren =
-  AuthenticatedMyContentContentIdRoute._addFileChildren(
-    AuthenticatedMyContentContentIdRouteChildren,
-  )
-
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedContentStoreContentIdRoute: typeof AuthenticatedContentStoreContentIdRoute
   AuthenticatedContentStoreInstallRoute: typeof AuthenticatedContentStoreInstallRoute
-  AuthenticatedMyContentContentIdRoute: typeof AuthenticatedMyContentContentIdRouteWithChildren
+  AuthenticatedMyContentContentIdRoute: typeof AuthenticatedMyContentContentIdRoute
   AuthenticatedMyContentNewRoute: typeof AuthenticatedMyContentNewRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
   AuthenticatedAuditLogsIndexRoute: typeof AuthenticatedAuditLogsIndexRoute
@@ -695,6 +680,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
+  AuthenticatedMyContentContentIdEditRoute: typeof AuthenticatedMyContentContentIdEditRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -703,8 +689,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedContentStoreContentIdRoute:
     AuthenticatedContentStoreContentIdRoute,
   AuthenticatedContentStoreInstallRoute: AuthenticatedContentStoreInstallRoute,
-  AuthenticatedMyContentContentIdRoute:
-    AuthenticatedMyContentContentIdRouteWithChildren,
+  AuthenticatedMyContentContentIdRoute: AuthenticatedMyContentContentIdRoute,
   AuthenticatedMyContentNewRoute: AuthenticatedMyContentNewRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
   AuthenticatedAuditLogsIndexRoute: AuthenticatedAuditLogsIndexRoute,
@@ -724,6 +709,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
+  AuthenticatedMyContentContentIdEditRoute:
+    AuthenticatedMyContentContentIdEditRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FilePlus, Pencil, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -83,13 +84,16 @@ export function SkillFileTree({
   }
 
   return (
-    <div className='flex min-h-0 flex-col rounded-md border'>
+    <div className='flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card'>
       <div className='flex items-center justify-between gap-2 px-3 py-2'>
-        <div className='text-sm font-medium'>文件</div>
+        <div className='flex min-w-0 items-center gap-2'>
+          <div className='text-sm font-medium'>文件</div>
+          <Badge variant='secondary'>{files.length}</Badge>
+        </div>
         <Button
           type='button'
           variant='ghost'
-          className='h-8 px-2'
+          size='sm'
           onClick={() => uploadRef.current?.click()}
         >
           <Upload data-icon='inline-start' />
@@ -103,46 +107,57 @@ export function SkillFileTree({
         />
       </div>
       <Separator />
-      <ScrollArea className='min-h-72 flex-1'>
-        <div className='p-2'>
-          {files.map((file) => (
-            <button
-              key={file.path}
-              type='button'
-              data-active={file.path === selectedPath}
-              className='flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent data-[active=true]:bg-accent'
-              onClick={() => {
-                onSelect(file.path)
-              }}
-            >
-              <span className='min-w-0 truncate'>{file.path}</span>
-              {file.kind === 'binary' ? (
-                <span className='shrink-0 text-xs text-muted-foreground'>
-                  {formatContentStoreSize(file.size)}
-                </span>
-              ) : null}
-            </button>
-          ))}
+      <div className='grid gap-2 p-3'>
+        <Label htmlFor='skill-file-path'>路径</Label>
+        <div className='flex gap-2'>
+          <Input
+            id='skill-file-path'
+            value={pathInput}
+            onChange={(event) => setPathInput(event.target.value)}
+            placeholder='docs/guide.md'
+            className='h-8 text-sm'
+          />
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={() => void handleAddTextFile()}
+          >
+            <FilePlus data-icon='inline-start' />
+            新建
+          </Button>
         </div>
+      </div>
+      <Separator />
+      <ScrollArea className='min-h-0 flex-1'>
+        {files.length ? (
+          <div className='p-2'>
+            {files.map((file) => (
+              <button
+                key={file.path}
+                type='button'
+                data-active={file.path === selectedPath}
+                className='flex h-8 w-full items-center justify-between gap-2 rounded-md px-2 text-left text-sm hover:bg-accent data-[active=true]:bg-accent'
+                onClick={() => {
+                  onSelect(file.path)
+                }}
+              >
+                <span className='min-w-0 truncate'>{file.path}</span>
+                {file.kind === 'binary' ? (
+                  <span className='shrink-0 text-xs text-muted-foreground'>
+                    {formatContentStoreSize(file.size)}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className='p-3 text-sm text-muted-foreground'>暂无文件</div>
+        )}
       </ScrollArea>
       <Separator />
-      <div className='flex flex-col gap-3 p-3'>
-        <div className='flex flex-col gap-2'>
-          <Label htmlFor='skill-file-path'>路径</Label>
-          <div className='flex gap-2'>
-            <Input
-              id='skill-file-path'
-              value={pathInput}
-              onChange={(event) => setPathInput(event.target.value)}
-              placeholder='docs/guide.md'
-            />
-            <Button type='button' variant='outline' onClick={() => void handleAddTextFile()}>
-              <FilePlus data-icon='inline-start' />
-              新建
-            </Button>
-          </div>
-        </div>
-        <div className='flex flex-col gap-2'>
+      <div className='grid gap-3 p-3'>
+        <div className='grid gap-2'>
           <Label htmlFor='skill-file-rename'>重命名</Label>
           <div className='flex gap-2'>
             <Input
@@ -150,10 +165,12 @@ export function SkillFileTree({
               value={renameInput}
               onChange={(event) => setRenameInput(event.target.value)}
               disabled={!selectedPath || selectedPath === 'SKILL.md'}
+              className='h-8 text-sm'
             />
             <Button
               type='button'
               variant='outline'
+              size='sm'
               disabled={!selectedPath || selectedPath === 'SKILL.md'}
               onClick={handleRename}
             >
@@ -165,6 +182,8 @@ export function SkillFileTree({
         <Button
           type='button'
           variant='outline'
+          size='sm'
+          className='w-full text-destructive hover:text-destructive'
           disabled={!selectedPath || selectedPath === 'SKILL.md'}
           onClick={handleDelete}
         >

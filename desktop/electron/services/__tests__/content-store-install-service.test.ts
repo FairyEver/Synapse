@@ -122,6 +122,18 @@ describe("ContentStoreInstallService", () => {
       content: "# Store Skill\n",
       attachments: [{ originalName: "assets/icon.bin", size: 4 }],
     })
+    expect(account.fetchAuthenticated).toHaveBeenNthCalledWith(
+      1,
+      "/content-store/install-sessions/session-1",
+      expect.objectContaining({ method: "GET" }),
+      "安装信息加载失败。",
+    )
+    expect(account.fetchAuthenticated).toHaveBeenNthCalledWith(
+      2,
+      "/content-store/install-sessions/session-1/package",
+      expect.objectContaining({ method: "GET" }),
+      "安装包下载失败。",
+    )
   })
 
   it("checks the package hash before parsing the archive and cleans failed downloads", async () => {
@@ -309,7 +321,7 @@ describe("ContentStoreInstallService", () => {
 
     expect(getOrCreate).toHaveBeenCalledTimes(1)
     expect(account.fetchAuthenticated).toHaveBeenLastCalledWith(
-      "/api/content-store/install-sessions/session-1/complete",
+      "/content-store/install-sessions/session-1/complete",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ clientInstanceId: "client-stable" }),

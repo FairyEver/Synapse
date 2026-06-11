@@ -41,6 +41,23 @@ afterEach(() => {
 })
 
 describe("KnowledgeBaseStoragePanel", () => {
+  it("shows a loading state before storage status is ready", async () => {
+    bridge.knowledgeBase.getStorageStatus.mockReturnValue(new Promise(() => undefined))
+
+    await renderPanel()
+
+    expect(document.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe("正在读取知识库存储")
+  })
+
+  it("shows a readable error when storage status fails to load", async () => {
+    bridge.knowledgeBase.getStorageStatus.mockRejectedValue(new Error("load failed"))
+
+    await renderPanel()
+    await waitForExpectation(() => {
+      expect(document.querySelector('[role="alert"]')?.textContent).toBe("load failed")
+    })
+  })
+
   it("shows recheck only when custom storage is unavailable", async () => {
     bridge.knowledgeBase.getStorageStatus.mockResolvedValue({
       mode: "custom",
@@ -77,4 +94,20 @@ function buttonByText(text: string): HTMLButtonElement {
   const button = findButton(text)
   if (!button) throw new Error(`Button not found: ${text}`)
   return button
+}
+
+async function waitForExpectation(assertion: () => void): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      })
+    }
+  }
+  throw lastError
 }

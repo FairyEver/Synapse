@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
-import { isModelPricePresetId } from "../index"
+import { isModelPricePresetId, MODEL_PRICE_PRESETS } from "../index"
 import { createModelPriceRuleId } from "../rule-id"
 import { initModelPriceSchema, ModelPriceService } from "../service"
 
@@ -284,6 +284,20 @@ describe("model price service", () => {
     expect(isModelPricePresetId(123)).toBe(false)
   })
 
+  it("keeps openai codex preset prices aligned with official API pricing", () => {
+    const openai = MODEL_PRICE_PRESETS.find((preset) => preset.id === "openai")
+
+    expect(openai?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        modelPattern: "gpt-5.3-codex",
+        inputPer1M: 12.6,
+        outputPer1M: 100.8,
+        cacheReadPer1M: 1.26,
+        reasoningPer1M: 100.8,
+      }),
+    ]))
+  })
+
   it("imports deepseek official preset using official prices", () => {
     const db = createDb()
     const service = new ModelPriceService(db)
@@ -302,6 +316,41 @@ describe("model price service", () => {
     expect(rule?.id).toMatch(/^mpr_[a-f0-9]{12}$/)
     expect(rule?.id).not.toContain("deepseek")
     db.close()
+  })
+
+  it("keeps aliyun bailian preset model ids and cache prices aligned with text model pricing", () => {
+    const bailian = MODEL_PRICE_PRESETS.find((preset) => preset.id === "aliyun-bailian")
+
+    expect(bailian?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        modelPattern: "qwen3.7-max",
+        inputPer1M: 12,
+        outputPer1M: 36,
+        cacheReadPer1M: 1.2,
+        cacheWritePer1M: 15,
+      }),
+      expect.objectContaining({
+        modelPattern: "qwen3-coder-plus",
+        inputPer1M: 20,
+        outputPer1M: 200,
+        cacheReadPer1M: 2,
+        cacheWritePer1M: 25,
+      }),
+      expect.objectContaining({
+        modelPattern: "deepseek-v4-pro",
+        inputPer1M: 12,
+        outputPer1M: 24,
+        cacheReadPer1M: 1.2,
+        cacheWritePer1M: 15,
+      }),
+      expect.objectContaining({
+        modelPattern: "MiniMax/MiniMax-M3",
+        inputPer1M: 4.2,
+        outputPer1M: 16.8,
+        cacheReadPer1M: 0.42,
+        cacheWritePer1M: 5.25,
+      }),
+    ]))
   })
 
   it("overwrites existing user rule when importing deepseek official preset", () => {
@@ -388,7 +437,8 @@ describe("model price service", () => {
     expect(rule).toMatchObject({
       inputPer1M: 12,
       outputPer1M: 24,
-      cacheReadPer1M: 0,
+      cacheReadPer1M: 1.2,
+      cacheWritePer1M: 15,
       reasoningPer1M: 24,
       source: "builtin",
     })

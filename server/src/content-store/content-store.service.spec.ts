@@ -358,6 +358,21 @@ describe("ContentStoreService", () => {
     await expect(service.resolveInstallSession("user-2", "session-1")).rejects.toThrow(ForbiddenException)
   })
 
+  it("resolves install sessions without exposing the package storage key", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession())
+
+    await expect(service.resolveInstallSession("user-1", "session-1")).resolves.toEqual({
+      id: "session-1",
+      contentId: "item-1",
+      versionId: "version-1",
+      type: "skill",
+      title: "Title",
+      packageSha256: "a".repeat(64),
+      packageSize: "100",
+      expiresAt: expect.any(String),
+    })
+  })
+
   it("opens an install package stream for the session owner", async () => {
     prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession())
     const stream = bufferStream("package")

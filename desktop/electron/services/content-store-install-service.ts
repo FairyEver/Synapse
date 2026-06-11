@@ -127,7 +127,7 @@ export class ContentStoreInstallService {
 
     try {
       const response = await this.account.fetchAuthenticated(
-        `/api/content-store/install-sessions/${encodeURIComponent(sessionId)}`,
+        `/content-store/install-sessions/${encodeURIComponent(sessionId)}`,
         { method: "GET" },
         "安装信息加载失败。",
       )
@@ -162,7 +162,7 @@ export class ContentStoreInstallService {
 
   async recordInstall(sessionId: string, clientInstanceId: string): Promise<{ ok: true }> {
     await this.account.fetchAuthenticated(
-      `/api/content-store/install-sessions/${encodeURIComponent(sessionId)}/complete`,
+      `/content-store/install-sessions/${encodeURIComponent(sessionId)}/complete`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -368,7 +368,7 @@ export class ContentStoreInstallService {
     packagePath: string,
   ): Promise<void> {
     const response = await this.account.fetchAuthenticated(
-      `/api/content-store/install-sessions/${encodeURIComponent(session.id)}/package`,
+      `/content-store/install-sessions/${encodeURIComponent(session.id)}/package`,
       { method: "GET" },
       "安装包下载失败。",
     )

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { ModuleContentPanel } from "@/components/module-page"
 import { Badge } from "@/components/ui/badge"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
@@ -20,81 +21,122 @@ interface ModelCoverageViewProps {
 export function ModelCoverageView({ state }: ModelCoverageViewProps) {
   if (state.loading && !state.data) {
     return (
-      <div className="space-y-2">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-9 w-full" />
-        ))}
-      </div>
+      <CoveragePanel>
+        <div className="space-y-2 p-2">
+          <Skeleton className="h-10 w-full" />
+          {Array.from({ length: 8 }).map((_, index) => (
+            <Skeleton key={index} className="h-9 w-full" />
+          ))}
+        </div>
+      </CoveragePanel>
     )
   }
 
   if (state.error) {
     return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>读取失败</EmptyTitle>
-          <EmptyDescription>{state.error.message}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <CoveragePanel>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>读取失败</EmptyTitle>
+            <EmptyDescription>{state.error.message}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </CoveragePanel>
     )
   }
 
   const rows = state.data ?? []
   if (rows.length === 0) {
     return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyTitle>暂无模型</EmptyTitle>
-          <EmptyDescription>刷新 CC 或 Codex 后查看覆盖情况。</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <CoveragePanel>
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>暂无覆盖数据</EmptyTitle>
+            <EmptyDescription>刷新后查看 CC 或 Codex 使用记录。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </CoveragePanel>
     )
   }
 
   return (
-    <ModuleContentPanel className="overflow-x-auto">
-      <Table className="min-w-[60rem] table-fixed">
+    <CoveragePanel>
+      <Table className="table-fixed" containerClassName="overflow-x-hidden">
         <colgroup>
-          <col className="w-auto" />
-          <col className="w-32" />
-          <col className="w-64" />
-          <col className="w-40" />
-          <col className="w-28" />
-          <col className="w-32" />
-          <col className="w-36" />
+          <col className="w-2/5" />
+          <col className="w-1/4" />
+          <col />
         </colgroup>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>模型</TableHead>
-            <TableHead>来源</TableHead>
-            <TableHead>规则</TableHead>
-            <TableHead className="text-right">Tokens</TableHead>
-            <TableHead className="text-right">请求</TableHead>
-            <TableHead className="text-right">未定价</TableHead>
-            <TableHead className="text-right">费用</TableHead>
+            <TableHead>定价</TableHead>
+            <TableHead className="text-right">用量</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.model}>
-              <TableCell className="font-medium">{row.model}</TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  {row.sources.map((source) => (
-                    <Badge key={source} variant="secondary">{sourceLabel(source)}</Badge>
-                  ))}
+              <TableCell className="whitespace-normal">
+                <div className="flex min-w-0 flex-col items-start gap-1">
+                  <span className="min-w-0 break-all font-medium">{row.model}</span>
+                  <span className="flex flex-wrap gap-1">
+                    {row.sources.map((source) => (
+                      <Badge key={source} variant="secondary">{sourceLabel(source)}</Badge>
+                    ))}
+                  </span>
                 </div>
               </TableCell>
-              <TableCell>{row.priceKnown ? row.matchedRulePattern : <span className="text-muted-foreground">未匹配</span>}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatInteger(row.requests)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatInteger(row.unpricedTokens)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatSynapseCost(row.estimatedCost)}</TableCell>
+              <TableCell className="whitespace-normal">{renderPricingStatus(row)}</TableCell>
+              <TableCell className="whitespace-normal">
+                <UsageSummary row={row} />
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+    </CoveragePanel>
+  )
+}
+
+function CoveragePanel({ children }: { readonly children: ReactNode }) {
+  return (
+    <ModuleContentPanel className="overflow-hidden">
+      {children}
     </ModuleContentPanel>
+  )
+}
+
+function renderPricingStatus(row: ModelPriceCoverageRow): ReactNode {
+  if (!row.priceKnown) {
+    return <span className="text-muted-foreground">未匹配</span>
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <Badge variant="outline">已匹配</Badge>
+      <span className="min-w-0 break-all text-muted-foreground">{row.matchedRulePattern}</span>
+    </div>
+  )
+}
+
+function UsageSummary({ row }: { readonly row: ModelPriceCoverageRow }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+      <UsageMetric label="Tokens" value={formatInteger(row.tokens)} />
+      <UsageMetric label="请求" value={formatInteger(row.requests)} />
+      <UsageMetric label="未定价" value={formatInteger(row.unpricedTokens)} />
+      <UsageMetric label="费用" value={formatSynapseCost(row.estimatedCost)} />
+    </dl>
+  )
+}
+
+function UsageMetric({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-right tabular-nums">{value}</dd>
+    </>
   )
 }
 

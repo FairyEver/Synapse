@@ -87,6 +87,22 @@ describe("ContentStoreUserController", () => {
     expect(service.publishDraft).toHaveBeenCalledWith("user-1", "item-1", 3)
   })
 
+  it("allows empty non-main Skill files in draft payloads", async () => {
+    const service = {
+      createDraft: vi.fn().mockResolvedValue({ id: "draft-1" }),
+    }
+    const controller = new ContentStoreUserController(service as never)
+    const request = userRequest("user-1")
+    const files = [
+      { path: "SKILL.md", contentBase64: Buffer.from("# Skill").toString("base64") },
+      { path: "send_daily_worklog_diagnostics.log", contentBase64: "" },
+    ]
+
+    await controller.createDraft({ type: "skill", title: "Skill", files }, request)
+
+    expect(service.createDraft).toHaveBeenCalledWith("user-1", expect.objectContaining({ files }))
+  })
+
   it("forwards item actions with authenticated user identity", async () => {
     const service = {
       getDetail: vi.fn().mockResolvedValue({ id: "item-1" }),

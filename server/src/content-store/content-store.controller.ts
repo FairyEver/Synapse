@@ -27,7 +27,7 @@ const adminListQuerySchema = listQuerySchema.extend({
 
 const fileSchema = z.object({
   path: z.string().trim().min(1).max(1024),
-  contentBase64: z.string().min(1).refine(isStrictBase64, "必须是有效的 base64 内容"),
+  contentBase64: z.string().refine(isStrictBase64, "必须是有效的 base64 内容"),
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
 

@@ -1,6 +1,7 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { useUsageAutoRefresh } from "../shared/auto-refresh"
 import { CODEX_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
 import { getUsageRefreshWarning } from "../shared/refresh-result"
@@ -21,7 +22,7 @@ export function CodexUsagePage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
       const result = await requireSynapseBridge().usageAnalysis.codex.refresh()
@@ -33,7 +34,9 @@ export function CodexUsagePage() {
     } finally {
       setRefreshing(false)
     }
-  }
+  }, [showError, showWarning])
+
+  useUsageAutoRefresh("codex", refresh)
 
   return (
     <UsageAnalysisShell
@@ -48,23 +51,24 @@ export function CodexUsagePage() {
         void refresh()
       }}
     >
-      {view === "today" ? <CodexTodayPage refreshKey={refreshKey} /> : null}
-      {view === "overview" ? <CodexOverviewPage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
-      {view === "time" ? <CodexTimePage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
-      {view === "models" ? <CodexModelsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "projects" ? <CodexProjectsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "tools" ? <CodexToolsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "details" ? <CodexDetailsPage range={range} refreshKey={refreshKey} /> : null}
+      {view === "today" ? <CodexTodayPage refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "overview" ? <CodexOverviewPage range={range} refreshKey={refreshKey} refreshing={refreshing} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
+      {view === "time" ? <CodexTimePage range={range} refreshKey={refreshKey} refreshing={refreshing} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
+      {view === "models" ? <CodexModelsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "projects" ? <CodexProjectsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "tools" ? <CodexToolsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
+      {view === "details" ? <CodexDetailsPage range={range} refreshKey={refreshKey} refreshing={refreshing} /> : null}
     </UsageAnalysisShell>
   )
 }
 
-function CodexTodayPage({ refreshKey }: { readonly refreshKey: number }) {
+function CodexTodayPage({ refreshKey, refreshing }: { readonly refreshKey: number; readonly refreshing: boolean }) {
   return (
     <TodayReportView
       overviewState={useCodexOverview("today", refreshKey)}
       timeState={useCodexTime("today", refreshKey)}
       modelsState={useCodexModels("today", refreshKey)}
+      refreshing={refreshing}
     />
   )
 }

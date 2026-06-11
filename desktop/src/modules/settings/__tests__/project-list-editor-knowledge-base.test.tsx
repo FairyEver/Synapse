@@ -158,6 +158,32 @@ function deferred<T>() {
 }
 
 describe("ProjectListEditor knowledge base actions", () => {
+  it("shows an empty state inside the project section", () => {
+    renderEditor([])
+
+    expect(document.body.textContent).toContain("项目和知识库")
+    expect(document.body.textContent).toContain("暂无项目")
+    expect(buttonByText("新建知识库")).toBeTruthy()
+    expect(buttonByText("添加项目")).toBeTruthy()
+  })
+
+  it("renders projects in an aligned table layout", () => {
+    renderEditor([
+      kbProject,
+      {
+        id: "project-2",
+        name: "App",
+        path: "/Users/example/projects/app",
+      },
+    ])
+
+    expect(document.querySelector("table")).toBeTruthy()
+    expect(document.body.textContent).toContain("名称")
+    expect(document.body.textContent).toContain("位置")
+    expect(document.body.textContent).toContain("/Users/example/projects/app")
+    expect(document.body.textContent).not.toContain("synapse-kb://project-1")
+  })
+
   it("shows a knowledge base badge and source manager action for knowledge base projects", async () => {
     renderEditor([kbProject])
 

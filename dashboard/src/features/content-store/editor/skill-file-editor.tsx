@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import Editor from '@monaco-editor/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { formatContentStoreSize } from '../content-store-display'
 import type { SkillEditorFile } from './content-store-editor-types'
 import {
@@ -25,13 +26,19 @@ export function SkillFileEditor({
     files.find((file) => file.path === selectedPath) ?? files[0] ?? null
 
   if (!selectedFile) {
-    return <div className='rounded-md border p-4 text-sm text-muted-foreground'>暂无文件</div>
+    return (
+      <div className='flex h-full min-h-0 items-center justify-center rounded-lg border bg-card p-4 text-sm text-muted-foreground'>
+        暂无文件
+      </div>
+    )
   }
 
   async function handleTextChange(value: string | undefined) {
     if (!selectedFile || selectedFile.kind !== 'text') return
     try {
-      onFilesChange(await updateSkillTextFile(files, selectedFile.path, value ?? ''))
+      onFilesChange(
+        await updateSkillTextFile(files, selectedFile.path, value ?? '')
+      )
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '编辑失败')
     }
@@ -40,24 +47,26 @@ export function SkillFileEditor({
   async function handleReplace(upload: File | undefined) {
     if (!upload || !selectedFile) return
     try {
-      onFilesChange(await replaceSkillFileFromUpload(files, upload, selectedFile.path))
+      onFilesChange(
+        await replaceSkillFileFromUpload(files, upload, selectedFile.path)
+      )
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '替换失败')
     }
   }
 
   return (
-    <div className='flex min-h-0 flex-col rounded-md border'>
-      <div className='flex items-center justify-between gap-3 border-b px-3 py-2 text-sm'>
+    <div className='flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card'>
+      <div className='flex min-h-12 flex-col gap-2 border-b px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between'>
         <div className='min-w-0 truncate font-medium'>{selectedFile.path}</div>
-        <div className='flex shrink-0 items-center gap-3'>
-          <span className='text-muted-foreground'>
+        <div className='flex shrink-0 items-center gap-2'>
+          <span className='text-xs text-muted-foreground'>
             {formatContentStoreSize(selectedFile.size)}
           </span>
           <Button
             type='button'
             variant='outline'
-            className='h-8 px-2'
+            size='sm'
             onClick={() => replaceRef.current?.click()}
           >
             替换
@@ -71,9 +80,9 @@ export function SkillFileEditor({
         </div>
       </div>
       {selectedFile.kind === 'text' ? (
-        <div className='min-h-120'>
+        <div className='min-h-0 flex-1 overflow-hidden'>
           <Editor
-            height='480px'
+            height='100%'
             language={languageForPath(selectedFile.path)}
             value={selectedFile.text}
             onChange={(value) => void handleTextChange(value)}
@@ -87,13 +96,12 @@ export function SkillFileEditor({
           />
         </div>
       ) : (
-        <div className='flex min-h-80 flex-col gap-2 p-4 text-sm'>
-          <div className='font-medium'>{selectedFile.path}</div>
-          <div className='text-muted-foreground'>
-            {formatContentStoreSize(selectedFile.size)}
+        <ScrollArea className='min-h-0 flex-1'>
+          <div className='flex min-h-64 flex-col items-center justify-center gap-2 p-6 text-center text-sm'>
+            <div className='font-medium'>{selectedFile.path}</div>
+            <div className='text-muted-foreground'>二进制文件不可编辑</div>
           </div>
-          <div className='text-muted-foreground'>二进制文件不可编辑</div>
-        </div>
+        </ScrollArea>
       )}
     </div>
   )
@@ -102,7 +110,9 @@ export function SkillFileEditor({
 function languageForPath(path: string): string {
   if (path.endsWith('.json')) return 'json'
   if (path.endsWith('.ts') || path.endsWith('.tsx')) return 'typescript'
-  if (path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.mjs')) return 'javascript'
+  if (path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.mjs')) {
+    return 'javascript'
+  }
   if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml'
   if (path.endsWith('.css')) return 'css'
   if (path.endsWith('.html')) return 'html'

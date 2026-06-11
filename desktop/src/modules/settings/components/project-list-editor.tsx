@@ -14,10 +14,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -26,9 +26,12 @@ import {
 import { Field, FieldError, FieldGroup } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getProjectNameFromPath } from "@/lib/path-utils"
 import { getRendererPlatform } from "@/lib/runtime-platform"
+import { SettingsGroup } from "@/modules/settings/components/settings-group"
+import { SettingsSectionHeading } from "@/modules/settings/components/settings-section-heading"
 import type { SynapseProjectConfig } from "@/types/config"
 
 const logger = createRendererLogger("settings.projects")
@@ -352,113 +355,51 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     }
   }
 
-  return (
-    <div className="flex flex-col gap-2">
-      {projects.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {projects.map((project) => (
-            <Card key={project.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 truncate">{project.name}</span>
-                  {isKnowledgeBaseProject(project) ? (
-                    <Badge variant="secondary">知识库</Badge>
-                  ) : null}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                {!isKnowledgeBaseProject(project) ? (
-                  <p className="text-sm text-muted-foreground break-all">
-                    {project.path}
-                  </p>
-                ) : null}
-              </CardContent>
-              <CardFooter className="justify-end gap-2">
-                {isKnowledgeBaseProject(project) ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={openingKnowledgeBaseProjectId === project.id}
-                    onClick={() => void handleOpenKnowledgeBaseSources(project)}
-                  >
-                    资料管理
-                  </Button>
-                ) : null}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleEditProject(project)}
-                >
-                  修改
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const bridge = window.synapse?.agent
-                    if (!bridge) {
-                      setDeleteTarget({ project, sessionCount: null })
-                      return
-                    }
-                    void bridge.listSessions(project.id).then((sessions) => {
-                      if (sessions.length > 0) {
-                        setDeleteTarget({ project, sessionCount: sessions.length })
-                      } else {
-                        void handleRemoveProject(project)
-                      }
-                    }).catch((err) => {
-                      logger.error("Failed to list project sessions before deletion.", { projectId: project.id, error: err })
-                      setDeleteTarget({ project, sessionCount: null })
-                    })
-                  }}
-                >
-                  删除
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        <Dialog open={isKnowledgeBaseDialogOpen} onOpenChange={handleKnowledgeBaseDialogOpenChange}>
-          <DialogTrigger asChild>
-            <Button variant="outline">新建知识库</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px]">
-            <DialogHeader>
-              <DialogTitle>新建知识库</DialogTitle>
-            </DialogHeader>
-            <FieldGroup className="gap-2">
-              <Field>
-                <Label htmlFor="knowledge-base-name">知识库名称</Label>
-                <Input
-                  id="knowledge-base-name"
-                  value={knowledgeBaseName}
-                  onChange={(event) => setKnowledgeBaseName(event.target.value)}
-                  disabled={isCreatingKnowledgeBase}
-                />
-              </Field>
-              <FieldError>{knowledgeBaseError}</FieldError>
-            </FieldGroup>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => handleKnowledgeBaseDialogOpenChange(false)} disabled={isCreatingKnowledgeBase}>
-                取消
-              </Button>
-              <Button onClick={() => void handleCreateKnowledgeBase()} disabled={isCreatingKnowledgeBase}>
-                {isCreatingKnowledgeBase ? "创建中..." : "创建"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
-          <DialogTrigger asChild>
-            <Button variant="outline">添加项目</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px]">
+  const actionButtons = (
+    <div className="flex flex-wrap gap-2">
+      <Dialog open={isKnowledgeBaseDialogOpen} onOpenChange={handleKnowledgeBaseDialogOpenChange}>
+        <DialogTrigger asChild>
+          <Button variant="outline">新建知识库</Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>新建知识库</DialogTitle>
+            <DialogDescription className="sr-only">
+              输入知识库名称。
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup className="gap-2">
+            <Field>
+              <Label htmlFor="knowledge-base-name">知识库名称</Label>
+              <Input
+                id="knowledge-base-name"
+                value={knowledgeBaseName}
+                onChange={(event) => setKnowledgeBaseName(event.target.value)}
+                disabled={isCreatingKnowledgeBase}
+              />
+            </Field>
+            <FieldError>{knowledgeBaseError}</FieldError>
+          </FieldGroup>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleKnowledgeBaseDialogOpenChange(false)} disabled={isCreatingKnowledgeBase}>
+              取消
+            </Button>
+            <Button onClick={() => void handleCreateKnowledgeBase()} disabled={isCreatingKnowledgeBase}>
+              {isCreatingKnowledgeBase ? "创建中..." : "创建"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
+        <DialogTrigger asChild>
+          <Button variant="outline">添加项目</Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>添加项目</DialogTitle>
+            <DialogDescription className="sr-only">
+              输入项目名称和路径。
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup className="gap-2">
             <Field>
@@ -512,12 +453,117 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <SettingsSectionHeading>项目和知识库</SettingsSectionHeading>
+      <SettingsGroup sectionClassName="p-0">
+        {projects.length > 0 ? (
+          <Table className="min-w-[760px] table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[15rem] px-4">名称</TableHead>
+                <TableHead>位置</TableHead>
+                <TableHead className="w-[15rem] px-4 text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {projects.map((project) => {
+                const knowledgeBaseProject = isKnowledgeBaseProject(project)
+                return (
+                  <TableRow key={project.id}>
+                    <TableCell className="px-4">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Folder className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 truncate font-medium" title={project.name}>
+                          {project.name}
+                        </span>
+                        {knowledgeBaseProject ? (
+                          <Badge variant="secondary">知识库</Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {knowledgeBaseProject ? (
+                        <span className="text-muted-foreground">知识库存储</span>
+                      ) : (
+                        <span
+                          className="block truncate text-muted-foreground"
+                          title={project.path}
+                          data-allow-select="true"
+                        >
+                          {project.path}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="px-4">
+                      <div className="flex justify-end gap-1">
+                        {knowledgeBaseProject ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={openingKnowledgeBaseProjectId === project.id}
+                            onClick={() => void handleOpenKnowledgeBaseSources(project)}
+                          >
+                            资料管理
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditProject(project)}
+                        >
+                          修改
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const bridge = window.synapse?.agent
+                            if (!bridge) {
+                              setDeleteTarget({ project, sessionCount: null })
+                              return
+                            }
+                            void bridge.listSessions(project.id).then((sessions) => {
+                              if (sessions.length > 0) {
+                                setDeleteTarget({ project, sessionCount: sessions.length })
+                              } else {
+                                void handleRemoveProject(project)
+                              }
+                            }).catch((err) => {
+                              logger.error("Failed to list project sessions before deletion.", { projectId: project.id, error: err })
+                              setDeleteTarget({ project, sessionCount: null })
+                            })
+                          }}
+                        >
+                          删除
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="px-4 py-6">
+            <p className="text-sm text-muted-foreground">暂无项目</p>
+          </div>
+        )}
+        <div className="px-4 py-3">
+          {actionButtons}
+        </div>
+      </SettingsGroup>
 
       <Dialog open={editingProject !== null} onOpenChange={(open) => { if (!open) handleEditDialogClose() }}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>修改项目</DialogTitle>
+            <DialogDescription className="sr-only">
+              修改项目信息。
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup className="gap-2">
             <Field>
