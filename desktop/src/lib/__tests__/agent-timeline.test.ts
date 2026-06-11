@@ -7,6 +7,42 @@ import {
 } from "../agent-timeline"
 
 describe("agent timeline conversion", () => {
+  it("preserves turn outcome metadata on cancelled result events", () => {
+    const item = agentEventToTimelineItem({
+      type: "result",
+      content: "",
+      done: true,
+      metadata: {
+        cancelled: true,
+        turnOutcome: {
+          status: "cancelled",
+          mode: "graceful",
+          reason: "user_cancelled",
+          message: "已停止本次执行。",
+          diagnostics: [{
+            source: "claude-sdk",
+            kind: "aborted",
+            message: "Request was aborted",
+          }],
+        },
+      },
+    }, {
+      id: "item-1",
+      timestamp: "2026-06-11T00:00:00.000Z",
+    })
+
+    expect(item).toMatchObject({
+      kind: "result",
+      metadata: {
+        cancelled: true,
+        turnOutcome: {
+          status: "cancelled",
+          message: "已停止本次执行。",
+        },
+      },
+    })
+  })
+
   it("converts live tool events into canonical items", () => {
     expect(agentEventToTimelineItem({
       type: "toolUse",

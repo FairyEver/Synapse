@@ -99,8 +99,18 @@ function AgentTimelineItem({
           <AlertDescription className="whitespace-pre-wrap break-words">{item.message}</AlertDescription>
         </Alert>
       )
-    case "result":
+    case "result": {
+      const outcome = item.metadata?.turnOutcome
+      if (outcome?.status === "cancelled") {
+        return (
+          <Alert>
+            <Info data-icon="inline-start" />
+            <AlertDescription>{outcome.message}</AlertDescription>
+          </Alert>
+        )
+      }
       return null
+    }
     case "phase":
       // Phase rows render through AgentPhaseRow inside AgentTimeline; this
       // branch is unreachable in the current call path but keeps the switch

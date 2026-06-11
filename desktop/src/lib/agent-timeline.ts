@@ -5,6 +5,7 @@ import type {
   SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
   SynapseAgentToolProgressTimelineItem,
+  SynapseAgentTurnOutcome,
   SynapseAgentUserQuestion,
 } from "../types/agent"
 
@@ -92,6 +93,7 @@ export function agentEventToTimelineItem(
         message: event.message,
         errorKind: event.errorKind,
         recoverable: event.recoverable,
+        turnOutcome: event.turnOutcome,
       }
     case "sessionInit":
       return {
@@ -198,6 +200,7 @@ export function historyRecordToTimelineItem(
         message: entry.content,
         errorKind: errorKindMetadata(metadata, "errorKind"),
         recoverable: booleanMetadata(metadata, "recoverable"),
+        turnOutcome: turnOutcomeMetadata(metadata, "turnOutcome"),
       }
     case "sdkEvent":
       return {
@@ -606,6 +609,7 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     contextRemainingPercent: numberMetadata(metadata, "contextRemainingPercent"),
     workDir: stringMetadata(metadata, "workDir"),
     cancelled: booleanMetadata(metadata, "cancelled"),
+    turnOutcome: turnOutcomeMetadata(metadata, "turnOutcome"),
     usage: recordMetadata(metadata, "usage"),
     turnUsage: recordMetadata(metadata, "turnUsage"),
     modelUsage: recordMetadata(metadata, "modelUsage"),
@@ -620,6 +624,14 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     estimatedCost: booleanMetadata(metadata, "estimatedCost"),
   }
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
+}
+
+function turnOutcomeMetadata(metadata: Record<string, unknown> | undefined, key: string): SynapseAgentTurnOutcome | undefined {
+  const value = metadata?.[key]
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  if (typeof record.status !== "string") return undefined
+  return record as unknown as SynapseAgentTurnOutcome
 }
 
 function resultMetadata(event: Extract<SynapseAgentEvent, { type: "result" }>): SynapseAgentResultMetadata | undefined {

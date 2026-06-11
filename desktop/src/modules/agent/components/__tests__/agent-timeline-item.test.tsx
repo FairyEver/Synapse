@@ -20,6 +20,36 @@ const profile: SynapseAgentDisplayProfile = {
 }
 
 describe("AgentTimelineItem", () => {
+  it("renders cancelled outcomes as non-destructive information", () => {
+    const html = renderToStaticMarkup(
+      <AgentTimelineItem
+        item={{
+          id: "result-1",
+          kind: "result",
+          content: "",
+          timestamp: "2026-06-11T00:00:00.000Z",
+          metadata: {
+            cancelled: true,
+            turnOutcome: {
+              status: "cancelled",
+              mode: "graceful",
+              reason: "user_cancelled",
+              message: "已停止本次执行。",
+            },
+          },
+        }}
+        profile={profile}
+        pendingPermissions={[]}
+        onOpenReference={vi.fn()}
+        onRespondPermission={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("已停止本次执行。")
+    expect(html).not.toContain("text-destructive")
+    expect(html).not.toContain("Agent 执行失败")
+  })
+
   it("wraps multi-line Agent error diagnostics without collapsing SDK details", () => {
     const html = renderToStaticMarkup(
       <AgentTimelineItem

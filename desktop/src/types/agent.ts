@@ -72,6 +72,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
         contextRemainingPercent?: number
         workDir?: string
         cancelled?: boolean
+        turnOutcome?: SynapseAgentTurnOutcome
         usage?: Record<string, unknown>
         turnUsage?: Record<string, unknown>
         modelUsage?: Record<string, unknown>
@@ -95,6 +96,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       message: string
       errorKind?: SynapseAgentErrorKind
       recoverable?: boolean
+      turnOutcome?: SynapseAgentTurnOutcome
       usage?: Record<string, unknown>
       modelUsage?: Record<string, unknown>
       sdkResultUuid?: string
@@ -162,6 +164,41 @@ export type SynapseAgentErrorKind =
   | "tool_use_interrupted"
   | "webfetch_preflight_failed"
 
+export interface SynapseAgentTurnDiagnostic {
+  readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
+  readonly kind: "aborted" | "closed" | "error" | "tool_use_interrupted"
+  readonly message?: string
+}
+
+export type SynapseAgentTurnOutcome =
+  | { readonly status: "completed"; readonly message?: string }
+  | {
+    readonly status: "cancelled"
+    readonly mode: "graceful" | "force"
+    readonly reason: "user_cancelled" | "system_cancelled" | "force_cancelled"
+    readonly message: string
+    readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
+  }
+  | {
+    readonly status: "failed"
+    readonly reason: string
+    readonly message: string
+    readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
+  }
+  | {
+    readonly status: "timed_out"
+    readonly reason: string
+    readonly message: string
+    readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
+  }
+  | {
+    readonly status: "interrupted"
+    readonly reason: "tool_use_interrupted"
+    readonly recoverable: true
+    readonly message: string
+    readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
+  }
+
 export type SynapseAgentTimelineKind =
   | "message"
   | "thinking"
@@ -190,6 +227,7 @@ export interface SynapseAgentResultMetadata {
   readonly contextRemainingPercent?: number
   readonly workDir?: string
   readonly cancelled?: boolean
+  readonly turnOutcome?: SynapseAgentTurnOutcome
   readonly usage?: Record<string, unknown>
   readonly turnUsage?: Record<string, unknown>
   readonly modelUsage?: Record<string, unknown>
@@ -259,6 +297,7 @@ export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase 
   readonly message: string
   readonly errorKind?: SynapseAgentErrorKind
   readonly recoverable?: boolean
+  readonly turnOutcome?: SynapseAgentTurnOutcome
 }
 
 export interface SynapseAgentResultTimelineItem extends SynapseAgentTimelineBase {
