@@ -263,6 +263,7 @@ function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",
       variables: [],
+      knowledgeBaseStorage: { mode: "default" },
     },
     agent: {
       defaultPermissionMode: "default",

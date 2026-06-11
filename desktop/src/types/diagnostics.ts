@@ -13,6 +13,16 @@ type SynapseDiagnosticsCheck = {
   durationMs?: number
 }
 
+type SynapseKnowledgeBaseStorageDiagnostics = {
+  mode: "default" | "custom"
+  rootPath: string
+  knowledgeBasesPath: string
+  available: boolean
+  runtimeCount: number
+  missingRuntimeCount: number
+  oldAbsoluteReferenceCount: number
+}
+
 type SynapseDiagnosticsReport = {
   schemaVersion: 1
   generatedAt: string
@@ -25,6 +35,7 @@ type SynapseDiagnosticsReport = {
   }
   system: Record<string, unknown>
   app: Record<string, unknown>
+  knowledgeBaseStorage?: SynapseKnowledgeBaseStorageDiagnostics
   activeContext: {
     repositoryUuid?: string
     repositoryName?: string
@@ -47,6 +58,7 @@ type SynapseDiagnosticsBundleExportResult = {
 export type {
   SynapseDiagnosticsBundleExportResult,
   SynapseDiagnosticsCheck,
+  SynapseKnowledgeBaseStorageDiagnostics,
   SynapseDiagnosticsReport,
   SynapseDiagnosticsSeverity,
   SynapseDiagnosticsStatus,

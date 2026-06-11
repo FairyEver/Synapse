@@ -2,7 +2,7 @@ import { app, dialog } from "electron"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
-import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../src/constants/defaults"
+import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_KNOWLEDGE_BASE_STORAGE } from "../../src/constants/defaults"
 import type {
   SynapseConfigBackup,
   SynapseConfigBackupExportResult,
@@ -12,6 +12,7 @@ import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../../
 import type {
   SynapseAgentGlobalConfig,
   SynapseFavorites,
+  SynapseKnowledgeBaseStorageConfig,
   SynapseProjectCapabilities,
   SynapseQuickInput,
   SynapseRecentlyViewed,
@@ -48,6 +49,34 @@ function isIsoDateString(value: unknown): value is string {
     && value.trim().length > 0
     && !Number.isNaN(Date.parse(value))
   )
+}
+
+function validateKnowledgeBaseStorageConfig(
+  rawValue: unknown,
+  errors: string[],
+): SynapseKnowledgeBaseStorageConfig | null {
+  if (rawValue === undefined) {
+    return DEFAULT_KNOWLEDGE_BASE_STORAGE
+  }
+
+  if (!isRecord(rawValue)) {
+    errors.push("config.global.knowledgeBaseStorage 必须是对象。")
+    return null
+  }
+
+  if (rawValue.mode === "default") {
+    return DEFAULT_KNOWLEDGE_BASE_STORAGE
+  }
+
+  if (rawValue.mode === "custom" && isNonEmptyString(rawValue.rootPath)) {
+    return {
+      mode: "custom",
+      rootPath: rawValue.rootPath.trim(),
+    }
+  }
+
+  errors.push("config.global.knowledgeBaseStorage 必须是 default 或包含 rootPath 的 custom。")
+  return null
 }
 
 function formatValidationErrors(errors: string[]): string {
@@ -617,6 +646,10 @@ function validateConfig(
   const recentlyViewed = validateContentLists(global.recentlyViewed, "config.global.recentlyViewed", errors)
   const contentSortOrder = global.contentSortOrder ?? "modified-desc"
   const variables = validateVariables(global.variables, "config.global.variables", errors) ?? []
+  const knowledgeBaseStorage = validateKnowledgeBaseStorageConfig(
+    global.knowledgeBaseStorage,
+    errors,
+  )
 
   if (
     typeof themeMode !== "string"
@@ -680,6 +713,7 @@ function validateConfig(
     || typeof contentSortOrder !== "string"
     || !SYNAPSE_CONTENT_SORT_OPTIONS.includes(contentSortOrder as (typeof SYNAPSE_CONTENT_SORT_OPTIONS)[number])
     || !normalizedAgent
+    || !knowledgeBaseStorage
   ) {
     return null
   }
@@ -696,6 +730,7 @@ function validateConfig(
       recentlyViewed,
       contentSortOrder: contentSortOrder as SynapseConfigBackup["config"]["global"]["contentSortOrder"],
       variables,
+      knowledgeBaseStorage,
     },
     agent: normalizedAgent,
   }

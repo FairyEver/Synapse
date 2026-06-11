@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { copyFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -12,6 +12,7 @@ import {
 import type {
   SynapseDiagnosticsBundleExportResult,
   SynapseDiagnosticsCheck,
+  SynapseKnowledgeBaseStorageDiagnostics,
   SynapseDiagnosticsReport,
 } from "../../src/types/diagnostics"
 import type {
@@ -46,6 +47,7 @@ import {
   type PackagedClaudeRuntimeStatus,
 } from "./agent-runtime/claude-runtime-binary"
 import { isManagedKnowledgeBaseProject, resolveProjectWorkspacePath } from "./knowledge-base/managed-path"
+import { resolveKnowledgeBasesDirectory, resolveKnowledgeBaseStorageRoot } from "./knowledge-base/storage-root"
 
 type AppPathName = Parameters<Electron.App["getPath"]>[0]
 
@@ -69,6 +71,12 @@ type PlatformInfo = Record<string, unknown> & {
 
 type PathStats = {
   isDirectory(): boolean
+}
+
+type DirectoryEntry = {
+  name: string
+  isDirectory(): boolean
+  isFile(): boolean
 }
 
 type ConfigStoreLike = {
@@ -129,6 +137,8 @@ type DiagnosticsServiceDeps = {
   now?: () => Date
   platformInfo?: () => PlatformInfo
   statPath?: (targetPath: string) => Promise<PathStats>
+  readDirectory?: (targetPath: string) => Promise<DirectoryEntry[]>
+  readTextFile?: (targetPath: string) => Promise<string>
   writeReadDeleteProbe?: (directoryPath: string) => Promise<void>
   chooseSavePath?: (defaultFileName: string) => Promise<string | null>
   makeTempDir?: (prefix: string) => Promise<string>
@@ -146,6 +156,14 @@ const RECENT_LOG_FILE_LIMIT = 3
 const RECENT_LOG_SAMPLE_LIMIT = 5
 const LIFECYCLE_LOG_SAMPLE_LIMIT = 5
 const AGENT_LOG_SAMPLE_LIMIT = 5
+const KNOWLEDGE_BASE_TEXT_FILE_EXTENSIONS = new Set([
+  ".md",
+  ".mdx",
+  ".txt",
+  ".json",
+  ".yaml",
+  ".yml",
+])
 
 type RecentLogSnapshot = {
   scannedFiles: string[]
@@ -188,6 +206,7 @@ class DiagnosticsService {
     const windowsCompatibility = this.createWindowsCompatibilitySnapshot(platformInfo)
     const macCompatibility = this.createMacCompatibilitySnapshot(platformInfo)
     const config = await this.loadConfig(checks)
+    const knowledgeBaseStorage = await this.collectKnowledgeBaseStorageDiagnostics(config)
     const activeProject = resolveActiveProject(config, payload.projectId)
     const activeRepository = config.repositories.find((item) => item.uuid === config.activeRepoUuid)
 
@@ -204,6 +223,7 @@ class DiagnosticsService {
     this.addNodeVisibilityCheck(checks, shellEnvironment)
     await this.addGitVisibilityCheck(checks, shellEnvironment)
 
+    this.addKnowledgeBaseStorageCheck(checks, knowledgeBaseStorage)
     await this.addPathChecks(checks, config)
     await this.addWindowsCompatibilityChecks(checks, config, windowsCompatibility)
     await this.addLogChecks(checks)
@@ -235,6 +255,7 @@ class DiagnosticsService {
         downloadsPath: this.deps.appInfo.getPath("downloads"),
         logPath: this.deps.logStore.getLogDirectory(),
       },
+      knowledgeBaseStorage,
       activeContext: {
         repositoryUuid: activeRepository?.uuid,
         repositoryName: activeRepository?.name,
@@ -516,6 +537,154 @@ class DiagnosticsService {
     }
   }
 
+  private async collectKnowledgeBaseStorageDiagnostics(
+    config: SynapseConfig,
+  ): Promise<SynapseKnowledgeBaseStorageDiagnostics> {
+    const userDataPath = this.deps.appInfo.getPath("userData")
+    const storage = config.global.knowledgeBaseStorage
+    const rootPath = resolveKnowledgeBaseStorageRoot({ userDataPath, storage })
+    const knowledgeBasesPath = resolveKnowledgeBasesDirectory({ userDataPath, storage })
+    const managedProjects = config.global.projects.filter(isManagedKnowledgeBaseProject)
+    const available = await this.isDirectoryAccessible(rootPath)
+    let missingRuntimeCount = 0
+
+    for (const project of managedProjects) {
+      const runtimePath = resolveProjectWorkspacePath(project, { userDataPath, storage })
+      if (!(await this.isDirectoryAccessible(runtimePath))) {
+        missingRuntimeCount += 1
+      }
+    }
+
+    const oldAbsoluteReferenceCount = storage.mode === "custom"
+      ? await this.countOldKnowledgeBaseAbsoluteReferences({
+          managedProjects,
+          storage,
+          userDataPath,
+        })
+      : 0
+
+    return {
+      mode: storage.mode,
+      rootPath,
+      knowledgeBasesPath,
+      available,
+      runtimeCount: managedProjects.length,
+      missingRuntimeCount,
+      oldAbsoluteReferenceCount,
+    }
+  }
+
+  private addKnowledgeBaseStorageCheck(
+    checks: SynapseDiagnosticsCheck[],
+    diagnostics: SynapseKnowledgeBaseStorageDiagnostics,
+  ): void {
+    if (!diagnostics.available) {
+      checks.push(this.failed(
+        "knowledge-base.storage",
+        "知识库",
+        "存储位置",
+        "知识库存储位置不可访问",
+        diagnostics,
+      ))
+      return
+    }
+
+    if (diagnostics.missingRuntimeCount > 0 || diagnostics.oldAbsoluteReferenceCount > 0) {
+      checks.push(this.degraded(
+        "knowledge-base.storage",
+        "知识库",
+        "存储位置",
+        "知识库存储存在需要检查的项目",
+        diagnostics,
+      ))
+      return
+    }
+
+    checks.push(this.ok(
+      "knowledge-base.storage",
+      "知识库",
+      "存储位置",
+      "知识库存储可用",
+      diagnostics,
+    ))
+  }
+
+  private async isDirectoryAccessible(targetPath: string): Promise<boolean> {
+    try {
+      const pathStats = await this.statPath(targetPath)
+      return pathStats.isDirectory()
+    } catch (error) {
+      this.deps.logger.debug("Diagnostics directory probe failed.", {
+        targetPath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  }
+
+  private async countOldKnowledgeBaseAbsoluteReferences(input: {
+    managedProjects: SynapseConfig["global"]["projects"]
+    storage: SynapseConfig["global"]["knowledgeBaseStorage"]
+    userDataPath: string
+  }): Promise<number> {
+    const oldKnowledgeBasesPath = path.join(input.userDataPath, "knowledge-bases")
+    let count = 0
+
+    for (const project of input.managedProjects) {
+      const runtimePath = resolveProjectWorkspacePath(project, {
+        userDataPath: input.userDataPath,
+        storage: input.storage,
+      })
+      count += await this.countTextOccurrencesInDirectory(
+        path.join(runtimePath, "wiki"),
+        oldKnowledgeBasesPath,
+      )
+      count += await this.countTextOccurrencesInFile(
+        path.join(runtimePath, ".raw", ".manifest.json"),
+        oldKnowledgeBasesPath,
+      )
+    }
+
+    return count
+  }
+
+  private async countTextOccurrencesInDirectory(directoryPath: string, needle: string): Promise<number> {
+    let entries: DirectoryEntry[]
+    try {
+      entries = await this.readDirectory(directoryPath)
+    } catch (error) {
+      this.deps.logger.debug("Diagnostics directory scan skipped.", {
+        directoryPath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return 0
+    }
+
+    let count = 0
+    for (const entry of entries) {
+      const entryPath = path.join(directoryPath, entry.name)
+      if (entry.isDirectory()) {
+        count += await this.countTextOccurrencesInDirectory(entryPath, needle)
+      } else if (entry.isFile() && KNOWLEDGE_BASE_TEXT_FILE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+        count += await this.countTextOccurrencesInFile(entryPath, needle)
+      }
+    }
+    return count
+  }
+
+  private async countTextOccurrencesInFile(filePath: string, needle: string): Promise<number> {
+    try {
+      const content = await this.readTextFile(filePath)
+      return countOccurrences(content, needle)
+    } catch (error) {
+      this.deps.logger.debug("Diagnostics file scan skipped.", {
+        filePath,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return 0
+    }
+  }
+
   private async addPathChecks(
     checks: SynapseDiagnosticsCheck[],
     config: SynapseConfig,
@@ -537,7 +706,7 @@ class DiagnosticsService {
 
     for (const project of config.global.projects) {
       await this.capture(checks, `project.path.${project.id}`, "路径与权限", project.name, async () => {
-        const pathTarget = this.resolveProjectPathForDiagnostics(project)
+        const pathTarget = this.resolveProjectPathForDiagnostics(project, config)
         const pathStats = await this.statPath(pathTarget.resolvedPath)
         const details = pathTarget.resolvedPath === project.path
           ? { path: project.path }
@@ -549,12 +718,18 @@ class DiagnosticsService {
     }
   }
 
-  private resolveProjectPathForDiagnostics(project: SynapseConfig["global"]["projects"][number]): {
+  private resolveProjectPathForDiagnostics(
+    project: SynapseConfig["global"]["projects"][number],
+    config: SynapseConfig,
+  ): {
     resolvedPath: string
   } {
     return {
       resolvedPath: isManagedKnowledgeBaseProject(project)
-        ? resolveProjectWorkspacePath(project, this.deps.appInfo.getPath("userData"))
+        ? resolveProjectWorkspacePath(project, {
+            userDataPath: this.deps.appInfo.getPath("userData"),
+            storage: config.global.knowledgeBaseStorage,
+          })
         : project.path,
     }
   }
@@ -752,7 +927,7 @@ class DiagnosticsService {
           kind: "project" as const,
           id: project.id,
           name: project.name,
-          path: this.resolveProjectPathForDiagnostics(project).resolvedPath,
+          path: this.resolveProjectPathForDiagnostics(project, config).resolvedPath,
         })),
       ])
 
@@ -1051,6 +1226,14 @@ class DiagnosticsService {
     return (this.deps.statPath ?? stat)(targetPath)
   }
 
+  private readDirectory(targetPath: string): Promise<DirectoryEntry[]> {
+    return this.deps.readDirectory?.(targetPath) ?? readdir(targetPath, { withFileTypes: true })
+  }
+
+  private readTextFile(targetPath: string): Promise<string> {
+    return this.deps.readTextFile?.(targetPath) ?? readFile(targetPath, "utf8")
+  }
+
   private writeReadDeleteProbe(directoryPath: string): Promise<void> {
     return (this.deps.writeReadDeleteProbe ?? writeReadDeleteProbe)(directoryPath)
   }
@@ -1211,6 +1394,19 @@ function isPathInsideDirectory(targetPath: string, directoryPath: string): boole
   return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
 }
 
+function countOccurrences(value: string, needle: string): number {
+  if (!needle) return 0
+  let count = 0
+  let index = value.indexOf(needle)
+
+  while (index !== -1) {
+    count += 1
+    index = value.indexOf(needle, index + needle.length)
+  }
+
+  return count
+}
+
 function createEmptyConfig(): SynapseConfig {
   return {
     activeRepoUuid: null,
@@ -1224,6 +1420,7 @@ function createEmptyConfig(): SynapseConfig {
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",
       variables: [],
+      knowledgeBaseStorage: { mode: "default" },
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }

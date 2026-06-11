@@ -599,7 +599,8 @@ class MigrationCancelledError extends Error {
 function managedRuntimeIds(config: SynapseConfig): string[] {
   return config.global.projects.flatMap((project) => {
     if (!isManagedKnowledgeBaseProject(project)) return []
-    return project.capabilities.knowledgeBase.runtimeId ? [project.capabilities.knowledgeBase.runtimeId] : []
+    const runtimeId = project.capabilities?.knowledgeBase?.runtimeId
+    return runtimeId ? [runtimeId] : []
   })
 }
 

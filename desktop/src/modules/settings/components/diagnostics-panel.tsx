@@ -18,6 +18,7 @@ import {
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import type {
   SynapseDiagnosticsCheck,
+  SynapseKnowledgeBaseStorageDiagnostics,
   SynapseDiagnosticsReport,
   SynapseDiagnosticsStatus,
 } from "@/types/diagnostics"
@@ -190,6 +191,10 @@ function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport
   const infoSections = [
     { title: "本机信息", entries: getInfoEntries(report.system, compatibilityKeys) },
     { title: "应用信息", entries: getInfoEntries(report.app) },
+    {
+      title: "知识库存储",
+      entries: getKnowledgeBaseStorageEntries(report.knowledgeBaseStorage),
+    },
     { title: "当前上下文", entries: getInfoEntries(report.activeContext) },
   ].filter((section) => section.entries.length > 0)
   const tabs = createDiagnosticsTabs({
@@ -464,6 +469,27 @@ function getMacCompatibilityEntries(value: unknown): [string, unknown][] {
   ]
 
   return entries.filter(([, entryValue]) => entryValue !== undefined)
+}
+
+function getKnowledgeBaseStorageEntries(
+  value: SynapseKnowledgeBaseStorageDiagnostics | undefined,
+): [string, unknown][] {
+  if (!value) return []
+
+  const entries: [string, unknown][] = [
+    ["模式", value.mode === "custom" ? "自定义" : "默认"],
+    ["状态", value.available ? "可用" : "不可用"],
+    ["存储位置", value.rootPath],
+    ["知识库目录", value.knowledgeBasesPath],
+    ["知识库数量", value.runtimeCount],
+    ["缺失目录", value.missingRuntimeCount],
+  ]
+
+  if (value.oldAbsoluteReferenceCount > 0) {
+    entries.push(["旧绝对路径", "发现旧绝对路径引用。"])
+  }
+
+  return entries
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -122,6 +122,7 @@ const IPC_CHANNELS = {
     "startStorageMigration": "synapse:knowledge-base:start-storage-migration",
     "cancelStorageMigration": "synapse:knowledge-base:cancel-storage-migration",
     "recheckStorage": "synapse:knowledge-base:recheck-storage",
+    "storageMigrationChanged": "synapse:knowledge-base:storage-migration-changed",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
