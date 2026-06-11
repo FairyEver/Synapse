@@ -25,6 +25,7 @@ import type {
   SynapseContentSortOrder,
   SynapseFavorites,
   SynapseGlobalConfig,
+  SynapseKnowledgeBaseStorageConfig,
   SynapseProjectConfig,
   SynapseQuickInput,
   SynapseRecentlyViewed,
@@ -230,6 +231,10 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "quickInputs") && !Array.isArray(value.quickInputs)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "knowledgeBaseStorage") && !isRecord(value.knowledgeBaseStorage)) {
     return true
   }
 
@@ -589,6 +594,19 @@ function normalizeRecentlyViewed(value: unknown): SynapseRecentlyViewed {
   }
 }
 
+function normalizeKnowledgeBaseStorage(value: unknown): SynapseKnowledgeBaseStorageConfig {
+  if (!isRecord(value)) {
+    return DEFAULT_GLOBAL_CONFIG.knowledgeBaseStorage
+  }
+
+  if (value.mode === "custom") {
+    const rootPath = asTrimmedString(value.rootPath)
+    return rootPath ? { mode: "custom", rootPath } : DEFAULT_GLOBAL_CONFIG.knowledgeBaseStorage
+  }
+
+  return DEFAULT_GLOBAL_CONFIG.knowledgeBaseStorage
+}
+
 function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   if (!isRecord(value)) {
     return structuredClone(DEFAULT_GLOBAL_CONFIG)
@@ -610,6 +628,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
       ? value.contentSortOrder
       : DEFAULT_CONTENT_SORT_ORDER,
     variables: normalizeVariableList(value.variables),
+    knowledgeBaseStorage: normalizeKnowledgeBaseStorage(value.knowledgeBaseStorage),
   }
 }
 
