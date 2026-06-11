@@ -3,6 +3,32 @@ import { describe, expect, it } from "vitest"
 import { formatAgentTranscript } from "../agent-transcript"
 
 describe("agent transcript helpers", () => {
+  it("exports cancelled turn outcome copy instead of raw SDK abort diagnostics", () => {
+    const transcript = formatAgentTranscript([{
+      id: "result-1",
+      kind: "result",
+      content: "",
+      timestamp: "2026-06-11T00:00:00.000Z",
+      metadata: {
+        cancelled: true,
+        turnOutcome: {
+          status: "cancelled",
+          mode: "graceful",
+          reason: "user_cancelled",
+          message: "已停止本次执行。",
+          diagnostics: [{
+            source: "claude-sdk",
+            kind: "aborted",
+            message: "Request was aborted",
+          }],
+        },
+      },
+    }])
+
+    expect(transcript).toContain("已停止本次执行。")
+    expect(transcript).not.toContain("Request was aborted")
+  })
+
   it("keeps paths and tool use ids useful while redacting secret-shaped values", () => {
     const transcript = formatAgentTranscript([
       {

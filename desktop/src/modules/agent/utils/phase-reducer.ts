@@ -82,7 +82,50 @@ export function reducePhaseEvent(
     })
   }
 
-  // 3. failed: run-failure terminal. Close all in-progress as failed AND append a terminal row.
+  // 3. cancelled: run-cancel terminal. Close all in-progress as done AND append a terminal row.
+  if (event.phase === "cancelled") {
+    const closed = current.map((item) => {
+      if (!isPhaseItem(item)) return item
+      if (!matchesTerminalScope(item, event)) return item
+      if (item.status !== "in-progress") return item
+      return closeItem(item, event.status, event.completedAt ?? event.eventTimestamp, event.errorMessage, event.errorKind, event.recoverable)
+    })
+    const existingCancelledIndex = closed.findIndex(
+      (item) =>
+        isPhaseItem(item)
+        && item.runId === event.runId
+        && item.phase === "cancelled",
+    )
+    if (existingCancelledIndex >= 0) {
+      const target = closed[existingCancelledIndex] as SynapseAgentPhaseTimelineItem
+      closed[existingCancelledIndex] = {
+        ...target,
+        timestamp: event.eventTimestamp,
+        status: event.status,
+        completedAt: event.completedAt ?? event.eventTimestamp,
+        errorMessage: event.errorMessage ?? target.errorMessage,
+        errorKind: event.errorKind ?? target.errorKind,
+        recoverable: event.recoverable ?? target.recoverable,
+      }
+      return closed
+    }
+    closed.push({
+      id: newPhaseId(event.runId, "cancelled"),
+      kind: "phase",
+      timestamp: event.eventTimestamp,
+      runId: event.runId,
+      phase: "cancelled",
+      status: event.status,
+      startedAt: event.startedAt,
+      completedAt: event.completedAt ?? event.eventTimestamp,
+      errorMessage: event.errorMessage,
+      errorKind: event.errorKind,
+      recoverable: event.recoverable,
+    })
+    return closed
+  }
+
+  // 4. failed: run-failure terminal. Close all in-progress as failed AND append a terminal row.
   if (event.phase === "failed") {
     const closed = current.map((item) => {
       if (!isPhaseItem(item)) return item
@@ -125,7 +168,7 @@ export function reducePhaseEvent(
     return closed
   }
 
-  // 4. Normal in-progress: idempotent if same (runId, phase) is already in-progress;
+  // 5. Normal in-progress: idempotent if same (runId, phase) is already in-progress;
   //    otherwise close prior in-progress on the run + append the new one.
   if (event.status === "in-progress") {
     const duplicate = current.some(

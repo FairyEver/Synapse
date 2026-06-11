@@ -119,8 +119,14 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
   switch (entry.kind) {
     case "message":
     case "thinking":
-    case "result":
       return redactSensitiveText(entry.content)
+    case "result": {
+      const outcome = entry.metadata?.turnOutcome
+      if (outcome?.status === "cancelled" || outcome?.status === "timed_out" || outcome?.status === "interrupted") {
+        return redactSensitiveText(outcome.message)
+      }
+      return redactSensitiveText(entry.content)
+    }
     case "toolCall":
       return toolCallTranscriptText(entry)
     case "toolResult": {
