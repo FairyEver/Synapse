@@ -1,4 +1,7 @@
 export const DRIVE_PUBLIC_PATH_PREFIX = "/files"
+export const DRIVE_OWNER_BROWSER_PATH_PREFIX = "/drive/items"
+export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/console/drive"
+export const DRIVE_SHARE_BROWSER_PATH_PREFIX = DRIVE_PUBLIC_PATH_PREFIX
 export const DRIVE_PAGE_PUBLIC_PATH_PREFIX = "/pages"
 export const DRIVE_SITE_PUBLIC_PATH_PREFIX = "/sites"
 
@@ -9,6 +12,9 @@ export type DriveShareItemType = "file" | "folder"
 export type DriveStorageStatus = "pending" | "active" | "delete_pending" | "deleted" | "failed"
 export type DriveUploadSessionStatus = "pending" | "completed" | "cancelled" | "expired" | "failed"
 export type DriveAccessExpiresIn = "7d" | "30d" | "1y" | "forever"
+export type DriveBrowserAccessContext = "owner" | "share"
+export type DriveBrowserSurface = "standalone" | "console"
+export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "download-only"
 
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
@@ -117,11 +123,114 @@ export interface DriveUsageDto {
   readonly quotaBytes: string
 }
 
+export interface DriveBrowserItemDto {
+  readonly id: string
+  readonly name: string
+  readonly type: DriveItemType
+  readonly size: string
+  readonly mimeType: string | null
+  readonly updatedAt: string
+  readonly previewKind: DriveBrowserPreviewKind
+  readonly browserUrl: string
+  readonly downloadUrl: string | null
+}
+
+export interface DriveBrowserBreadcrumbDto {
+  readonly id: string
+  readonly name: string
+  readonly browserUrl: string
+}
+
+export interface DriveBrowserPreviewDto {
+  readonly kind: DriveBrowserPreviewKind
+  readonly text: string | null
+  readonly truncated: boolean
+  readonly imageUrl: string | null
+  readonly visitUrl: string | null
+}
+
+export interface DriveBrowserSnapshotDto {
+  readonly context: DriveBrowserAccessContext
+  readonly surface: DriveBrowserSurface
+  readonly current: DriveBrowserItemDto
+  readonly breadcrumbs: readonly DriveBrowserBreadcrumbDto[]
+  readonly children: readonly DriveBrowserItemDto[]
+  readonly preview: DriveBrowserPreviewDto | null
+  readonly canDownload: boolean
+  readonly canZip: boolean
+}
+
+export interface DriveBrowserPasswordRequiredDto {
+  readonly passwordRequired: true
+  readonly message: string
+}
+
 export function buildDriveShareUrl(input: {
   readonly publicAppUrl: string
   readonly shareId: string
 }): string {
   return `${normalizePublicAppUrl(input.publicAppUrl)}${DRIVE_PUBLIC_PATH_PREFIX}/${encodeURIComponent(input.shareId)}`
+}
+
+export function buildOwnerDriveBrowserUrl(rootItemId: string): string {
+  return `${DRIVE_OWNER_BROWSER_PATH_PREFIX}/${encodeURIComponent(rootItemId)}`
+}
+
+export function buildOwnerDriveChildBrowserUrl(rootItemId: string, itemId: string): string {
+  return `${buildOwnerDriveBrowserUrl(rootItemId)}/items/${encodeURIComponent(itemId)}`
+}
+
+export function buildOwnerDriveDownloadUrl(rootItemId: string): string {
+  return `${buildOwnerDriveBrowserUrl(rootItemId)}/download`
+}
+
+export function buildOwnerDriveChildDownloadUrl(rootItemId: string, itemId: string): string {
+  return `${buildOwnerDriveChildBrowserUrl(rootItemId, itemId)}/download`
+}
+
+export function buildOwnerDriveZipUrl(rootItemId: string): string {
+  return `${buildOwnerDriveBrowserUrl(rootItemId)}/zip`
+}
+
+export function buildOwnerDriveChildZipUrl(rootItemId: string, itemId: string): string {
+  return `${buildOwnerDriveChildBrowserUrl(rootItemId, itemId)}/zip`
+}
+
+export function buildOwnerDriveRenderUrl(rootItemId: string): string {
+  return `${buildOwnerDriveBrowserUrl(rootItemId)}/render`
+}
+
+export function buildOwnerDriveChildRenderUrl(rootItemId: string, itemId: string): string {
+  return `${buildOwnerDriveChildBrowserUrl(rootItemId, itemId)}/render`
+}
+
+export function buildConsoleDriveRootUrl(): string {
+  return DRIVE_CONSOLE_BROWSER_PATH_PREFIX
+}
+
+export function buildConsoleDriveBrowserUrl(rootItemId: string): string {
+  return `${DRIVE_CONSOLE_BROWSER_PATH_PREFIX}/items/${encodeURIComponent(rootItemId)}`
+}
+
+export function buildConsoleDriveChildBrowserUrl(rootItemId: string, itemId: string): string {
+  return `${buildConsoleDriveBrowserUrl(rootItemId)}/items/${encodeURIComponent(itemId)}`
+}
+
+export function buildShareDriveBrowserUrl(shareId: string, itemId?: string | null): string {
+  const rootUrl = `${DRIVE_SHARE_BROWSER_PATH_PREFIX}/${encodeURIComponent(shareId)}`
+  return itemId ? `${rootUrl}/items/${encodeURIComponent(itemId)}` : rootUrl
+}
+
+export function buildShareDriveDownloadUrl(shareId: string, itemId?: string | null): string {
+  return `${buildShareDriveBrowserUrl(shareId, itemId)}/download`
+}
+
+export function buildShareDriveZipUrl(shareId: string): string {
+  return `${buildShareDriveBrowserUrl(shareId)}/zip`
+}
+
+export function buildShareDriveChildZipUrl(shareId: string, itemId: string): string {
+  return `${buildShareDriveBrowserUrl(shareId, itemId)}/zip`
 }
 
 export function buildDrivePublicationUrl(input: {
@@ -148,18 +257,17 @@ export function buildDriveUrlWithPassword(url: string, password: string | null |
 }
 
 export function maskDriveShareUrl(value: string): string {
+  return maskDriveBrowserUrl(value)
+}
+
+export function maskDriveBrowserUrl(value: string): string {
   try {
     const parsed = new URL(value)
-    const parts = parsed.pathname.split("/")
-    if (parts.length >= 3 && parts[1] === "files") {
-      parts[2] = "***"
-      parsed.pathname = parts.join("/")
-      return maskPasswordQuery(parsed.toString())
-    }
+    parsed.pathname = maskDriveBrowserPath(parsed.pathname)
+    return maskPasswordQuery(parsed.toString())
   } catch {
-    return maskPasswordQuery(value.replace(/\/files\/[^/?#]+/u, "/files/***"))
+    return maskPasswordQuery(maskDriveBrowserPath(value))
   }
-  return maskPasswordQuery(value.replace(/\/files\/[^/?#]+/u, "/files/***"))
 }
 
 export function maskDrivePublicUrl(value: string): string {
@@ -183,6 +291,16 @@ export function maskDrivePublicUrl(value: string): string {
 
 function normalizePublicAppUrl(value: string): string {
   return value.trim().replace(/\/+$/u, "")
+}
+
+function maskDriveBrowserPath(value: string): string {
+  return value
+    .replace(/\/drive\/items\/[^/?#]+/u, "/drive/items/***")
+    .replace(/(\/drive\/items\/\*\*\*\/items\/)[^/?#]+/u, "$1***")
+    .replace(/\/console\/drive\/items\/[^/?#]+/u, "/console/drive/items/***")
+    .replace(/(\/console\/drive\/items\/\*\*\*\/items\/)[^/?#]+/u, "$1***")
+    .replace(/\/files\/[^/?#]+/u, "/files/***")
+    .replace(/(\/files\/\*\*\*\/items\/)[^/?#]+/u, "$1***")
 }
 
 function buildRelativeUrlWithPassword(url: string, password: string): string {
