@@ -163,6 +163,45 @@ describe("Synapse config Agent defaults", () => {
   })
 })
 
+describe("Synapse Knowledge Base storage config", () => {
+  it("defaults knowledge base storage to userData mode", () => {
+    expect(createDefaultConfig().global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("keeps a trimmed custom knowledge base storage root", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        knowledgeBaseStorage: {
+          mode: "custom",
+          rootPath: "  /Volumes/Data/SynapseData  ",
+        },
+      },
+    })
+
+    expect(config.global.knowledgeBaseStorage).toEqual({
+      mode: "custom",
+      rootPath: "/Volumes/Data/SynapseData",
+    })
+  })
+
+  it("falls back to default mode when custom root is empty", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        knowledgeBaseStorage: {
+          mode: "custom",
+          rootPath: "   ",
+        },
+      },
+    })
+
+    expect(config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+})
+
 describe("Synapse project capabilities", () => {
   it("drops legacy non-managed knowledge base capability config", () => {
     const config = sanitizeSynapseConfig({

@@ -1,3 +1,5 @@
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 import { describe, expect, it, vi } from "vitest"
@@ -383,6 +385,96 @@ describe("DiagnosticsService.collect", () => {
       path: path.join("/app/userData", "knowledge-bases", "kb-1"),
       unsafeSegments: [],
     })
+  })
+
+  it("reports custom knowledge base storage status", async () => {
+    const service = createService({
+      configStore: {
+        load: vi.fn(async () => createConfig({
+          knowledgeBaseStorage: {
+            mode: "custom",
+            rootPath: "/Volumes/Data/SynapseData",
+          },
+        })),
+      },
+      statPath: vi.fn(async () => ({ isDirectory: () => true })),
+    })
+
+    const report = await service.collect()
+
+    expect(report.knowledgeBaseStorage).toMatchObject({
+      mode: "custom",
+      available: true,
+      rootPath: "/Volumes/Data/SynapseData",
+      knowledgeBasesPath: "/Volumes/Data/SynapseData/knowledge-bases",
+      runtimeCount: 0,
+      missingRuntimeCount: 0,
+      oldAbsoluteReferenceCount: 0,
+    })
+    expect(report.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "knowledge-base.storage",
+        status: "ok",
+      }),
+    ]))
+  })
+
+  it("reports old absolute path references without rewriting files", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-diagnostics-kb-"))
+    const userDataPath = path.join(tempRoot, "userData")
+    const customRootPath = path.join(tempRoot, "custom")
+    const runtimePath = path.join(customRootPath, "knowledge-bases", "kb-1")
+    const wikiPath = path.join(runtimePath, "wiki", "index.md")
+    const oldReference = path.join(userDataPath, "knowledge-bases", "kb-1", "wiki", "old.md")
+
+    await mkdir(path.dirname(wikiPath), { recursive: true })
+    await writeFile(wikiPath, oldReference, "utf8")
+
+    try {
+      const service = createService({
+        appInfo: {
+          getAppPath: () => "/app",
+          getLocale: () => "zh-CN",
+          getName: () => "Synapse",
+          getVersion: () => "0.2.49",
+          hasSingleInstanceLock: () => true,
+          isPackaged: false,
+          getPath: (name) => {
+            if (name === "userData") return userDataPath
+            return `/app/${name}`
+          },
+        },
+        configStore: {
+          load: vi.fn(async () => createConfig({
+            knowledgeBaseStorage: {
+              mode: "custom",
+              rootPath: customRootPath,
+            },
+            projects: [{
+              id: "kb-1",
+              name: "个人知识库",
+              path: "synapse-kb://kb-1",
+              capabilities: {
+                knowledgeBase: {
+                  enabled: true,
+                  managed: true,
+                  runtimeId: "kb-1",
+                  schemaVersion: 1,
+                  templateVersion: "2026-05-21",
+                },
+              },
+            }],
+          })),
+        },
+      })
+
+      const report = await service.collect()
+
+      expect(report.knowledgeBaseStorage?.oldAbsoluteReferenceCount).toBe(1)
+      await expect(readFile(wikiPath, "utf8")).resolves.toContain(oldReference)
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
   })
 
   it("reports packaged Claude runtime as available", async () => {
@@ -795,6 +887,7 @@ function findWrittenPath(files: Map<string, string>, suffix: string): string | u
 
 function createConfig(options: {
   projects?: SynapseConfig["global"]["projects"]
+  knowledgeBaseStorage?: SynapseConfig["global"]["knowledgeBaseStorage"]
 } = {}): SynapseConfig {
   return {
     activeRepoUuid: "repo-1",
@@ -813,6 +906,7 @@ function createConfig(options: {
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",
       variables: [],
+      knowledgeBaseStorage: options.knowledgeBaseStorage ?? { mode: "default" },
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }

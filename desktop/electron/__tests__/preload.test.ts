@@ -451,6 +451,61 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps Knowledge Base storage migration methods and progress events", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+
+    await bridge.knowledgeBase.getStorageStatus()
+    await bridge.knowledgeBase.startStorageMigration({
+      target: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
+    })
+    await bridge.knowledgeBase.cancelStorageMigration()
+    await bridge.knowledgeBase.recheckStorage()
+    bridge.knowledgeBase.onStorageMigrationChanged(listener)
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:get-storage-status",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:start-storage-migration",
+      { target: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:cancel-storage-migration",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:recheck-storage",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledWith(
+      "synapse:events:knowledge-base",
+      expect.any(Function),
+    )
+
+    const wrapped = electronMock.ipcRenderer.on.mock.calls.at(-1)?.[1]
+    wrapped?.({}, {
+      domain: "knowledge-base",
+      type: "knowledge-base.storageMigrationChanged",
+      payload: {
+        active: true,
+        phase: "copying",
+        cancellable: true,
+        copiedBytes: 12,
+        totalBytes: 24,
+        message: "正在复制知识库",
+      },
+      timestamp: "2026-06-10T00:00:00.000Z",
+    })
+
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+      active: true,
+      phase: "copying",
+      copiedBytes: 12,
+    }))
+  })
+
   it("maps Claude Code conversation and record methods to usage analysis IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

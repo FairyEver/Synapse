@@ -14,6 +14,7 @@ export type EventDomain =
   | "connector"  // M3
   | "scheduler"  // M4
   | "automation"
+  | "knowledge-base"
   | "project"    // Phase 0.5
   | "system"     // handshake / lifecycle
   | "install-status"

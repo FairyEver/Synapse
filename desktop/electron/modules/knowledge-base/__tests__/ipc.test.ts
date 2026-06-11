@@ -11,7 +11,7 @@ const logStoreMock = vi.hoisted(() => ({
 }))
 
 import { createInMemoryHarness } from "../../../runtime/ipc"
-import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
+import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { KnowledgeBaseService } from "../../../services/knowledge-base/knowledge-base-service"
 import { knowledgeBaseIpcModule } from "../ipc"
@@ -37,6 +37,7 @@ const electronMock = vi.hoisted(() => ({
 
 const sourceManagerWindowServiceMock = vi.hoisted(() => ({
   open: vi.fn(),
+  trackMutation: vi.fn((run: () => Promise<unknown>) => run()),
 }))
 
 vi.mock("electron", () => ({
@@ -322,13 +323,7 @@ describe("knowledgeBaseIpcModule", () => {
         activeRepoUuid: null,
         repositories: [],
         global: {
-          themeMode: "system",
-          favorites: { rule: [], skill: [], prompt: [] },
-          recentlyViewed: { rule: [], skill: [], prompt: [] },
-          contentSortOrder: "modified-desc",
-          variables: [],
-          quickInputs: [],
-          defaultQuickInputsSeededVersion: null,
+          ...DEFAULT_GLOBAL_CONFIG,
           projects: [{
             id: "kb-1",
             name: "Knowledge",
@@ -394,6 +389,47 @@ describe("knowledgeBaseIpcModule", () => {
       resource: "managed-knowledge-base:project-1",
       context: { source: "knowledgeBase.openSourceManager" },
     })
+  })
+
+  it("starts storage migration through a guarded write operation", async () => {
+    const { auditSink, harness, migrationService, permissionGuard } = createHarness({ service: {} })
+    migrationService.startMigration.mockResolvedValue({ status: "completed" })
+
+    await harness.invoke("synapse:knowledge-base:start-storage-migration", {
+      target: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
+    })
+
+    expect(migrationService.startMigration).toHaveBeenCalledWith({
+      target: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
+      requestedBy: "settings",
+    })
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      resource: "/Volumes/Data/SynapseData",
+      context: { source: "knowledgeBase.startStorageMigration" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      outcome: "allowed",
+      resource: "/Volumes/Data/SynapseData",
+      metadata: { source: "knowledgeBase.startStorageMigration" },
+    }))
+  })
+
+  it("returns current storage status", async () => {
+    const { harness, migrationService } = createHarness({ service: {} })
+    migrationService.getStorageStatus.mockResolvedValue({
+      mode: "default",
+      rootPath: "/tmp/userData",
+      knowledgeBasesPath: "/tmp/userData/knowledge-bases",
+      available: true,
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:get-storage-status", undefined))
+      .resolves.toMatchObject({
+        mode: "default",
+        available: true,
+      })
   })
 
   it("lists raw directory entries through guarded read permission", async () => {
@@ -735,14 +771,20 @@ function createHarness(options: {
     list: vi.fn(() => []),
     clearForTests: vi.fn(),
   }
+  const migrationService = {
+    cancelMigration: vi.fn(),
+    getStorageStatus: vi.fn(),
+    startMigration: vi.fn(),
+  }
   harness.registry.register(knowledgeBaseIpcModule, {
     moduleId: "knowledge-base",
     resolve: <T,>(serviceId: string): T => {
       if (serviceId === "knowledge-base.service") return options.service as T
+      if (serviceId === "knowledge-base.storage-migration-service") return migrationService as T
       if (serviceId === "core.permission-guard") return permissionGuard as T
       if (serviceId === "core.audit-sink") return auditSink as T
       throw new Error(`Unknown service: ${serviceId}`)
     },
   })
-  return { auditSink, harness, permissionGuard }
+  return { auditSink, harness, migrationService, permissionGuard }
 }

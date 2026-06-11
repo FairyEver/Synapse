@@ -84,9 +84,14 @@ function createRendererHealthLabel(payload: SynapseKnowledgeBaseOpenSourceManage
 
 function createKnowledgeBaseSourceManagerWindowService(deps: SourceManagerWindowServiceDeps) {
   const windowsByKey = new Map<string, BrowserWindow>()
+  let migrationBlocked = false
+  let activeMutationCount = 0
 
   return {
     async open(payload: SynapseKnowledgeBaseOpenSourceManagerPayload): Promise<void> {
+      if (migrationBlocked) {
+        throw new Error("知识库存储迁移正在进行。")
+      }
       const key = createSourceManagerWindowKey(payload)
       const existingWindow = windowsByKey.get(key)
       if (existingWindow && !existingWindow.isDestroyed()) {
@@ -152,6 +157,33 @@ function createKnowledgeBaseSourceManagerWindowService(deps: SourceManagerWindow
           window.close()
         }
         throw error
+      }
+    },
+    setMigrationBlocked(blocked: boolean): void {
+      migrationBlocked = blocked
+    },
+    hasActiveMutation(): boolean {
+      return activeMutationCount > 0
+    },
+    closeIdleWindows(): void {
+      if (activeMutationCount > 0) {
+        throw new Error("资料操作仍在进行。")
+      }
+      for (const window of Array.from(sourceManagerWindows)) {
+        if (!window.isDestroyed()) {
+          window.close()
+        }
+      }
+    },
+    async trackMutation<T>(run: () => Promise<T>): Promise<T> {
+      if (migrationBlocked) {
+        throw new Error("知识库存储迁移正在进行。")
+      }
+      activeMutationCount += 1
+      try {
+        return await run()
+      } finally {
+        activeMutationCount -= 1
       }
     },
   }

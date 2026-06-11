@@ -1,0 +1,318 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
+import type { SynapseConfig, SynapseKnowledgeBaseStorageConfig } from "../../../../src/types/config"
+import { KnowledgeBaseStorageMigrationService } from "../storage-migration-service"
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => ({
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  }),
+}))
+
+const roots: string[] = []
+
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-migration-"))
+  roots.push(dir)
+  return dir
+}
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+describe("KnowledgeBaseStorageMigrationService", () => {
+  it("copies all runtimes, switches config, and trashes the old directory", async () => {
+    const harness = await migrationHarness()
+    await harness.seedRuntime("kb-1")
+
+    const result = await harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    expect(result.status).toBe("completed")
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+    await expect(readFile(path.join(harness.newRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Knowledge\n")
+    expect(harness.trashed).toEqual([path.join(harness.oldRoot, "knowledge-bases")])
+  })
+
+  it("keeps old config and old data when verification fails", async () => {
+    const harness = await migrationHarness()
+    await harness.seedRuntime("kb-1", harness.oldRoot, { manifest: false })
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("知识库存储迁移校验失败。")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+    await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Knowledge\n")
+  })
+
+  it("keeps new config when trashing the old directory fails", async () => {
+    const harness = await migrationHarness({ trashError: new Error("trash unavailable") })
+    await harness.seedRuntime("kb-1")
+
+    const result = await harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    expect(result).toEqual({
+      status: "completed-with-warning",
+      warningCode: "old-copy-not-trashed",
+    })
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+  })
+
+  it("cancels during copy and keeps the old config", async () => {
+    const harness = await migrationHarness({ pauseAfterFirstCopy: true })
+    await harness.seedRuntime("kb-1")
+    const migration = harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    await harness.waitForPhase("copying")
+    await harness.waitForCopyPause()
+    await harness.service.cancelMigration()
+    harness.resume()
+
+    await expect(migration).resolves.toEqual({ status: "cancelled" })
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("does not cancel after switching begins", async () => {
+    const harness = await migrationHarness({ pauseAtPhase: "switching" })
+    await harness.seedRuntime("kb-1")
+    const migration = harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    await harness.waitForPhase("switching")
+    await expect(harness.service.cancelMigration()).rejects.toThrow("当前阶段不能取消。")
+    harness.resume()
+    await expect(migration).resolves.toMatchObject({ status: "completed" })
+  })
+
+  it("recovers an interrupted pre-switch journal to the old root", async () => {
+    const harness = await migrationHarness()
+    await harness.writeJournal({ phase: "copying", switchStarted: false, newRootVerified: false })
+
+    await harness.service.recoverIfNeeded()
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("keeps a verified new root during recovery", async () => {
+    const harness = await migrationHarness()
+    await harness.seedRuntime("kb-1", harness.newRoot)
+    await harness.writeJournal({ phase: "cleaning", switchStarted: true, newRootVerified: true })
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+
+    await harness.service.recoverIfNeeded()
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+  })
+
+  it("rejects migration when available space is below runtime size plus margin", async () => {
+    const harness = await migrationHarness({ availableBytes: 10 })
+    await harness.seedRuntime("kb-1")
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("目标位置空间不足。")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("continues when available space cannot be confirmed", async () => {
+    const harness = await migrationHarness({ availableBytes: null })
+    await harness.seedRuntime("kb-1")
+
+    const result = await harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    expect(result.status).toBe("completed")
+    expect(harness.states.some((state) => state.warningCode === "free-space-unknown")).toBe(true)
+  })
+})
+
+type RuntimeSeedOptions = {
+  manifest?: boolean
+}
+
+type MigrationHarnessOptions = {
+  trashError?: Error
+  pauseAfterFirstCopy?: boolean
+  pauseAtPhase?: "switching"
+  availableBytes?: number | null
+}
+
+async function migrationHarness(options: MigrationHarnessOptions = {}) {
+  const oldRoot = await tempDir()
+  const newRoot = await tempDir()
+  const journalPath = path.join(await tempDir(), "migration.json")
+  const trashed: string[] = []
+  const states: ReturnType<KnowledgeBaseStorageMigrationService["getState"]>[] = []
+  let resumePause: (() => void) | null = null
+  let pausedCopy = false
+  let copyPausedResolve: (() => void) | null = null
+  const copyPaused = new Promise<void>((resolve) => {
+    copyPausedResolve = resolve
+  })
+  let config = createConfig({ mode: "default" })
+  const sourceManager = {
+    hasActiveMutation: vi.fn(() => false),
+    closeIdleWindows: vi.fn(),
+    setMigrationBlocked: vi.fn(),
+  }
+  const service = new KnowledgeBaseStorageMigrationService({
+    userDataPath: oldRoot,
+    loadConfig: async () => structuredClone(config),
+    updateConfig: async (patch) => {
+      config = {
+        ...config,
+        global: {
+          ...config.global,
+          ...patch.global,
+        },
+      }
+      return structuredClone(config)
+    },
+    trashItem: async (targetPath) => {
+      if (options.trashError) throw options.trashError
+      trashed.push(targetPath)
+    },
+    journalPath,
+    sourceManager,
+    hasActiveKnowledgeBaseSession: async () => false,
+    getAvailableBytes: async () => options.availableBytes === undefined ? 100_000_000_000 : options.availableBytes,
+    afterCopyEntry: async () => {
+      if (!options.pauseAfterFirstCopy || pausedCopy) return
+      pausedCopy = true
+      copyPausedResolve?.()
+      await new Promise<void>((resolve) => {
+        resumePause = resolve
+      })
+    },
+    afterPhaseChange: async (phase) => {
+      if (options.pauseAtPhase !== phase) return
+      await new Promise<void>((resolve) => {
+        resumePause = resolve
+      })
+    },
+  })
+  service.subscribe((state) => {
+    states.push(state)
+  })
+
+  async function seedRuntime(runtimeId: string, rootPath = oldRoot, seedOptions: RuntimeSeedOptions = {}) {
+    const runtimePath = path.join(rootPath, "knowledge-bases", runtimeId)
+    await mkdir(path.join(runtimePath, ".claude-plugin"), { recursive: true })
+    await mkdir(path.join(runtimePath, "skills"), { recursive: true })
+    await mkdir(path.join(runtimePath, "commands"), { recursive: true })
+    await mkdir(path.join(runtimePath, ".raw"), { recursive: true })
+    await mkdir(path.join(runtimePath, "wiki"), { recursive: true })
+    await writeFile(path.join(runtimePath, ".claude-plugin", "plugin.json"), "{\"name\":\"kb\"}\n", "utf8")
+    await writeFile(path.join(runtimePath, "skills", ".gitkeep"), "", "utf8")
+    await writeFile(path.join(runtimePath, "commands", ".gitkeep"), "", "utf8")
+    await writeFile(path.join(runtimePath, "CLAUDE.md"), "# Knowledge\n", "utf8")
+    if (seedOptions.manifest !== false) {
+      await writeFile(path.join(runtimePath, ".raw", ".manifest.json"), "{\"version\":1}\n", "utf8")
+    }
+    await writeFile(path.join(runtimePath, "wiki", "index.md"), "# Index\n", "utf8")
+  }
+
+  return {
+    get config() {
+      return config
+    },
+    oldRoot,
+    newRoot,
+    service,
+    sourceManager,
+    states,
+    trashed,
+    seedRuntime,
+    setStorage(storage: SynapseKnowledgeBaseStorageConfig) {
+      config = {
+        ...config,
+        global: {
+          ...config.global,
+          knowledgeBaseStorage: storage,
+        },
+      }
+    },
+    async writeJournal(partial: { phase: string; switchStarted: boolean; newRootVerified: boolean }) {
+      await mkdir(path.dirname(journalPath), { recursive: true })
+      await writeFile(journalPath, `${JSON.stringify({
+        version: 1,
+        oldStorage: { mode: "default" },
+        targetStorage: { mode: "custom", rootPath: newRoot },
+        oldRoot,
+        newRoot,
+        tempPath: path.join(newRoot, ".knowledge-bases-migration-test"),
+        startedAt: "2026-06-10T00:00:00.000Z",
+        ...partial,
+      }, null, 2)}\n`, "utf8")
+    },
+    waitForPhase(phase: string) {
+      if (states.some((state) => state.phase === phase)) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        const unsubscribe = service.subscribe((state) => {
+          if (state.phase !== phase) return
+          unsubscribe()
+          resolve()
+        })
+      })
+    },
+    waitForCopyPause() {
+      return copyPaused
+    },
+    resume() {
+      const resolve = resumePause
+      resumePause = null
+      resolve?.()
+    },
+  }
+}
+
+function createConfig(storage: SynapseKnowledgeBaseStorageConfig): SynapseConfig {
+  return {
+    activeRepoUuid: null,
+    repositories: [],
+    global: {
+      ...DEFAULT_GLOBAL_CONFIG,
+      knowledgeBaseStorage: storage,
+      projects: [{
+        id: "kb-1",
+        name: "Knowledge",
+        path: "synapse-kb://kb-1",
+        capabilities: {
+          knowledgeBase: {
+            enabled: true,
+            schemaVersion: 1,
+            templateVersion: "2026-05-24",
+            managed: true,
+            runtimeId: "kb-1",
+          },
+        },
+      }],
+    },
+    agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
+  }
+}

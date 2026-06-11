@@ -21,6 +21,10 @@ let pendingPushFlowRunning = false
 export interface BeforeQuitDeps {
   readonly state: MainWindowState
   readonly registry: ServiceRegistryImpl
+  readonly knowledgeBaseStorageMigration?: {
+    isActive: () => boolean
+    focusDialog: () => void
+  }
   /** Mutable flag; set to true to allow app.quit() without re-entering this flow. */
   readonly setAllowQuit: (value: boolean) => void
   readonly isAllowedToQuit: () => boolean
@@ -56,6 +60,12 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
       } catch (error) {
         logger.error("logStore dispose failed.", { error })
       }
+      return
+    }
+
+    if (deps.knowledgeBaseStorageMigration?.isActive()) {
+      deps.knowledgeBaseStorageMigration.focusDialog()
+      logger.info("App quit blocked by active Knowledge Base storage migration.")
       return
     }
 

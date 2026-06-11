@@ -177,3 +177,43 @@ export type SynapseKnowledgeBaseTrashRawEntriesPayload = {
   projectId: string
   relativePaths: string[]
 }
+
+export type SynapseKnowledgeBaseStorageStatus = {
+  mode: "default" | "custom"
+  rootPath: string
+  knowledgeBasesPath: string
+  available: boolean
+  unavailableReason?: string
+  oldAbsoluteReferenceCount?: number
+}
+
+export type SynapseKnowledgeBaseStorageMigrationPayload = {
+  target: { mode: "default" } | { mode: "custom"; rootPath: string }
+}
+
+export type SynapseKnowledgeBaseStorageMigrationProgress = {
+  active: boolean
+  phase:
+    | "idle"
+    | "preparing"
+    | "copying"
+    | "verifying"
+    | "switching"
+    | "cleaning"
+    | "completed"
+    | "completed-with-warning"
+    | "failed"
+    | "cancelled"
+    | "recovering"
+  cancellable: boolean
+  copiedBytes: number
+  totalBytes: number | null
+  message: string
+  warningCode?: "free-space-unknown" | "old-copy-not-trashed"
+  errorMessage?: string
+}
+
+export type SynapseKnowledgeBaseStorageMigrationResult =
+  | { status: "completed" }
+  | { status: "completed-with-warning"; warningCode: "old-copy-not-trashed" }
+  | { status: "cancelled" }

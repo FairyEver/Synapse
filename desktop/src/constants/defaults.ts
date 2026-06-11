@@ -4,6 +4,7 @@ import type {
   SynapseContentSortOrder,
   SynapseFavorites,
   SynapseGlobalConfig,
+  SynapseKnowledgeBaseStorageConfig,
   SynapseQuickInput,
   SynapseRecentlyViewed,
   SynapseThemeMode,
@@ -76,6 +77,10 @@ export const DEFAULT_RECENTLY_VIEWED = {
 
 export const DEFAULT_CONTENT_SORT_ORDER: SynapseContentSortOrder = "modified-desc"
 
+export const DEFAULT_KNOWLEDGE_BASE_STORAGE = {
+  mode: "default",
+} as const satisfies SynapseKnowledgeBaseStorageConfig
+
 export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   themeMode: DEFAULT_THEME_MODE,
   projects: [],
@@ -85,6 +90,7 @@ export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   recentlyViewed: DEFAULT_RECENTLY_VIEWED,
   contentSortOrder: DEFAULT_CONTENT_SORT_ORDER,
   variables: [],
+  knowledgeBaseStorage: DEFAULT_KNOWLEDGE_BASE_STORAGE,
 }
 
 export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {

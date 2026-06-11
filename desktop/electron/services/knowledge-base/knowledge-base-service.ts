@@ -23,7 +23,7 @@ import type {
   SynapseKnowledgeBaseSourceEntry,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
-import type { SynapseConfig, SynapseProjectConfig } from "../../../src/types/config"
+import type { SynapseConfig, SynapseKnowledgeBaseStorageConfig, SynapseProjectConfig } from "../../../src/types/config"
 import { scanKnowledgeBaseSources } from "./source-scan"
 import { stageKnowledgeBaseUrlSource } from "./source-staging"
 import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
@@ -112,7 +112,7 @@ export class KnowledgeBaseService {
         },
       },
     }
-    const runtimePath = resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    const runtimePath = resolveManagedKnowledgeBasePath(project, await this.resolveStorageOptions())
     if (await pathExists(runtimePath)) {
       logger.warn("Managed Knowledge Base runtime already exists.", {
         projectId: payload.projectId,
@@ -396,7 +396,7 @@ export class KnowledgeBaseService {
     if (!isManagedKnowledgeBaseProject(project)) {
       throw new Error("当前项目不是托管知识库。")
     }
-    const projectPath = resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    const projectPath = resolveManagedKnowledgeBasePath(project, await this.resolveStorageOptions(config))
     await assertKnowledgeBaseRootNotSymlink(projectPath)
     return projectPath
   }
@@ -415,9 +415,32 @@ export class KnowledgeBaseService {
           runtimeId,
         },
       },
-    }, this.userDataPath)
+    }, await this.resolveStorageOptions())
     await assertKnowledgeBaseRootNotSymlink(projectPath)
     return projectPath
+  }
+
+  private async resolveStorageOptions(config?: SynapseConfig): Promise<{
+    userDataPath: string
+    storage: SynapseKnowledgeBaseStorageConfig
+  }> {
+    const currentConfig = config ?? await this.loadConfig()
+    const storage = currentConfig.global.knowledgeBaseStorage
+    if (storage.mode === "custom") {
+      try {
+        await access(storage.rootPath, constants.R_OK | constants.W_OK)
+      } catch (error) {
+        logger.warn("Knowledge Base custom storage root is unavailable.", {
+          rootPath: storage.rootPath,
+          ...knowledgeBaseErrorMeta(error),
+        })
+        throw new Error("知识库存储位置不可用。")
+      }
+    }
+    return {
+      userDataPath: this.userDataPath,
+      storage,
+    }
   }
 
   private async ensureRawRoot(projectPath: string): Promise<string> {

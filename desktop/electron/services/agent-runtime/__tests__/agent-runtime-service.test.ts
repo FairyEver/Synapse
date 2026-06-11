@@ -73,6 +73,33 @@ describe("AgentRuntimeService", () => {
     })
   })
 
+  it("reports active sessions only for managed knowledge base runtimes", () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const managedService = new AgentRuntimeService({
+      projectId: "kb-1",
+      workDir: "/kb",
+      conversations,
+      managedKnowledgeBase: true,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+    })
+    const regularService = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+    })
+
+    ;(managedService as unknown as {
+      states: Map<string, { busy: boolean; activeTurns: number; queue: unknown[] }>
+    }).states.set("conversation-1", { busy: true, activeTurns: 1, queue: [] })
+    ;(regularService as unknown as {
+      states: Map<string, { busy: boolean; activeTurns: number; queue: unknown[] }>
+    }).states.set("conversation-1", { busy: true, activeTurns: 1, queue: [] })
+
+    expect(managedService.hasActiveKnowledgeBaseSession()).toBe(true)
+    expect(regularService.hasActiveKnowledgeBaseSession()).toBe(false)
+  })
+
   it("passes side-channel reply environment into live SDK sessions", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new ScriptedSession([

@@ -127,6 +127,11 @@ export const IPC_CHANNELS = {
     "selectAndUploadRawDirectory": "synapse:knowledge-base:select-and-upload-raw-directory",
     "exportRawEntries": "synapse:knowledge-base:export-raw-entries",
     "openSourceManager": "synapse:knowledge-base:open-source-manager",
+    "getStorageStatus": "synapse:knowledge-base:get-storage-status",
+    "startStorageMigration": "synapse:knowledge-base:start-storage-migration",
+    "cancelStorageMigration": "synapse:knowledge-base:cancel-storage-migration",
+    "recheckStorage": "synapse:knowledge-base:recheck-storage",
+    "storageMigrationChanged": "synapse:knowledge-base:storage-migration-changed",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",

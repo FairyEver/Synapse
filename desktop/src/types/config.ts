@@ -67,6 +67,10 @@ export type SynapseRepositoryConfig = {
   skillsDir?: string
 }
 
+export type SynapseKnowledgeBaseStorageConfig =
+  | { mode: "default" }
+  | { mode: "custom"; rootPath: string }
+
 export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
   projects: SynapseProjectConfig[]
@@ -76,6 +80,7 @@ export type SynapseGlobalConfig = {
   recentlyViewed: SynapseRecentlyViewed
   contentSortOrder: SynapseContentSortOrder
   variables: SynapseVariable[]
+  knowledgeBaseStorage: SynapseKnowledgeBaseStorageConfig
 }
 
 export type SynapseAgentGlobalConfig = {

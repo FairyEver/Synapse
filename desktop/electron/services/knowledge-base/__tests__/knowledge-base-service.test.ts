@@ -2,12 +2,14 @@ import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:f
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
+import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
+import type { SynapseKnowledgeBaseStorageConfig, SynapseConfig } from "../../../../src/types/config"
 import { KnowledgeBaseService } from "../knowledge-base-service"
 import { KnowledgeBaseRawFileManager } from "../raw-file-manager"
 
 const mocks = vi.hoisted(() => ({
   logger: {
+    debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
@@ -39,6 +41,34 @@ async function tempDir(): Promise<string> {
 
 type KnowledgeBaseServiceOptions = ConstructorParameters<typeof KnowledgeBaseService>[0]
 
+function configWithKnowledgeBaseStorage(
+  storage: SynapseKnowledgeBaseStorageConfig,
+  projects = DEFAULT_GLOBAL_CONFIG.projects,
+): SynapseConfig {
+  return {
+    activeRepoUuid: null,
+    repositories: [],
+    global: {
+      ...DEFAULT_GLOBAL_CONFIG,
+      knowledgeBaseStorage: storage,
+      projects,
+    },
+    agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
+  }
+}
+
+async function createMinimalTemplateRoot(): Promise<string> {
+  const templateRoot = await tempDir()
+  await mkdir(path.join(templateRoot, "wiki"), { recursive: true })
+  await mkdir(path.join(templateRoot, ".raw"), { recursive: true })
+  await mkdir(path.join(templateRoot, ".vault-meta"), { recursive: true })
+  await mkdir(path.join(templateRoot, ".claude-plugin"), { recursive: true })
+  await writeFile(path.join(templateRoot, "CLAUDE.md"), "# Knowledge\n", "utf8")
+  await writeFile(path.join(templateRoot, "wiki", "index.md"), "# Example Index\n", "utf8")
+  await writeFile(path.join(templateRoot, ".claude-plugin", "plugin.json"), "{\"name\":\"kb\"}\n", "utf8")
+  return templateRoot
+}
+
 async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
   const projectId = "kb-1"
   const userDataPath = await tempDir()
@@ -47,18 +77,7 @@ async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
   const service = new KnowledgeBaseService({
     ...options,
     userDataPath,
-    loadConfig: async () => ({
-      activeRepoUuid: null,
-      repositories: [],
-      global: {
-        themeMode: "system",
-        favorites: { rule: [], skill: [], prompt: [] },
-        recentlyViewed: { rule: [], skill: [], prompt: [] },
-        contentSortOrder: "modified-desc",
-        variables: [],
-        quickInputs: [],
-        defaultQuickInputsSeededVersion: null,
-        projects: [{
+    loadConfig: async () => configWithKnowledgeBaseStorage({ mode: "default" }, [{
           id: projectId,
           name: "Knowledge",
           path: `synapse-kb://${projectId}`,
@@ -71,16 +90,14 @@ async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
               runtimeId: projectId,
             },
           },
-        }],
-      },
-      agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
-    }),
+        }]),
   })
   return { projectId, projectPath, service }
 }
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  vi.clearAllMocks()
 })
 
 describe("KnowledgeBaseService", () => {
@@ -135,6 +152,42 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(result.runtimePath, ".vault-meta", "tiling-thresholds.json"), "utf8")).resolves.toBe("{\"version\":1}\n")
     await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8")).resolves.toContain("kb")
     await expect(readFile(path.join(templateRoot, ".vault-meta", "address-counter.txt"), "utf8")).resolves.toBe("3\n")
+  })
+
+  it("creates managed knowledge base runtime under a custom storage root", async () => {
+    const templateRoot = await createMinimalTemplateRoot()
+    const userDataPath = await tempDir()
+    const customRoot = await tempDir()
+    const service = new KnowledgeBaseService({
+      managedTemplateRoot: templateRoot,
+      userDataPath,
+      loadConfig: async () => configWithKnowledgeBaseStorage({
+        mode: "custom",
+        rootPath: customRoot,
+      }),
+    })
+
+    const result = await service.createManaged({ projectId: "kb-custom", name: "Knowledge" })
+
+    expect(result.runtimePath).toBe(path.join(customRoot, "knowledge-bases", "kb-custom"))
+    await expect(readFile(path.join(result.runtimePath, "CLAUDE.md"), "utf8")).resolves.toBeDefined()
+  })
+
+  it("blocks managed operations when a custom storage root is unavailable", async () => {
+    const templateRoot = await createMinimalTemplateRoot()
+    const userDataPath = await tempDir()
+    const missingRoot = path.join(userDataPath, "missing-disk")
+    const service = new KnowledgeBaseService({
+      managedTemplateRoot: templateRoot,
+      userDataPath,
+      loadConfig: async () => configWithKnowledgeBaseStorage({
+        mode: "custom",
+        rootPath: missingRoot,
+      }),
+    })
+
+    await expect(service.createManaged({ projectId: "kb-missing", name: "Knowledge" }))
+      .rejects.toThrow("知识库存储位置不可用。")
   })
 
   it("uses the Synapse Knowledge Base template path by default", async () => {
@@ -284,13 +337,7 @@ describe("KnowledgeBaseService", () => {
         activeRepoUuid: null,
         repositories: [],
         global: {
-          themeMode: "system",
-          favorites: { rule: [], skill: [], prompt: [] },
-          recentlyViewed: { rule: [], skill: [], prompt: [] },
-          contentSortOrder: "modified-desc",
-          variables: [],
-          quickInputs: [],
-          defaultQuickInputsSeededVersion: null,
+          ...DEFAULT_GLOBAL_CONFIG,
           projects: [],
         },
         agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),

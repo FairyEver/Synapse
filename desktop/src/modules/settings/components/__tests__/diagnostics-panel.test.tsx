@@ -78,6 +78,15 @@ describe("DiagnosticsPanel", () => {
     expect(html).not.toContain("macCompatibility")
   })
 
+  it("renders knowledge base storage diagnostics", () => {
+    const html = renderToStaticMarkup(<DiagnosticsReportDetails report={createKnowledgeBaseStorageReport()} />)
+
+    expect(html).toContain("知识库存储")
+    expect(html).toContain("自定义")
+    expect(html).toContain("可用")
+    expect(html).toContain("发现旧绝对路径引用。")
+  })
+
   it("groups checks by group name", () => {
     const groups = groupChecks(createReport().checks)
 
@@ -181,5 +190,20 @@ function createCompatibilityReport(): SynapseDiagnosticsReport {
     app: {},
     activeContext: {},
     checks: [],
+  }
+}
+
+function createKnowledgeBaseStorageReport(): SynapseDiagnosticsReport {
+  return {
+    ...createReport(),
+    knowledgeBaseStorage: {
+      mode: "custom",
+      rootPath: "/Volumes/Data/SynapseData",
+      knowledgeBasesPath: "/Volumes/Data/SynapseData/knowledge-bases",
+      available: true,
+      runtimeCount: 2,
+      missingRuntimeCount: 0,
+      oldAbsoluteReferenceCount: 1,
+    },
   }
 }

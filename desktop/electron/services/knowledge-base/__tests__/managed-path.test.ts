@@ -8,27 +8,40 @@ import {
 } from "../managed-path"
 
 describe("managed knowledge base paths", () => {
-  it("builds a virtual public path", () => {
-    expect(knowledgeBaseVirtualPath("kb-1")).toBe("synapse-kb://kb-1")
-  })
-
-  it("resolves a managed project to userData-backed runtime path", () => {
-    const project: SynapseProjectConfig = {
-      id: "kb-1",
+  function managedProject(runtimeId: string): SynapseProjectConfig {
+    return {
+      id: runtimeId,
       name: "Knowledge",
-      path: "synapse-kb://kb-1",
+      path: `synapse-kb://${runtimeId}`,
       capabilities: {
         knowledgeBase: {
           enabled: true,
           schemaVersion: 1,
           templateVersion: "2026-05-24",
           managed: true,
-          runtimeId: "kb-1",
+          runtimeId,
         },
       },
     }
+  }
+
+  it("builds a virtual public path", () => {
+    expect(knowledgeBaseVirtualPath("kb-1")).toBe("synapse-kb://kb-1")
+  })
+
+  it("resolves a managed project to userData-backed runtime path", () => {
+    const project = managedProject("kb-1")
 
     expect(resolveManagedKnowledgeBasePath(project, "/UserData")).toBe(path.join("/UserData", "knowledge-bases", "kb-1"))
+  })
+
+  it("resolves a managed project to custom storage root runtime path", () => {
+    const project = managedProject("kb-1")
+
+    expect(resolveManagedKnowledgeBasePath(project, {
+      userDataPath: "/UserData",
+      storage: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
+    })).toBe(path.join("/Volumes/Data/SynapseData", "knowledge-bases", "kb-1"))
   })
 
   it("does not treat legacy knowledge bases as managed", () => {

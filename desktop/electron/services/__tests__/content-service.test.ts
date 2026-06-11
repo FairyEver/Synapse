@@ -88,6 +88,7 @@ function createConfig(): SynapseConfig {
       },
       themeMode: "system",
       variables: [],
+      knowledgeBaseStorage: { mode: "default" },
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }
