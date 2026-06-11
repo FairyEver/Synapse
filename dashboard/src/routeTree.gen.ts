@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as FilesShareIdRouteImport } from './routes/files/$shareId'
 import { Route as authTeamInviteRouteImport } from './routes/(auth)/team-invite'
 import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
@@ -27,6 +28,7 @@ import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedMyContentIndexRouteImport } from './routes/_authenticated/my-content/index'
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_authenticated/invitations/index'
+import { Route as AuthenticatedDriveIndexRouteImport } from './routes/_authenticated/drive/index'
 import { Route as AuthenticatedDevicesIndexRouteImport } from './routes/_authenticated/devices/index'
 import { Route as AuthenticatedContentStoreIndexRouteImport } from './routes/_authenticated/content-store/index'
 import { Route as AuthenticatedContentStoreAdminIndexRouteImport } from './routes/_authenticated/content-store-admin/index'
@@ -39,7 +41,10 @@ import { Route as AuthenticatedMyContentContentIdRouteImport } from './routes/_a
 import { Route as AuthenticatedContentStoreInstallRouteImport } from './routes/_authenticated/content-store/install'
 import { Route as AuthenticatedContentStoreContentIdRouteImport } from './routes/_authenticated/content-store/$contentId'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
+import { Route as FilesShareIdItemsBrowserItemIdRouteImport } from './routes/files/$shareId/items/$browserItemId'
 import { Route as AuthenticatedMyContentContentIdEditRouteImport } from './routes/_authenticated/my-content/$contentId/edit'
+import { Route as AuthenticatedDriveItemsRootItemIdRouteImport } from './routes/_authenticated/drive/items/$rootItemId'
+import { Route as AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRouteImport } from './routes/_authenticated/drive/items/$rootItemId/items/$browserItemId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -49,6 +54,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const FilesShareIdRoute = FilesShareIdRouteImport.update({
+  id: '/files/$shareId',
+  path: '/files/$shareId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const authTeamInviteRoute = authTeamInviteRouteImport.update({
   id: '/(auth)/team-invite',
@@ -138,6 +148,11 @@ const AuthenticatedInvitationsIndexRoute =
     path: '/invitations/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDriveIndexRoute = AuthenticatedDriveIndexRouteImport.update({
+  id: '/drive/',
+  path: '/drive/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDevicesIndexRoute =
   AuthenticatedDevicesIndexRouteImport.update({
     id: '/devices/',
@@ -209,11 +224,29 @@ const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
   path: '/auth/desktop',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FilesShareIdItemsBrowserItemIdRoute =
+  FilesShareIdItemsBrowserItemIdRouteImport.update({
+    id: '/items/$browserItemId',
+    path: '/items/$browserItemId',
+    getParentRoute: () => FilesShareIdRoute,
+  } as any)
 const AuthenticatedMyContentContentIdEditRoute =
   AuthenticatedMyContentContentIdEditRouteImport.update({
     id: '/edit',
     path: '/edit',
     getParentRoute: () => AuthenticatedMyContentContentIdRoute,
+  } as any)
+const AuthenticatedDriveItemsRootItemIdRoute =
+  AuthenticatedDriveItemsRootItemIdRouteImport.update({
+    id: '/drive/items/$rootItemId',
+    path: '/drive/items/$rootItemId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute =
+  AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRouteImport.update({
+    id: '/items/$browserItemId',
+    path: '/items/$browserItemId',
+    getParentRoute: () => AuthenticatedDriveItemsRootItemIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -224,6 +257,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
   '/team-invite': typeof authTeamInviteRoute
+  '/files/$shareId': typeof FilesShareIdRouteWithChildren
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
@@ -236,6 +270,7 @@ export interface FileRoutesByFullPath {
   '/content-store-admin/': typeof AuthenticatedContentStoreAdminIndexRoute
   '/content-store/': typeof AuthenticatedContentStoreIndexRoute
   '/devices/': typeof AuthenticatedDevicesIndexRoute
+  '/drive/': typeof AuthenticatedDriveIndexRoute
   '/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
   '/my-content/': typeof AuthenticatedMyContentIndexRoute
@@ -246,7 +281,10 @@ export interface FileRoutesByFullPath {
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
+  '/drive/items/$rootItemId': typeof AuthenticatedDriveItemsRootItemIdRouteWithChildren
   '/my-content/$contentId/edit': typeof AuthenticatedMyContentContentIdEditRoute
+  '/files/$shareId/items/$browserItemId': typeof FilesShareIdItemsBrowserItemIdRoute
+  '/drive/items/$rootItemId/items/$browserItemId': typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof authForgotPasswordRoute
@@ -254,6 +292,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
   '/team-invite': typeof authTeamInviteRoute
+  '/files/$shareId': typeof FilesShareIdRouteWithChildren
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
@@ -267,6 +306,7 @@ export interface FileRoutesByTo {
   '/content-store-admin': typeof AuthenticatedContentStoreAdminIndexRoute
   '/content-store': typeof AuthenticatedContentStoreIndexRoute
   '/devices': typeof AuthenticatedDevicesIndexRoute
+  '/drive': typeof AuthenticatedDriveIndexRoute
   '/invitations': typeof AuthenticatedInvitationsIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
   '/my-content': typeof AuthenticatedMyContentIndexRoute
@@ -277,7 +317,10 @@ export interface FileRoutesByTo {
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
+  '/drive/items/$rootItemId': typeof AuthenticatedDriveItemsRootItemIdRouteWithChildren
   '/my-content/$contentId/edit': typeof AuthenticatedMyContentContentIdEditRoute
+  '/files/$shareId/items/$browserItemId': typeof FilesShareIdItemsBrowserItemIdRoute
+  '/drive/items/$rootItemId/items/$browserItemId': typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -288,6 +331,7 @@ export interface FileRoutesById {
   '/(auth)/sign-in': typeof authSignInRoute
   '/(auth)/sign-up': typeof authSignUpRoute
   '/(auth)/team-invite': typeof authTeamInviteRoute
+  '/files/$shareId': typeof FilesShareIdRouteWithChildren
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
@@ -301,6 +345,7 @@ export interface FileRoutesById {
   '/_authenticated/content-store-admin/': typeof AuthenticatedContentStoreAdminIndexRoute
   '/_authenticated/content-store/': typeof AuthenticatedContentStoreIndexRoute
   '/_authenticated/devices/': typeof AuthenticatedDevicesIndexRoute
+  '/_authenticated/drive/': typeof AuthenticatedDriveIndexRoute
   '/_authenticated/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
   '/_authenticated/my-content/': typeof AuthenticatedMyContentIndexRoute
@@ -311,7 +356,10 @@ export interface FileRoutesById {
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
+  '/_authenticated/drive/items/$rootItemId': typeof AuthenticatedDriveItemsRootItemIdRouteWithChildren
   '/_authenticated/my-content/$contentId/edit': typeof AuthenticatedMyContentContentIdEditRoute
+  '/files/$shareId/items/$browserItemId': typeof FilesShareIdItemsBrowserItemIdRoute
+  '/_authenticated/drive/items/$rootItemId/items/$browserItemId': typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -323,6 +371,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/team-invite'
+    | '/files/$shareId'
     | '/auth/desktop'
     | '/content-store/$contentId'
     | '/content-store/install'
@@ -335,6 +384,7 @@ export interface FileRouteTypes {
     | '/content-store-admin/'
     | '/content-store/'
     | '/devices/'
+    | '/drive/'
     | '/invitations/'
     | '/logs/'
     | '/my-content/'
@@ -345,7 +395,10 @@ export interface FileRouteTypes {
     | '/users/'
     | '/webhook-deliveries/'
     | '/webhooks/'
+    | '/drive/items/$rootItemId'
     | '/my-content/$contentId/edit'
+    | '/files/$shareId/items/$browserItemId'
+    | '/drive/items/$rootItemId/items/$browserItemId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -353,6 +406,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/team-invite'
+    | '/files/$shareId'
     | '/'
     | '/auth/desktop'
     | '/content-store/$contentId'
@@ -366,6 +420,7 @@ export interface FileRouteTypes {
     | '/content-store-admin'
     | '/content-store'
     | '/devices'
+    | '/drive'
     | '/invitations'
     | '/logs'
     | '/my-content'
@@ -376,7 +431,10 @@ export interface FileRouteTypes {
     | '/users'
     | '/webhook-deliveries'
     | '/webhooks'
+    | '/drive/items/$rootItemId'
     | '/my-content/$contentId/edit'
+    | '/files/$shareId/items/$browserItemId'
+    | '/drive/items/$rootItemId/items/$browserItemId'
   id:
     | '__root__'
     | '/_authenticated'
@@ -386,6 +444,7 @@ export interface FileRouteTypes {
     | '/(auth)/sign-in'
     | '/(auth)/sign-up'
     | '/(auth)/team-invite'
+    | '/files/$shareId'
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
     | '/_authenticated/content-store/$contentId'
@@ -399,6 +458,7 @@ export interface FileRouteTypes {
     | '/_authenticated/content-store-admin/'
     | '/_authenticated/content-store/'
     | '/_authenticated/devices/'
+    | '/_authenticated/drive/'
     | '/_authenticated/invitations/'
     | '/_authenticated/logs/'
     | '/_authenticated/my-content/'
@@ -409,7 +469,10 @@ export interface FileRouteTypes {
     | '/_authenticated/users/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
+    | '/_authenticated/drive/items/$rootItemId'
     | '/_authenticated/my-content/$contentId/edit'
+    | '/files/$shareId/items/$browserItemId'
+    | '/_authenticated/drive/items/$rootItemId/items/$browserItemId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -419,6 +482,7 @@ export interface RootRouteChildren {
   authSignInRoute: typeof authSignInRoute
   authSignUpRoute: typeof authSignUpRoute
   authTeamInviteRoute: typeof authTeamInviteRoute
+  FilesShareIdRoute: typeof FilesShareIdRouteWithChildren
   authAuthDesktopRoute: typeof authAuthDesktopRoute
 }
 
@@ -437,6 +501,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/files/$shareId': {
+      id: '/files/$shareId'
+      path: '/files/$shareId'
+      fullPath: '/files/$shareId'
+      preLoaderRoute: typeof FilesShareIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/(auth)/team-invite': {
       id: '/(auth)/team-invite'
@@ -550,6 +621,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvitationsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/drive/': {
+      id: '/_authenticated/drive/'
+      path: '/drive'
+      fullPath: '/drive/'
+      preLoaderRoute: typeof AuthenticatedDriveIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/devices/': {
       id: '/_authenticated/devices/'
       path: '/devices'
@@ -634,12 +712,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authAuthDesktopRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/files/$shareId/items/$browserItemId': {
+      id: '/files/$shareId/items/$browserItemId'
+      path: '/items/$browserItemId'
+      fullPath: '/files/$shareId/items/$browserItemId'
+      preLoaderRoute: typeof FilesShareIdItemsBrowserItemIdRouteImport
+      parentRoute: typeof FilesShareIdRoute
+    }
     '/_authenticated/my-content/$contentId/edit': {
       id: '/_authenticated/my-content/$contentId/edit'
       path: '/edit'
       fullPath: '/my-content/$contentId/edit'
       preLoaderRoute: typeof AuthenticatedMyContentContentIdEditRouteImport
       parentRoute: typeof AuthenticatedMyContentContentIdRoute
+    }
+    '/_authenticated/drive/items/$rootItemId': {
+      id: '/_authenticated/drive/items/$rootItemId'
+      path: '/drive/items/$rootItemId'
+      fullPath: '/drive/items/$rootItemId'
+      preLoaderRoute: typeof AuthenticatedDriveItemsRootItemIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/drive/items/$rootItemId/items/$browserItemId': {
+      id: '/_authenticated/drive/items/$rootItemId/items/$browserItemId'
+      path: '/items/$browserItemId'
+      fullPath: '/drive/items/$rootItemId/items/$browserItemId'
+      preLoaderRoute: typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRouteImport
+      parentRoute: typeof AuthenticatedDriveItemsRootItemIdRoute
     }
   }
 }
@@ -673,6 +772,21 @@ const AuthenticatedMyContentContentIdRouteWithChildren =
     AuthenticatedMyContentContentIdRouteChildren,
   )
 
+interface AuthenticatedDriveItemsRootItemIdRouteChildren {
+  AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
+}
+
+const AuthenticatedDriveItemsRootItemIdRouteChildren: AuthenticatedDriveItemsRootItemIdRouteChildren =
+  {
+    AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute:
+      AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute,
+  }
+
+const AuthenticatedDriveItemsRootItemIdRouteWithChildren =
+  AuthenticatedDriveItemsRootItemIdRoute._addFileChildren(
+    AuthenticatedDriveItemsRootItemIdRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -687,6 +801,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedContentStoreAdminIndexRoute: typeof AuthenticatedContentStoreAdminIndexRoute
   AuthenticatedContentStoreIndexRoute: typeof AuthenticatedContentStoreIndexRoute
   AuthenticatedDevicesIndexRoute: typeof AuthenticatedDevicesIndexRoute
+  AuthenticatedDriveIndexRoute: typeof AuthenticatedDriveIndexRoute
   AuthenticatedInvitationsIndexRoute: typeof AuthenticatedInvitationsIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
   AuthenticatedMyContentIndexRoute: typeof AuthenticatedMyContentIndexRoute
@@ -696,6 +811,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
+  AuthenticatedDriveItemsRootItemIdRoute: typeof AuthenticatedDriveItemsRootItemIdRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -715,6 +831,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedContentStoreAdminIndexRoute,
   AuthenticatedContentStoreIndexRoute: AuthenticatedContentStoreIndexRoute,
   AuthenticatedDevicesIndexRoute: AuthenticatedDevicesIndexRoute,
+  AuthenticatedDriveIndexRoute: AuthenticatedDriveIndexRoute,
   AuthenticatedInvitationsIndexRoute: AuthenticatedInvitationsIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
   AuthenticatedMyContentIndexRoute: AuthenticatedMyContentIndexRoute,
@@ -725,10 +842,24 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
+  AuthenticatedDriveItemsRootItemIdRoute:
+    AuthenticatedDriveItemsRootItemIdRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
+interface FilesShareIdRouteChildren {
+  FilesShareIdItemsBrowserItemIdRoute: typeof FilesShareIdItemsBrowserItemIdRoute
+}
+
+const FilesShareIdRouteChildren: FilesShareIdRouteChildren = {
+  FilesShareIdItemsBrowserItemIdRoute: FilesShareIdItemsBrowserItemIdRoute,
+}
+
+const FilesShareIdRouteWithChildren = FilesShareIdRoute._addFileChildren(
+  FilesShareIdRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
@@ -737,6 +868,7 @@ const rootRouteChildren: RootRouteChildren = {
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
   authTeamInviteRoute: authTeamInviteRoute,
+  FilesShareIdRoute: FilesShareIdRouteWithChildren,
   authAuthDesktopRoute: authAuthDesktopRoute,
 }
 export const routeTree = rootRouteImport

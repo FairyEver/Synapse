@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, dashboardApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, driveBrowserApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
 
 describe('adminApi.cleanupLogs', () => {
   afterEach(() => {
@@ -155,6 +155,76 @@ describe('dashboardApi.devices', () => {
         body: JSON.stringify({ displayName: 'Studio Mac' }),
         credentials: 'include',
         method: 'PATCH',
+      })
+    )
+  })
+})
+
+describe('driveBrowserApi', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function mockJsonResponse(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+  }
+
+  it('uses owner and console browser endpoints', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveBrowserApi.getOwnerRoot('root/id')
+    await driveBrowserApi.getOwnerChild('root/id', 'child/id', 'console')
+    await driveBrowserApi.getConsoleRoot()
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/drive/browser/owner/items/root%2Fid',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/drive/browser/owner/items/root%2Fid/items/child%2Fid?surface=console',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/drive/browser/owner/root',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+
+  it('uses share browser endpoints and unlocks with POST JSON', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveBrowserApi.getShareRoot('shr/id')
+    await driveBrowserApi.getShareItem('shr/id', 'child/id')
+    await driveBrowserApi.unlockShare('shr/id', 'letmein')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/drive/browser/shares/shr%2Fid',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/drive/browser/shares/shr%2Fid/access',
+      expect.objectContaining({
+        body: JSON.stringify({ password: 'letmein' }),
+        credentials: 'include',
+        method: 'POST',
       })
     )
   })

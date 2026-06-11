@@ -9,6 +9,8 @@ import type {
   ContentStoreVisibility,
   DashboardWebhookDto,
   DashboardWebhookSecretResult,
+  DriveBrowserPasswordRequiredDto,
+  DriveBrowserSnapshotDto,
   WebhookDeliveryDto,
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
@@ -254,6 +256,7 @@ const consoleApiBasePath = '/api/console'
 const legacyDashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
 const contentStoreApiBasePath = '/api/content-store'
+const driveBrowserApiBasePath = '/api/drive/browser'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
 const authExpiredListeners = new Set<() => void>()
 
@@ -675,6 +678,48 @@ export const dashboardApi = {
       {
         method: 'POST',
         body: JSON.stringify(input),
+      }
+    ),
+}
+
+type DriveBrowserSurface = 'standalone' | 'console'
+
+function driveBrowserSurfaceSuffix(surface: DriveBrowserSurface = 'standalone') {
+  return surface === 'console' ? '?surface=console' : ''
+}
+
+export const driveBrowserApi = {
+  getOwnerRoot: (
+    rootItemId: string,
+    surface: DriveBrowserSurface = 'standalone'
+  ) =>
+    request<DriveBrowserSnapshotDto>(
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}${driveBrowserSurfaceSuffix(surface)}`
+    ),
+  getOwnerChild: (
+    rootItemId: string,
+    itemId: string,
+    surface: DriveBrowserSurface = 'standalone'
+  ) =>
+    request<DriveBrowserSnapshotDto>(
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}/items/${encodeURIComponent(itemId)}${driveBrowserSurfaceSuffix(surface)}`
+    ),
+  getConsoleRoot: () =>
+    request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root`),
+  getShareRoot: (shareId: string) =>
+    request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}`
+    ),
+  getShareItem: (shareId: string, itemId: string) =>
+    request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}`
+    ),
+  unlockShare: (shareId: string, password: string) =>
+    request<DriveBrowserSnapshotDto>(
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/access`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ password }),
       }
     ),
 }

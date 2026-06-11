@@ -35,6 +35,7 @@ describe('getSidebarData', () => {
     expect(data.appTitle.logo).toBe(Logo)
     expect(collectUrls(data)).toContain('/content-store')
     expect(collectUrls(data)).toContain('/my-content')
+    expect(collectUrls(data)).toContain('/drive')
     expect(collectUrls(data)).toContain('/webhooks')
     expect(collectUrls(data)).toContain('/webhook-deliveries')
     expect(collectUrls(data)).toContain('/my-devices')
@@ -42,6 +43,7 @@ describe('getSidebarData', () => {
     expect(collectUrls(data)).not.toContain('/content-store-admin')
     expect(collectUrls(data)).not.toContain('/devices')
     expect(collectUrls(data)).not.toContain('/admin-drive')
+    expect(collectTitles(data)).toContain('网盘')
     expect(collectUrls(data)).not.toContain('/me')
   })
 
@@ -63,6 +65,7 @@ describe('getSidebarData', () => {
     expect(collectUrls(data)).toContain('/admin-drive')
     expect(collectUrls(data)).toContain('/webhook-deliveries')
     expect(collectTitles(data)).toContain('云盘管理')
+    expect(collectUrls(data)).not.toContain('/drive')
     expect(collectUrls(data)).not.toContain('/content-store')
     expect(collectUrls(data)).not.toContain('/my-content')
     expect(collectUrls(data)).not.toContain('/my-devices')

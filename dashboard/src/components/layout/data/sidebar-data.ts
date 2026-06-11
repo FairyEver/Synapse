@@ -92,6 +92,11 @@ const userAccountNavGroup = {
       icon: FolderKanban,
     },
     {
+      title: '网盘',
+      url: '/drive',
+      icon: HardDrive,
+    },
+    {
       title: 'Webhooks',
       url: '/webhooks',
       icon: Webhook,
