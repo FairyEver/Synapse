@@ -73,6 +73,82 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     })
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
   })
+
+  it("cancels during copy and keeps the old config", async () => {
+    const harness = await migrationHarness({ pauseAfterFirstCopy: true })
+    await harness.seedRuntime("kb-1")
+    const migration = harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    await harness.waitForPhase("copying")
+    await harness.waitForCopyPause()
+    await harness.service.cancelMigration()
+    harness.resume()
+
+    await expect(migration).resolves.toEqual({ status: "cancelled" })
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("does not cancel after switching begins", async () => {
+    const harness = await migrationHarness({ pauseAtPhase: "switching" })
+    await harness.seedRuntime("kb-1")
+    const migration = harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    await harness.waitForPhase("switching")
+    await expect(harness.service.cancelMigration()).rejects.toThrow("当前阶段不能取消。")
+    harness.resume()
+    await expect(migration).resolves.toMatchObject({ status: "completed" })
+  })
+
+  it("recovers an interrupted pre-switch journal to the old root", async () => {
+    const harness = await migrationHarness()
+    await harness.writeJournal({ phase: "copying", switchStarted: false, newRootVerified: false })
+
+    await harness.service.recoverIfNeeded()
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("keeps a verified new root during recovery", async () => {
+    const harness = await migrationHarness()
+    await harness.seedRuntime("kb-1", harness.newRoot)
+    await harness.writeJournal({ phase: "cleaning", switchStarted: true, newRootVerified: true })
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+
+    await harness.service.recoverIfNeeded()
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+  })
+
+  it("rejects migration when available space is below runtime size plus margin", async () => {
+    const harness = await migrationHarness({ availableBytes: 10 })
+    await harness.seedRuntime("kb-1")
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("目标位置空间不足。")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+  })
+
+  it("continues when available space cannot be confirmed", async () => {
+    const harness = await migrationHarness({ availableBytes: null })
+    await harness.seedRuntime("kb-1")
+
+    const result = await harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    expect(result.status).toBe("completed")
+    expect(harness.states.some((state) => state.warningCode === "free-space-unknown")).toBe(true)
+  })
 })
 
 type RuntimeSeedOptions = {
@@ -81,6 +157,9 @@ type RuntimeSeedOptions = {
 
 type MigrationHarnessOptions = {
   trashError?: Error
+  pauseAfterFirstCopy?: boolean
+  pauseAtPhase?: "switching"
+  availableBytes?: number | null
 }
 
 async function migrationHarness(options: MigrationHarnessOptions = {}) {
@@ -88,6 +167,13 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
   const newRoot = await tempDir()
   const journalPath = path.join(await tempDir(), "migration.json")
   const trashed: string[] = []
+  const states: ReturnType<KnowledgeBaseStorageMigrationService["getState"]>[] = []
+  let resumePause: (() => void) | null = null
+  let pausedCopy = false
+  let copyPausedResolve: (() => void) | null = null
+  const copyPaused = new Promise<void>((resolve) => {
+    copyPausedResolve = resolve
+  })
   let config = createConfig({ mode: "default" })
   const sourceManager = {
     hasActiveMutation: vi.fn(() => false),
@@ -114,6 +200,24 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     journalPath,
     sourceManager,
     hasActiveKnowledgeBaseSession: async () => false,
+    getAvailableBytes: async () => options.availableBytes === undefined ? 100_000_000_000 : options.availableBytes,
+    afterCopyEntry: async () => {
+      if (!options.pauseAfterFirstCopy || pausedCopy) return
+      pausedCopy = true
+      copyPausedResolve?.()
+      await new Promise<void>((resolve) => {
+        resumePause = resolve
+      })
+    },
+    afterPhaseChange: async (phase) => {
+      if (options.pauseAtPhase !== phase) return
+      await new Promise<void>((resolve) => {
+        resumePause = resolve
+      })
+    },
+  })
+  service.subscribe((state) => {
+    states.push(state)
   })
 
   async function seedRuntime(runtimeId: string, rootPath = oldRoot, seedOptions: RuntimeSeedOptions = {}) {
@@ -141,8 +245,49 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     newRoot,
     service,
     sourceManager,
+    states,
     trashed,
     seedRuntime,
+    setStorage(storage: SynapseKnowledgeBaseStorageConfig) {
+      config = {
+        ...config,
+        global: {
+          ...config.global,
+          knowledgeBaseStorage: storage,
+        },
+      }
+    },
+    async writeJournal(partial: { phase: string; switchStarted: boolean; newRootVerified: boolean }) {
+      await mkdir(path.dirname(journalPath), { recursive: true })
+      await writeFile(journalPath, `${JSON.stringify({
+        version: 1,
+        oldStorage: { mode: "default" },
+        targetStorage: { mode: "custom", rootPath: newRoot },
+        oldRoot,
+        newRoot,
+        tempPath: path.join(newRoot, ".knowledge-bases-migration-test"),
+        startedAt: "2026-06-10T00:00:00.000Z",
+        ...partial,
+      }, null, 2)}\n`, "utf8")
+    },
+    waitForPhase(phase: string) {
+      if (states.some((state) => state.phase === phase)) return Promise.resolve()
+      return new Promise<void>((resolve) => {
+        const unsubscribe = service.subscribe((state) => {
+          if (state.phase !== phase) return
+          unsubscribe()
+          resolve()
+        })
+      })
+    },
+    waitForCopyPause() {
+      return copyPaused
+    },
+    resume() {
+      const resolve = resumePause
+      resumePause = null
+      resolve?.()
+    },
   }
 }
 

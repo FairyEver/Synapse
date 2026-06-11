@@ -1,5 +1,5 @@
 import { constants } from "node:fs"
-import { access, cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseConfig,
@@ -59,6 +59,9 @@ type KnowledgeBaseStorageMigrationDeps = {
     setMigrationBlocked: (blocked: boolean) => void
   }
   hasActiveKnowledgeBaseSession: () => Promise<boolean>
+  getAvailableBytes?: (targetRoot: string) => Promise<number | null>
+  afterCopyEntry?: (entryPath: string) => Promise<void>
+  afterPhaseChange?: (phase: KnowledgeBaseStorageMigrationPhase) => Promise<void>
 }
 
 type StartMigrationPayload = {
@@ -99,9 +102,14 @@ const REQUIRED_RUNTIME_PATHS = [
   path.join("wiki", "index.md"),
 ] as const
 
+const MIN_FREE_SPACE_MARGIN_BYTES = 1024 * 1024 * 1024
+const FREE_SPACE_MARGIN_RATIO = 0.1
+
 export class KnowledgeBaseStorageMigrationService {
   private state: KnowledgeBaseStorageMigrationState = INITIAL_STATE
   private readonly listeners = new Set<(state: KnowledgeBaseStorageMigrationState) => void>()
+  private cancelRequested = false
+  private nonCancellable = false
 
   constructor(private readonly deps: KnowledgeBaseStorageMigrationDeps) {}
 
@@ -111,6 +119,14 @@ export class KnowledgeBaseStorageMigrationService {
 
   isActive(): boolean {
     return this.state.active
+  }
+
+  async cancelMigration(): Promise<void> {
+    if (!this.state.active) return
+    if (!this.state.cancellable || this.nonCancellable) {
+      throw new Error("当前阶段不能取消。")
+    }
+    this.cancelRequested = true
   }
 
   subscribe(listener: (state: KnowledgeBaseStorageMigrationState) => void): () => void {
@@ -126,7 +142,10 @@ export class KnowledgeBaseStorageMigrationService {
       throw new Error("知识库存储迁移正在进行。")
     }
 
-    this.emitState({
+    this.cancelRequested = false
+    this.nonCancellable = false
+
+    await this.transitionState({
       active: true,
       phase: "preparing",
       cancellable: false,
@@ -135,20 +154,23 @@ export class KnowledgeBaseStorageMigrationService {
     })
     this.deps.sourceManager.setMigrationBlocked(true)
 
-    const config = await this.deps.loadConfig()
-    const oldStorage = config.global.knowledgeBaseStorage
-    const oldRoot = resolveKnowledgeBaseStorageRoot({
-      userDataPath: this.deps.userDataPath,
-      storage: oldStorage,
-    })
-    const newRoot = resolveKnowledgeBaseStorageRoot({
-      userDataPath: this.deps.userDataPath,
-      storage: payload.target,
-    })
+    let oldStorage: SynapseKnowledgeBaseStorageConfig | null = null
+    let tempPath: string | null = null
 
     try {
+      const config = await this.deps.loadConfig()
+      oldStorage = config.global.knowledgeBaseStorage
+      const oldRoot = resolveKnowledgeBaseStorageRoot({
+        userDataPath: this.deps.userDataPath,
+        storage: oldStorage,
+      })
+      const newRoot = resolveKnowledgeBaseStorageRoot({
+        userDataPath: this.deps.userDataPath,
+        storage: payload.target,
+      })
+
       if (path.resolve(oldRoot) === path.resolve(newRoot)) {
-        this.emitState({
+        await this.transitionState({
           active: false,
           phase: "completed",
           cancellable: false,
@@ -169,8 +191,10 @@ export class KnowledgeBaseStorageMigrationService {
         userDataPath: this.deps.userDataPath,
         storage: payload.target,
       })
-      const tempPath = path.join(newRoot, `.knowledge-bases-migration-${Date.now()}`)
+      tempPath = path.join(newRoot, `.knowledge-bases-migration-${Date.now()}`)
       const tempKnowledgeBasesPath = path.join(tempPath, "knowledge-bases")
+      const sourceStats = await treeStats(oldKnowledgeBasesPath)
+      const warningCode = await this.validateAvailableSpace(newRoot, sourceStats.bytes)
       const journal: MigrationJournal = {
         version: 1,
         oldStorage,
@@ -185,34 +209,38 @@ export class KnowledgeBaseStorageMigrationService {
       }
 
       await this.writeJournal(journal)
-      this.emitState({
+      await this.transitionState({
         active: true,
         phase: "copying",
         cancellable: true,
         message: "正在复制知识库",
+        warningCode,
         progress: {
           copiedBytes: 0,
-          totalBytes: (await treeStats(oldKnowledgeBasesPath)).bytes,
+          totalBytes: sourceStats.bytes,
         },
       })
       await mkdir(tempPath, { recursive: true })
-      await copyKnowledgeBasesTree(oldKnowledgeBasesPath, tempKnowledgeBasesPath)
+      await this.copyKnowledgeBasesTree(oldKnowledgeBasesPath, tempKnowledgeBasesPath, sourceStats.bytes)
 
       const runtimeIds = managedRuntimeIds(config)
-      this.emitState({
+      await this.transitionState({
         active: true,
         phase: "verifying",
         cancellable: true,
         message: "正在校验知识库",
       })
+      this.assertNotCancelled()
       await verifyKnowledgeBasesTree(oldKnowledgeBasesPath, tempKnowledgeBasesPath, runtimeIds)
+      this.assertNotCancelled()
 
       await this.writeJournal({
         ...journal,
         phase: "switching",
         switchStarted: true,
       })
-      this.emitState({
+      this.nonCancellable = true
+      await this.transitionState({
         active: true,
         phase: "switching",
         cancellable: false,
@@ -229,7 +257,7 @@ export class KnowledgeBaseStorageMigrationService {
         switchStarted: true,
         newRootVerified: true,
       })
-      this.emitState({
+      await this.transitionState({
         active: true,
         phase: "cleaning",
         cancellable: false,
@@ -244,7 +272,7 @@ export class KnowledgeBaseStorageMigrationService {
           ...knowledgeBaseErrorMeta(error),
         })
         await this.clearJournal()
-        this.emitState({
+        await this.transitionState({
           active: false,
           phase: "completed-with-warning",
           cancellable: false,
@@ -255,7 +283,7 @@ export class KnowledgeBaseStorageMigrationService {
       }
 
       await this.clearJournal()
-      this.emitState({
+      await this.transitionState({
         active: false,
         phase: "completed",
         cancellable: false,
@@ -263,11 +291,32 @@ export class KnowledgeBaseStorageMigrationService {
       })
       return { status: "completed" }
     } catch (error) {
-      if (error instanceof MigrationVerificationError) {
+      if (error instanceof MigrationCancelledError) {
+        if (oldStorage) {
+          await this.deps.updateConfig({ global: { knowledgeBaseStorage: oldStorage } })
+        }
+        if (tempPath) {
+          await rm(tempPath, { recursive: true, force: true })
+        }
+        await this.clearJournal()
+        await this.transitionState({
+          active: false,
+          phase: "cancelled",
+          cancellable: false,
+          message: "知识库存储迁移已取消",
+          progress: { copiedBytes: 0, totalBytes: null },
+        })
+        return { status: "cancelled" }
+      }
+      if (oldStorage && error instanceof MigrationVerificationError && !this.nonCancellable) {
         await this.deps.updateConfig({ global: { knowledgeBaseStorage: oldStorage } })
       }
+      if (tempPath && !this.nonCancellable) {
+        await rm(tempPath, { recursive: true, force: true })
+        await this.clearJournal()
+      }
       logger.warn("Knowledge Base storage migration failed.", knowledgeBaseErrorMeta(error))
-      this.emitState({
+      await this.transitionState({
         active: false,
         phase: "failed",
         cancellable: false,
@@ -275,6 +324,65 @@ export class KnowledgeBaseStorageMigrationService {
         errorMessage: error instanceof Error ? error.message : "迁移失败。",
       })
       throw error
+    } finally {
+      this.deps.sourceManager.setMigrationBlocked(false)
+      this.cancelRequested = false
+      this.nonCancellable = false
+    }
+  }
+
+  async recoverIfNeeded(): Promise<void> {
+    if (this.state.active) {
+      throw new Error("知识库存储迁移正在进行。")
+    }
+
+    const journal = await this.readJournal()
+    if (!journal) return
+
+    this.deps.sourceManager.setMigrationBlocked(true)
+    try {
+      await this.transitionState({
+        active: true,
+        phase: "recovering",
+        cancellable: false,
+        progress: { copiedBytes: 0, totalBytes: null },
+        message: "正在恢复知识库存储迁移",
+      })
+
+      if (!journal.switchStarted) {
+        await rm(journal.tempPath, { recursive: true, force: true })
+        await this.deps.updateConfig({ global: { knowledgeBaseStorage: journal.oldStorage } })
+        await this.clearJournal()
+        await this.transitionState({
+          active: false,
+          phase: "completed",
+          cancellable: false,
+          message: "知识库存储迁移已恢复到旧位置",
+        })
+        return
+      }
+
+      if (journal.newRootVerified || await this.canVerifyRecoveredTarget(journal)) {
+        await this.deps.updateConfig({ global: { knowledgeBaseStorage: journal.targetStorage } })
+        await this.clearJournal()
+        await this.transitionState({
+          active: false,
+          phase: "completed",
+          cancellable: false,
+          message: "知识库存储迁移已恢复到新位置",
+        })
+        return
+      }
+
+      await this.deps.updateConfig({ global: { knowledgeBaseStorage: journal.oldStorage } })
+      await this.clearJournal()
+      await this.transitionState({
+        active: false,
+        phase: "failed",
+        cancellable: false,
+        message: "知识库存储迁移恢复失败",
+        errorMessage: "无法确认新位置数据完整。",
+      })
     } finally {
       this.deps.sourceManager.setMigrationBlocked(false)
     }
@@ -304,6 +412,100 @@ export class KnowledgeBaseStorageMigrationService {
     }
   }
 
+  private async validateAvailableSpace(
+    targetRoot: string,
+    sourceBytes: number,
+  ): Promise<KnowledgeBaseStorageMigrationState["warningCode"] | undefined> {
+    let availableBytes: number | null = null
+    try {
+      availableBytes = await this.deps.getAvailableBytes?.(targetRoot) ?? null
+    } catch (error) {
+      logger.warn("Knowledge Base storage free space check failed.", {
+        targetRoot,
+        ...knowledgeBaseErrorMeta(error),
+      })
+    }
+
+    if (availableBytes === null) {
+      return "free-space-unknown"
+    }
+
+    const marginBytes = Math.max(Math.ceil(sourceBytes * FREE_SPACE_MARGIN_RATIO), MIN_FREE_SPACE_MARGIN_BYTES)
+    if (availableBytes < sourceBytes + marginBytes) {
+      throw new Error("目标位置空间不足。")
+    }
+    return undefined
+  }
+
+  private async copyKnowledgeBasesTree(
+    sourcePath: string,
+    targetPath: string,
+    totalBytes: number,
+  ): Promise<void> {
+    let copiedBytes = 0
+    const copyEntry = async (sourceEntryPath: string, targetEntryPath: string) => {
+      this.assertNotCancelled()
+      if (!await pathExists(sourceEntryPath)) {
+        await mkdir(targetEntryPath, { recursive: true })
+        return
+      }
+
+      const entryStat = await stat(sourceEntryPath)
+      if (entryStat.isDirectory()) {
+        await mkdir(targetEntryPath, { recursive: true })
+        const entries = await readdir(sourceEntryPath, { withFileTypes: true })
+        for (const entry of entries) {
+          await copyEntry(path.join(sourceEntryPath, entry.name), path.join(targetEntryPath, entry.name))
+        }
+        return
+      }
+
+      if (!entryStat.isFile()) return
+
+      await mkdir(path.dirname(targetEntryPath), { recursive: true })
+      await copyFile(sourceEntryPath, targetEntryPath)
+      copiedBytes += entryStat.size
+      this.emitState({
+        progress: {
+          copiedBytes,
+          totalBytes,
+        },
+      })
+      await this.deps.afterCopyEntry?.(sourceEntryPath)
+      this.assertNotCancelled()
+    }
+
+    await copyEntry(sourcePath, targetPath)
+  }
+
+  private assertNotCancelled(): void {
+    if (this.cancelRequested) {
+      throw new MigrationCancelledError()
+    }
+  }
+
+  private async canVerifyRecoveredTarget(journal: MigrationJournal): Promise<boolean> {
+    try {
+      const config = await this.deps.loadConfig()
+      const runtimeIds = managedRuntimeIds(config)
+      const oldKnowledgeBasesPath = resolveKnowledgeBasesDirectory({
+        userDataPath: this.deps.userDataPath,
+        storage: journal.oldStorage,
+      })
+      const newKnowledgeBasesPath = resolveKnowledgeBasesDirectory({
+        userDataPath: this.deps.userDataPath,
+        storage: journal.targetStorage,
+      })
+      await verifyKnowledgeBasesTree(oldKnowledgeBasesPath, newKnowledgeBasesPath, runtimeIds)
+      return true
+    } catch (error) {
+      logger.warn("Knowledge Base storage migration recovery verification failed.", {
+        ...knowledgeBaseErrorMeta(error),
+      })
+      return false
+    }
+  }
+
   private async writeJournal(journal: MigrationJournal): Promise<void> {
     await mkdir(path.dirname(this.deps.journalPath), { recursive: true })
     await writeFile(this.deps.journalPath, `${JSON.stringify(journal, null, 2)}\n`, "utf8")
@@ -311,6 +513,26 @@ export class KnowledgeBaseStorageMigrationService {
 
   private async clearJournal(): Promise<void> {
     await rm(this.deps.journalPath, { force: true })
+  }
+
+  private async readJournal(): Promise<MigrationJournal | null> {
+    try {
+      const raw = await readFile(this.deps.journalPath, "utf8")
+      const parsed = JSON.parse(raw) as MigrationJournal
+      return parsed.version === 1 ? parsed : null
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return null
+      }
+      throw error
+    }
+  }
+
+  private async transitionState(patch: Partial<KnowledgeBaseStorageMigrationState>): Promise<void> {
+    this.emitState(patch)
+    if (patch.phase) {
+      await this.deps.afterPhaseChange?.(patch.phase)
+    }
   }
 
   private emitState(patch: Partial<KnowledgeBaseStorageMigrationState>): void {
@@ -332,22 +554,16 @@ class MigrationVerificationError extends Error {
   }
 }
 
+class MigrationCancelledError extends Error {
+  constructor() {
+    super("知识库存储迁移已取消。")
+  }
+}
+
 function managedRuntimeIds(config: SynapseConfig): string[] {
   return config.global.projects.flatMap((project) => {
     if (!isManagedKnowledgeBaseProject(project)) return []
     return project.capabilities.knowledgeBase.runtimeId ? [project.capabilities.knowledgeBase.runtimeId] : []
-  })
-}
-
-async function copyKnowledgeBasesTree(sourcePath: string, targetPath: string): Promise<void> {
-  if (!await pathExists(sourcePath)) {
-    await mkdir(targetPath, { recursive: true })
-    return
-  }
-  await cp(sourcePath, targetPath, {
-    recursive: true,
-    errorOnExist: true,
-    force: false,
   })
 }
 
