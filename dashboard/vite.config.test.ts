@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import config, { isDriveBrowserSpaPath } from "./vite.config"
+import config, {
+  isDriveBrowserSpaPath,
+  resolveDashboardDevSpaFallback,
+  resolveLegacyDashboardDevRedirect,
+} from "./vite.config"
 
 describe("dashboard Vite dev proxy", () => {
   it("fails instead of opening another port when the dashboard port is occupied", () => {
@@ -56,6 +60,22 @@ describe("dashboard Vite dev proxy", () => {
     expect(isDriveBrowserSpaPath("/drive/items/root-id/items/file-id/render")).toBe(false)
     expect(isDriveBrowserSpaPath("/files/share-id/download")).toBe(false)
     expect(isDriveBrowserSpaPath("/files/share-id/items/file-id/download")).toBe(false)
+  })
+
+  it("redirects legacy dashboard page routes to console paths in dev", () => {
+    expect(resolveLegacyDashboardDevRedirect("/dashboard")).toBe("/console/")
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/")).toBe("/console/")
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/auth/desktop")).toBe("/console/auth/desktop")
+    expect(resolveLegacyDashboardDevRedirect("/dashboard/users")).toBe("/console/users")
+    expect(resolveLegacyDashboardDevRedirect("/api/dashboard/session")).toBeNull()
+    expect(resolveLegacyDashboardDevRedirect("/console/auth/desktop")).toBeNull()
+  })
+
+  it("keeps drive direct response routes out of the dashboard app fallback", () => {
+    expect(resolveDashboardDevSpaFallback("/files/share-id")).toBe("/console/")
+    expect(resolveDashboardDevSpaFallback("/drive/items/root-id/items/file-id")).toBe("/console/")
+    expect(resolveDashboardDevSpaFallback("/files/share-id/items/file-id/download")).toBeNull()
+    expect(resolveDashboardDevSpaFallback("/drive/items/root-id/items/file-id/render")).toBeNull()
   })
 
   it("proxies public drive publication endpoints through /pages and /sites", () => {

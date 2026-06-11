@@ -11,19 +11,40 @@ export function isDriveBrowserSpaPath(pathname: string) {
   return /^\/files\/[^/]+\/items\/[^/]+$/u.test(pathname)
 }
 
+export function resolveLegacyDashboardDevRedirect(pathname: string) {
+  if (pathname === '/dashboard') return '/console/'
+  if (pathname === '/dashboard/') return '/console/'
+  if (pathname.startsWith('/dashboard/')) return `/console/${pathname.slice('/dashboard/'.length)}`
+  return null
+}
+
+export function resolveDashboardDevSpaFallback(pathname: string) {
+  if (isDriveBrowserSpaPath(pathname)) return '/console/'
+  return null
+}
+
 function driveBrowserHistoryFallback(): Plugin {
   return {
     name: 'synapse-drive-browser-history-fallback',
     configureServer(server) {
-      server.middlewares.use((request, _response, next) => {
+      server.middlewares.use((request, response, next) => {
         if (request.method !== 'GET' && request.method !== 'HEAD') {
           next()
           return
         }
 
         const parsedUrl = new URL(request.url ?? '/', 'http://localhost')
-        if (isDriveBrowserSpaPath(parsedUrl.pathname)) {
-          request.url = `/console/${parsedUrl.search}`
+        const redirectPath = resolveLegacyDashboardDevRedirect(parsedUrl.pathname)
+        if (redirectPath) {
+          response.statusCode = 302
+          response.setHeader('Location', `${redirectPath}${parsedUrl.search}`)
+          response.end()
+          return
+        }
+
+        const fallbackPath = resolveDashboardDevSpaFallback(parsedUrl.pathname)
+        if (fallbackPath) {
+          request.url = `${fallbackPath}${parsedUrl.search}`
         }
         next()
       })
