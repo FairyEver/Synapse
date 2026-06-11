@@ -143,7 +143,7 @@ export function getSidebarData(user: Pick<AuthUser, 'displayName' | 'email' | 'r
       profileUrl: undefined,
     },
     appTitle: {
-      name: 'Synapse Dashboard',
+      name: 'Synapse Console',
       logo: Logo,
       description: isAdmin ? '管理后台' : '用户后台',
     },

@@ -83,11 +83,13 @@ export class ContentStoreUploadService {
       ],
     })
 
+    const consoleEditUrl = buildContentStoreConsoleEditUrl(this.publicAppUrl, draft.itemId)
     return {
       draftId: draft.id,
       itemId: draft.itemId,
       revision: draft.revision,
-      dashboardEditUrl: buildContentStoreDashboardEditUrl(this.publicAppUrl, draft.itemId),
+      consoleEditUrl,
+      dashboardEditUrl: consoleEditUrl,
     }
   }
 }
@@ -111,7 +113,7 @@ function normalizeFingerprintPath(value: string | null): string | null {
   return process.platform === "win32" ? portable.replace(/^([A-Z]):/, (_, drive: string) => `${drive.toLowerCase()}:`) : portable
 }
 
-function buildContentStoreDashboardEditUrl(publicAppUrl: string, itemId: string): string {
+function buildContentStoreConsoleEditUrl(publicAppUrl: string, itemId: string): string {
   const url = new URL(`/console/my-content/${encodeURIComponent(itemId)}/edit`, normalizedUrlBase(publicAppUrl))
   return url.toString()
 }
@@ -151,7 +153,8 @@ function assertSkillFileBytes(originalName: string, bytes: Uint8Array | undefine
 export const contentStoreUploadService = new ContentStoreUploadService()
 
 export {
-  buildContentStoreDashboardEditUrl,
+  buildContentStoreConsoleEditUrl,
+  buildContentStoreConsoleEditUrl as buildContentStoreDashboardEditUrl,
   createLocalSourceFingerprint,
   normalizeFingerprintPath,
 }

@@ -146,6 +146,7 @@ const uploadSkillDraftToContentStoreResultSchema = z.object({
   draftId: z.string(),
   itemId: z.string(),
   revision: z.number().int().nonnegative(),
+  consoleEditUrl: z.string(),
   dashboardEditUrl: z.string(),
 })
 

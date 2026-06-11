@@ -506,7 +506,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       })
 
       try {
-        await bridge.shell.openExternal(result.dashboardEditUrl)
+        await bridge.shell.openExternal(result.consoleEditUrl ?? result.dashboardEditUrl)
       } catch (openError) {
         logger.warn("Content store draft edit URL open failed.", {
           editorId: item.editorId,
@@ -515,8 +515,8 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
           pathBasename: logSafeItemPath(item.path),
           scope: item.scope,
         })
-        setContentStoreEditUrl(result.dashboardEditUrl)
-        notifyError("无法打开 Dashboard。")
+        setContentStoreEditUrl(result.consoleEditUrl ?? result.dashboardEditUrl)
+        notifyError("无法打开 Console。")
       }
     } catch (error) {
       logger.warn("Content store skill draft upload failed.", {

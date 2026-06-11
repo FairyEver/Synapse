@@ -209,7 +209,7 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain("handleUploadSkillToContentStore")
   })
 
-  it("opens Dashboard after uploading a content store Skill draft", async () => {
+  it("opens Console after uploading a content store Skill draft", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
       "utf8",
@@ -217,8 +217,8 @@ describe("scan item detail dialog layout", () => {
 
     expect(source).toContain("bridge.editorScan.uploadSkillDraftToContentStore")
     expect(source).toContain("buildUploadSkillDraftRequest(item)")
-    expect(source).toContain("bridge.shell.openExternal(result.dashboardEditUrl)")
-    expect(source).toContain("setContentStoreEditUrl(result.dashboardEditUrl)")
+    expect(source).toContain("bridge.shell.openExternal(result.consoleEditUrl ?? result.dashboardEditUrl)")
+    expect(source).toContain("setContentStoreEditUrl(result.consoleEditUrl ?? result.dashboardEditUrl)")
     expect(source).toContain("复制链接")
   })
 })

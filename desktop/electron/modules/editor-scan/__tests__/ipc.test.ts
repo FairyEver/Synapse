@@ -29,7 +29,8 @@ describe("editorScanIpcModule", () => {
       draftId: "draft-1",
       itemId: "item-1",
       revision: 1,
-      dashboardEditUrl: "https://synapse.example.test/dashboard/my-content/item-1/edit",
+      consoleEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
+      dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
     })
   })
 
@@ -47,7 +48,8 @@ describe("editorScanIpcModule", () => {
       draftId: "draft-1",
       itemId: "item-1",
       revision: 1,
-      dashboardEditUrl: "https://synapse.example.test/dashboard/my-content/item-1/edit",
+      consoleEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
+      dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
     })
 
     expect(mocks.uploadService.uploadSkillDraftToContentStore).toHaveBeenCalledWith(

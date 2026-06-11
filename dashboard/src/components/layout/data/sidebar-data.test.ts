@@ -31,7 +31,7 @@ describe('getSidebarData', () => {
 
     expect(data.user.profileUrl).toBeUndefined()
     expect(data.user.name).toBe('Ada Lovelace')
-    expect(data.appTitle.name).toBe('Synapse Dashboard')
+    expect(data.appTitle.name).toBe('Synapse Console')
     expect(data.appTitle.logo).toBe(Logo)
     expect(collectUrls(data)).toContain('/content-store')
     expect(collectUrls(data)).toContain('/my-content')
@@ -58,7 +58,7 @@ describe('getSidebarData', () => {
 
     expect(data.user.profileUrl).toBeUndefined()
     expect(data.user.name).toBe('admin@example.com')
-    expect(data.appTitle.name).toBe('Synapse Dashboard')
+    expect(data.appTitle.name).toBe('Synapse Console')
     expect(data.appTitle.logo).toBe(Logo)
     expect(collectUrls(data)).toContain('/content-store-admin')
     expect(collectUrls(data)).toContain('/devices')

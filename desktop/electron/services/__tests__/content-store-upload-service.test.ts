@@ -48,7 +48,7 @@ const authenticatedState = {
 }
 
 import {
-  buildContentStoreDashboardEditUrl,
+  buildContentStoreConsoleEditUrl,
   ContentStoreUploadService,
   createLocalSourceFingerprint,
 } from "../content-store-upload-service"
@@ -119,6 +119,7 @@ describe("ContentStoreUploadService", () => {
       draftId: "draft-1",
       itemId: "item-1",
       revision: 2,
+      consoleEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
       dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
     })
 
@@ -178,8 +179,8 @@ describe("ContentStoreUploadService", () => {
     expect(createContentStoreSkillDraft).not.toHaveBeenCalled()
   })
 
-  it("builds Dashboard edit URLs from the public app URL", () => {
-    expect(buildContentStoreDashboardEditUrl("https://synapse.example.test", "item 1")).toBe(
+  it("builds Console edit URLs from the public app URL", () => {
+    expect(buildContentStoreConsoleEditUrl("https://synapse.example.test", "item 1")).toBe(
       "https://synapse.example.test/console/my-content/item%201/edit",
     )
   })

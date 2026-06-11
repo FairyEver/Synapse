@@ -29,7 +29,7 @@ describe("shared URL helpers", () => {
     expect(buildApiBaseUrl("https://synapse.test/")).toBe("https://synapse.test/api")
   })
 
-  it("builds dashboard login URLs with encoded desktop auth parameters", () => {
+  it("builds console login URLs with encoded desktop auth parameters", () => {
     const loginUrl = new URL(buildDesktopDashboardLoginUrl({
       apiBaseUrl: "https://synapse.test/api",
       state: "state value",

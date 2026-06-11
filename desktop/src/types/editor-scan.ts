@@ -149,5 +149,7 @@ export type EditorScanContentStoreUploadResult = {
   draftId: string
   itemId: string
   revision: number
+  consoleEditUrl: string
+  /** @deprecated Use consoleEditUrl. */
   dashboardEditUrl: string
 }
