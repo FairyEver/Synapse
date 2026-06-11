@@ -143,13 +143,17 @@ interface TrendBucketProps {
   readonly onTrendBucketChange: (bucket: UsageTrendBucketGranularity) => void
 }
 
-export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: {
+interface RefreshingReportProps {
+  readonly refreshing?: boolean
+}
+
+export function OverviewReportView({ state, trendBucket, onTrendBucketChange, refreshing = false }: {
   readonly state: LoaderState<UsageOverviewReport>
-} & TrendBucketProps) {
+} & TrendBucketProps & RefreshingReportProps) {
   const report = state.data
   const projectLabels = report ? createProjectLabelMap(report.topProjects) : new Map<string, string>()
   return (
-    <ReportState loading={state.loading && !report} error={state.error} empty={!report || report.totals.tokens === 0}>
+    <ReportState loading={state.loading && !report} error={state.error} empty={!report || report.totals.tokens === 0} refreshing={refreshing}>
       {report ? (
         <div className="flex min-w-0 flex-col gap-2">
           <MetricGrid
@@ -182,12 +186,12 @@ export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: 
   )
 }
 
-export function TimeReportView({ state, trendBucket, onTrendBucketChange }: {
+export function TimeReportView({ state, trendBucket, onTrendBucketChange, refreshing = false }: {
   readonly state: LoaderState<UsageTimeBucket[]>
-} & TrendBucketProps) {
+} & TrendBucketProps & RefreshingReportProps) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
       <div className="flex min-w-0 flex-col gap-2">
         <UsageTrendChart title="Token / 请求 / 工具" rows={rows} bucket={trendBucket} onBucketChange={onTrendBucketChange} />
         <div className="min-w-0 overflow-x-auto">
@@ -221,10 +225,10 @@ export function TimeReportView({ state, trendBucket, onTrendBucketChange }: {
   )
 }
 
-export function ModelsReportView({ state }: { readonly state: LoaderState<UsageModelRow[]> }) {
+export function ModelsReportView({ state, refreshing = false }: { readonly state: LoaderState<UsageModelRow[]> } & RefreshingReportProps) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
       <div className="flex min-w-0 flex-col gap-2">
         <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: row.model, value: row.tokens, extraLabel: modelCostLabel(row) }))} valueFormatter={formatInteger} />
         <UsageBreakdownChart title="模型费用占比" rows={rows.map((row) => ({ label: row.model, value: row.estimatedCost }))} valueFormatter={formatCurrency} />
@@ -234,11 +238,11 @@ export function ModelsReportView({ state }: { readonly state: LoaderState<UsageM
   )
 }
 
-export function ProjectsReportView({ state }: { readonly state: LoaderState<UsageProjectRow[]> }) {
+export function ProjectsReportView({ state, refreshing = false }: { readonly state: LoaderState<UsageProjectRow[]> } & RefreshingReportProps) {
   const rows = state.data ?? []
   const projectLabels = createProjectLabelMap(rows)
   return (
-    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
       <div className="flex min-w-0 flex-col gap-2">
         <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.tokens, extra: row.requests }))} valueFormatter={formatInteger} extraFormatter={(value) => `请求 ${formatInteger(value)}`} />
         <UsageRankChart title="工具调用排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.toolCalls, extra: row.sessions }))} valueFormatter={formatInteger} extraFormatter={(value) => `会话 ${formatInteger(value)}`} />
@@ -248,10 +252,10 @@ export function ProjectsReportView({ state }: { readonly state: LoaderState<Usag
   )
 }
 
-export function ToolsReportView({ state }: { readonly state: LoaderState<UsageToolRow[]> }) {
+export function ToolsReportView({ state, refreshing = false }: { readonly state: LoaderState<UsageToolRow[]> } & RefreshingReportProps) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
       <div className="flex min-w-0 flex-col gap-2">
         <UsageRankChart title="调用排行" rows={rows.map((row) => ({ label: row.toolName, value: row.calls, extra: row.failureRate }))} valueFormatter={formatInteger} extraFormatter={(value) => `失败率 ${formatPercent(value)}`} />
         <UsageBreakdownChart title="失败占比" rows={rows.map((row) => ({ label: row.toolName, value: row.failures }))} valueFormatter={formatInteger} />
@@ -264,13 +268,14 @@ export function ToolsReportView({ state }: { readonly state: LoaderState<UsageTo
 export function DetailsReportView({
   state,
   onOpenConversation,
+  refreshing = false,
 }: {
   readonly state: LoaderState<UsageDetailRow[]>
   readonly onOpenConversation?: (row: UsageDetailRow) => void
-}) {
+} & RefreshingReportProps) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
       <div className="flex min-w-0 flex-col gap-2">
         <div className="text-sm text-muted-foreground">最近 200 条</div>
         <div className="min-w-0 overflow-x-auto">

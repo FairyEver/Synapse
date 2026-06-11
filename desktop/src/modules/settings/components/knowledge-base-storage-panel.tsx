@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsSectionHeading } from "@/modules/settings/components/settings-section-heading"
@@ -76,26 +77,46 @@ function KnowledgeBaseStoragePanel() {
     }
   }, [loadStatus, pendingTarget])
 
-  if (!status) return null
+  if (!status) {
+    return (
+      <>
+        <SettingsSectionHeading>知识库存储</SettingsSectionHeading>
+        <SettingsGroup>
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">{error}</p>
+          ) : (
+            <div className="space-y-2" role="status" aria-label="正在读取知识库存储">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-5 w-full max-w-md" />
+            </div>
+          )}
+        </SettingsGroup>
+      </>
+    )
+  }
 
   return (
     <>
       <SettingsSectionHeading>知识库存储</SettingsSectionHeading>
       <SettingsGroup>
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium">当前位置</p>
                 <Badge variant={status.available ? "secondary" : "destructive"}>
                   {status.available ? storageModeText(status.mode) : "不可用"}
                 </Badge>
               </div>
-              <p className="mt-1 truncate text-sm text-muted-foreground" data-allow-select="true">
+              <p
+                className="mt-1 break-all text-sm text-muted-foreground sm:truncate"
+                title={status.rootPath}
+                data-allow-select="true"
+              >
                 {status.rootPath}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
               {unavailable ? (
                 <Button
                   type="button"
@@ -130,9 +151,9 @@ function KnowledgeBaseStoragePanel() {
             </div>
           </div>
           {status.unavailableReason ? (
-            <p className="text-sm text-destructive">{status.unavailableReason}</p>
+            <p className="text-sm text-destructive" role="alert">{status.unavailableReason}</p>
           ) : null}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <p className="text-sm text-destructive" role="alert">{error}</p> : null}
         </div>
       </SettingsGroup>
       <AlertDialog

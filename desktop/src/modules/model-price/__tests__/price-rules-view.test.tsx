@@ -68,6 +68,39 @@ afterEach(() => {
 })
 
 describe("PriceRulesView", () => {
+  it("adds a new rule at the top of the table", async () => {
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PriceRulesView
+          state={{
+            data: [
+              priceRule({ id: "first", modelPattern: "first-model", sortIndex: 0 }),
+              priceRule({ id: "second", modelPattern: "second-model", sortIndex: 1 }),
+            ],
+            loading: false,
+            error: null,
+            reload: vi.fn(),
+          }}
+          presetState={presetState([])}
+          onSaved={vi.fn()}
+        />,
+      )
+      await flushPromises()
+    })
+
+    await act(async () => {
+      clickButton("添加")
+      await flushPromises()
+    })
+
+    expect(modelPatternValues()).toEqual(["", "first-model", "second-model"])
+  })
+
   it("confirms and clears rules", async () => {
     modelPriceBridge.clearRules.mockResolvedValueOnce([])
     const onSaved = vi.fn()
@@ -237,6 +270,11 @@ function flushPromises(): Promise<void> {
 
 function inputValues(): string[] {
   return [...document.querySelectorAll("input")].map((input) => input.value)
+}
+
+function modelPatternValues(): string[] {
+  return [...document.querySelectorAll<HTMLInputElement>('input[aria-label="模型匹配"]')]
+    .map((input) => input.value)
 }
 
 function presetState(data: ModelPricePresetSummary[]) {

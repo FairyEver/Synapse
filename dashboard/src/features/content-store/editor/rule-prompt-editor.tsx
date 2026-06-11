@@ -15,14 +15,14 @@ export function RulePromptEditor({
   onChange,
 }: RulePromptEditorProps) {
   return (
-    <div className='flex flex-col gap-2'>
+    <section className='flex min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded-lg border bg-card p-4'>
       <Label htmlFor={id}>{label}</Label>
       <Textarea
         id={id}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className='min-h-120 resize-y font-mono text-sm'
+        className='min-h-0 flex-1 resize-none font-mono text-sm'
       />
-    </div>
+    </section>
   )
 }

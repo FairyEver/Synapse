@@ -16,9 +16,11 @@ import {
 export function CcRecordsPage({
   range,
   refreshKey,
+  refreshing = false,
 }: {
   readonly range: UsageRangePreset
   readonly refreshKey: number
+  readonly refreshing?: boolean
 }) {
   const [query, setQuery] = useState("")
   const [rawText, setRawText] = useState(false)
@@ -99,7 +101,7 @@ export function CcRecordsPage({
           正在加载
         </div>
       ) : (
-        <ReportState loading={false} error={state.error} empty={rows.length === 0}>
+        <ReportState loading={false} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
           {partial ? (
             <Alert>
               <AlertTitle>结果可能不完整</AlertTitle>

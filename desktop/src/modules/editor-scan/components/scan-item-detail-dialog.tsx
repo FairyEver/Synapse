@@ -36,7 +36,9 @@ import { Separator } from "@/components/ui/separator"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -807,57 +809,65 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-40">
-                <DropdownMenuItem
-                  disabled={isQuickPublishBusy || disabledReason !== null}
-                  onSelect={() => void handlePrimaryAction()}
-                >
-                  {primaryActionLabel}
-                </DropdownMenuItem>
-                {canReinstall ? (
+                <DropdownMenuGroup>
                   <DropdownMenuItem
-                    disabled={isReinstallBusy || disabledReason !== null}
-                    onSelect={() => void handleReinstall()}
+                    disabled={isQuickPublishBusy || disabledReason !== null}
+                    onSelect={() => void handlePrimaryAction()}
                   >
-                    重新安装
+                    {primaryActionLabel}
                   </DropdownMenuItem>
-                ) : null}
-                {canPublishToRepo ? (
+                  {canReinstall ? (
+                    <DropdownMenuItem
+                      disabled={isReinstallBusy || disabledReason !== null}
+                      onSelect={() => void handleReinstall()}
+                    >
+                      重新安装
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canPublishToRepo ? (
+                    <DropdownMenuItem
+                      disabled={isOverwriteBusy || isQuickPublishBusy || disabledReason !== null}
+                      onSelect={() => {
+                        logger.info("Publish-to-repo choice opened.", {
+                          contentId: item.synapseContentId,
+                          contentType: item.type,
+                          editorId: item.editorId,
+                          scope: item.scope,
+                        })
+                        setIsPublishChoiceOpen(true)
+                      }}
+                    >
+                      发布到仓库
+                    </DropdownMenuItem>
+                  ) : null}
+                  {item.type === "skill" ? (
+                    <DropdownMenuItem
+                      disabled={isContentStoreUploadBusy || uploadSkillToStoreDisabledReason !== null}
+                      onSelect={() => void handleUploadSkillToContentStore()}
+                    >
+                      {isContentStoreUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
+                      发布到商店
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
                   <DropdownMenuItem
-                    disabled={isOverwriteBusy || isQuickPublishBusy || disabledReason !== null}
-                    onSelect={() => {
-                      logger.info("Publish-to-repo choice opened.", {
-                        contentId: item.synapseContentId,
-                        contentType: item.type,
-                        editorId: item.editorId,
-                        scope: item.scope,
-                      })
-                      setIsPublishChoiceOpen(true)
-                    }}
+                    disabled={isTrashBusy || trashDisabledReason !== null}
+                    onSelect={() => setIsTrashConfirmOpen(true)}
                   >
-                    发布到仓库
+                    移到废纸篓
                   </DropdownMenuItem>
-                ) : null}
-                {item.type === "skill" ? (
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
                   <DropdownMenuItem
-                    disabled={isContentStoreUploadBusy || uploadSkillToStoreDisabledReason !== null}
-                    onSelect={() => void handleUploadSkillToContentStore()}
+                    disabled={!content}
+                    onSelect={() => setIsEditorCopyOpen(true)}
                   >
-                    {isContentStoreUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-                    发布到商店
+                    复制到其它编辑器
                   </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem
-                  disabled={isTrashBusy || trashDisabledReason !== null}
-                  onSelect={() => setIsTrashConfirmOpen(true)}
-                >
-                  移到废纸篓
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!content}
-                  onSelect={() => setIsEditorCopyOpen(true)}
-                >
-                  复制到其它编辑器
-                </DropdownMenuItem>
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

@@ -62,10 +62,13 @@ export interface ResolvedContentStoreInstallSession {
   readonly versionId: string
   readonly type: Extract<ContentStoreType, "skill" | "rule">
   readonly title: string
-  readonly packageKey: string
   readonly packageSha256: string
   readonly packageSize: string | null
   readonly expiresAt: string
+}
+
+type ResolvedContentStoreInstallSessionWithPackage = ResolvedContentStoreInstallSession & {
+  readonly packageKey: string
 }
 
 export interface OpenContentStoreInstallPackage {
@@ -527,6 +530,23 @@ export class ContentStoreService {
   }
 
   async resolveInstallSession(userId: string, sessionId: string): Promise<ResolvedContentStoreInstallSession> {
+    const resolved = await this.resolveInstallSessionForPackage(userId, sessionId)
+    return {
+      id: resolved.id,
+      contentId: resolved.contentId,
+      versionId: resolved.versionId,
+      type: resolved.type,
+      title: resolved.title,
+      packageSha256: resolved.packageSha256,
+      packageSize: resolved.packageSize,
+      expiresAt: resolved.expiresAt,
+    }
+  }
+
+  private async resolveInstallSessionForPackage(
+    userId: string,
+    sessionId: string,
+  ): Promise<ResolvedContentStoreInstallSessionWithPackage> {
     const session = await this.prisma.contentStoreInstallSession.findFirst({
       where: { id: sessionId },
       include: { item: true, version: true },
@@ -554,7 +574,7 @@ export class ContentStoreService {
   }
 
   async openInstallPackage(userId: string, sessionId: string): Promise<OpenContentStoreInstallPackage> {
-    const resolved = await this.resolveInstallSession(userId, sessionId)
+    const resolved = await this.resolveInstallSessionForPackage(userId, sessionId)
     try {
       const object = await this.storage.getObjectStream({ key: resolved.packageKey })
       return {

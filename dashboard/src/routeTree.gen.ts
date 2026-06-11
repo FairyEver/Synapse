@@ -42,7 +42,7 @@ import { Route as AuthenticatedContentStoreInstallRouteImport } from './routes/_
 import { Route as AuthenticatedContentStoreContentIdRouteImport } from './routes/_authenticated/content-store/$contentId'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 import { Route as FilesShareIdItemsBrowserItemIdRouteImport } from './routes/files/$shareId/items/$browserItemId'
-import { Route as AuthenticatedMyContentContentIdEditRouteImport } from './routes/_authenticated/my-content/$contentId/edit'
+import { Route as AuthenticatedMyContentContentIdEditRouteImport } from './routes/_authenticated/my-content/$contentId_/edit'
 import { Route as AuthenticatedDriveItemsRootItemIdRouteImport } from './routes/_authenticated/drive/items/$rootItemId'
 import { Route as AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRouteImport } from './routes/_authenticated/drive/items/$rootItemId/items/$browserItemId'
 
@@ -232,9 +232,9 @@ const FilesShareIdItemsBrowserItemIdRoute =
   } as any)
 const AuthenticatedMyContentContentIdEditRoute =
   AuthenticatedMyContentContentIdEditRouteImport.update({
-    id: '/edit',
-    path: '/edit',
-    getParentRoute: () => AuthenticatedMyContentContentIdRoute,
+    id: '/my-content/$contentId_/edit',
+    path: '/my-content/$contentId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedDriveItemsRootItemIdRoute =
   AuthenticatedDriveItemsRootItemIdRouteImport.update({
@@ -261,7 +261,7 @@ export interface FileRoutesByFullPath {
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
-  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRouteWithChildren
+  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/my-content/new': typeof AuthenticatedMyContentNewRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/admin-drive/': typeof AuthenticatedAdminDriveIndexRoute
@@ -297,7 +297,7 @@ export interface FileRoutesByTo {
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
-  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRouteWithChildren
+  '/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/my-content/new': typeof AuthenticatedMyContentNewRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/admin-drive': typeof AuthenticatedAdminDriveIndexRoute
@@ -336,7 +336,7 @@ export interface FileRoutesById {
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/_authenticated/content-store/install': typeof AuthenticatedContentStoreInstallRoute
-  '/_authenticated/my-content/$contentId': typeof AuthenticatedMyContentContentIdRouteWithChildren
+  '/_authenticated/my-content/$contentId': typeof AuthenticatedMyContentContentIdRoute
   '/_authenticated/my-content/new': typeof AuthenticatedMyContentNewRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/_authenticated/admin-drive/': typeof AuthenticatedAdminDriveIndexRoute
@@ -357,7 +357,7 @@ export interface FileRoutesById {
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/_authenticated/drive/items/$rootItemId': typeof AuthenticatedDriveItemsRootItemIdRouteWithChildren
-  '/_authenticated/my-content/$contentId/edit': typeof AuthenticatedMyContentContentIdEditRoute
+  '/_authenticated/my-content/$contentId_/edit': typeof AuthenticatedMyContentContentIdEditRoute
   '/files/$shareId/items/$browserItemId': typeof FilesShareIdItemsBrowserItemIdRoute
   '/_authenticated/drive/items/$rootItemId/items/$browserItemId': typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
 }
@@ -470,7 +470,7 @@ export interface FileRouteTypes {
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
     | '/_authenticated/drive/items/$rootItemId'
-    | '/_authenticated/my-content/$contentId/edit'
+    | '/_authenticated/my-content/$contentId_/edit'
     | '/files/$shareId/items/$browserItemId'
     | '/_authenticated/drive/items/$rootItemId/items/$browserItemId'
   fileRoutesById: FileRoutesById
@@ -719,12 +719,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FilesShareIdItemsBrowserItemIdRouteImport
       parentRoute: typeof FilesShareIdRoute
     }
-    '/_authenticated/my-content/$contentId/edit': {
-      id: '/_authenticated/my-content/$contentId/edit'
-      path: '/edit'
+    '/_authenticated/my-content/$contentId_/edit': {
+      id: '/_authenticated/my-content/$contentId_/edit'
+      path: '/my-content/$contentId/edit'
       fullPath: '/my-content/$contentId/edit'
       preLoaderRoute: typeof AuthenticatedMyContentContentIdEditRouteImport
-      parentRoute: typeof AuthenticatedMyContentContentIdRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/drive/items/$rootItemId': {
       id: '/_authenticated/drive/items/$rootItemId'
@@ -757,21 +757,6 @@ const AuthenticatedSettingsRouteRouteWithChildren =
     AuthenticatedSettingsRouteRouteChildren,
   )
 
-interface AuthenticatedMyContentContentIdRouteChildren {
-  AuthenticatedMyContentContentIdEditRoute: typeof AuthenticatedMyContentContentIdEditRoute
-}
-
-const AuthenticatedMyContentContentIdRouteChildren: AuthenticatedMyContentContentIdRouteChildren =
-  {
-    AuthenticatedMyContentContentIdEditRoute:
-      AuthenticatedMyContentContentIdEditRoute,
-  }
-
-const AuthenticatedMyContentContentIdRouteWithChildren =
-  AuthenticatedMyContentContentIdRoute._addFileChildren(
-    AuthenticatedMyContentContentIdRouteChildren,
-  )
-
 interface AuthenticatedDriveItemsRootItemIdRouteChildren {
   AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
 }
@@ -792,7 +777,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedContentStoreContentIdRoute: typeof AuthenticatedContentStoreContentIdRoute
   AuthenticatedContentStoreInstallRoute: typeof AuthenticatedContentStoreInstallRoute
-  AuthenticatedMyContentContentIdRoute: typeof AuthenticatedMyContentContentIdRouteWithChildren
+  AuthenticatedMyContentContentIdRoute: typeof AuthenticatedMyContentContentIdRoute
   AuthenticatedMyContentNewRoute: typeof AuthenticatedMyContentNewRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
   AuthenticatedAdminDriveIndexRoute: typeof AuthenticatedAdminDriveIndexRoute
@@ -812,6 +797,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
   AuthenticatedDriveItemsRootItemIdRoute: typeof AuthenticatedDriveItemsRootItemIdRouteWithChildren
+  AuthenticatedMyContentContentIdEditRoute: typeof AuthenticatedMyContentContentIdEditRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -820,8 +806,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedContentStoreContentIdRoute:
     AuthenticatedContentStoreContentIdRoute,
   AuthenticatedContentStoreInstallRoute: AuthenticatedContentStoreInstallRoute,
-  AuthenticatedMyContentContentIdRoute:
-    AuthenticatedMyContentContentIdRouteWithChildren,
+  AuthenticatedMyContentContentIdRoute: AuthenticatedMyContentContentIdRoute,
   AuthenticatedMyContentNewRoute: AuthenticatedMyContentNewRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
   AuthenticatedAdminDriveIndexRoute: AuthenticatedAdminDriveIndexRoute,
@@ -844,6 +829,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
   AuthenticatedDriveItemsRootItemIdRoute:
     AuthenticatedDriveItemsRootItemIdRouteWithChildren,
+  AuthenticatedMyContentContentIdEditRoute:
+    AuthenticatedMyContentContentIdEditRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -36,6 +36,7 @@ interface TodayReportViewProps {
   readonly overviewState: LoaderState<UsageOverviewReport>
   readonly timeState: LoaderState<UsageTimeBucket[]>
   readonly modelsState: LoaderState<UsageModelRow[]>
+  readonly refreshing?: boolean
 }
 
 interface TokenBreakdown {
@@ -46,7 +47,7 @@ interface TokenBreakdown {
   readonly reasoning: number
 }
 
-export function TodayReportView({ overviewState, timeState, modelsState }: TodayReportViewProps) {
+export function TodayReportView({ overviewState, timeState, modelsState, refreshing = false }: TodayReportViewProps) {
   const report = overviewState.data
   const timeRows = report ? buildTodayTimeRows(timeState.data ?? [], report.generatedAt) : []
   const modelRows = modelsState.data ?? []
@@ -56,7 +57,7 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
   const empty = !report || report.totals.tokens === 0
 
   return (
-    <ReportState loading={loading} error={error} empty={empty}>
+    <ReportState loading={loading} error={error} empty={empty} refreshing={refreshing}>
       {report ? (
         <div className="flex min-w-0 flex-col gap-2">
           <MetricGrid metrics={buildTodayMetricRows(report, timeRows)} columns="four" />
