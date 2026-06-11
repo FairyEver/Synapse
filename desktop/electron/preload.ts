@@ -24,6 +24,7 @@ import type { ScheduledTaskChangedEvent } from "../src/types/task-scheduler"
 import type { AutomationChangedEvent } from "../src/types/automation"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
+import type { SynapseKnowledgeBaseStorageMigrationProgress } from "../src/types/knowledge-base"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
 
@@ -117,6 +118,10 @@ const IPC_CHANNELS = {
     "selectAndUploadRawDirectory": "synapse:knowledge-base:select-and-upload-raw-directory",
     "exportRawEntries": "synapse:knowledge-base:export-raw-entries",
     "openSourceManager": "synapse:knowledge-base:open-source-manager",
+    "getStorageStatus": "synapse:knowledge-base:get-storage-status",
+    "startStorageMigration": "synapse:knowledge-base:start-storage-migration",
+    "cancelStorageMigration": "synapse:knowledge-base:cancel-storage-migration",
+    "recheckStorage": "synapse:knowledge-base:recheck-storage",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
@@ -745,6 +750,16 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["knowledge-base"].exportRawEntries)(payload),
     openSourceManager: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].openSourceManager)(payload),
+    getStorageStatus: invoke(IPC_CHANNELS["knowledge-base"].getStorageStatus),
+    startStorageMigration: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].startStorageMigration)(payload),
+    cancelStorageMigration: invoke(IPC_CHANNELS["knowledge-base"].cancelStorageMigration),
+    recheckStorage: invoke(IPC_CHANNELS["knowledge-base"].recheckStorage),
+    onStorageMigrationChanged: createDomainEventPayloadSubscription<SynapseKnowledgeBaseStorageMigrationProgress>(
+      subscribe,
+      "knowledge-base",
+      "knowledge-base.storageMigrationChanged",
+    ),
     filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
   },
   shell: {

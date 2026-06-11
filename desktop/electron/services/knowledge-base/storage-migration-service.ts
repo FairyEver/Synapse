@@ -6,6 +6,7 @@ import type {
   SynapseConfigPatch,
   SynapseKnowledgeBaseStorageConfig,
 } from "../../../src/types/config"
+import type { SynapseKnowledgeBaseStorageStatus as SharedKnowledgeBaseStorageStatus } from "../../../src/types/knowledge-base"
 import { isManagedKnowledgeBaseProject } from "./managed-path"
 import {
   isPathInside,
@@ -385,6 +386,37 @@ export class KnowledgeBaseStorageMigrationService {
       })
     } finally {
       this.deps.sourceManager.setMigrationBlocked(false)
+    }
+  }
+
+  async getStorageStatus(): Promise<SharedKnowledgeBaseStorageStatus> {
+    const config = await this.deps.loadConfig()
+    const storage = config.global.knowledgeBaseStorage
+    const rootPath = resolveKnowledgeBaseStorageRoot({
+      userDataPath: this.deps.userDataPath,
+      storage,
+    })
+    const knowledgeBasesPath = resolveKnowledgeBasesDirectory({
+      userDataPath: this.deps.userDataPath,
+      storage,
+    })
+
+    try {
+      await access(rootPath, constants.R_OK | constants.W_OK)
+      return {
+        mode: storage.mode,
+        rootPath,
+        knowledgeBasesPath,
+        available: true,
+      }
+    } catch (error) {
+      return {
+        mode: storage.mode,
+        rootPath,
+        knowledgeBasesPath,
+        available: false,
+        unavailableReason: error instanceof Error ? error.message : "知识库存储位置不可用。",
+      }
     }
   }
 

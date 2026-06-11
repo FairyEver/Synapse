@@ -193,6 +193,10 @@ import type {
   SynapseKnowledgeBaseRawMutationResult,
   SynapseKnowledgeBaseRenameRawEntryPayload,
   SynapseKnowledgeBaseSelectAndUploadRawDirectoryPayload,
+  SynapseKnowledgeBaseStorageMigrationPayload,
+  SynapseKnowledgeBaseStorageMigrationProgress,
+  SynapseKnowledgeBaseStorageMigrationResult,
+  SynapseKnowledgeBaseStorageStatus,
   SynapseKnowledgeBaseTrashRawEntriesPayload,
   SynapseKnowledgeBaseUploadRawFilesPayload,
   SynapseKnowledgeBaseUploadRawItemsPayload,
@@ -904,6 +908,15 @@ export type SynapseBridge = {
       payload: Omit<SynapseKnowledgeBaseExportRawEntriesPayload, "targetDirectoryPath">,
     ) => Promise<SynapseKnowledgeBaseRawMutationResult>
     openSourceManager: (payload: SynapseKnowledgeBaseOpenSourceManagerPayload) => Promise<void>
+    getStorageStatus: () => Promise<SynapseKnowledgeBaseStorageStatus>
+    startStorageMigration: (
+      payload: SynapseKnowledgeBaseStorageMigrationPayload,
+    ) => Promise<SynapseKnowledgeBaseStorageMigrationResult>
+    cancelStorageMigration: () => Promise<void>
+    recheckStorage: () => Promise<SynapseKnowledgeBaseStorageStatus>
+    onStorageMigrationChanged: (
+      listener: (payload: SynapseKnowledgeBaseStorageMigrationProgress) => void,
+    ) => () => void
     filePathForDroppedFile: (file: File) => string | null
   }
   shell: {

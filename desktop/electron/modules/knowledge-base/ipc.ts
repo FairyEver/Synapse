@@ -4,6 +4,7 @@ import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import { createMainLogger } from "../../services/log-store"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
+import type { KnowledgeBaseStorageMigrationService } from "../../services/knowledge-base/storage-migration-service"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { sanitizeError } from "../../services/error-sanitize"
@@ -164,8 +165,62 @@ const openSourceManagerPayloadSchema = z.object({
   projectName: z.string().min(1),
 })
 
+const storageTargetSchema = z.union([
+  z.object({ mode: z.literal("default") }),
+  z.object({ mode: z.literal("custom"), rootPath: z.string().min(1) }),
+])
+
+const storageMigrationPayloadSchema = z.object({
+  target: storageTargetSchema,
+})
+
+const storageStatusSchema = z.object({
+  mode: z.enum(["default", "custom"]),
+  rootPath: z.string(),
+  knowledgeBasesPath: z.string(),
+  available: z.boolean(),
+  unavailableReason: z.string().optional(),
+  oldAbsoluteReferenceCount: z.number().optional(),
+})
+
+const storageMigrationResultSchema = z.union([
+  z.object({ status: z.literal("completed") }),
+  z.object({
+    status: z.literal("completed-with-warning"),
+    warningCode: z.literal("old-copy-not-trashed"),
+  }),
+  z.object({ status: z.literal("cancelled") }),
+])
+
+const storageMigrationProgressSchema = z.object({
+  active: z.boolean(),
+  phase: z.enum([
+    "idle",
+    "preparing",
+    "copying",
+    "verifying",
+    "switching",
+    "cleaning",
+    "completed",
+    "completed-with-warning",
+    "failed",
+    "cancelled",
+    "recovering",
+  ]),
+  cancellable: z.boolean(),
+  copiedBytes: z.number(),
+  totalBytes: z.number().nullable(),
+  message: z.string(),
+  warningCode: z.enum(["free-space-unknown", "old-copy-not-trashed"]).optional(),
+  errorMessage: z.string().optional(),
+})
+
 function service(ctx: IpcHandlerContext): KnowledgeBaseService {
   return ctx.resolve<KnowledgeBaseService>("knowledge-base.service")
+}
+
+function migrationService(ctx: IpcHandlerContext): KnowledgeBaseStorageMigrationService {
+  return ctx.resolve<KnowledgeBaseStorageMigrationService>("knowledge-base.storage-migration-service")
 }
 
 function ipcErrorMeta(error: unknown): Record<string, unknown> {
@@ -624,6 +679,53 @@ export const knowledgeBaseIpcModule: IpcModule = {
         run: () => knowledgeBaseSourceManagerWindowService.open(request),
       }),
     },
+    getStorageStatus: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:get-storage-status",
+      request: z.void(),
+      response: storageStatusSchema,
+      handler: (ctx) => migrationService(ctx).getStorageStatus(),
+    },
+    startStorageMigration: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:start-storage-migration",
+      request: storageMigrationPayloadSchema,
+      response: storageMigrationResultSchema,
+      handler: (ctx, request: { target: { mode: "default" } | { mode: "custom"; rootPath: string } }) => (
+        runGuardedKnowledgeBaseOperation({
+          ctx,
+          action: request.target.mode === "custom" ? "fs.write.outside-userdata" : "fs.write",
+          resource: request.target.mode === "custom"
+            ? request.target.rootPath
+            : "managed-knowledge-base:default-storage",
+          source: "knowledgeBase.startStorageMigration",
+          run: () => migrationService(ctx).startMigration({
+            target: request.target,
+            requestedBy: "settings",
+          }),
+        })
+      ),
+    },
+    cancelStorageMigration: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:cancel-storage-migration",
+      request: z.void(),
+      response: z.void(),
+      handler: (ctx) => migrationService(ctx).cancelMigration(),
+    },
+    recheckStorage: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:recheck-storage",
+      request: z.void(),
+      response: storageStatusSchema,
+      handler: (ctx) => migrationService(ctx).getStorageStatus(),
+    },
   },
-  events: {},
+  events: {
+    storageMigrationChanged: {
+      kind: "event",
+      channel: "synapse:knowledge-base:storage-migration-changed",
+      payload: storageMigrationProgressSchema,
+    },
+  },
 }
