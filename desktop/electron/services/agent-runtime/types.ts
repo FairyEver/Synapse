@@ -1,5 +1,6 @@
 import type { ActorIdentity } from "../../runtime/security"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
+import type { AgentTurnOutcome } from "./turn-outcome"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
@@ -127,6 +128,7 @@ export interface AgentResultMetadata {
   readonly contextRemainingPercent?: number
   readonly workDir?: string
   readonly cancelled?: boolean
+  readonly turnOutcome?: AgentTurnOutcome
   readonly usage?: Record<string, unknown>
   readonly turnUsage?: Record<string, unknown>
   readonly modelUsage?: Record<string, unknown>
@@ -165,6 +167,7 @@ export interface AgentErrorEvent extends AgentEventBase {
   readonly message: string
   readonly errorKind?: AgentErrorKind
   readonly recoverable?: boolean
+  readonly turnOutcome?: AgentTurnOutcome
   readonly usage?: Record<string, unknown>
   readonly modelUsage?: Record<string, unknown>
   readonly sdkResultUuid?: string
