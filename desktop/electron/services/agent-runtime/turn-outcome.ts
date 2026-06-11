@@ -225,7 +225,7 @@ function failureReason(diagnostic: AgentTurnDiagnostic | undefined): AgentTurnFa
 
 function failedMessage(diagnostic: AgentTurnDiagnostic | undefined): string {
   if (diagnostic?.kind === "aborted") return "请求中断，任务未完成。"
-  return diagnostic?.message ? `Agent 执行失败。诊断信息：${diagnostic.message}` : "Agent 执行失败。"
+  return diagnostic?.message ?? "Agent 执行失败。"
 }
 
 export function diagnosticFromAgentError(event: AgentErrorEvent): AgentTurnDiagnostic {

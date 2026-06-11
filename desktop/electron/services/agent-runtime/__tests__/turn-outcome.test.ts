@@ -94,6 +94,30 @@ describe("turn outcome normalization", () => {
     })
   })
 
+  it("keeps generic SDK error messages without adding failure wrapper copy", () => {
+    const lifecycle = createTurnLifecycle({
+      turnId: "turn-1",
+      conversationId: "conversation-1",
+      now: () => "2026-06-11T00:00:00.000Z",
+    })
+
+    const outcome = normalizeExecutorEvent(lifecycle, {
+      type: "executor.error",
+      diagnostic: {
+        source: "claude-sdk",
+        kind: "error",
+        message: "failed",
+      },
+    })
+
+    expect(outcome).toMatchObject({
+      status: "failed",
+      reason: "runtime_error",
+      message: "failed",
+    })
+    expect(outcomeMessage(outcome)).toBe("failed")
+  })
+
   it("maps timeout intent plus abort to timed_out", () => {
     const lifecycle = createTurnLifecycle({
       turnId: "turn-1",
