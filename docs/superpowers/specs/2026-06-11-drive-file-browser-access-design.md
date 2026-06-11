@@ -5,7 +5,7 @@ Scope: `server/`, `dashboard/`, `desktop/`, `shared/`, `docs/`
 
 ## Goal
 
-重构 Synapse Drive 的文件承接页，让用户不需要先创建分享链接也能查看自己上传的文件。文件承接页统一负责文件夹浏览、文件预览和下载；分享访问复用同一套浏览器体验；发布网页和发布站点继续走独立的直出渲染链路。
+重构 Synapse Drive 的文件承接页，让用户不需要先创建分享链接也能查看自己上传的文件。文件承接页统一负责文件夹浏览、文件预览和下载；分享访问复用同一套浏览器体验；发布网页和发布站点继续走独立的直出渲染链路。同时把 Web 管理入口从 `dashboard` 规范为 `console`，并把本次新增的 owner 文件访问路由命名为资源集合式路径。
 
 本设计把云盘分成三类页面：
 
@@ -14,6 +14,30 @@ Scope: `server/`, `dashboard/`, `desktop/`, `shared/`, `docs/`
 - 发布页：直接渲染已发布 HTML 页面或站点资源。
 
 核心边界是：访问上下文和文件浏览器解耦，预览能力和发布能力解耦，管理动作和承接页解耦。
+
+## Route Naming Standard
+
+本次任务同时规范域名下的一级路由。
+
+一级产品空间使用单数：
+
+```text
+/console/   管理和用户控制台 SPA
+/drive/     登录用户自己的 Drive 文件承接空间
+/api/       程序接口命名空间
+/healthz    健康检查
+```
+
+资源集合使用复数：
+
+```text
+/files/     分享文件承接页
+/pages/     发布单页
+/sites/     发布站点
+/webhooks/  公开 Webhook 接收
+```
+
+`/dashboard/` 不再作为 canonical Web 入口。新的 canonical 入口是 `/console/`。代码内部包名和部分历史类型名可以分阶段迁移，但对外 URL 和新增 API 以 `console` 为准。
 
 ## Current Context
 
@@ -33,6 +57,8 @@ Scope: `server/`, `dashboard/`, `desktop/`, `shared/`, `docs/`
 ## Confirmed Product Decisions
 
 - 用户自己看文件不需要先分享。
+- 管理后台对外入口从 `/dashboard/` 改为 `/console/`。
+- 控制台 API canonical namespace 从 `/api/dashboard` 改为 `/api/console`。
 - 自己预览和分享访问复用同一个文件浏览器组件。
 - 自己预览和分享访问只差访问上下文、权限校验和能力开关。
 - 文件承接页不放分享和发布管理动作。
@@ -156,23 +182,59 @@ PublishRenderer 是发布链路，不属于 FileBrowser。
 
 ## Route Design
 
+### Console
+
+```text
+GET /console/
+GET /console/*
+GET /dashboard
+GET /dashboard/
+GET /dashboard/*
+```
+
+`/console/` 是新的控制台 SPA canonical 入口。
+
+兼容规则：
+
+- `/dashboard` 301 到 `/console/`。
+- `/dashboard/` 和 `/dashboard/*` 301 到对应 `/console/` 路径。
+- 新生成的团队邀请链接、登录回跳、桌面授权回调等控制台链接都使用 `/console/`。
+- 前端 Vite base 从 `/dashboard/` 改为 `/console/`。
+- 生产 Nginx 静态托管从 `/dashboard/` 改为 `/console/`，保留 `/dashboard*` 重定向。
+
+### Console API
+
+```text
+/api/console/*
+/api/dashboard/*
+```
+
+`/api/console/*` 是新的控制台 API canonical namespace。它承接当前 `/api/dashboard/*` 的职责，例如登录、登出、session、当前用户资料、当前用户设备、Webhook 管理、Webhook delivery 列表和控制台 live stream。
+
+兼容规则：
+
+- `/api/dashboard/*` 在迁移期保留为兼容 alias，避免旧桌面版本或已打开的控制台页面立即失效。
+- API 兼容不使用 301/302 重定向，避免 POST、PATCH、DELETE 语义和 cookie 行为出错。
+- 新代码、新 dashboard API client、测试和文档都使用 `/api/console/*`。
+- `/api/admin/*` 保持 admin-only API 语义，不随 console 命名迁移。
+
 ### Owner Preview
 
 ```text
-GET /drive/preview/:itemId
-GET /drive/preview/:itemId/download
-GET /drive/preview/:itemId/zip
-GET /drive/render/:itemId
+GET /drive/items/:itemId
+GET /drive/items/:itemId/download
+GET /drive/items/:itemId/zip
+GET /drive/items/:itemId/render
 ```
 
-`/drive/preview/:itemId`：
+`/drive/items/:itemId`：
 
 - item 是文件夹时显示文件夹浏览器。
 - item 是文件时显示文件预览。
-- 子文件夹和子文件都直接使用自己的 item id 打开 `/drive/preview/:itemId`。
-- 文件夹下载使用当前文件夹 item id 的 `/drive/preview/:itemId/zip`。
+- 子文件夹和子文件都直接使用自己的 item id 打开 `/drive/items/:itemId`。
+- 文件夹下载使用当前文件夹 item id 的 `/drive/items/:itemId/zip`。
 
-`/drive/render/:itemId`：
+`/drive/items/:itemId/render`：
 
 - 只允许 owner preview 上下文访问。
 - 只允许 HTML 文件。
@@ -185,8 +247,8 @@ GET /drive/render/:itemId
 GET /files/:shareId
 GET /files/:shareId/download
 GET /files/:shareId/zip
-GET /files/:shareId?itemId=:browserItemId
-GET /files/:shareId/download?itemId=:browserItemId
+GET /files/:shareId/items/:browserItemId
+GET /files/:shareId/items/:browserItemId/download
 ```
 
 `/files/:shareId`：
@@ -194,11 +256,11 @@ GET /files/:shareId/download?itemId=:browserItemId
 - share 指向文件夹时显示文件夹浏览器。
 - share 指向文件时显示文件预览。
 
-`itemId` query：
+`/files/:shareId/items/:browserItemId`：
 
 - 只允许访问 share 根节点自身或其后代。
-- 缺省时表示分享根节点。
-- 非缺省时表示分享根节点下的某个浏览器 item。
+- `/files/:shareId` 表示分享根节点。
+- `/files/:shareId/items/:browserItemId` 表示分享根节点下的某个浏览器 item。
 - item 不属于该 share 子树时返回统一不可访问状态。
 
 下载接口必须复用 share browser 访问校验。
@@ -383,6 +445,20 @@ shared download、folder zip、image preview URL、text preview 都必须复用�
 
 现有 `/pages/:publishId`、`/sites/:publishId/*` 保持发布直出语义，不受文件浏览器重构影响。
 
+现有 `/dashboard/` 迁移为 `/console/`：
+
+- Nginx 新增 `/console/` 静态托管。
+- Nginx 保留 `/dashboard*` 到 `/console*` 的 301。
+- Dashboard Vite base 改为 `/console/`。
+- TanStack Router 的逻辑路由不需要带 `/console` 前缀；它仍运行在 SPA base 下。
+- 旧邀请链接 `/dashboard/team-invite?token=...` 通过 301 到 `/console/team-invite?token=...`。
+
+现有 `/api/dashboard/*` 迁移为 `/api/console/*`：
+
+- 新 API client base path 使用 `/api/console`。
+- 服务端为 `/api/dashboard/*` 保留兼容 alias。
+- 测试覆盖 canonical `/api/console/*` 和兼容 `/api/dashboard/*`。
+
 桌面端云盘管理页可增加预览入口：
 
 - 文件夹行和文件行的主打开行为仍服务云盘管理导航。
@@ -400,7 +476,7 @@ shared download、folder zip、image preview URL、text preview 都必须复用�
 - shared HTML 文件返回 `htmlAccess=false`。
 - share 访问只能下钻到分享根节点及后代。
 - 禁用、过期、密码错误、源文件删除时不返回文件列表、预览内容或下载地址。
-- `/drive/render/:itemId` 只允许 owner 访问 HTML 文件。
+- `/drive/items/:itemId/render` 只允许 owner 访问 HTML 文件。
 - 下载接口不能绕过 owner/share 权限。
 
 前端测试：
