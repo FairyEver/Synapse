@@ -112,7 +112,7 @@ function normalizeFingerprintPath(value: string | null): string | null {
 }
 
 function buildContentStoreDashboardEditUrl(publicAppUrl: string, itemId: string): string {
-  const url = new URL(`/dashboard/my-content/${encodeURIComponent(itemId)}/edit`, normalizedUrlBase(publicAppUrl))
+  const url = new URL(`/console/my-content/${encodeURIComponent(itemId)}/edit`, normalizedUrlBase(publicAppUrl))
   return url.toString()
 }
 

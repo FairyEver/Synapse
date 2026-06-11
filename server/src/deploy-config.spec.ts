@@ -204,10 +204,10 @@ describe("server deployment configuration", () => {
     expect(deployScript).not.toContain("<title>Synapse</title>")
     expect(deployScript).toContain("run_remote_health_check")
     expect(deployScript).toContain("http://127.0.0.1:3000/healthz")
-    expect(deployScript).toContain("http://127.0.0.1:3000/dashboard/")
+    expect(deployScript).toContain("http://127.0.0.1:3000/console/")
     expect(deployScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
     expect(deployScript).toContain("http://127.0.0.1:3000/files/shr_not_found")
-    expect(deployScript).toContain("Location: /dashboard/")
+    expect(deployScript).toContain("Location: /console/")
     expect(deployScript).toContain("webhook route")
     expect(deployScript).toContain("drive share route")
     expect(deployScript).toContain('<div id="root">')
@@ -240,6 +240,23 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location /pages/")
     expect(nginx).toContain("location /sites/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
+  it("serves the console bundle and redirects legacy dashboard paths", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(nginx).toContain("location = /console")
+    expect(nginx).toContain("return 301 /console/;")
+    expect(nginx).toContain("location /console/")
+    expect(nginx).toContain("alias /app/dashboard/dist/;")
+    expect(nginx).toContain("try_files $uri $uri/ /console/index.html;")
+    expect(nginx).toContain("location = /dashboard")
+    expect(nginx).toContain("return 301 /console/;")
+    expect(nginx).toContain("location /dashboard/")
+    expect(nginx).toContain("return 301 /console/$is_args$args;")
+    expect(nginx).toContain("location ~ ^/dashboard/(.*)$")
+    expect(nginx).toContain("return 301 /console/$1$is_args$args;")
+    expect(nginx).toContain("return 302 /console/;")
   })
 
   it("forwards public origin and websocket upgrade headers to the api server", () => {

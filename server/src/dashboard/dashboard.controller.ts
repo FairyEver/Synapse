@@ -9,7 +9,7 @@ const updateMeSchema = z.object({
 }).strict()
 
 @UseGuards(UserAuthGuard)
-@Controller("/api/dashboard")
+@Controller(["/api/console", "/api/dashboard"])
 export class DashboardController {
   constructor(private readonly auth: UserAuthService) {}
 

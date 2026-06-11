@@ -21,16 +21,16 @@ const updateWebhookSchema = z.object({
 const deliveryHistorySortFields = ["receivedAt", "status", "method"] as const
 
 @UseGuards(UserAuthGuard)
-@Controller("/api/dashboard/webhooks")
+@Controller(["/api/console", "/api/dashboard"])
 export class WebhookDashboardController {
   constructor(private readonly webhooks: WebhookService) {}
 
-  @Get()
+  @Get("/webhooks")
   list(@Req() request: AuthenticatedUserRequest) {
     return this.webhooks.listForUser(request.user!.id, resolveRequestPublicAppUrl(request))
   }
 
-  @Post()
+  @Post("/webhooks")
   create(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     return this.webhooks.createForUser(
       request.user!.id,
@@ -40,7 +40,7 @@ export class WebhookDashboardController {
     )
   }
 
-  @Patch("/:id")
+  @Patch("/webhooks/:id")
   update(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     return this.webhooks.updateForUser(
       request.user!.id,
@@ -51,28 +51,28 @@ export class WebhookDashboardController {
     )
   }
 
-  @Delete("/:id")
+  @Delete("/webhooks/:id")
   delete(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.webhooks.deleteForUser(request.user!.id, id, request.ip)
   }
 
-  @Post("/:id/reset-secret")
+  @Post("/webhooks/:id/reset-secret")
   resetSecret(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.webhooks.resetSecret(request.user!.id, id, resolveRequestPublicAppUrl(request), request.ip)
   }
 
-  @Get("/:id/deliveries")
+  @Get("/webhooks/:id/deliveries")
   listDeliveries(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.webhooks.listDeliveriesForUser(request.user!.id, id)
   }
 }
 
 @UseGuards(UserAuthGuard)
-@Controller("/api/dashboard/webhook-deliveries")
+@Controller(["/api/console", "/api/dashboard"])
 export class WebhookDeliveryDashboardController {
   constructor(private readonly webhooks: WebhookService) {}
 
-  @Get()
+  @Get("/webhook-deliveries")
   list(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {
     return this.webhooks.listDeliveryHistoryForUser(request.user!.id, {
       pagination: parsePagination(query, { allowedSortFields: deliveryHistorySortFields }),

@@ -23,7 +23,7 @@ function adminCookieOptions() {
   }
 }
 
-@Controller("/api/dashboard")
+@Controller(["/api/console", "/api/dashboard"])
 export class AdminAuthController {
   constructor(
     private readonly auth: AdminAuthService,

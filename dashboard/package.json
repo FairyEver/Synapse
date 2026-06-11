@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Synapse admin dashboard",
   "scripts": {
-    "dev": "pnpm --filter @synapse/shared run build && vite --port 3000 --host 0.0.0.0 --open /dashboard/",
+    "dev": "pnpm --filter @synapse/shared run build && vite --port 3000 --host 0.0.0.0 --open /console/",
     "build": "pnpm --filter @synapse/shared run build && tsc -b && vite build",
     "preview": "vite preview --port 3000",
     "tsc": "pnpm --filter @synapse/shared run build && tsc --noEmit"

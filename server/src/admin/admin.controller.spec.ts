@@ -234,7 +234,7 @@ describe("AdminController", () => {
     vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
     const createInvitation = vi.fn().mockResolvedValue({
       id: "invite-1",
-      inviteUrl: "https://app.example.com/dashboard/team-invite?token=token-1",
+      inviteUrl: "https://app.example.com/console/team-invite?token=token-1",
     })
     const controller = createController({ createInvitation } as never)
     const request = {

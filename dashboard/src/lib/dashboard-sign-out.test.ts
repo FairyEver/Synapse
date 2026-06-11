@@ -27,6 +27,25 @@ describe('performDashboardSignOut', () => {
     )
   })
 
+  it('normalizes console paths when navigating to sign in', async () => {
+    const logout = vi.fn().mockResolvedValue({ ok: true })
+    const reset = vi.fn()
+    const navigate = vi.fn()
+
+    await performDashboardSignOut({
+      currentPath: '/console/users?page=2',
+      logout,
+      reset,
+      navigate,
+    })
+
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/sign-in',
+      search: { redirect: '/users?page=2' },
+      replace: true,
+    })
+  })
+
   it('still clears local auth and navigates when server logout fails', async () => {
     const logout = vi.fn().mockRejectedValue(new Error('offline'))
     const reset = vi.fn()

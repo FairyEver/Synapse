@@ -1,10 +1,15 @@
 const dashboardRedirectOrigin = 'https://synapse.local'
-const dashboardBasePath = '/dashboard'
+const dashboardBasePath = '/console'
+const legacyDashboardBasePath = '/dashboard'
 
 function stripDashboardBasePath(pathname: string) {
   if (pathname === dashboardBasePath) return '/'
   if (pathname.startsWith(`${dashboardBasePath}/`)) {
     return pathname.slice(dashboardBasePath.length)
+  }
+  if (pathname === legacyDashboardBasePath) return '/'
+  if (pathname.startsWith(`${legacyDashboardBasePath}/`)) {
+    return pathname.slice(legacyDashboardBasePath.length)
   }
   return pathname
 }

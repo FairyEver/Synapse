@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { PATH_METADATA } from "@nestjs/common/constants"
 import { WebhookDashboardController, WebhookDeliveryDashboardController, WebhookPublicController } from "./webhook.controller"
 import type { WebhookService } from "./webhook.service"
 
@@ -25,6 +26,14 @@ afterEach(() => {
 })
 
 describe("WebhookDashboardController", () => {
+  it("mounts console and legacy dashboard webhook routes", () => {
+    expect(Reflect.getMetadata(PATH_METADATA, WebhookDashboardController)).toEqual([
+      "/api/console",
+      "/api/dashboard",
+    ])
+    expect(Reflect.getMetadata(PATH_METADATA, WebhookDashboardController.prototype.list)).toBe("/webhooks")
+  })
+
   it("lists current-user webhooks", async () => {
     const service = {
       listForUser: vi.fn().mockResolvedValue([]),
@@ -119,6 +128,14 @@ describe("WebhookDashboardController", () => {
 })
 
 describe("WebhookDeliveryDashboardController", () => {
+  it("mounts console and legacy dashboard webhook delivery routes", () => {
+    expect(Reflect.getMetadata(PATH_METADATA, WebhookDeliveryDashboardController)).toEqual([
+      "/api/console",
+      "/api/dashboard",
+    ])
+    expect(Reflect.getMetadata(PATH_METADATA, WebhookDeliveryDashboardController.prototype.list)).toBe("/webhook-deliveries")
+  })
+
   it("lists current-user delivery history with pagination and filters", async () => {
     const service = {
       listDeliveryHistoryForUser: vi.fn().mockResolvedValue({ data: [], total: 0, page: 2, pageSize: 10 }),

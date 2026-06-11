@@ -129,7 +129,7 @@ describe("AccountService", () => {
 
     expect(result.state.status).toBe("authenticating")
     const loginUrl = new URL(result.loginUrl)
-    expect(loginUrl.pathname).toBe("/dashboard/auth/desktop")
+    expect(loginUrl.pathname).toBe("/console/auth/desktop")
     expect(loginUrl.searchParams.get("client_id")).toBe("synapse-desktop")
     expect(loginUrl.searchParams.get("redirect_uri")).toBe("synapse://auth/desktop/callback")
     expect(loginUrl.searchParams.get("response_type")).toBe("code")
@@ -919,7 +919,7 @@ describe("AccountService", () => {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
-        if (String(url).endsWith("/dashboard/webhooks")) {
+        if (String(url).endsWith("/console/webhooks")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
           return jsonResponse([{
             id: "webhook-1",
@@ -945,7 +945,7 @@ describe("AccountService", () => {
     expect(calls).toEqual([
       expectedApiUrl("/auth/desktop/token"),
       expectedApiUrl("/auth/me"),
-      expectedApiUrl("/dashboard/webhooks"),
+      expectedApiUrl("/console/webhooks"),
     ])
   })
 
@@ -1197,7 +1197,7 @@ describe("AccountService", () => {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
-        if (String(url).endsWith("/dashboard/webhooks") && calls.filter((item) => item.endsWith("/dashboard/webhooks")).length === 1) {
+        if (String(url).endsWith("/console/webhooks") && calls.filter((item) => item.endsWith("/console/webhooks")).length === 1) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
           return jsonResponse({ error: "stale access" }, 401)
         }
@@ -1209,7 +1209,7 @@ describe("AccountService", () => {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
-        if (String(url).endsWith("/dashboard/webhooks")) {
+        if (String(url).endsWith("/console/webhooks")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
           return jsonResponse([])
         }
@@ -1226,10 +1226,10 @@ describe("AccountService", () => {
     expect(calls).toEqual([
       expectedApiUrl("/auth/desktop/token"),
       expectedApiUrl("/auth/me"),
-      expectedApiUrl("/dashboard/webhooks"),
+      expectedApiUrl("/console/webhooks"),
       expectedApiUrl("/auth/refresh"),
       expectedApiUrl("/auth/me"),
-      expectedApiUrl("/dashboard/webhooks"),
+      expectedApiUrl("/console/webhooks"),
     ])
     expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
   })

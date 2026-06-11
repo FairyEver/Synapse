@@ -250,7 +250,8 @@ export type AdminDriveItemRow = {
 
 type RequestOptions = RequestInit
 
-const dashboardApiBasePath = '/api/dashboard'
+const consoleApiBasePath = '/api/console'
+const legacyDashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
 const contentStoreApiBasePath = '/api/content-store'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
@@ -328,22 +329,29 @@ function notifyAuthExpired() {
   }
 }
 
-function shouldNotifyAuthExpired(path: string, status: number) {
+export function shouldNotifyAuthExpired(path: string, status: number) {
   if (path === desktopAuthorizePath) {
     return status === 401 || status === 403
   }
   if (status !== 401) return false
   if (
     !path.startsWith(adminApiBasePath) &&
-    !path.startsWith(dashboardApiBasePath) &&
+    !path.startsWith(consoleApiBasePath) &&
+    !path.startsWith(legacyDashboardApiBasePath) &&
     !path.startsWith(contentStoreApiBasePath)
   ) {
     return false
   }
+  const authExemptPaths = [
+    `${consoleApiBasePath}/login`,
+    `${consoleApiBasePath}/logout`,
+    `${consoleApiBasePath}/session`,
+    `${legacyDashboardApiBasePath}/login`,
+    `${legacyDashboardApiBasePath}/logout`,
+    `${legacyDashboardApiBasePath}/session`,
+  ]
   return ![
-    `${dashboardApiBasePath}/login`,
-    `${dashboardApiBasePath}/logout`,
-    `${dashboardApiBasePath}/session`,
+    ...authExemptPaths,
   ].includes(path)
 }
 
@@ -518,36 +526,36 @@ export function getBackupDownloadUrl(filename: string) {
 }
 
 export const dashboardApi = {
-  getSession: () => request<AdminSession>(`${dashboardApiBasePath}/session`),
+  getSession: () => request<AdminSession>(`${consoleApiBasePath}/session`),
   login: (credentials: { email: string; password: string }) =>
-    request<AdminSession>(`${dashboardApiBasePath}/login`, {
+    request<AdminSession>(`${consoleApiBasePath}/login`, {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
   logout: () =>
-    request<{ ok: true }>(`${dashboardApiBasePath}/logout`, { method: 'POST' }),
-  getMe: () => request<DashboardMe>(`${dashboardApiBasePath}/me`),
+    request<{ ok: true }>(`${consoleApiBasePath}/logout`, { method: 'POST' }),
+  getMe: () => request<DashboardMe>(`${consoleApiBasePath}/me`),
   updateMe: (input: { displayName: string }) =>
-    request<DashboardMe>(`${dashboardApiBasePath}/me`, {
+    request<DashboardMe>(`${consoleApiBasePath}/me`, {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
   listLiveClients: () =>
-    request<LiveClientRow[]>(`${dashboardApiBasePath}/live-clients`),
+    request<LiveClientRow[]>(`${consoleApiBasePath}/live-clients`),
   listDevices: () =>
-    request<DashboardDeviceRow[]>(`${dashboardApiBasePath}/devices`),
+    request<DashboardDeviceRow[]>(`${consoleApiBasePath}/devices`),
   renameDevice: (clientInstanceId: string, input: { displayName: string }) =>
     request<DashboardDeviceRow>(
-      `${dashboardApiBasePath}/devices/${encodeURIComponent(clientInstanceId)}`,
+      `${consoleApiBasePath}/devices/${encodeURIComponent(clientInstanceId)}`,
       {
         method: 'PATCH',
         body: JSON.stringify(input),
       }
     ),
   listWebhooks: () =>
-    request<DashboardWebhookDto[]>(`${dashboardApiBasePath}/webhooks`),
+    request<DashboardWebhookDto[]>(`${consoleApiBasePath}/webhooks`),
   createWebhook: (input: { name: string }) =>
-    request<DashboardWebhookSecretResult>(`${dashboardApiBasePath}/webhooks`, {
+    request<DashboardWebhookSecretResult>(`${consoleApiBasePath}/webhooks`, {
       method: 'POST',
       body: JSON.stringify(input),
     }),
@@ -556,7 +564,7 @@ export const dashboardApi = {
     input: { name?: string; enabled?: boolean }
   ) =>
     request<DashboardWebhookDto>(
-      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}`,
+      `${consoleApiBasePath}/webhooks/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
         body: JSON.stringify(input),
@@ -564,30 +572,30 @@ export const dashboardApi = {
     ),
   deleteWebhook: (id: string) =>
     request<{ ok: true }>(
-      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}`,
+      `${consoleApiBasePath}/webhooks/${encodeURIComponent(id)}`,
       { method: 'DELETE' }
     ),
   resetWebhookSecret: (id: string) =>
     request<DashboardWebhookSecretResult>(
-      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}/reset-secret`,
+      `${consoleApiBasePath}/webhooks/${encodeURIComponent(id)}/reset-secret`,
       { method: 'POST' }
     ),
   listWebhookDeliveries: (id: string) =>
     request<WebhookDeliveryDto[]>(
-      `${dashboardApiBasePath}/webhooks/${encodeURIComponent(id)}/deliveries`
+      `${consoleApiBasePath}/webhooks/${encodeURIComponent(id)}/deliveries`
     ),
   listWebhookDeliveryHistory: (
     options: WebhookDeliveryHistoryQuery = {}
   ) =>
     request<PaginatedResponse<WebhookDeliveryHistoryDto>>(
-      `${dashboardApiBasePath}/webhook-deliveries${querySuffix(options)}`
+      `${consoleApiBasePath}/webhook-deliveries${querySuffix(options)}`
     ),
   subscribeLiveClients: (
     onEvent: (event: LiveClientChangedEvent) => void,
     onError?: () => void
   ) =>
     subscribeServerEvents<LiveClientChangedEvent>(
-      `${dashboardApiBasePath}/live/stream`,
+      `${consoleApiBasePath}/live/stream`,
       'live.client.changed',
       onEvent,
       onError

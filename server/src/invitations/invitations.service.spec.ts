@@ -27,11 +27,11 @@ describe("InvitationsService", () => {
       publicAppUrl: "https://app.example.com",
     })
 
-    expect(result.inviteUrl).toBe(`https://app.example.com/dashboard/team-invite?token=${result.token}`)
+    expect(result.inviteUrl).toBe(`https://app.example.com/console/team-invite?token=${result.token}`)
     expect(prisma.invitation.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         type: "team_join",
-        inviteUrl: `https://app.example.com/dashboard/team-invite?token=${result.token}`,
+        inviteUrl: `https://app.example.com/console/team-invite?token=${result.token}`,
       }),
     })
   })
@@ -82,7 +82,7 @@ describe("InvitationsService", () => {
     expect(prisma.invitation.findUnique).not.toHaveBeenCalled()
   })
 
-  it("accepts dashboard team invite URLs when consuming invitations", async () => {
+  it("accepts legacy dashboard team invite URLs when consuming invitations", async () => {
     const prisma = createPrismaMock()
     prisma.invitation.updateManyAndReturn.mockResolvedValue([{
       id: "invite-1",

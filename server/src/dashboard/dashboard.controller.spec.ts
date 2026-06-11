@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from "vitest"
+import { PATH_METADATA } from "@nestjs/common/constants"
 import { DashboardController } from "./dashboard.controller"
 
 describe("DashboardController", () => {
+  it("mounts console and legacy dashboard profile routes", () => {
+    expect(Reflect.getMetadata(PATH_METADATA, DashboardController)).toEqual([
+      "/api/console",
+      "/api/dashboard",
+    ])
+  })
+
   it("returns the normal user dashboard profile", async () => {
     const auth = {
       getMe: vi.fn().mockResolvedValue({

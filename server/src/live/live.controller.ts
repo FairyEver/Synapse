@@ -40,19 +40,19 @@ export class LiveController {
   }
 
   @UseGuards(UserAuthGuard)
-  @Get("/api/dashboard/live-clients")
+  @Get(["/api/console/live-clients", "/api/dashboard/live-clients"])
   listDashboardClients(@Req() request: AuthenticatedUserRequest) {
     return this.query.listUserClients(request.user!.id)
   }
 
   @UseGuards(UserAuthGuard)
-  @Get("/api/dashboard/devices")
+  @Get(["/api/console/devices", "/api/dashboard/devices"])
   listDashboardDevices(@Req() request: AuthenticatedUserRequest) {
     return this.devices.listUserDevices(request.user!.id)
   }
 
   @UseGuards(UserAuthGuard)
-  @Patch("/api/dashboard/devices/:clientInstanceId")
+  @Patch(["/api/console/devices/:clientInstanceId", "/api/dashboard/devices/:clientInstanceId"])
   renameDashboardDevice(
     @Param("clientInstanceId") clientInstanceId: string,
     @Body() body: unknown,
@@ -64,8 +64,14 @@ export class LiveController {
   }
 
   @UseGuards(UserAuthGuard)
-  @Sse("/api/dashboard/live/stream")
+  @Sse("/api/console/live/stream")
   dashboardStream(@Req() request: AuthenticatedUserRequest) {
     return this.streams.userEvents(request.user!.id).pipe(map((event) => ({ type: event.type, data: event })))
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Sse("/api/dashboard/live/stream")
+  legacyDashboardStream(@Req() request: AuthenticatedUserRequest) {
+    return this.dashboardStream(request)
   }
 }

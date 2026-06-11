@@ -255,7 +255,7 @@ curl http://127.0.0.1:3000/healthz
 
 然后浏览器访问：
 - API：`https://api.yourdomain.com/healthz`
-- 管理后台：`https://api.yourdomain.com/dashboard`
+- 管理后台：`https://api.yourdomain.com/console`
 
 用 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 登录。登录后可创建普通账号注册邀请。
 
@@ -295,7 +295,7 @@ bash deploy.sh
 
 部署会生成这些切换备份：远端 `.env` 备份保存到 `/www/wwwroot/synapse/backups/env/`，Postgres 角色和权限 globals 备份保存到 `/www/wwwroot/synapse/backups/globals/`，在线数据库备份用于临时数据库预演，停旧服务后的最终数据库备份会先恢复到 `synapse_final_verify_*` 临时库验证成功后才启动新服务。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。未配置 Drive COS 且存在 `server/data/drive` 时，部署还会在切换窗口打包本地 Drive 数据到 `/www/wwwroot/synapse/backups/drive/`。
 
-真正切换前脚本会先通过 Docker 网络验证 `.env` 中的数据库密码能连接 `postgres:5432`，失败时会在停服前中止。切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/dashboard/` 静态入口、`/dashboard` 到 `/dashboard/` 的重定向，以及 `/webhooks/not-found/test` 公共 Webhook 路由不会被导向管理后台。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近 server 日志、最终备份路径和人工恢复命令。
+真正切换前脚本会先通过 Docker 网络验证 `.env` 中的数据库密码能连接 `postgres:5432`，失败时会在停服前中止。切换时脚本只停止 `server` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、`/console/` 静态入口、`/dashboard` 到 `/console/` 的重定向，以及 `/webhooks/not-found/test` 公共 Webhook 路由不会被导向管理后台。失败时自动回滚到上一版服务镜像，但不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近 server 日志、最终备份路径和人工恢复命令。
 
 如果是在服务器上手动更新，也必须先备份，再构建启动：
 
@@ -491,5 +491,5 @@ server/               # NestJS API、Prisma、Docker 和 Nginx 配置
 ├── Dockerfile        # Docker 多阶段构建文件
 └── .env.example      # 环境变量模板
 
-dashboard/            # React + Vite 管理后台源码，生产构建后由 server 容器的 Nginx 服务到 /dashboard/
+dashboard/            # React + Vite 管理后台源码，生产构建后由 server 容器的 Nginx 服务到 /console/
 ```

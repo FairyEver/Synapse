@@ -289,7 +289,7 @@ export class AccountService {
 
   async listWebhooks(): Promise<DashboardWebhookDto[]> {
     return this.getAuthenticatedJson<DashboardWebhookDto[]>(
-      `${apiBaseUrl()}/dashboard/webhooks`,
+      `${apiBaseUrl()}/console/webhooks`,
       "Webhook 列表加载失败。",
     )
   }

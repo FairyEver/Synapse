@@ -1,5 +1,6 @@
 import "reflect-metadata"
 import { describe, expect, it, vi } from "vitest"
+import { PATH_METADATA } from "@nestjs/common/constants"
 import { hashToken } from "../auth/token"
 import { AdminAuthController } from "./admin-auth.controller"
 import type { AdminRequest } from "./admin-auth.guard"
@@ -8,6 +9,14 @@ const throttleLimitMetadata = "THROTTLER:LIMITdefault"
 const throttleTtlMetadata = "THROTTLER:TTLdefault"
 
 describe("AdminAuthController", () => {
+  it("mounts console and legacy dashboard auth routes", () => {
+    expect(Reflect.getMetadata(PATH_METADATA, AdminAuthController)).toEqual([
+      "/api/console",
+      "/api/dashboard",
+    ])
+    expect(Reflect.getMetadata(PATH_METADATA, AdminAuthController.prototype.getSession)).toBe("/session")
+  })
+
   it("applies stricter throttling to dashboard login and logout", () => {
     expect(Reflect.getMetadata(throttleLimitMetadata, AdminAuthController.prototype.login)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, AdminAuthController.prototype.login)).toBe(60000)

@@ -11,6 +11,14 @@ function collectUrls(data: ReturnType<typeof getSidebarData>) {
   )
 }
 
+function collectTitles(data: ReturnType<typeof getSidebarData>) {
+  return data.navGroups.flatMap((group) =>
+    group.items.flatMap((item) =>
+      item.url ? [item.title] : item.items.map((subItem) => subItem.title)
+    )
+  )
+}
+
 describe('getSidebarData', () => {
   it('keeps settings available for normal users', () => {
     const data = getSidebarData({
@@ -33,7 +41,7 @@ describe('getSidebarData', () => {
     expect(collectUrls(data)).toContain('/settings')
     expect(collectUrls(data)).not.toContain('/content-store-admin')
     expect(collectUrls(data)).not.toContain('/devices')
-    expect(collectUrls(data)).not.toContain('/drive')
+    expect(collectUrls(data)).not.toContain('/admin-drive')
     expect(collectUrls(data)).not.toContain('/me')
   })
 
@@ -52,8 +60,9 @@ describe('getSidebarData', () => {
     expect(data.appTitle.logo).toBe(Logo)
     expect(collectUrls(data)).toContain('/content-store-admin')
     expect(collectUrls(data)).toContain('/devices')
-    expect(collectUrls(data)).toContain('/drive')
+    expect(collectUrls(data)).toContain('/admin-drive')
     expect(collectUrls(data)).toContain('/webhook-deliveries')
+    expect(collectTitles(data)).toContain('云盘管理')
     expect(collectUrls(data)).not.toContain('/content-store')
     expect(collectUrls(data)).not.toContain('/my-content')
     expect(collectUrls(data)).not.toContain('/my-devices')

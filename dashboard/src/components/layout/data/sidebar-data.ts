@@ -66,8 +66,8 @@ const adminNavGroup = {
       icon: HardDrive,
     },
     {
-      title: '云盘',
-      url: '/drive',
+      title: '云盘管理',
+      url: '/admin-drive',
       icon: HardDrive,
     },
     {

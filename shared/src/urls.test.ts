@@ -18,7 +18,7 @@ import {
 describe("shared URL helpers", () => {
   it("defines public path and desktop auth constants once", () => {
     expect(API_PATH_PREFIX).toBe("/api")
-    expect(DASHBOARD_PATH_PREFIX).toBe("/dashboard")
+    expect(DASHBOARD_PATH_PREFIX).toBe("/console")
     expect(DESKTOP_CLIENT_ID).toBe("synapse-desktop")
     expect(DESKTOP_REDIRECT_URI).toBe("synapse://auth/desktop/callback")
     expect(DESKTOP_PKCE_CHALLENGE_METHOD).toBe("S256")
@@ -37,7 +37,7 @@ describe("shared URL helpers", () => {
     }))
 
     expect(loginUrl.origin).toBe("https://synapse.test")
-    expect(loginUrl.pathname).toBe("/dashboard/auth/desktop")
+    expect(loginUrl.pathname).toBe("/console/auth/desktop")
     expect(loginUrl.searchParams.get("client_id")).toBe(DESKTOP_CLIENT_ID)
     expect(loginUrl.searchParams.get("redirect_uri")).toBe(DESKTOP_REDIRECT_URI)
     expect(loginUrl.searchParams.get("response_type")).toBe("code")
@@ -50,7 +50,7 @@ describe("shared URL helpers", () => {
     expect(buildTeamInviteUrl({
       publicAppUrl: "https://synapse.test/",
       token: "plain token",
-    })).toBe("https://synapse.test/dashboard/team-invite?token=plain+token")
+    })).toBe("https://synapse.test/console/team-invite?token=plain+token")
     expect(buildPasswordResetUrl({
       publicAppUrl: "https://synapse.test/",
       token: "reset token",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, dashboardApi, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
 
 describe('adminApi.cleanupLogs', () => {
   afterEach(() => {
@@ -86,7 +86,7 @@ describe('dashboardApi.webhooks', () => {
     )
   }
 
-  it('uses dashboard webhook management endpoints', async () => {
+  it('uses console webhook management endpoints', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 
     await dashboardApi.updateWebhook('hook/id', { name: 'Deploy', enabled: false })
@@ -95,7 +95,7 @@ describe('dashboardApi.webhooks', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/dashboard/webhooks/hook%2Fid',
+      '/api/console/webhooks/hook%2Fid',
       expect.objectContaining({
         body: JSON.stringify({ name: 'Deploy', enabled: false }),
         credentials: 'include',
@@ -104,7 +104,7 @@ describe('dashboardApi.webhooks', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/dashboard/webhooks/hook%2Fid/reset-secret',
+      '/api/console/webhooks/hook%2Fid/reset-secret',
       expect.objectContaining({
         credentials: 'include',
         method: 'POST',
@@ -112,7 +112,7 @@ describe('dashboardApi.webhooks', () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      '/api/dashboard/webhooks/hook%2Fid/deliveries',
+      '/api/console/webhooks/hook%2Fid/deliveries',
       expect.objectContaining({
         credentials: 'include',
       })
@@ -137,7 +137,7 @@ describe('dashboardApi.devices', () => {
     )
   }
 
-  it('uses dashboard device endpoints', async () => {
+  it('uses console device endpoints', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 
     await dashboardApi.listDevices()
@@ -145,18 +145,51 @@ describe('dashboardApi.devices', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/dashboard/devices',
+      '/api/console/devices',
       expect.objectContaining({ credentials: 'include' })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/dashboard/devices/client%2Fid',
+      '/api/console/devices/client%2Fid',
       expect.objectContaining({
         body: JSON.stringify({ displayName: 'Studio Mac' }),
         credentials: 'include',
         method: 'PATCH',
       })
     )
+  })
+})
+
+describe('dashboardApi auth expiration compatibility', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps legacy dashboard session checks out of auth-expired notifications', async () => {
+    const authExpired = vi.fn()
+    const unsubscribe = subscribeAuthExpired(authExpired)
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: '会话已过期。' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    )
+
+    try {
+      await expect(dashboardApi.getSession()).rejects.toMatchObject({ status: 401 })
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/console/session',
+        expect.objectContaining({ credentials: 'include' })
+      )
+      expect(authExpired).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it('recognizes legacy dashboard session as an auth-expired compatibility path', () => {
+    expect(shouldNotifyAuthExpired('/api/dashboard/session', 401)).toBe(false)
   })
 })
 

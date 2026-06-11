@@ -1,5 +1,5 @@
 export const API_PATH_PREFIX = "/api"
-export const DASHBOARD_PATH_PREFIX = "/dashboard"
+export const DASHBOARD_PATH_PREFIX = "/console"
 export const TEAM_INVITE_PATH = `${DASHBOARD_PATH_PREFIX}/team-invite`
 export const PASSWORD_RESET_PATH = "/reset-password"
 export const LIVE_DESKTOP_API_PATH = `${API_PATH_PREFIX}/live/desktop`

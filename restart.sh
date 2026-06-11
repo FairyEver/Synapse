@@ -131,8 +131,8 @@ check_not_redirect_to_dashboard() {
 }
 
 check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
-check_body_contains "dashboard" "http://127.0.0.1:3000/dashboard/" '<div id="root">'
-check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/dashboard/"
+check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
+check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
 check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found/test"
 check_not_redirect_to_dashboard "drive share route" "http://127.0.0.1:3000/files/shr_not_found"
 

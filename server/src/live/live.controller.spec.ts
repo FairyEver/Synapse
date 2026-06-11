@@ -1,5 +1,6 @@
 import { firstValueFrom, of } from "rxjs"
 import { describe, expect, it, vi } from "vitest"
+import { PATH_METADATA } from "@nestjs/common/constants"
 import { LiveController } from "./live.controller"
 import type { LiveDeviceService } from "./live-device.service"
 import type { LiveQueryService } from "./live-query.service"
@@ -41,6 +42,23 @@ function createEvent(userId = "user-1"): LiveClientChangedEvent {
 }
 
 describe("LiveController", () => {
+  it("mounts canonical console routes with legacy dashboard aliases", () => {
+    expect(Reflect.getMetadata(PATH_METADATA, LiveController.prototype.listDashboardClients)).toEqual([
+      "/api/console/live-clients",
+      "/api/dashboard/live-clients",
+    ])
+    expect(Reflect.getMetadata(PATH_METADATA, LiveController.prototype.listDashboardDevices)).toEqual([
+      "/api/console/devices",
+      "/api/dashboard/devices",
+    ])
+    expect(Reflect.getMetadata(PATH_METADATA, LiveController.prototype.renameDashboardDevice)).toEqual([
+      "/api/console/devices/:clientInstanceId",
+      "/api/dashboard/devices/:clientInstanceId",
+    ])
+    expect(Reflect.getMetadata(PATH_METADATA, LiveController.prototype.dashboardStream)).toBe("/api/console/live/stream")
+    expect(Reflect.getMetadata(PATH_METADATA, LiveController.prototype.legacyDashboardStream)).toBe("/api/dashboard/live/stream")
+  })
+
   it("returns all live clients for admins", () => {
     const listAdminClients = vi.fn().mockReturnValue([{ userId: "user-1", clientInstanceId: "client-a" }])
     const controller = createController({ listAdminClients })

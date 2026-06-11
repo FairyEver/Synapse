@@ -20,11 +20,15 @@ const queryClient = new QueryClient({
   },
 })
 
+function resolveRouterBasepath(pathname: string) {
+  return pathname === '/console' || pathname.startsWith('/console/') ? '/console' : '/'
+}
+
 const router = createRouter({
   routeTree,
   context: { queryClient },
   defaultPreload: 'intent',
-  basepath: '/dashboard',
+  basepath: resolveRouterBasepath(window.location.pathname),
 })
 
 declare module '@tanstack/react-router' {

@@ -543,9 +543,9 @@ check_not_redirect_to_dashboard() {
 run_checks_once() {
   failed=0
   check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
-  check_body_contains "dashboard" "http://127.0.0.1:3000/dashboard/" '<div id="root">'
-  # Expected redirect header: Location: /dashboard/
-  check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/dashboard/"
+  check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
+  # Expected redirect header: Location: /console/
+  check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
   check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found/test"
   check_not_redirect_to_dashboard "drive share route" "http://127.0.0.1:3000/files/shr_not_found"
   return "$failed"
@@ -684,5 +684,5 @@ fi
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 echo ""
 echo "部署完成 (${TOTAL_ELAPSED}s)"
-echo "管理面板: https://synapse.d2.pub/dashboard"
+echo "管理面板: https://synapse.d2.pub/console"
 print_deployment_artifacts

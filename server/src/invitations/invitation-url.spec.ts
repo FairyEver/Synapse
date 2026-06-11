@@ -6,7 +6,7 @@ describe("invitation URL helpers", () => {
     expect(buildTeamInviteUrl({
       publicAppUrl: "https://app.example.com",
       token: "plain token",
-    })).toBe("https://app.example.com/dashboard/team-invite?token=plain+token")
+    })).toBe("https://app.example.com/console/team-invite?token=plain+token")
   })
 
   it("prefers the configured public app URL over request origin", () => {
@@ -50,6 +50,11 @@ describe("invitation URL helpers", () => {
   })
 
   it("parses tokens from token query URLs", () => {
+    expect(parseInviteTokenInput("https://app.example.com/console/team-invite?token=plain-token"))
+      .toBe("plain-token")
+  })
+
+  it("keeps parsing legacy dashboard team invite URLs", () => {
     expect(parseInviteTokenInput("https://app.example.com/dashboard/team-invite?token=plain-token"))
       .toBe("plain-token")
   })

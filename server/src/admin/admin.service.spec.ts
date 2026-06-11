@@ -338,7 +338,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.create.mockResolvedValue({
       id: "invite-1",
-      inviteUrl: "https://app.example.com/dashboard/team-invite?token=token-1",
+      inviteUrl: "https://app.example.com/console/team-invite?token=token-1",
       expiresAt: new Date("2026-06-08T00:00:00.000Z"),
     })
     const auditLog = { record: vi.fn() }
@@ -351,7 +351,7 @@ describe("AdminService", () => {
       "203.0.113.44",
     )).resolves.toMatchObject({
       id: "invite-1",
-      inviteUrl: expect.stringMatching(/^https:\/\/app\.example\.com\/dashboard\/team-invite\?token=.+/),
+      inviteUrl: expect.stringMatching(/^https:\/\/app\.example\.com\/console\/team-invite\?token=.+/),
     })
     expect(prisma.team.findUnique).toHaveBeenCalledWith({
       where: { id: "team-1" },

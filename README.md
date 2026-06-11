@@ -43,9 +43,9 @@ pnpm dev:website  # 官网 / 文档站
 本地开发环境不会自动打开浏览器，需要手动访问：
 
 - 老站 / 文档站：<http://localhost:19773/>
-- 管理后台：<http://localhost:3000/dashboard/>
+- 管理后台：<http://localhost:3000/console/>
 
-管理后台标准地址带末尾 `/`；访问 `http://localhost:3000/dashboard` 时，开发服务器会重定向到 `http://localhost:3000/dashboard/`。
+管理后台标准地址带末尾 `/`；生产环境访问 `http://localhost:3000/dashboard` 时会重定向到 `http://localhost:3000/console/`。
 管理后台前端固定使用 `3000` 端口，接口默认代理到 `3001` 端口的后端服务；如需调整后端接口端口，可在 `server/.env` 中设置 `SYNAPSE_SERVER_API_PORT`。
 
 ### 常用脚本
@@ -80,7 +80,7 @@ bash scripts/manual/fix-dev-protocol.sh
 
 ## 正式环境
 
-- 管理面板：<https://synapse.d2.pub/dashboard>
+- 管理面板：<https://synapse.d2.pub/console>
 
 ### 线上访问链路
 
@@ -93,7 +93,7 @@ bash scripts/manual/fix-dev-protocol.sh
   -> 反向代理 / 到 http://127.0.0.1:3000
   -> Docker: server-server-1  127.0.0.1:3000 -> 3000/tcp
   -> 容器内 Nginx
-       /dashboard/  管理后台静态文件
+       /console/    管理后台静态文件
        /api/        NestJS API http://127.0.0.1:3001
        /healthz     NestJS health check
   -> Docker 内网

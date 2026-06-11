@@ -119,7 +119,7 @@ describe("ContentStoreUploadService", () => {
       draftId: "draft-1",
       itemId: "item-1",
       revision: 2,
-      dashboardEditUrl: "https://synapse.example.test/dashboard/my-content/item-1/edit",
+      dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
     })
 
     expect(createContentStoreSkillDraft).toHaveBeenCalledWith({
@@ -180,7 +180,7 @@ describe("ContentStoreUploadService", () => {
 
   it("builds Dashboard edit URLs from the public app URL", () => {
     expect(buildContentStoreDashboardEditUrl("https://synapse.example.test", "item 1")).toBe(
-      "https://synapse.example.test/dashboard/my-content/item%201/edit",
+      "https://synapse.example.test/console/my-content/item%201/edit",
     )
   })
 })
