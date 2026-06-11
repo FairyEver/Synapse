@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import {
+  type DriveBrowserSnapshotDto,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
@@ -47,10 +48,24 @@ import {
 } from "./drive-token"
 import type { DriveStoragePort } from "./drive-storage"
 import {
+  buildConsoleDriveRootBreadcrumb,
+  buildConsoleDriveRootItemDto,
+  buildDriveBrowserBreadcrumb,
+  buildDriveBrowserItemDto,
+  buildDriveBrowserPreview,
+  DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES,
+  resolveDriveBrowserPreviewKind,
+  shouldCreateDriveBrowserImagePreview,
+  shouldReadDriveBrowserTextPreview,
+  type DriveBrowserRouteContext,
+  type DriveBrowserSourceItem,
+} from "./drive-browser"
+import {
   toDrivePublicationDto,
   toDriveItemDto,
   type DriveAdminFilters,
   type DriveAdminItemDto,
+  type DriveItemRecord,
   type DrivePublicationRecord,
   type DrivePrepareFolderUploadInput,
   type DrivePrepareUploadInput,
@@ -86,6 +101,16 @@ type DrivePublishedAssetValue = {
   readonly stream: NodeJS.ReadableStream
   readonly contentType: string
   readonly size?: bigint
+}
+
+type DriveFolderZipEntry = {
+  readonly path: string
+  readonly url: string
+}
+
+type DriveItemRecordWithStorage = DriveItemRecord & {
+  readonly userId: string
+  readonly storageKey: string | null
 }
 
 const driveItemWithShares = {
@@ -613,6 +638,159 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
+  async getOwnerBrowserSnapshot(input: {
+    readonly userId: string
+    readonly rootItemId: string
+    readonly currentItemId?: string | null
+    readonly surface: "standalone" | "console"
+  }): Promise<DriveBrowserSnapshotDto> {
+    const { root, current } = await this.resolveOwnedBrowserCurrent(input)
+    const route: DriveBrowserRouteContext = { context: "owner", surface: input.surface, rootItemId: root.id }
+    const children = current.type === DRIVE_ITEM_TYPE.folder
+      ? await this.listActiveChildren(root.userId, current.id)
+      : []
+
+    return {
+      context: "owner",
+      surface: input.surface,
+      current: buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(current), route }),
+      breadcrumbs: await this.buildOwnedBrowserBreadcrumbs(root.userId, root, current, route),
+      children: children.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
+      preview: await this.buildBrowserPreview(current, route),
+      canDownload: current.type === DRIVE_ITEM_TYPE.file,
+      canZip: current.type === DRIVE_ITEM_TYPE.folder,
+    }
+  }
+
+  async getOwnerConsoleRootBrowserSnapshot(userId: string): Promise<DriveBrowserSnapshotDto> {
+    const children = await this.prisma.driveItem.findMany({
+      where: { userId, parentId: null, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      include: driveItemWithShares,
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+    })
+
+    return {
+      context: "owner",
+      surface: "console",
+      current: buildConsoleDriveRootItemDto(),
+      breadcrumbs: [buildConsoleDriveRootBreadcrumb()],
+      children: children.map((item) => buildDriveBrowserItemDto({
+        item: toDriveBrowserSourceItem(item),
+        route: { context: "owner", surface: "console", rootItemId: item.id },
+      })),
+      preview: null,
+      canDownload: false,
+      canZip: false,
+    }
+  }
+
+  async createDownloadUrlForOwnerBrowserItem(input: {
+    readonly userId: string
+    readonly rootItemId: string
+    readonly currentItemId?: string | null
+  }): Promise<{ readonly url: string; readonly fileName: string }> {
+    const { current } = await this.resolveOwnedBrowserCurrent(input)
+    const storageKey = this.requireActiveFileStorage(current)
+    const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
+    return { url: download.url, fileName: current.name }
+  }
+
+  async createFolderZipEntriesForOwnerBrowserItem(input: {
+    readonly userId: string
+    readonly rootItemId: string
+    readonly currentItemId?: string | null
+  }): Promise<readonly DriveFolderZipEntry[]> {
+    const { current } = await this.resolveOwnedBrowserCurrent(input)
+    if (current.type !== DRIVE_ITEM_TYPE.folder) throw new NotFoundException("文件未找到")
+    return this.createFolderZipEntries(current.userId, current.id)
+  }
+
+  async resolveOwnerHtmlRenderAccess(input: {
+    readonly userId: string
+    readonly rootItemId: string
+    readonly currentItemId?: string | null
+  }): Promise<DrivePublishedAssetValue> {
+    const { current } = await this.resolveOwnedBrowserCurrent(input)
+    const storageKey = this.requireActiveFileStorage(current)
+    if (!isHtmlDriveItem(current.name, current.mimeType)) throw new BadRequestException("只能访问 HTML 文件。")
+    const object = await this.storage.getObjectStream({ key: storageKey })
+    return {
+      stream: object.stream,
+      size: object.size ?? current.size,
+      contentType: "text/html; charset=utf-8",
+    }
+  }
+
+  async getShareBrowserSnapshot(input: {
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly accessCookie?: string
+  }): Promise<DriveBrowserSnapshotDto> {
+    const share = await this.resolvePublicShare({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    const { root, current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    const route: DriveBrowserRouteContext = {
+      context: "share",
+      surface: "standalone",
+      shareId: input.shareId,
+      rootItemId: root.id,
+    }
+    const children = current.type === DRIVE_ITEM_TYPE.folder
+      ? await this.listActiveChildren(share.ownerId, current.id)
+      : []
+
+    return {
+      context: "share",
+      surface: "standalone",
+      current: buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(current), route }),
+      breadcrumbs: await this.buildShareBrowserBreadcrumbs(share.ownerId, root, current, route),
+      children: children.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
+      preview: await this.buildBrowserPreview(current, route),
+      canDownload: current.type === DRIVE_ITEM_TYPE.file,
+      canZip: current.type === DRIVE_ITEM_TYPE.folder,
+    }
+  }
+
+  async createDownloadUrlForShareBrowserItem(input: {
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly accessCookie?: string
+  }): Promise<{ readonly url: string; readonly fileName: string }> {
+    const share = await this.resolvePublicShare({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    const storageKey = this.requireActiveFileStorage(current)
+    const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
+    return { url: download.url, fileName: current.name }
+  }
+
+  async createFolderZipEntriesForShareBrowserItem(input: {
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly accessCookie?: string
+  }): Promise<readonly DriveFolderZipEntry[]> {
+    const share = await this.resolvePublicShare({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    if (current.type !== DRIVE_ITEM_TYPE.folder) throw new NotFoundException("文件未找到")
+    return this.createFolderZipEntries(share.ownerId, current.id)
+  }
+
   async resolvePublicShareAccess(input: {
     readonly shareId: string
     readonly password?: string
@@ -724,32 +902,10 @@ export class DriveService implements OnApplicationBootstrap {
     readonly shareId: string
     readonly password?: string
     readonly cookie?: string
-  }): Promise<Array<{ readonly path: string; readonly url: string }>> {
+  }): Promise<DriveFolderZipEntry[]> {
     const share = await this.resolvePublicShare(input)
     if (share.type !== "folder") throw new NotFoundException("文件未找到")
-    const entries: Array<{ readonly path: string; readonly url: string }> = []
-    const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: share.item.id, prefix: "" }]
-
-    while (queue.length > 0) {
-      const current = queue.shift()!
-      const children = await this.prisma.driveItem.findMany({
-        where: { userId: share.ownerId, parentId: current.parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
-        include: driveItemWithShares,
-        orderBy: [{ type: "asc" }, { createdAt: "desc" }],
-      })
-      for (const child of children) {
-        const childPath = current.prefix ? `${current.prefix}/${child.name}` : child.name
-        if (child.type === DRIVE_ITEM_TYPE.folder) {
-          queue.push({ parentId: child.id, prefix: childPath })
-          continue
-        }
-        if (!child.storageKey) continue
-        const download = await this.storage.createDownloadUrl({ key: child.storageKey, filename: child.name })
-        entries.push({ path: childPath, url: download.url })
-      }
-    }
-
-    return entries
+    return this.createFolderZipEntries(share.ownerId, share.item.id)
   }
 
   async listAdminItems(options: { pagination: PaginationQuery; filters: DriveAdminFilters }): Promise<PaginatedResponse<DriveAdminItemDto>> {
@@ -836,6 +992,122 @@ export class DriveService implements OnApplicationBootstrap {
     const folder = await this.requireOwnedItem(userId, folderId)
     if (folder.type !== DRIVE_ITEM_TYPE.folder) throw new BadRequestException("目标不是文件夹。")
     return folder
+  }
+
+  private async resolveOwnedBrowserCurrent(input: {
+    readonly userId: string
+    readonly rootItemId: string
+    readonly currentItemId?: string | null
+  }): Promise<{ readonly root: DriveItemRecordWithStorage; readonly current: DriveItemRecordWithStorage }> {
+    const root = await this.requireOwnedItem(input.userId, input.rootItemId) as DriveItemRecordWithStorage
+    this.assertActiveBrowserItem(root)
+    if (!input.currentItemId || input.currentItemId === root.id) return { root, current: root }
+
+    const current = await this.requireOwnedItem(input.userId, input.currentItemId) as DriveItemRecordWithStorage
+    this.assertActiveBrowserItem(current)
+    if (!await this.isDescendantOf(current.id, root.id)) throw new NotFoundException("文件未找到")
+    return { root, current }
+  }
+
+  private async resolveShareBrowserCurrent(
+    share: DrivePublicShareValue,
+    currentItemId?: string | null,
+  ): Promise<{ readonly root: DriveItemRecordWithStorage; readonly current: DriveItemRecordWithStorage }> {
+    const root = await this.findActiveDriveItem(share.ownerId, share.item.id)
+    if (!root) throw new NotFoundException("文件未找到")
+    if (!currentItemId || currentItemId === root.id) return { root, current: root }
+    if (share.type !== "folder") throw new NotFoundException("文件未找到")
+
+    const current = await this.findActiveDriveItem(share.ownerId, currentItemId)
+    if (!current || !await this.isDescendantOf(current.id, root.id)) throw new NotFoundException("文件未找到")
+    return { root, current }
+  }
+
+  private async findActiveDriveItem(userId: string, itemId: string): Promise<DriveItemRecordWithStorage | null> {
+    return this.prisma.driveItem.findFirst({
+      where: { id: itemId, userId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      include: driveItemWithShares,
+    }) as Promise<DriveItemRecordWithStorage | null>
+  }
+
+  private async listActiveChildren(userId: string, parentId: string): Promise<DriveItemRecordWithStorage[]> {
+    return this.prisma.driveItem.findMany({
+      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      include: driveItemWithShares,
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+    }) as Promise<DriveItemRecordWithStorage[]>
+  }
+
+  private async buildOwnedBrowserBreadcrumbs(
+    userId: string,
+    root: DriveItemRecordWithStorage,
+    current: DriveItemRecordWithStorage,
+    route: DriveBrowserRouteContext,
+  ) {
+    const items = await this.collectBrowserBreadcrumbItems({ userId, root, current })
+    return items.map((item) => buildDriveBrowserBreadcrumb({ item: toDriveBrowserSourceItem(item), route }))
+  }
+
+  private async buildShareBrowserBreadcrumbs(
+    userId: string,
+    root: DriveItemRecordWithStorage,
+    current: DriveItemRecordWithStorage,
+    route: DriveBrowserRouteContext,
+  ) {
+    const items = await this.collectBrowserBreadcrumbItems({ userId, root, current })
+    return items.map((item) => buildDriveBrowserBreadcrumb({ item: toDriveBrowserSourceItem(item), route }))
+  }
+
+  private async collectBrowserBreadcrumbItems(input: {
+    readonly userId: string
+    readonly root: DriveItemRecordWithStorage
+    readonly current: DriveItemRecordWithStorage
+  }): Promise<DriveItemRecordWithStorage[]> {
+    const items: DriveItemRecordWithStorage[] = [input.current]
+    let cursor = input.current
+    while (cursor.id !== input.root.id) {
+      if (!cursor.parentId) throw new NotFoundException("文件未找到")
+      const parent = await this.findActiveDriveItem(input.userId, cursor.parentId)
+      if (!parent) throw new NotFoundException("文件未找到")
+      items.push(parent)
+      cursor = parent
+    }
+    return items.reverse()
+  }
+
+  private async buildBrowserPreview(
+    current: DriveItemRecordWithStorage,
+    route: DriveBrowserRouteContext,
+  ) {
+    if (current.type === DRIVE_ITEM_TYPE.folder) return null
+    const item = toDriveBrowserSourceItem(current)
+    const kind = resolveDriveBrowserPreviewKind(item)
+    const storageKey = this.requireActiveFileStorage(current)
+    if (shouldReadDriveBrowserTextPreview(kind)) {
+      const preview = await this.readTextPreview(storageKey)
+      return buildDriveBrowserPreview({ item, route, text: preview.text, truncated: preview.truncated })
+    }
+    if (shouldCreateDriveBrowserImagePreview(kind)) {
+      const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
+      return buildDriveBrowserPreview({ item, route, imageUrl: download.url })
+    }
+    return buildDriveBrowserPreview({ item, route })
+  }
+
+  private async readTextPreview(storageKey: string): Promise<{ readonly text: string; readonly truncated: boolean }> {
+    const object = await this.storage.getObjectStream({ key: storageKey })
+    return readStreamTextPrefix(object.stream, DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES)
+  }
+
+  private requireActiveFileStorage(item: DriveItemRecordWithStorage): string {
+    if (item.type !== DRIVE_ITEM_TYPE.file || item.storageStatus !== DRIVE_STORAGE_STATUS.active || !item.storageKey) {
+      throw new NotFoundException("文件未找到")
+    }
+    return item.storageKey
+  }
+
+  private assertActiveBrowserItem(item: DriveItemRecordWithStorage): void {
+    if (item.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new NotFoundException("文件未找到")
   }
 
   private async assertNoFolderCycle(itemId: string, parentId: string | null): Promise<void> {
@@ -1046,6 +1318,28 @@ export class DriveService implements OnApplicationBootstrap {
     return result
   }
 
+  private async createFolderZipEntries(userId: string, folderId: string): Promise<DriveFolderZipEntry[]> {
+    const entries: DriveFolderZipEntry[] = []
+    const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: folderId, prefix: "" }]
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const children = await this.listActiveChildren(userId, current.parentId)
+      for (const child of children) {
+        const childPath = current.prefix ? `${current.prefix}/${child.name}` : child.name
+        if (child.type === DRIVE_ITEM_TYPE.folder) {
+          queue.push({ parentId: child.id, prefix: childPath })
+          continue
+        }
+        if (!child.storageKey) continue
+        const download = await this.storage.createDownloadUrl({ key: child.storageKey, filename: child.name })
+        entries.push({ path: childPath, url: download.url })
+      }
+    }
+
+    return entries
+  }
+
   private decryptStoredPassword(value: string | null | undefined): string | null {
     if (!value) return null
     return decryptDrivePassword(value, this.accessSecret)
@@ -1226,6 +1520,45 @@ function toDrivePublicShareValue(share: {
     storageKey: share.item.storageKey,
     type: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
   }
+}
+
+function toDriveBrowserSourceItem(item: DriveItemRecord): DriveBrowserSourceItem {
+  const dto = toDriveItemDto(item)
+  return {
+    id: dto.id,
+    name: dto.name,
+    type: dto.type,
+    size: dto.size,
+    mimeType: dto.mimeType,
+    updatedAt: dto.updatedAt,
+  }
+}
+
+async function readStreamTextPrefix(
+  stream: NodeJS.ReadableStream,
+  maxBytes: number,
+): Promise<{ readonly text: string; readonly truncated: boolean }> {
+  const chunks: Buffer[] = []
+  let bytes = 0
+  let truncated = false
+  const readable = stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>
+
+  for await (const chunk of readable) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    const available = maxBytes - bytes
+    if (buffer.length > available) {
+      if (available > 0) chunks.push(buffer.subarray(0, available))
+      bytes = maxBytes
+      truncated = true
+      const destroyable = stream as { destroy?: () => void }
+      destroyable.destroy?.()
+      break
+    }
+    chunks.push(buffer)
+    bytes += buffer.length
+  }
+
+  return { text: Buffer.concat(chunks, bytes).toString("utf8"), truncated }
 }
 
 function toDriveShareDto(

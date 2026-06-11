@@ -969,6 +969,102 @@ describe("DriveService", () => {
     expect(entries).toEqual([{ path: "docs/spec.txt", url: "https://cos.example/download" }])
   })
 
+  it("builds owner browser snapshots with child breadcrumbs and html visit urls", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("<html></html>"), size: 13n, contentType: "text/html" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    const page = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      rootItemId: folder.id,
+      currentItemId: page.id,
+      surface: "standalone",
+    })
+
+    expect(snapshot.context).toBe("owner")
+    expect(snapshot.current.browserUrl).toBe(`/drive/items/${folder.id}/items/${page.id}`)
+    expect(snapshot.breadcrumbs.map((item) => item.name)).toEqual(["site", "index.html"])
+    expect(snapshot.preview).toMatchObject({
+      kind: "html-source",
+      text: "<html></html>",
+      visitUrl: `/drive/items/${folder.id}/items/${page.id}/render`,
+    })
+  })
+
+  it("builds console root browser snapshots for user drive roots", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+
+    const snapshot = await service.getOwnerConsoleRootBrowserSnapshot("user-1")
+
+    expect(snapshot.current.browserUrl).toBe("/console/drive")
+    expect(snapshot.breadcrumbs).toEqual([{ id: "root", name: "网盘", browserUrl: "/console/drive" }])
+    expect(snapshot.children).toEqual([expect.objectContaining({
+      id: folder.id,
+      browserUrl: `/console/drive/items/${folder.id}`,
+      downloadUrl: `/drive/items/${folder.id}/zip`,
+    })])
+  })
+
+  it("builds share browser html source previews without visit urls", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("<html></html>"), size: 13n, contentType: "text/html" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+
+    expect(snapshot.current.browserUrl).toBe(`/files/${share.shareId}`)
+    expect(snapshot.preview).toMatchObject({
+      kind: "html-source",
+      text: "<html></html>",
+      visitUrl: null,
+    })
+  })
+
+  it("rejects share browser access outside the shared subtree", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "shared" })
+    const outside = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "outside.txt",
+      mimeType: "text/plain",
+    })
+    const share = await service.createShare("user-1", folder.id, "https://synapse.test")
+
+    await expect(service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      itemId: outside.id,
+      password: share.password ?? undefined,
+    })).rejects.toBeInstanceOf(NotFoundException)
+  })
+
   it("expires pending sessions and releases reserved quota", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
