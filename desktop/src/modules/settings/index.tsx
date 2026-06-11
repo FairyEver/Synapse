@@ -33,6 +33,7 @@ import { SettingsCategorySidebar } from "@/modules/settings/components/settings-
 import { ServicesPanel } from "@/modules/settings/components/services-panel"
 import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
+import { KnowledgeBaseStoragePanel } from "@/modules/settings/components/knowledge-base-storage-panel"
 import { QuickInputsPanel } from "@/modules/settings/components/quick-inputs-panel"
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
@@ -308,7 +309,10 @@ function SettingsModule() {
         ) : null}
 
         {isReady && activeCategory === "projects" ? (
-          <ProjectListEditor projects={config.global.projects} onSave={handleSaveProjects} />
+          <>
+            <KnowledgeBaseStoragePanel />
+            <ProjectListEditor projects={config.global.projects} onSave={handleSaveProjects} />
+          </>
         ) : null}
 
         {isReady && activeCategory === "quick-inputs" ? (

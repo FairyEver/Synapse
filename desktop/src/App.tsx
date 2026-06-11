@@ -2,12 +2,14 @@ import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState }
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
+import { KnowledgeBaseStorageMigrationDialog } from "@/app-shell/components/knowledge-base-storage-migration-dialog"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
+import { useKnowledgeBaseStorageMigration } from "@/app-shell/hooks/use-knowledge-base-storage-migration"
 import { createRendererLogger } from "@/app-shell/logging"
 import { updateDiagnosticContext } from "@/lib/diagnostic-context"
 import {
@@ -111,6 +113,7 @@ function MainApp() {
   const [pendingAgentSession, setPendingAgentSession] =
     useState<OpenAgentSessionPayload | null>(null)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
+  const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
   // 检查是否需要显示空状态页面
   const hasNoRepositories = !hasRepositories
@@ -416,6 +419,10 @@ function MainApp() {
             </ErrorBoundary>
           ) : null}
         </div>
+        <KnowledgeBaseStorageMigrationDialog
+          progress={knowledgeBaseStorageMigration.progress}
+          onCancel={knowledgeBaseStorageMigration.cancel}
+        />
       </AppShellLayout>
     </IdentityGate>
   )
