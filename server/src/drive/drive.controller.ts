@@ -12,7 +12,8 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveAccessSettingsInput,
-  type DriveItemDto,
+  type DriveBrowserPasswordRequiredDto,
+  type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
 import { LocalDriveStorage } from "./drive-storage"
@@ -176,6 +177,39 @@ export class DriveUserController {
   getUsage(@Req() request: AuthenticatedUserRequest) {
     return this.drive.getUsage(request.user!.id)
   }
+
+  @Get("/browser/owner/root")
+  getOwnerConsoleRootSnapshot(@Req() request: AuthenticatedUserRequest) {
+    return this.drive.getOwnerConsoleRootBrowserSnapshot(request.user!.id)
+  }
+
+  @Get("/browser/owner/items/:rootItemId")
+  getOwnerRootSnapshot(
+    @Param("rootItemId") rootItemId: string,
+    @Query("surface") surface: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.getOwnerBrowserSnapshot({
+      userId: request.user!.id,
+      rootItemId,
+      surface: parseBrowserSurface(surface),
+    })
+  }
+
+  @Get("/browser/owner/items/:rootItemId/items/:itemId")
+  getOwnerChildSnapshot(
+    @Param("rootItemId") rootItemId: string,
+    @Param("itemId") itemId: string,
+    @Query("surface") surface: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.getOwnerBrowserSnapshot({
+      userId: request.user!.id,
+      rootItemId,
+      currentItemId: itemId,
+      surface: parseBrowserSurface(surface),
+    })
+  }
 }
 
 @UseGuards(AdminAuthGuard)
@@ -206,6 +240,125 @@ export class DriveAdminController {
 @Controller()
 export class DrivePublicController {
   constructor(private readonly drive: DriveService) {}
+
+  @Get("/api/drive/browser/shares/:shareId")
+  async getShareRootSnapshot(
+    @Param("shareId") shareId: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.getShareSnapshotResponse({ shareId, request, response })
+  }
+
+  @Get("/api/drive/browser/shares/:shareId/items/:itemId")
+  async getShareItemSnapshot(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.getShareSnapshotResponse({ shareId, itemId, request, response })
+  }
+
+  @Post("/api/drive/browser/shares/:shareId/access")
+  async unlockShareBrowser(
+    @Param("shareId") shareId: string,
+    @Body() body: unknown,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const password = readPasswordFromBody(body)
+    const access = await this.drive.resolvePublicShareAccess({
+      shareId,
+      password,
+      cookie: readDriveAccessCookie(request),
+    })
+    if (access.status !== "ok" || !access.cookie) return driveBrowserPasswordRequired()
+    setDriveAccessCookie(response, access.cookie)
+    return this.drive.getShareBrowserSnapshot({
+      shareId,
+      password,
+      cookie: access.cookie,
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Get("/drive/items/:rootItemId/download")
+  async downloadOwnerItem(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
+    const download = await this.drive.createDownloadUrlForOwnerBrowserItem({
+      userId: request.user!.id,
+      rootItemId,
+    })
+    response.redirect(302, download.url)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Get("/drive/items/:rootItemId/items/:itemId/download")
+  async downloadOwnerChildItem(
+    @Param("rootItemId") rootItemId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: AuthenticatedUserRequest,
+    @Res() response: Response,
+  ) {
+    const download = await this.drive.createDownloadUrlForOwnerBrowserItem({
+      userId: request.user!.id,
+      rootItemId,
+      currentItemId: itemId,
+    })
+    response.redirect(302, download.url)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Get("/drive/items/:rootItemId/zip")
+  async downloadOwnerFolderZip(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
+    const entries = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
+      userId: request.user!.id,
+      rootItemId,
+    })
+    await sendDriveZip(response, `${rootItemId}.zip`, entries)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Get("/drive/items/:rootItemId/items/:itemId/zip")
+  async downloadOwnerChildFolderZip(
+    @Param("rootItemId") rootItemId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: AuthenticatedUserRequest,
+    @Res() response: Response,
+  ) {
+    const entries = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
+      userId: request.user!.id,
+      rootItemId,
+      currentItemId: itemId,
+    })
+    await sendDriveZip(response, `${itemId}.zip`, entries)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Get("/drive/items/:rootItemId/render")
+  async renderOwnerHtmlItem(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
+    const asset = await this.drive.resolveOwnerHtmlRenderAccess({
+      userId: request.user!.id,
+      rootItemId,
+    })
+    await sendPublishedAsset(response, asset)
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Get("/drive/items/:rootItemId/items/:itemId/render")
+  async renderOwnerChildHtmlItem(
+    @Param("rootItemId") rootItemId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: AuthenticatedUserRequest,
+    @Res() response: Response,
+  ) {
+    const asset = await this.drive.resolveOwnerHtmlRenderAccess({
+      userId: request.user!.id,
+      rootItemId,
+      currentItemId: itemId,
+    })
+    await sendPublishedAsset(response, asset)
+  }
 
   @Get("/pages/:publishId")
   async openPublishedPage(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
@@ -263,41 +416,6 @@ export class DrivePublicController {
     })
   }
 
-  @Get("/files/:shareId")
-  async openShare(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
-    const password = readPasswordQuery(request)
-    const access = await this.drive.resolvePublicShareAccess({
-      shareId,
-      password,
-      cookie: readDriveAccessCookie(request),
-    })
-    if (access.status === "password_required") {
-      response.type("html").send(renderDrivePasswordPage({ actionPath: request.path }))
-      return
-    }
-    if (access.status === "static_denied") {
-      response.status(403).type("text/plain; charset=utf-8").send("访问受限")
-      return
-    }
-    if (access.cookie) {
-      setDriveAccessCookie(response, access.cookie)
-    }
-    if (password) {
-      response.redirect(302, cleanPasswordUrl(request))
-      return
-    }
-    if (access.value.type === "file") {
-      response.type("html").send(renderPublicFilePage(shareId, access.value.item))
-      return
-    }
-    const folder = await this.drive.listPublicFolderChildren({
-      shareId,
-      password,
-      cookie: readDriveAccessCookie(request),
-    })
-    response.type("html").send(renderPublicFolderPage(shareId, folder))
-  }
-
   @Post("/files/:shareId")
   async unlockShare(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
     const access = await this.drive.resolvePublicShareAccess({
@@ -311,6 +429,29 @@ export class DrivePublicController {
     }
     setDriveAccessCookie(response, access.cookie)
     response.redirect(302, request.path)
+  }
+
+  private async getShareSnapshotResponse(input: {
+    readonly shareId: string
+    readonly itemId?: string
+    readonly request: Request
+    readonly response: Response
+  }): Promise<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto> {
+    const password = readPasswordQuery(input.request)
+    const access = await this.drive.resolvePublicShareAccess({
+      shareId: input.shareId,
+      password,
+      cookie: readDriveAccessCookie(input.request),
+    })
+    if (access.status === "password_required") return driveBrowserPasswordRequired()
+    if (access.status === "static_denied") throw new NotFoundException("文件未找到")
+    if (access.cookie) setDriveAccessCookie(input.response, access.cookie)
+    return this.drive.getShareBrowserSnapshot({
+      shareId: input.shareId,
+      itemId: input.itemId,
+      password,
+      cookie: access.cookie ?? readDriveAccessCookie(input.request),
+    })
   }
 
   @Get("/files/:shareId/download")
@@ -329,7 +470,7 @@ export class DrivePublicController {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    const download = await this.drive.createDownloadUrlForShare({
+    const download = await this.drive.createDownloadUrlForShareBrowserItem({
       shareId,
       password,
       cookie: readDriveAccessCookie(request),
@@ -337,7 +478,7 @@ export class DrivePublicController {
     response.redirect(302, download.url)
   }
 
-  @Get("/files/:shareId/:itemId/download")
+  @Get(["/files/:shareId/items/:itemId/download", "/files/:shareId/:itemId/download"])
   async downloadShareChild(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Req() request: Request, @Res() response: Response) {
     const password = readPasswordQuery(request)
     if (password) {
@@ -353,7 +494,7 @@ export class DrivePublicController {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    const download = await this.drive.createDownloadUrlForShareChild({
+    const download = await this.drive.createDownloadUrlForShareBrowserItem({
       shareId,
       itemId,
       password,
@@ -378,30 +519,42 @@ export class DrivePublicController {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    if (access.value.type !== "folder") {
-      const download = await this.drive.createDownloadUrlForShare({
-        shareId,
-        password,
-        cookie: readDriveAccessCookie(request),
-      })
-      response.redirect(302, download.url)
-      return
-    }
-    const entries = await this.drive.createFolderZipEntriesForShare({
+    const entries = await this.drive.createFolderZipEntriesForShareBrowserItem({
       shareId,
       password,
       cookie: readDriveAccessCookie(request),
     })
-    response.setHeader("Content-Type", "application/zip")
-    response.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(access.value.item.name)}.zip"`)
-    const archive = archiver("zip", { zlib: { level: 6 } })
-    archive.pipe(response)
-    for (const entry of entries) {
-      const objectResponse = await fetch(entry.url)
-      if (!objectResponse.ok) throw new NotFoundException("文件未找到")
-      archive.append(Buffer.from(await objectResponse.arrayBuffer()), { name: entry.path })
+    await sendDriveZip(response, `${access.value.item.name}.zip`, entries)
+  }
+
+  @Get("/files/:shareId/items/:itemId/zip")
+  async downloadShareChildFolderZip(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    const password = readPasswordQuery(request)
+    const access = await this.drive.resolvePublicShareAccess({
+      shareId,
+      password,
+      cookie: readDriveAccessCookie(request),
+    })
+    if (access.status !== "ok") throw new NotFoundException("文件未找到")
+    if (access.cookie) {
+      setDriveAccessCookie(response, access.cookie)
     }
-    await archive.finalize()
+    if (password) {
+      response.redirect(302, cleanPasswordUrl(request))
+      return
+    }
+    const entries = await this.drive.createFolderZipEntriesForShareBrowserItem({
+      shareId,
+      itemId,
+      password,
+      cookie: readDriveAccessCookie(request),
+    })
+    await sendDriveZip(response, `${itemId}.zip`, entries)
   }
 
   private async sendPublishedAsset(response: Response, input: {
@@ -499,6 +652,14 @@ function parseAccessSettings(body: unknown): DriveAccessSettingsInput {
   }
 }
 
+function parseBrowserSurface(value: string | undefined): "standalone" | "console" {
+  return value === "console" ? "console" : "standalone"
+}
+
+function driveBrowserPasswordRequired(): DriveBrowserPasswordRequiredDto {
+  return { passwordRequired: true, message: "请输入密码。" }
+}
+
 function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
   return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
 }
@@ -529,10 +690,13 @@ function readPasswordQuery(request: Request): string | undefined {
 }
 
 function readBodyPassword(request: Request): string | undefined {
-  const body = request.body
-  if (!isRecord(body)) return undefined
-  const value = body.password
-  return typeof value === "string" && value.length > 0 ? value : undefined
+  return readPasswordFromBody(request.body)
+}
+
+function readPasswordFromBody(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined
+  const password = value.password
+  return typeof password === "string" && password.length > 0 ? password : undefined
 }
 
 function readDriveAccessCookie(request: Request): string | undefined {
@@ -576,6 +740,23 @@ function decodeCookieValue(value: string): string | undefined {
   } catch {
     return value
   }
+}
+
+async function sendDriveZip(
+  response: Response,
+  filename: string,
+  entries: readonly { readonly path: string; readonly url: string }[],
+): Promise<void> {
+  response.setHeader("Content-Type", "application/zip")
+  response.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`)
+  const archive = archiver("zip", { zlib: { level: 6 } })
+  archive.pipe(response)
+  for (const entry of entries) {
+    const objectResponse = await fetch(entry.url)
+    if (!objectResponse.ok) throw new NotFoundException("文件未找到")
+    archive.append(Buffer.from(await objectResponse.arrayBuffer()), { name: entry.path })
+  }
+  await archive.finalize()
 }
 
 async function sendPublishedAsset(response: Response, asset: {
@@ -722,248 +903,4 @@ body {
 </main>
 </body>
 </html>`
-}
-
-function renderPublicFilePage(shareId: string, item: DriveItemDto): string {
-  const fileName = escapeHtml(item.name)
-  const downloadHref = `./${encodeURIComponent(shareId)}/download`
-  return `<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${fileName}</title>
-<style>
-* {
-  box-sizing: border-box;
-}
-body {
-  margin: 0;
-  background: Canvas;
-  color: CanvasText;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-a {
-  color: LinkText;
-}
-.drive-share-shell {
-  min-height: 100vh;
-  padding: 28px 40px 48px;
-}
-.drive-share-main {
-  max-width: 720px;
-  margin: 0 auto;
-}
-.drive-share-file {
-  display: grid;
-  gap: 12px;
-  border-top: 1px solid ButtonBorder;
-  padding-top: 16px;
-}
-.drive-share-name {
-  overflow-wrap: anywhere;
-  font-size: 16px;
-  font-weight: 650;
-}
-.drive-share-meta {
-  color: GrayText;
-  font-size: 13px;
-}
-.drive-share-download {
-  width: fit-content;
-  font-size: 14px;
-  font-weight: 600;
-}
-@media (max-width: 720px) {
-  .drive-share-shell {
-    padding: 18px 18px 36px;
-  }
-}
-</style>
-</head>
-<body>
-<main class="drive-share-shell">
-  <section class="drive-share-main" aria-label="分享文件">
-    <div class="drive-share-file">
-      <div class="drive-share-name">${fileName}</div>
-      <div class="drive-share-meta">${escapeHtml(formatPublicBytes(item.size))}</div>
-      <a class="drive-share-download" href="${escapeAttribute(downloadHref)}">下载</a>
-    </div>
-  </section>
-</main>
-</body>
-</html>`
-}
-
-function renderPublicFolderPage(shareId: string, folder: { readonly item: DriveItemDto; readonly children: readonly DriveItemDto[] }): string {
-  const folderName = escapeHtml(folder.item.name)
-  const children = folder.children.map((item) => renderPublicFolderRow(shareId, item)).join("")
-  const emptyState = folder.children.length === 0 ? `<div class="drive-share-empty">暂无文件</div>` : ""
-  return `<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${folderName}</title>
-<style>
-* {
-  box-sizing: border-box;
-}
-html,
-body {
-  min-height: 100%;
-}
-body {
-  margin: 0;
-  background: Canvas;
-  color: CanvasText;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-a {
-  color: inherit;
-  text-decoration: none;
-}
-.drive-share-shell {
-  min-height: 100vh;
-  padding: 28px 40px 48px;
-}
-.drive-share-main {
-  max-width: 980px;
-  margin: 0 auto;
-}
-.drive-share-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  margin-bottom: 14px;
-  overflow: hidden;
-  font-size: 16px;
-  line-height: 1.5;
-}
-.drive-share-crumb-muted {
-  flex: 0 0 auto;
-  color: GrayText;
-  font-weight: 500;
-}
-.drive-share-crumb-separator {
-  flex: 0 0 auto;
-  color: GrayText;
-}
-.drive-share-crumb-current {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.drive-share-list {
-  display: block;
-  width: 100%;
-  border-top: 1px solid ButtonBorder;
-}
-.drive-share-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px 160px 64px;
-  gap: 16px;
-  align-items: center;
-  min-width: 0;
-  min-height: 44px;
-  border-bottom: 1px solid ButtonBorder;
-  padding: 0 12px;
-}
-.drive-share-name {
-  overflow: hidden;
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.drive-share-meta {
-  color: GrayText;
-  font-size: 13px;
-  text-align: right;
-}
-.drive-share-download {
-  color: LinkText;
-  font-size: 13px;
-  text-align: right;
-}
-.drive-share-empty {
-  min-height: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: GrayText;
-  font-size: 14px;
-  text-align: center;
-}
-@media (max-width: 720px) {
-  .drive-share-shell {
-    padding: 18px 18px 36px;
-  }
-  .drive-share-main {
-    max-width: none;
-  }
-  .drive-share-row {
-    grid-template-columns: minmax(0, 1fr) 72px 0 48px;
-    gap: 10px;
-  }
-  .drive-share-time {
-    display: none;
-  }
-}
-</style>
-</head>
-<body>
-<main class="drive-share-shell">
-  <section class="drive-share-main" aria-label="分享文件列表">
-    <nav class="drive-share-breadcrumb" aria-label="当前位置">
-      <span class="drive-share-crumb-muted">全部文件</span>
-      <span class="drive-share-crumb-separator">›</span>
-      <span class="drive-share-crumb-current">${folderName}</span>
-    </nav>
-    ${emptyState || `<div class="drive-share-list">${children}</div>`}
-  </section>
-</main>
-</body>
-</html>`
-}
-
-function renderPublicFolderRow(shareId: string, item: DriveItemDto): string {
-  const name = escapeHtml(item.name)
-  const time = formatPublicDateTime(item.updatedAt)
-  const href = `./${encodeURIComponent(shareId)}/${encodeURIComponent(item.id)}/download`
-  const download = item.type === "file"
-    ? `<a class="drive-share-download" href="${escapeAttribute(href)}" aria-label="下载 ${escapeAttribute(item.name)}">下载</a>`
-    : ""
-  return `<div class="drive-share-row">
-  <span class="drive-share-name" title="${escapeAttribute(item.name)}">${name}</span>
-  <span class="drive-share-meta">${item.type === "file" ? escapeHtml(formatPublicBytes(item.size)) : "-"}</span>
-  <span class="drive-share-meta drive-share-time">${escapeHtml(time)}</span>
-  ${download || "<span></span>"}
-</div>`
-}
-
-function formatPublicDateTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "-"
-  const formatter = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Shanghai",
-  })
-  return formatter.format(date).replace(/\//gu, "/")
-}
-
-function formatPublicBytes(value: string): string {
-  const bytes = Number(value)
-  if (!Number.isFinite(bytes)) return "-"
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }

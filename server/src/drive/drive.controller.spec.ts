@@ -1,7 +1,7 @@
 import { Readable } from "node:stream"
-import { type INestApplication, NotFoundException, UnauthorizedException } from "@nestjs/common"
+import { BadRequestException, type INestApplication, NotFoundException, UnauthorizedException } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
-import type { DrivePublicationDto } from "@synapse/shared"
+import type { DriveBrowserSnapshotDto, DriveItemDto, DrivePublicationDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { DrivePublicController, DriveUserController } from "./drive.controller"
@@ -40,6 +40,14 @@ describe("DriveController", () => {
     createDownloadUrlForShare: vi.fn(),
     createDownloadUrlForShareChild: vi.fn(),
     createFolderZipEntriesForShare: vi.fn(),
+    getOwnerConsoleRootBrowserSnapshot: vi.fn(),
+    getOwnerBrowserSnapshot: vi.fn(),
+    getShareBrowserSnapshot: vi.fn(),
+    createDownloadUrlForOwnerBrowserItem: vi.fn(),
+    createFolderZipEntriesForOwnerBrowserItem: vi.fn(),
+    resolveOwnerHtmlRenderAccess: vi.fn(),
+    createDownloadUrlForShareBrowserItem: vi.fn(),
+    createFolderZipEntriesForShareBrowserItem: vi.fn(),
   }
 
   beforeEach(async () => {
@@ -60,6 +68,14 @@ describe("DriveController", () => {
     drive.createDownloadUrlForShare.mockReset()
     drive.createDownloadUrlForShareChild.mockReset()
     drive.createFolderZipEntriesForShare.mockReset()
+    drive.getOwnerConsoleRootBrowserSnapshot.mockReset()
+    drive.getOwnerBrowserSnapshot.mockReset()
+    drive.getShareBrowserSnapshot.mockReset()
+    drive.createDownloadUrlForOwnerBrowserItem.mockReset()
+    drive.createFolderZipEntriesForOwnerBrowserItem.mockReset()
+    drive.resolveOwnerHtmlRenderAccess.mockReset()
+    drive.createDownloadUrlForShareBrowserItem.mockReset()
+    drive.createFolderZipEntriesForShareBrowserItem.mockReset()
     restoreEnv("PAGES_PUBLIC_URL", originalPagesPublicUrl)
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
     drive.resolvePublishedAssetAccess.mockRejectedValue(new NotFoundException("网页未找到"))
@@ -78,6 +94,7 @@ describe("DriveController", () => {
   afterEach(async () => {
     await app?.close()
     app = null
+    vi.unstubAllGlobals()
     restoreEnv("PAGES_PUBLIC_URL", originalPagesPublicUrl)
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
   })
@@ -86,8 +103,82 @@ describe("DriveController", () => {
     await request(app!.getHttpServer()).get("/api/drive/items").expect(401)
   })
 
-  it("returns public not found for missing share ids", async () => {
-    const response = await request(app!.getHttpServer()).get("/files/shr_missing").expect(404)
+  it("requires user auth for owner direct file responses", async () => {
+    await request(app!.getHttpServer()).get("/drive/items/root-1/download").expect(401)
+  })
+
+  it("calls owner browser APIs with the authenticated user and surface", async () => {
+    const snapshot = createBrowserSnapshot()
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.getOwnerConsoleRootBrowserSnapshot.mockResolvedValue(snapshot)
+      drive.getOwnerBrowserSnapshot.mockResolvedValue(snapshot)
+
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/root").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/root-1?surface=console").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/root-1/items/child-1").expect(200)
+
+      expect(drive.getOwnerConsoleRootBrowserSnapshot).toHaveBeenCalledWith("user-1")
+      expect(drive.getOwnerBrowserSnapshot).toHaveBeenCalledWith({
+        userId: "user-1",
+        rootItemId: "root-1",
+        surface: "console",
+      })
+      expect(drive.getOwnerBrowserSnapshot).toHaveBeenCalledWith({
+        userId: "user-1",
+        rootItemId: "root-1",
+        currentItemId: "child-1",
+        surface: "standalone",
+      })
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("redirects owner direct downloads and rejects invalid owner renders", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DrivePublicController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.createDownloadUrlForOwnerBrowserItem.mockResolvedValue({ url: "https://cos.example/owner-download", fileName: "brief.txt" })
+      drive.resolveOwnerHtmlRenderAccess.mockRejectedValue(new BadRequestException("只能访问 HTML 文件。"))
+
+      const download = await request(userApp.getHttpServer()).get("/drive/items/root-1/items/file-1/download").expect(302)
+      expect(download.headers.location).toBe("https://cos.example/owner-download")
+      expect(drive.createDownloadUrlForOwnerBrowserItem).toHaveBeenCalledWith({
+        userId: "user-1",
+        rootItemId: "root-1",
+        currentItemId: "file-1",
+      })
+
+      await request(userApp.getHttpServer()).get("/drive/items/root-1/render").expect(400)
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("returns public not found for missing browser share ids", async () => {
+    const response = await request(app!.getHttpServer()).get("/api/drive/browser/shares/shr_missing").expect(404)
     expect(response.text).toContain("文件未找到")
   })
 
@@ -516,20 +607,18 @@ describe("DriveController", () => {
     })
   })
 
-  it("renders password page without resource details for protected shares", async () => {
+  it("returns typed password-required responses for protected share browser APIs", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
 
-    const response = await request(app!.getHttpServer()).get("/files/shr_locked").expect(200)
+    const response = await request(app!.getHttpServer()).get("/api/drive/browser/shares/shr_locked").expect(200)
 
-    expect(response.text).toContain("drive-password-shell")
-    expect(response.text).toContain("name=\"password\"")
-    expect(response.text).not.toContain("secret.txt")
-    expect(response.text).not.toContain("交接材料")
+    expect(response.body).toEqual({ passwordRequired: true, message: "请输入密码。" })
     expect(drive.listPublicFolderChildren).not.toHaveBeenCalled()
     expect(drive.createDownloadUrlForShare).not.toHaveBeenCalled()
   })
 
-  it("unlocks password query and redirects to a clean share URL", async () => {
+  it("unlocks share browser access and returns the browser snapshot", async () => {
+    const snapshot = createBrowserSnapshot()
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
       cookie: "access-cookie",
@@ -540,11 +629,15 @@ describe("DriveController", () => {
         storageKey: "drive/file-1",
       },
     })
+    drive.getShareBrowserSnapshot.mockResolvedValue(snapshot)
 
-    const response = await request(app!.getHttpServer()).get("/files/shr_file?password=letmein&x=1").expect(302)
+    const response = await request(app!.getHttpServer())
+      .post("/api/drive/browser/shares/shr_file/access")
+      .send({ password: "letmein" })
+      .expect(201)
     const setCookie = response.headers["set-cookie"]
 
-    expect(response.headers.location).toBe("/files/shr_file?x=1")
+    expect(response.body).toEqual(snapshot)
     expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain("synapse_drive_access=access-cookie")
     expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain("HttpOnly")
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
@@ -552,11 +645,18 @@ describe("DriveController", () => {
       password: "letmein",
       cookie: undefined,
     })
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      password: "letmein",
+      cookie: "access-cookie",
+    })
   })
 
-  it("cleans stale password query for share landing pages even without a new cookie", async () => {
+  it("passes password query through share browser APIs and sets access cookies", async () => {
+    const snapshot = createBrowserSnapshot()
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
+      cookie: "query-cookie",
       value: {
         type: "file",
         item: createDriveItem({ id: "file-1", name: "brief.txt", size: "11" }),
@@ -564,10 +664,13 @@ describe("DriveController", () => {
         storageKey: "drive/file-1",
       },
     })
+    drive.getShareBrowserSnapshot.mockResolvedValue(snapshot)
 
-    const response = await request(app!.getHttpServer()).get("/files/shr_file?password=stale").expect(302)
+    const response = await request(app!.getHttpServer()).get("/api/drive/browser/shares/shr_file?password=stale").expect(200)
+    const setCookie = response.headers["set-cookie"]
 
-    expect(response.headers.location).toBe("/files/shr_file")
+    expect(response.body).toEqual(snapshot)
+    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain("synapse_drive_access=query-cookie")
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: "stale",
@@ -583,22 +686,9 @@ describe("DriveController", () => {
     expect(response.text).toBe("访问受限")
   })
 
-  it("renders a file share landing page instead of redirecting to storage", async () => {
-    drive.resolvePublicShareAccess.mockResolvedValue({
-      status: "ok",
-      value: {
-        type: "file",
-        item: createDriveItem({ id: "file-1", name: "brief.txt", size: "11" }),
-        ownerId: "user-1",
-        storageKey: "drive/file-1",
-      },
-    })
-
-    const response = await request(app!.getHttpServer()).get("/files/shr_file").expect(200)
-
-    expect(response.text).toContain("drive-share-shell")
-    expect(response.text).toContain("brief.txt")
-    expect(response.text).toContain("./shr_file/download")
+  it("leaves share browser page routes to the SPA", async () => {
+    await request(app!.getHttpServer()).get("/files/shr_file").expect(404)
+    expect(drive.resolvePublicShareAccess).not.toHaveBeenCalled()
     expect(drive.createDownloadUrlForShare).not.toHaveBeenCalled()
   })
 
@@ -643,7 +733,7 @@ describe("DriveController", () => {
     const response = await request(app!.getHttpServer()).get("/files/shr_file/download?password=stale").expect(302)
 
     expect(response.headers.location).toBe("/files/shr_file/download")
-    expect(drive.createDownloadUrlForShare).not.toHaveBeenCalled()
+    expect(drive.createDownloadUrlForShareBrowserItem).not.toHaveBeenCalled()
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: "stale",
@@ -663,7 +753,7 @@ describe("DriveController", () => {
     expect(response.text).toContain("drive-password-shell")
   })
 
-  it("renders public folder children and redirects public file downloads", async () => {
+  it("redirects canonical and legacy public file downloads", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
       value: {
@@ -673,40 +763,74 @@ describe("DriveController", () => {
         storageKey: null,
       },
     })
-    drive.listPublicFolderChildren.mockResolvedValue({
-      item: createDriveItem({ id: "folder-1", name: "交接材料", type: "folder" }),
-      children: [{
-        id: "file-1",
-        type: "file",
-        name: "brief.txt",
-        size: "11",
-        updatedAt: "2026-06-07T08:15:00.000Z",
-      }],
-    })
-    drive.createDownloadUrlForShare.mockResolvedValue({ url: "https://cos.example/download" })
-    drive.createDownloadUrlForShareChild.mockResolvedValue({ url: "https://cos.example/child-download" })
+    drive.createDownloadUrlForShareBrowserItem.mockResolvedValueOnce({ url: "https://cos.example/download" })
+    drive.createDownloadUrlForShareBrowserItem.mockResolvedValueOnce({ url: "https://cos.example/child-download" })
+    drive.createDownloadUrlForShareBrowserItem.mockResolvedValueOnce({ url: "https://cos.example/legacy-child-download" })
 
-    const folder = await request(app!.getHttpServer()).get("/files/shr_folder").expect(200)
-    expect(folder.text).toContain("drive-share-shell")
-    expect(folder.text).toContain("全部文件")
-    expect(folder.text).toContain("交接材料")
-    expect(folder.text).toContain("drive-share-list")
-    expect(folder.text).not.toContain("搜索云盘内文件")
-    expect(folder.text).not.toContain("公开分享")
-    expect(folder.text).not.toContain("下载全部")
-    expect(folder.text).not.toContain("drive-share-grid")
-    expect(folder.text).toContain("brief.txt")
-    expect(folder.text).toContain("2026/06/07 16:15")
-    expect(folder.text).toContain("./shr_folder/file-1/download")
-    expect(drive.listPublicFolderChildren).toHaveBeenCalledWith({ shareId: "shr_folder", cookie: undefined, password: undefined })
     const download = await request(app!.getHttpServer()).get("/files/shr_folder/download").expect(302)
     expect(download.headers.location).toBe("https://cos.example/download")
-    expect(drive.createDownloadUrlForShare).toHaveBeenCalledWith({ shareId: "shr_folder", cookie: undefined, password: undefined })
-    const childDownload = await request(app!.getHttpServer()).get("/files/shr_folder/file-1/download").expect(302)
+    expect(drive.createDownloadUrlForShareBrowserItem).toHaveBeenCalledWith({ shareId: "shr_folder", cookie: undefined, password: undefined })
+    const childDownload = await request(app!.getHttpServer()).get("/files/shr_folder/items/file-1/download").expect(302)
     expect(childDownload.headers.location).toBe("https://cos.example/child-download")
-    expect(drive.createDownloadUrlForShareChild).toHaveBeenCalledWith({ shareId: "shr_folder", itemId: "file-1", cookie: undefined, password: undefined })
+    expect(drive.createDownloadUrlForShareBrowserItem).toHaveBeenCalledWith({ shareId: "shr_folder", itemId: "file-1", cookie: undefined, password: undefined })
+    const legacyChildDownload = await request(app!.getHttpServer()).get("/files/shr_folder/file-1/download").expect(302)
+    expect(legacyChildDownload.headers.location).toBe("https://cos.example/legacy-child-download")
+    expect(drive.createDownloadUrlForShareBrowserItem).toHaveBeenCalledWith({ shareId: "shr_folder", itemId: "file-1", cookie: undefined, password: undefined })
+  })
+
+  it("streams public child folder zip archives", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        type: "folder",
+        item: createDriveItem({ id: "folder-1", name: "交接材料", type: "folder" }),
+        ownerId: "user-1",
+        storageKey: null,
+      },
+    })
+    drive.createFolderZipEntriesForShareBrowserItem.mockResolvedValue([{ path: "brief.txt", url: "https://cos.example/brief.txt" }])
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("brief")))
+
+    const response = await request(app!.getHttpServer()).get("/files/shr_folder/items/folder-2/zip").expect(200)
+
+    expect(response.headers["content-type"]).toContain("application/zip")
+    expect(drive.createFolderZipEntriesForShareBrowserItem).toHaveBeenCalledWith({
+      shareId: "shr_folder",
+      itemId: "folder-2",
+      cookie: undefined,
+      password: undefined,
+    })
   })
 })
+
+function createBrowserSnapshot(): DriveBrowserSnapshotDto {
+  return {
+    context: "share",
+    surface: "standalone",
+    current: {
+      id: "file-1",
+      name: "brief.txt",
+      type: "file",
+      size: "11",
+      mimeType: "text/plain",
+      updatedAt: "2026-06-09T00:00:00.000Z",
+      previewKind: "text",
+      browserUrl: "/files/shr_file",
+      downloadUrl: "/files/shr_file/download",
+    },
+    breadcrumbs: [{ id: "file-1", name: "brief.txt", browserUrl: "/files/shr_file" }],
+    children: [],
+    preview: {
+      kind: "text",
+      text: "brief",
+      truncated: false,
+      imageUrl: null,
+      visitUrl: null,
+    },
+    canDownload: true,
+    canZip: false,
+  }
+}
 
 function createPublication(input: Partial<DrivePublicationDto> = {}): DrivePublicationDto {
   return {
@@ -738,7 +862,6 @@ function createDriveItem(input: Partial<DriveItemDto> = {}): DriveItemDto {
     size: "11",
     mimeType: "text/plain",
     storageStatus: "active",
-    uploadStatus: "completed",
     shared: false,
     createdAt: "2026-06-09T00:00:00.000Z",
     updatedAt: "2026-06-09T00:00:00.000Z",
