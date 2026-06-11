@@ -223,6 +223,10 @@ function migrationService(ctx: IpcHandlerContext): KnowledgeBaseStorageMigration
   return ctx.resolve<KnowledgeBaseStorageMigrationService>("knowledge-base.storage-migration-service")
 }
 
+function trackRawMutation<T>(run: () => Promise<T>): Promise<T> {
+  return knowledgeBaseSourceManagerWindowService.trackMutation(run)
+}
+
 function ipcErrorMeta(error: unknown): Record<string, unknown> {
   return {
     errorName: error instanceof Error ? error.name : typeof error,
@@ -473,7 +477,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
         filePaths: request.filePaths,
         readSource: "knowledgeBase.uploadRawFiles.read",
         writeSource: "knowledgeBase.uploadRawFiles",
-        run: () => service(ctx).uploadRawFiles(request),
+        run: () => trackRawMutation(() => service(ctx).uploadRawFiles(request)),
       }),
     },
     uploadRawItems: {
@@ -487,7 +491,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
         filePaths: request.itemPaths,
         readSource: "knowledgeBase.uploadRawItems.read",
         writeSource: "knowledgeBase.uploadRawItems",
-        run: () => service(ctx).uploadRawItems(request),
+        run: () => trackRawMutation(() => service(ctx).uploadRawItems(request)),
       }),
     },
     createRawFolder: {
@@ -504,7 +508,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
           rawNewName: request.name,
           rawTargetDirectoryPath: request.parentDirectoryPath,
         }),
-        run: () => service(ctx).createRawFolder(request),
+        run: () => trackRawMutation(() => service(ctx).createRawFolder(request)),
       }),
     },
     renameRawEntry: {
@@ -521,7 +525,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
           rawNewName: request.newName,
           rawRelativePaths: [request.relativePath],
         }),
-        run: () => service(ctx).renameRawEntry(request),
+        run: () => trackRawMutation(() => service(ctx).renameRawEntry(request)),
       }),
     },
     moveRawEntries: {
@@ -538,7 +542,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
           rawRelativePaths: request.relativePaths,
           rawTargetDirectoryPath: request.targetDirectoryPath,
         }),
-        run: () => service(ctx).moveRawEntries(request),
+        run: () => trackRawMutation(() => service(ctx).moveRawEntries(request)),
       }),
     },
     trashRawEntries: {
@@ -554,7 +558,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
         auditMetadata: rawMutationAuditMetadata({
           rawRelativePaths: request.relativePaths,
         }),
-        run: () => service(ctx).trashRawEntries(request),
+        run: () => trackRawMutation(() => service(ctx).trashRawEntries(request)),
       }),
     },
     addUrlSource: {
@@ -574,7 +578,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
           action: "fs.write",
           resource: `managed-knowledge-base:${request.projectId}`,
           source: "knowledgeBase.addUrlSource",
-          run: () => service(ctx).addUrlSource(request),
+          run: () => trackRawMutation(() => service(ctx).addUrlSource(request)),
         })
       },
     },
@@ -599,11 +603,11 @@ export const knowledgeBaseIpcModule: IpcModule = {
           filePaths: result.filePaths,
           readSource: "knowledgeBase.selectAndUploadRawFiles.read",
           writeSource: "knowledgeBase.selectAndUploadRawFiles",
-          run: () => service(ctx).uploadRawFiles({
+          run: () => trackRawMutation(() => service(ctx).uploadRawFiles({
             projectId: request.projectId,
             targetDirectoryPath: request.targetDirectoryPath,
             filePaths: result.filePaths,
-          }),
+          })),
         })
       },
     },
@@ -626,11 +630,11 @@ export const knowledgeBaseIpcModule: IpcModule = {
           filePaths: itemPaths,
           readSource: "knowledgeBase.selectAndUploadRawDirectory.read",
           writeSource: "knowledgeBase.selectAndUploadRawDirectory",
-          run: () => service(ctx).uploadRawItems({
+          run: () => trackRawMutation(() => service(ctx).uploadRawItems({
             projectId: request.projectId,
             targetDirectoryPath: request.targetDirectoryPath,
             itemPaths,
-          }),
+          })),
         })
       },
     },

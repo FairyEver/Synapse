@@ -23,10 +23,11 @@
  * T1.7 adds repo.* + ui.tray.
  */
 
-import { app, safeStorage } from "electron"
+import { app, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
+import { statfs } from "node:fs/promises"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
@@ -44,6 +45,11 @@ import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
+import {
+  KnowledgeBaseStorageMigrationService,
+  type KnowledgeBaseStorageMigrationState,
+} from "../services/knowledge-base/storage-migration-service"
+import { knowledgeBaseSourceManagerWindowService } from "../services/knowledge-base/source-manager-window-service"
 import { runBuiltinTool } from "../services/builtin-tools/runner"
 import { toolWindowService, type ToolWindowService } from "../services/tools/tool-window-service"
 import { initDatabase, shutdownDatabase } from "../database"
@@ -134,6 +140,9 @@ import type { WorkflowRunResult, WorkflowRunStatus, ValidationError } from "../.
 import { agentTimeoutMinsToMs, DEFAULT_AGENT_TIMEOUT_MINS } from "../../workflow-nodes/agent-timeout"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
+
+const knowledgeBaseMigrationLogger = createMainLogger("bootstrap.knowledge-base-storage-migration")
+const knowledgeBaseMigrationSubscriptions = new WeakMap<KnowledgeBaseStorageMigrationService, () => void>()
 
 type ProcessEnvironmentService = {
   readonly nodeRuntimeBinPath?: string
@@ -240,6 +249,72 @@ export const coreKnowledgeBaseDescriptor: ServiceDescriptor<KnowledgeBaseService
   create() {
     return new KnowledgeBaseService()
   },
+}
+
+export const coreKnowledgeBaseStorageMigrationDescriptor: ServiceDescriptor<KnowledgeBaseStorageMigrationService> = {
+  id: "knowledge-base.storage-migration-service",
+  criticality: "degraded",
+  dependsOn: ["core.event-bus", "core.project-containers"],
+  create(ctx) {
+    return new KnowledgeBaseStorageMigrationService({
+      userDataPath: app.getPath("userData"),
+      loadConfig: () => configStore.load(),
+      updateConfig: (patch) => configStore.update(patch),
+      trashItem: (targetPath) => shell.trashItem(targetPath),
+      journalPath: path.join(app.getPath("userData"), "knowledge-base-storage-migration.json"),
+      sourceManager: knowledgeBaseSourceManagerWindowService,
+      hasActiveKnowledgeBaseSession: async () => hasActiveKnowledgeBaseSession(ctx.registry.get<ProjectContainerRegistry>("core.project-containers")),
+      getAvailableBytes: async (targetRoot) => {
+        const stats = await statfs(targetRoot)
+        return stats.bavail * stats.bsize
+      },
+    })
+  },
+  async start(instance, ctx) {
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
+    const unsubscribe = instance.subscribe((state) => {
+      eventBus.emit({
+        domain: "knowledge-base",
+        type: "knowledge-base.storageMigrationChanged",
+        payload: storageMigrationEventPayload(state),
+        timestamp: new Date().toISOString(),
+      }, { backpressure: "coalesce", coalesceWindowMs: 16 })
+    })
+    knowledgeBaseMigrationSubscriptions.set(instance, unsubscribe)
+    await instance.recoverIfNeeded()
+  },
+  stop(instance) {
+    knowledgeBaseMigrationSubscriptions.get(instance)?.()
+    knowledgeBaseMigrationSubscriptions.delete(instance)
+  },
+}
+
+function hasActiveKnowledgeBaseSession(containers: ProjectContainerRegistry): boolean {
+  return containers.list().some(({ projectId }) => {
+    try {
+      const container = containers.peek(projectId)
+      return container?.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID).hasActiveKnowledgeBaseSession() ?? false
+    } catch (error) {
+      knowledgeBaseMigrationLogger.warn("Failed to inspect project agent runtime during Knowledge Base storage migration check.", {
+        projectId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  })
+}
+
+function storageMigrationEventPayload(state: KnowledgeBaseStorageMigrationState) {
+  return {
+    active: state.active,
+    phase: state.phase,
+    cancellable: state.cancellable,
+    copiedBytes: state.progress.copiedBytes,
+    totalBytes: state.progress.totalBytes,
+    message: state.message,
+    ...(state.warningCode ? { warningCode: state.warningCode } : {}),
+    ...(state.errorMessage ? { errorMessage: state.errorMessage } : {}),
+  }
 }
 
 export const coreToolsWindowDescriptor: ServiceDescriptor<ToolWindowService> = {

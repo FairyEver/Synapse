@@ -10,6 +10,7 @@ import type { EventBus } from "../runtime/event-bus"
 import type { IpcHandlerContext } from "../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { WindowManager } from "../runtime/window"
+import type { KnowledgeBaseStorageMigrationService } from "../services/knowledge-base/storage-migration-service"
 import { createAccountExternalUrlOpener } from "./account-external-opener"
 import { attachActivateHandler } from "./app-events"
 import { attachBeforeQuitHandler } from "./before-quit"
@@ -108,9 +109,21 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     }
   })
 
+  let knowledgeBaseStorageMigration: KnowledgeBaseStorageMigrationService | undefined
+  try {
+    knowledgeBaseStorageMigration = registry.get<KnowledgeBaseStorageMigrationService>(
+      "knowledge-base.storage-migration-service",
+    )
+  } catch (error) {
+    logger.warn("Knowledge Base storage migration quit gate unavailable.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+  }
+
   attachBeforeQuitHandler({
     state: deps.mainWindowState,
     registry,
+    knowledgeBaseStorageMigration,
     setAllowQuit: deps.setAllowAppQuit,
     isAllowedToQuit: deps.isAppQuitting,
   })

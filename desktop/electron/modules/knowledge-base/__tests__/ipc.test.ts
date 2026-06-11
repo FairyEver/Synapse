@@ -37,6 +37,7 @@ const electronMock = vi.hoisted(() => ({
 
 const sourceManagerWindowServiceMock = vi.hoisted(() => ({
   open: vi.fn(),
+  trackMutation: vi.fn((run: () => Promise<unknown>) => run()),
 }))
 
 vi.mock("electron", () => ({

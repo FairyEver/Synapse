@@ -97,6 +97,7 @@ interface CommandExecutionRunner {
 export interface AgentRuntimeServiceDeps {
   readonly projectId: string
   readonly workDir?: string
+  readonly managedKnowledgeBase?: boolean
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly providerService: ProviderService
   readonly createSession?: AgentLiveSessionFactory
@@ -279,6 +280,15 @@ export class AgentRuntimeService {
     name: string,
   ): Promise<AgentRuntimeTurnResult> {
     return this.conversationRouter.sendNewSession(message, name)
+  }
+
+  hasActiveKnowledgeBaseSession(): boolean {
+    if (this.deps.managedKnowledgeBase !== true) {
+      return false
+    }
+    return Array.from(this.states.values()).some((state) =>
+      state.busy || state.activeTurns > 0 || state.queue.length > 0
+    )
   }
 
   async sendSideSessionWithTimeout(

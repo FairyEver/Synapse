@@ -173,6 +173,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
+        managedKnowledgeBase: isManagedKnowledgeBase,
         validateWorkspacePath: validateWorkspaceDirectory,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),

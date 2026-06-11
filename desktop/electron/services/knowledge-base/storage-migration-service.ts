@@ -122,6 +122,10 @@ export class KnowledgeBaseStorageMigrationService {
     return this.state.active
   }
 
+  focusDialog(): void {
+    this.emitState({})
+  }
+
   async cancelMigration(): Promise<void> {
     if (!this.state.active) return
     if (!this.state.cancellable || this.nonCancellable) {
