@@ -1,9 +1,31 @@
 import { app } from "electron"
 import os from "node:os"
 import path from "node:path"
-import type { SynapseProjectConfig } from "../../../src/types/config"
+import type { SynapseKnowledgeBaseStorageConfig, SynapseProjectConfig } from "../../../src/types/config"
+import { resolveKnowledgeBasesDirectory } from "./storage-root"
 
 const RUNTIME_ID_PATTERN = /^[A-Za-z0-9_-]+$/
+
+type ManagedPathResolveOptions =
+  | string
+  | {
+    userDataPath?: string
+    storage?: SynapseKnowledgeBaseStorageConfig
+  }
+
+function normalizeManagedPathResolveOptions(options?: ManagedPathResolveOptions): {
+  userDataPath: string
+  storage: SynapseKnowledgeBaseStorageConfig
+} {
+  if (typeof options === "string") {
+    return { userDataPath: options, storage: { mode: "default" } }
+  }
+
+  return {
+    userDataPath: options?.userDataPath ?? defaultKnowledgeBaseUserDataPath(),
+    storage: options?.storage ?? { mode: "default" },
+  }
+}
 
 export function knowledgeBaseVirtualPath(runtimeId: string): string {
   return `synapse-kb://${runtimeId}`
@@ -18,21 +40,21 @@ export function isManagedKnowledgeBaseProject(project: SynapseProjectConfig | nu
 
 export function resolveManagedKnowledgeBasePath(
   project: SynapseProjectConfig,
-  userDataPath = defaultKnowledgeBaseUserDataPath(),
+  options?: ManagedPathResolveOptions,
 ): string {
   const runtimeId = project.capabilities?.knowledgeBase?.runtimeId
   if (!runtimeId || !RUNTIME_ID_PATTERN.test(runtimeId)) {
     throw new Error("Invalid managed knowledge base runtime id.")
   }
-  return path.join(userDataPath, "knowledge-bases", runtimeId)
+  return path.join(resolveKnowledgeBasesDirectory(normalizeManagedPathResolveOptions(options)), runtimeId)
 }
 
 export function resolveProjectWorkspacePath(
   project: SynapseProjectConfig,
-  userDataPath?: string,
+  options?: ManagedPathResolveOptions,
 ): string {
   return isManagedKnowledgeBaseProject(project)
-    ? resolveManagedKnowledgeBasePath(project, userDataPath ?? defaultKnowledgeBaseUserDataPath())
+    ? resolveManagedKnowledgeBasePath(project, options ?? { userDataPath: defaultKnowledgeBaseUserDataPath() })
     : project.path
 }
 
