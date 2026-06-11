@@ -227,11 +227,18 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })
 
-  it("routes public drive shares through nginx instead of dashboard redirects", () => {
+  it("serves drive browser pages from the console bundle and proxies direct file responses", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
+    expect(nginx).toContain("location ~ ^/drive/items/[^/]+/(download|zip|render)$")
+    expect(nginx).toContain("location ~ ^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$")
+    expect(nginx).toContain("location ~ ^/files/[^/]+/(download|zip)$")
+    expect(nginx).toContain("location ~ ^/files/[^/]+/items/[^/]+/(download|zip)$")
+    expect(nginx).toContain("location ~ ^/files/[^/]+/[^/]+/download$")
+    expect(nginx).toContain("location /drive/items/")
     expect(nginx).toContain("location /files/")
-    expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+    expect(nginx).toContain("alias /app/dashboard/dist/;")
+    expect(nginx).toContain("try_files $uri $uri/ /console/index.html;")
   })
 
   it("routes public drive publication pages and sites through nginx instead of dashboard redirects", () => {
@@ -240,6 +247,17 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location /pages/")
     expect(nginx).toContain("location /sites/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
+  it("keeps drive browser pages inside the Vite SPA while proxying direct responses", () => {
+    const viteConfig = readRepoFile("dashboard/vite.config.ts")
+
+    expect(viteConfig).toContain("'^/drive/items/[^/]+/(download|zip|render)$'")
+    expect(viteConfig).toContain("'^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$'")
+    expect(viteConfig).toContain("'^/files/[^/]+/(download|zip)$'")
+    expect(viteConfig).toContain("'^/files/[^/]+/items/[^/]+/(download|zip)$'")
+    expect(viteConfig).toContain("'^/files/[^/]+/[^/]+/download$'")
+    expect(viteConfig).not.toContain("'/files':")
   })
 
   it("serves the console bundle and redirects legacy dashboard paths", () => {

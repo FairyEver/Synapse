@@ -28,7 +28,23 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '/files': {
+      '^/drive/items/[^/]+/(download|zip|render)$': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '^/files/[^/]+/(download|zip)$': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '^/files/[^/]+/items/[^/]+/(download|zip)$': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '^/files/[^/]+/[^/]+/download$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
