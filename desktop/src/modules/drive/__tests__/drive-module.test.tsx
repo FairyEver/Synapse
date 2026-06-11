@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   disableDrivePublication: vi.fn(),
   disableDriveShare: vi.fn(),
   filePathForDroppedFile: vi.fn(),
+  getDriveItemPreviewUrl: vi.fn(),
   getDriveDeleteImpact: vi.fn(),
   listDrivePublications: vi.fn(),
   listDriveItems: vi.fn(),
@@ -97,6 +98,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       disableDrivePublication: mocks.disableDrivePublication,
       disableDriveShare: mocks.disableDriveShare,
       filePathForDroppedFile: mocks.filePathForDroppedFile,
+      getDriveItemPreviewUrl: mocks.getDriveItemPreviewUrl,
       getDriveDeleteImpact: mocks.getDriveDeleteImpact,
       listDrivePublications: mocks.listDrivePublications,
       listDriveItems: mocks.listDriveItems,
@@ -135,6 +137,7 @@ beforeEach(() => {
   mocks.disableDrivePublication.mockResolvedValue({ ok: true })
   mocks.disableDriveShare.mockResolvedValue({ ok: true })
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
+  mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
   mocks.getDriveDeleteImpact.mockResolvedValue({ publications: [] })
   mocks.listDrivePublications.mockResolvedValue([])
   mocks.listDriveItems.mockResolvedValue([])
@@ -824,6 +827,56 @@ describe("DriveModule", () => {
 
     await clickButtonText("复制密码")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
+  })
+
+  it("opens a file preview from the row action", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(getButton("预览").querySelector("svg")).toBeNull()
+
+    await clickButtonText("预览")
+
+    expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/drive/items/file-1")
+  })
+
+  it("opens a folder preview without entering the desktop folder row", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "nested-1", name: "nested.txt", type: "file", parentId: "folder-1" }),
+      ])
+    mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/folder-1" })
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("预览")
+
+    expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: "folder-1" })
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/drive/items/folder-1")
+    expect(document.body.textContent).toContain("site")
+    expect(document.body.textContent).not.toContain("nested.txt")
+  })
+
+  it("shows a toast when opening a row preview fails", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    mocks.getDriveItemPreviewUrl.mockRejectedValue(new Error("preview url failed"))
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("预览")
+
+    expect(mocks.openExternal).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith("打开失败")
   })
 
   it("closes the access settings dialog before waiting for clipboard copy", async () => {

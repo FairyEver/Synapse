@@ -327,6 +327,7 @@ const IPC_CHANNELS = {
     "uploadDriveLocalItems": "synapse:account:drive:uploads:local-items",
     "cancelDriveUpload": "synapse:account:drive:uploads:cancel",
     "createDriveFolder": "synapse:account:drive:folders:create",
+    "getDriveItemPreviewUrl": "synapse:account:drive:items:preview-url",
     "renameDriveItem": "synapse:account:drive:items:rename",
     "moveDriveItem": "synapse:account:drive:items:move",
     "deleteDriveItem": "synapse:account:drive:items:delete",
@@ -600,6 +601,7 @@ const synapseBridge: SynapseBridge = {
     filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
     cancelDriveUpload: invoke(IPC_CHANNELS.account.cancelDriveUpload),
     createDriveFolder: invoke(IPC_CHANNELS.account.createDriveFolder),
+    getDriveItemPreviewUrl: invoke(IPC_CHANNELS.account.getDriveItemPreviewUrl),
     renameDriveItem: invoke(IPC_CHANNELS.account.renameDriveItem),
     moveDriveItem: invoke(IPC_CHANNELS.account.moveDriveItem),
     deleteDriveItem: invoke(IPC_CHANNELS.account.deleteDriveItem),
@@ -1069,7 +1071,9 @@ const synapseBridge: SynapseBridge = {
   },
   usageAnalysis: {
     cc: {
-      refresh: invoke(IPC_CHANNELS["usage-analysis"].ccRefresh),
+      refresh: (input) => input
+        ? invoke(IPC_CHANNELS["usage-analysis"].ccRefresh)(input)
+        : invoke(IPC_CHANNELS["usage-analysis"].ccRefresh)(),
       getOverview: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccOverview)(range),
       getTime: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccTime)(range),
       getModels: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccModels)(range),
@@ -1086,7 +1090,9 @@ const synapseBridge: SynapseBridge = {
       openConversationWindow: (request) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationWindowOpen)(request),
     },
     codex: {
-      refresh: invoke(IPC_CHANNELS["usage-analysis"].codexRefresh),
+      refresh: (input) => input
+        ? invoke(IPC_CHANNELS["usage-analysis"].codexRefresh)(input)
+        : invoke(IPC_CHANNELS["usage-analysis"].codexRefresh)(),
       getOverview: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexOverview)(range),
       getTime: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexTime)(range),
       getModels: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexModels)(range),

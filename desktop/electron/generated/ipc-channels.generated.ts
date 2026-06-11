@@ -21,6 +21,7 @@ export const IPC_CHANNELS = {
     "uploadDriveLocalItems": "synapse:account:drive:uploads:local-items",
     "cancelDriveUpload": "synapse:account:drive:uploads:cancel",
     "createDriveFolder": "synapse:account:drive:folders:create",
+    "getDriveItemPreviewUrl": "synapse:account:drive:items:preview-url",
     "renameDriveItem": "synapse:account:drive:items:rename",
     "moveDriveItem": "synapse:account:drive:items:move",
     "deleteDriveItem": "synapse:account:drive:items:delete",

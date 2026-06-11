@@ -41,6 +41,8 @@ const CODEX_USAGE_VIEWS: readonly UsageViewOption[] = [
 
 export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
   const views = props.views ?? BASE_USAGE_VIEWS
+  const refreshLabel = props.view === "today" ? "刷新今日" : "刷新"
+  const refreshingLabel = props.view === "today" ? "刷新今日中" : "刷新中"
 
   return (
     <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-surface">
@@ -68,7 +70,7 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
             onClick={props.onRefresh}
           >
             <RefreshCw data-icon="inline-start" className={props.refreshing ? "animate-spin" : undefined} />
-            {props.refreshing ? "刷新中" : "刷新"}
+            {props.refreshing ? refreshingLabel : refreshLabel}
           </Button>
         </div>
       </div>

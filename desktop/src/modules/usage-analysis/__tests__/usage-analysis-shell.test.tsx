@@ -39,7 +39,7 @@ describe("UsageAnalysisShell", () => {
 
     expect(html).not.toContain("7 天")
     expect(html).not.toContain("90 天")
-    expect(html).toContain("刷新")
+    expect(html).toContain("刷新今日")
   })
 
   it("shows the historical range picker on overview", () => {
@@ -119,6 +119,24 @@ describe("UsageAnalysisShell", () => {
     expect(html).toContain("aria-busy=\"true\"")
     expect(html).toContain("animate-spin")
     expect(html).toContain("刷新中")
+  })
+
+  it("shows today-specific loading refresh text on today", () => {
+    const html = renderToStaticMarkup(
+      <UsageAnalysisShell
+        title="CC"
+        view="today"
+        range="30d"
+        refreshing
+        onViewChange={() => undefined}
+        onRangeChange={() => undefined}
+        onRefresh={() => undefined}
+      >
+        <div>content</div>
+      </UsageAnalysisShell>,
+    )
+
+    expect(html).toContain("刷新今日中")
   })
 
   it("keeps report padding inside the scroll viewport content", () => {

@@ -38,6 +38,7 @@ vi.mock("../../../services/account-service", () => ({
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 0, failed: 0, skipped: 0 })),
     cancelDriveUpload: async () => ({ ok: true }),
     createDriveFolder: async () => ({}),
+    getDriveItemPreviewUrl: vi.fn(async () => ({ url: "https://synapse.test/drive/items/file-1" })),
     renameDriveItem: async () => ({}),
     moveDriveItem: async () => ({}),
     deleteDriveItem: async () => ({ ok: true }),
@@ -176,6 +177,15 @@ describe("accountIpcModule", () => {
         files: [{ path: "/tmp/bad.txt", relativePath: "../bad.txt" }],
       }],
     })).toThrow()
+  })
+
+  it("returns owner drive item preview URLs", async () => {
+    const handler = accountIpcModule.methods.getDriveItemPreviewUrl.handler
+
+    await expect(handler({} as IpcHandlerContext, { itemId: "file-1" }))
+      .resolves.toEqual({ url: "https://synapse.test/drive/items/file-1" })
+
+    expect(accountService.getDriveItemPreviewUrl).toHaveBeenCalledWith("file-1")
   })
 
   it("guards local drive upload file reads and cloud writes", async () => {

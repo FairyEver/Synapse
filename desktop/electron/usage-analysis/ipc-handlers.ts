@@ -18,7 +18,7 @@ import {
   searchCcConversationTextInWorker,
   searchCcRecordsTextInWorker,
 } from "../services/usage-analysis"
-import type { UsageDetailInput, UsageModelPriceRuleInput, UsageRangeInput } from "../services/usage-analysis"
+import type { UsageDetailInput, UsageModelPriceRuleInput, UsageRangeInput, UsageRefreshInput } from "../services/usage-analysis"
 import { ccConversationWindowService } from "../services/usage-analysis/cc-conversation-window-service"
 import type {
   CcConversationFocus,
@@ -32,6 +32,10 @@ let registered = false
 type UsageRangeIpcPayload = {
   readonly preset?: unknown
   readonly bucket?: unknown
+}
+
+export function normalizeUsageRefreshInput(input: { readonly preset?: unknown } | undefined): UsageRefreshInput | undefined {
+  return input?.preset === "today" ? { preset: "today" } : undefined
 }
 
 export function normalizeUsageRangeForIpc(range: UsageRangeIpcPayload | undefined): UsageRangeInput {
@@ -232,12 +236,14 @@ export function registerUsageAnalysisHandlers(): void {
     roots: codexRoots,
   })
 
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async () => {
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async (_event, input?: UsageRefreshInput) => {
+    const scope = normalizeUsageRefreshInput(input)
     logger.info("Usage Analysis CC refresh requested.", { rootCount: ccRoots.length })
     return refreshUsageInWorker({
       dbPath,
       prefix: "cc",
       roots: ccRoots,
+      scope,
     })
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccOverview, async (_event, range?: UsageRangeInput) => {
@@ -328,10 +334,11 @@ export function registerUsageAnalysisHandlers(): void {
     })
   })
 
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexRefresh, async () => refreshUsageInWorker({
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexRefresh, async (_event, input?: UsageRefreshInput) => refreshUsageInWorker({
     dbPath,
     prefix: "cx",
     roots: codexRoots,
+    scope: normalizeUsageRefreshInput(input),
   }))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexOverview, async (_event, range?: UsageRangeInput) => codex.getOverview(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTime, async (_event, range?: UsageRangeInput) => codex.getTime(normalizeUsageRangeForIpc(range)))

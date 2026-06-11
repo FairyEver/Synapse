@@ -173,6 +173,11 @@ async function withCurrentDrivePublicationUrl<T extends DrivePublicationDto>(ite
   }
 }
 
+async function currentOwnerDriveBrowserUrl(itemId: string): Promise<string> {
+  const { buildOwnerDriveBrowserUrl } = await sharedUrlsPromise
+  return `${publicAppUrl().trim().replace(/\/+$/u, "")}${buildOwnerDriveBrowserUrl(itemId)}`
+}
+
 function isLocalApiBaseUrl(value: string): boolean {
   try {
     const url = new URL(value)
@@ -311,6 +316,10 @@ export class AccountService {
   async listDriveItems(parentId: string | null): Promise<DriveItemDto[]> {
     const query = parentId ? `?parentId=${encodeURIComponent(parentId)}` : ""
     return this.getAuthenticatedJson<DriveItemDto[]>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
+  }
+
+  async getDriveItemPreviewUrl(itemId: string): Promise<{ readonly url: string }> {
+    return { url: await currentOwnerDriveBrowserUrl(itemId) }
   }
 
   async prepareDriveUpload(input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }): Promise<DriveUploadPrepareResult> {

@@ -1,11 +1,12 @@
 import path from "node:path"
 import { Worker } from "node:worker_threads"
-import type { UsageRefreshResult } from "./types"
+import type { UsageRefreshInput, UsageRefreshResult } from "./types"
 
 export interface UsageRefreshWorkerInput {
   readonly dbPath: string
   readonly prefix: "cc" | "cx"
   readonly roots: readonly string[]
+  readonly scope?: UsageRefreshInput
 }
 
 type UsageRefreshWorkerMessage =
@@ -21,16 +22,19 @@ export function refreshUsageInWorker(input: UsageRefreshWorkerInput): Promise<Us
 }
 
 export function runSingleFlightUsageRefresh(input: UsageRefreshWorkerInput, runner: UsageRefreshRunner): Promise<UsageRefreshResult> {
-  const key = `${input.dbPath}\0${input.prefix}`
-  const existing = inFlightRefreshes.get(key)
-  if (existing) return existing
+  const fullKey = usageRefreshSingleFlightKey({ ...input, scope: undefined })
+  const scopedKey = usageRefreshSingleFlightKey(input)
+  const existingFull = inFlightRefreshes.get(fullKey)
+  if (existingFull) return existingFull
+  const existingScoped = inFlightRefreshes.get(scopedKey)
+  if (existingScoped) return existingScoped
 
   const promise = runner(input).finally(() => {
-    if (inFlightRefreshes.get(key) === promise) {
-      inFlightRefreshes.delete(key)
+    if (inFlightRefreshes.get(scopedKey) === promise) {
+      inFlightRefreshes.delete(scopedKey)
     }
   })
-  inFlightRefreshes.set(key, promise)
+  inFlightRefreshes.set(scopedKey, promise)
   return promise
 }
 
@@ -45,6 +49,7 @@ function startUsageRefreshWorker(input: UsageRefreshWorkerInput): Promise<UsageR
         dbPath: input.dbPath,
         prefix: input.prefix,
         roots: [...input.roots],
+        scope: input.scope,
       } satisfies UsageRefreshWorkerInput,
     })
     let settled = false
@@ -68,6 +73,10 @@ function startUsageRefreshWorker(input: UsageRefreshWorkerInput): Promise<UsageR
       reject(new Error(`Usage analysis refresh worker exited with code ${code}`))
     })
   })
+}
+
+function usageRefreshSingleFlightKey(input: UsageRefreshWorkerInput): string {
+  return `${input.dbPath}\0${input.prefix}\0${input.scope?.preset ?? "all"}`
 }
 
 export function resolveUsageRefreshWorkerPath(baseDir: string): string {

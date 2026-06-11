@@ -7,6 +7,10 @@ export interface UsageRangeInput {
   readonly bucket?: UsageTimeBucketGranularity
 }
 
+export interface UsageRefreshInput {
+  readonly preset: "today"
+}
+
 export interface UsageDetailInput extends UsageRangeInput {
   readonly limit?: number
   readonly offset?: number

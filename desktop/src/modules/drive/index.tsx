@@ -407,6 +407,15 @@ function DriveModule() {
     setAccessSettingsTarget({ kind: "share", item })
   }, [])
 
+  const handlePreview = useCallback(async (item: DriveItemDto) => {
+    try {
+      const { url } = await requireSynapseBridge().account.getDriveItemPreviewUrl({ itemId: item.id })
+      await openDriveUrl(url)
+    } catch {
+      toast("打开失败")
+    }
+  }, [])
+
   const handleAccessSettingsConfirm = useCallback(async (settings: DriveAccessSettingsInput) => {
     const target = accessSettingsTarget
     if (!target) return
@@ -563,6 +572,7 @@ function DriveModule() {
         onRename={handleRename}
         onMove={handleMove}
         onDelete={handleDelete}
+        onPreview={handlePreview}
         onShare={handleShare}
         onDisableShare={handleDisableShare}
         onUploadDroppedFiles={handleDroppedFiles}
@@ -1045,6 +1055,7 @@ function DriveFileList({
   onRename,
   onMove,
   onDelete,
+  onPreview,
   onShare,
   onDisableShare,
   onUploadDroppedFiles,
@@ -1068,6 +1079,7 @@ function DriveFileList({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
+  readonly onPreview: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
@@ -1164,6 +1176,7 @@ function DriveFileList({
                   onRename={onRename}
                   onMove={onMove}
                   onDelete={onDelete}
+                  onPreview={onPreview}
                   onShare={onShare}
                   onDisableShare={onDisableShare}
                   publicationActions={publicationActionsByItemId.get(item.id) ?? { page: null, site: null }}
@@ -1196,7 +1209,7 @@ function DriveFileTableHeader() {
         <TableHead className="w-32">状态</TableHead>
         <TableHead className="w-24 text-right">大小</TableHead>
         <TableHead className="w-40 text-right">更新时间</TableHead>
-        <TableHead className="w-36 text-right">操作</TableHead>
+        <TableHead className="w-48 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1288,6 +1301,7 @@ function DriveFileListRow({
   onRename,
   onMove,
   onDelete,
+  onPreview,
   onShare,
   onDisableShare,
   publicationActions,
@@ -1301,6 +1315,7 @@ function DriveFileListRow({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
+  readonly onPreview: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly publicationActions: DriveItemPublicationActions
@@ -1373,6 +1388,9 @@ function DriveFileListRow({
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          <Button type="button" variant="ghost" size="xs" onClick={() => onPreview(item)}>
+            预览
+          </Button>
           <Button type="button" variant="ghost" size="xs" onClick={() => onShare(item)}>
             分享
           </Button>

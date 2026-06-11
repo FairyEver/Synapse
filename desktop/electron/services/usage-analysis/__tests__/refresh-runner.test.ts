@@ -118,4 +118,99 @@ describe("usage analysis refresh runner", () => {
     await expect(second).resolves.toBe(result)
     expect(calls).toBe(1)
   })
+
+  it("coalesces concurrent today-scoped refreshes for the same database namespace", async () => {
+    let calls = 0
+    const input = { dbPath: "/tmp/usage.db", prefix: "cc" as const, roots: ["/tmp/projects"], scope: { preset: "today" as const } }
+    const result = {
+      scannedFiles: 1,
+      parsedFiles: 1,
+      skippedFiles: 0,
+      failedFiles: 0,
+      usageEvents: 1,
+      toolEvents: 0,
+      elapsedMs: 1,
+    }
+    let resolveRefresh: (value: typeof result) => void = () => {
+      throw new Error("Refresh promise was not created")
+    }
+    const runner = async () => {
+      calls += 1
+      return await new Promise<typeof result>((resolve) => {
+        resolveRefresh = resolve
+      })
+    }
+
+    const first = runSingleFlightUsageRefresh(input, runner)
+    const second = runSingleFlightUsageRefresh(input, runner)
+    resolveRefresh(result)
+
+    await expect(first).resolves.toBe(result)
+    await expect(second).resolves.toBe(result)
+    expect(calls).toBe(1)
+  })
+
+  it("reuses an in-flight full refresh for today-scoped refreshes", async () => {
+    let calls = 0
+    const fullInput = { dbPath: "/tmp/usage.db", prefix: "cc" as const, roots: ["/tmp/projects"] }
+    const todayInput = { ...fullInput, scope: { preset: "today" as const } }
+    const result = {
+      scannedFiles: 1,
+      parsedFiles: 1,
+      skippedFiles: 0,
+      failedFiles: 0,
+      usageEvents: 1,
+      toolEvents: 0,
+      elapsedMs: 1,
+    }
+    let resolveRefresh: (value: typeof result) => void = () => {
+      throw new Error("Refresh promise was not created")
+    }
+    const runner = async () => {
+      calls += 1
+      return await new Promise<typeof result>((resolve) => {
+        resolveRefresh = resolve
+      })
+    }
+
+    const full = runSingleFlightUsageRefresh(fullInput, runner)
+    const today = runSingleFlightUsageRefresh(todayInput, runner)
+    resolveRefresh(result)
+
+    await expect(full).resolves.toBe(result)
+    await expect(today).resolves.toBe(result)
+    expect(calls).toBe(1)
+  })
+
+  it("does not satisfy a full refresh with an in-flight today-scoped refresh", async () => {
+    let calls = 0
+    const fullInput = { dbPath: "/tmp/usage.db", prefix: "cc" as const, roots: ["/tmp/projects"] }
+    const todayInput = { ...fullInput, scope: { preset: "today" as const } }
+    const todayResult = {
+      scannedFiles: 1,
+      parsedFiles: 1,
+      skippedFiles: 0,
+      failedFiles: 0,
+      usageEvents: 1,
+      toolEvents: 0,
+      elapsedMs: 1,
+    }
+    const fullResult = { ...todayResult, scannedFiles: 2 }
+    const resolvers: Array<(value: typeof todayResult) => void> = []
+    const runner = async () => {
+      calls += 1
+      return await new Promise<typeof todayResult>((resolve) => {
+        resolvers.push(resolve)
+      })
+    }
+
+    const today = runSingleFlightUsageRefresh(todayInput, runner)
+    const full = runSingleFlightUsageRefresh(fullInput, runner)
+    resolvers[0]?.(todayResult)
+    resolvers[1]?.(fullResult)
+
+    await expect(today).resolves.toBe(todayResult)
+    await expect(full).resolves.toBe(fullResult)
+    expect(calls).toBe(2)
+  })
 })

@@ -6,11 +6,19 @@ import {
   normalizeConversationFocus,
   normalizeConversationListInput,
   normalizeRecordDetailsInput,
+  normalizeUsageRefreshInput,
   normalizeUsageRangeForIpc,
   resolveClaudeUsageRoots,
 } from "../ipc-handlers"
 
 describe("usage analysis ipc handlers", () => {
+  it("normalizes only today refresh input as scoped refresh", () => {
+    expect(normalizeUsageRefreshInput({ preset: "today" })).toEqual({ preset: "today" })
+    expect(normalizeUsageRefreshInput({ preset: "30d" })).toBeUndefined()
+    expect(normalizeUsageRefreshInput({ preset: "all" })).toBeUndefined()
+    expect(normalizeUsageRefreshInput(undefined)).toBeUndefined()
+  })
+
   it("accepts today range preset", () => {
     expect(normalizeUsageRangeForIpc({ preset: "today" })).toEqual({ preset: "today" })
   })

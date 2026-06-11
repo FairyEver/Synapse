@@ -6,6 +6,7 @@ import { CC_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-a
 import { TodayReportView } from "../shared/components/today-report-view"
 import { getUsageRefreshWarning } from "../shared/refresh-result"
 import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
+import type { UsageAnalysisRefreshInput } from "@/types/bridge"
 import { useCcModels, useCcOverview, useCcTime } from "./hooks"
 import { CcModelsPage } from "./pages/models"
 import { CcOverviewPage } from "./pages/overview"
@@ -22,10 +23,12 @@ export function CcUsagePage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (input?: UsageAnalysisRefreshInput) => {
     setRefreshing(true)
     try {
-      const result = await requireSynapseBridge().usageAnalysis.cc.refresh()
+      const result = input
+        ? await requireSynapseBridge().usageAnalysis.cc.refresh(input)
+        : await requireSynapseBridge().usageAnalysis.cc.refresh()
       const warning = getUsageRefreshWarning(result)
       if (warning) showWarning(warning)
       setRefreshKey((current) => current + 1)
@@ -35,8 +38,9 @@ export function CcUsagePage() {
       setRefreshing(false)
     }
   }, [showError, showWarning])
+  const refreshToday = useCallback(() => refresh({ preset: "today" }), [refresh])
 
-  useUsageAutoRefresh("cc", refresh)
+  useUsageAutoRefresh("cc", refreshToday)
 
   return (
     <UsageAnalysisShell
@@ -48,6 +52,10 @@ export function CcUsagePage() {
       onViewChange={setView}
       onRangeChange={setRange}
       onRefresh={() => {
+        if (view === "today") {
+          void refresh({ preset: "today" })
+          return
+        }
         void refresh()
       }}
     >

@@ -1185,6 +1185,14 @@ describe("AccountService", () => {
     ])
   })
 
+  it("builds owner drive item preview URLs from the desktop public app URL", async () => {
+    const { service } = await createTestAccountService()
+
+    expect(await service.getDriveItemPreviewUrl("folder/a b")).toEqual({
+      url: `${expectedPublicAppUrl.replace(/\/+$/u, "")}/drive/items/folder%2Fa%20b`,
+    })
+  })
+
   it("refreshes and retries account webhook list when the access token expires", async () => {
     const calls: string[] = []
     const { namespace, service } = await createTestAccountService({

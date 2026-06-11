@@ -3,12 +3,13 @@ import { parentPort, workerData } from "node:worker_threads"
 import { CcUsageAnalysisService, runWithUsageDatabaseLockRetry } from "./cc-service"
 import { CodexUsageAnalysisService } from "./codex-service"
 import { initUsageAnalysisSchema } from "./db-schema"
-import type { UsageRefreshResult } from "./types"
+import type { UsageRefreshInput, UsageRefreshResult } from "./types"
 
 interface UsageRefreshWorkerInput {
   readonly dbPath: string
   readonly prefix: "cc" | "cx"
   readonly roots: readonly string[]
+  readonly scope?: UsageRefreshInput
 }
 
 function asRefreshWorkerInput(value: unknown): UsageRefreshWorkerInput {
@@ -20,6 +21,7 @@ function asRefreshWorkerInput(value: unknown): UsageRefreshWorkerInput {
     dbPath: input.dbPath,
     prefix: input.prefix,
     roots: input.roots.filter((root): root is string => typeof root === "string"),
+    scope: input.scope?.preset === "today" ? { preset: "today" } : undefined,
   }
 }
 
@@ -36,7 +38,7 @@ async function runRefresh(): Promise<UsageRefreshResult> {
     const service = input.prefix === "cc"
       ? new CcUsageAnalysisService({ db, roots: [...input.roots] })
       : new CodexUsageAnalysisService({ db, roots: [...input.roots] })
-    return await service.refresh()
+    return await service.refresh(input.scope)
   } finally {
     db.close()
   }

@@ -315,6 +315,52 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM cc_hourly_usage").get()).toEqual({ count: 0 })
   })
 
+  it("keeps historical CC rows when a today-scoped refresh scans only today's files", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-12T12:00:00"))
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const oldFile = path.join(projectDir, "old-session.jsonl")
+    const todayFile = path.join(projectDir, "today-session.jsonl")
+    fs.writeFileSync(oldFile, JSON.stringify({
+      type: "assistant",
+      sessionId: "old-session",
+      timestamp: "2026-06-11T01:00:01.000Z",
+      message: {
+        id: "old-msg",
+        role: "assistant",
+        model: "claude-opus-4.6",
+        usage: { input_tokens: 100, output_tokens: 20 },
+      },
+    }))
+    fs.writeFileSync(todayFile, JSON.stringify({
+      type: "assistant",
+      sessionId: "today-session",
+      timestamp: "2026-06-12T01:00:01.000Z",
+      message: {
+        id: "today-msg",
+        role: "assistant",
+        model: "claude-opus-4.6",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    }))
+    const todayStartMs = new Date("2026-06-12T00:00:00").getTime()
+    fs.utimesSync(oldFile, new Date(todayStartMs - 60_000), new Date(todayStartMs - 60_000))
+    fs.utimesSync(todayFile, new Date(todayStartMs + 60_000), new Date(todayStartMs + 60_000))
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+    await service.refresh()
+
+    const refresh = await service.refresh({ preset: "today" })
+
+    expect(refresh.scannedFiles).toBe(1)
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_scan_files WHERE file_path = ?").get(oldFile)).toEqual({ count: 1 })
+    expect(service.getOverview({ preset: "all" }).totals.tokens).toBe(135)
+  })
+
   it("removes Codex usage rows for source files deleted before refresh", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

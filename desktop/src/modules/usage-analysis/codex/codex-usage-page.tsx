@@ -6,6 +6,7 @@ import { CODEX_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usag
 import { TodayReportView } from "../shared/components/today-report-view"
 import { getUsageRefreshWarning } from "../shared/refresh-result"
 import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
+import type { UsageAnalysisRefreshInput } from "@/types/bridge"
 import { useCodexModels, useCodexOverview, useCodexTime } from "./hooks"
 import { CodexDetailsPage } from "./pages/details"
 import { CodexModelsPage } from "./pages/models"
@@ -22,10 +23,12 @@ export function CodexUsagePage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (input?: UsageAnalysisRefreshInput) => {
     setRefreshing(true)
     try {
-      const result = await requireSynapseBridge().usageAnalysis.codex.refresh()
+      const result = input
+        ? await requireSynapseBridge().usageAnalysis.codex.refresh(input)
+        : await requireSynapseBridge().usageAnalysis.codex.refresh()
       const warning = getUsageRefreshWarning(result)
       if (warning) showWarning(warning)
       setRefreshKey((current) => current + 1)
@@ -35,8 +38,9 @@ export function CodexUsagePage() {
       setRefreshing(false)
     }
   }, [showError, showWarning])
+  const refreshToday = useCallback(() => refresh({ preset: "today" }), [refresh])
 
-  useUsageAutoRefresh("codex", refresh)
+  useUsageAutoRefresh("codex", refreshToday)
 
   return (
     <UsageAnalysisShell
@@ -48,6 +52,10 @@ export function CodexUsagePage() {
       onViewChange={setView}
       onRangeChange={setRange}
       onRefresh={() => {
+        if (view === "today") {
+          void refresh({ preset: "today" })
+          return
+        }
         void refresh()
       }}
     >

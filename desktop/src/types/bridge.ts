@@ -691,13 +691,17 @@ export type UsageAnalysisOverviewReport = {
 }
 
 export type UsageAnalysisBridgeDomain = {
-  refresh: () => Promise<UsageAnalysisRefreshResult>
+  refresh: (input?: UsageAnalysisRefreshInput) => Promise<UsageAnalysisRefreshResult>
   getOverview: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisOverviewReport>
   getTime: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisTimeBucket[]>
   getModels: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisModelRow[]>
   getProjects: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisProjectRow[]>
   getTools: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisToolRow[]>
   getDetails: (range: UsageAnalysisDetailInput) => Promise<UsageAnalysisDetailRow[]>
+}
+
+export type UsageAnalysisRefreshInput = {
+  readonly preset: "today"
 }
 
 export type ClaudeCodeUsageAnalysisBridgeDomain = UsageAnalysisBridgeDomain & {
@@ -733,6 +737,7 @@ export type SynapseBridge = {
     filePathForDroppedFile: (file: File) => string | null
     cancelDriveUpload: (input: { sessionId: string }) => Promise<{ ok: true }>
     createDriveFolder: (input: { parentId?: string | null; name: string }) => Promise<DriveItemDto>
+    getDriveItemPreviewUrl: (input: { itemId: string }) => Promise<{ url: string }>
     renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
     moveDriveItem: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
     deleteDriveItem: (input: { itemId: string; disablePublications?: boolean }) => Promise<{ ok: true }>

@@ -212,6 +212,7 @@ const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optio
 const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
 const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
 const driveItemIdSchema = z.object({ itemId: z.string() })
+const drivePreviewUrlSchema = z.object({ url: z.string().url() })
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean(),
   expiresIn: z.enum(["7d", "30d", "1y", "forever"]),
@@ -433,6 +434,13 @@ export const accountIpcModule: IpcModule = {
       request: driveFolderCreateSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => accountService.createDriveFolder(driveFolderCreateSchema.parse(input)),
+    },
+    getDriveItemPreviewUrl: {
+      kind: "invoke",
+      channel: "synapse:account:drive:items:preview-url",
+      request: driveItemIdSchema,
+      response: drivePreviewUrlSchema,
+      handler: async (_ctx, input) => accountService.getDriveItemPreviewUrl(driveItemIdSchema.parse(input).itemId),
     },
     renameDriveItem: {
       kind: "invoke",
