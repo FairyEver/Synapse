@@ -1,16 +1,17 @@
 # Drive File Browser Console Routes Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to execute this plan.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the Drive file browser承接页 and route normalization in one scoped change: `/console/` replaces `/dashboard/` as the canonical Web console, `/api/console/*` replaces `/api/dashboard/*` with compatibility aliases, owners can browse and preview their own Drive files at `/drive/items/:itemId`, shared resources use the same browser at `/files/:shareId`, and published pages/sites continue to render directly at `/pages/*` and `/sites/*`.
+**Goal:** Ship the Drive file browser承接页 and route normalization in one scoped change: `/console/` replaces `/dashboard/` as the canonical Web console, `/api/console/*` replaces `/api/dashboard/*` with compatibility aliases, owners can browse and preview their own Drive files at `/drive/items/:rootItemId`, console users get a `网盘` sidebar entry backed by the same Drive data, shared resources use the same browser at `/files/:shareId`, and published pages/sites continue to render directly at `/pages/*` and `/sites/*`.
 
-**Architecture:** Reuse the dashboard React bundle for three public browser contexts:
+**Architecture:** Reuse the dashboard React bundle for four browser surfaces:
 
 - `/console/*`: authenticated console SPA.
-- `/drive/items/*`: owner file browser routes, served by the same SPA but backed by authenticated Drive browser APIs.
+- `/console/drive*`: authenticated user Drive page inside the console shell, with management actions around the shared browser/preview core.
+- `/drive/items/*`: owner standalone file browser routes, served by the same SPA but backed by authenticated Drive browser APIs.
 - `/files/*`: shared file browser routes, served by the same SPA but backed by public share browser APIs and password access state.
 
-The reusable FileBrowser component is context-driven. It receives a browser snapshot from the API and never knows whether access came from an owner session or a share token except through explicit capability flags. Publish rendering stays outside this component.
+The reusable FileBrowser component is context-driven. It receives a browser snapshot from the API and never knows whether access came from an owner session, console surface, or share token except through explicit context and capability flags. Publish rendering stays outside this component.
 
 **Tech Stack:** NestJS, Prisma, React 19, TanStack Router, TanStack Query, shadcn/Radix UI, Tailwind utilities, Vitest.
 
@@ -57,15 +58,33 @@ Console API:
 Owner Drive browser:
 
 ```text
-GET /drive/items/:itemId
-GET /drive/items/:itemId/download
-GET /drive/items/:itemId/zip
-GET /drive/items/:itemId/render
+GET /drive/items/:rootItemId
+GET /drive/items/:rootItemId/download
+GET /drive/items/:rootItemId/zip
+GET /drive/items/:rootItemId/render
+GET /drive/items/:rootItemId/items/:browserItemId
+GET /drive/items/:rootItemId/items/:browserItemId/download
+GET /drive/items/:rootItemId/items/:browserItemId/zip
+GET /drive/items/:rootItemId/items/:browserItemId/render
 ```
 
-- `/drive/items/:itemId` is the owner browser page.
+- `/drive/items/:rootItemId` is the owner standalone browser root page.
+- `/drive/items/:rootItemId/items/:browserItemId` opens a child item under that root.
 - Download, zip, and HTML render routes stay server responses.
-- `/drive/items/:itemId/render` is owner-only and HTML-only.
+- Owner render routes are owner-only and HTML-only.
+
+Console Drive browser:
+
+```text
+GET /console/drive
+GET /console/drive/items/:rootItemId
+GET /console/drive/items/:rootItemId/items/:browserItemId
+```
+
+- `/console/drive` is the logged-in user's virtual Drive root.
+- Console routes use the same FileBrowser and PreviewRenderer but render inside the authenticated console layout.
+- The user sidebar label is `网盘`.
+- The existing admin-only Drive management page must not conflict with the user `网盘` route; migrate it to an admin route such as `/admin-drive` and label it `云盘管理`.
 
 Share Drive browser:
 
@@ -75,11 +94,21 @@ GET /files/:shareId/download
 GET /files/:shareId/zip
 GET /files/:shareId/items/:browserItemId
 GET /files/:shareId/items/:browserItemId/download
+GET /files/:shareId/items/:browserItemId/zip
 ```
 
 - `/files/:shareId` is the share root browser page.
 - `/files/:shareId/items/:browserItemId` opens a child item inside the shared tree.
 - Share browser never exposes the owner-only HTML `访问` action.
+
+Down-drill rule:
+
+```text
+context root URL
+context root URL + /items/:browserItemId
+```
+
+Owner, share, and console all follow this rule. Only the context root differs.
 
 Publish:
 
@@ -107,6 +136,8 @@ dashboard/src/lib/api.test.ts
 dashboard/src/lib/dashboard-redirect.ts
 dashboard/src/lib/dashboard-redirect.test.ts
 dashboard/src/lib/dashboard-sign-out.test.ts
+dashboard/src/components/layout/data/sidebar-data.ts
+dashboard/src/components/layout/data/sidebar-data.test.ts
 server/nginx.conf
 server/src/admin-auth/admin-auth.controller.ts
 server/src/dashboard/dashboard.controller.ts
@@ -140,10 +171,16 @@ server/src/drive/drive.service.spec.ts
 Dashboard FileBrowser UI:
 
 ```text
-dashboard/src/routes/drive/items/$itemId.tsx
+dashboard/src/routes/_authenticated/admin-drive/index.tsx
+dashboard/src/routes/_authenticated/drive/index.tsx
+dashboard/src/routes/drive/items/$rootItemId.tsx
+dashboard/src/routes/drive/items/$rootItemId/items/$browserItemId.tsx
+dashboard/src/routes/_authenticated/drive/items/$rootItemId.tsx
+dashboard/src/routes/_authenticated/drive/items/$rootItemId/items/$browserItemId.tsx
 dashboard/src/routes/files/$shareId.tsx
 dashboard/src/routes/files/$shareId/items/$browserItemId.tsx
 dashboard/src/features/drive-browser/index.tsx
+dashboard/src/features/drive-browser/drive-console-page.tsx
 dashboard/src/features/drive-browser/file-browser-page.tsx
 dashboard/src/features/drive-browser/file-browser-table.tsx
 dashboard/src/features/drive-browser/file-preview-panel.tsx
@@ -169,6 +206,7 @@ Checklist:
 - [ ] Move dashboard API client to `/api/console`.
 - [ ] Add server `/api/console` aliases.
 - [ ] Redirect `/dashboard*` to `/console*`.
+- [ ] Reserve `/console/drive` for the user `网盘` page and move the admin Drive page out of that route.
 - [ ] Update generated links and redirect normalization.
 - [ ] Run Phase 1 focused tests.
 - [ ] Commit Phase 1.
@@ -184,7 +222,7 @@ Modify `dashboard/vite.config.ts`:
 - Change Vite `base` from `/dashboard/` to `/console/`.
 - Keep `/api`, `/webhooks`, `/pages`, and `/sites` proxies.
 - Replace the broad `/files` proxy with explicit download/zip proxies after Phase 5, because `/files/:shareId` becomes an SPA route.
-- Add explicit `/drive/.../download`, `/drive/.../zip`, and `/drive/.../render` proxies after Phase 5, because `/drive/items/:itemId` becomes an SPA route.
+- Add explicit `/drive/.../download`, `/drive/.../zip`, and `/drive/.../render` proxies after Phase 5, because `/drive/items/:rootItemId` and `/drive/items/:rootItemId/items/:browserItemId` become SPA routes.
 
 Modify `dashboard/src/main.tsx`:
 
@@ -317,10 +355,26 @@ Expected:
 - New invite URLs use `/console/team-invite?...`.
 - Old `/dashboard/team-invite?...` remains reachable through Nginx redirect.
 
+### Task 1.6: Reserve `/console/drive` for user Drive
+
+Modify dashboard route files:
+
+- Move current admin-only route from `dashboard/src/routes/_authenticated/drive/index.tsx` to `dashboard/src/routes/_authenticated/admin-drive/index.tsx`.
+- Keep the page implementation in `dashboard/src/features/drive/index.tsx`.
+- Change the admin route label in `dashboard/src/components/layout/data/sidebar-data.ts` from `云盘` to `云盘管理`.
+- Change the admin route URL from `/drive` to `/admin-drive`.
+
+Modify `dashboard/src/components/layout/data/sidebar-data.test.ts`:
+
+- Admin sidebar contains `/admin-drive` and label `云盘管理`.
+- User sidebar does not contain `/admin-drive`.
+
+`/console/drive` becomes the user Drive browser route in Phase 6. Phase 1 only moves the admin page so the route name is available.
+
 Commit after Phase 1:
 
 ```bash
-git add dashboard/package.json dashboard/vite.config.ts dashboard/src/main.tsx dashboard/src/lib/api.ts dashboard/src/lib/api.test.ts dashboard/src/lib/dashboard-redirect.ts dashboard/src/lib/dashboard-redirect.test.ts dashboard/src/lib/dashboard-sign-out.test.ts server/nginx.conf server/src/admin-auth/admin-auth.controller.ts server/src/dashboard/dashboard.controller.ts server/src/live/live.controller.ts server/src/webhooks/webhook.controller.ts server/src/deploy-config.spec.ts server/src/invitations/invitation-url.spec.ts server/src/invitations/invitations.service.spec.ts server/src/admin/admin.service.spec.ts server/src/admin/admin.controller.spec.ts server/README.md
+git add dashboard/package.json dashboard/vite.config.ts dashboard/src/main.tsx dashboard/src/lib/api.ts dashboard/src/lib/api.test.ts dashboard/src/lib/dashboard-redirect.ts dashboard/src/lib/dashboard-redirect.test.ts dashboard/src/lib/dashboard-sign-out.test.ts dashboard/src/components/layout/data/sidebar-data.ts dashboard/src/components/layout/data/sidebar-data.test.ts dashboard/src/routes/_authenticated/drive/index.tsx dashboard/src/routes/_authenticated/admin-drive/index.tsx server/nginx.conf server/src/admin-auth/admin-auth.controller.ts server/src/dashboard/dashboard.controller.ts server/src/live/live.controller.ts server/src/webhooks/webhook.controller.ts server/src/deploy-config.spec.ts server/src/invitations/invitation-url.spec.ts server/src/invitations/invitations.service.spec.ts server/src/admin/admin.service.spec.ts server/src/admin/admin.controller.spec.ts server/README.md
 git commit -m "feat(console): rename dashboard routes to console"
 ```
 
@@ -332,7 +386,7 @@ Checklist:
 
 - [ ] Add owner/share browser path constants.
 - [ ] Add Drive browser DTO types.
-- [ ] Add owner/share URL builders.
+- [ ] Add owner/share/console URL builders with root/current item support.
 - [ ] Extend Drive route masking tests.
 - [ ] Commit Phase 2.
 
@@ -342,6 +396,7 @@ Modify `shared/src/drive.ts`:
 
 ```ts
 export const DRIVE_OWNER_BROWSER_PATH_PREFIX = "/drive/items"
+export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/console/drive"
 export const DRIVE_SHARE_BROWSER_PATH_PREFIX = "/files"
 ```
 
@@ -361,6 +416,7 @@ Add to `shared/src/drive.ts`:
 
 ```ts
 export type DriveBrowserAccessContext = "owner" | "share"
+export type DriveBrowserSurface = "standalone" | "console"
 
 export type DriveBrowserPreviewKind =
   | "image"
@@ -396,6 +452,7 @@ export interface DriveBrowserPreviewDto {
 
 export interface DriveBrowserSnapshotDto {
   readonly context: DriveBrowserAccessContext
+  readonly surface: DriveBrowserSurface
   readonly current: DriveBrowserItemDto
   readonly breadcrumbs: readonly DriveBrowserBreadcrumbDto[]
   readonly children: readonly DriveBrowserItemDto[]
@@ -421,25 +478,38 @@ Capability meaning:
 Add pure helpers:
 
 ```ts
-export function buildOwnerDriveBrowserUrl(itemId: string): string
-export function buildOwnerDriveDownloadUrl(itemId: string): string
-export function buildOwnerDriveZipUrl(itemId: string): string
-export function buildOwnerDriveRenderUrl(itemId: string): string
+export function buildOwnerDriveBrowserUrl(rootItemId: string): string
+export function buildOwnerDriveChildBrowserUrl(rootItemId: string, itemId: string): string
+export function buildOwnerDriveDownloadUrl(rootItemId: string): string
+export function buildOwnerDriveChildDownloadUrl(rootItemId: string, itemId: string): string
+export function buildOwnerDriveZipUrl(rootItemId: string): string
+export function buildOwnerDriveChildZipUrl(rootItemId: string, itemId: string): string
+export function buildOwnerDriveRenderUrl(rootItemId: string): string
+export function buildOwnerDriveChildRenderUrl(rootItemId: string, itemId: string): string
+export function buildConsoleDriveRootUrl(): string
+export function buildConsoleDriveBrowserUrl(rootItemId: string): string
+export function buildConsoleDriveChildBrowserUrl(rootItemId: string, itemId: string): string
 export function buildShareDriveBrowserUrl(shareId: string, itemId?: string | null): string
 export function buildShareDriveDownloadUrl(shareId: string, itemId?: string | null): string
 export function buildShareDriveZipUrl(shareId: string): string
+export function buildShareDriveChildZipUrl(shareId: string, itemId: string): string
 ```
 
 Update masking helpers so logs redact:
 
-- `/drive/items/:itemId`
-- `/drive/items/:itemId/download`
-- `/drive/items/:itemId/render`
+- `/drive/items/:rootItemId`
+- `/drive/items/:rootItemId/download`
+- `/drive/items/:rootItemId/render`
+- `/drive/items/:rootItemId/items/:browserItemId`
+- `/console/drive/items/:rootItemId`
+- `/console/drive/items/:rootItemId/items/:browserItemId`
 - `/files/:shareId/items/:browserItemId`
 
 Add tests in `shared/src/drive.test.ts`:
 
 - Owner browser URL encodes item ids.
+- Owner child URL encodes both root and child ids.
+- Console child URL encodes both root and child ids.
 - Share child URL encodes both share id and item id.
 - Masking redacts owner item ids and share ids while preserving route shape.
 
@@ -458,6 +528,7 @@ Checklist:
 
 - [ ] Create pure Drive browser mapping helper.
 - [ ] Add owner browser service methods.
+- [ ] Add console virtual root browser service method.
 - [ ] Add share browser service methods.
 - [ ] Cover preview classification, ownership, share boundaries, and password behavior with tests.
 - [ ] Commit Phase 3.
@@ -492,6 +563,8 @@ Add tests in `server/src/drive/drive-browser.spec.ts`:
 - Text file name fallback works when MIME type is missing.
 - Archive MIME/name is `download-only`.
 - Owner HTML item includes `visitUrl`; share HTML item does not.
+- Owner child browser URL is built as `/drive/items/:rootItemId/items/:browserItemId`.
+- Console child browser URL is built as `/console/drive/items/:rootItemId/items/:browserItemId`.
 
 ### Task 3.2: Add owner browser service methods
 
@@ -500,16 +573,42 @@ Modify `server/src/drive/drive.service.ts`.
 Add methods:
 
 ```ts
-async getOwnerBrowserSnapshot(userId: string, itemId: string): Promise<DriveBrowserSnapshotDto>
-async createDownloadUrlForOwnerItem(userId: string, itemId: string): Promise<{ readonly url: string; readonly fileName: string }>
-async createFolderZipEntriesForOwner(userId: string, itemId: string): Promise<readonly DriveFolderZipEntry[]>
-async resolveOwnerHtmlRenderAccess(userId: string, itemId: string): Promise<PublishedAssetAccess>
+async getOwnerBrowserSnapshot(input: {
+  readonly userId: string
+  readonly rootItemId: string
+  readonly currentItemId?: string | null
+  readonly surface: "standalone" | "console"
+}): Promise<DriveBrowserSnapshotDto>
+
+async getOwnerConsoleRootBrowserSnapshot(userId: string): Promise<DriveBrowserSnapshotDto>
+
+async createDownloadUrlForOwnerBrowserItem(input: {
+  readonly userId: string
+  readonly rootItemId: string
+  readonly currentItemId?: string | null
+}): Promise<{ readonly url: string; readonly fileName: string }>
+
+async createFolderZipEntriesForOwnerBrowserItem(input: {
+  readonly userId: string
+  readonly rootItemId: string
+  readonly currentItemId?: string | null
+}): Promise<readonly DriveFolderZipEntry[]>
+
+async resolveOwnerHtmlRenderAccess(input: {
+  readonly userId: string
+  readonly rootItemId: string
+  readonly currentItemId?: string | null
+}): Promise<PublishedAssetAccess>
 ```
 
 Implementation notes:
 
 - Use existing `requireOwnedItem`, `isDescendantOf`, storage status checks, and zip helpers.
-- For folders, `getOwnerBrowserSnapshot` lists direct children.
+- For `getOwnerBrowserSnapshot`, `currentItemId` defaults to `rootItemId`.
+- For standalone owner routes, require current item to equal root item or be a descendant of root item.
+- For console item routes, use the same descendant rule with `surface: "console"`.
+- `getOwnerConsoleRootBrowserSnapshot` lists `parentId = null` items and uses a virtual root DTO.
+- For folders, snapshots list direct children.
 - For files, `getOwnerBrowserSnapshot` includes a preview object.
 - Text and HTML source previews use storage stream reads with a strict byte cap.
 - `resolveOwnerHtmlRenderAccess` only succeeds for an active file that passes `isHtmlDriveItem`.
@@ -518,6 +617,8 @@ Tests:
 
 - Owner cannot read another user item.
 - Owner folder snapshot lists children.
+- Owner child folder snapshot requires the child to be under `rootItemId`.
+- Console virtual root snapshot lists current user's root items.
 - Owner file snapshot for HTML returns source preview and a non-null `visitUrl`.
 - Owner unknown file snapshot returns `download-only`.
 
@@ -541,6 +642,13 @@ async createDownloadUrlForShareBrowserItem(input: {
   readonly password?: string | null
   readonly accessCookie?: string | null
 }): Promise<{ readonly url: string; readonly fileName: string }>
+
+async createFolderZipEntriesForShareBrowserItem(input: {
+  readonly shareId: string
+  readonly itemId?: string | null
+  readonly password?: string | null
+  readonly accessCookie?: string | null
+}): Promise<readonly DriveFolderZipEntry[]>
 ```
 
 Implementation notes:
@@ -555,6 +663,7 @@ Tests:
 - Share root file snapshot works.
 - Share root folder snapshot lists direct children.
 - Share child outside shared root is rejected.
+- Share child folder zip uses the same share subtree check.
 - Password-protected share returns the same access error before unlock.
 - Share HTML source preview has `visitUrl: null`.
 
@@ -586,8 +695,16 @@ Modify `server/src/drive/drive.controller.ts` or extract a new controller in the
 @Controller("/api/drive/browser")
 export class DriveBrowserApiController {
   @UseGuards(JwtAuthGuard)
-  @Get("/owner/items/:itemId")
-  getOwnerSnapshot(...)
+  @Get("/owner/root")
+  getOwnerConsoleRootSnapshot(...)
+
+  @UseGuards(JwtAuthGuard)
+  @Get("/owner/items/:rootItemId")
+  getOwnerRootSnapshot(...)
+
+  @UseGuards(JwtAuthGuard)
+  @Get("/owner/items/:rootItemId/items/:itemId")
+  getOwnerChildSnapshot(...)
 
   @Get("/shares/:shareId")
   getShareRootSnapshot(...)
@@ -603,6 +720,8 @@ export class DriveBrowserApiController {
 Behavior:
 
 - Owner route uses `request.user!.id`.
+- Owner console root route returns the virtual root snapshot for `/console/drive`.
+- Owner child route verifies the child is under `rootItemId`.
 - Share routes use password body or the existing access cookie.
 - Password unlock route sets the existing `synapse_drive_access` cookie and returns the browser snapshot.
 - JSON API returns a typed password-required error for the dashboard client to render the password form.
@@ -613,16 +732,28 @@ Add non-API routes:
 
 ```ts
 @UseGuards(JwtAuthGuard)
-@Get("/drive/items/:itemId/download")
+@Get("/drive/items/:rootItemId/download")
 downloadOwnerItem(...)
 
 @UseGuards(JwtAuthGuard)
-@Get("/drive/items/:itemId/zip")
+@Get("/drive/items/:rootItemId/zip")
 downloadOwnerFolderZip(...)
 
 @UseGuards(JwtAuthGuard)
-@Get("/drive/items/:itemId/render")
+@Get("/drive/items/:rootItemId/render")
 renderOwnerHtmlItem(...)
+
+@UseGuards(JwtAuthGuard)
+@Get("/drive/items/:rootItemId/items/:itemId/download")
+downloadOwnerChildItem(...)
+
+@UseGuards(JwtAuthGuard)
+@Get("/drive/items/:rootItemId/items/:itemId/zip")
+downloadOwnerChildFolderZip(...)
+
+@UseGuards(JwtAuthGuard)
+@Get("/drive/items/:rootItemId/items/:itemId/render")
+renderOwnerChildHtmlItem(...)
 ```
 
 Behavior:
@@ -630,6 +761,7 @@ Behavior:
 - File download redirects to storage signed URL.
 - Folder zip streams archive entries.
 - Render only streams owner-owned HTML files.
+- Child direct routes validate `itemId` under `rootItemId` before download, zip, or render.
 - Render uses HTML content type and the existing security headers pattern from publish rendering where applicable.
 
 ### Task 4.3: Update share direct response routes
@@ -640,13 +772,16 @@ Modify current share routes:
 - Replace `GET /files/:shareId/:itemId/download` with canonical `GET /files/:shareId/items/:itemId/download`.
 - Keep the old `GET /files/:shareId/:itemId/download` as compatibility redirect or alias during migration.
 - Keep `GET /files/:shareId/zip`.
+- Add `GET /files/:shareId/items/:itemId/zip` for child folders.
 - Remove server-rendered share file/folder HTML for `GET /files/:shareId`; this path will be served by the dashboard bundle through Nginx/Vite.
 
 Tests:
 
 - Owner direct download rejects unauthenticated users.
 - Owner direct render rejects non-HTML files.
+- Owner child direct routes reject items outside `rootItemId`.
 - Share child download canonical route works.
+- Share child zip canonical route works.
 - Legacy share child download route still works or redirects.
 - Publish `/pages/:publishId` and `/sites/:publishId/*` behavior remains unchanged.
 
@@ -679,11 +814,15 @@ location ~ ^/drive/items/[^/]+/(download|zip|render)$ {
   proxy_pass http://127.0.0.1:3001;
 }
 
+location ~ ^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$ {
+  proxy_pass http://127.0.0.1:3001;
+}
+
 location ~ ^/files/[^/]+/(download|zip)$ {
   proxy_pass http://127.0.0.1:3001;
 }
 
-location ~ ^/files/[^/]+/items/[^/]+/download$ {
+location ~ ^/files/[^/]+/items/[^/]+/(download|zip)$ {
   proxy_pass http://127.0.0.1:3001;
 }
 ```
@@ -702,7 +841,7 @@ location /files/ {
 }
 ```
 
-Keep `/pages/` and `/sites/` proxying to the server.
+`/console/drive*` is already covered by `/console/` static hosting. Keep `/pages/` and `/sites/` proxying to the server.
 
 Update `server/src/deploy-config.spec.ts`:
 
@@ -721,11 +860,15 @@ Proxy only direct response paths:
   target: "http://localhost:3001",
   changeOrigin: true,
 },
+"^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$": {
+  target: "http://localhost:3001",
+  changeOrigin: true,
+},
 "^/files/[^/]+/(download|zip)$": {
   target: "http://localhost:3001",
   changeOrigin: true,
 },
-"^/files/[^/]+/items/[^/]+/download$": {
+"^/files/[^/]+/items/[^/]+/(download|zip)$": {
   target: "http://localhost:3001",
   changeOrigin: true,
 },
@@ -733,7 +876,7 @@ Proxy only direct response paths:
 
 Expected:
 
-- `/files/:shareId` and `/drive/items/:itemId` are handled by Vite SPA fallback in development.
+- `/files/:shareId`, `/files/:shareId/items/:browserItemId`, `/drive/items/:rootItemId`, and `/drive/items/:rootItemId/items/:browserItemId` are handled by Vite SPA fallback in development.
 - Download/render links still hit the Nest server.
 
 Commit after Phase 5:
@@ -750,7 +893,8 @@ git commit -m "feat(drive): serve browser pages from dashboard app"
 Checklist:
 
 - [ ] Add centralized Drive browser API client methods.
-- [ ] Add owner and share public route files.
+- [ ] Add owner, share, and console route files.
+- [ ] Add user sidebar `网盘` entry.
 - [ ] Implement `useDriveBrowser`.
 - [ ] Implement FileBrowser layout.
 - [ ] Keep management actions out of browser pages.
@@ -765,8 +909,16 @@ Add exported methods without introducing component-local `fetch`:
 
 ```ts
 export const driveBrowserApi = {
-  getOwnerItem: (itemId: string) =>
-    request<DriveBrowserSnapshotDto>(`/api/drive/browser/owner/items/${encodeURIComponent(itemId)}`),
+  getOwnerRoot: (rootItemId: string) =>
+    request<DriveBrowserSnapshotDto>(`/api/drive/browser/owner/items/${encodeURIComponent(rootItemId)}`),
+
+  getOwnerChild: (rootItemId: string, itemId: string) =>
+    request<DriveBrowserSnapshotDto>(
+      `/api/drive/browser/owner/items/${encodeURIComponent(rootItemId)}/items/${encodeURIComponent(itemId)}`
+    ),
+
+  getConsoleRoot: () =>
+    request<DriveBrowserSnapshotDto>('/api/drive/browser/owner/root'),
 
   getShareRoot: (shareId: string) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
@@ -788,7 +940,9 @@ export const driveBrowserApi = {
 
 Add tests:
 
-- Owner API uses `/api/drive/browser/owner/items/:itemId`.
+- Owner root API uses `/api/drive/browser/owner/items/:rootItemId`.
+- Owner child API encodes both root and child ids.
+- Console root API uses `/api/drive/browser/owner/root`.
 - Share child API encodes both ids.
 - Unlock sends POST JSON.
 
@@ -797,7 +951,11 @@ Add tests:
 Add route files:
 
 ```text
-dashboard/src/routes/drive/items/$itemId.tsx
+dashboard/src/routes/drive/items/$rootItemId.tsx
+dashboard/src/routes/drive/items/$rootItemId/items/$browserItemId.tsx
+dashboard/src/routes/_authenticated/drive/index.tsx
+dashboard/src/routes/_authenticated/drive/items/$rootItemId.tsx
+dashboard/src/routes/_authenticated/drive/items/$rootItemId/items/$browserItemId.tsx
 dashboard/src/routes/files/$shareId.tsx
 dashboard/src/routes/files/$shareId/items/$browserItemId.tsx
 ```
@@ -805,7 +963,11 @@ dashboard/src/routes/files/$shareId/items/$browserItemId.tsx
 Each route should render `DriveBrowserPage` with explicit context:
 
 ```tsx
-<DriveBrowserPage context="owner" itemId={itemId} />
+<DriveBrowserPage context="owner" surface="standalone" rootItemId={rootItemId} />
+<DriveBrowserPage context="owner" surface="standalone" rootItemId={rootItemId} itemId={browserItemId} />
+<DriveConsolePage />
+<DriveBrowserPage context="owner" surface="console" rootItemId={rootItemId} />
+<DriveBrowserPage context="owner" surface="console" rootItemId={rootItemId} itemId={browserItemId} />
 <DriveBrowserPage context="share" shareId={shareId} />
 <DriveBrowserPage context="share" shareId={shareId} itemId={browserItemId} />
 ```
@@ -818,7 +980,7 @@ Create `dashboard/src/features/drive-browser/use-drive-browser.ts`.
 
 Responsibilities:
 
-- Choose owner/share query function from context.
+- Choose owner/share/console query function from context, surface, root item, and current item.
 - Surface states:
   - `loading`
   - `error`
@@ -827,7 +989,34 @@ Responsibilities:
 - Expose `unlock(password)` mutation for share password form.
 - Never include share/publish management actions.
 
-### Task 6.4: Implement FileBrowser layout
+### Task 6.4: Add console Drive shell and sidebar entry
+
+Create `dashboard/src/features/drive-browser/drive-console-page.tsx`.
+
+Responsibilities:
+
+- Render inside authenticated console layout through `_authenticated/drive`.
+- Use `DriveBrowserPage` for the browser and preview body.
+- Allow management actions only outside FileBrowser. Initial implementation may include the already available browse/download behavior and leave upload/share/publish wiring to existing management modules if those APIs are not yet exposed in dashboard.
+- Do not duplicate PreviewRenderer logic.
+
+Modify `dashboard/src/components/layout/data/sidebar-data.ts`:
+
+```ts
+{
+  title: '网盘',
+  url: '/drive',
+  icon: HardDrive,
+}
+```
+
+Modify `dashboard/src/components/layout/data/sidebar-data.test.ts`:
+
+- User sidebar contains `/drive` with label `网盘`.
+- Admin sidebar still contains `/admin-drive` with label `云盘管理`.
+- User sidebar does not contain `/admin-drive`.
+
+### Task 6.5: Implement FileBrowser layout
 
 Create the UI files under `dashboard/src/features/drive-browser/`.
 
@@ -875,11 +1064,12 @@ Rules:
 - Download-only: preview panel shows a short necessary message and a download button.
 - Owner HTML source with `preview.visitUrl`: show a button with text `访问`.
 - Share HTML source: no `访问` button.
+- Console owner HTML source follows owner capability rules and can show `访问`.
 - Empty folder text: `暂无文件`.
 - Loading text: `加载中...`.
 - Error text: use the returned API message.
 
-### Task 6.5: Keep management actions out of browser pages
+### Task 6.6: Keep management actions out of browser pages
 
 Do not import or render these management actions in `drive-browser`:
 
@@ -900,18 +1090,22 @@ The FileBrowser allowed actions are only:
 - zip folder
 - owner-only HTML `访问`
 
+Console shell management actions are outside FileBrowser. If upload/share/publish controls are added in the console shell, they must consume the same selected/current item state from the browser snapshot instead of duplicating folder navigation or preview logic.
+
 Tests:
 
 - Owner HTML page renders `访问`.
+- Console owner HTML page renders `访问`.
 - Share HTML page does not render `访问`.
 - Download-only file renders download action.
 - Folder renders child rows.
+- Owner child route and share child route generate the same root + `/items/:browserItemId` navigation pattern.
 - Password-required share renders password form and unlock calls the API.
 
 Commit after Phase 6:
 
 ```bash
-git add dashboard/src/lib/api.ts dashboard/src/lib/api.test.ts dashboard/src/routes/drive/items dashboard/src/routes/files dashboard/src/features/drive-browser dashboard/src/routeTree.gen.ts
+git add dashboard/src/lib/api.ts dashboard/src/lib/api.test.ts dashboard/src/components/layout/data/sidebar-data.ts dashboard/src/components/layout/data/sidebar-data.test.ts dashboard/src/routes/drive/items dashboard/src/routes/files dashboard/src/routes/_authenticated/drive dashboard/src/features/drive-browser dashboard/src/routeTree.gen.ts
 git commit -m "feat(drive): add reusable file browser UI"
 ```
 
@@ -934,6 +1128,7 @@ Add user-facing bullets:
 
 ```md
 - 云盘文件现在可以直接打开承接页预览，用户无需先创建分享链接即可浏览自己的文件夹、查看图片和文本内容，并下载不支持预览的文件。
+- Web 控制台新增 `网盘` 入口，用户可以在控制台中浏览自己的云盘内容。
 - 分享链接统一使用新的文件浏览器体验；发布网页和发布站点仍保持直接打开网页效果。
 - Web 管理入口从 `/dashboard/` 规范为 `/console/`，旧链接会跳转到新入口。
 ```
@@ -965,8 +1160,12 @@ Open in the in-app browser:
 
 ```text
 http://localhost:3000/console/
+http://localhost:3000/console/drive
+http://localhost:3000/console/drive/items/<owned-folder-id>/items/<child-item-id>
 http://localhost:3000/drive/items/<owned-item-id>
+http://localhost:3000/drive/items/<owned-folder-id>/items/<child-item-id>
 http://localhost:3000/files/<share-id>
+http://localhost:3000/files/<share-id>/items/<child-item-id>
 http://localhost:3000/pages/<publish-id>
 http://localhost:3000/sites/<publish-id>/
 ```
@@ -974,9 +1173,12 @@ http://localhost:3000/sites/<publish-id>/
 Verify:
 
 - `/dashboard/drive` redirects to `/console/drive`.
-- `/console/drive` still shows the management page.
-- `/drive/items/:itemId` shows browser/download only.
+- `/console/drive` shows the user `网盘` page.
+- Admin global Drive management is available at the migrated admin route.
+- `/drive/items/:rootItemId` shows browser/download only.
+- `/drive/items/:rootItemId/items/:browserItemId` and `/files/:shareId/items/:browserItemId` use the same down-drill pattern.
 - Owner HTML source shows `访问`.
+- Console owner HTML source shows `访问`.
 - Share HTML source does not show `访问`.
 - `/pages/:publishId` directly renders the published page.
 - `/sites/:publishId/` directly renders the published site.
@@ -1007,5 +1209,7 @@ Acceptable final state:
 - `/console/` is the canonical Web console route.
 - `/api/console/*` is canonical and `/api/dashboard/*` still works.
 - Owner and share file browser pages use the same React component.
+- Console `网盘` uses the same FileBrowser and PreviewRenderer as standalone owner and share pages.
+- Owner, console, and share down-drill URLs use the context root + `/items/:browserItemId` model.
 - FileBrowser has no share/publish/delete/rename/move management actions.
 - Published pages/sites still render directly.
