@@ -1,0 +1,4 @@
+interface:
+  display_name: "百炼价格更新"
+  short_description: "从阿里云百炼官方页面更新 Synapse 模型价格预设。"
+  default_prompt: "从百炼更新价格"

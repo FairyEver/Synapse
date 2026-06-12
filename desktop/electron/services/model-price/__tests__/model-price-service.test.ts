@@ -323,6 +323,26 @@ describe("model price service", () => {
 
     expect(bailian?.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        modelPattern: "qwen-plus",
+        inputPer1M: 4.8,
+        outputPer1M: 48,
+        cacheReadPer1M: 0.48,
+        cacheWritePer1M: 6,
+        reasoningPer1M: 64,
+      }),
+      expect.objectContaining({
+        modelPattern: "qwen-turbo",
+        inputPer1M: 0.3,
+        outputPer1M: 0.6,
+        cacheReadPer1M: 0.06,
+        reasoningPer1M: 3,
+      }),
+      expect.objectContaining({
+        modelPattern: "qwen-long",
+        inputPer1M: 0.5,
+        outputPer1M: 2,
+      }),
+      expect.objectContaining({
         modelPattern: "qwen3.7-max",
         inputPer1M: 12,
         outputPer1M: 36,
@@ -340,15 +360,26 @@ describe("model price service", () => {
         modelPattern: "deepseek-v4-pro",
         inputPer1M: 12,
         outputPer1M: 24,
-        cacheReadPer1M: 1.2,
-        cacheWritePer1M: 15,
+        cacheReadPer1M: 1,
       }),
       expect.objectContaining({
         modelPattern: "MiniMax/MiniMax-M3",
         inputPer1M: 4.2,
         outputPer1M: 16.8,
+        cacheReadPer1M: 0.84,
+      }),
+      expect.objectContaining({
+        modelPattern: "MiniMax-M2.5",
+        inputPer1M: 2.1,
+        outputPer1M: 8.4,
         cacheReadPer1M: 0.42,
-        cacheWritePer1M: 5.25,
+      }),
+      expect.objectContaining({
+        modelPattern: "kimi-k2.6",
+        inputPer1M: 6.5,
+        outputPer1M: 27,
+        cacheReadPer1M: 0.65,
+        cacheWritePer1M: 8.125,
       }),
       expect.objectContaining({
         modelPattern: "kimi-k2-thinking",
@@ -369,6 +400,13 @@ describe("model price service", () => {
         cacheReadPer1M: 1.1,
       }),
       expect.objectContaining({
+        modelPattern: "glm-5.1",
+        inputPer1M: 8,
+        outputPer1M: 28,
+        cacheReadPer1M: 0.8,
+        cacheWritePer1M: 10,
+      }),
+      expect.objectContaining({
         modelPattern: "glm-5",
         inputPer1M: 6,
         outputPer1M: 22,
@@ -379,6 +417,18 @@ describe("model price service", () => {
         inputPer1M: 6,
         outputPer1M: 22,
         cacheReadPer1M: 1.5,
+      }),
+      expect.objectContaining({
+        modelPattern: "xiaomi/mimo-v2.5-pro",
+        inputPer1M: 14,
+        outputPer1M: 42,
+        cacheReadPer1M: 2.8,
+      }),
+      expect.objectContaining({
+        modelPattern: "stepfun/step-3.7-flash",
+        inputPer1M: 1.35,
+        outputPer1M: 8.1,
+        cacheReadPer1M: 0.27,
       }),
     ]))
   })
@@ -467,8 +517,8 @@ describe("model price service", () => {
     expect(rule).toMatchObject({
       inputPer1M: 12,
       outputPer1M: 24,
-      cacheReadPer1M: 1.2,
-      cacheWritePer1M: 15,
+      cacheReadPer1M: 1,
+      cacheWritePer1M: 0,
       reasoningPer1M: 24,
       source: "builtin",
     })
