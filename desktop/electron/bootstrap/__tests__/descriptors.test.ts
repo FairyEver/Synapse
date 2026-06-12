@@ -27,6 +27,15 @@ vi.mock("electron-updater", () => ({
   },
   CancellationToken: class {},
 }))
+vi.mock("@synapse/shared", () => ({}), { virtual: true })
+const deploymentConfigModule = {
+  SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG: {
+    apiBaseUrl: "https://api.example.test",
+    publicAppUrl: "https://app.example.test",
+  },
+}
+vi.mock("../generated/deployment-config.generated", () => deploymentConfigModule, { virtual: true })
+vi.mock("../../generated/deployment-config.generated", () => deploymentConfigModule, { virtual: true })
 const tmpUserData = "/tmp/synapse-test-userdata-" + Date.now()
 const bootstrapImportTimeoutMs = process.platform === "win32" ? 120_000 : 15_000
 vi.mock("electron", () => {
@@ -290,6 +299,101 @@ describe("bootstrap descriptors (T1.5)", () => {
 
     expect(result.status).toBe("failed")
     expect(containers.open).not.toHaveBeenCalled()
+  })
+
+  it("coreWorkflowEngineDescriptor resolves repository workspace paths for Codex nodes", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Repo", localPath: "/repo-path" }],
+          global: { projects: [] },
+        })),
+      },
+    }))
+
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create({
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return { open: vi.fn() }
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    } as never) as unknown as {
+      runtimeDeps: {
+        resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
+      }
+    }
+
+    await expect(engine.runtimeDeps.resolveProjectWorkspacePath?.("repo-1")).resolves.toBe("/repo-path")
+  })
+
+  it("coreWorkflowEngineDescriptor resolves global project workspace paths for Codex nodes", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [],
+          global: {
+            projects: [{ id: "project-1", name: "Project One", path: "/global-project-path" }],
+          },
+        })),
+      },
+    }))
+
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create({
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return { open: vi.fn() }
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    } as never) as unknown as {
+      runtimeDeps: {
+        resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
+      }
+    }
+
+    await expect(engine.runtimeDeps.resolveProjectWorkspacePath?.("project-1")).resolves.toBe("/global-project-path")
+  })
+
+  it("coreWorkflowEngineDescriptor returns null when the Codex project cannot be resolved", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [],
+          global: { projects: [] },
+        })),
+      },
+    }))
+
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create({
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return { open: vi.fn() }
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    } as never) as unknown as {
+      runtimeDeps: {
+        resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
+      }
+    }
+
+    await expect(engine.runtimeDeps.resolveProjectWorkspacePath?.("missing-project")).resolves.toBeNull()
   })
 
   it("coreWorkflowEngineDescriptor injects workflow call runtime dependency", async () => {
