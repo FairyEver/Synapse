@@ -228,6 +228,24 @@ describe('driveBrowserApi', () => {
       })
     )
   })
+
+  it('passes share password query when loading public browser snapshots', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveBrowserApi.getShareRoot('shr/id', 'CtekZGNr')
+    await driveBrowserApi.getShareItem('shr/id', 'child/id', 'CtekZGNr')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/drive/browser/shares/shr%2Fid?password=CtekZGNr',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid?password=CtekZGNr',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
 })
 
 describe('dashboardApi auth expiration compatibility', () => {

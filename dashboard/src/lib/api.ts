@@ -688,6 +688,11 @@ function driveBrowserSurfaceSuffix(surface: DriveBrowserSurface = 'standalone') 
   return surface === 'console' ? '?surface=console' : ''
 }
 
+function driveBrowserPasswordSuffix(password?: string) {
+  if (!password) return ''
+  return `?password=${encodeURIComponent(password)}`
+}
+
 export const driveBrowserApi = {
   getOwnerRoot: (
     rootItemId: string,
@@ -706,13 +711,13 @@ export const driveBrowserApi = {
     ),
   getConsoleRoot: () =>
     request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root`),
-  getShareRoot: (shareId: string) =>
+  getShareRoot: (shareId: string, password?: string) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}`
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${driveBrowserPasswordSuffix(password)}`
     ),
-  getShareItem: (shareId: string, itemId: string) =>
+  getShareItem: (shareId: string, itemId: string, password?: string) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}`
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}${driveBrowserPasswordSuffix(password)}`
     ),
   unlockShare: (shareId: string, password: string) =>
     request<DriveBrowserSnapshotDto>(

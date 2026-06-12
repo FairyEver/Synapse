@@ -43,6 +43,7 @@ export type DriveBrowserPageProps =
       context: 'share'
       shareId: string
       itemId?: string
+      initialPassword?: string
     }
 
 export function DriveBrowserPage(props: DriveBrowserPageProps) {

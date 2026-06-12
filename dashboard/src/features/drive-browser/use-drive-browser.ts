@@ -18,6 +18,7 @@ export type DriveBrowserInput =
       context: 'share'
       shareId: string
       itemId?: string
+      initialPassword?: string
     }
   | {
       context: 'console-root'
@@ -37,7 +38,7 @@ export type DriveBrowserState =
 
 export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const [unlockedSnapshot, setUnlockedSnapshot] = useState<DriveBrowserSnapshotDto | null>(null)
-  const queryKey = useMemo(() => ['drive-browser', input], [input])
+  const queryKey = useMemo(() => ['drive-browser', toDriveBrowserQueryKey(input)], [input])
   const query = useQuery({
     queryKey,
     queryFn: () => loadDriveBrowser(input),
@@ -69,6 +70,16 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   return { status: 'loading' }
 }
 
+function toDriveBrowserQueryKey(input: DriveBrowserInput) {
+  if (input.context !== 'share') return input
+  return {
+    context: input.context,
+    shareId: input.shareId,
+    itemId: input.itemId,
+    hasInitialPassword: Boolean(input.initialPassword),
+  }
+}
+
 async function loadDriveBrowser(input: DriveBrowserInput) {
   if (input.context === 'console-root') return driveBrowserApi.getConsoleRoot()
   if (input.context === 'owner') {
@@ -77,8 +88,8 @@ async function loadDriveBrowser(input: DriveBrowserInput) {
       : driveBrowserApi.getOwnerRoot(input.rootItemId, input.surface)
   }
   return input.itemId
-    ? driveBrowserApi.getShareItem(input.shareId, input.itemId)
-    : driveBrowserApi.getShareRoot(input.shareId)
+    ? driveBrowserApi.getShareItem(input.shareId, input.itemId, input.initialPassword)
+    : driveBrowserApi.getShareRoot(input.shareId, input.initialPassword)
 }
 
 export function isDriveBrowserPasswordRequired(
