@@ -24,9 +24,12 @@ import {
   type DriveAccessSettingsInput,
   type DriveDeleteImpactDto,
   type DriveItemDto,
+  type DriveLocalUploadConflictPolicy,
   type DrivePublicationDto,
   type DriveShareDto,
   type DriveShareListItemDto,
+  type DriveUploadConflict,
+  type DriveUploadConflictInspectEntry,
   type DriveUploadPrepareResult,
 } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
@@ -111,6 +114,12 @@ type DriveAccessSettingsTarget = {
   readonly item: DriveItemDto
 }
 
+type DriveUploadConflictDialogState = {
+  readonly request: DriveLocalUploadRequest
+  readonly skipped: number
+  readonly conflicts: readonly DriveUploadConflict[]
+}
+
 type DriveAccessResultState = Pick<DrivePublicationDto, "url" | "urlWithPassword" | "passwordEnabled" | "password" | "expiresAt">
 type DrivePublicationSuccessState = Pick<DrivePublicationDto, "name" | "type"> & DriveAccessResultState
 type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
@@ -168,6 +177,7 @@ function DriveModule() {
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
+  const [uploadConflict, setUploadConflict] = useState<DriveUploadConflictDialogState | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const prefetchedParentIdRef = useRef<string | null | undefined>(undefined)
@@ -269,6 +279,18 @@ function DriveModule() {
     }
   }, [accountAuthenticated])
 
+  const executeLocalUpload = useCallback(async (
+    request: DriveLocalUploadRequest,
+    skipped: number,
+    conflictPolicy?: DriveLocalUploadConflictPolicy,
+  ) => {
+    const uploadRequest = conflictPolicy ? { ...request, conflictPolicy } : request
+    setUploadItemCount(countDriveLocalUploadItems(request.items))
+    const result = await requireSynapseBridge().account.uploadDriveLocalItems(uploadRequest)
+    toast(uploadResultMessage(withSkipped(result, skipped)))
+    await refreshCurrentItemsAfterUpload()
+  }, [refreshCurrentItemsAfterUpload])
+
   const runLocalUpload = useCallback(async (createRequest: () => Promise<DriveLocalUploadBuildResult>) => {
     if (uploadActionsDisabled) return
     setUploading(true)
@@ -278,17 +300,39 @@ function DriveModule() {
         toast(skipped > 0 ? `已跳过 ${skipped} 个文件` : "没有可上传的文件")
         return
       }
-      setUploadItemCount(countDriveLocalUploadItems(request.items))
-      const result = await requireSynapseBridge().account.uploadDriveLocalItems(request)
-      toast(uploadResultMessage(withSkipped(result, skipped)))
-      await refreshCurrentItemsAfterUpload()
+
+      const conflicts = await inspectDriveLocalUploadConflicts(request)
+      if (conflicts.length > 0) {
+        setUploadConflict({ request, skipped, conflicts })
+        return
+      }
+
+      await executeLocalUpload(request, skipped)
     } catch (rawError) {
       toast(errorMessage(rawError, "上传失败"))
     } finally {
       setUploading(false)
       setUploadItemCount(null)
     }
-  }, [refreshCurrentItemsAfterUpload, uploadActionsDisabled])
+  }, [executeLocalUpload, uploadActionsDisabled])
+
+  const continueUploadWithConflictPolicy = useCallback(async (mode: "replace-all" | "keep-both-all") => {
+    const pending = uploadConflict
+    if (!pending) return
+    setUploadConflict(null)
+    setUploading(true)
+    try {
+      await executeLocalUpload(pending.request, pending.skipped, {
+        mode,
+        conflicts: pending.conflicts,
+      })
+    } catch (rawError) {
+      toast(errorMessage(rawError, "上传失败"))
+    } finally {
+      setUploading(false)
+      setUploadItemCount(null)
+    }
+  }, [executeLocalUpload, uploadConflict])
 
   const handleFileSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
@@ -761,6 +805,12 @@ function DriveModule() {
                 if (!open) setShareSuccess(null)
               }}
             />
+            <DriveUploadConflictDialog
+              state={uploadConflict}
+              onCancel={() => setUploadConflict(null)}
+              onKeepBoth={() => { void continueUploadWithConflictPolicy("keep-both-all") }}
+              onReplace={() => { void continueUploadWithConflictPolicy("replace-all") }}
+            />
           </>
         )}
       >
@@ -889,6 +939,53 @@ function DriveStatusState({
       </EmptyHeader>
       {action ? <EmptyContent>{action}</EmptyContent> : null}
     </Empty>
+  )
+}
+
+function DriveUploadConflictDialog({
+  state,
+  onCancel,
+  onKeepBoth,
+  onReplace,
+}: {
+  readonly state: DriveUploadConflictDialogState | null
+  readonly onCancel: () => void
+  readonly onKeepBoth: () => void
+  readonly onReplace: () => void
+}) {
+  const conflicts = state?.conflicts ?? []
+  const replaceable = conflicts.every((conflict) => conflict.replaceable)
+  const names = conflicts.slice(0, 4).map((conflict) => conflict.name)
+  const remaining = Math.max(0, conflicts.length - names.length)
+
+  return (
+    <AlertDialog open={state !== null} onOpenChange={(open) => {
+      if (!open) onCancel()
+    }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>发现同名文件</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="grid gap-3">
+              <div>{conflicts.length} 个文件已存在。</div>
+              <div className="rounded-lg border bg-muted p-2 text-foreground">
+                <ul className="grid gap-1">
+                  {names.map((name) => (
+                    <li key={name} className="truncate" title={name}>{name}</li>
+                  ))}
+                  {remaining > 0 ? <li className="text-muted-foreground">还有 {remaining} 个</li> : null}
+                </ul>
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction onClick={onKeepBoth}>保留副本</AlertDialogAction>
+          <AlertDialogAction disabled={!replaceable} onClick={onReplace}>替换</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -2198,6 +2295,26 @@ type DriveFileSystemDirectoryEntry = DriveFileSystemEntry & {
   readonly createReader: () => {
     readonly readEntries: (success: (entries: DriveFileSystemEntry[]) => void, failure?: (error: DOMException) => void) => void
   }
+}
+
+async function inspectDriveLocalUploadConflicts(request: DriveLocalUploadRequest): Promise<readonly DriveUploadConflict[]> {
+  const entries = driveLocalUploadConflictEntries(request.items)
+  if (entries.length === 0) return []
+  const result = await requireSynapseBridge().account.inspectDriveUploadConflicts({
+    parentId: request.parentId ?? null,
+    entries,
+  })
+  return result.conflicts
+}
+
+function driveLocalUploadConflictEntries(items: readonly DriveLocalUploadItem[]): DriveUploadConflictInspectEntry[] {
+  return items
+    .filter((item): item is Extract<DriveLocalUploadItem, { kind: "file" }> => item.kind === "file")
+    .map((item) => ({
+      kind: "file",
+      name: item.name,
+      relativePath: null,
+    }))
 }
 
 async function buildDriveLocalUploadRequestFromFiles({

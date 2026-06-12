@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   filePathForDroppedFile: vi.fn(),
   getDriveItemPreviewUrl: vi.fn(),
   getDriveDeleteImpact: vi.fn(),
+  inspectDriveUploadConflicts: vi.fn(),
   listDrivePublications: vi.fn(),
   listDriveItems: vi.fn(),
   listDriveShares: vi.fn(),
@@ -100,6 +101,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       filePathForDroppedFile: mocks.filePathForDroppedFile,
       getDriveItemPreviewUrl: mocks.getDriveItemPreviewUrl,
       getDriveDeleteImpact: mocks.getDriveDeleteImpact,
+      inspectDriveUploadConflicts: mocks.inspectDriveUploadConflicts,
       listDrivePublications: mocks.listDrivePublications,
       listDriveItems: mocks.listDriveItems,
       listDriveShares: mocks.listDriveShares,
@@ -139,6 +141,7 @@ beforeEach(() => {
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
   mocks.getDriveDeleteImpact.mockResolvedValue({ publications: [] })
+  mocks.inspectDriveUploadConflicts.mockResolvedValue({ conflicts: [] })
   mocks.listDrivePublications.mockResolvedValue([])
   mocks.listDriveItems.mockResolvedValue([])
   mocks.listDriveShares.mockResolvedValue([])
@@ -562,6 +565,137 @@ describe("DriveModule", () => {
     expect(mocks.uploadDrivePreparedFile).not.toHaveBeenCalled()
     expect(mocks.completeDriveUpload).not.toHaveBeenCalled()
     expect(mocks.toast).toHaveBeenCalledWith("已上传 1 个文件")
+  })
+
+  it("checks selected files for upload conflicts before uploading", async () => {
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    const file = new File(["report"], "report.txt", { type: "text/plain" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(mocks.inspectDriveUploadConflicts).toHaveBeenCalledWith({
+      parentId: null,
+      entries: [{ kind: "file", name: "report.txt", relativePath: null }],
+    })
+  })
+
+  it("cancels a selected file upload when the same-name conflict dialog is dismissed", async () => {
+    mocks.inspectDriveUploadConflicts.mockResolvedValue({
+      conflicts: [{
+        kind: "file",
+        name: "report.txt",
+        relativePath: null,
+        existingItemId: "existing-1",
+        existingUpdatedAt: "2026-06-09T00:00:00.000Z",
+        replaceable: true,
+      }],
+    })
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    const file = new File(["report"], "report.txt", { type: "text/plain" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(document.body.textContent).toContain("发现同名文件")
+
+    await clickAlertDialogButton("取消")
+
+    expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
+  })
+
+  it("uploads selected files with a replace conflict policy after confirmation", async () => {
+    const conflict = {
+      kind: "file" as const,
+      name: "report.txt",
+      relativePath: null,
+      existingItemId: "existing-1",
+      existingUpdatedAt: "2026-06-09T00:00:00.000Z",
+      replaceable: true as const,
+    }
+    mocks.inspectDriveUploadConflicts.mockResolvedValue({ conflicts: [conflict] })
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    const file = new File(["report"], "report.txt", { type: "text/plain" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+    await clickAlertDialogButton("替换")
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: null,
+      items: [{
+        kind: "file",
+        path: "/tmp/report.txt",
+        name: "report.txt",
+        mimeType: "text/plain",
+      }],
+      conflictPolicy: { mode: "replace-all", conflicts: [conflict] },
+    })
+  })
+
+  it("uploads selected files with a keep-both conflict policy after confirmation", async () => {
+    const conflict = {
+      kind: "file" as const,
+      name: "report.txt",
+      relativePath: null,
+      existingItemId: "existing-1",
+      existingUpdatedAt: "2026-06-09T00:00:00.000Z",
+      replaceable: true as const,
+    }
+    mocks.inspectDriveUploadConflicts.mockResolvedValue({ conflicts: [conflict] })
+    await render(<DriveModule />)
+
+    const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
+    const file = new File(["report"], "report.txt", { type: "text/plain" })
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    })
+
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await flushPromises()
+    })
+    await clickAlertDialogButton("保留副本")
+
+    expect(mocks.uploadDriveLocalItems).toHaveBeenCalledWith({
+      parentId: null,
+      items: [{
+        kind: "file",
+        path: "/tmp/report.txt",
+        name: "report.txt",
+        mimeType: "text/plain",
+      }],
+      conflictPolicy: { mode: "keep-both-all", conflicts: [conflict] },
+    })
   })
 
   it("keeps non-upload list actions available while a local upload is running", async () => {
