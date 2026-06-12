@@ -79,4 +79,30 @@ describe("sanitizeNodeResultsForSnapshot", () => {
     expect(raw).not.toContain("secret-cookie")
     expect(raw).not.toContain("/Users/liyang/private.txt")
   })
+
+  it("sanitizes codex debug previews consistently with snapshot string redaction", () => {
+    const result: NodeRunResult = {
+      nodeId: "codex-1",
+      status: "failed",
+      input: { variables: {}, prompt: "run codex" },
+      outputs: {
+        codexDebug: {
+          stdoutPreview: "Authorization: Bearer secret\ntoken=abc123\n/Users/liyang/project",
+          stderrPreview: "Authorization: Bearer secret\ntoken=abc123\n/Users/liyang/project",
+        },
+      },
+    }
+
+    const sanitized = sanitizeNodeResultsForSnapshot({ "codex-1": result })
+    const codexDebug = sanitized["codex-1"]?.outputs?.codexDebug as Record<string, string>
+    const raw = JSON.stringify(sanitized)
+
+    expect(codexDebug.stdoutPreview).toContain("[redacted]")
+    expect(codexDebug.stderrPreview).toContain("[redacted]")
+    expect(codexDebug.stdoutPreview).toContain("[path]")
+    expect(codexDebug.stderrPreview).toContain("[path]")
+    expect(raw).not.toContain("Bearer secret")
+    expect(raw).not.toContain("abc123")
+    expect(raw).not.toContain("/Users/liyang/project")
+  })
 })
