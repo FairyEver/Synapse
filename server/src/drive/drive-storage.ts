@@ -165,7 +165,12 @@ export class CosDriveStorage implements DriveStoragePort {
 
   async createDownloadUrl(input: { readonly key: string; readonly filename: string }): Promise<{ readonly url: string; readonly expiresAt: Date }> {
     const expiresAt = new Date(Date.now() + driveDownloadUrlTtlSeconds * 1000)
-    const url = await this.getSignedUrl({ key: input.key, method: "get", expires: driveDownloadUrlTtlSeconds })
+    const url = await this.getSignedUrl({
+      key: input.key,
+      method: "get",
+      expires: driveDownloadUrlTtlSeconds,
+      responseContentDisposition: contentDisposition(input.filename),
+    })
     return { url, expiresAt }
   }
 
@@ -226,7 +231,12 @@ export class CosDriveStorage implements DriveStoragePort {
     }
   }
 
-  private getSignedUrl(input: { readonly key: string; readonly method: "put" | "get"; readonly expires: number }): Promise<string> {
+  private getSignedUrl(input: {
+    readonly key: string
+    readonly method: "put" | "get"
+    readonly expires: number
+    readonly responseContentDisposition?: string
+  }): Promise<string> {
     return new Promise((resolve, reject) => {
       const client = this.getClient()
       client.cos.getObjectUrl({
@@ -236,6 +246,9 @@ export class CosDriveStorage implements DriveStoragePort {
         Sign: true,
         Method: input.method,
         Expires: input.expires,
+        Query: input.responseContentDisposition ? {
+          "response-content-disposition": input.responseContentDisposition,
+        } : undefined,
       }, (error, data) => {
         if (error) reject(error)
         else resolve(data.Url)
@@ -291,4 +304,14 @@ function encodeCosCopySourceKey(key: string): string {
 function parseContentLength(value: string | undefined): bigint | undefined {
   if (!value) return undefined
   return BigInt(value)
+}
+
+function contentDisposition(filename: string): string {
+  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
+  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
+}
+
+function encodeRFC5987ValueChars(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }

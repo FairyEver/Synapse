@@ -1,17 +1,29 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { Readable } from "node:stream"
 import { Test } from "@nestjs/testing"
 
-import { LOCAL_DRIVE_STORAGE_OPTIONS, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
+const cosGetObjectUrlMock = vi.hoisted(() => vi.fn())
+const cosConstructorMock = vi.hoisted(() => vi.fn(function MockCos() {
+  return { getObjectUrl: cosGetObjectUrlMock }
+}))
+
+vi.mock("cos-nodejs-sdk-v5", () => ({
+  default: cosConstructorMock,
+}))
+
+import { CosDriveStorage, LOCAL_DRIVE_STORAGE_OPTIONS, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
 
 const roots: string[] = []
 
 afterEach(async () => {
   await Promise.all(roots.map((root) => rm(root, { force: true, recursive: true })))
   roots.length = 0
+  cosGetObjectUrlMock.mockReset()
+  cosConstructorMock.mockClear()
+  vi.unstubAllEnvs()
 })
 
 describe("LocalDriveStorage", () => {
@@ -105,3 +117,47 @@ describe("shouldUseCosDriveStorage", () => {
     })).toBe(false)
   })
 })
+
+describe("CosDriveStorage", () => {
+  it("requests download urls with the original filename in content disposition", async () => {
+    stubServerEnv({
+      DRIVE_COS_SECRET_ID: "secret-id",
+      DRIVE_COS_SECRET_KEY: "secret-key",
+      DRIVE_COS_BUCKET: "drive-bucket",
+      DRIVE_COS_REGION: "ap-shanghai",
+    })
+    cosGetObjectUrlMock.mockImplementation((_params: unknown, callback: (error: unknown, data: { readonly Url: string }) => void) => {
+      callback(null, { Url: "https://cos.example/signed-download" })
+    })
+
+    const storage = new CosDriveStorage()
+    await expect(storage.createDownloadUrl({
+      key: "drive/file-1",
+      filename: "工作流循环机制调研与头脑风暴.md",
+    })).resolves.toMatchObject({ url: "https://cos.example/signed-download" })
+
+    expect(cosGetObjectUrlMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Bucket: "drive-bucket",
+        Region: "ap-shanghai",
+        Key: "drive/file-1",
+        Method: "get",
+        Query: {
+          "response-content-disposition": "attachment; filename=\"______________.md\"; filename*=UTF-8''%E5%B7%A5%E4%BD%9C%E6%B5%81%E5%BE%AA%E7%8E%AF%E6%9C%BA%E5%88%B6%E8%B0%83%E7%A0%94%E4%B8%8E%E5%A4%B4%E8%84%91%E9%A3%8E%E6%9A%B4.md",
+        },
+      }),
+      expect.any(Function),
+    )
+  })
+})
+
+function stubServerEnv(overrides: NodeJS.ProcessEnv = {}): void {
+  vi.stubEnv("DATABASE_URL", "postgresql://synapse:secret@localhost:5432/synapse")
+  vi.stubEnv("ADMIN_EMAIL", "admin@synapse.com")
+  vi.stubEnv("ADMIN_PASSWORD", "admin-password-123")
+  vi.stubEnv("ADMIN_JWT_SECRET", "a".repeat(32))
+  vi.stubEnv("USER_ACCESS_JWT_SECRET", "b".repeat(32))
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) vi.stubEnv(key, value)
+  }
+}
