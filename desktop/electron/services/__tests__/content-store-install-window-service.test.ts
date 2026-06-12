@@ -1,3 +1,4 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -126,7 +127,7 @@ describe("loadContentStoreInstallWindow", () => {
 
     await loadContentStoreInstallWindow(window as never, { session: "session-1" }, "/app")
 
-    expect(window.loadFile).toHaveBeenCalledWith("/app/dist/index.html", {
+    expect(window.loadFile).toHaveBeenCalledWith(path.join("/app", "dist/index.html"), {
       query: {
         session: "session-1",
         synapseWindow: "content-store-install",

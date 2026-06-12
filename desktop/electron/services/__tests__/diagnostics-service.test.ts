@@ -405,8 +405,8 @@ describe("DiagnosticsService.collect", () => {
     expect(report.knowledgeBaseStorage).toMatchObject({
       mode: "custom",
       available: true,
-      rootPath: "/Volumes/Data/SynapseData",
-      knowledgeBasesPath: "/Volumes/Data/SynapseData/knowledge-bases",
+      rootPath: path.resolve("/Volumes/Data/SynapseData"),
+      knowledgeBasesPath: path.join(path.resolve("/Volumes/Data/SynapseData"), "knowledge-bases"),
       runtimeCount: 0,
       missingRuntimeCount: 0,
       oldAbsoluteReferenceCount: 0,

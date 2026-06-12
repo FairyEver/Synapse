@@ -41,7 +41,7 @@ describe("managed knowledge base paths", () => {
     expect(resolveManagedKnowledgeBasePath(project, {
       userDataPath: "/UserData",
       storage: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
-    })).toBe(path.join("/Volumes/Data/SynapseData", "knowledge-bases", "kb-1"))
+    })).toBe(path.join(path.resolve("/Volumes/Data/SynapseData"), "knowledge-bases", "kb-1"))
   })
 
   it("does not treat legacy knowledge bases as managed", () => {

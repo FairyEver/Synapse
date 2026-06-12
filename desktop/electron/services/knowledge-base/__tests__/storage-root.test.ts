@@ -1,3 +1,4 @@
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   isPathInside,
@@ -16,7 +17,7 @@ describe("knowledge base storage root", () => {
     expect(resolveKnowledgeBaseStorageRoot({
       userDataPath: "/tmp/userData",
       storage: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
-    })).toBe("/Volumes/Data/SynapseData")
+    })).toBe(path.resolve("/Volumes/Data/SynapseData"))
   })
 
   it("detects a child path", () => {
