@@ -194,10 +194,11 @@ describe("codexNodeExecutor", () => {
   })
 
   it("fails when process runner is missing", async () => {
-    const input = makeInput({}, {
+    const runtimeDeps: Partial<NodeRuntimeDeps> = {
       sendHttpRequest: vi.fn(),
       resolveProjectWorkspacePath: vi.fn(),
-    } as NodeRuntimeDeps)
+    }
+    const input = makeInput({}, runtimeDeps as unknown as NodeRuntimeDeps)
 
     const result = await codexNodeExecutor.execute(input)
 

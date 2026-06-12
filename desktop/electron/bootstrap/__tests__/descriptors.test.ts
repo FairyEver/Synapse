@@ -27,15 +27,15 @@ vi.mock("electron-updater", () => ({
   },
   CancellationToken: class {},
 }))
-vi.mock("@synapse/shared", () => ({}), { virtual: true })
+vi.mock("@synapse/shared", () => ({}))
 const deploymentConfigModule = {
   SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG: {
     apiBaseUrl: "https://api.example.test",
     publicAppUrl: "https://app.example.test",
   },
 }
-vi.mock("../generated/deployment-config.generated", () => deploymentConfigModule, { virtual: true })
-vi.mock("../../generated/deployment-config.generated", () => deploymentConfigModule, { virtual: true })
+vi.mock("../generated/deployment-config.generated", () => deploymentConfigModule)
+vi.mock("../../generated/deployment-config.generated", () => deploymentConfigModule)
 const tmpUserData = "/tmp/synapse-test-userdata-" + Date.now()
 const bootstrapImportTimeoutMs = process.platform === "win32" ? 120_000 : 15_000
 vi.mock("electron", () => {
