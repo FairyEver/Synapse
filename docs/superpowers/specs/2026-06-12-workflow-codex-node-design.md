@@ -76,7 +76,9 @@ interface CodexNodeConfig {
   model?: string
   profile?: string
   enableSearch: boolean
-  enabledFeatures: Array<"goals">
+  features: {
+    goals: "default" | "enabled" | "disabled"
+  }
   skipGitRepoCheck: boolean
   strictConfig: boolean
   bypassApprovalsAndSandbox: boolean
@@ -98,7 +100,7 @@ Default config:
   approvalPolicy: "never",
   sandbox: "workspace-write",
   enableSearch: false,
-  enabledFeatures: ["goals"],
+  features: { goals: "enabled" },
   skipGitRepoCheck: true,
   strictConfig: false,
   bypassApprovalsAndSandbox: false,
@@ -146,7 +148,9 @@ Config mapping:
 - `model` -> `--model <value>`
 - `profile` -> `--profile <value>`
 - `enableSearch` -> `--search`
-- `enabledFeatures[]` -> repeated `--enable <feature>`
+- `features.goals === "enabled"` -> `--enable goals`
+- `features.goals === "disabled"` -> `--disable goals`
+- `features.goals === "default"` -> no goals feature flag
 - `skipGitRepoCheck` -> `--skip-git-repo-check`
 - `strictConfig` -> `--strict-config`
 - `bypassApprovalsAndSandbox` -> `--dangerously-bypass-approvals-and-sandbox`
@@ -279,7 +283,7 @@ Sections:
    - Profile input
    - Timeout input
    - Search checkbox
-   - Enabled features selector; first version exposes `goals` as a checkbox or controlled multi-select, not free text
+   - Goals feature select with `默认` / `启用` / `禁用`; first version exposes only the known `goals` feature and never accepts free-text feature names
    - Skip git repo check checkbox
    - Strict config checkbox
    - Bypass approvals and sandbox checkbox
@@ -312,7 +316,7 @@ Save/edit validation:
 - `prompt` is required.
 - `timeoutMins`, when present, must be greater than 0.
 - `approvalPolicy` and `sandbox` must be valid enum values.
-- `enabledFeatures` must contain only known feature values. First version supports only `goals`.
+- `features.goals` must be `default`, `enabled`, or `disabled`.
 - `additionalWritableDirs` and `images` must not contain empty items.
 - `configOverrides.key` must be non-empty.
 - `configOverrides.key` values must be unique.

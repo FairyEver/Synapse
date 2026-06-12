@@ -67,7 +67,7 @@ describe("codexNodeConfigSchema", () => {
       approvalPolicy: "never",
       sandbox: "workspace-write",
       enableSearch: false,
-      enabledFeatures: ["goals"],
+      features: { goals: "enabled" },
       skipGitRepoCheck: true,
       strictConfig: false,
       bypassApprovalsAndSandbox: false,
@@ -110,7 +110,7 @@ describe("codexNodeConfigSchema", () => {
       model: "gpt-5-codex",
       profile: "automation",
       enableSearch: true,
-      enabledFeatures: ["goals"],
+      features: { goals: "enabled" },
       strictConfig: true,
       bypassHookTrust: true,
       additionalWritableDirs: ["/Users/liyang/project-extra"],
@@ -144,7 +144,7 @@ import { variableBindingSchema } from "../schemas/variable-binding"
 
 export const codexApprovalPolicySchema = z.enum(["never", "on-request", "untrusted"])
 export const codexSandboxSchema = z.enum(["read-only", "workspace-write", "danger-full-access"])
-export const codexFeatureSchema = z.enum(["goals"])
+export const codexFeatureStateSchema = z.enum(["default", "enabled", "disabled"])
 
 const nonEmptyTrimmedString = z.string().transform((value) => value.trim()).pipe(z.string().min(1))
 
@@ -163,7 +163,9 @@ export const codexNodeConfigSchema = z.object({
   model: z.string().trim().optional(),
   profile: z.string().trim().optional(),
   enableSearch: z.boolean(),
-  enabledFeatures: z.array(codexFeatureSchema),
+  features: z.object({
+    goals: codexFeatureStateSchema,
+  }),
   skipGitRepoCheck: z.boolean(),
   strictConfig: z.boolean(),
   bypassApprovalsAndSandbox: z.boolean(),
@@ -189,7 +191,7 @@ export const codexNodeConfigSchema = z.object({
 export type CodexNodeConfig = z.infer<typeof codexNodeConfigSchema>
 export type CodexApprovalPolicy = z.infer<typeof codexApprovalPolicySchema>
 export type CodexSandbox = z.infer<typeof codexSandboxSchema>
-export type CodexFeature = z.infer<typeof codexFeatureSchema>
+export type CodexFeatureState = z.infer<typeof codexFeatureStateSchema>
 
 export const defaultCodexNodeConfig: CodexNodeConfig = {
   variables: [],
@@ -197,7 +199,7 @@ export const defaultCodexNodeConfig: CodexNodeConfig = {
   approvalPolicy: "never",
   sandbox: "workspace-write",
   enableSearch: false,
-  enabledFeatures: ["goals"],
+  features: { goals: "enabled" },
   skipGitRepoCheck: true,
   strictConfig: false,
   bypassApprovalsAndSandbox: false,
@@ -286,7 +288,7 @@ describe("buildCodexExecRequest", () => {
       model: "gpt-5-codex",
       profile: "automation",
       enableSearch: true,
-      enabledFeatures: ["goals"],
+      features: { goals: "enabled" },
       strictConfig: true,
       bypassHookTrust: true,
       additionalWritableDirs: ["/Users/liyang/extra"],
@@ -374,8 +376,10 @@ export function buildCodexExecArgs(config: CodexNodeConfig, cwd: string, lastMes
   if (config.model) args.push("--model", config.model)
   if (config.profile) args.push("--profile", config.profile)
   if (config.enableSearch) args.push("--search")
-  for (const feature of config.enabledFeatures) {
-    args.push("--enable", feature)
+  if (config.features.goals === "enabled") {
+    args.push("--enable", "goals")
+  } else if (config.features.goals === "disabled") {
+    args.push("--disable", "goals")
   }
   if (config.strictConfig) args.push("--strict-config")
   if (config.bypassHookTrust) args.push("--dangerously-bypass-hook-trust")
@@ -865,7 +869,7 @@ function codexOptionKeys(config: CodexNodeConfig): string[] {
     config.model ? "model" : undefined,
     config.profile ? "profile" : undefined,
     config.enableSearch ? "search" : undefined,
-    config.enabledFeatures.length > 0 ? "enabledFeatures" : undefined,
+    config.features.goals !== "default" ? "features.goals" : undefined,
     config.skipGitRepoCheck ? "skipGitRepoCheck" : undefined,
     config.strictConfig ? "strictConfig" : undefined,
     config.bypassApprovalsAndSandbox ? "bypassApprovalsAndSandbox" : undefined,
@@ -951,7 +955,7 @@ export const codexNodeManifest: NodeManifest<CodexNodeConfig> = {
     { name: "sandbox", kind: "select", label: "沙箱" },
     { name: "model", kind: "text", label: "模型", optional: true },
     { name: "profile", kind: "text", label: "Profile", optional: true },
-    { name: "enabledFeatures", kind: "select", label: "启用功能", optional: true },
+    { name: "features", kind: "record", label: "功能开关", optional: true },
     { name: "timeoutMins", kind: "number", label: "超时分钟", optional: true },
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
     { name: "prompt", kind: "text", label: "指令" },
@@ -1144,7 +1148,7 @@ describe("CodexNodePanel", () => {
     expect(screen.getByText("执行配置")).toBeTruthy()
     expect(screen.getByLabelText("审批策略")).toBeTruthy()
     expect(screen.getByLabelText("沙箱")).toBeTruthy()
-    expect(screen.getByLabelText("启用 Goals")).toBeTruthy()
+    expect(screen.getByLabelText("Goals")).toBeTruthy()
     expect(screen.getByLabelText("跳过 Git 仓库检查")).toBeTruthy()
     expect(screen.getByText("输入映射")).toBeTruthy()
     expect(screen.getByText("项目")).toBeTruthy()
@@ -1198,7 +1202,7 @@ import { CollapsibleSection } from "../collapsible-section"
 import { ProjectSelect } from "../project-select"
 import { PromptEditor } from "../prompt-editor"
 import { VariableBindingEditor } from "../variable-binding-editor"
-import type { CodexApprovalPolicy, CodexNodeConfig, CodexSandbox } from "./schema"
+import type { CodexApprovalPolicy, CodexFeatureState, CodexNodeConfig, CodexSandbox } from "./schema"
 
 export interface CodexNodePanelProps {
   config: CodexNodeConfig
@@ -1245,7 +1249,15 @@ export function CodexNodePanel({ config, onChange, upstreamNodes, workflowParams
           <Input aria-label="Profile" className="h-7 text-xs" value={config.profile ?? ""} onChange={(event) => commit({ profile: event.target.value || undefined })} />
           <Input aria-label="超时分钟" className="h-7 text-xs" type="number" min={1} value={config.timeoutMins ?? ""} onChange={(event) => commit({ timeoutMins: event.target.value ? Number(event.target.value) : undefined })} />
           <BooleanRow id="codex-search" label="启用搜索" checked={config.enableSearch} onChange={(checked) => commit({ enableSearch: checked })} />
-          <BooleanRow id="codex-enable-goals" label="启用 Goals" checked={config.enabledFeatures.includes("goals")} onChange={(checked) => commit({ enabledFeatures: checked ? ["goals"] : [] })} />
+          <Select value={config.features.goals} onValueChange={(value) => commit({ features: { ...config.features, goals: value as CodexFeatureState } })}>
+            <Label>Goals</Label>
+            <SelectTrigger aria-label="Goals" className="h-7 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">默认</SelectItem>
+              <SelectItem value="enabled">启用</SelectItem>
+              <SelectItem value="disabled">禁用</SelectItem>
+            </SelectContent>
+          </Select>
           <BooleanRow id="codex-skip-git" label="跳过 Git 仓库检查" checked={config.skipGitRepoCheck} onChange={(checked) => commit({ skipGitRepoCheck: checked })} />
           <BooleanRow id="codex-strict-config" label="严格配置" checked={config.strictConfig} onChange={(checked) => commit({ strictConfig: checked })} />
           <BooleanRow id="codex-bypass" label="绕过审批和沙箱" checked={config.bypassApprovalsAndSandbox} onChange={(checked) => commit({ bypassApprovalsAndSandbox: checked })} />
