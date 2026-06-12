@@ -8,6 +8,7 @@ import {
   buildConsoleDriveBrowserUrl,
   buildConsoleDriveChildBrowserUrl,
   buildConsoleDriveRootUrl,
+  buildDriveKeepBothName,
   buildDrivePublicationUrl,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
@@ -150,5 +151,23 @@ describe("drive URL helpers", () => {
     expect(DRIVE_SHARE_BROWSER_PATH_PREFIX).toBe("/files")
     expect(DRIVE_OWNER_BROWSER_PATH_PREFIX).toBe("/drive/items")
     expect(DRIVE_CONSOLE_BROWSER_PATH_PREFIX).toBe("/console/drive")
+  })
+})
+
+describe("buildDriveKeepBothName", () => {
+  it("adds timestamp before normal extensions", () => {
+    expect(buildDriveKeepBothName("report.md", "20260612_143000")).toBe("report_20260612_143000.md")
+  })
+
+  it("preserves compound archive extensions", () => {
+    expect(buildDriveKeepBothName("archive.tar.gz", "20260612_143000")).toBe("archive_20260612_143000.tar.gz")
+  })
+
+  it("handles extensionless names", () => {
+    expect(buildDriveKeepBothName("README", "20260612_143000")).toBe("README_20260612_143000")
+  })
+
+  it("adds numeric suffix when requested", () => {
+    expect(buildDriveKeepBothName("report.md", "20260612_143000", 2)).toBe("report_20260612_143000_2.md")
   })
 })

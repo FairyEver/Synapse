@@ -67,6 +67,52 @@ export interface DriveFolderUploadPrepareResult {
   }>
 }
 
+export type DriveUploadConflictEntryKind = "file" | "folder"
+
+export interface DriveUploadConflictInspectEntry {
+  readonly kind: DriveUploadConflictEntryKind
+  readonly name: string
+  readonly relativePath?: string | null
+}
+
+export interface DriveUploadConflictInspectInput {
+  readonly parentId?: string | null
+  readonly entries: readonly DriveUploadConflictInspectEntry[]
+}
+
+export type DriveUploadConflict =
+  | {
+    readonly kind: "file"
+    readonly name: string
+    readonly relativePath: string | null
+    readonly existingItemId: string
+    readonly existingUpdatedAt: string
+    readonly replaceable: true
+  }
+  | {
+    readonly kind: "folder"
+    readonly name: string
+    readonly relativePath: string | null
+    readonly existingItemId: string
+    readonly existingUpdatedAt: string
+    readonly replaceable: false
+    readonly reason: "folder-conflict"
+  }
+
+export interface DriveUploadConflictInspectResult {
+  readonly conflicts: readonly DriveUploadConflict[]
+}
+
+export type DriveUploadConflictStrategy =
+  | { readonly mode: "fail" }
+  | { readonly mode: "replace"; readonly existingItemId: string }
+  | { readonly mode: "keep-both" }
+
+export type DriveLocalUploadConflictPolicy =
+  | { readonly mode: "fail" }
+  | { readonly mode: "replace-all"; readonly conflicts: readonly DriveUploadConflict[] }
+  | { readonly mode: "keep-both-all"; readonly conflicts: readonly DriveUploadConflict[] }
+
 export interface DriveShareDto {
   readonly id: string
   readonly shareId: string
@@ -254,6 +300,24 @@ export function buildDriveUrlWithPassword(url: string, password: string | null |
   } catch {
     return buildRelativeUrlWithPassword(url, password)
   }
+}
+
+const DRIVE_COMPOUND_EXTENSIONS = [".tar.gz", ".tar.bz2", ".tar.xz"] as const
+
+export function buildDriveKeepBothName(name: string, timestamp: string, suffix?: number): string {
+  const trimmed = name.trim()
+  const numericSuffix = suffix && suffix > 1 ? `_${suffix}` : ""
+  const lowerName = trimmed.toLowerCase()
+  const compoundExtension = DRIVE_COMPOUND_EXTENSIONS.find((extension) => lowerName.endsWith(extension))
+  if (compoundExtension) {
+    const base = trimmed.slice(0, -compoundExtension.length)
+    return `${base}_${timestamp}${numericSuffix}${trimmed.slice(-compoundExtension.length)}`
+  }
+  const dotIndex = trimmed.lastIndexOf(".")
+  if (dotIndex > 0) {
+    return `${trimmed.slice(0, dotIndex)}_${timestamp}${numericSuffix}${trimmed.slice(dotIndex)}`
+  }
+  return `${trimmed}_${timestamp}${numericSuffix}`
 }
 
 export function maskDriveShareUrl(value: string): string {
