@@ -8,6 +8,7 @@ import { EndNodePanel } from "./end/panel"
 import { HttpRequestNodePanel } from "./http-request/panel"
 import { ScriptNodePanel } from "./script/panel"
 import { WorkflowCallNodePanel } from "./workflow-call/panel"
+import { CodexNodePanel } from "./codex/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -35,6 +36,7 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["http_request", HttpRequestNodePanel as unknown as PanelComponent],
   ["script", ScriptNodePanel as unknown as PanelComponent],
   ["workflow_call", WorkflowCallNodePanel as unknown as PanelComponent],
+  ["codex", CodexNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {
