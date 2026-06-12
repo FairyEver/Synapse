@@ -2,8 +2,9 @@
  * @vitest-environment jsdom
  */
 import React from "react"
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { CodexNodePanel } from "../panel"
 import { defaultCodexNodeConfig } from "../schema"
 
@@ -115,8 +116,119 @@ vi.mock("@/components/ui/select", () => {
   }
 })
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let container: HTMLDivElement | undefined
+let root: Root | undefined
+
+function render(element: React.ReactElement) {
+  container = document.createElement("div")
+  document.body.appendChild(container)
+  root = createRoot(container)
+  act(() => {
+    root?.render(element)
+  })
+
+  return {
+    rerender(nextElement: React.ReactElement) {
+      act(() => {
+        root?.render(nextElement)
+      })
+    },
+  }
+}
+
+function allElements(): HTMLElement[] {
+  return Array.from(container?.querySelectorAll<HTMLElement>("*") ?? [])
+}
+
+function elementName(element: HTMLElement): string {
+  const ariaLabel = element.getAttribute("aria-label")
+  if (ariaLabel) return ariaLabel
+  return element.textContent?.trim() ?? ""
+}
+
+function elementRole(element: HTMLElement): string | null {
+  const role = element.getAttribute("role")
+  if (role) return role
+  if (element.tagName === "BUTTON") return "button"
+  if (element.tagName === "INPUT" && (element as HTMLInputElement).type === "checkbox") return "checkbox"
+  return null
+}
+
+function getByText(text: string): HTMLElement {
+  const match = allElements().find((element) => element.textContent?.trim() === text)
+  if (!match) throw new Error(`Unable to find text: ${text}`)
+  return match
+}
+
+function getByLabelText(label: string): HTMLElement {
+  const byAria = allElements().find((element) => element.getAttribute("aria-label") === label)
+  if (byAria) return byAria
+
+  const labelElement = allElements().find((element) => (
+    element.tagName === "LABEL" && element.textContent?.trim() === label
+  ))
+  const controlId = labelElement?.getAttribute("for")
+  if (controlId) {
+    const control = document.getElementById(controlId)
+    if (control instanceof HTMLElement) return control
+  }
+  const nestedControl = labelElement?.querySelector<HTMLElement>("button,input,textarea,[role]")
+  if (nestedControl) return nestedControl
+
+  throw new Error(`Unable to find label: ${label}`)
+}
+
+function getByRole(role: string, options: { name: string }): HTMLElement {
+  const match = allElements().find((element) => (
+    elementRole(element) === role && elementName(element) === options.name
+  ))
+  if (!match) throw new Error(`Unable to find role ${role} named ${options.name}`)
+  return match
+}
+
+function getByDisplayValue(value: string): HTMLInputElement | HTMLTextAreaElement {
+  const match = allElements().find((element) => (
+    (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && element.value === value
+  ))
+  if (!match || !(match instanceof HTMLInputElement || match instanceof HTMLTextAreaElement)) {
+    throw new Error(`Unable to find display value: ${value}`)
+  }
+  return match
+}
+
+function click(element: HTMLElement) {
+  act(() => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+  })
+}
+
+function change(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  act(() => {
+    const prototype = element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype
+    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set
+    setter?.call(element, value)
+    element.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }))
+    element.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }))
+  })
+}
+
+function blur(element: HTMLElement) {
+  act(() => {
+    element.dispatchEvent(new FocusEvent("focusout", { bubbles: true, cancelable: true }))
+  })
+}
+
 afterEach(() => {
-  cleanup()
+  act(() => {
+    root?.unmount()
+  })
+  container?.remove()
+  root = undefined
+  container = undefined
   vi.clearAllMocks()
 })
 
@@ -132,21 +244,21 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    expect(screen.getByText("执行配置")).toBeTruthy()
-    expect(screen.getByLabelText("审批策略")).toBeTruthy()
-    expect(screen.getByLabelText("沙箱")).toBeTruthy()
-    expect(screen.getByLabelText("Goals")).toBeTruthy()
-    expect(screen.getByLabelText("跳过 Git 仓库检查")).toBeTruthy()
-    expect(screen.getByText("输入映射")).toBeTruthy()
-    expect(screen.getByText("项目")).toBeTruthy()
-    expect(screen.getByText("指令")).toBeTruthy()
-    expect(screen.getByText("高级参数")).toBeTruthy()
-    expect(screen.getByText("调试记录")).toBeTruthy()
-    expect(screen.getByRole("button", { name: "审批策略" }).textContent).toContain("never")
-    expect(screen.getByRole("button", { name: "沙箱" }).textContent).toContain("workspace-write")
-    expect(screen.getByRole("button", { name: "Goals" }).textContent).toContain("启用")
-    expect(screen.getByRole("checkbox", { name: "跳过 Git 仓库检查" }).getAttribute("aria-checked")).toBe("true")
-    expect(screen.getByRole("checkbox", { name: "保存调试文件" }).getAttribute("aria-checked")).toBe("true")
+    expect(getByText("执行配置")).toBeTruthy()
+    expect(getByLabelText("审批策略")).toBeTruthy()
+    expect(getByLabelText("沙箱")).toBeTruthy()
+    expect(getByLabelText("Goals")).toBeTruthy()
+    expect(getByLabelText("跳过 Git 仓库检查")).toBeTruthy()
+    expect(getByText("输入映射")).toBeTruthy()
+    expect(getByText("项目")).toBeTruthy()
+    expect(getByText("指令")).toBeTruthy()
+    expect(getByText("高级参数")).toBeTruthy()
+    expect(getByText("调试记录")).toBeTruthy()
+    expect(getByRole("button", { name: "审批策略" }).textContent).toContain("never")
+    expect(getByRole("button", { name: "沙箱" }).textContent).toContain("workspace-write")
+    expect(getByRole("button", { name: "Goals" }).textContent).toContain("启用")
+    expect(getByRole("checkbox", { name: "跳过 Git 仓库检查" }).getAttribute("aria-checked")).toBe("true")
+    expect(getByRole("checkbox", { name: "保存调试文件" }).getAttribute("aria-checked")).toBe("true")
   })
 
   it("commits prompt changes on blur", () => {
@@ -162,9 +274,9 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    const textbox = screen.getByDisplayValue("Old")
-    fireEvent.change(textbox, { target: { value: "New prompt" } })
-    fireEvent.blur(textbox)
+    const textbox = getByDisplayValue("Old")
+    change(textbox, "New prompt")
+    blur(textbox)
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ prompt: "New prompt" }))
   })
@@ -182,7 +294,7 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "绕过审批和沙箱" }))
+    click(getByRole("checkbox", { name: "绕过审批和沙箱" }))
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       bypassApprovalsAndSandbox: true,
@@ -202,7 +314,7 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole("option", { name: "禁用" }))
+    click(getByRole("option", { name: "禁用" }))
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       features: { goals: "disabled" },
@@ -222,15 +334,15 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "添加配置覆盖" }))
-    fireEvent.change(screen.getByLabelText("配置键 1"), { target: { value: "model_reasoning_effort" } })
-    fireEvent.change(screen.getByLabelText("配置值 1"), { target: { value: "high" } })
+    click(getByRole("button", { name: "添加配置覆盖" }))
+    change(getByLabelText("配置键 1") as HTMLInputElement, "model_reasoning_effort")
+    change(getByLabelText("配置值 1") as HTMLInputElement, "high")
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       configOverrides: [{ key: "model_reasoning_effort", value: "high" }],
     }))
 
-    fireEvent.click(screen.getByRole("button", { name: "删除配置覆盖 1" }))
+    click(getByRole("button", { name: "删除配置覆盖 1" }))
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       configOverrides: [],
@@ -269,7 +381,7 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "启用搜索" }))
+    click(getByRole("checkbox", { name: "启用搜索" }))
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       prompt: "Updated prompt",
