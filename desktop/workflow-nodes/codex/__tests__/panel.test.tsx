@@ -35,9 +35,24 @@ vi.mock("../../prompt-editor", () => ({
 
 vi.mock("@/components/ui/select", () => {
   const ReactModule = React
+
+  function collectLabels(node: React.ReactNode, labels: Record<string, React.ReactNode> = {}) {
+    ReactModule.Children.forEach(node, (child) => {
+      if (!ReactModule.isValidElement(child)) return
+      if (typeof child.props.value === "string" && child.props.children !== undefined) {
+        labels[child.props.value] = child.props.children
+      }
+      if (child.props.children) {
+        collectLabels(child.props.children, labels)
+      }
+    })
+    return labels
+  }
+
   const SelectContext = ReactModule.createContext<{
     value?: string
     onValueChange?: (value: string) => void
+    labels: Record<string, React.ReactNode>
   } | null>(null)
 
   return {
@@ -50,7 +65,7 @@ vi.mock("@/components/ui/select", () => {
       onValueChange?: (value: string) => void
       children: React.ReactNode
     }) => (
-      <SelectContext.Provider value={{ value, onValueChange }}>
+      <SelectContext.Provider value={{ value, onValueChange, labels: collectLabels(children) }}>
         <div>{children}</div>
       </SelectContext.Provider>
     ),
@@ -69,7 +84,10 @@ vi.mock("@/components/ui/select", () => {
         {children}
       </button>
     ),
-    SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+    SelectValue: ({ placeholder }: { placeholder?: string }) => {
+      const context = ReactModule.useContext(SelectContext)
+      return <span>{context?.value ? context.labels[context.value] ?? context.value : placeholder}</span>
+    },
     SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     SelectGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     SelectItem: ({
@@ -124,6 +142,11 @@ describe("CodexNodePanel", () => {
     expect(screen.getByText("指令")).toBeTruthy()
     expect(screen.getByText("高级参数")).toBeTruthy()
     expect(screen.getByText("调试记录")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "审批策略" }).textContent).toContain("never")
+    expect(screen.getByRole("button", { name: "沙箱" }).textContent).toContain("workspace-write")
+    expect(screen.getByRole("button", { name: "Goals" }).textContent).toContain("启用")
+    expect(screen.getByRole("checkbox", { name: "跳过 Git 仓库检查" }).getAttribute("aria-checked")).toBe("true")
+    expect(screen.getByRole("checkbox", { name: "保存调试文件" }).getAttribute("aria-checked")).toBe("true")
   })
 
   it("commits prompt changes on blur", () => {
@@ -211,6 +234,48 @@ describe("CodexNodePanel", () => {
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
       configOverrides: [],
+    }))
+  })
+
+  it("syncs external config into local panel state before later edits", () => {
+    const onChange = vi.fn()
+    const { rerender } = render(
+      <CodexNodePanel
+        config={{
+          ...defaultCodexNodeConfig,
+          prompt: "Old prompt",
+          additionalWritableDirs: ["/tmp/old-dir"],
+          configOverrides: [{ key: "approval_mode", value: "never" }],
+        }}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    rerender(
+      <CodexNodePanel
+        config={{
+          ...defaultCodexNodeConfig,
+          prompt: "Updated prompt",
+          additionalWritableDirs: ["/tmp/new-dir"],
+          configOverrides: [{ key: "sandbox_workspace_write.network_access", value: "true" }],
+        }}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "启用搜索" }))
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      prompt: "Updated prompt",
+      additionalWritableDirs: ["/tmp/new-dir"],
+      configOverrides: [{ key: "sandbox_workspace_write.network_access", value: "true" }],
+      enableSearch: true,
     }))
   })
 })

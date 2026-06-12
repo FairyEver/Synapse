@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -43,6 +43,14 @@ export function CodexNodePanel({
   const [images, setImages] = useState(config.images)
   const [configOverrides, setConfigOverrides] = useState(config.configOverrides)
   const lastCommittedRef = useRef<CodexNodeConfig>(config)
+
+  useEffect(() => {
+    setPrompt(config.prompt)
+    setAdditionalWritableDirs(config.additionalWritableDirs)
+    setImages(config.images)
+    setConfigOverrides(config.configOverrides)
+    lastCommittedRef.current = config
+  }, [config])
 
   const commit = (overrides?: Partial<CodexNodeConfig>) => {
     const next: CodexNodeConfig = {

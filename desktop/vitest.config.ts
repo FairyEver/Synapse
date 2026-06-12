@@ -11,7 +11,7 @@ export default defineConfig({
     globals: false,
     environment: "node",
     include: [
-      "workflow-nodes/**/__tests__/**/*.{test,spec}.ts",
+      "workflow-nodes/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "action-packages/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "action-packages/**/*.test.{ts,tsx}",
       "electron/**/__tests__/**/*.{test,spec}.ts",
