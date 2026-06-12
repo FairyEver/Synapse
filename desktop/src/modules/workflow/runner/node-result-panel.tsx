@@ -64,6 +64,10 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
   const displayStructuredOutputs = structuredOutputs
     ? sanitizeWorkflowResultValue(structuredOutputs) as Record<string, unknown>
     : undefined
+  const codexDebug = isRecord(displayStructuredOutputs?.codexDebug) ? displayStructuredOutputs.codexDebug : undefined
+  const displayGenericStructuredOutputs = displayStructuredOutputs
+    ? omitRecordKey(displayStructuredOutputs, "codexDebug")
+    : undefined
   const agentConversation = agentConversationTargetFromOutputs(result.outputs)
 
   return (
@@ -169,11 +173,24 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
               )}
             </ContentSection>
           )}
-          {displayStructuredOutputs && (
+          {codexDebug && (
+            <ContentSection title="Codex 调试" trackingName="workflow-runner-codex-debug-render-mode">
+              {(mode) => (
+                <FieldList>
+                  {renderCodexDebugFields(codexDebug).map(({ label, value, monoLabel }) => (
+                    <FieldBlock key={label} label={label} monoLabel={monoLabel}>
+                      <TextContent content={value} mode={mode} />
+                    </FieldBlock>
+                  ))}
+                </FieldList>
+              )}
+            </ContentSection>
+          )}
+          {displayGenericStructuredOutputs && (
             <ContentSection title="结构化输出" trackingName="workflow-runner-structured-output-render-mode">
               {(mode) => (
                 <FieldList>
-                  {Object.entries(displayStructuredOutputs).map(([k, v]) => (
+                  {Object.entries(displayGenericStructuredOutputs).map(([k, v]) => (
                     <FieldBlock key={k} label={k} monoLabel>
                       <TextContent content={formatOutputValue(v)} mode={mode} />
                     </FieldBlock>
@@ -332,6 +349,44 @@ function formatOutputValue(value: unknown): string {
   return String(value)
 }
 
+function renderCodexDebugFields(value: Record<string, unknown>): Array<{ label: string, value: string, monoLabel?: boolean }> {
+  const fields: Array<{ label: string, value: string, monoLabel?: boolean }> = []
+  appendCodexDebugField(fields, "command", value.command)
+  appendCodexDebugField(fields, "args", formatCodexArgs(value.args))
+  appendCodexDebugField(fields, "cwd", value.cwd)
+  appendCodexDebugField(fields, "exitCode", value.exitCode)
+  appendCodexDebugField(fields, "durationMs", value.durationMs)
+  appendCodexDebugField(fields, "stdoutPath", value.stdoutPath)
+  appendCodexDebugField(fields, "stderrPath", value.stderrPath)
+  appendCodexDebugField(fields, "promptPath", value.promptPath)
+  appendCodexDebugField(fields, "lastMessagePath", value.lastMessagePath)
+  appendCodexDebugField(fields, "stdoutPreview", value.stdoutPreview)
+  appendCodexDebugField(fields, "stderrPreview", value.stderrPreview)
+  appendCodexDebugField(fields, "sessionHints", value.sessionHints)
+  return fields
+}
+
+function appendCodexDebugField(
+  fields: Array<{ label: string, value: string, monoLabel?: boolean }>,
+  label: string,
+  value: unknown,
+) {
+  if (value === null || value === undefined || value === "") return
+  fields.push({
+    label,
+    value: typeof value === "string" ? value : formatOutputValue(value),
+    monoLabel: true,
+  })
+}
+
+function formatCodexArgs(value: unknown): string | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined
+  if (value.every((entry) => typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean")) {
+    return value.map((entry) => String(entry)).join(" ")
+  }
+  return formatOutputValue(value)
+}
+
 function resolveStructuredOutputs(result: NodeRunResult): Record<string, unknown> | undefined {
   if (!result.outputs || Object.keys(result.outputs).length === 0) return undefined
   const entries = Object.entries(result.outputs).filter(([key, value]) => (
@@ -339,6 +394,15 @@ function resolveStructuredOutputs(result: NodeRunResult): Record<string, unknown
     && !(key === "markdown" && typeof value === "string" && value === result.output)
   ))
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function omitRecordKey(record: Record<string, unknown>, keyToOmit: string): Record<string, unknown> | undefined {
+  const entries = Object.entries(record).filter(([key]) => key !== keyToOmit)
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 /** JSON.stringify replacer that replaces circular references with a marker. */
