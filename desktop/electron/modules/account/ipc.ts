@@ -148,11 +148,17 @@ const driveUsageSchema = z.object({
 })
 
 const driveParentSchema = z.object({ parentId: z.string().nullable().optional() })
+const driveUploadConflictStrategySchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("fail") }),
+  z.object({ mode: z.literal("replace"), existingItemId: z.string() }),
+  z.object({ mode: z.literal("keep-both") }),
+])
 const drivePrepareUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
   name: z.string(),
   size: z.string(),
   mimeType: z.string().nullable().optional(),
+  conflictStrategy: driveUploadConflictStrategySchema.optional(),
 })
 const drivePrepareFolderUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
@@ -162,6 +168,37 @@ const drivePrepareFolderUploadSchema = z.object({
     size: z.string(),
     mimeType: z.string().nullable().optional(),
   })),
+})
+const driveUploadConflictInspectEntrySchema = z.object({
+  kind: z.enum(["file", "folder"]),
+  name: z.string().min(1),
+  relativePath: z.string().nullable().optional(),
+})
+const driveUploadConflictInspectSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  entries: z.array(driveUploadConflictInspectEntrySchema).min(1),
+})
+const driveUploadConflictSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("file"),
+    name: z.string(),
+    relativePath: z.string().nullable(),
+    existingItemId: z.string(),
+    existingUpdatedAt: z.string(),
+    replaceable: z.literal(true),
+  }),
+  z.object({
+    kind: z.literal("folder"),
+    name: z.string(),
+    relativePath: z.string().nullable(),
+    existingItemId: z.string(),
+    existingUpdatedAt: z.string(),
+    replaceable: z.literal(false),
+    reason: z.literal("folder-conflict"),
+  }),
+])
+const driveUploadConflictInspectResultSchema = z.object({
+  conflicts: z.array(driveUploadConflictSchema),
 })
 const driveSessionSchema = z.object({ sessionId: z.string() })
 const drivePreparedFileUploadSchema = z.object({
@@ -200,6 +237,11 @@ const driveLocalUploadRequestSchema = z.object({
     driveLocalUploadFileItemSchema,
     driveLocalUploadFolderItemSchema,
   ])).min(1),
+  conflictPolicy: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("fail") }),
+    z.object({ mode: z.literal("replace-all"), conflicts: z.array(driveUploadConflictSchema) }),
+    z.object({ mode: z.literal("keep-both-all"), conflicts: z.array(driveUploadConflictSchema) }),
+  ]).optional(),
 })
 
 const driveLocalUploadResultSchema = z.object({
@@ -392,6 +434,15 @@ export const accountIpcModule: IpcModule = {
       request: drivePrepareFolderUploadSchema,
       response: driveFolderUploadPrepareResultSchema,
       handler: async (_ctx, input) => accountService.prepareDriveFolderUpload(drivePrepareFolderUploadSchema.parse(input)),
+    },
+    inspectDriveUploadConflicts: {
+      kind: "invoke",
+      channel: "synapse:account:drive:uploads:conflicts:inspect",
+      request: driveUploadConflictInspectSchema,
+      response: driveUploadConflictInspectResultSchema,
+      handler: async (_ctx, input) => accountService.inspectDriveUploadConflicts(
+        driveUploadConflictInspectSchema.parse(input),
+      ),
     },
     completeDriveUpload: {
       kind: "invoke",

@@ -21,9 +21,14 @@ import type {
   DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DriveLocalUploadConflictPolicy,
   DrivePublicationDto,
   DriveShareDto,
   DriveShareListItemDto,
+  DriveUploadConflict,
+  DriveUploadConflictInspectInput,
+  DriveUploadConflictInspectResult,
+  DriveUploadConflictStrategy,
   DriveUploadPrepareResult,
   DriveUsageDto,
   ContentStoreDraftDto,
@@ -322,12 +327,19 @@ export class AccountService {
     return { url: await currentOwnerDriveBrowserUrl(itemId) }
   }
 
-  async prepareDriveUpload(input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }): Promise<DriveUploadPrepareResult> {
+  async prepareDriveUpload(input: {
+    parentId?: string | null
+    name: string
+    size: string
+    mimeType?: string | null
+    conflictStrategy?: DriveUploadConflictStrategy
+  }): Promise<DriveUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/prepare`, {
       parentId: input.parentId ?? null,
       name: input.name,
       size: input.size,
       mimeType: input.mimeType ?? null,
+      ...(input.conflictStrategy ? { conflictStrategy: input.conflictStrategy } : {}),
     }, "上传准备失败。")
   }
 
@@ -345,6 +357,22 @@ export class AccountService {
         mimeType: file.mimeType ?? null,
       })),
     }, "文件夹上传准备失败。")
+  }
+
+  async inspectDriveUploadConflicts(input: DriveUploadConflictInspectInput): Promise<DriveUploadConflictInspectResult> {
+    return this.requestAuthenticatedJson<DriveUploadConflictInspectResult>(
+      "POST",
+      `${apiBaseUrl()}/drive/uploads/conflicts/inspect`,
+      {
+        parentId: input.parentId ?? null,
+        entries: input.entries.map((entry) => ({
+          kind: entry.kind,
+          name: entry.name,
+          relativePath: entry.relativePath ?? null,
+        })),
+      },
+      "上传冲突检查失败。",
+    )
   }
 
   async completeDriveUpload(sessionId: string): Promise<DriveItemDto> {
@@ -369,7 +397,7 @@ export class AccountService {
 
     for (const item of input.items) {
       const result = item.kind === "file"
-        ? await this.uploadDriveLocalFile(input.parentId ?? null, item)
+        ? await this.uploadDriveLocalFile(input.parentId ?? null, item, input.conflictPolicy)
         : await this.uploadDriveLocalFolder(input.parentId ?? null, item)
       completed += result.completed
       failed += result.failed
@@ -424,6 +452,7 @@ export class AccountService {
   private async uploadDriveLocalFile(
     parentId: string | null,
     item: DriveLocalUploadFileItem,
+    conflictPolicy?: DriveLocalUploadConflictPolicy,
   ): Promise<DriveLocalUploadResult> {
     const fileStat = await safeLocalFileStat(item.path)
     if (!fileStat?.isFile()) {
@@ -433,11 +462,13 @@ export class AccountService {
 
     let prepared: DriveUploadPrepareResult
     try {
+      const conflictStrategy = strategyForLocalFile(conflictPolicy, item.name, null)
       prepared = await this.prepareDriveUpload({
         parentId,
         name: item.name,
         size: String(fileStat.size),
         mimeType: item.mimeType ?? null,
+        ...(conflictStrategy ? { conflictStrategy } : {}),
       })
     } catch {
       return { completed: 0, failed: 1, skipped: 0, message: localUploadErrorMessage() }
@@ -1308,6 +1339,32 @@ function isSafeDriveRelativePath(value: string): boolean {
     return false
   }
   return value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
+}
+
+function strategyForLocalFile(
+  policy: DriveLocalUploadConflictPolicy | undefined,
+  name: string,
+  relativePath: string | null,
+): DriveUploadConflictStrategy | undefined {
+  if (!policy || policy.mode === "fail") return undefined
+  const conflict = findLocalFileConflict(policy.conflicts, name, relativePath)
+  if (!conflict) return undefined
+  if (policy.mode === "replace-all") {
+    return { mode: "replace", existingItemId: conflict.existingItemId }
+  }
+  return { mode: "keep-both" }
+}
+
+function findLocalFileConflict(
+  conflicts: readonly DriveUploadConflict[],
+  name: string,
+  relativePath: string | null,
+): Extract<DriveUploadConflict, { kind: "file" }> | undefined {
+  return conflicts.find((conflict): conflict is Extract<DriveUploadConflict, { kind: "file" }> => (
+    conflict.kind === "file"
+    && conflict.name === name
+    && conflict.relativePath === relativePath
+  ))
 }
 
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {

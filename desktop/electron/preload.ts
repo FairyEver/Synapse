@@ -322,6 +322,7 @@ const IPC_CHANNELS = {
     "listDriveItems": "synapse:account:drive:items:list",
     "prepareDriveUpload": "synapse:account:drive:uploads:prepare",
     "prepareDriveFolderUpload": "synapse:account:drive:uploads:folder:prepare",
+    "inspectDriveUploadConflicts": "synapse:account:drive:uploads:conflicts:inspect",
     "completeDriveUpload": "synapse:account:drive:uploads:complete",
     "uploadDrivePreparedFile": "synapse:account:drive:uploads:put",
     "uploadDriveLocalItems": "synapse:account:drive:uploads:local-items",
@@ -592,6 +593,7 @@ const synapseBridge: SynapseBridge = {
     listDriveItems: invoke(IPC_CHANNELS.account.listDriveItems),
     prepareDriveUpload: invoke(IPC_CHANNELS.account.prepareDriveUpload),
     prepareDriveFolderUpload: invoke(IPC_CHANNELS.account.prepareDriveFolderUpload),
+    inspectDriveUploadConflicts: invoke(IPC_CHANNELS.account.inspectDriveUploadConflicts),
     completeDriveUpload: invoke(IPC_CHANNELS.account.completeDriveUpload),
     uploadDrivePreparedFile: invoke(IPC_CHANNELS.account.uploadDrivePreparedFile),
     uploadDriveLocalItems: invokeWithFailureLogRequest(

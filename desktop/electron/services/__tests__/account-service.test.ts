@@ -209,6 +209,100 @@ describe("AccountService", () => {
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
   })
 
+  it("passes replace conflict strategy for matching local drive files", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-replace-"))
+    const filePath = path.join(dir, "report.md")
+    await writeFile(filePath, "updated")
+
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "existing-1", name: "report.md", size: "7" }),
+      sessionId: "session-replace-1",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "text/markdown" },
+        method: "PUT",
+        url: "https://upload.example.test/replace-1",
+      },
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "existing-1", name: "report.md", size: "7" }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: "folder-1",
+      items: [{ kind: "file", path: filePath, name: "report.md", mimeType: "text/markdown" }],
+      conflictPolicy: {
+        mode: "replace-all",
+        conflicts: [{
+          kind: "file",
+          name: "report.md",
+          relativePath: null,
+          existingItemId: "existing-1",
+          existingUpdatedAt: "2026-06-09T00:00:00.000Z",
+          replaceable: true,
+        }],
+      },
+    })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
+
+    expect(service.prepareDriveUpload).toHaveBeenCalledWith({
+      parentId: "folder-1",
+      name: "report.md",
+      size: "7",
+      mimeType: "text/markdown",
+      conflictStrategy: { mode: "replace", existingItemId: "existing-1" },
+    })
+  })
+
+  it("passes keep-both conflict strategy for matching local drive files", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-keep-both-"))
+    const filePath = path.join(dir, "report.md")
+    await writeFile(filePath, "copy")
+
+    const fetch = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    vi.spyOn(service, "prepareDriveUpload").mockResolvedValue({
+      item: driveItem({ id: "file-copy-1", name: "report_20260609_001000.md", size: "4" }),
+      sessionId: "session-copy-1",
+      upload: {
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        headers: { "Content-Type": "text/markdown" },
+        method: "PUT",
+        url: "https://upload.example.test/copy-1",
+      },
+    })
+    vi.spyOn(service, "completeDriveUpload").mockResolvedValue(
+      driveItem({ id: "file-copy-1", name: "report_20260609_001000.md", size: "4" }),
+    )
+    vi.spyOn(service, "cancelDriveUpload").mockResolvedValue({ ok: true })
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: "folder-1",
+      items: [{ kind: "file", path: filePath, name: "report.md", mimeType: "text/markdown" }],
+      conflictPolicy: {
+        mode: "keep-both-all",
+        conflicts: [{
+          kind: "file",
+          name: "report.md",
+          relativePath: null,
+          existingItemId: "existing-1",
+          existingUpdatedAt: "2026-06-09T00:00:00.000Z",
+          replaceable: true,
+        }],
+      },
+    })).resolves.toEqual({ completed: 1, failed: 0, skipped: 0 })
+
+    expect(service.prepareDriveUpload).toHaveBeenCalledWith({
+      parentId: "folder-1",
+      name: "report.md",
+      size: "4",
+      mimeType: "text/markdown",
+      conflictStrategy: { mode: "keep-both" },
+    })
+  })
+
   it("preserves existing prepared upload content-length headers", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-existing-length-"))
     const filePath = path.join(dir, "report.txt")

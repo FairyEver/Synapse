@@ -278,6 +278,10 @@ describe("preload bridge", () => {
 
     await bridge.account.listDriveItems({ parentId: null })
     await bridge.account.prepareDriveUpload({ parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" })
+    await bridge.account.inspectDriveUploadConflicts({
+      parentId: null,
+      entries: [{ kind: "file", name: "brief.txt", relativePath: null }],
+    })
     await bridge.account.completeDriveUpload({ sessionId: "session-1" })
     await bridge.account.uploadDrivePreparedFile({
       body: new ArrayBuffer(11),
@@ -309,6 +313,13 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:uploads:prepare",
       { parentId: null, name: "brief.txt", size: "11", mimeType: "text/plain" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:uploads:conflicts:inspect",
+      {
+        parentId: null,
+        entries: [{ kind: "file", name: "brief.txt", relativePath: null }],
+      },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:uploads:complete",

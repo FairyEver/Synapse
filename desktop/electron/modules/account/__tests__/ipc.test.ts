@@ -33,6 +33,7 @@ vi.mock("../../../services/account-service", () => ({
     listDriveItems: async () => [],
     prepareDriveUpload: async () => ({}),
     prepareDriveFolderUpload: async () => ({}),
+    inspectDriveUploadConflicts: async () => ({ conflicts: [] }),
     completeDriveUpload: async () => ({}),
     uploadDrivePreparedFile: async () => ({ ok: true }),
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 0, failed: 0, skipped: 0 })),
@@ -161,12 +162,24 @@ describe("accountIpcModule", () => {
           ],
         },
       ],
+      conflictPolicy: {
+        mode: "replace-all",
+        conflicts: [{
+          kind: "file",
+          name: "report.txt",
+          relativePath: null,
+          existingItemId: "existing-1",
+          existingUpdatedAt: "2026-06-09T00:00:00.000Z",
+          replaceable: true,
+        }],
+      },
     })).toMatchObject({
       parentId: "folder-1",
       items: [
         { kind: "file", name: "report.txt" },
         { kind: "folder", folderName: "项目A" },
       ],
+      conflictPolicy: { mode: "replace-all" },
     })
 
     expect(() => requestSchema.parse({
@@ -177,6 +190,26 @@ describe("accountIpcModule", () => {
         files: [{ path: "/tmp/bad.txt", relativePath: "../bad.txt" }],
       }],
     })).toThrow()
+  })
+
+  it("validates drive upload conflict inspection requests", () => {
+    const requestSchema = accountIpcModule.methods.inspectDriveUploadConflicts.request
+    expect(requestSchema).toBeDefined()
+    if (!requestSchema) throw new Error("expected conflict inspect request schema")
+
+    expect(requestSchema.parse({
+      parentId: "folder-1",
+      entries: [
+        { kind: "file", name: "report.md", relativePath: null },
+        { kind: "folder", name: "docs", relativePath: "docs" },
+      ],
+    })).toMatchObject({
+      parentId: "folder-1",
+      entries: [
+        { kind: "file", name: "report.md", relativePath: null },
+        { kind: "folder", name: "docs", relativePath: "docs" },
+      ],
+    })
   })
 
   it("returns owner drive item preview URLs", async () => {

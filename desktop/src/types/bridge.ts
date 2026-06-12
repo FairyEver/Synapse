@@ -29,9 +29,13 @@ import type {
   DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DriveLocalUploadConflictPolicy,
   DrivePublicationDto,
   DriveShareDto,
   DriveShareListItemDto,
+  DriveUploadConflictInspectInput,
+  DriveUploadConflictInspectResult,
+  DriveUploadConflictStrategy,
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -58,6 +62,7 @@ export type DriveLocalUploadItem = DriveLocalUploadFileItem | DriveLocalUploadFo
 export type DriveLocalUploadRequest = {
   readonly parentId?: string | null
   readonly items: DriveLocalUploadItem[]
+  readonly conflictPolicy?: DriveLocalUploadConflictPolicy
 }
 
 export type DriveLocalUploadResult = {
@@ -729,8 +734,9 @@ export type SynapseBridge = {
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>
     listDriveItems: (input: { parentId?: string | null }) => Promise<DriveItemDto[]>
-    prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }) => Promise<DriveUploadPrepareResult>
+    prepareDriveUpload: (input: { parentId?: string | null; name: string; size: string; mimeType?: string | null; conflictStrategy?: DriveUploadConflictStrategy }) => Promise<DriveUploadPrepareResult>
     prepareDriveFolderUpload: (input: { parentId?: string | null; folderName: string; files: Array<{ relativePath: string; size: string; mimeType?: string | null }> }) => Promise<DriveFolderUploadPrepareResult>
+    inspectDriveUploadConflicts: (input: DriveUploadConflictInspectInput) => Promise<DriveUploadConflictInspectResult>
     completeDriveUpload: (input: { sessionId: string }) => Promise<DriveItemDto>
     uploadDrivePreparedFile: (input: { method: "PUT"; url: string; headers: Record<string, string>; body: ArrayBuffer }) => Promise<{ ok: true }>
     uploadDriveLocalItems: (input: DriveLocalUploadRequest) => Promise<DriveLocalUploadResult>
