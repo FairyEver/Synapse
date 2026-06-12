@@ -172,6 +172,16 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     expect(result.status).toBe("completed")
     expect(harness.states.some((state) => state.warningCode === "free-space-unknown")).toBe(true)
   })
+
+  it("shows an actionable message when a knowledge base session blocks migration", async () => {
+    const harness = await migrationHarness({ activeKnowledgeBaseSession: true })
+    await harness.seedRuntime("kb-1")
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("知识库对话仍在运行，暂时不能迁移。请先停止知识库对话里的回答；如果没有正在回答，请重启 Synapse 后再迁移。")
+  })
 })
 
 type RuntimeSeedOptions = {
@@ -184,6 +194,7 @@ type MigrationHarnessOptions = {
   pauseAfterFirstCopy?: boolean
   pauseAtPhase?: "switching"
   availableBytes?: number | null
+  activeKnowledgeBaseSession?: boolean
 }
 
 async function migrationHarness(options: MigrationHarnessOptions = {}) {
@@ -223,7 +234,7 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     },
     journalPath,
     sourceManager,
-    hasActiveKnowledgeBaseSession: async () => false,
+    hasActiveKnowledgeBaseSession: async () => options.activeKnowledgeBaseSession === true,
     getAvailableBytes: async () => options.availableBytes === undefined ? 100_000_000_000 : options.availableBytes,
     afterCopyEntry: async () => {
       if (!options.pauseAfterFirstCopy || pausedCopy) return

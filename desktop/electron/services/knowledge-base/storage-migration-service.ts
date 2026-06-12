@@ -435,7 +435,7 @@ export class KnowledgeBaseStorageMigrationService {
 
   private async assertCanStartMigration(): Promise<void> {
     if (await this.deps.hasActiveKnowledgeBaseSession()) {
-      throw new Error("请先停止正在运行的知识库会话。")
+      throw new Error("知识库对话仍在运行，暂时不能迁移。请先停止知识库对话里的回答；如果没有正在回答，请重启 Synapse 后再迁移。")
     }
     if (this.deps.sourceManager.hasActiveMutation()) {
       throw new Error("资料操作仍在进行。")
