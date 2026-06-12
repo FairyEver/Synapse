@@ -516,7 +516,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
           scope: item.scope,
         })
         setContentStoreEditUrl(result.consoleEditUrl ?? result.dashboardEditUrl)
-        notifyError("无法打开 Console。")
+        notifyError("无法打开 Synapse。")
       }
     } catch (error) {
       logger.warn("Content store skill draft upload failed.", {

@@ -143,9 +143,9 @@ export function getSidebarData(user: Pick<AuthUser, 'displayName' | 'email' | 'r
       profileUrl: undefined,
     },
     appTitle: {
-      name: 'Synapse Console',
+      name: 'Synapse',
       logo: Logo,
-      description: isAdmin ? '管理后台' : '用户后台',
+      description: isAdmin ? '系统管理' : '个人空间',
     },
     navGroups: isAdmin ? [adminNavGroup, adminAccountNavGroup] : [userAccountNavGroup],
   }

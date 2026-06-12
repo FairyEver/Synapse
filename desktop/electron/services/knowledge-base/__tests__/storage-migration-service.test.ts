@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir as fsReaddir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -72,6 +72,29 @@ describe("KnowledgeBaseStorageMigrationService", () => {
       warningCode: "old-copy-not-trashed",
     })
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+  })
+
+  it("restores default storage when the default old copy still exists", async () => {
+    const harness = await migrationHarness()
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+    await harness.seedRuntime("kb-1", harness.newRoot, { content: "# Current custom data\n" })
+    await harness.seedRuntime("kb-1", harness.oldRoot, { content: "# Preserved old data\n" })
+
+    const result = await harness.service.startMigration({
+      target: { mode: "default" },
+      requestedBy: "test",
+    })
+
+    expect(result.status).toBe("completed")
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+    await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Current custom data\n")
+    const backupNames = (await fsReaddir(harness.oldRoot)).filter((entry) =>
+      entry.startsWith("knowledge-bases.backup-before-migration-")
+    )
+    expect(backupNames).toHaveLength(1)
+    await expect(readFile(path.join(harness.oldRoot, backupNames[0], "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Preserved old data\n")
   })
 
   it("cancels during copy and keeps the old config", async () => {
@@ -153,6 +176,7 @@ describe("KnowledgeBaseStorageMigrationService", () => {
 
 type RuntimeSeedOptions = {
   manifest?: boolean
+  content?: string
 }
 
 type MigrationHarnessOptions = {
@@ -230,7 +254,7 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     await writeFile(path.join(runtimePath, ".claude-plugin", "plugin.json"), "{\"name\":\"kb\"}\n", "utf8")
     await writeFile(path.join(runtimePath, "skills", ".gitkeep"), "", "utf8")
     await writeFile(path.join(runtimePath, "commands", ".gitkeep"), "", "utf8")
-    await writeFile(path.join(runtimePath, "CLAUDE.md"), "# Knowledge\n", "utf8")
+    await writeFile(path.join(runtimePath, "CLAUDE.md"), seedOptions.content ?? "# Knowledge\n", "utf8")
     if (seedOptions.manifest !== false) {
       await writeFile(path.join(runtimePath, ".raw", ".manifest.json"), "{\"version\":1}\n", "utf8")
     }

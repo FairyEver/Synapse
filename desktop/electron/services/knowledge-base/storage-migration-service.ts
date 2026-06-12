@@ -186,7 +186,7 @@ export class KnowledgeBaseStorageMigrationService {
 
       await this.assertCanStartMigration()
       this.deps.sourceManager.closeIdleWindows()
-      await this.validateTargetRoot(oldRoot, newRoot)
+      const shouldPreserveExistingDefaultTarget = await this.validateTargetRoot(oldRoot, newRoot, payload.target)
 
       const oldKnowledgeBasesPath = resolveKnowledgeBasesDirectory({
         userDataPath: this.deps.userDataPath,
@@ -251,6 +251,15 @@ export class KnowledgeBaseStorageMigrationService {
         cancellable: false,
         message: "正在切换知识库存储",
       })
+      if (shouldPreserveExistingDefaultTarget) {
+        const backupPath = await moveExistingKnowledgeBasesAside(newKnowledgeBasesPath)
+        if (backupPath) {
+          logger.info("Existing default Knowledge Base storage preserved before restore.", {
+            backupPath,
+            targetKnowledgeBasesPath: newKnowledgeBasesPath,
+          })
+        }
+      }
       await rename(tempKnowledgeBasesPath, newKnowledgeBasesPath)
       await rm(tempPath, { recursive: true, force: true })
       await this.deps.updateConfig({ global: { knowledgeBaseStorage: payload.target } })
@@ -433,7 +442,11 @@ export class KnowledgeBaseStorageMigrationService {
     }
   }
 
-  private async validateTargetRoot(oldRoot: string, newRoot: string): Promise<void> {
+  private async validateTargetRoot(
+    oldRoot: string,
+    newRoot: string,
+    target: KnowledgeBaseStorageMigrationTarget,
+  ): Promise<boolean> {
     if (!path.isAbsolute(newRoot)) {
       throw new Error("知识库存储位置必须是绝对路径。")
     }
@@ -444,8 +457,12 @@ export class KnowledgeBaseStorageMigrationService {
     await access(newRoot, constants.R_OK | constants.W_OK)
     const targetKnowledgeBasesPath = path.join(newRoot, "knowledge-bases")
     if (await hasDirectoryEntries(targetKnowledgeBasesPath)) {
+      if (target.mode === "default") {
+        return true
+      }
       throw new Error("目标位置已存在知识库数据。")
     }
+    return false
   }
 
   private async validateAvailableSpace(
@@ -669,4 +686,25 @@ async function hasDirectoryEntries(targetPath: string): Promise<boolean> {
     }
     throw error
   }
+}
+
+async function moveExistingKnowledgeBasesAside(knowledgeBasesPath: string): Promise<string | null> {
+  if (!await hasDirectoryEntries(knowledgeBasesPath)) {
+    return null
+  }
+  const backupPath = await uniqueKnowledgeBasesBackupPath(path.dirname(knowledgeBasesPath))
+  await rename(knowledgeBasesPath, backupPath)
+  return backupPath
+}
+
+async function uniqueKnowledgeBasesBackupPath(rootPath: string): Promise<string> {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+  for (let index = 0; index < 100; index += 1) {
+    const suffix = index === 0 ? "" : `-${index}`
+    const candidate = path.join(rootPath, `knowledge-bases.backup-before-migration-${stamp}${suffix}`)
+    if (!await pathExists(candidate)) {
+      return candidate
+    }
+  }
+  throw new Error("无法创建旧知识库备份目录。")
 }

@@ -209,7 +209,7 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain("handleUploadSkillToContentStore")
   })
 
-  it("opens Console after uploading a content store Skill draft", async () => {
+  it("opens Synapse after uploading a content store Skill draft", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
       "utf8",

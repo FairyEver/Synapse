@@ -68,7 +68,7 @@ export function SignUpForm({
     return (
       <div className='flex flex-col gap-4'>
         <p className='text-sm text-muted-foreground'>
-          {registeredEmail} 已创建，可以登录管理后台。
+          {registeredEmail} 已创建，可以登录 Synapse。
         </p>
         <Button asChild>
           <Link to='/sign-in'>去登录</Link>

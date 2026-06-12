@@ -288,7 +288,7 @@ export class AgentRuntimeService {
       return false
     }
     return Array.from(this.states.values()).some((state) =>
-      state.busy || state.activeTurns > 0 || state.queue.length > 0
+      state.busy || state.activeTurns > 0 || state.queue.length > 0 || state.liveSession?.alive() === true
     )
   }
 

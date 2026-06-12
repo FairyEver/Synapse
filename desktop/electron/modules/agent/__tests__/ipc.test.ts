@@ -122,14 +122,16 @@ describe("agentIpcModule", () => {
     })
   })
 
-  it("opens managed knowledge base projects with their hidden runtime path", async () => {
-    const backingPath = path.join(defaultKnowledgeBaseUserDataPath(), "knowledge-bases", "kb-1")
+  it("opens managed knowledge base projects with their configured hidden runtime path", async () => {
+    const customRoot = path.join(tmpdir(), "synapse-agent-ipc-custom-kb-root")
+    const backingPath = path.join(customRoot, "knowledge-bases", "kb-1")
     await fs.rm(backingPath, { recursive: true, force: true })
     await fs.mkdir(backingPath, { recursive: true })
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [],
       global: {
         themeMode: "system",
+        knowledgeBaseStorage: { mode: "custom", rootPath: customRoot },
         projects: [{
           id: "kb-1",
           name: "Knowledge",
@@ -170,7 +172,7 @@ describe("agentIpcModule", () => {
 
     expect(harness.projectContainers.open).toHaveBeenCalledWith("kb-1", {
       name: "Knowledge",
-      workspacePath: expect.stringContaining(path.join("knowledge-bases", "kb-1")),
+      workspacePath: backingPath,
       managedKnowledgeBase: true,
     })
   })

@@ -264,7 +264,7 @@ async function resolveAgentProjectConfig(
   return {
     uuid: project.id,
     name: project.name,
-    localPath: resolveProjectWorkspacePath(project),
+    localPath: resolveProjectWorkspacePath(project, { storage: config.global.knowledgeBaseStorage }),
     ...(isManagedKnowledgeBaseProject(project) ? { managedKnowledgeBase: true } : undefined),
   }
 }

@@ -20,6 +20,7 @@ The default storage root is the current Electron `userData` path, which keeps ex
 - If a custom root is unavailable, block Knowledge Base operations instead of silently falling back to the default root.
 - After a successful migration and verification, move the old `knowledge-bases` directory to the system trash or recycle bin.
 - If moving the old directory to trash fails after the new location is verified, keep the new location active and report that the old copy remains.
+- If restoring the default location later finds that old default copy still present, preserve it by moving it to a timestamped backup directory before placing the current migrated data at the default `knowledge-bases` path.
 - Do not expose an "open real folder" action, and do not show real runtime paths in project records.
 
 ## Goals
@@ -92,6 +93,7 @@ Changing the root and restoring the default root use the same transaction:
    - target is not a dangerous system path,
    - target is not inside the current `knowledge-bases` tree,
    - target does not already contain a non-empty `knowledge-bases` directory that was not created by this migration,
+   - exception: when restoring default storage and the default `knowledge-bases` directory still contains the old copy from a previous successful migration, move that directory aside as `knowledge-bases.backup-before-migration-<timestamp>` during the switch phase instead of overwriting it,
    - when free-space data is available, target space exceeds current runtime bytes plus the greater of 10% or 1 GB,
    - when free-space data is unavailable, record that the check is unknown and allow the guarded copy to proceed.
 6. Persist a migration journal before copying.
@@ -137,6 +139,7 @@ Failure handling:
 - Temporary directories are cleaned up best effort with structured warnings on cleanup failure.
 - Old runtime data is never permanently deleted by the migration.
 - Failure to trash the old directory after successful switch and verification does not roll back the new root. Complete with a warning that the old copy remains.
+- Restore-default migration preserves any leftover old default copy by renaming it before installing the current copy; the active default `knowledge-bases` directory must contain the latest current data after the switch.
 
 ## Claude Code And Runtime Loading
 
@@ -252,6 +255,7 @@ Audit metadata should include operation name, old root category, new root catego
 - Verification failure keeps or restores old config and old data.
 - Successful migration switches config, resolves all runtimes from the new root, and trashes the old `knowledge-bases` directory.
 - Trash failure after a successful switch keeps the new root active and reports that the old copy remains.
+- Restoring default after a trash failure preserves the old default copy in a timestamped backup and restores the current data to the default `knowledge-bases` directory.
 - Custom-root unavailability blocks create, raw/source management, and Knowledge Base Agent launch.
 - Custom-root unavailability exposes re-detection only and does not permit restore-default migration until the source returns.
 - Claude Code session creation receives the new resolved backing directory after migration.

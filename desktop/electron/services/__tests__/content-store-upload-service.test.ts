@@ -179,7 +179,7 @@ describe("ContentStoreUploadService", () => {
     expect(createContentStoreSkillDraft).not.toHaveBeenCalled()
   })
 
-  it("builds Console edit URLs from the public app URL", () => {
+  it("builds Synapse edit URLs from the public app URL", () => {
     expect(buildContentStoreConsoleEditUrl("https://synapse.example.test", "item 1")).toBe(
       "https://synapse.example.test/console/my-content/item%201/edit",
     )

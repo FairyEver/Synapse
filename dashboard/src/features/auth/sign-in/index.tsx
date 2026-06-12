@@ -20,7 +20,7 @@ export function SignIn() {
       <Card className='w-full max-w-sm gap-4 sm:min-w-sm'>
         <CardHeader>
           <CardTitle className='text-lg'>登录</CardTitle>
-          <CardDescription>输入邮箱和密码登录管理后台。</CardDescription>
+          <CardDescription>输入邮箱和密码登录 Synapse。</CardDescription>
         </CardHeader>
         <CardContent>
           <UserAuthForm redirectTo={redirectTo} />
