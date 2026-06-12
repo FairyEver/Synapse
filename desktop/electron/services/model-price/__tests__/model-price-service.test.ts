@@ -350,6 +350,36 @@ describe("model price service", () => {
         cacheReadPer1M: 0.42,
         cacheWritePer1M: 5.25,
       }),
+      expect.objectContaining({
+        modelPattern: "kimi-k2-thinking",
+        inputPer1M: 4,
+        outputPer1M: 16,
+        cacheReadPer1M: 0.8,
+      }),
+      expect.objectContaining({
+        modelPattern: "Moonshot-Kimi-K2-Instruct",
+        inputPer1M: 4,
+        outputPer1M: 16,
+        cacheReadPer1M: 0.8,
+      }),
+      expect.objectContaining({
+        modelPattern: "kimi/kimi-k2.6",
+        inputPer1M: 6.5,
+        outputPer1M: 27,
+        cacheReadPer1M: 1.1,
+      }),
+      expect.objectContaining({
+        modelPattern: "glm-5",
+        inputPer1M: 6,
+        outputPer1M: 22,
+        cacheReadPer1M: 1.2,
+      }),
+      expect.objectContaining({
+        modelPattern: "ZHIPU/GLM-5",
+        inputPer1M: 6,
+        outputPer1M: 22,
+        cacheReadPer1M: 1.5,
+      }),
     ]))
   })
 

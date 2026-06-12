@@ -22,6 +22,7 @@ describe("drive access protection", () => {
 
   it("computes expiration presets", () => {
     const now = new Date("2026-06-09T00:00:00.000Z")
+    expect(computeDriveAccessExpiresAt("3d", now)?.toISOString()).toBe("2026-06-12T00:00:00.000Z")
     expect(computeDriveAccessExpiresAt("7d", now)?.toISOString()).toBe("2026-06-16T00:00:00.000Z")
     expect(computeDriveAccessExpiresAt("30d", now)?.toISOString()).toBe("2026-07-09T00:00:00.000Z")
     expect(computeDriveAccessExpiresAt("1y", now)?.toISOString()).toBe("2027-06-09T00:00:00.000Z")

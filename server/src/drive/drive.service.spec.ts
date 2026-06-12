@@ -1001,6 +1001,82 @@ describe("DriveService", () => {
     })
   })
 
+  it("builds owner browser snapshots with markdown visit urls", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Notes"), size: 7n, contentType: "text/markdown" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "notes.md",
+      mimeType: "text/markdown",
+    })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      rootItemId: file.id,
+      surface: "standalone",
+    })
+
+    expect(snapshot.current.previewKind).toBe("markdown")
+    expect(snapshot.preview).toMatchObject({
+      kind: "markdown",
+      text: "# Notes",
+      visitUrl: `/drive/items/${file.id}/render`,
+    })
+  })
+
+  it("renders owner markdown files as html documents", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Notes"), size: 7n, contentType: "text/markdown" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "notes.md",
+      mimeType: "text/markdown",
+    })
+
+    const asset = await service.resolveOwnerRenderAccess({
+      userId: "user-1",
+      rootItemId: file.id,
+    })
+
+    expect(asset.contentType).toBe("text/html; charset=utf-8")
+    expect(asset.csp).toContain("default-src 'none'")
+    await expect(readTestStream(asset.stream)).resolves.toContain("<h1>Notes</h1>")
+  })
+
+  it("rejects markdown render requests above the in-memory render limit", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Large"), size: 10_485_761n, contentType: "text/markdown" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "large.md",
+      mimeType: "text/markdown",
+    })
+    await prisma.driveItem.update({
+      where: { id: file.id },
+      data: { size: 10_485_761n },
+    })
+
+    await expect(service.resolveOwnerRenderAccess({
+      userId: "user-1",
+      rootItemId: file.id,
+    })).rejects.toBeInstanceOf(BadRequestException)
+  })
+
   it("builds console root browser snapshots for user drive roots", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -1478,6 +1554,14 @@ function orderRows(rows: any[], orderBy: any): any[] {
     }
     return 0
   })
+}
+
+async function readTestStream(stream: NodeJS.ReadableStream): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks).toString("utf8")
 }
 
 function uniqueConstraintError(target: readonly string[]): Prisma.PrismaClientKnownRequestError {

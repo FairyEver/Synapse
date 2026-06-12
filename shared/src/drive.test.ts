@@ -23,6 +23,7 @@ import {
   buildShareDriveChildZipUrl,
   buildShareDriveDownloadUrl,
   buildShareDriveZipUrl,
+  type DriveBrowserPreviewKind,
   maskDriveBrowserUrl,
   maskDrivePublicUrl,
   maskDriveShareUrl,
@@ -135,7 +136,13 @@ describe("drive URL helpers", () => {
   })
 
   it("defines the default drive access settings", () => {
-    expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({ passwordEnabled: true, expiresIn: "7d" })
+    expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({ passwordEnabled: true, expiresIn: "3d" })
+  })
+
+  it("allows markdown as a drive browser preview kind", () => {
+    const kind: DriveBrowserPreviewKind = "markdown"
+
+    expect(kind).toBe("markdown")
   })
 
   it("uses the files public prefix", () => {

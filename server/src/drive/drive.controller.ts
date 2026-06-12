@@ -47,7 +47,7 @@ const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
 const deleteItemSchema = z.object({ disablePublications: z.boolean().optional() }).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
-  expiresIn: z.enum(["7d", "30d", "1y", "forever"]).optional(),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
 }).strict()
 const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatus"] as const
 
@@ -337,7 +337,7 @@ export class DrivePublicController {
   @UseGuards(UserAuthGuard)
   @Get("/drive/items/:rootItemId/render")
   async renderOwnerHtmlItem(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
-    const asset = await this.drive.resolveOwnerHtmlRenderAccess({
+    const asset = await this.drive.resolveOwnerRenderAccess({
       userId: request.user!.id,
       rootItemId,
     })
@@ -352,7 +352,7 @@ export class DrivePublicController {
     @Req() request: AuthenticatedUserRequest,
     @Res() response: Response,
   ) {
-    const asset = await this.drive.resolveOwnerHtmlRenderAccess({
+    const asset = await this.drive.resolveOwnerRenderAccess({
       userId: request.user!.id,
       rootItemId,
       currentItemId: itemId,
@@ -763,13 +763,14 @@ async function sendPublishedAsset(response: Response, asset: {
   readonly stream: NodeJS.ReadableStream
   readonly contentType: string
   readonly size?: bigint
+  readonly csp?: string
 }) {
   response.setHeader("Content-Type", asset.contentType)
   response.setHeader("X-Content-Type-Options", "nosniff")
   response.setHeader("Referrer-Policy", "no-referrer")
   response.setHeader(
     "Content-Security-Policy",
-    "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'none';",
+    asset.csp ?? "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'none';",
   )
   if (asset.size !== undefined) response.setHeader("Content-Length", asset.size.toString())
   await pipeline(asset.stream, createResponseWritable(response))

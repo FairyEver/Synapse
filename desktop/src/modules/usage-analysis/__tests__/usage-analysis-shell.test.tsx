@@ -121,7 +121,7 @@ describe("UsageAnalysisShell", () => {
     expect(html).toContain("刷新中")
   })
 
-  it("shows today-specific loading refresh text on today", () => {
+  it("keeps today refresh text unchanged while loading", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
         title="CC"
@@ -136,7 +136,8 @@ describe("UsageAnalysisShell", () => {
       </UsageAnalysisShell>,
     )
 
-    expect(html).toContain("刷新今日中")
+    expect(html).toContain("刷新今日")
+    expect(html).not.toContain("刷新今日中")
   })
 
   it("keeps report padding inside the scroll viewport content", () => {

@@ -68,7 +68,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -79,6 +78,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 type DrivePathEntry = {
@@ -134,6 +134,7 @@ const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
 const DRIVE_ACCESS_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; readonly value: DriveAccessExpiresInOption }> = [
+  { label: "3 天", value: "3d" },
   { label: "7 天", value: "7d" },
   { label: "30 天", value: "30d" },
   { label: "1 年", value: "1y" },
@@ -493,8 +494,17 @@ function DriveModule() {
     setAccessSettingsTarget({ kind: "page", item })
   }, [])
 
-  const handlePublishSite = useCallback((item: DriveItemDto) => {
-    setAccessSettingsTarget({ kind: "site", item })
+  const handlePublishSite = useCallback(async (item: DriveItemDto) => {
+    try {
+      const children = await requireSynapseBridge().account.listDriveItems({ parentId: item.id })
+      if (!hasRootIndexHtml(children)) {
+        toast("站点根目录需要 index.html。")
+        return
+      }
+      setAccessSettingsTarget({ kind: "site", item })
+    } catch (_rawError) {
+      toast("检查站点文件失败")
+    }
   }, [])
 
   const handleDisablePublication = useCallback(async (publicationId: string) => {
@@ -1538,24 +1548,31 @@ function DriveAccessSettingsDialog({
             </label>
             <div className="grid gap-2.5">
               <Label>有效时长</Label>
-              <RadioGroup
-                className="gap-1.5"
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                className="w-full"
                 value={settings.expiresIn}
-                onValueChange={(value) => setSettings((current) => ({
-                  ...current,
-                  expiresIn: value as DriveAccessExpiresInOption,
-                }))}
+                onValueChange={(value) => {
+                  if (!value) return
+                  setSettings((current) => ({
+                    ...current,
+                    expiresIn: value as DriveAccessExpiresInOption,
+                  }))
+                }}
               >
-                {DRIVE_ACCESS_EXPIRES_OPTIONS.map((option) => {
-                  const id = `drive-access-expires-${option.value}`
-                  return (
-                    <label key={option.value} className="flex min-h-8 items-center gap-2 text-sm" htmlFor={id}>
-                      <RadioGroupItem id={id} value={option.value} />
-                      <span>{option.label}</span>
-                    </label>
-                  )
-                })}
-              </RadioGroup>
+                {DRIVE_ACCESS_EXPIRES_OPTIONS.map((option) => (
+                  <ToggleGroupItem
+                    key={option.value}
+                    className="h-8 flex-1"
+                    type="button"
+                    value={option.value}
+                  >
+                    {option.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
             </div>
           </div>
         </FormDialog>
@@ -2510,6 +2527,10 @@ function readRelativeFilePath(file: File): string {
 function isHtmlDriveItem(item: DriveItemDto): boolean {
   const name = item.name.toLowerCase()
   return item.type === "file" && (name.endsWith(".html") || name.endsWith(".htm") || item.mimeType === "text/html")
+}
+
+function hasRootIndexHtml(items: readonly DriveItemDto[]): boolean {
+  return items.some((item) => item.type === "file" && item.name === "index.html" && item.storageStatus === "active")
 }
 
 function formatBytes(value: string): string {

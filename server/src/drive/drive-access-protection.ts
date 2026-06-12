@@ -58,7 +58,7 @@ export function computeDriveAccessExpiresAt(expiresIn: DriveAccessExpiresIn, now
     return expiresAt
   }
 
-  const days = expiresIn === "7d" ? 7 : 30
+  const days = expiresIn === "3d" ? 3 : expiresIn === "7d" ? 7 : 30
   return new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
 }
 

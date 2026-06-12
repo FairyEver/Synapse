@@ -381,11 +381,11 @@ describe("accountIpcModule", () => {
     expect(accountIpcModule.methods.shareDriveItem.request?.parse({
       itemId: "share-1",
       passwordEnabled: false,
-      expiresIn: "30d",
+      expiresIn: "3d",
     })).toEqual({
       itemId: "share-1",
       passwordEnabled: false,
-      expiresIn: "30d",
+      expiresIn: "3d",
     })
     expect(accountIpcModule.methods.publishDrivePage.request?.parse({
       itemId: "item-1",

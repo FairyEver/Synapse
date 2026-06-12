@@ -215,7 +215,7 @@ const driveItemIdSchema = z.object({ itemId: z.string() })
 const drivePreviewUrlSchema = z.object({ url: z.string().url() })
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean(),
-  expiresIn: z.enum(["7d", "30d", "1y", "forever"]),
+  expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
 })
 const driveAccessItemSchema = driveItemIdSchema.extend(driveAccessSettingsSchema.shape)
 const driveDeleteItemSchema = z.object({ itemId: z.string(), disablePublications: z.boolean().optional() })

@@ -804,12 +804,14 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("分享设置")
     expect(document.body.textContent).toContain("需要密码")
     expect(document.body.textContent).toContain("有效时长")
+    expect(document.body.textContent).toContain("3 天")
 
     await clickButtonText("确定")
 
     expect(mocks.shareDriveItem).toHaveBeenCalledWith({
       itemId: "file-1",
-      ...DRIVE_DEFAULT_ACCESS_SETTINGS,
+      passwordEnabled: true,
+      expiresIn: "3d",
     })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
@@ -1099,9 +1101,16 @@ describe("DriveModule", () => {
   })
 
   it("publishes folders and shows the site URL actions", async () => {
-    mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
-    ])
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "index-1", parentId: "folder-1", name: "index.html", type: "file", mimeType: "text/html" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+      ])
     mocks.publishDriveSite.mockResolvedValue(createDrivePublication({
       id: "pub-site-1",
       publishId: "pub_site",
@@ -1121,8 +1130,9 @@ describe("DriveModule", () => {
     expect(mocks.publishDriveSite).not.toHaveBeenCalled()
 
     await clickSwitchByLabel("需要密码")
-    await clickRadioByLabel("30 天")
+    await clickText("30 天")
     await clickButtonText("确定")
+    await flushAct()
 
     expect(mocks.publishDriveSite).toHaveBeenCalledWith({
       itemId: "folder-1",
@@ -1139,11 +1149,68 @@ describe("DriveModule", () => {
     await clickButtonText("打开站点")
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/sites/pub_site/")
 
-    expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(3)
+    expect(mocks.listDriveItems).toHaveBeenNthCalledWith(2, { parentId: "folder-1" })
     expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: null })
     expect(mocks.publishDriveSite.mock.invocationCallOrder[0]).toBeLessThan(mocks.writeClipboardText.mock.invocationCallOrder[0])
     expect(mocks.writeClipboardText.mock.invocationCallOrder[0]).toBeLessThan(mocks.toast.mock.invocationCallOrder[0])
-    expect(mocks.toast.mock.invocationCallOrder[0]).toBeLessThan(mocks.listDriveItems.mock.invocationCallOrder[1])
+    expect(mocks.toast.mock.invocationCallOrder[0]).toBeLessThan(mocks.listDriveItems.mock.invocationCallOrder[2])
+  })
+
+  it("does not open site publish settings when the folder has no root index html", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("site")
+    await clickText("发布站点")
+
+    expect(mocks.listDriveItems).toHaveBeenNthCalledWith(2, { parentId: "folder-1" })
+    expect(mocks.toast).toHaveBeenCalledWith("站点根目录需要 index.html。")
+    expect(document.body.textContent).not.toContain("发布设置")
+    expect(mocks.publishDriveSite).not.toHaveBeenCalled()
+  })
+
+  it("requires an active lowercase index html file directly inside the site folder", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "assets-1", parentId: "folder-1", name: "assets", type: "folder" }),
+        createDriveItem({ id: "index-1", parentId: "folder-1", name: "INDEX.HTML", type: "file", mimeType: "text/html" }),
+        createDriveItem({ id: "pending-index-1", parentId: "folder-1", name: "index.html", type: "file", storageStatus: "pending" }),
+      ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("site")
+    await clickText("发布站点")
+
+    expect(mocks.toast).toHaveBeenCalledWith("站点根目录需要 index.html。")
+    expect(document.body.textContent).not.toContain("发布设置")
+    expect(mocks.publishDriveSite).not.toHaveBeenCalled()
+  })
+
+  it("does not continue publishing when the site index check fails", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
+      ])
+      .mockRejectedValueOnce(new Error("network failed"))
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("site")
+    await clickText("发布站点")
+
+    expect(mocks.toast).toHaveBeenCalledWith("检查站点文件失败")
+    expect(document.body.textContent).not.toContain("发布设置")
+    expect(mocks.publishDriveSite).not.toHaveBeenCalled()
   })
 
   it("shows the published URL when automatic clipboard copy fails", async () => {
@@ -1757,18 +1824,6 @@ async function clickSwitchByLabel(label: string): Promise<void> {
   if (!switchElement) throw new Error(`Switch not found: ${label}`)
   await act(async () => {
     switchElement.click()
-    await flushPromises()
-  })
-}
-
-async function clickRadioByLabel(label: string): Promise<void> {
-  const labelElement = Array.from(document.body.querySelectorAll<HTMLLabelElement>("label"))
-    .find((candidate) => candidate.textContent?.trim() === label)
-  const radio = labelElement?.querySelector<HTMLButtonElement>("[role='radio']")
-    ?? (labelElement?.htmlFor ? document.getElementById(labelElement.htmlFor) as HTMLButtonElement | null : null)
-  if (!radio) throw new Error(`Radio not found: ${label}`)
-  await act(async () => {
-    radio.click()
     await flushPromises()
   })
 }

@@ -53,6 +53,7 @@ export function resolveDriveBrowserPreviewKind(item: Pick<DriveBrowserSourceItem
   const lowerName = item.name.toLowerCase()
   if (mimeType.startsWith("image/")) return "image"
   if (mimeType === "text/html" || lowerName.endsWith(".html") || lowerName.endsWith(".htm")) return "html-source"
+  if (isMarkdownDriveItem(lowerName, mimeType)) return "markdown"
   if (mimeType.startsWith("text/")) return "text"
   if (isKnownTextName(lowerName)) return "text"
   if (isKnownArchiveName(lowerName) || isKnownArchiveMimeType(mimeType)) return "download-only"
@@ -118,19 +119,20 @@ export function buildDriveBrowserPreview(input: {
   readonly imageUrl?: string | null
 }): DriveBrowserPreviewDto {
   const kind = resolveDriveBrowserPreviewKind(input.item)
+  const textPreview = isTextPreviewKind(kind)
   return {
     kind,
-    text: kind === "text" || kind === "html-source" ? input.text ?? "" : null,
-    truncated: kind === "text" || kind === "html-source" ? input.truncated ?? false : false,
+    text: textPreview ? input.text ?? "" : null,
+    truncated: textPreview ? input.truncated ?? false : false,
     imageUrl: kind === "image" ? input.imageUrl ?? null : null,
-    visitUrl: input.route.context === "owner" && kind === "html-source"
+    visitUrl: input.route.context === "owner" && (kind === "html-source" || kind === "markdown")
       ? buildRenderUrl(input.route, input.item.id)
       : null,
   }
 }
 
 export function shouldReadDriveBrowserTextPreview(kind: DriveBrowserPreviewKind): boolean {
-  return kind === "text" || kind === "html-source"
+  return isTextPreviewKind(kind)
 }
 
 export function shouldCreateDriveBrowserImagePreview(kind: DriveBrowserPreviewKind): boolean {
@@ -180,7 +182,18 @@ function buildRenderUrl(route: DriveBrowserRouteContext, itemId: string): string
 }
 
 function isKnownTextName(lowerName: string): boolean {
-  return [".txt", ".md", ".json", ".csv"].some((extension) => lowerName.endsWith(extension))
+  return [".txt", ".json", ".csv"].some((extension) => lowerName.endsWith(extension))
+}
+
+function isTextPreviewKind(kind: DriveBrowserPreviewKind): boolean {
+  return kind === "text" || kind === "html-source" || kind === "markdown"
+}
+
+function isMarkdownDriveItem(lowerName: string, mimeType: string): boolean {
+  return lowerName.endsWith(".md")
+    || lowerName.endsWith(".markdown")
+    || mimeType === "text/markdown"
+    || mimeType === "text/x-markdown"
 }
 
 function isKnownArchiveName(lowerName: string): boolean {

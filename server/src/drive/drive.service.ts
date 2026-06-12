@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
+import { Readable } from "node:stream"
 import {
   type DriveBrowserSnapshotDto,
   buildDriveShareUrl,
@@ -26,6 +27,7 @@ import {
   verifyDrivePasswordInput,
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
+import { renderDriveMarkdownDocument } from "./drive-markdown-renderer"
 import {
   DRIVE_ITEM_TYPE,
   DRIVE_PUBLICATION_DEPLOYMENT_STATUS,
@@ -101,6 +103,7 @@ type DrivePublishedAssetValue = {
   readonly stream: NodeJS.ReadableStream
   readonly contentType: string
   readonly size?: bigint
+  readonly csp?: string
 }
 
 type DriveFolderZipEntry = {
@@ -119,6 +122,9 @@ const driveItemWithShares = {
     select: { id: true, enabled: true },
   },
 } as const
+
+const DRIVE_MARKDOWN_RENDER_MAX_BYTES = 10 * 1024 * 1024
+const DRIVE_MARKDOWN_RENDER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
 
 @Injectable()
 export class DriveService implements OnApplicationBootstrap {
@@ -705,20 +711,45 @@ export class DriveService implements OnApplicationBootstrap {
     return this.createFolderZipEntries(current.userId, current.id)
   }
 
-  async resolveOwnerHtmlRenderAccess(input: {
+  async resolveOwnerRenderAccess(input: {
     readonly userId: string
     readonly rootItemId: string
     readonly currentItemId?: string | null
   }): Promise<DrivePublishedAssetValue> {
     const { current } = await this.resolveOwnedBrowserCurrent(input)
     const storageKey = this.requireActiveFileStorage(current)
-    if (!isHtmlDriveItem(current.name, current.mimeType)) throw new BadRequestException("只能访问 HTML 文件。")
+    if (!isHtmlDriveItem(current.name, current.mimeType) && !isMarkdownDriveItem(current.name, current.mimeType)) {
+      throw new BadRequestException("只能访问 HTML 或 Markdown 文件。")
+    }
+    if (isMarkdownDriveItem(current.name, current.mimeType)) {
+      if (current.size > BigInt(DRIVE_MARKDOWN_RENDER_MAX_BYTES)) {
+        throw new BadRequestException("Markdown 文件超过 10MB，无法渲染。")
+      }
+      const object = await this.storage.getObjectStream({ key: storageKey })
+      const markdown = await readStreamTextPrefix(object.stream, DRIVE_MARKDOWN_RENDER_MAX_BYTES + 1)
+      if (markdown.truncated) throw new BadRequestException("Markdown 文件超过 10MB，无法渲染。")
+      const html = await renderDriveMarkdownDocument({ title: current.name, markdown: markdown.text })
+      return {
+        stream: Readable.from(html),
+        size: BigInt(Buffer.byteLength(html, "utf8")),
+        contentType: "text/html; charset=utf-8",
+        csp: DRIVE_MARKDOWN_RENDER_CSP,
+      }
+    }
     const object = await this.storage.getObjectStream({ key: storageKey })
     return {
       stream: object.stream,
       size: object.size ?? current.size,
       contentType: "text/html; charset=utf-8",
     }
+  }
+
+  async resolveOwnerHtmlRenderAccess(input: {
+    readonly userId: string
+    readonly rootItemId: string
+    readonly currentItemId?: string | null
+  }): Promise<DrivePublishedAssetValue> {
+    return this.resolveOwnerRenderAccess(input)
   }
 
   async getShareBrowserSnapshot(input: {
@@ -960,7 +991,7 @@ export class DriveService implements OnApplicationBootstrap {
     let shares = 0
     let publications = 0
     for (const share of legacyShares) {
-      const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn: "7d" }, this.accessSecret, now)
+      const material = await createDrivePasswordMaterial(DRIVE_DEFAULT_ACCESS_SETTINGS, this.accessSecret, now)
       const result = await this.prisma.driveShare.updateMany({
         where: { id: share.id, enabled: true, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
         data: toDrivePasswordUpdateData(material, now),
@@ -968,7 +999,7 @@ export class DriveService implements OnApplicationBootstrap {
       if (result.count === 1) shares += 1
     }
     for (const publication of legacyPublications) {
-      const material = await createDrivePasswordMaterial({ passwordEnabled: true, expiresIn: "7d" }, this.accessSecret, now)
+      const material = await createDrivePasswordMaterial(DRIVE_DEFAULT_ACCESS_SETTINGS, this.accessSecret, now)
       const result = await this.prisma.drivePublication.updateMany({
         where: { id: publication.id, status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
         data: toDrivePasswordUpdateData(material, now),
@@ -1491,6 +1522,15 @@ function normalizeRelativePath(value: string): string[] {
 function isHtmlDriveItem(name: string, mimeType: string | null): boolean {
   const lowerName = name.toLowerCase()
   return lowerName.endsWith(".html") || lowerName.endsWith(".htm") || mimeType === "text/html"
+}
+
+function isMarkdownDriveItem(name: string, mimeType: string | null): boolean {
+  const lowerName = name.toLowerCase()
+  const normalizedMimeType = mimeType?.toLowerCase() ?? ""
+  return lowerName.endsWith(".md")
+    || lowerName.endsWith(".markdown")
+    || normalizedMimeType === "text/markdown"
+    || normalizedMimeType === "text/x-markdown"
 }
 
 function resolvePublicationContentType(relativePath: string, stored: string | null | undefined): string {

@@ -32,6 +32,50 @@ describe('drive browser view model', () => {
     expect(getDriveBrowserActions(snapshot).visitUrl).toBeNull()
   })
 
+  it('shows visit for owner markdown previews', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        visitUrl: '/drive/items/root/items/file/render',
+      },
+    })
+
+    expect(getDriveBrowserActions(snapshot)).toMatchObject({
+      downloadUrl: '/drive/items/root/items/file/download',
+      visitUrl: '/drive/items/root/items/file/render',
+    })
+  })
+
+  it('does not show visit for share markdown previews', () => {
+    const snapshot = createSnapshot({
+      context: 'share',
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+        browserUrl: '/files/shr_public/items/file',
+        downloadUrl: '/files/shr_public/items/file/download',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        visitUrl: null,
+      },
+    })
+
+    expect(getDriveBrowserActions(snapshot).visitUrl).toBeNull()
+  })
+
   it('keeps download actions for download-only files', () => {
     const snapshot = createSnapshot({
       current: { ...baseCurrent(), previewKind: 'download-only' },

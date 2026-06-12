@@ -45,7 +45,7 @@ describe("DriveController", () => {
     getShareBrowserSnapshot: vi.fn(),
     createDownloadUrlForOwnerBrowserItem: vi.fn(),
     createFolderZipEntriesForOwnerBrowserItem: vi.fn(),
-    resolveOwnerHtmlRenderAccess: vi.fn(),
+    resolveOwnerRenderAccess: vi.fn(),
     createDownloadUrlForShareBrowserItem: vi.fn(),
     createFolderZipEntriesForShareBrowserItem: vi.fn(),
   }
@@ -73,7 +73,7 @@ describe("DriveController", () => {
     drive.getShareBrowserSnapshot.mockReset()
     drive.createDownloadUrlForOwnerBrowserItem.mockReset()
     drive.createFolderZipEntriesForOwnerBrowserItem.mockReset()
-    drive.resolveOwnerHtmlRenderAccess.mockReset()
+    drive.resolveOwnerRenderAccess.mockReset()
     drive.createDownloadUrlForShareBrowserItem.mockReset()
     drive.createFolderZipEntriesForShareBrowserItem.mockReset()
     restoreEnv("PAGES_PUBLIC_URL", originalPagesPublicUrl)
@@ -146,7 +146,7 @@ describe("DriveController", () => {
     }
   })
 
-  it("redirects owner direct downloads and rejects invalid owner renders", async () => {
+  it("redirects owner direct downloads and renders owner files", async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [DrivePublicController],
       providers: [{ provide: DriveService, useValue: drive }],
@@ -161,7 +161,13 @@ describe("DriveController", () => {
     await userApp.init()
     try {
       drive.createDownloadUrlForOwnerBrowserItem.mockResolvedValue({ url: "https://cos.example/owner-download", fileName: "brief.txt" })
-      drive.resolveOwnerHtmlRenderAccess.mockRejectedValue(new BadRequestException("只能访问 HTML 文件。"))
+      drive.resolveOwnerRenderAccess
+        .mockRejectedValueOnce(new BadRequestException("只能访问 HTML 或 Markdown 文件。"))
+        .mockResolvedValueOnce({
+          stream: Readable.from("<!doctype html><html><body>Notes</body></html>"),
+          contentType: "text/html; charset=utf-8",
+          csp: "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; frame-ancestors 'none';",
+        })
 
       const download = await request(userApp.getHttpServer()).get("/drive/items/root-1/items/file-1/download").expect(302)
       expect(download.headers.location).toBe("https://cos.example/owner-download")
@@ -172,6 +178,18 @@ describe("DriveController", () => {
       })
 
       await request(userApp.getHttpServer()).get("/drive/items/root-1/render").expect(400)
+
+      const render = await request(userApp.getHttpServer())
+        .get("/drive/items/root-1/items/file-1/render")
+        .expect(200)
+      expect(render.headers["content-type"]).toContain("text/html; charset=utf-8")
+      expect(render.headers["content-security-policy"]).toContain("default-src 'none'")
+      expect(render.text).toContain("Notes")
+      expect(drive.resolveOwnerRenderAccess).toHaveBeenLastCalledWith({
+        userId: "user-1",
+        rootItemId: "root-1",
+        currentItemId: "file-1",
+      })
     } finally {
       await userApp.close()
     }
@@ -241,11 +259,11 @@ describe("DriveController", () => {
       expect(drive.listPublications).toHaveBeenCalledWith("user-1", "https://pages.example")
       expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example", {
         passwordEnabled: true,
-        expiresIn: "7d",
+        expiresIn: "3d",
       })
       expect(drive.publishSite).toHaveBeenCalledWith("user-1", "folder-1", "https://pages.example", {
         passwordEnabled: true,
-        expiresIn: "7d",
+        expiresIn: "3d",
       })
       expect(drive.redeployPublication).toHaveBeenCalledWith("user-1", "pub-row-1", "https://pages.example")
       expect(drive.disablePublication).toHaveBeenCalledWith("user-1", "pub-row-1")
@@ -289,7 +307,7 @@ describe("DriveController", () => {
 
       await request(userApp.getHttpServer())
         .post("/api/drive/items/file-1/share")
-        .send({ passwordEnabled: false, expiresIn: "forever" })
+        .send({ passwordEnabled: false, expiresIn: "3d" })
         .expect(201)
       await request(userApp.getHttpServer())
         .post("/api/drive/items/file-1/publications/page")
@@ -302,7 +320,7 @@ describe("DriveController", () => {
 
       expect(drive.createShare).toHaveBeenCalledWith("user-1", "file-1", "https://app.example", {
         passwordEnabled: false,
-        expiresIn: "forever",
+        expiresIn: "3d",
       })
       expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example", {
         passwordEnabled: true,
@@ -437,7 +455,7 @@ describe("DriveController", () => {
 
       expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://app.example", {
         passwordEnabled: true,
-        expiresIn: "7d",
+        expiresIn: "3d",
       })
     } finally {
       await userApp.close()

@@ -11,10 +11,10 @@ export type DrivePublicationStatus = "active" | "disabled"
 export type DriveShareItemType = "file" | "folder"
 export type DriveStorageStatus = "pending" | "active" | "delete_pending" | "deleted" | "failed"
 export type DriveUploadSessionStatus = "pending" | "completed" | "cancelled" | "expired" | "failed"
-export type DriveAccessExpiresIn = "7d" | "30d" | "1y" | "forever"
+export type DriveAccessExpiresIn = "3d" | "7d" | "30d" | "1y" | "forever"
 export type DriveBrowserAccessContext = "owner" | "share"
 export type DriveBrowserSurface = "standalone" | "console"
-export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "download-only"
+export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "markdown" | "download-only"
 
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
@@ -23,7 +23,7 @@ export interface DriveAccessSettingsInput {
 
 export const DRIVE_DEFAULT_ACCESS_SETTINGS: DriveAccessSettingsInput = {
   passwordEnabled: true,
-  expiresIn: "7d",
+  expiresIn: "3d",
 }
 
 export interface DriveItemDto {

@@ -24,8 +24,15 @@ describe("drive browser helpers", () => {
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "photo.bin", mimeType: "image/png" })).toBe("image")
   })
 
+  it("classifies markdown files by extension and mime type", () => {
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "notes.md", mimeType: null })).toBe("markdown")
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "guide.markdown", mimeType: null })).toBe("markdown")
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "upload.bin", mimeType: "text/markdown" })).toBe("markdown")
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "legacy.bin", mimeType: "text/x-markdown" })).toBe("markdown")
+  })
+
   it("falls back to text preview by filename when mime type is missing", () => {
-    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "notes.md", mimeType: null })).toBe("text")
+    expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "notes.txt", mimeType: null })).toBe("text")
   })
 
   it("classifies archives as download only", () => {
@@ -53,6 +60,31 @@ describe("drive browser helpers", () => {
     })
 
     expect(preview.kind).toBe("html-source")
+    expect(preview.visitUrl).toBeNull()
+  })
+
+  it("adds owner-only visit url for markdown previews", () => {
+    const item = { ...baseItem, id: "child-1", name: "notes.md", mimeType: "text/markdown" }
+    const preview = buildDriveBrowserPreview({
+      item,
+      route: { context: "owner", surface: "standalone", rootItemId: "root-1" },
+      text: "# Notes",
+    })
+
+    expect(preview.kind).toBe("markdown")
+    expect(preview.text).toBe("# Notes")
+    expect(preview.visitUrl).toBe("/drive/items/root-1/items/child-1/render")
+  })
+
+  it("keeps share markdown previews without visit url", () => {
+    const item = { ...baseItem, id: "child-1", name: "notes.md", mimeType: "text/markdown" }
+    const preview = buildDriveBrowserPreview({
+      item,
+      route: { context: "share", surface: "standalone", shareId: "shr-1", rootItemId: "root-1" },
+      text: "# Notes",
+    })
+
+    expect(preview.kind).toBe("markdown")
     expect(preview.visitUrl).toBeNull()
   })
 
