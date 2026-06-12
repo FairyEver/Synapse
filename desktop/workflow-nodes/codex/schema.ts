@@ -10,6 +10,14 @@ const nonEmptyTrimmedStringSchema = z
   .transform((value) => value.trim())
   .pipe(z.string().min(1))
 
+const optionalTrimmedStringSchema = z
+  .string()
+  .transform((value) => {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+  })
+  .optional()
+
 export const codexConfigOverrideSchema = z.object({
   key: nonEmptyTrimmedStringSchema,
   value: z.string(),
@@ -23,8 +31,8 @@ export const codexNodeConfigSchema = z
     timeoutMins: z.number().int().min(1).optional(),
     approvalPolicy: codexApprovalPolicySchema,
     sandbox: codexSandboxSchema,
-    model: z.string().optional(),
-    profile: z.string().optional(),
+    model: optionalTrimmedStringSchema,
+    profile: optionalTrimmedStringSchema,
     enableSearch: z.boolean(),
     features: z.object({
       goals: codexFeatureStateSchema,

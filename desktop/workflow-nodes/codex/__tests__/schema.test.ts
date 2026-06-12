@@ -77,6 +77,17 @@ describe("codexNodeConfigSchema", () => {
     })
   })
 
+  it("trims model and profile and drops blank values", () => {
+    const parsed = codexNodeConfigSchema.parse({
+      ...defaultCodexNodeConfig,
+      model: "  gpt-5-codex  ",
+      profile: "  ",
+    })
+
+    expect(parsed.model).toBe("gpt-5-codex")
+    expect(parsed.profile).toBeUndefined()
+  })
+
   it("rejects unknown goals feature state", () => {
     const result = codexNodeConfigSchema.safeParse({
       ...defaultCodexNodeConfig,
