@@ -1331,8 +1331,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(document.body.textContent).toContain("report.html")
-    expect(document.body.textContent).toContain("类型 / 状态")
-    expect(document.body.textContent).toContain("来源")
+    expect(document.body.textContent).toContain("链接信息")
     expect(document.body.textContent).toContain("密码")
     expect(document.body.textContent).toContain("到期")
     expect(document.body.textContent).toContain("时间")
@@ -1387,6 +1386,8 @@ describe("DriveModule", () => {
 
     const dialogContent = document.querySelector('[data-slot="dialog-content"]')
     expect(dialogContent?.className).toContain("sm:max-w-5xl")
+    const tableContainer = document.querySelector('[data-slot="table-container"]')
+    expect(tableContainer?.className).toContain("overflow-x-hidden")
   })
 
   it("loads share and publication data in the public links dialog", async () => {
@@ -1471,8 +1472,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(document.body.textContent).toContain("report.txt")
-    expect(document.body.textContent).toContain("类型")
-    expect(document.body.textContent).toContain("来源")
+    expect(document.body.textContent).toContain("链接信息")
     expect(document.body.textContent).toContain("密码")
     expect(document.body.textContent).toContain("到期")
     expect(document.body.textContent).toContain("时间")
@@ -1499,7 +1499,7 @@ describe("DriveModule", () => {
 
     expect(mocks.listDriveShares).toHaveBeenCalled()
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(2)
-    expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "shr_test" })
+    expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 

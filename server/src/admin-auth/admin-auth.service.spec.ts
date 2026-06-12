@@ -46,6 +46,14 @@ describe("AdminAuthService", () => {
     expect(result.token.length).toBeGreaterThan(20)
   })
 
+  it("issues dashboard sessions that remain valid for 30 days", async () => {
+    const { service } = await createTestService()
+    const result = await service.login("admin@d2.com", "admin@pwd1234!")
+    const payload = new JwtService().decode(result.token) as { iat: number; exp: number }
+
+    expect(payload.exp - payload.iat).toBe(30 * 24 * 60 * 60)
+  })
+
   it("accepts a later administrator by email instead of only the first admin", async () => {
     const auditLog = { record: vi.fn() }
     const { service, prisma } = await createTestService(auditLog)

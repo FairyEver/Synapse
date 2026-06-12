@@ -720,7 +720,7 @@ export const driveBrowserApi = {
       `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}${driveBrowserPasswordSuffix(password)}`
     ),
   unlockShare: (shareId: string, password: string) =>
-    request<DriveBrowserSnapshotDto>(
+    request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
       `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/access`,
       {
         method: 'POST',

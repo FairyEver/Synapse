@@ -390,10 +390,20 @@ export class DrivePublicController {
       })
       return
     }
+    if (readPasswordQuery(request)) {
+      await this.sendPublishedAsset(response, {
+        publishId,
+        type: "site",
+        relativePath: "index.html",
+        request,
+        cleanRedirectUrl: buildSiteRootCleanRedirect(request, publishId),
+      })
+      return
+    }
     response.redirect(302, buildSiteRootRedirect(request, publishId))
   }
 
-  @Get(["/sites/:publishId/", "/sites/:publishId/*"])
+  @Get(["/sites/:publishId/", "/sites/:publishId/*path"])
   async openPublishedSiteAsset(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
     const prefix = `/sites/${encodeURIComponent(publishId)}/`
     const relativePath = safeDecodeURIComponent(request.path.startsWith(prefix) ? request.path.slice(prefix.length) : "")
@@ -405,7 +415,7 @@ export class DrivePublicController {
     })
   }
 
-  @Post(["/sites/:publishId", "/sites/:publishId/", "/sites/:publishId/*"])
+  @Post(["/sites/:publishId", "/sites/:publishId/", "/sites/:publishId/*path"])
   async unlockPublishedSite(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
     const prefix = `/sites/${encodeURIComponent(publishId)}/`
     const relativePath = safeDecodeURIComponent(request.path.startsWith(prefix) ? request.path.slice(prefix.length) : "")
@@ -562,6 +572,7 @@ export class DrivePublicController {
     readonly type: "page" | "site"
     readonly relativePath: string
     readonly request: Request
+    readonly cleanRedirectUrl?: string
   }): Promise<void> {
     try {
       const password = readPasswordQuery(input.request)
@@ -584,7 +595,7 @@ export class DrivePublicController {
         setDriveAccessCookie(response, access.cookie)
       }
       if (password) {
-        response.redirect(302, cleanPasswordUrl(input.request))
+        response.redirect(302, input.cleanRedirectUrl ?? cleanPasswordUrl(input.request))
         return
       }
       await sendPublishedAsset(response, access.value)
@@ -730,6 +741,12 @@ function cleanPasswordUrl(request: Request): string {
 
 function buildSiteRootRedirect(request: Request, publishId: string): string {
   const url = new URL(request.originalUrl || request.url, "http://synapse.local")
+  return `/sites/${encodeURIComponent(publishId)}/${url.search}`
+}
+
+function buildSiteRootCleanRedirect(request: Request, publishId: string): string {
+  const url = new URL(request.originalUrl || request.url, "http://synapse.local")
+  url.searchParams.delete("password")
   return `/sites/${encodeURIComponent(publishId)}/${url.search}`
 }
 

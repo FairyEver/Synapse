@@ -603,6 +603,31 @@ describe("DriveController", () => {
     expect(Array.isArray(siteCookie) ? siteCookie.join(";") : siteCookie).toContain("HttpOnly")
   })
 
+  it("unlocks site root password query before adding the trailing slash", async () => {
+    drive.resolvePublishedAssetAccess.mockResolvedValue({
+      status: "ok",
+      cookie: "cookie-value",
+      value: {
+        stream: Readable.from(["<h1>unlocked</h1>"]),
+        contentType: "text/html; charset=utf-8",
+        size: 17n,
+      },
+    })
+
+    const response = await request(app!.getHttpServer()).get("/sites/pub_locked?password=AbC234xy").expect(302)
+    const cookie = response.headers["set-cookie"]
+
+    expect(response.headers.location).toBe("/sites/pub_locked/")
+    expect(Array.isArray(cookie) ? cookie.join(";") : cookie).toContain("synapse_drive_access=cookie-value")
+    expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
+      publishId: "pub_locked",
+      type: "site",
+      relativePath: "index.html",
+      password: "AbC234xy",
+      cookie: undefined,
+    })
+  })
+
   it("cleans stale password query for published pages even without a new cookie", async () => {
     drive.resolvePublishedAssetAccess.mockResolvedValue({
       status: "ok",

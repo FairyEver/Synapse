@@ -25,7 +25,8 @@ export interface DashboardSession {
   readonly modulePermissions: readonly string[]
 }
 
-const dashboardJwtExpiresIn = "8h"
+const dashboardSessionMaxAgeMs = 30 * 24 * 60 * 60 * 1000
+const dashboardJwtExpiresIn = "30d"
 const userModulePermissionSelect = { permissionKey: true } as const
 
 function getDashboardModulePermissions(user: { modulePermissions?: readonly { permissionKey: string }[] }): string[] {
@@ -169,7 +170,7 @@ export class AdminAuthService {
     } catch {
       return
     }
-    const expiresAt = payload.exp ? new Date(payload.exp * 1000) : new Date(Date.now() + 8 * 60 * 60 * 1000)
+    const expiresAt = payload.exp ? new Date(payload.exp * 1000) : new Date(Date.now() + dashboardSessionMaxAgeMs)
     await this.prisma.dashboardRevokedToken.upsert({
       where: { tokenHash: hashToken(token) },
       update: { expiresAt, revokedAt: new Date() },

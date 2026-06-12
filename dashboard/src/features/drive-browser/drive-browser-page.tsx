@@ -13,11 +13,18 @@ import {
   FileText,
   Folder,
   Image,
+  Loader2,
 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@/components/ui/resizable'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -46,11 +53,29 @@ export type DriveBrowserPageProps =
       initialPassword?: string
     }
 
+type DriveBrowserLayoutMode = 'auto' | 'fixed'
+type DriveFileRendererMode = DriveBrowserLayoutMode | 'reader'
+
 export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const state = useDriveBrowser(props)
   const framed = props.context === 'share' || props.surface === 'standalone'
+  const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
+  const shouldCenterState = framed && state.status !== 'ready'
+  if (state.status === 'ready' && shouldRenderDriveSingleFileReader(state.snapshot)) {
+    return <DriveSingleFileReaderView snapshot={state.snapshot} />
+  }
+
   const content = (
-    <div className='mx-auto flex min-h-0 w-full max-w-7xl flex-col gap-3'>
+    <div
+      className={cn(
+        'mx-auto flex min-h-0 w-full flex-col gap-3',
+        shouldCenterState
+          ? 'max-w-md flex-1 justify-center'
+          : layoutMode === 'fixed'
+            ? 'flex-1 overflow-hidden'
+            : 'max-w-7xl'
+      )}
+    >
       {state.status === 'loading' ? <DriveBrowserLoading /> : null}
       {state.status === 'error' ? <DriveBrowserError message={state.message} /> : null}
       {state.status === 'passwordRequired' ? (
@@ -61,12 +86,14 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
           onUnlock={state.unlock}
         />
       ) : null}
-      {state.status === 'ready' ? <DriveBrowserView snapshot={state.snapshot} /> : null}
+      {state.status === 'ready' ? (
+        <DriveBrowserView snapshot={state.snapshot} layoutMode={layoutMode} />
+      ) : null}
     </div>
   )
 
   if (!framed) return content
-  return <main className='min-h-svh bg-background p-4 md:p-6'>{content}</main>
+  return <main className='flex min-h-svh bg-background p-4 md:p-6'>{content}</main>
 }
 
 export function DriveConsoleBrowserPage(props: Omit<Extract<DriveBrowserPageProps, { context: 'owner' }>, 'context' | 'surface'>) {
@@ -78,14 +105,26 @@ export function DriveConsoleRootBrowser() {
   if (state.status === 'loading') return <DriveBrowserLoading />
   if (state.status === 'error') return <DriveBrowserError message={state.message} />
   if (state.status !== 'ready') return null
-  return <DriveBrowserView snapshot={state.snapshot} />
+  return <DriveBrowserView snapshot={state.snapshot} layoutMode='fixed' />
 }
 
-export function DriveBrowserView({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+export function DriveBrowserView({
+  snapshot,
+  layoutMode = 'auto',
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly layoutMode?: DriveBrowserLayoutMode
+}) {
   const actions = getDriveBrowserActions(snapshot)
+  const fixed = layoutMode === 'fixed'
   return (
-    <section className='flex min-h-0 flex-col rounded-md border bg-background'>
-      <div className='flex flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between'>
+    <section
+      className={cn(
+        'flex min-h-0 flex-col rounded-md border bg-background',
+        fixed && 'flex-1 overflow-hidden'
+      )}
+    >
+      <div className='flex shrink-0 flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between'>
         <DriveBrowserBreadcrumbs snapshot={snapshot} />
         <div className='flex shrink-0 flex-wrap gap-2'>
           {actions.downloadUrl ? (
@@ -106,13 +145,101 @@ export function DriveBrowserView({ snapshot }: { readonly snapshot: DriveBrowser
           ) : null}
         </div>
       </div>
-      <div className='grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]'>
-        <div className='min-h-0 border-b md:border-r md:border-b-0'>
-          <DriveBrowserList snapshot={snapshot} />
-        </div>
-        <DriveBrowserPreview preview={snapshot.preview} current={snapshot.current} />
-      </div>
+      {fixed ? (
+        <DriveBrowserFixedLayout snapshot={snapshot} />
+      ) : (
+        <DriveBrowserAutoLayout snapshot={snapshot} />
+      )}
     </section>
+  )
+}
+
+export function DriveSingleFileReaderView({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+  const actions = getDriveBrowserActions(snapshot)
+  return (
+    <main className='min-h-svh bg-background'>
+      <header data-reader-toolbar='true' className='sticky top-0 z-10 border-b bg-background'>
+        <div className='mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6'>
+          <div className='flex min-w-0 flex-col gap-1'>
+            <div className='flex min-w-0 items-center gap-2 text-sm font-medium'>
+              <DriveBrowserItemIcon item={snapshot.current} />
+              <span className='min-w-0 truncate'>{snapshot.current.name}</span>
+            </div>
+            {snapshot.breadcrumbs.length > 1 ? (
+              <DriveBrowserBreadcrumbs snapshot={snapshot} />
+            ) : null}
+          </div>
+          <div className='flex shrink-0 flex-wrap gap-2'>
+            {actions.downloadUrl ? (
+              <Button asChild variant='outline' size='sm'>
+                <a href={actions.downloadUrl}>
+                  <Download data-icon='inline-start' />
+                  下载
+                </a>
+              </Button>
+            ) : null}
+            {actions.visitUrl ? (
+              <Button asChild size='sm'>
+                <a href={actions.visitUrl} target='_blank' rel='noreferrer'>
+                  <ExternalLink data-icon='inline-start' />
+                  访问
+                </a>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </header>
+      <DriveBrowserPreview
+        preview={snapshot.preview}
+        current={snapshot.current}
+        layoutMode='reader'
+      />
+    </main>
+  )
+}
+
+function DriveBrowserAutoLayout({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+  return (
+    <div className='grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]'>
+      <div className='min-h-0 border-b md:border-r md:border-b-0'>
+        <DriveBrowserList snapshot={snapshot} />
+      </div>
+      <DriveBrowserPreview preview={snapshot.preview} current={snapshot.current} />
+    </div>
+  )
+}
+
+function DriveBrowserFixedLayout({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+  return (
+    <div className='min-h-0 flex-1 overflow-hidden'>
+      <div className='grid h-full min-h-0 grid-rows-2 md:hidden'>
+        <div className='min-h-0 border-b'>
+          <DriveBrowserList snapshot={snapshot} layoutMode='fixed' />
+        </div>
+        <DriveBrowserPreview
+          preview={snapshot.preview}
+          current={snapshot.current}
+          layoutMode='fixed'
+        />
+      </div>
+      <div className='hidden h-full min-h-0 md:block'>
+        <ResizablePanelGroup orientation='horizontal' className='min-h-0'>
+          <ResizablePanel defaultSize='52%' minSize='28%' maxSize='72%'>
+            <div className='h-full min-h-0'>
+              <DriveBrowserList snapshot={snapshot} layoutMode='fixed' />
+            </div>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize='48%' minSize='28%'>
+            <DriveBrowserPreview
+              preview={snapshot.preview}
+              current={snapshot.current}
+              layoutMode='fixed'
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
+    </div>
   )
 }
 
@@ -137,10 +264,23 @@ function DriveBrowserBreadcrumbs({ snapshot }: { readonly snapshot: DriveBrowser
   )
 }
 
-function DriveBrowserList({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+function DriveBrowserList({
+  snapshot,
+  layoutMode = 'auto',
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly layoutMode?: DriveBrowserLayoutMode
+}) {
+  const fixed = layoutMode === 'fixed'
+
   if (snapshot.current.type !== 'folder') {
     return (
-      <div className='flex min-h-72 flex-col gap-2 p-4 text-sm'>
+      <div
+        className={cn(
+          'flex flex-col gap-2 p-4 text-sm',
+          fixed ? 'h-full min-h-0' : 'min-h-72'
+        )}
+      >
         <div className='flex items-center gap-2 font-medium'>
           <DriveBrowserItemIcon item={snapshot.current} />
           <span className='min-w-0 truncate'>{snapshot.current.name}</span>
@@ -154,11 +294,20 @@ function DriveBrowserList({ snapshot }: { readonly snapshot: DriveBrowserSnapsho
   }
 
   if (snapshot.children.length === 0) {
-    return <div className='flex min-h-72 items-center justify-center text-sm text-muted-foreground'>暂无文件</div>
+    return (
+      <div
+        className={cn(
+          'flex items-center justify-center text-sm text-muted-foreground',
+          fixed ? 'h-full min-h-0' : 'min-h-72'
+        )}
+      >
+        暂无文件
+      </div>
+    )
   }
 
   return (
-    <ScrollArea className='h-[520px]'>
+    <ScrollArea className={cn('min-h-0', fixed && 'h-full')}>
       <Table>
         <TableHeader>
           <TableRow>
@@ -204,16 +353,37 @@ function DriveBrowserList({ snapshot }: { readonly snapshot: DriveBrowserSnapsho
 function DriveBrowserPreview({
   preview,
   current,
+  layoutMode = 'auto',
 }: {
   readonly preview: DriveBrowserPreviewDto | null
   readonly current: DriveBrowserItemDto
+  readonly layoutMode?: DriveFileRendererMode
 }) {
+  const fixed = layoutMode === 'fixed'
+  const reader = layoutMode === 'reader'
+
   if (current.type === 'folder') {
-    return <div className='min-h-72 p-4 text-sm text-muted-foreground'>选择文件预览</div>
+    return (
+      <div
+        className={cn(
+          'p-4 text-sm text-muted-foreground',
+          fixed ? 'h-full min-h-0' : 'min-h-72'
+        )}
+      >
+        选择文件预览
+      </div>
+    )
   }
   if (!preview || preview.kind === 'download-only') {
     return (
-      <div className='flex min-h-72 flex-col items-start gap-3 p-4 text-sm'>
+      <div
+        className={cn(
+          'flex flex-col items-start gap-3 p-4 text-sm',
+          fixed && 'h-full min-h-0',
+          !fixed && !reader && 'min-h-72',
+          reader && 'mx-auto w-full max-w-4xl px-4 py-8 md:px-6'
+        )}
+      >
         <div className='font-medium'>{current.name}</div>
         <div className='text-muted-foreground'>此文件只能下载。</div>
         {current.downloadUrl ? (
@@ -229,9 +399,24 @@ function DriveBrowserPreview({
   }
   if (preview.kind === 'image') {
     return (
-      <div className='flex min-h-72 items-center justify-center p-4'>
+      <div
+        className={cn(
+          'flex items-center justify-center p-4',
+          fixed && 'h-full min-h-0',
+          !fixed && !reader && 'min-h-72',
+          reader && 'mx-auto w-full max-w-6xl px-4 py-6 md:px-6'
+        )}
+      >
         {preview.imageUrl ? (
-          <img src={preview.imageUrl} alt={current.name} className='max-h-[520px] max-w-full rounded-md object-contain' />
+          <img
+            src={preview.imageUrl}
+            alt={current.name}
+            className={cn(
+              'max-w-full rounded-md object-contain',
+              fixed && 'max-h-full',
+              !fixed && 'max-h-screen'
+            )}
+          />
         ) : (
           <div className='text-sm text-muted-foreground'>图片不可预览</div>
         )}
@@ -239,55 +424,103 @@ function DriveBrowserPreview({
     )
   }
   if (preview.kind === 'markdown') {
-    return <DriveBrowserMarkdownPreview preview={preview} />
+    return <DriveBrowserMarkdownPreview preview={preview} layoutMode={layoutMode} />
   }
-  return (
-    <ScrollArea className='h-[520px]'>
-      <pre className='whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed'>
-        {preview.text}
-      </pre>
+  return <DriveBrowserTextPreview preview={preview} layoutMode={layoutMode} />
+}
+
+function DriveBrowserMarkdownPreview({
+  preview,
+  layoutMode = 'auto',
+}: {
+  readonly preview: DriveBrowserPreviewDto
+  readonly layoutMode?: DriveFileRendererMode
+}) {
+  const renderedHtml = preview.html?.trim()
+  const fixed = layoutMode === 'fixed'
+  const reader = layoutMode === 'reader'
+
+  if (!renderedHtml) {
+    return <DriveBrowserTextPreview preview={preview} layoutMode={layoutMode} />
+  }
+
+  const renderedContent = (
+    <>
+      <div
+        className={cn(
+          'space-y-3 text-sm leading-relaxed [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-medium [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc',
+          reader
+            ? 'text-base leading-7 [&_h1]:text-2xl [&_h2]:text-xl'
+            : 'p-4 [&_h1]:text-xl [&_h2]:text-lg'
+        )}
+        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+      />
       {preview.truncated ? (
         <div className='border-t px-4 py-2 text-xs text-muted-foreground'>内容已截断</div>
       ) : null}
-    </ScrollArea>
+    </>
   )
-}
-
-function DriveBrowserMarkdownPreview({ preview }: { readonly preview: DriveBrowserPreviewDto }) {
-  const renderedHtml = preview.html?.trim()
-  if (!renderedHtml) {
-    return <DriveBrowserTextPreview preview={preview} />
-  }
 
   return (
-    <Tabs defaultValue='rendered' className='h-[520px] min-h-0 gap-0'>
-      <div className='border-b px-4 py-2'>
+    <Tabs
+      defaultValue='rendered'
+      className={cn(
+        'min-h-0 gap-0',
+        fixed && 'flex h-full flex-col',
+        reader && 'mx-auto w-full max-w-4xl px-4 py-6 md:px-6'
+      )}
+    >
+      <div
+        data-renderer-toolbar='markdown'
+        className={cn(
+          'shrink-0',
+          reader ? 'pb-4' : 'border-b px-4 py-2'
+        )}
+      >
         <TabsList>
           <TabsTrigger type='button' value='rendered'>预览</TabsTrigger>
           <TabsTrigger type='button' value='source'>源码</TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent value='rendered' className='min-h-0'>
-        <ScrollArea className='h-[468px]'>
-          <div
-            className='space-y-3 p-4 text-sm leading-relaxed [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-medium [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc'
-            dangerouslySetInnerHTML={{ __html: renderedHtml }}
-          />
-          {preview.truncated ? (
-            <div className='border-t px-4 py-2 text-xs text-muted-foreground'>内容已截断</div>
-          ) : null}
-        </ScrollArea>
+      <TabsContent value='rendered' className={cn('min-h-0', fixed && 'flex-1')}>
+        {reader ? renderedContent : (
+          <ScrollArea className={cn('min-h-0', fixed && 'h-full')}>
+            {renderedContent}
+          </ScrollArea>
+        )}
       </TabsContent>
-      <TabsContent value='source' className='min-h-0'>
-        <DriveBrowserTextPreview preview={preview} />
+      <TabsContent value='source' className={cn('min-h-0', fixed && 'flex-1')}>
+        <DriveBrowserTextPreview preview={preview} layoutMode={layoutMode} />
       </TabsContent>
     </Tabs>
   )
 }
 
-function DriveBrowserTextPreview({ preview }: { readonly preview: DriveBrowserPreviewDto }) {
+function DriveBrowserTextPreview({
+  preview,
+  layoutMode = 'auto',
+}: {
+  readonly preview: DriveBrowserPreviewDto
+  readonly layoutMode?: DriveFileRendererMode
+}) {
+  const fixed = layoutMode === 'fixed'
+  const reader = layoutMode === 'reader'
+
+  if (reader) {
+    return (
+      <div className='mx-auto w-full max-w-4xl px-4 py-6 md:px-6'>
+        <pre className='whitespace-pre-wrap break-words font-mono text-sm leading-6'>
+          {preview.text}
+        </pre>
+        {preview.truncated ? (
+          <div className='mt-4 border-t pt-2 text-xs text-muted-foreground'>内容已截断</div>
+        ) : null}
+      </div>
+    )
+  }
+
   return (
-    <ScrollArea className='h-[520px]'>
+    <ScrollArea className={cn('min-h-0', fixed && 'h-full')}>
       <pre className='whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed'>
         {preview.text}
       </pre>
@@ -310,24 +543,43 @@ function DriveBrowserPasswordForm({
   readonly onUnlock: (password: string) => void
 }) {
   const [password, setPassword] = useState('')
+  const passwordInputId = 'drive-share-password'
+  const passwordHelpId = 'drive-share-password-help'
+  const passwordErrorId = 'drive-share-password-error'
+  const unlockErrorMessage = unlockError === message ? '密码不正确，请重试。' : unlockError
   return (
     <form
-      className='mx-auto flex w-full max-w-sm flex-col gap-3 rounded-md border bg-background p-4'
+      className='flex w-full flex-col gap-4 rounded-lg border bg-background p-5'
       onSubmit={(event) => {
         event.preventDefault()
         onUnlock(password)
       }}
     >
-      <div className='text-sm font-medium'>{message}</div>
-      <Input
-        type='password'
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        autoComplete='current-password'
-      />
-      {unlockError ? <div className='text-sm text-destructive'>{unlockError}</div> : null}
+      <div className='space-y-1.5'>
+        <h1 className='text-base font-semibold'>输入访问密码</h1>
+        <p id={passwordHelpId} className='text-sm text-muted-foreground'>{message}</p>
+      </div>
+      <div className='space-y-2'>
+        <Label htmlFor={passwordInputId}>密码</Label>
+        <Input
+          id={passwordInputId}
+          type='password'
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          autoComplete='current-password'
+          autoFocus
+          aria-invalid={Boolean(unlockError)}
+          aria-describedby={unlockError ? passwordErrorId : passwordHelpId}
+        />
+      </div>
+      {unlockErrorMessage ? (
+        <Alert id={passwordErrorId} variant='destructive' aria-live='polite'>
+          <AlertDescription>{unlockErrorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
       <Button type='submit' disabled={unlocking || password.length === 0}>
-        确定
+        {unlocking ? <Loader2 className='animate-spin' /> : null}
+        {unlocking ? '验证中' : '打开'}
       </Button>
     </form>
   )
@@ -335,10 +587,13 @@ function DriveBrowserPasswordForm({
 
 function DriveBrowserLoading() {
   return (
-    <div className='flex flex-col gap-3 rounded-md border p-4'>
-      <div className='text-sm text-muted-foreground'>加载中...</div>
-      <Skeleton className='h-10 w-full' />
-      <Skeleton className='h-64 w-full' />
+    <div className='flex w-full flex-col gap-4 rounded-lg border bg-background p-5' aria-busy='true'>
+      <div className='space-y-2'>
+        <Skeleton className='h-5 w-32' />
+        <Skeleton className='h-4 w-48' />
+      </div>
+      <Skeleton className='h-9 w-full' />
+      <Skeleton className='h-40 w-full' />
     </div>
   )
 }
@@ -346,6 +601,7 @@ function DriveBrowserLoading() {
 function DriveBrowserError({ message }: { readonly message: string }) {
   return (
     <Alert variant='destructive'>
+      <AlertTitle>无法打开</AlertTitle>
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   )
@@ -368,6 +624,10 @@ export function getDriveBrowserActions(snapshot: DriveBrowserSnapshotDto) {
 
 export function getDriveBrowserChildUrls(snapshot: DriveBrowserSnapshotDto) {
   return snapshot.children.map((item) => item.browserUrl)
+}
+
+export function shouldRenderDriveSingleFileReader(snapshot: DriveBrowserSnapshotDto): boolean {
+  return snapshot.context === 'share' && snapshot.current.type === 'file'
 }
 
 function driveBrowserKindLabel(kind: DriveBrowserItemDto['previewKind']) {

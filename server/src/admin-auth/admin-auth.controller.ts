@@ -14,8 +14,18 @@ const loginSchema = z.object({
 }).strict()
 
 const adminCookieName = "synapse_admin"
+const dashboardSessionMaxAgeMs = 30 * 24 * 60 * 60 * 1000
 
 function adminCookieOptions() {
+  return {
+    httpOnly: true,
+    maxAge: dashboardSessionMaxAgeMs,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+  }
+}
+
+function adminCookieClearOptions() {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
@@ -68,7 +78,7 @@ export class AdminAuthController {
         await this.auth.revokeDashboardSession(token)
       }
     } finally {
-      response.clearCookie(adminCookieName, adminCookieOptions())
+      response.clearCookie(adminCookieName, adminCookieClearOptions())
     }
     return { ok: true }
   }

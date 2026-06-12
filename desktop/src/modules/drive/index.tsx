@@ -1730,41 +1730,39 @@ function DrivePublicationList({
   if (items.length === 0) return <DriveDialogEmptyState title="暂无发布" />
 
   return (
-    <Table className="min-w-[920px] table-fixed">
-      <DrivePublicationTableHeader />
+    <Table className="table-fixed" containerClassName="overflow-x-hidden">
+      <DrivePublicLinkTableHeader />
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id}>
-            <TableCell>
-              <div className="truncate font-medium" title={item.name}>{item.name}</div>
-            </TableCell>
-            <TableCell>
-              <div className="flex min-w-0 flex-wrap items-center gap-1">
-                <Badge variant="outline">{item.type === "site" ? "站点" : "网页"}</Badge>
-                <Badge variant={item.status === "active" ? "secondary" : "outline"}>
-                  {item.status === "active" ? "已发布" : "已取消"}
-                </Badge>
+            <TableCell className="min-w-0 whitespace-normal align-top">
+              <div className="grid gap-1">
+                <div className="truncate font-medium" title={item.name}>{item.name}</div>
+                <div className="truncate text-xs text-muted-foreground" title={formatDriveAccessPassword(item)}>
+                  密码 {formatDriveAccessPassword(item)}
+                </div>
               </div>
             </TableCell>
-            <TableCell>
-              <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              <div className="truncate" title={formatDriveAccessPassword(item)}>
-                {formatDriveAccessPassword(item)}
+            <TableCell className="min-w-0 whitespace-normal align-top">
+              <div className="grid gap-1.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
+                  <Badge variant="outline">{item.type === "site" ? "站点" : "网页"}</Badge>
+                  <Badge variant={item.status === "active" ? "secondary" : "outline"}>
+                    {item.status === "active" ? "已发布" : "已取消"}
+                  </Badge>
+                  <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
+                  <span className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
+                    到期 {formatDriveAccessExpiresAt(item.expiresAt)}
+                  </span>
+                  <span className="truncate" title={formatDriveDateTime(item.updatedAt)}>
+                    时间 {formatDriveDateTime(item.updatedAt)}
+                  </span>
+                </div>
               </div>
             </TableCell>
-            <TableCell className="text-muted-foreground tabular-nums">
-              <div className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
-                {formatDriveAccessExpiresAt(item.expiresAt)}
-              </div>
-            </TableCell>
-            <TableCell className="text-muted-foreground tabular-nums">
-              <div className="truncate" title={formatDriveDateTime(item.updatedAt)}>
-                {formatDriveDateTime(item.updatedAt)}
-              </div>
-            </TableCell>
-            <TableCell>
+            <TableCell className="align-top">
               <DrivePublicationActions
                 item={item}
                 onPublicationDeployed={onPublicationDeployed}
@@ -1778,33 +1776,13 @@ function DrivePublicationList({
   )
 }
 
-function DrivePublicationTableHeader() {
+function DrivePublicLinkTableHeader() {
   return (
     <TableHeader>
       <TableRow className="hover:bg-transparent">
-        <TableHead>名称</TableHead>
-        <TableHead className="w-36">类型 / 状态</TableHead>
-        <TableHead className="w-28">来源</TableHead>
-        <TableHead className="w-24">密码</TableHead>
-        <TableHead className="w-36">到期</TableHead>
-        <TableHead className="w-36">时间</TableHead>
-        <TableHead className="w-32 text-right">操作</TableHead>
-      </TableRow>
-    </TableHeader>
-  )
-}
-
-function DriveShareTableHeader() {
-  return (
-    <TableHeader>
-      <TableRow className="hover:bg-transparent">
-        <TableHead>名称</TableHead>
-        <TableHead className="w-24">类型</TableHead>
-        <TableHead className="w-28">来源</TableHead>
-        <TableHead className="w-24">密码</TableHead>
-        <TableHead className="w-36">到期</TableHead>
-        <TableHead className="w-36">时间</TableHead>
-        <TableHead className="w-32 text-right">操作</TableHead>
+        <TableHead className="w-72">名称</TableHead>
+        <TableHead>链接信息</TableHead>
+        <TableHead className="w-36 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1907,7 +1885,7 @@ function DriveShareActions({
       <DriveIconAction
         label={`取消分享 ${item.itemName}`}
         tooltip="取消分享"
-        onClick={() => { void disableDriveShare(item.shareId, onReload) }}
+        onClick={() => { void disableDriveShare(item.id, onReload) }}
       >
         <X />
       </DriveIconAction>
@@ -1986,40 +1964,33 @@ function DriveDialogEmptyState({ title }: { readonly title: string }) {
 }
 
 function DrivePublicationTableSkeleton() {
-  return (
-    <Table className="min-w-[920px] table-fixed">
-      <DrivePublicationTableHeader />
-      <TableBody>
-        {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
-          <TableRow key={row}>
-            <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-28" /></TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  )
+  return <DrivePublicLinkTableSkeleton />
 }
 
 function DriveShareTableSkeleton() {
+  return <DrivePublicLinkTableSkeleton />
+}
+
+function DrivePublicLinkTableSkeleton() {
   return (
-    <Table className="min-w-[880px] table-fixed">
-      <DriveShareTableHeader />
+    <Table className="table-fixed" containerClassName="overflow-x-hidden">
+      <DrivePublicLinkTableHeader />
       <TableBody>
         {DRIVE_SKELETON_ROWS.slice(0, 4).map((row) => (
           <TableRow key={row}>
-            <TableCell><Skeleton className="h-4 w-56 max-w-full" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-28" /></TableCell>
+            <TableCell className="whitespace-normal align-top">
+              <div className="grid gap-2">
+                <Skeleton className="h-4 w-56 max-w-full" />
+                <Skeleton className="h-3 w-24 max-w-full" />
+              </div>
+            </TableCell>
+            <TableCell className="whitespace-normal align-top">
+              <div className="grid gap-2">
+                <Skeleton className="h-5 w-56 max-w-full" />
+                <Skeleton className="h-3 w-72 max-w-full" />
+              </div>
+            </TableCell>
+            <TableCell className="align-top"><Skeleton className="ml-auto h-7 w-28 max-w-full" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -2171,36 +2142,36 @@ function DriveShareList({
   if (items.length === 0) return <DriveDialogEmptyState title="暂无分享" />
 
   return (
-    <Table className="min-w-[880px] table-fixed">
-      <DriveShareTableHeader />
+    <Table className="table-fixed" containerClassName="overflow-x-hidden">
+      <DrivePublicLinkTableHeader />
       <TableBody>
         {items.map((item) => (
           <TableRow key={item.id}>
-            <TableCell>
-              <div className="truncate font-medium" title={item.itemName}>{item.itemName}</div>
-            </TableCell>
-            <TableCell>
-              <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>
-            </TableCell>
-            <TableCell>
-              <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              <div className="truncate" title={formatDriveAccessPassword(item)}>
-                {formatDriveAccessPassword(item)}
+            <TableCell className="min-w-0 whitespace-normal align-top">
+              <div className="grid gap-1">
+                <div className="truncate font-medium" title={item.itemName}>{item.itemName}</div>
+                <div className="truncate text-xs text-muted-foreground" title={formatDriveAccessPassword(item)}>
+                  密码 {formatDriveAccessPassword(item)}
+                </div>
               </div>
             </TableCell>
-            <TableCell className="text-muted-foreground tabular-nums">
-              <div className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
-                {formatDriveAccessExpiresAt(item.expiresAt)}
+            <TableCell className="min-w-0 whitespace-normal align-top">
+              <div className="grid gap-1.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
+                  <Badge variant="outline">{item.itemType === "folder" ? "文件夹" : "文件"}</Badge>
+                  <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
+                  <span className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
+                    到期 {formatDriveAccessExpiresAt(item.expiresAt)}
+                  </span>
+                  <span className="truncate" title={formatDriveDateTime(item.createdAt)}>
+                    时间 {formatDriveDateTime(item.createdAt)}
+                  </span>
+                </div>
               </div>
             </TableCell>
-            <TableCell className="text-muted-foreground tabular-nums">
-              <div className="truncate" title={formatDriveDateTime(item.createdAt)}>
-                {formatDriveDateTime(item.createdAt)}
-              </div>
-            </TableCell>
-            <TableCell>
+            <TableCell className="align-top">
               <DriveShareActions item={item} onReload={onReload} />
             </TableCell>
           </TableRow>
