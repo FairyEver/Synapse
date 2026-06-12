@@ -82,7 +82,7 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
     }
   }
 
-  if (node.type === "prompt" || node.type === "switch") {
+  if (node.type === "prompt" || node.type === "switch" || node.type === "codex") {
     pushString(cfg.prompt)
   } else if (node.type === "end") {
     pushString(cfg.template)
@@ -179,19 +179,21 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 "${node.name}" 类型无效：${message}` })
     }
 
-    // Provider resolution: prompt/switch nodes must have provider either on node or workflow default
-    if (node.type === "prompt" || node.type === "switch") {
+    // Provider resolution: prompt/switch nodes must have provider/model/project;
+    // codex nodes only require project resolution.
+    if (node.type === "prompt" || node.type === "switch" || node.type === "codex") {
       const cfg = node.config as Record<string, unknown>
       const hasProviderId = typeof cfg.providerId === "string" && cfg.providerId.length > 0
       const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0
       const hasProjectId = typeof cfg.projectId === "string" && cfg.projectId.trim().length > 0
-      if (!hasProviderId && !def.defaultProviderId) {
+      const requiresProviderAndModel = node.type === "prompt" || node.type === "switch"
+      if (requiresProviderAndModel && !hasProviderId && !def.defaultProviderId) {
         errors.push(missingWorkflowDefaultError({
           node, field: "defaultProviderId", nodeField: "providerId", label: "供应商", cfg,
           defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
         }))
       }
-      if (!hasModelTier && !def.defaultModelTier) {
+      if (requiresProviderAndModel && !hasModelTier && !def.defaultModelTier) {
         errors.push(missingWorkflowDefaultError({
           node, field: "defaultModelTier", nodeField: "modelTier", label: "模型层级", cfg,
           defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,

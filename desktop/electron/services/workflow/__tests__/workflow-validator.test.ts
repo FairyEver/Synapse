@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../../src/types/workflow"
 import { validateWorkflow } from "../workflow-validator"
 import "../../../../workflow-nodes/register.main"
+import { defaultCodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
 
 const logger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -29,6 +30,54 @@ describe("validateWorkflow", () => {
     ]))
     expect(result.warnings).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "disconnected_node" }),
+    ]))
+  })
+
+  it("requires a project for codex nodes when workflow default is missing", () => {
+    const result = validateWorkflow(definitionWithCodexNode())
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "codex-1",
+        field: "defaultProjectId",
+        details: expect.objectContaining({
+          missingField: "defaultProjectId",
+          nodeField: "projectId",
+        }),
+      }),
+    ]))
+    expect(result.errors).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "defaultProviderId" }),
+      expect.objectContaining({ field: "defaultModelTier" }),
+    ]))
+  })
+
+  it("accepts codex nodes with workflow default project and without provider/model defaults", () => {
+    const result = validateWorkflow(definitionWithCodexNode({
+      defaultProjectId: "project-1",
+    }))
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("checks template placeholders inside codex prompts", () => {
+    const result = validateWorkflow(definitionWithCodexNode({
+      nodes: [
+        codexNode({ prompt: "Use {{missingVar}}" }),
+        endNode(),
+      ],
+    }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "codex-1",
+        message: expect.stringContaining("模板变量「missingVar」未绑定"),
+      }),
     ]))
   })
 })
@@ -65,5 +114,46 @@ function definitionWithDisconnectedNode(): WorkflowDefinition {
       },
     ],
     edges: [{ id: "edge-1", from: "script-1", to: "end" }],
+  }
+}
+
+function definitionWithCodexNode(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+  return {
+    id: "workflow-codex",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      codexNode(),
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "codex-1", to: "end" }],
+    ...overrides,
+  }
+}
+
+function codexNode(config: Partial<typeof defaultCodexNodeConfig> = {}): WorkflowDefinition["nodes"][number] {
+  return {
+    id: "codex-1",
+    name: "Codex",
+    type: "codex",
+    position: { x: 0, y: 0 },
+    config: {
+      ...defaultCodexNodeConfig,
+      prompt: "Run codex",
+      ...config,
+    },
+  }
+}
+
+function endNode(): WorkflowDefinition["nodes"][number] {
+  return {
+    id: "end",
+    name: "End",
+    type: "end",
+    position: { x: 200, y: 0 },
+    config: { outputType: "text", template: "", variables: [] },
   }
 }

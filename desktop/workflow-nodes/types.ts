@@ -77,6 +77,7 @@ export interface NodeRuntimeDeps {
     run: (request: import("../electron/runtime/process").ControlledProcessRunRequest) => Promise<import("../electron/runtime/process").ControlledProcessResult>
   }
   sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
+  resolveProjectWorkspacePath?: (projectId: string) => Promise<string | null>
   workflowCall?: WorkflowCallRuntimeDeps
 }
 

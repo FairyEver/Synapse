@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NodeTypeRegistry } from "../registry"
 import { z } from "zod"
 import { Square } from "lucide-react"
@@ -15,6 +15,18 @@ const stub: NodeManifest<{ t: string }> = {
 const exec: NodeExecutor<{ t: string }> = { execute: async () => ({ status: "success", output: "ok", durationMs: 0 }) }
 
 describe("NodeTypeRegistry", () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.doUnmock("electron")
+    vi.doUnmock("../../electron/services/log-store")
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.doUnmock("electron")
+    vi.doUnmock("../../electron/services/log-store")
+  })
+
   it("registers and retrieves manifest and executor", () => {
     const r = new NodeTypeRegistry()
     r.register(stub, exec)
@@ -24,5 +36,42 @@ describe("NodeTypeRegistry", () => {
   })
   it("throws for unknown type", () => {
     expect(() => new NodeTypeRegistry().getManifest("nope")).toThrow("Unknown node type: nope")
+  })
+
+  it("registers codex manifest in renderer registry", async () => {
+    await import("../register.renderer")
+    const { nodeTypeRegistry } = await import("../registry")
+
+    const manifest = nodeTypeRegistry.getManifest("codex")
+
+    expect(manifest.title).toBe("Codex")
+    expect(manifest.type).toBe("codex")
+  })
+
+  it("registers codex manifest and executor in main registry", async () => {
+    vi.doMock("electron", () => ({
+      app: {
+        getPath: () => "/tmp",
+        getAppPath: () => "/tmp",
+      },
+    }))
+
+    vi.doMock("../../electron/services/log-store", () => ({
+      createMainLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }),
+    }))
+
+    await import("../register.main")
+    const [{ nodeTypeRegistry }, { codexNodeExecutor }] = await Promise.all([
+      import("../registry"),
+      import("../codex/executor.main"),
+    ])
+
+    expect(nodeTypeRegistry.getManifest("codex").title).toBe("Codex")
+    expect(nodeTypeRegistry.getExecutor("codex")).toBe(codexNodeExecutor)
   })
 })

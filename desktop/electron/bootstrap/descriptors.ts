@@ -1615,6 +1615,12 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
+    const loadWorkflowProject = async (projectId: string) => {
+      const config = await configStore.load()
+      const repo = config.repositories.find((r) => r.uuid === projectId)
+      const proj = !repo ? config.global.projects.find((p) => p.id === projectId) : undefined
+      return { repo, proj }
+    }
     const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({
       providerId,
       modelTier,
@@ -1633,9 +1639,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         if (!projectId) {
           throw new Error("Workflow prompt project is required")
         }
-        const config = await configStore.load()
-        const repo = config.repositories.find((r) => r.uuid === projectId)
-        const proj = !repo ? config.global.projects.find((p) => p.id === projectId) : undefined
+        const { repo, proj } = await loadWorkflowProject(projectId)
         if (!repo && !proj) {
           throw new Error("Workflow prompt project was not found")
         }
@@ -1701,6 +1705,10 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
+      resolveProjectWorkspacePath: async (projectId) => {
+        const { repo, proj } = await loadWorkflowProject(projectId)
+        return repo?.localPath ?? proj?.path ?? null
+      },
       workflowCall: {
         getWorkflowDefinition: (id) => registry.get<WorkflowService>("core.workflow").get(id),
         runWorkflow: async (input) => {

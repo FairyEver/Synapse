@@ -461,6 +461,53 @@ describe("NodeResultPanel", () => {
       root.unmount()
     })
   })
+
+  it("renders sanitized codex debug output without duplicating secrets", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            error: undefined,
+            output: "",
+            outputs: {
+              codexDebug: {
+                command: "codex exec",
+                args: ["exec", "--json", "-"],
+                cwd: "/Users/liyang/project",
+                exitCode: 0,
+                signal: "SIGTERM",
+                durationMs: 100,
+                stdoutPath: "/tmp/stdout.log",
+                stderrPreview: "Authorization: Bearer raw-secret warning",
+              },
+            },
+          }}
+          nodeName="Codex node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const renderedText = container.textContent ?? ""
+    expect(renderedText).toContain("codex exec")
+    expect(renderedText).toContain("[path]")
+    expect(renderedText).not.toContain("/Users/liyang/project")
+    expect(renderedText).toContain("0")
+    expect(renderedText).toContain("SIGTERM")
+    expect(renderedText).not.toContain("/tmp/stdout.log")
+    expect(renderedText).toContain("warning")
+    expect(renderedText).not.toContain("codexDebug")
+    expect(renderedText).not.toContain("raw-secret")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
 })
 
 function nodeResult(): NodeRunResult {
