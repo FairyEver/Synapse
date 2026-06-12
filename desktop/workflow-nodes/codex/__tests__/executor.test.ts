@@ -130,9 +130,28 @@ describe("codex artifacts", () => {
     })
 
     expect(JSON.stringify(debug)).not.toContain("secret-token")
-    expect(debug.args.join(" ")).toContain("token=[redacted]")
+    expect(debug.args.join(" ")).toContain("endpoint=[redacted]")
     expect(debug.stdoutPreview).toContain("token=[redacted]")
     expect(debug.stderrPreview).toContain("api_key=[redacted]")
+  })
+
+  it("redacts all config override values in debug args", () => {
+    const debug = buildCodexDebugOutput({
+      args: ["exec", "--config", "project_context=customer-alpha", "--config", "model_reasoning_effort=high"],
+      cwd: "/Users/liyang/project",
+      exitCode: 0,
+      durationMs: 10,
+    })
+
+    expect(debug.args).toEqual([
+      "exec",
+      "--config",
+      "project_context=[redacted]",
+      "--config",
+      "model_reasoning_effort=[redacted]",
+    ])
+    expect(JSON.stringify(debug)).not.toContain("customer-alpha")
+    expect(JSON.stringify(debug)).not.toContain("high")
   })
 
   it("truncates debug previews to 2000 characters", () => {
@@ -152,6 +171,24 @@ describe("codex artifacts", () => {
     expect(finalOutputFromResult(" final answer \n", " stdout ")).toBe("final answer")
     expect(finalOutputFromResult(" \n", " stdout \n")).toBe("stdout")
     expect(finalOutputFromResult(undefined, undefined)).toBe("")
+  })
+
+  it("does not return raw JSONL stdout as final output", () => {
+    const stdout = [
+      JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+      JSON.stringify({ type: "tool.result", content: "raw tool output token=secret" }),
+    ].join("\n")
+
+    expect(finalOutputFromResult(undefined, stdout)).toBe("")
+  })
+
+  it("extracts final text from known JSONL final message events", () => {
+    const stdout = [
+      JSON.stringify({ type: "thread.started", thread_id: "thread-1" }),
+      JSON.stringify({ type: "final_message", message: "done" }),
+    ].join("\n")
+
+    expect(finalOutputFromResult(undefined, stdout)).toBe("done")
   })
 
   it("extracts and dedupes JSONL session hints", () => {
@@ -310,6 +347,27 @@ describe("codexNodeExecutor", () => {
 
     expect(result.status).toBe("success")
     expect(result.output).toBe("stdout answer")
+  })
+
+  it("does not use raw JSONL stdout as successful fallback output", async () => {
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockResolvedValue({
+          exitCode: 0,
+          signal: null,
+          stdout: JSON.stringify({ type: "tool.result", content: "raw tool output token=secret" }),
+          stderr: "",
+          timedOut: false,
+          durationMs: 25,
+        }),
+      },
+    })
+
+    const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
+
+    expect(result.status).toBe("success")
+    expect(result.output).toBe("")
+    expect(JSON.stringify(result)).not.toContain("token=secret")
   })
 
   it("returns sanitized codex debug output for non-zero exits", async () => {

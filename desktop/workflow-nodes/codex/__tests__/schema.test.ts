@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest"
 import { codexNodeConfigSchema, defaultCodexNodeConfig } from "../schema"
 
 describe("codexNodeConfigSchema", () => {
-  it("accepts unattended-friendly defaults", () => {
-    const parsed = codexNodeConfigSchema.parse(defaultCodexNodeConfig)
-
-    expect(parsed).toEqual({
+  it("defines unattended-friendly default values", () => {
+    expect(defaultCodexNodeConfig).toEqual({
       variables: [],
       prompt: "",
       approvalPolicy: "never",
@@ -21,6 +19,15 @@ describe("codexNodeConfigSchema", () => {
       configOverrides: [],
       captureDebugArtifacts: true,
     })
+  })
+
+  it("rejects blank prompts", () => {
+    const result = codexNodeConfigSchema.safeParse({
+      ...defaultCodexNodeConfig,
+      prompt: "   ",
+    })
+
+    expect(result.success).toBe(false)
   })
 
   it("rejects duplicate config override keys", () => {
@@ -80,6 +87,7 @@ describe("codexNodeConfigSchema", () => {
   it("trims model and profile and drops blank values", () => {
     const parsed = codexNodeConfigSchema.parse({
       ...defaultCodexNodeConfig,
+      prompt: "run",
       model: "  gpt-5-codex  ",
       profile: "  ",
     })
@@ -91,6 +99,7 @@ describe("codexNodeConfigSchema", () => {
   it("rejects unknown goals feature state", () => {
     const result = codexNodeConfigSchema.safeParse({
       ...defaultCodexNodeConfig,
+      prompt: "run",
       features: { goals: "maybe" },
     })
 

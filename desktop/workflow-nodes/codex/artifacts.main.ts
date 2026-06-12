@@ -75,7 +75,10 @@ export async function readCodexArtifact(filePath: string): Promise<string> {
 export function finalOutputFromResult(lastMessage: string | undefined, stdout: string | undefined): string {
   const finalMessage = lastMessage?.trim()
   if (finalMessage) return finalMessage
-  return stdout?.trim() ?? ""
+  const stdoutText = stdout?.trim()
+  if (!stdoutText) return ""
+  const jsonlOutput = finalOutputFromJsonl(stdoutText)
+  return jsonlOutput ?? stdoutText
 }
 
 export function buildCodexDebugOutput(input: BuildCodexDebugOutputInput): CodexNodeDebugOutput {
@@ -85,7 +88,7 @@ export function buildCodexDebugOutput(input: BuildCodexDebugOutputInput): CodexN
 
   return {
     command: "codex exec",
-    args: input.args.map(sanitizeForDebug),
+    args: sanitizeArgsForDebug(input.args),
     cwd: input.cwd,
     exitCode: input.exitCode,
     ...(input.signal === undefined ? {} : { signal: sanitizeForDebug(input.signal) }),
@@ -98,6 +101,24 @@ export function buildCodexDebugOutput(input: BuildCodexDebugOutputInput): CodexN
     ...(stderrPreview === undefined ? {} : { stderrPreview }),
     ...(sessionHints.length === 0 ? {} : { sessionHints }),
   }
+}
+
+function finalOutputFromJsonl(stdout: string): string | undefined {
+  const lines = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length === 0) return ""
+  let sawJsonObject = false
+  let finalText = ""
+
+  for (const line of lines) {
+    const parsed = parseJsonObject(line)
+    if (!parsed) continue
+    sawJsonObject = true
+    const candidate = extractFinalTextCandidate(parsed)
+    if (candidate) finalText = candidate
+  }
+
+  if (!sawJsonObject) return undefined
+  return finalText
 }
 
 function preview(value: string | undefined): string | undefined {
@@ -135,6 +156,37 @@ function parseJsonObject(line: string): Record<string, unknown> | undefined {
   }
 
   return undefined
+}
+
+function extractFinalTextCandidate(value: Record<string, unknown>): string | undefined {
+  const type = typeof value.type === "string" ? value.type.toLowerCase() : ""
+  const candidateKeys = type.includes("final") || type.includes("message")
+    ? ["message", "content", "text", "output", "answer", "final_answer"]
+    : ["final_answer"]
+
+  for (const key of candidateKeys) {
+    const candidate = value[key]
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim()
+  }
+
+  return undefined
+}
+
+function sanitizeArgsForDebug(args: readonly string[]): string[] {
+  return args.map((arg, index) => {
+    if (args[index - 1] === "--config") return redactConfigOverrideArg(arg)
+    if (arg.startsWith("--config=")) {
+      return `--config=${redactConfigOverrideArg(arg.slice("--config=".length))}`
+    }
+    return sanitizeForDebug(arg)
+  })
+}
+
+function redactConfigOverrideArg(arg: string): string {
+  const separatorIndex = arg.indexOf("=")
+  if (separatorIndex < 0) return sanitizeForDebug(arg)
+  const key = sanitizeForDebug(arg.slice(0, separatorIndex))
+  return `${key}=[redacted]`
 }
 
 function sanitizeForDebug(value: string): string {
