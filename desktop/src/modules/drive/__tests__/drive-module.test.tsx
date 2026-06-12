@@ -209,20 +209,30 @@ describe("DriveModule", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
     expect(html).toContain("云盘")
-    expect(html).toContain("已分享")
-    expect(html).toContain("已发布")
+    expect(html).toContain("公开链接")
+    expect(html).not.toContain("已分享")
+    expect(html).not.toContain("已发布")
     expect(html).toContain("上传文件")
     expect(html).toContain("上传文件夹")
     expect(html).toContain("新建文件夹")
     expect(html).toContain("刷新")
   })
 
-  it("shows share and publication management actions in the drive top bar", async () => {
+  it("opens public link management from one top-bar action", async () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getButton("已分享")).not.toBeNull()
-    expect(getButton("已发布")).not.toBeNull()
+    expect(getButton("公开链接")).not.toBeNull()
+    expect(queryButton("已分享")).toBeNull()
+    expect(queryButton("已发布")).toBeNull()
+
+    await clickButtonText("公开链接")
+    await flushAct()
+
+    expect(document.body.textContent).toContain("公开链接")
+    expect(document.body.textContent).toContain("全部")
+    expect(document.body.textContent).toContain("分享")
+    expect(document.body.textContent).toContain("发布")
   })
 
   it("keeps file actions in the list toolbar after search", () => {
@@ -246,8 +256,9 @@ describe("DriveModule", () => {
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
     expect(queryButton("新建文件夹")).toBeNull()
-    expect(getButton("已分享").disabled).toBe(true)
-    expect(getButton("已发布").disabled).toBe(true)
+    expect(getButton("公开链接").disabled).toBe(true)
+    expect(queryButton("已分享")).toBeNull()
+    expect(queryButton("已发布")).toBeNull()
 
     await clickButtonText("登录")
 
@@ -266,8 +277,9 @@ describe("DriveModule", () => {
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
     expect(queryButton("新建文件夹")).toBeNull()
-    expect(getButton("已分享").disabled).toBe(true)
-    expect(getButton("已发布").disabled).toBe(true)
+    expect(getButton("公开链接").disabled).toBe(true)
+    expect(queryButton("已分享")).toBeNull()
+    expect(queryButton("已发布")).toBeNull()
   })
 
   it("keeps management actions disabled while the drive list is loading", async () => {
@@ -279,8 +291,9 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushPromises()
 
-    expect(getButton("已分享").disabled).toBe(true)
-    expect(getButton("已发布").disabled).toBe(true)
+    expect(getButton("公开链接").disabled).toBe(true)
+    expect(queryButton("已分享")).toBeNull()
+    expect(queryButton("已发布")).toBeNull()
 
     await act(async () => {
       resolveItems([])
@@ -831,6 +844,21 @@ describe("DriveModule", () => {
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
   })
 
+  it("keeps row actions focused on opening and sharing", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "notes.md", type: "file", mimeType: "text/markdown" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(getButton("打开")).not.toBeNull()
+    expect(getButton("分享")).not.toBeNull()
+    expect(queryButton("预览")).toBeNull()
+    expect(queryButton("删除")).toBeNull()
+    expect(getButton("更多 notes.md")).not.toBeNull()
+  })
+
   it("opens a file preview from the row action", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
@@ -1363,6 +1391,26 @@ describe("DriveModule", () => {
 
     dialogContent = document.querySelector('[data-slot="dialog-content"]')
     expect(dialogContent?.className).toContain("sm:max-w-4xl")
+  })
+
+  it("loads share and publication data in the public links dialog", async () => {
+    mocks.listDriveShares.mockResolvedValue([
+      createDriveShare({ id: "share-1", itemName: "notes.md", itemType: "file" }),
+    ])
+    mocks.listDrivePublications.mockResolvedValue([
+      createDrivePublication({ id: "pub-1", name: "index.html", type: "page" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("公开链接")
+    await flushAct()
+
+    expect(mocks.listDriveShares).toHaveBeenCalledTimes(1)
+    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("notes.md")
+    expect(document.body.textContent).toContain("index.html")
   })
 
   it("shows publication dialog loading state", async () => {
