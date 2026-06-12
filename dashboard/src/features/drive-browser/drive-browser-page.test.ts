@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import {
+  DriveBrowserView,
   getDriveBrowserActions,
   getDriveBrowserChildUrls,
 } from './drive-browser-page'
@@ -32,7 +35,7 @@ describe('drive browser view model', () => {
     expect(getDriveBrowserActions(snapshot).visitUrl).toBeNull()
   })
 
-  it('shows visit for owner markdown previews', () => {
+  it('does not show visit for owner markdown previews', () => {
     const snapshot = createSnapshot({
       current: {
         ...baseCurrent(),
@@ -44,13 +47,14 @@ describe('drive browser view model', () => {
         ...basePreview(),
         kind: 'markdown',
         text: '# Notes',
-        visitUrl: '/drive/items/root/items/file/render',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
       },
     })
 
     expect(getDriveBrowserActions(snapshot)).toMatchObject({
       downloadUrl: '/drive/items/root/items/file/download',
-      visitUrl: '/drive/items/root/items/file/render',
+      visitUrl: null,
     })
   })
 
@@ -69,11 +73,36 @@ describe('drive browser view model', () => {
         ...basePreview(),
         kind: 'markdown',
         text: '# Notes',
+        html: '<h1>Notes</h1>',
         visitUrl: null,
       },
     })
 
     expect(getDriveBrowserActions(snapshot).visitUrl).toBeNull()
+  })
+
+  it('renders markdown html by default while keeping source hidden', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot }))
+
+    expect(html).toContain('<h1>Notes</h1>')
+    expect(html).toContain('源码')
+    expect(html).not.toContain('# Notes')
   })
 
   it('keeps download actions for download-only files', () => {
@@ -140,5 +169,6 @@ function basePreview(): NonNullable<DriveBrowserSnapshotDto['preview']> {
     truncated: false,
     imageUrl: null,
     visitUrl: '/drive/items/root/items/file/render',
+    html: null,
   }
 }

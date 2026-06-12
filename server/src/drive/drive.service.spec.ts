@@ -1001,7 +1001,7 @@ describe("DriveService", () => {
     })
   })
 
-  it("builds owner browser snapshots with markdown visit urls", async () => {
+  it("builds owner browser snapshots with rendered markdown previews", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -1025,7 +1025,8 @@ describe("DriveService", () => {
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
       text: "# Notes",
-      visitUrl: `/drive/items/${file.id}/render`,
+      html: "<h1>Notes</h1>",
+      visitUrl: null,
     })
   })
 
@@ -1118,6 +1119,34 @@ describe("DriveService", () => {
     expect(snapshot.preview).toMatchObject({
       kind: "html-source",
       text: "<html></html>",
+      visitUrl: null,
+    })
+  })
+
+  it("builds share browser snapshots with rendered markdown previews", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Notes"), size: 7n, contentType: "text/markdown" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "notes.md",
+      mimeType: "text/markdown",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+
+    expect(snapshot.preview).toMatchObject({
+      kind: "markdown",
+      text: "# Notes",
+      html: "<h1>Notes</h1>",
       visitUrl: null,
     })
   })

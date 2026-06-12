@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { renderDriveMarkdownDocument } from "./drive-markdown-renderer"
+import { renderDriveMarkdownDocument, renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 
 describe("drive markdown renderer", () => {
   it("renders github flavored markdown into a complete document", async () => {
@@ -53,5 +53,20 @@ describe("drive markdown renderer", () => {
     })
 
     expect(html).toContain("<title>bad &quot; &lt;title&gt;.md</title>")
+  })
+
+  it("renders a sanitized markdown fragment for browser previews", async () => {
+    const html = await renderDriveMarkdownFragment([
+      "# Notes",
+      "",
+      "<script>alert(1)</script>",
+      "",
+      "- [x] reviewed",
+    ].join("\n"))
+
+    expect(html).toContain("<h1>Notes</h1>")
+    expect(html).toContain('type="checkbox"')
+    expect(html).not.toContain("<!doctype html>")
+    expect(html).not.toContain("<script>")
   })
 })

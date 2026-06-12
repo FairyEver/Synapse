@@ -42,6 +42,10 @@ export async function renderDriveMarkdownDocument(input: MarkdownRenderInput): P
   ].join("")
 }
 
+export async function renderDriveMarkdownFragment(markdown: string): Promise<string> {
+  return renderMarkdownBody(markdown)
+}
+
 async function renderMarkdownBody(markdown: string): Promise<string> {
   const [
     { unified },

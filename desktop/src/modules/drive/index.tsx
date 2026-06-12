@@ -8,7 +8,6 @@ import {
   FileText,
   Folder,
   FolderPlus,
-  Globe2,
   KeyRound,
   Link2,
   LoaderCircle,
@@ -78,6 +77,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -160,11 +160,10 @@ function DriveModule() {
   const [deleteTarget, setDeleteTarget] = useState<DriveItemDto | null>(null)
   const [deleteImpact, setDeleteImpact] = useState<DriveDeleteImpactDto | null>(null)
   const [disablePublicationsOnDelete, setDisablePublicationsOnDelete] = useState(false)
-  const [publicationsOpen, setPublicationsOpen] = useState(false)
+  const [publicLinksOpen, setPublicLinksOpen] = useState(false)
   const [publicationSuccess, setPublicationSuccess] = useState<DrivePublicationSuccessState | null>(null)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [accessSettingsTarget, setAccessSettingsTarget] = useState<DriveAccessSettingsTarget | null>(null)
-  const [sharesOpen, setSharesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadItemCount, setUploadItemCount] = useState<number | null>(null)
@@ -582,7 +581,7 @@ function DriveModule() {
         onRename={handleRename}
         onMove={handleMove}
         onDelete={handleDelete}
-        onPreview={handlePreview}
+        onOpenItem={handlePreview}
         onShare={handleShare}
         onDisableShare={handleDisableShare}
         onUploadDroppedFiles={handleDroppedFiles}
@@ -621,16 +620,10 @@ function DriveModule() {
           <>
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
             <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setSharesOpen(true)}>
-                <Link2 data-icon="inline-start" />
-                已分享
-              </Button>
-              <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setPublicationsOpen(true)}>
-                <Globe2 data-icon="inline-start" />
-                已发布
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setPublicLinksOpen(true)}>
+              <Link2 data-icon="inline-start" />
+              公开链接
+            </Button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon-sm" disabled={!accountAuthenticated || loading || openingFolderId !== null} onClick={() => void loadItems()}>
@@ -737,10 +730,9 @@ function DriveModule() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <DriveSharesDialog open={sharesOpen} onOpenChange={setSharesOpen} />
-            <DrivePublicationsDialog
-              open={publicationsOpen}
-              onOpenChange={setPublicationsOpen}
+            <DrivePublicLinksDialog
+              open={publicLinksOpen}
+              onOpenChange={setPublicLinksOpen}
               onPublicationDeployed={setPublicationSuccess}
             />
             <DriveAccessSettingsDialog
@@ -1065,7 +1057,7 @@ function DriveFileList({
   onRename,
   onMove,
   onDelete,
-  onPreview,
+  onOpenItem,
   onShare,
   onDisableShare,
   onUploadDroppedFiles,
@@ -1089,7 +1081,7 @@ function DriveFileList({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
-  readonly onPreview: (item: DriveItemDto) => void
+  readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
@@ -1186,7 +1178,7 @@ function DriveFileList({
                   onRename={onRename}
                   onMove={onMove}
                   onDelete={onDelete}
-                  onPreview={onPreview}
+                  onOpenItem={onOpenItem}
                   onShare={onShare}
                   onDisableShare={onDisableShare}
                   publicationActions={publicationActionsByItemId.get(item.id) ?? { page: null, site: null }}
@@ -1219,7 +1211,7 @@ function DriveFileTableHeader() {
         <TableHead className="w-32">状态</TableHead>
         <TableHead className="w-24 text-right">大小</TableHead>
         <TableHead className="w-40 text-right">更新时间</TableHead>
-        <TableHead className="w-48 text-right">操作</TableHead>
+        <TableHead className="w-40 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -1311,7 +1303,7 @@ function DriveFileListRow({
   onRename,
   onMove,
   onDelete,
-  onPreview,
+  onOpenItem,
   onShare,
   onDisableShare,
   publicationActions,
@@ -1325,7 +1317,7 @@ function DriveFileListRow({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
-  readonly onPreview: (item: DriveItemDto) => void
+  readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly publicationActions: DriveItemPublicationActions
@@ -1398,19 +1390,17 @@ function DriveFileListRow({
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <Button type="button" variant="ghost" size="xs" onClick={() => onPreview(item)}>
-            预览
+          <Button type="button" variant="ghost" size="xs" onClick={() => onOpenItem(item)}>
+            打开
           </Button>
           <Button type="button" variant="ghost" size="xs" onClick={() => onShare(item)}>
             分享
-          </Button>
-          <Button type="button" variant="destructive" size="xs" onClick={() => onDelete(item)}>
-            删除
           </Button>
           <DriveItemMenu
             item={item}
             onRename={onRename}
             onMove={onMove}
+            onDelete={onDelete}
             onDisableShare={onDisableShare}
             publicationActions={publicationActions}
             onPublishPage={onPublishPage}
@@ -1427,6 +1417,7 @@ function DriveItemMenu({
   item,
   onRename,
   onMove,
+  onDelete,
   onDisableShare,
   publicationActions,
   onPublishPage,
@@ -1436,6 +1427,7 @@ function DriveItemMenu({
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
+  readonly onDelete: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly publicationActions: DriveItemPublicationActions
   readonly onPublishPage: (item: DriveItemDto) => void
@@ -1487,6 +1479,7 @@ function DriveItemMenu({
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={() => onDelete(item)}>删除</DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1581,7 +1574,9 @@ function DriveAccessSettingsDialog({
   )
 }
 
-function DrivePublicationsDialog({
+type DrivePublicLinkTab = "all" | "shares" | "publications"
+
+function DrivePublicLinksDialog({
   open,
   onOpenChange,
   onPublicationDeployed,
@@ -1590,17 +1585,24 @@ function DrivePublicationsDialog({
   readonly onOpenChange: (open: boolean) => void
   readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
 }) {
-  const [items, setItems] = useState<DrivePublicationDto[]>([])
+  const [tab, setTab] = useState<DrivePublicLinkTab>("all")
+  const [shares, setShares] = useState<DriveShareListItemDto[]>([])
+  const [publications, setPublications] = useState<DrivePublicationDto[]>([])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const loadPublications = useCallback(async () => {
+  const loadPublicLinks = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
     try {
-      setItems(await requireSynapseBridge().account.listDrivePublications())
+      const [nextShares, nextPublications] = await Promise.all([
+        requireSynapseBridge().account.listDriveShares(),
+        requireSynapseBridge().account.listDrivePublications(),
+      ])
+      setShares(nextShares)
+      setPublications(nextPublications)
     } catch (rawError) {
-      const message = errorMessage(rawError, "已发布加载失败")
+      const message = errorMessage(rawError, "公开链接加载失败")
       setLoadError(message)
       toast(message)
     } finally {
@@ -1609,26 +1611,104 @@ function DrivePublicationsDialog({
   }, [])
 
   useEffect(() => {
-    if (open) void loadPublications()
-  }, [loadPublications, open])
+    if (open) void loadPublicLinks()
+  }, [loadPublicLinks, open])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <FormDialog
-        title="已发布"
-        contentClassName="sm:max-w-4xl"
+        title="公开链接"
+        contentClassName="sm:max-w-5xl"
         onSubmit={(event) => event.preventDefault()}
         footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
       >
-        <DrivePublicationList
-          error={loadError}
-          items={items}
-          loading={loading}
-          onPublicationDeployed={onPublicationDeployed}
-          onReload={loadPublications}
-        />
+        <Tabs value={tab} onValueChange={(value) => setTab(value as DrivePublicLinkTab)}>
+          <TabsList>
+            <TabsTrigger type="button" value="all" onClick={() => setTab("all")}>全部</TabsTrigger>
+            <TabsTrigger type="button" value="shares" onClick={() => setTab("shares")}>分享</TabsTrigger>
+            <TabsTrigger type="button" value="publications" onClick={() => setTab("publications")}>发布</TabsTrigger>
+          </TabsList>
+          <TabsContent value="all">
+            <DrivePublicLinkList
+              emptyTitle="暂无公开链接"
+              error={loadError}
+              loading={loading}
+              publications={publications}
+              shares={shares}
+              onPublicationDeployed={onPublicationDeployed}
+              onReload={loadPublicLinks}
+            />
+          </TabsContent>
+          <TabsContent value="shares">
+            <DrivePublicLinkList
+              emptyTitle="暂无分享"
+              error={loadError}
+              loading={loading}
+              publications={[]}
+              shares={shares}
+              onPublicationDeployed={onPublicationDeployed}
+              onReload={loadPublicLinks}
+            />
+          </TabsContent>
+          <TabsContent value="publications">
+            <DrivePublicLinkList
+              emptyTitle="暂无发布"
+              error={loadError}
+              loading={loading}
+              publications={publications}
+              shares={[]}
+              onPublicationDeployed={onPublicationDeployed}
+              onReload={loadPublicLinks}
+            />
+          </TabsContent>
+        </Tabs>
       </FormDialog>
     </Dialog>
+  )
+}
+
+function DrivePublicLinkList({
+  emptyTitle,
+  error,
+  loading,
+  publications,
+  shares,
+  onPublicationDeployed,
+  onReload,
+}: {
+  readonly emptyTitle: string
+  readonly error: string | null
+  readonly loading: boolean
+  readonly publications: readonly DrivePublicationDto[]
+  readonly shares: readonly DriveShareListItemDto[]
+  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
+  readonly onReload: () => Promise<void>
+}) {
+  if (loading) return <DrivePublicationTableSkeleton />
+  if (error) return <DriveDialogErrorState message={error} onRetry={onReload} />
+  if (publications.length === 0 && shares.length === 0) return <DriveDialogEmptyState title={emptyTitle} />
+
+  return (
+    <div className="grid gap-3">
+      {shares.length > 0 ? (
+        <section className="grid gap-2">
+          <h3 className="text-sm font-medium">分享</h3>
+          <DriveShareList error={null} items={shares} loading={false} onReload={onReload} />
+        </section>
+      ) : null}
+      {publications.length > 0 ? (
+        <section className="grid gap-2">
+          <h3 className="text-sm font-medium">发布</h3>
+          <DrivePublicationList
+            error={null}
+            items={publications}
+            loading={false}
+            onPublicationDeployed={onPublicationDeployed}
+            onReload={onReload}
+          />
+        </section>
+      ) : null}
+    </div>
   )
 }
 
@@ -2070,49 +2150,6 @@ function DriveShareSuccessDialog({
             </div>
           </dl>
         </div>
-      </FormDialog>
-    </Dialog>
-  )
-}
-
-function DriveSharesDialog({
-  open,
-  onOpenChange,
-}: {
-  readonly open: boolean
-  readonly onOpenChange: (open: boolean) => void
-}) {
-  const [items, setItems] = useState<DriveShareListItemDto[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
-  const loadShares = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
-    try {
-      setItems(await requireSynapseBridge().account.listDriveShares())
-    } catch (rawError) {
-      const message = errorMessage(rawError, "已分享加载失败")
-      setLoadError(message)
-      toast(message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (open) void loadShares()
-  }, [loadShares, open])
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <FormDialog
-        title="已分享"
-        contentClassName="sm:max-w-4xl"
-        onSubmit={(event) => event.preventDefault()}
-        footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
-      >
-        <DriveShareList error={loadError} items={items} loading={loading} onReload={loadShares} />
       </FormDialog>
     </Dialog>
   )

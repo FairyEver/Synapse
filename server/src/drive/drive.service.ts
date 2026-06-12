@@ -27,7 +27,7 @@ import {
   verifyDrivePasswordInput,
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
-import { renderDriveMarkdownDocument } from "./drive-markdown-renderer"
+import { renderDriveMarkdownDocument, renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 import {
   DRIVE_ITEM_TYPE,
   DRIVE_PUBLICATION_DEPLOYMENT_STATUS,
@@ -1116,7 +1116,8 @@ export class DriveService implements OnApplicationBootstrap {
     const storageKey = this.requireActiveFileStorage(current)
     if (shouldReadDriveBrowserTextPreview(kind)) {
       const preview = await this.readTextPreview(storageKey)
-      return buildDriveBrowserPreview({ item, route, text: preview.text, truncated: preview.truncated })
+      const html = kind === "markdown" ? await renderDriveMarkdownFragment(preview.text) : null
+      return buildDriveBrowserPreview({ item, route, text: preview.text, html, truncated: preview.truncated })
     }
     if (shouldCreateDriveBrowserImagePreview(kind)) {
       const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
