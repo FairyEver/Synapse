@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { mkdtempSync } from "node:fs"
-import { rmSync } from "node:fs"
+import { readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -15,7 +15,7 @@ vi.mock("../log-store", () => ({
   createMainLogger: () => logger,
 }))
 
-import { DataRepositoryImpl, JsonNamespace, workflowsSchema, type WorkflowEntryV1 } from "../../runtime/data-repo"
+import { DataRepositoryImpl, JsonNamespace, reviveWorkflowsEnvelope, workflowsSchema, type WorkflowEntryV1 } from "../../runtime/data-repo"
 import { WorkflowService } from "../workflow/workflow-service"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import "../../../workflow-nodes/register.main"
@@ -34,8 +34,7 @@ afterEach(() => {
   }
 })
 
-function createRepo(): { repo: DataRepositoryImpl; svc: WorkflowService } {
-  const dir = tmpDir()
+function createRepoAt(dir: string): { repo: DataRepositoryImpl; svc: WorkflowService } {
   const repo = new DataRepositoryImpl()
   repo.register(workflowsSchema, new JsonNamespace({
     name: workflowsSchema.name,
@@ -43,9 +42,15 @@ function createRepo(): { repo: DataRepositoryImpl; svc: WorkflowService } {
     backend: "json",
     filePath: path.join(dir, "workflows.json"),
     validate: workflowsSchema.validate,
+    reviveEnvelope: reviveWorkflowsEnvelope,
   }))
   const svc = new WorkflowService(repo)
   return { repo, svc }
+}
+
+function createRepo(): { repo: DataRepositoryImpl; svc: WorkflowService; dir: string } {
+  const dir = tmpDir()
+  return { ...createRepoAt(dir), dir }
 }
 
 function makeDef(): WorkflowDefinition {
@@ -153,5 +158,99 @@ describe("WorkflowService", () => {
     expect("errors" in result).toBe(true)
     expect((result as { errors: Array<{ message: string }> }).errors[0].message).toContain("ID")
     expect(await svc.list()).toEqual([])
+  })
+  it("normalizes nullable optional metadata before persisting so restart can list workflows", async () => {
+    const { svc, dir } = createRepo()
+    const dirty = {
+      ...makeDef(),
+      description: null,
+      defaultProjectId: null,
+      defaultProviderId: null,
+      defaultModelTier: null,
+      defaultNodeTimeoutMins: 0,
+    } as unknown as WorkflowDefinition
+
+    const result = await svc.save(dirty)
+    expect("versionHash" in result).toBe(true)
+
+    const restarted = createRepoAt(dir).svc
+    await expect(restarted.list()).resolves.toHaveLength(1)
+    const stored = JSON.parse(readFileSync(path.join(dir, "workflows.json"), "utf8"))
+    const item = stored.items[dirty.id]
+    expect(item.description).toBeUndefined()
+    expect(item.defaultProjectId).toBeUndefined()
+    expect(item.defaultProviderId).toBeUndefined()
+    expect(item.defaultModelTier).toBeUndefined()
+    expect(item.defaultNodeTimeoutMins).toBeUndefined()
+  })
+  it("revives legacy workflow records with nullable optional fields and missing param defaults", async () => {
+    const dir = tmpDir()
+    const def = makeDef()
+    writeFileSync(path.join(dir, "workflows.json"), JSON.stringify({
+      schemaVersion: 1,
+      singleton: null,
+      items: {
+        [def.id]: {
+          ...def,
+          schemaVersion: 1,
+          description: null,
+          defaultProjectId: null,
+          defaultProviderId: null,
+          defaultModelTier: null,
+          defaultNodeTimeoutMins: null,
+          params: [{ name: "topic", type: "text" }],
+        },
+      },
+    }), "utf8")
+
+    const svc = createRepoAt(dir).svc
+    await expect(svc.list()).resolves.toEqual([
+      expect.objectContaining({ id: def.id, name: def.name, nodeCount: 1 }),
+    ])
+    await expect(svc.get(def.id)).resolves.toMatchObject({
+      id: def.id,
+      params: [{ name: "topic", type: "text", default: null }],
+    })
+  })
+  it("isolates unrecoverable workflow records instead of failing the whole list", async () => {
+    const dir = tmpDir()
+    const valid = makeDef()
+    writeFileSync(path.join(dir, "workflows.json"), JSON.stringify({
+      schemaVersion: 1,
+      singleton: null,
+      items: {
+        [valid.id]: { ...valid, schemaVersion: 1 },
+        "broken-workflow": {
+          id: "broken-workflow",
+          schemaVersion: 1,
+          name: "坏工作流",
+          version: "v_broken",
+          createdAt: 100,
+          updatedAt: 200,
+          params: [],
+          edges: [],
+        },
+      },
+    }), "utf8")
+
+    const svc = createRepoAt(dir).svc
+    const list = await svc.list()
+    expect(list).toHaveLength(2)
+    expect(list).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: valid.id, name: valid.name }),
+      expect.objectContaining({
+        id: "broken-workflow",
+        name: "坏工作流",
+        loadError: "工作流数据格式异常",
+        nodeCount: 0,
+      }),
+    ]))
+    await expect(svc.get("broken-workflow")).resolves.toMatchObject({
+      id: "broken-workflow",
+      loadError: "工作流数据格式异常",
+      nodes: [],
+      edges: [],
+      params: [],
+    })
   })
 })

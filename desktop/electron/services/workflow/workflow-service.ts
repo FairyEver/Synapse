@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
-import type { DataNamespace, DataRepository, WorkflowEntryV1 } from "../../runtime/data-repo"
+import { normalizeWorkflowEntry, type DataNamespace, type DataRepository, type WorkflowEntryV1 } from "../../runtime/data-repo"
 import { validateWorkflow } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { errorCode, sanitizeAgentError, truncateWithEllipsis } from "./workflow-utils"
@@ -39,6 +39,7 @@ export class WorkflowService {
         name: d.name,
         description: d.description,
         version: d.version,
+        loadError: d.loadError as string | undefined,
         nodeCount: (d.nodes ?? []).length,
         createdAt: d.createdAt as number,
         updatedAt: d.updatedAt as number,
@@ -69,6 +70,7 @@ export class WorkflowService {
         version: entry.version as string,
         createdAt: entry.createdAt as number,
         updatedAt: entry.updatedAt as number,
+        loadError: entry.loadError as string | undefined,
         defaultProjectId: entry.defaultProjectId as string | undefined,
         defaultProviderId: entry.defaultProviderId as string | undefined,
         defaultModelTier: entry.defaultModelTier as WorkflowDefinition["defaultModelTier"],
@@ -100,7 +102,7 @@ export class WorkflowService {
     }
     const versionHash = this.versionHash(def)
     const now = Date.now()
-    const versioned: WorkflowEntryV1 = {
+    const versioned = normalizeWorkflowEntry({
       id: def.id,
       schemaVersion: 1,
       name: def.name,
@@ -115,6 +117,9 @@ export class WorkflowService {
       params: def.params as WorkflowEntryV1["params"],
       nodes: def.nodes as WorkflowEntryV1["nodes"],
       edges: def.edges as WorkflowEntryV1["edges"],
+    })
+    if (!versioned) {
+      return { errors: [{ type: "invalid_config", message: "保存失败：工作流数据格式异常，请检查后重试" }] }
     }
     try {
       await this.workflowsNamespace.upsert(versioned)

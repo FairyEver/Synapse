@@ -72,6 +72,8 @@ export {
   taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
+  normalizeWorkflowEntry,
+  reviveWorkflowsEnvelope,
   workflowsSchema,
   type AuditEntryV1,
   type AgentCompressStateEntryV1,

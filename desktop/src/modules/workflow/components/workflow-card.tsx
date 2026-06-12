@@ -20,6 +20,7 @@ interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: 
 
 export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenActiveRun, onHistory, onExport, onDelete }: WorkflowCardProps) {
   const badge = runState ? RUN_STATE_BADGE[runState.status] : null
+  const hasLoadError = Boolean(meta.loadError)
   const suppressClickRef = useRef(false)
 
   return (
@@ -45,7 +46,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
         </div>
       </TableCell>
       <TableCell>
-        {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : <Badge variant="outline">未运行</Badge>}
+        {hasLoadError ? <Badge variant="destructive">数据异常</Badge> : badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : <Badge variant="outline">未运行</Badge>}
       </TableCell>
       <TableCell className="text-right text-muted-foreground">{meta.nodeCount} 个节点</TableCell>
       <TableCell>
@@ -69,7 +70,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
             type="button"
             size="icon-sm"
             variant="ghost"
-            disabled={running}
+            disabled={running || hasLoadError}
             aria-label="运行工作流"
             data-track="workflow-card-run"
             onClick={(e) => { e.stopPropagation(); onRun() }}
@@ -90,6 +91,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
             type="button"
             size="icon-sm"
             variant="ghost"
+            disabled={hasLoadError}
             aria-label="导出工作流"
             data-track="workflow-card-export"
             onClick={(e) => { e.stopPropagation(); onExport() }}

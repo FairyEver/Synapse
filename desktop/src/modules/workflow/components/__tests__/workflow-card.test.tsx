@@ -130,6 +130,22 @@ describe("WorkflowCard", () => {
 
     expect(onOpenActiveRun).toHaveBeenCalledWith("active-run")
   })
+
+  it("marks malformed workflows and disables unsafe actions", async () => {
+    const onRun = vi.fn()
+    const onExport = vi.fn()
+    const container = await renderWorkflowCard({
+      meta: { ...workflowMeta, loadError: "工作流数据格式异常" },
+      onRun,
+      onExport,
+    })
+
+    expect(container.textContent).toContain("数据异常")
+    const runButton = container.querySelector<HTMLButtonElement>('[aria-label="运行工作流"]')
+    const exportButton = container.querySelector<HTMLButtonElement>('[aria-label="导出工作流"]')
+    expect(runButton?.disabled).toBe(true)
+    expect(exportButton?.disabled).toBe(true)
+  })
 })
 
 async function renderWorkflowCard(props: Partial<ComponentProps<typeof WorkflowCard>> = {}): Promise<HTMLDivElement> {

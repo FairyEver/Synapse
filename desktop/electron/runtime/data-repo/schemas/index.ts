@@ -50,6 +50,8 @@ export {
   taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
+  normalizeWorkflowEntry,
+  reviveWorkflowsEnvelope,
   workflowsSchema,
   type AuditEntryV1,
   type AgentCompressStateEntryV1,
@@ -126,6 +128,8 @@ import {
   taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
+  normalizeWorkflowEntry,
+  reviveWorkflowsEnvelope,
   workflowsSchema,
 } from "./placeholders"
 import type { NamespaceSchema } from "../types"

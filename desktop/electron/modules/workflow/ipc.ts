@@ -255,6 +255,7 @@ const workflowIdSchema = z.string().refine(isSafeWorkflowId, "Invalid workflow i
 const workflowDefinitionSchema = z.object({
   id: workflowIdSchema, name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
+  loadError: z.string().optional(),
   defaultProjectId: z.string().optional(),
   defaultProviderId: z.string().optional(),
   defaultModelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
@@ -810,7 +811,7 @@ export const workflowIpcModule: IpcModule = {
     },
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
-      response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
+      response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), loadError: z.string().optional(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
       handler: async (ctx) => {
         const result = await ctx.resolve<WorkflowService>("core.workflow").list()
         logger.info("workflow:list", { count: result.length })

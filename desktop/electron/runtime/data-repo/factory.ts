@@ -6,7 +6,7 @@ import { JsonNamespace } from "./backends/json"
 import { JsonLinesNamespace } from "./backends/jsonl"
 import { openSqliteDatabase, SqliteNamespace } from "./backends/sqlite"
 import { DataRepositoryImpl } from "./repository"
-import { allSchemas } from "./schemas"
+import { allSchemas, reviveWorkflowsEnvelope } from "./schemas"
 import type { NamespaceSchema } from "./types"
 
 export interface FileBackedDataRepositoryOptions {
@@ -36,6 +36,7 @@ export function createFileBackedDataRepository(
           filePath: path.join(options.rootDir, `${safeFileName(schema.name)}.json`),
           defaults: recordSchema.defaults,
           validate: recordSchema.validate,
+          reviveEnvelope: schema.name === "workflows" ? reviveWorkflowsEnvelope : undefined,
         }))
         break
       case "encrypted-json":

@@ -18,6 +18,7 @@ export interface WorkflowVariableBinding {
 export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number
+  loadError?: string
   defaultProjectId?: string
   defaultProviderId?: string
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
@@ -26,6 +27,7 @@ export interface WorkflowDefinition {
 }
 export interface WorkflowMeta {
   id: string; name: string; description?: string; version: string
+  loadError?: string
   nodeCount: number; createdAt: number; updatedAt: number
 }
 export interface WorkflowUsageCostBreakdownCny {
