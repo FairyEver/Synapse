@@ -276,7 +276,17 @@ The config panel follows existing Prompt node rhythm and current shadcn/Radix UI
 
 Sections:
 
-1. **执行配置**
+1. **输入映射**
+   - Existing `VariableBindingEditor`
+
+2. **项目**
+   - Existing `ProjectSelect`
+   - Same inherited project wording as Prompt node
+
+3. **指令**
+   - Existing `PromptEditor`
+
+4. **执行配置**
    - Approval policy select
    - Sandbox select
    - Model input
@@ -288,16 +298,6 @@ Sections:
    - Strict config checkbox
    - Bypass approvals and sandbox checkbox
    - Bypass hook trust checkbox
-
-2. **输入映射**
-   - Existing `VariableBindingEditor`
-
-3. **项目**
-   - Existing `ProjectSelect`
-   - Same inherited project wording as Prompt node
-
-4. **指令**
-   - Existing `PromptEditor`
 
 5. **高级参数**
    - Additional writable directories list

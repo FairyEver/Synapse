@@ -162,6 +162,16 @@ function getByText(text: string): HTMLElement {
   return match
 }
 
+function expectTextOrder(labels: string[]) {
+  const positions = labels.map((label) => allElements().indexOf(getByText(label)))
+  positions.forEach((position, index) => {
+    expect(position, `${labels[index]} should be rendered`).toBeGreaterThanOrEqual(0)
+    if (index > 0) {
+      expect(position, `${labels[index]} should render after ${labels[index - 1]}`).toBeGreaterThan(positions[index - 1])
+    }
+  })
+}
+
 function getByLabelText(label: string): HTMLElement {
   const byAria = allElements().find((element) => element.getAttribute("aria-label") === label)
   if (byAria) return byAria
@@ -244,16 +254,11 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    expect(getByText("执行配置")).toBeTruthy()
+    expectTextOrder(["输入映射", "项目", "指令", "执行配置", "高级参数", "调试记录"])
     expect(getByLabelText("审批策略")).toBeTruthy()
     expect(getByLabelText("沙箱")).toBeTruthy()
     expect(getByLabelText("Goals")).toBeTruthy()
     expect(getByLabelText("跳过 Git 仓库检查")).toBeTruthy()
-    expect(getByText("输入映射")).toBeTruthy()
-    expect(getByText("项目")).toBeTruthy()
-    expect(getByText("指令")).toBeTruthy()
-    expect(getByText("高级参数")).toBeTruthy()
-    expect(getByText("调试记录")).toBeTruthy()
     expect(getByRole("button", { name: "审批策略" }).textContent).toContain("never")
     expect(getByRole("button", { name: "沙箱" }).textContent).toContain("workspace-write")
     expect(getByRole("button", { name: "Goals" }).textContent).toContain("启用")

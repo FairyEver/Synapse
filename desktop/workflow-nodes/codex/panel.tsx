@@ -104,6 +104,36 @@ export function CodexNodePanel({
 
   return (
     <div className="grid gap-2">
+      <CollapsibleSection title="输入映射" summary={variableSummary}>
+        <VariableBindingEditor
+          variables={config.variables}
+          onChange={(variables) => commit({ variables })}
+          upstreamNodes={upstreamNodes}
+          workflowParams={workflowParams}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="项目">
+        <ProjectSelect
+          value={config.projectId}
+          onChange={(projectId) => commit({ projectId })}
+          projects={projects}
+          placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
+        />
+        {errorFor("projectId") ? <p className="text-xs text-destructive">{errorFor("projectId")}</p> : null}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="指令" summary={promptSummary}>
+        <PromptEditor
+          value={prompt}
+          onChange={setPrompt}
+          onBlur={() => commit({ prompt })}
+          variables={config.variables}
+          placeholder="输入指令，用 {{变量名}} 引用变量…"
+        />
+        {errorFor("prompt") ? <p className="text-xs text-destructive">{errorFor("prompt")}</p> : null}
+      </CollapsibleSection>
+
       <CollapsibleSection title="执行配置">
         <div className="grid gap-2">
           <LabeledSelect
@@ -202,36 +232,6 @@ export function CodexNodePanel({
             onChange={(checked) => commit({ bypassHookTrust: checked })}
           />
         </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="输入映射" summary={variableSummary}>
-        <VariableBindingEditor
-          variables={config.variables}
-          onChange={(variables) => commit({ variables })}
-          upstreamNodes={upstreamNodes}
-          workflowParams={workflowParams}
-        />
-      </CollapsibleSection>
-
-      <CollapsibleSection title="项目">
-        <ProjectSelect
-          value={config.projectId}
-          onChange={(projectId) => commit({ projectId })}
-          projects={projects}
-          placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
-        />
-        {errorFor("projectId") ? <p className="text-xs text-destructive">{errorFor("projectId")}</p> : null}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="指令" summary={promptSummary}>
-        <PromptEditor
-          value={prompt}
-          onChange={setPrompt}
-          onBlur={() => commit({ prompt })}
-          variables={config.variables}
-          placeholder="输入指令，用 {{变量名}} 引用变量…"
-        />
-        {errorFor("prompt") ? <p className="text-xs text-destructive">{errorFor("prompt")}</p> : null}
       </CollapsibleSection>
 
       <CollapsibleSection title="高级参数">
