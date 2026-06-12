@@ -22,7 +22,7 @@
 - Modify `desktop/src/types/bridge.ts`: expose new shared types on the bridge and extend upload methods.
 - Modify `desktop/electron/modules/account/ipc.ts`: validate new conflict inspection and upload policy IPC payloads.
 - Modify `desktop/electron/preload.ts` and `desktop/electron/generated/ipc-channels.generated.ts`: expose the new IPC method if generation is not automatic in this workflow.
-- Modify `desktop/electron/services/account-service.ts`: call server conflict inspection, pass conflict strategies, and map local upload policies to per-file upload calls.
+- Modify `desktop/electron/services/account-service.ts`: call server conflict inspection, pass conflict strategies, and map local upload policies to top-level file upload calls.
 - Modify `desktop/electron/services/__tests__/account-service.test.ts`: cover local upload policy mapping and no local path leakage.
 - Modify `desktop/electron/modules/account/__tests__/ipc.test.ts`: cover IPC schema for conflict inspection and upload conflict policy.
 - Modify `desktop/src/modules/drive/index.tsx`: inspect conflicts before upload, show conflict dialog, pass chosen policy, and keep upload result behavior stable.
@@ -815,6 +815,19 @@ for (const session of sessions) {
 }
 ```
 
+Update `cancelUpload` with the same replacement-safe detection:
+
+```ts
+const session = await this.prisma.driveUploadSession.findFirst({
+  where: { id: sessionId, userId, status: DRIVE_UPLOAD_STATUS.pending },
+  include: { item: { select: { storageStatus: true, storageKey: true } } },
+})
+if (!session) throw new NotFoundException("上传会话不存在。")
+const preserveItem = session.item.storageStatus === DRIVE_STORAGE_STATUS.active && session.item.storageKey !== session.storageKey
+await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled, new Date(), { preserveItem })
+return { ok: true }
+```
+
 - [ ] **Step 6: Run server replacement tests**
 
 Run:
@@ -1086,7 +1099,7 @@ Update `uploadDriveLocalFile` signature to accept `policy`, and pass:
 conflictStrategy: strategyForLocalFile(policy, item.name, null),
 ```
 
-For folder file uploads, pass `relativePath` into `strategyForLocalFile(policy, fileName, file.relativePath)`.
+For folder uploads in this first implementation, do not map nested file conflicts. A folder upload either creates a new root folder or is blocked by a same-name root folder conflict. Keep calls to `prepareDriveFolderUpload` unchanged except for carrying `conflictPolicy` through the local upload request type. Nested folder merge and nested file replacement are not part of this plan.
 
 - [ ] **Step 6: Run desktop IPC and account tests**
 
@@ -1285,20 +1298,9 @@ Add helper:
 
 ```ts
 function driveUploadConflictInspectEntries(items: readonly DriveLocalUploadItem[]) {
-  return items.flatMap((item) => {
-    if (item.kind === "file") return [{ kind: "file" as const, name: item.name, relativePath: null }]
-    return [
-      { kind: "folder" as const, name: item.folderName, relativePath: null },
-      ...item.files.map((file) => {
-        const parts = file.relativePath.split("/")
-        return {
-          kind: "file" as const,
-          name: parts.at(-1) ?? file.relativePath,
-          relativePath: file.relativePath,
-        }
-      }),
-    ]
-  })
+  return items.map((item) => item.kind === "file"
+    ? { kind: "file" as const, name: item.name, relativePath: null }
+    : { kind: "folder" as const, name: item.folderName, relativePath: null })
 }
 ```
 
