@@ -355,6 +355,7 @@ function renderCodexDebugFields(value: Record<string, unknown>): Array<{ label: 
   appendCodexDebugField(fields, "args", formatCodexArgs(value.args))
   appendCodexDebugField(fields, "cwd", value.cwd)
   appendCodexDebugField(fields, "exitCode", value.exitCode)
+  appendCodexDebugField(fields, "signal", value.signal)
   appendCodexDebugField(fields, "durationMs", value.durationMs)
   appendCodexDebugField(fields, "stdoutPath", value.stdoutPath)
   appendCodexDebugField(fields, "stderrPath", value.stderrPath)
