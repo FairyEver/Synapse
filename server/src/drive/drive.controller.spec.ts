@@ -841,6 +841,7 @@ function createBrowserSnapshot(): DriveBrowserSnapshotDto {
     preview: {
       kind: "text",
       text: "brief",
+      html: null,
       truncated: false,
       imageUrl: null,
       visitUrl: null,

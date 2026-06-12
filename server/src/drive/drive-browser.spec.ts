@@ -63,28 +63,32 @@ describe("drive browser helpers", () => {
     expect(preview.visitUrl).toBeNull()
   })
 
-  it("adds owner-only visit url for markdown previews", () => {
+  it("builds owner markdown previews with rendered html instead of visit urls", () => {
     const item = { ...baseItem, id: "child-1", name: "notes.md", mimeType: "text/markdown" }
     const preview = buildDriveBrowserPreview({
       item,
       route: { context: "owner", surface: "standalone", rootItemId: "root-1" },
       text: "# Notes",
+      html: "<h1>Notes</h1>",
     })
 
     expect(preview.kind).toBe("markdown")
     expect(preview.text).toBe("# Notes")
-    expect(preview.visitUrl).toBe("/drive/items/root-1/items/child-1/render")
+    expect(preview.html).toBe("<h1>Notes</h1>")
+    expect(preview.visitUrl).toBeNull()
   })
 
-  it("keeps share markdown previews without visit url", () => {
+  it("builds share markdown previews with rendered html", () => {
     const item = { ...baseItem, id: "child-1", name: "notes.md", mimeType: "text/markdown" }
     const preview = buildDriveBrowserPreview({
       item,
       route: { context: "share", surface: "standalone", shareId: "shr-1", rootItemId: "root-1" },
       text: "# Notes",
+      html: "<h1>Notes</h1>",
     })
 
     expect(preview.kind).toBe("markdown")
+    expect(preview.html).toBe("<h1>Notes</h1>")
     expect(preview.visitUrl).toBeNull()
   })
 

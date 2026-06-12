@@ -144,6 +144,7 @@ export interface DriveBrowserBreadcrumbDto {
 export interface DriveBrowserPreviewDto {
   readonly kind: DriveBrowserPreviewKind
   readonly text: string | null
+  readonly html: string | null
   readonly truncated: boolean
   readonly imageUrl: string | null
   readonly visitUrl: string | null

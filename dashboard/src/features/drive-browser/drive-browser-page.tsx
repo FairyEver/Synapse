@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { useDriveBrowser } from './use-drive-browser'
 
@@ -236,6 +237,54 @@ function DriveBrowserPreview({
       </div>
     )
   }
+  if (preview.kind === 'markdown') {
+    return <DriveBrowserMarkdownPreview preview={preview} />
+  }
+  return (
+    <ScrollArea className='h-[520px]'>
+      <pre className='whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed'>
+        {preview.text}
+      </pre>
+      {preview.truncated ? (
+        <div className='border-t px-4 py-2 text-xs text-muted-foreground'>内容已截断</div>
+      ) : null}
+    </ScrollArea>
+  )
+}
+
+function DriveBrowserMarkdownPreview({ preview }: { readonly preview: DriveBrowserPreviewDto }) {
+  const renderedHtml = preview.html?.trim()
+  if (!renderedHtml) {
+    return <DriveBrowserTextPreview preview={preview} />
+  }
+
+  return (
+    <Tabs defaultValue='rendered' className='h-[520px] min-h-0 gap-0'>
+      <div className='border-b px-4 py-2'>
+        <TabsList>
+          <TabsTrigger type='button' value='rendered'>预览</TabsTrigger>
+          <TabsTrigger type='button' value='source'>源码</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value='rendered' className='min-h-0'>
+        <ScrollArea className='h-[468px]'>
+          <div
+            className='space-y-3 p-4 text-sm leading-relaxed [&_a]:underline [&_blockquote]:border-l [&_blockquote]:pl-3 [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-medium [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc'
+            dangerouslySetInnerHTML={{ __html: renderedHtml }}
+          />
+          {preview.truncated ? (
+            <div className='border-t px-4 py-2 text-xs text-muted-foreground'>内容已截断</div>
+          ) : null}
+        </ScrollArea>
+      </TabsContent>
+      <TabsContent value='source' className='min-h-0'>
+        <DriveBrowserTextPreview preview={preview} />
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+function DriveBrowserTextPreview({ preview }: { readonly preview: DriveBrowserPreviewDto }) {
   return (
     <ScrollArea className='h-[520px]'>
       <pre className='whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed'>

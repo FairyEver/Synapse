@@ -115,6 +115,7 @@ export function buildDriveBrowserPreview(input: {
   readonly item: DriveBrowserSourceItem
   readonly route: DriveBrowserRouteContext
   readonly text?: string | null
+  readonly html?: string | null
   readonly truncated?: boolean
   readonly imageUrl?: string | null
 }): DriveBrowserPreviewDto {
@@ -123,9 +124,10 @@ export function buildDriveBrowserPreview(input: {
   return {
     kind,
     text: textPreview ? input.text ?? "" : null,
+    html: kind === "markdown" ? input.html ?? null : null,
     truncated: textPreview ? input.truncated ?? false : false,
     imageUrl: kind === "image" ? input.imageUrl ?? null : null,
-    visitUrl: input.route.context === "owner" && (kind === "html-source" || kind === "markdown")
+    visitUrl: input.route.context === "owner" && kind === "html-source"
       ? buildRenderUrl(input.route, input.item.id)
       : null,
   }
