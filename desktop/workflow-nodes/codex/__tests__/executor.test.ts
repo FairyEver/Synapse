@@ -43,6 +43,35 @@ describe("codex artifacts", () => {
     expect(debug.stderrPreview).toContain("/Users/liyang/project/error.log")
   })
 
+  it("redacts URL query secrets in debug args and previews", () => {
+    const debug = buildCodexDebugOutput({
+      args: ["exec", "--config", "endpoint=https://example.com/path?token=secret-token"],
+      cwd: "/Users/liyang/project",
+      exitCode: 1,
+      durationMs: 123,
+      stdout: "opened https://example.com/path?token=secret-token",
+      stderr: "failed https://example.com/path?api_key=secret-token",
+    })
+
+    expect(JSON.stringify(debug)).not.toContain("secret-token")
+    expect(debug.args.join(" ")).toContain("token=[redacted]")
+    expect(debug.stdoutPreview).toContain("token=[redacted]")
+    expect(debug.stderrPreview).toContain("api_key=[redacted]")
+  })
+
+  it("truncates debug previews to 2000 characters", () => {
+    const debug = buildCodexDebugOutput({
+      args: ["exec"],
+      cwd: "/Users/liyang/project",
+      exitCode: 0,
+      durationMs: 10,
+      stdout: "x".repeat(2001),
+    })
+
+    expect(debug.stdoutPreview).toHaveLength(2000)
+    expect(debug.stdoutPreview?.endsWith("...")).toBe(true)
+  })
+
   it("prefers last message before stdout fallback", () => {
     expect(finalOutputFromResult(" final answer \n", " stdout ")).toBe("final answer")
     expect(finalOutputFromResult(" \n", " stdout \n")).toBe("stdout")

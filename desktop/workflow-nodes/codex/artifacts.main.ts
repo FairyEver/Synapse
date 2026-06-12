@@ -7,6 +7,7 @@ import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-
 const DEBUG_PREVIEW_LENGTH = 2000
 const SESSION_HINT_FIELDS = ["thread_id", "session_id", "session_path"] as const
 const ABSOLUTE_PATH_PATTERN = /\b(?:[A-Za-z]:\\(?:[^\\\s"')]+\\)*[^\\\s"'),;]+|\/(?:[^/\s"')]+\/)*[^/\s"'),;]+)/g
+const URL_SECRET_QUERY_PARAM_PATTERN = /([?&][A-Za-z0-9_-]*(?:secret|token|api[-_]?key|authorization|cookie|password|credential)[A-Za-z0-9_-]*=)([^&#\s"']+)/gi
 
 export interface CodexArtifactPaths {
   readonly directory: string
@@ -138,7 +139,10 @@ function parseJsonObject(line: string): Record<string, unknown> | undefined {
 
 function sanitizeForDebug(value: string): string {
   const paths: string[] = []
-  const withPlaceholders = value.replace(ABSOLUTE_PATH_PATTERN, (match) => {
+  const redactedUrlSecrets = value.replace(URL_SECRET_QUERY_PARAM_PATTERN, "$1[redacted]")
+  const withPlaceholders = redactedUrlSecrets.replace(ABSOLUTE_PATH_PATTERN, (match, offset: number, source: string) => {
+    if (isUrlPathFragment(source, offset)) return match
+
     const placeholder = `__SYNAPSE_PATH_${paths.length}__`
     paths.push(match)
     return placeholder
@@ -150,4 +154,21 @@ function sanitizeForDebug(value: string): string {
   })
 
   return sanitized
+}
+
+function isUrlPathFragment(source: string, pathOffset: number): boolean {
+  const tokenPrefix = source.slice(findTokenStart(source, pathOffset), pathOffset)
+  return /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"']*$/.test(tokenPrefix)
+}
+
+function findTokenStart(source: string, offset: number): number {
+  const tokenBoundary = /[\s"']/
+
+  for (let index = offset - 1; index >= 0; index -= 1) {
+    if (tokenBoundary.test(source[index])) {
+      return index + 1
+    }
+  }
+
+  return 0
 }
