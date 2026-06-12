@@ -76,6 +76,7 @@ interface CodexNodeConfig {
   model?: string
   profile?: string
   enableSearch: boolean
+  enabledFeatures: Array<"goals">
   skipGitRepoCheck: boolean
   strictConfig: boolean
   bypassApprovalsAndSandbox: boolean
@@ -97,6 +98,7 @@ Default config:
   approvalPolicy: "never",
   sandbox: "workspace-write",
   enableSearch: false,
+  enabledFeatures: ["goals"],
   skipGitRepoCheck: true,
   strictConfig: false,
   bypassApprovalsAndSandbox: false,
@@ -144,6 +146,7 @@ Config mapping:
 - `model` -> `--model <value>`
 - `profile` -> `--profile <value>`
 - `enableSearch` -> `--search`
+- `enabledFeatures[]` -> repeated `--enable <feature>`
 - `skipGitRepoCheck` -> `--skip-git-repo-check`
 - `strictConfig` -> `--strict-config`
 - `bypassApprovalsAndSandbox` -> `--dangerously-bypass-approvals-and-sandbox`
@@ -276,6 +279,7 @@ Sections:
    - Profile input
    - Timeout input
    - Search checkbox
+   - Enabled features selector; first version exposes `goals` as a checkbox or controlled multi-select, not free text
    - Skip git repo check checkbox
    - Strict config checkbox
    - Bypass approvals and sandbox checkbox
@@ -308,6 +312,7 @@ Save/edit validation:
 - `prompt` is required.
 - `timeoutMins`, when present, must be greater than 0.
 - `approvalPolicy` and `sandbox` must be valid enum values.
+- `enabledFeatures` must contain only known feature values. First version supports only `goals`.
 - `additionalWritableDirs` and `images` must not contain empty items.
 - `configOverrides.key` must be non-empty.
 - `configOverrides.key` values must be unique.
@@ -361,6 +366,7 @@ Runtime and node tests:
 
 - Schema defaults match unattended-friendly defaults.
 - Default command includes `codex exec`, `--ask-for-approval never`, `--sandbox workspace-write`, `--json`, `--skip-git-repo-check`, `--output-last-message`, and `--cd`.
+- Default command includes `--enable goals`.
 - Prompt goes through stdin and is absent from argv.
 - `bypassApprovalsAndSandbox` emits the bypass flag and suppresses approval/sandbox flags.
 - Model, profile, search, strict config, hook trust bypass, add-dir, image, and config overrides map correctly to argv.
