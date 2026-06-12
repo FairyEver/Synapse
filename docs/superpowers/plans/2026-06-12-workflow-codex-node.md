@@ -605,6 +605,9 @@ git commit -m "feat(workflow): add codex debug artifact helpers"
 **Files:**
 - Create: `desktop/workflow-nodes/codex/executor.main.ts`
 - Modify: `desktop/workflow-nodes/codex/__tests__/executor.test.ts`
+- Modify: `desktop/workflow-nodes/types.ts`
+- Modify: `desktop/electron/bootstrap/descriptors.ts`
+- Modify: `desktop/electron/bootstrap/__tests__/descriptors.test.ts`
 
 - [ ] **Step 1: Extend executor tests**
 
@@ -652,6 +655,7 @@ function deps(exitCode = 0, stdout = "stdout fallback", stderr = ""): NodeRuntim
       }),
     },
     sendHttpRequest: vi.fn(),
+    resolveProjectWorkspacePath: vi.fn().mockResolvedValue("/Users/liyang/project"),
   }
 }
 
@@ -668,6 +672,7 @@ describe("codexNodeExecutor", () => {
     expect(result.status).toBe("success")
     expect(runtimeDeps.processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
       command: "codex",
+      cwd: "/Users/liyang/project",
       stdin: "Summarize the result",
     }))
     expect(result.output).toBe("stdout fallback")
@@ -732,9 +737,16 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       return { status: "failed", output: "", error: "Codex 执行能力不可用", durationMs: Date.now() - start }
     }
 
-    const cwd = context.projectId?.trim()
+    const projectId = config.projectId?.trim() || context.projectId?.trim()
+    if (!projectId) {
+      return { status: "failed", output: "", error: "Codex 节点缺少项目", durationMs: Date.now() - start }
+    }
+    if (!runtimeDeps.resolveProjectWorkspacePath) {
+      return { status: "failed", output: "", error: "Codex 项目路径解析能力不可用", durationMs: Date.now() - start }
+    }
+    const cwd = await runtimeDeps.resolveProjectWorkspacePath(projectId)
     if (!cwd) {
-      return { status: "failed", output: "", error: "Codex 节点缺少项目目录", durationMs: Date.now() - start }
+      return { status: "failed", output: "", error: "Codex 节点项目不存在", durationMs: Date.now() - start }
     }
 
     input.onProgress?.("preparing_codex", "准备 Codex…")
