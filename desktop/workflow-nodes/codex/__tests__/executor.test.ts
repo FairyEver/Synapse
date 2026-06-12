@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises"
+import { access, mkdtemp, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -317,7 +317,7 @@ describe("codexNodeExecutor", () => {
         run: vi.fn().mockResolvedValue({
           exitCode: 1,
           signal: null,
-          stdout: "created /Users/liyang/project/out.txt\nthread_id=thread-1",
+          stdout: "created /Users/liyang/project/out.txt\ntoken=sk-secret\nthread_id=thread-1",
           stderr: "failed with token=sk-secret at /Users/liyang/private",
           timedOut: false,
           durationMs: 25,
@@ -329,12 +329,76 @@ describe("codexNodeExecutor", () => {
     const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
 
     expect(result.status).toBe("failed")
+    expect(result.output).toBe("")
     expect(result.error).toContain("Codex 执行失败")
     expect(result.error).not.toContain("sk-secret")
     expect(result.error).not.toContain("/Users/liyang/private")
     expect(result.outputs?.codexDebug).toBeDefined()
-    const serialized = JSON.stringify(result.outputs?.codexDebug)
+    const serialized = JSON.stringify(result)
     expect(serialized).not.toContain("sk-secret")
     expect(serialized).toContain("/Users/liyang/project/out.txt")
+  })
+
+  it("returns empty output for timed out processes while keeping codexDebug", async () => {
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockResolvedValue({
+          exitCode: 124,
+          signal: null,
+          stdout: "partial jsonl output\n",
+          stderr: "",
+          timedOut: true,
+          durationMs: 25,
+        }),
+      },
+    })
+
+    const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
+
+    expect(result).toMatchObject({
+      status: "failed",
+      output: "",
+      error: "Codex 执行超时",
+    })
+    expect(result.outputs?.codexDebug).toBeDefined()
+  })
+
+  it("skips prompt/stdout/stderr artifact persistence when captureDebugArtifacts is false", async () => {
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockImplementation(async (request: { args?: readonly string[] }) => {
+          const lastMessagePathIndex = request.args?.indexOf("--output-last-message") ?? -1
+          const lastMessagePath = lastMessagePathIndex >= 0 ? request.args?.[lastMessagePathIndex + 1] : undefined
+          if (typeof lastMessagePath === "string") {
+            await writeFile(lastMessagePath, "final answer from file\n", "utf8")
+          }
+
+          return {
+            exitCode: 0,
+            signal: null,
+            stdout: "stdout answer\n",
+            stderr: "stderr output\n",
+            timedOut: false,
+            durationMs: 25,
+          }
+        }),
+      },
+    })
+
+    const input = makeInput({ captureDebugArtifacts: false }, runtimeDeps)
+    const artifactPaths = codexArtifactPaths(electronState.userDataPath, context.runId, context.nodeId)
+    const result = await codexNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(result.output).toBe("final answer from file")
+    expect(result.outputs?.codexDebug).toMatchObject({
+      lastMessagePath: artifactPaths.lastMessagePath,
+    })
+    expect(result.outputs?.codexDebug).not.toHaveProperty("promptPath")
+    expect(result.outputs?.codexDebug).not.toHaveProperty("stdoutPath")
+    expect(result.outputs?.codexDebug).not.toHaveProperty("stderrPath")
+    await expect(access(artifactPaths.promptPath)).rejects.toThrow()
+    await expect(access(artifactPaths.stdoutPath)).rejects.toThrow()
+    await expect(access(artifactPaths.stderrPath)).rejects.toThrow()
   })
 })

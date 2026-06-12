@@ -82,6 +82,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
 
     const actor = context.actor ?? { kind: "system" as const, id: "workflow-engine" }
     const timeoutMs = config.timeoutMins === undefined ? undefined : config.timeoutMins * 60_000
+    const captureDebugArtifacts = config.captureDebugArtifacts
     const artifactPaths = codexArtifactPaths(
       app.getPath("userData"),
       context.runId,
@@ -93,12 +94,14 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       label: "artifact directory",
       task: () => ensureCodexArtifactDirectory(artifactPaths),
     })
-    await bestEffortArtifactWrite({
-      logContext,
-      label: "prompt artifact",
-      filePath: artifactPaths.promptPath,
-      task: () => writeCodexArtifact(artifactPaths.promptPath, prompt),
-    })
+    if (captureDebugArtifacts) {
+      await bestEffortArtifactWrite({
+        logContext,
+        label: "prompt artifact",
+        filePath: artifactPaths.promptPath,
+        task: () => writeCodexArtifact(artifactPaths.promptPath, prompt),
+      })
+    }
 
     const request = buildCodexExecRequest({
       config,
@@ -133,30 +136,34 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       const stdout = result.stdout ?? ""
       const stderr = result.stderr ?? ""
 
-      await bestEffortArtifactWrite({
-        logContext,
-        label: "stdout artifact",
-        filePath: artifactPaths.stdoutPath,
-        task: () => writeCodexArtifact(artifactPaths.stdoutPath, stdout),
-      })
-      await bestEffortArtifactWrite({
-        logContext,
-        label: "stderr artifact",
-        filePath: artifactPaths.stderrPath,
-        task: () => writeCodexArtifact(artifactPaths.stderrPath, stderr),
-      })
+      if (captureDebugArtifacts) {
+        await bestEffortArtifactWrite({
+          logContext,
+          label: "stdout artifact",
+          filePath: artifactPaths.stdoutPath,
+          task: () => writeCodexArtifact(artifactPaths.stdoutPath, stdout),
+        })
+        await bestEffortArtifactWrite({
+          logContext,
+          label: "stderr artifact",
+          filePath: artifactPaths.stderrPath,
+          task: () => writeCodexArtifact(artifactPaths.stderrPath, stderr),
+        })
+      }
 
-      const lastMessage = await bestEffortReadArtifact(artifactPaths.lastMessagePath, logContext)
-      const output = finalOutputFromResult(lastMessage, stdout)
       const codexDebug = buildCodexDebugOutput({
         args: request.args ?? [],
         cwd,
         exitCode: result.exitCode,
         signal: result.signal ?? undefined,
         durationMs: result.durationMs,
-        stdoutPath: artifactPaths.stdoutPath,
-        stderrPath: artifactPaths.stderrPath,
-        promptPath: artifactPaths.promptPath,
+        ...(captureDebugArtifacts
+          ? {
+              stdoutPath: artifactPaths.stdoutPath,
+              stderrPath: artifactPaths.stderrPath,
+              promptPath: artifactPaths.promptPath,
+            }
+          : {}),
         lastMessagePath: artifactPaths.lastMessagePath,
         stdout,
         stderr,
@@ -172,7 +179,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         })
         return {
           status: "cancelled",
-          output,
+          output: "",
           outputs,
           error: "运行被取消",
           durationMs,
@@ -188,7 +195,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         })
         return {
           status: "failed",
-          output,
+          output: "",
           outputs,
           error: "Codex 执行超时",
           durationMs,
@@ -208,13 +215,15 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         })
         return {
           status: "failed",
-          output,
+          output: "",
           outputs,
           error,
           durationMs,
         }
       }
 
+      const lastMessage = await bestEffortReadArtifact(artifactPaths.lastMessagePath, logContext)
+      const output = finalOutputFromResult(lastMessage, stdout)
       input.onProgress?.("processing_output", "处理输出…")
       logger.info("codex node succeeded", {
         ...logContext,
