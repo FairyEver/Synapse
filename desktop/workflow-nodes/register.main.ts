@@ -5,6 +5,7 @@ import { endNodeManifest, endNodeExecutor } from "./end"
 import { httpRequestNodeManifest, httpRequestNodeExecutor } from "./http-request"
 import { scriptNodeManifest, scriptNodeExecutor } from "./script"
 import { workflowCallNodeManifest, workflowCallNodeExecutor } from "./workflow-call"
+import { codexNodeManifest, codexNodeExecutor } from "./codex"
 
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
 nodeTypeRegistry.register(switchNodeManifest, switchNodeExecutor)
@@ -12,3 +13,4 @@ nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
 nodeTypeRegistry.register(httpRequestNodeManifest, httpRequestNodeExecutor)
 nodeTypeRegistry.register(scriptNodeManifest, scriptNodeExecutor)
 nodeTypeRegistry.register(workflowCallNodeManifest, workflowCallNodeExecutor)
+nodeTypeRegistry.register(codexNodeManifest, codexNodeExecutor)

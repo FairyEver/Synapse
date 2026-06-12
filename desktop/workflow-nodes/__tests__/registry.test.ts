@@ -1,8 +1,24 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { NodeTypeRegistry } from "../registry"
 import { z } from "zod"
 import { Square } from "lucide-react"
 import type { NodeManifest, NodeExecutor } from "../types"
+
+vi.mock("electron", () => ({
+  app: {
+    getPath: () => "/tmp",
+    getAppPath: () => "/tmp",
+  },
+}))
+
+vi.mock("../../electron/services/log-store", () => ({
+  createMainLogger: () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+}))
 
 const stub: NodeManifest<{ t: string }> = {
   type: "stub", title: "Stub", icon: Square, color: "bg-muted",
@@ -24,5 +40,30 @@ describe("NodeTypeRegistry", () => {
   })
   it("throws for unknown type", () => {
     expect(() => new NodeTypeRegistry().getManifest("nope")).toThrow("Unknown node type: nope")
+  })
+
+  it("registers codex manifest in renderer registry", async () => {
+    vi.resetModules()
+
+    await import("../register.renderer")
+    const { nodeTypeRegistry } = await import("../registry")
+
+    const manifest = nodeTypeRegistry.getManifest("codex")
+
+    expect(manifest.title).toBe("Codex")
+    expect(manifest.type).toBe("codex")
+  })
+
+  it("registers codex manifest and executor in main registry", async () => {
+    vi.resetModules()
+
+    await import("../register.main")
+    const [{ nodeTypeRegistry }, { codexNodeExecutor }] = await Promise.all([
+      import("../registry"),
+      import("../codex/executor.main"),
+    ])
+
+    expect(nodeTypeRegistry.getManifest("codex").title).toBe("Codex")
+    expect(nodeTypeRegistry.getExecutor("codex")).toBe(codexNodeExecutor)
   })
 })
