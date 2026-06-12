@@ -856,7 +856,7 @@ describe("DriveModule", () => {
     expect(getButton("分享")).not.toBeNull()
     expect(queryButton("预览")).toBeNull()
     expect(queryButton("删除")).toBeNull()
-    expect(getButton("更多 notes.md")).not.toBeNull()
+    expect(queryButtonByLabel("更多 notes.md")).not.toBeNull()
   })
 
   it("opens a file preview from the row action", async () => {
@@ -867,9 +867,9 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getButton("预览").querySelector("svg")).toBeNull()
+    expect(getButton("打开").querySelector("svg")).toBeNull()
 
-    await clickButtonText("预览")
+    await clickButtonText("打开")
 
     expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: "file-1" })
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/drive/items/file-1")
@@ -887,7 +887,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("预览")
+    await clickButtonText("打开")
 
     expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: "folder-1" })
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/drive/items/folder-1")
@@ -903,7 +903,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("预览")
+    await clickButtonText("打开")
 
     expect(mocks.openExternal).not.toHaveBeenCalled()
     expect(mocks.toast).toHaveBeenCalledWith("打开失败")
@@ -1064,6 +1064,7 @@ describe("DriveModule", () => {
       "取消分享",
       "重命名",
       "移动",
+      "删除",
     ])
   })
 
@@ -1263,7 +1264,7 @@ describe("DriveModule", () => {
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
   })
 
-  it("keeps rename and move in the more menu without share or delete", async () => {
+  it("keeps row management actions in the more menu without duplicate share", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "shared.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
     ])
@@ -1272,7 +1273,7 @@ describe("DriveModule", () => {
 
     await openFirstMenu()
 
-    expect(menuItemTexts()).toEqual(["取消分享", "重命名", "移动"])
+    expect(menuItemTexts()).toEqual(["取消分享", "重命名", "移动", "删除"])
   })
 
   it("opens an in-app confirmation before deleting an item", async () => {
@@ -1282,7 +1283,8 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("删除")
+    await openFirstMenu()
+    await clickText("删除")
 
     expect(document.body.textContent).toContain("确认删除")
     expect(document.body.textContent).toContain("report.txt")
@@ -1305,7 +1307,8 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("删除")
+    await openFirstMenu()
+    await clickText("删除")
     await flushAct()
 
     expect(document.body.textContent).toContain("会影响 1 个已发布内容")
@@ -1315,7 +1318,7 @@ describe("DriveModule", () => {
     expect(mocks.deleteDriveItem).toHaveBeenCalledWith({ itemId: "file-1", disablePublications: true })
   })
 
-  it("manages publications from the publications dialog", async () => {
+  it("manages publications from the public links dialog", async () => {
     mocks.listDrivePublications.mockResolvedValue([
       createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
       createDrivePublication({ id: "pub-row-2", name: "site", type: "site", publishId: "pub_site", url: "https://synapse.test/sites/pub_site/" }),
@@ -1324,7 +1327,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("已发布")
+    await clickButtonText("公开链接")
     await flushAct()
 
     expect(document.body.textContent).toContain("report.html")
@@ -1369,7 +1372,7 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
 
-  it("uses wider dialogs for publication and share history tables", async () => {
+  it("uses a wider dialog for public link history tables", async () => {
     mocks.listDrivePublications.mockResolvedValue([
       createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
     ])
@@ -1379,18 +1382,11 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("已发布")
+    await clickButtonText("公开链接")
     await flushAct()
 
-    let dialogContent = document.querySelector('[data-slot="dialog-content"]')
-    expect(dialogContent?.className).toContain("sm:max-w-4xl")
-
-    await clickButtonText("关闭")
-    await clickButtonText("已分享")
-    await flushAct()
-
-    dialogContent = document.querySelector('[data-slot="dialog-content"]')
-    expect(dialogContent?.className).toContain("sm:max-w-4xl")
+    const dialogContent = document.querySelector('[data-slot="dialog-content"]')
+    expect(dialogContent?.className).toContain("sm:max-w-5xl")
   })
 
   it("loads share and publication data in the public links dialog", async () => {
@@ -1408,18 +1404,18 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(1)
-    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(1)
+    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(2)
     expect(document.body.textContent).toContain("notes.md")
     expect(document.body.textContent).toContain("index.html")
   })
 
-  it("shows publication dialog loading state", async () => {
+  it("shows publication loading state in the public links dialog", async () => {
     const publications = createDeferred<DrivePublicationDto[]>()
-    mocks.listDrivePublications.mockReturnValueOnce(publications.promise)
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("已发布")
+    mocks.listDrivePublications.mockReturnValueOnce(publications.promise)
+    await clickButtonText("公开链接")
 
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
 
@@ -1429,23 +1425,25 @@ describe("DriveModule", () => {
     })
   })
 
-  it("shows publication dialog empty state", async () => {
+  it("shows publication empty state in the public links dialog", async () => {
     mocks.listDrivePublications.mockResolvedValue([])
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("已发布")
+    await clickButtonText("公开链接")
+    await flushAct()
+    await clickTabText("发布")
     await flushAct()
 
     expect(document.body.textContent).toContain("暂无发布")
   })
 
-  it("shows publication dialog retry state", async () => {
-    mocks.listDrivePublications.mockRejectedValue(new Error("发布列表加载失败。"))
+  it("shows publication retry state in the public links dialog", async () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("已发布")
+    mocks.listDrivePublications.mockRejectedValueOnce(new Error("发布列表加载失败。"))
+    await clickButtonText("公开链接")
     await flushAct()
 
     expect(document.body.textContent).toContain("读取失败")
@@ -1461,7 +1459,7 @@ describe("DriveModule", () => {
     expect(mocks.listDrivePublications).toHaveBeenCalledTimes(1)
   })
 
-  it("manages shares from the shares dialog", async () => {
+  it("manages shares from the public links dialog", async () => {
     mocks.listDriveShares.mockResolvedValue([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
       createDriveShare({ id: "share-row-2", shareId: "shr_folder", itemName: "folder", itemType: "folder", sourceDeleted: true, url: "https://synapse.test/files/shr_folder" }),
@@ -1469,7 +1467,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("已分享")
+    await clickButtonText("公开链接")
     await flushAct()
 
     expect(document.body.textContent).toContain("report.txt")
@@ -1505,13 +1503,13 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
   })
 
-  it("shows share dialog loading, empty, and retry states", async () => {
+  it("shows share loading, empty, and retry states in the public links dialog", async () => {
     const shares = createDeferred<DriveShareListItemDto[]>()
-    mocks.listDriveShares.mockReturnValueOnce(shares.promise)
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("已分享")
+    mocks.listDriveShares.mockReturnValueOnce(shares.promise)
+    await clickButtonText("公开链接")
 
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
 
@@ -1521,6 +1519,7 @@ describe("DriveModule", () => {
     })
     await flushAct()
 
+    await clickTabText("分享")
     expect(document.body.textContent).toContain("暂无分享")
 
     mocks.listDriveShares
@@ -1528,7 +1527,7 @@ describe("DriveModule", () => {
       .mockResolvedValueOnce([])
 
     await clickButtonText("关闭")
-    await clickButtonText("已分享")
+    await clickButtonText("公开链接")
     await flushAct()
 
     expect(document.body.textContent).toContain("读取失败")
@@ -1802,6 +1801,18 @@ async function clickButtonText(text: string): Promise<void> {
     .find((candidate) => candidate.textContent?.trim() === text)
   if (!element) throw new Error(`Button not found: ${text}`)
   await act(async () => {
+    element.click()
+    await flushPromises()
+  })
+}
+
+async function clickTabText(text: string): Promise<void> {
+  const element = Array.from(document.body.querySelectorAll<HTMLButtonElement>("[role='tab']"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!element) throw new Error(`Tab not found: ${text}`)
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    element.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, button: 0 }))
     element.click()
     await flushPromises()
   })
