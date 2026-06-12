@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import {
   type DriveBrowserSnapshotDto,
+  buildDriveKeepBothName,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
@@ -13,6 +14,9 @@ import {
   type DrivePublicationDto,
   type DriveShareDto,
   type DriveShareListItemDto,
+  type DriveUploadConflictInspectInput,
+  type DriveUploadConflictInspectResult,
+  type DriveUploadConflictStrategy,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
 } from "@synapse/shared"
@@ -154,11 +158,48 @@ export class DriveService implements OnApplicationBootstrap {
     return toDriveItemDto(await this.requireOwnedItem(userId, itemId))
   }
 
+  async inspectUploadConflicts(userId: string, input: DriveUploadConflictInspectInput): Promise<DriveUploadConflictInspectResult> {
+    const parentId = input.parentId ?? null
+    if (parentId) await this.requireOwnedFolder(userId, parentId)
+    const conflicts: Array<DriveUploadConflictInspectResult["conflicts"][number]> = []
+    for (const entry of input.entries) {
+      const name = normalizeDriveName(entry.name)
+      const existing = await this.prisma.driveItem.findFirst({
+        where: { userId, parentId, name, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+        select: { id: true, type: true, updatedAt: true },
+      })
+      if (!existing) continue
+      if (existing.type === DRIVE_ITEM_TYPE.file && entry.kind === "file") {
+        conflicts.push({
+          kind: "file",
+          name,
+          relativePath: entry.relativePath ?? null,
+          existingItemId: existing.id,
+          existingUpdatedAt: existing.updatedAt.toISOString(),
+          replaceable: true,
+        })
+        continue
+      }
+      conflicts.push({
+        kind: "folder",
+        name,
+        relativePath: entry.relativePath ?? null,
+        existingItemId: existing.id,
+        existingUpdatedAt: existing.updatedAt.toISOString(),
+        replaceable: false,
+        reason: "folder-conflict",
+      })
+    }
+    return { conflicts }
+  }
+
   async prepareUpload(userId: string, input: DrivePrepareUploadInput): Promise<DriveUploadPrepareResult> {
-    const name = normalizeDriveName(input.name)
+    const normalizedName = normalizeDriveName(input.name)
     const requestedSize = parseRequestedSize(input.size)
     if (requestedSize > driveMaxFileBytes) throw new BadRequestException("文件超过 1GB 限制。")
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
+    const strategy = input.conflictStrategy ?? { mode: "fail" as const }
+    const name = await this.resolveUploadConflictName(userId, input.parentId, normalizedName, strategy)
 
     const result = await this.prisma.$transaction(async (tx) => {
       const usage = await ensureUsage(tx, userId)
@@ -223,6 +264,35 @@ export class DriveService implements OnApplicationBootstrap {
         headers: upload.headers,
       },
     }
+  }
+
+  private async resolveUploadConflictName(
+    userId: string,
+    parentId: string | null,
+    name: string,
+    strategy: DriveUploadConflictStrategy,
+  ): Promise<string> {
+    const existing = await this.prisma.driveItem.findFirst({
+      where: { userId, parentId, name, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      select: { id: true, type: true },
+    })
+    if (!existing) return name
+    if (existing.type !== DRIVE_ITEM_TYPE.file) throw new BadRequestException("目标位置已有同名文件夹。")
+    if (strategy.mode === "keep-both") return this.createKeepBothDriveName(userId, parentId, name)
+    throw new BadRequestException("目标位置已有同名文件。")
+  }
+
+  private async createKeepBothDriveName(userId: string, parentId: string | null, name: string, now = new Date()): Promise<string> {
+    const timestamp = formatDriveKeepBothTimestamp(now)
+    for (let suffix = 1; suffix <= 99; suffix += 1) {
+      const candidate = buildDriveKeepBothName(name, timestamp, suffix)
+      const existing = await this.prisma.driveItem.findFirst({
+        where: { userId, parentId, name: candidate, deletedAt: null },
+        select: { id: true },
+      })
+      if (!existing) return candidate
+    }
+    throw new BadRequestException("无法生成可用文件名。")
   }
 
   async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput): Promise<DriveFolderUploadPrepareResult> {
@@ -1507,6 +1577,19 @@ function parseRequestedSize(value: string): bigint {
   const size = BigInt(value)
   if (size <= 0n) throw new BadRequestException("文件大小无效。")
   return size
+}
+
+function formatDriveKeepBothTimestamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    "_",
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join("")
 }
 
 function normalizeRelativePath(value: string): string[] {

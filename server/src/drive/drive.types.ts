@@ -1,6 +1,7 @@
 import {
   buildDrivePublicationUrl,
   buildDriveUrlWithPassword,
+  type DriveUploadConflictStrategy,
   type DriveFolderUploadPrepareFileInput,
   type DriveItemDto,
   type DrivePublicationDto,
@@ -13,6 +14,7 @@ export type DrivePrepareUploadInput = {
   readonly size: string
   readonly mimeType?: string | null
   readonly publicAppUrl: string
+  readonly conflictStrategy?: DriveUploadConflictStrategy
 }
 
 export type DrivePrepareFolderUploadInput = {

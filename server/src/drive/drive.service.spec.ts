@@ -116,6 +116,88 @@ describe("DriveService", () => {
     expect(session.status).toBe("failed")
   })
 
+  it("inspects same-name upload conflicts in the target folder", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const existing = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.md",
+      mimeType: "text/markdown",
+    })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "docs" })
+
+    const result = await service.inspectUploadConflicts("user-1", {
+      parentId: null,
+      entries: [
+        { kind: "file", name: "report.md" },
+        { kind: "folder", name: "docs" },
+        { kind: "file", name: "unique.md" },
+      ],
+    })
+
+    expect(result.conflicts).toEqual([
+      {
+        kind: "file",
+        name: "report.md",
+        relativePath: null,
+        existingItemId: existing.id,
+        existingUpdatedAt: existing.updatedAt,
+        replaceable: true,
+      },
+      {
+        kind: "folder",
+        name: "docs",
+        relativePath: null,
+        existingItemId: folder.id,
+        existingUpdatedAt: folder.updatedAt,
+        replaceable: false,
+        reason: "folder-conflict",
+      },
+    ])
+  })
+
+  it("rejects same-name file uploads without an explicit conflict strategy", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.md",
+      mimeType: "text/markdown",
+    })
+
+    await expect(service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "11",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+    })).rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it("keeps both same-name files with a timestamp-suffixed name", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.md",
+      mimeType: "text/markdown",
+    })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "11",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+      conflictStrategy: { mode: "keep-both" },
+    })
+
+    expect(prepared.item.name).toMatch(/^report_\d{8}_\d{6}(?:_\d+)?\.md$/u)
+  })
+
   it("creates revocable share links", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

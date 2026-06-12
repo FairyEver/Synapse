@@ -25,6 +25,11 @@ const prepareUploadSchema = z.object({
   name: z.string().trim().min(1).max(255),
   size: z.string().regex(/^\d+$/u),
   mimeType: z.string().trim().max(255).nullable().optional(),
+  conflictStrategy: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("fail") }).strict(),
+    z.object({ mode: z.literal("replace"), existingItemId: z.string().min(1) }).strict(),
+    z.object({ mode: z.literal("keep-both") }).strict(),
+  ]).optional(),
 }).strict()
 
 const prepareFolderUploadSchema = z.object({
@@ -34,6 +39,15 @@ const prepareFolderUploadSchema = z.object({
     relativePath: z.string().trim().min(1).max(1024),
     size: z.string().regex(/^\d+$/u),
     mimeType: z.string().trim().max(255).nullable().optional(),
+  }).strict()).min(1).max(1000),
+}).strict()
+
+const uploadConflictInspectSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  entries: z.array(z.object({
+    kind: z.enum(["file", "folder"]),
+    name: z.string().trim().min(1).max(255),
+    relativePath: z.string().trim().min(1).max(1024).nullable().optional(),
   }).strict()).min(1).max(1000),
 }).strict()
 
@@ -71,6 +85,19 @@ export class DriveUserController {
     return this.drive.getDeleteImpact(request.user!.id, id, resolveRequestPagesPublicUrl(request))
   }
 
+  @Post("/uploads/conflicts/inspect")
+  inspectUploadConflicts(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(uploadConflictInspectSchema, body, "上传冲突检查请求无效。")
+    return this.drive.inspectUploadConflicts(request.user!.id, {
+      parentId: parsed.parentId ?? null,
+      entries: parsed.entries.map((entry) => ({
+        kind: entry.kind,
+        name: entry.name,
+        relativePath: entry.relativePath ?? null,
+      })),
+    })
+  }
+
   @Post("/uploads/prepare")
   prepareUpload(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(prepareUploadSchema, body, "上传请求无效。")
@@ -80,6 +107,7 @@ export class DriveUserController {
       size: parsed.size,
       mimeType: parsed.mimeType ?? null,
       publicAppUrl: resolveRequestPublicAppUrl(request),
+      conflictStrategy: parsed.conflictStrategy ?? { mode: "fail" },
     })
   }
 

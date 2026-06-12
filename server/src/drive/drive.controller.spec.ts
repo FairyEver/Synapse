@@ -24,6 +24,8 @@ describe("DriveController", () => {
   const originalAppPublicUrl = process.env.APP_PUBLIC_URL
   const drive = {
     listItems: vi.fn(),
+    inspectUploadConflicts: vi.fn(),
+    prepareUpload: vi.fn(),
     prepareFolderUpload: vi.fn(),
     deleteItem: vi.fn(),
     getDeleteImpact: vi.fn(),
@@ -52,6 +54,8 @@ describe("DriveController", () => {
 
   beforeEach(async () => {
     drive.listItems.mockReset()
+    drive.inspectUploadConflicts.mockReset()
+    drive.prepareUpload.mockReset()
     drive.prepareFolderUpload.mockReset()
     drive.deleteItem.mockReset()
     drive.getDeleteImpact.mockReset()
@@ -222,6 +226,68 @@ describe("DriveController", () => {
       expect(drive.prepareFolderUpload).toHaveBeenCalledWith("user-1", expect.objectContaining({
         parentId: null,
         folderName: "交接材料",
+      }))
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("inspects upload conflicts through the user API", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.inspectUploadConflicts.mockResolvedValue({ conflicts: [] })
+      await request(userApp.getHttpServer())
+        .post("/api/drive/uploads/conflicts/inspect")
+        .send({ parentId: "folder-1", entries: [{ kind: "file", name: "report.md", relativePath: null }] })
+        .expect(201)
+      expect(drive.inspectUploadConflicts).toHaveBeenCalledWith("user-1", {
+        parentId: "folder-1",
+        entries: [{ kind: "file", name: "report.md", relativePath: null }],
+      })
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("passes upload conflict strategy through the user API", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.prepareUpload.mockResolvedValue({ sessionId: "session-1", item: { id: "file-1" }, upload: { method: "PUT", url: "https://upload.example", expiresAt: "2026-06-12T00:00:00.000Z", headers: {} } })
+      await request(userApp.getHttpServer())
+        .post("/api/drive/uploads/prepare")
+        .send({
+          parentId: null,
+          name: "report.md",
+          size: "11",
+          mimeType: "text/markdown",
+          conflictStrategy: { mode: "keep-both" },
+        })
+        .expect(201)
+      expect(drive.prepareUpload).toHaveBeenCalledWith("user-1", expect.objectContaining({
+        name: "report.md",
+        conflictStrategy: { mode: "keep-both" },
       }))
     } finally {
       await userApp.close()
