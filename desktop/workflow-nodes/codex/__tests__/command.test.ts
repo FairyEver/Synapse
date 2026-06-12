@@ -28,7 +28,7 @@ describe("buildCodexExecRequest", () => {
       cwd: "/Users/liyang/project",
       stdin: "Write a summary",
       timeoutMs: 60_000,
-      pathStrategy: "login-shell",
+      pathStrategy: "merge",
       output: { stdout: "buffer", stderr: "buffer" },
       metadata: { source: "workflow", actionType: "workflow.codex" },
     })

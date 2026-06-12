@@ -21,7 +21,7 @@ export function buildCodexExecRequest(input: BuildCodexExecRequestInput): Contro
     args: buildCodexExecArgs(input.config, input.cwd, input.lastMessagePath),
     cwd: input.cwd,
     stdin: input.prompt,
-    pathStrategy: "login-shell",
+    pathStrategy: "merge",
     output: { stdout: "buffer", stderr: "buffer" },
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.abortSignal === undefined ? {} : { abortSignal: input.abortSignal }),
