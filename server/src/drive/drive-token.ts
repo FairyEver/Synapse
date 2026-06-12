@@ -12,6 +12,10 @@ export function driveStorageKeyForItem(itemId: string): string {
   return `drive/${itemId}`
 }
 
+export function driveReplacementStorageKeyForSession(input: { readonly itemId: string; readonly sessionId: string }): string {
+  return `drive-replacements/${input.itemId}/${input.sessionId}`
+}
+
 export function drivePublicationStorageKey(input: {
   readonly publicationId: string
   readonly deploymentId: string

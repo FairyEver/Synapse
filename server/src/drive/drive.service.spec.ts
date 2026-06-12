@@ -198,6 +198,131 @@ describe("DriveService", () => {
     expect(prepared.item.name).toMatch(/^report_\d{8}_\d{6}(?:_\d+)?\.md$/u)
   })
 
+  it("replaces an existing file while keeping the item id and share", async () => {
+    const prisma = createPrismaMemory()
+    const setupService = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const replacementStorage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key: string) => ({ key, size: 20n, etag: "new-etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, replacementStorage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const existing = await createCompletedUpload(setupService, "user-1", {
+      parentId: null,
+      name: "report.md",
+      mimeType: "text/markdown",
+    })
+    const share = await service.createShare("user-1", existing.id, "https://synapse.test")
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "20",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+      conflictStrategy: { mode: "replace", existingItemId: existing.id },
+    })
+    const completed = await service.completeUpload("user-1", prepared.sessionId)
+
+    expect(prepared.item.id).toBe(existing.id)
+    expect(completed.id).toBe(existing.id)
+    expect(completed.size).toBe("20")
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId, password: share.password ?? undefined }))
+      .resolves.toMatchObject({ value: { item: { id: existing.id, size: "20" } } })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(20n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
+  it("does not update publication deployments when replacing a source file", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const existing = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "page.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishPage("user-1", existing.id, "https://synapse.test")
+    const originalDeploymentId = publication.currentDeploymentId
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "page.html",
+      size: "11",
+      mimeType: "text/html",
+      publicAppUrl: "https://synapse.test",
+      conflictStrategy: { mode: "replace", existingItemId: existing.id },
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const publications = await service.listPublications("user-1", "https://synapse.test")
+
+    expect(publications.find((item) => item.id === publication.id)?.currentDeploymentId).toBe(originalDeploymentId)
+  })
+
+  it("keeps the old file active when replacement upload instruction creation fails", async () => {
+    const prisma = createPrismaMemory()
+    const setupService = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const failingStorage: DriveStoragePort = {
+      ...storageMock,
+      createUploadInstruction: vi.fn(async () => {
+        throw new Error("storage unavailable")
+      }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, failingStorage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const existing = await createCompletedUpload(setupService, "user-1", {
+      parentId: null,
+      name: "report.md",
+      mimeType: "text/markdown",
+    })
+
+    await expect(service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "20",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+      conflictStrategy: { mode: "replace", existingItemId: existing.id },
+    })).rejects.toThrow("storage unavailable")
+
+    await expect(service.getItem("user-1", existing.id)).resolves.toMatchObject({
+      id: existing.id,
+      storageStatus: "active",
+      size: "11",
+    })
+  })
+
+  it("keeps the old file active when a replacement upload is cancelled", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const existing = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.md",
+      mimeType: "text/markdown",
+    })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "20",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+      conflictStrategy: { mode: "replace", existingItemId: existing.id },
+    })
+    await service.cancelUpload("user-1", prepared.sessionId)
+
+    await expect(service.getItem("user-1", existing.id)).resolves.toMatchObject({
+      id: existing.id,
+      storageStatus: "active",
+      size: "11",
+    })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(11n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("creates revocable share links", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -1437,8 +1562,9 @@ function createPrismaMemory() {
         Object.assign(session, data)
         return session
       },
-      findMany: async ({ where, select }: any = {}) => {
+      findMany: async ({ where, select, include }: any = {}) => {
         const found = [...sessions.values()].filter((session) => matchesWhere(session, where ?? {}))
+        if (include?.item) return found.map((session) => ({ ...session, item: withShares(items.get(session.itemId)) }))
         return select ? found.map((session) => selectFields(session, select)) : found
       },
     },

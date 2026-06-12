@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   createDrivePublishId,
   createDriveShareId,
+  driveReplacementStorageKeyForSession,
   drivePublicationStorageKey,
   driveStorageKeyForItem,
   isValidDriveItemName,
@@ -18,6 +19,11 @@ describe("drive token helpers", () => {
 
   it("builds storage keys from server item ids", () => {
     expect(driveStorageKeyForItem("item_123")).toBe("drive/item_123")
+  })
+
+  it("builds replacement staging keys", () => {
+    expect(driveReplacementStorageKeyForSession({ itemId: "item-1", sessionId: "session-1" }))
+      .toBe("drive-replacements/item-1/session-1")
   })
 
   it("builds publication storage keys", () => {

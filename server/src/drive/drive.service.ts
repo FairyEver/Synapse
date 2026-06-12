@@ -48,6 +48,7 @@ import {
   createDrivePublishId,
   createDriveShareId,
   drivePublicationStorageKey,
+  driveReplacementStorageKeyForSession,
   driveStorageKeyForItem,
   isValidDriveItemName,
   normalizePublicationRelativePath,
@@ -199,6 +200,15 @@ export class DriveService implements OnApplicationBootstrap {
     if (requestedSize > driveMaxFileBytes) throw new BadRequestException("文件超过 1GB 限制。")
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
     const strategy = input.conflictStrategy ?? { mode: "fail" as const }
+    if (strategy.mode === "replace") {
+      return this.prepareReplacementUpload(userId, {
+        parentId: input.parentId,
+        name: normalizedName,
+        requestedSize,
+        mimeType: input.mimeType ?? null,
+        existingItemId: strategy.existingItemId,
+      })
+    }
     const name = await this.resolveUploadConflictName(userId, input.parentId, normalizedName, strategy)
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -263,6 +273,87 @@ export class DriveService implements OnApplicationBootstrap {
         expiresAt: upload.expiresAt.toISOString(),
         headers: upload.headers,
       },
+    }
+  }
+
+  private async requireReplaceTarget(userId: string, parentId: string | null, name: string, existingItemId: string) {
+    const item = await this.prisma.driveItem.findFirst({
+      where: {
+        id: existingItemId,
+        userId,
+        parentId,
+        name,
+        type: DRIVE_ITEM_TYPE.file,
+        deletedAt: null,
+        storageStatus: DRIVE_STORAGE_STATUS.active,
+      },
+      include: driveItemWithShares,
+    })
+    if (!item) throw new BadRequestException("要替换的文件不存在。")
+    return item
+  }
+
+  private async prepareReplacementUpload(
+    userId: string,
+    input: {
+      readonly parentId: string | null
+      readonly name: string
+      readonly requestedSize: bigint
+      readonly mimeType: string | null
+      readonly existingItemId: string
+    },
+  ): Promise<DriveUploadPrepareResult> {
+    const target = await this.requireReplaceTarget(userId, input.parentId, input.name, input.existingItemId)
+    const result = await this.prisma.$transaction(async (tx) => {
+      const usage = await ensureUsage(tx, userId)
+      if (usage.usedBytes + usage.reservedBytes + input.requestedSize > usage.quotaBytes) {
+        throw new BadRequestException("云盘空间不足。")
+      }
+      const session = await tx.driveUploadSession.create({
+        data: {
+          userId,
+          itemId: target.id,
+          storageKey: `pending-replacement/${target.id}`,
+          expectedName: input.name,
+          expectedSize: input.requestedSize,
+          expectedMime: input.mimeType,
+          status: DRIVE_UPLOAD_STATUS.pending,
+          credentialKind: "presigned_put",
+          expiresAt: new Date(Date.now() + driveUploadUrlTtlSeconds * 1000),
+        },
+      })
+      const storageKey = driveReplacementStorageKeyForSession({ itemId: target.id, sessionId: session.id })
+      const updatedSession = await tx.driveUploadSession.update({
+        where: { id: session.id },
+        data: { storageKey },
+      })
+      await tx.driveUsage.update({
+        where: { userId },
+        data: { reservedBytes: { increment: input.requestedSize } },
+      })
+      return { item: target, session: updatedSession }
+    })
+
+    try {
+      const upload = await this.storage.createUploadInstruction({
+        key: result.session.storageKey,
+        contentType: input.mimeType ?? undefined,
+      })
+      return {
+        sessionId: result.session.id,
+        item: toDriveItemDto(result.item),
+        upload: {
+          method: upload.method,
+          url: upload.url,
+          expiresAt: upload.expiresAt.toISOString(),
+          headers: upload.headers,
+        },
+      }
+    } catch (error) {
+      await this.failUploadSession(userId, result.session.id, result.session.itemId, result.session.expectedSize, DRIVE_UPLOAD_STATUS.failed, new Date(), {
+        preserveItem: true,
+      })
+      throw error
     }
   }
 
@@ -338,15 +429,21 @@ export class DriveService implements OnApplicationBootstrap {
       include: { item: { include: driveItemWithShares } },
     })
     if (!session || session.item.deletedAt) throw new NotFoundException("上传会话不存在。")
+    const replacingExistingObject = isReplacementUploadSession(session)
     if (session.expiresAt.getTime() <= Date.now()) {
-      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired)
+      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired, new Date(), {
+        preserveItem: replacingExistingObject,
+      })
       throw new BadRequestException("上传会话已过期。")
     }
     const object = await this.storage.headObject(session.storageKey)
     if (!object || object.size !== session.expectedSize) {
-      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.failed)
+      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.failed, new Date(), {
+        preserveItem: replacingExistingObject,
+      })
       throw new BadRequestException("上传文件校验失败。")
     }
+    const oldStorageKey = session.item.storageKey
 
     const item = await this.prisma.$transaction(async (tx) => {
       await tx.driveUploadSession.update({
@@ -355,29 +452,47 @@ export class DriveService implements OnApplicationBootstrap {
       })
       await tx.driveUsage.update({
         where: { userId },
-        data: {
-          reservedBytes: { decrement: session.expectedSize },
-          usedBytes: { increment: session.expectedSize },
-        },
+        data: replacingExistingObject
+          ? {
+            reservedBytes: { decrement: session.expectedSize },
+            usedBytes: { increment: session.expectedSize - session.item.size },
+          }
+          : {
+            reservedBytes: { decrement: session.expectedSize },
+            usedBytes: { increment: session.expectedSize },
+          },
       })
       return tx.driveItem.update({
         where: { id: session.itemId },
         data: {
+          storageKey: session.storageKey,
+          size: session.expectedSize,
+          mimeType: session.expectedMime,
           storageStatus: DRIVE_STORAGE_STATUS.active,
           uploadStatus: DRIVE_UPLOAD_STATUS.completed,
         },
         include: driveItemWithShares,
       })
     })
+    if (replacingExistingObject && oldStorageKey) {
+      try {
+        await this.storage.deleteObject(oldStorageKey)
+      } catch {
+        logger.warn("Drive replacement old object cleanup failed.", { itemId: item.id })
+      }
+    }
     return toDriveItemDto(item)
   }
 
   async cancelUpload(userId: string, sessionId: string): Promise<{ readonly ok: true }> {
     const session = await this.prisma.driveUploadSession.findFirst({
       where: { id: sessionId, userId, status: DRIVE_UPLOAD_STATUS.pending },
+      include: { item: { include: driveItemWithShares } },
     })
     if (!session) throw new NotFoundException("上传会话不存在。")
-    await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled)
+    await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled, new Date(), {
+      preserveItem: isReplacementUploadSession(session),
+    })
     return { ok: true }
   }
 
@@ -1040,10 +1155,12 @@ export class DriveService implements OnApplicationBootstrap {
   async expirePendingUploadSessions(now = new Date()): Promise<{ readonly expired: number }> {
     const sessions = await this.prisma.driveUploadSession.findMany({
       where: { status: DRIVE_UPLOAD_STATUS.pending, expiresAt: { lte: now } },
-      select: { id: true, userId: true, expectedSize: true, itemId: true },
+      include: { item: { include: driveItemWithShares } },
     })
     for (const session of sessions) {
-      await this.failUploadSession(session.userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired, now)
+      await this.failUploadSession(session.userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired, now, {
+        preserveItem: isReplacementUploadSession(session),
+      })
     }
     return { expired: sessions.length }
   }
@@ -1245,7 +1362,21 @@ export class DriveService implements OnApplicationBootstrap {
     expectedSize: bigint,
     status: string,
     now = new Date(),
+    options: { readonly preserveItem?: boolean } = {},
   ): Promise<void> {
+    if (options.preserveItem) {
+      await this.prisma.$transaction([
+        this.prisma.driveUploadSession.update({
+          where: { id: sessionId },
+          data: { status, failedAt: now },
+        }),
+        this.prisma.driveUsage.update({
+          where: { userId },
+          data: { reservedBytes: { decrement: expectedSize } },
+        }),
+      ])
+      return
+    }
     await this.prisma.$transaction([
       this.prisma.driveUploadSession.update({
         where: { id: sessionId },
@@ -1590,6 +1721,18 @@ function formatDriveKeepBothTimestamp(date: Date): string {
     pad(date.getMinutes()),
     pad(date.getSeconds()),
   ].join("")
+}
+
+function isReplacementUploadSession(session: {
+  readonly storageKey: string
+  readonly item: {
+    readonly storageKey: string | null
+    readonly storageStatus: string
+  }
+}): boolean {
+  return session.item.storageStatus === DRIVE_STORAGE_STATUS.active
+    && session.item.storageKey !== null
+    && session.item.storageKey !== session.storageKey
 }
 
 function normalizeRelativePath(value: string): string[] {
