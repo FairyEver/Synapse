@@ -1,21 +1,25 @@
 import { ChevronDown, CircleUserRound, LoaderCircle, LogOut, RefreshCw, Settings } from "lucide-react"
 import { useAccount } from "@/app-shell/account"
+import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { buildAccountDashboardHomeUrl } from "@/lib/account-dashboard-url"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
 import type { SynapseAccountState } from "@/types/account"
 
 type AccountUserControlProps = {
   variant?: "toolbar" | "panel"
   onOpenSettings?: () => void
 }
+
+const logger = createRendererLogger("account-user-control")
 
 function getDisplayName(state: SynapseAccountState): string | null {
   if (state.status !== "authenticated") return null
@@ -79,6 +83,19 @@ function AccountUserControl({
 
   const handleLogout = () => {
     void runAndReport(logout)
+  }
+
+  const handleOpenDashboard = () => {
+    try {
+      void requireBridgeDomain("shell").openExternal(buildAccountDashboardHomeUrl())
+        .catch((error) => {
+          logger.warn("Failed to open account dashboard.", { error })
+          warning("无法打开管理后台。")
+        })
+    } catch (error) {
+      logger.warn("Failed to open account dashboard.", { error })
+      warning("无法打开管理后台。")
+    }
   }
 
   if (variant === "panel") {
@@ -151,14 +168,14 @@ function AccountUserControl({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="font-normal">
+        <DropdownMenuItem className="h-auto py-3" onSelect={handleOpenDashboard}>
           <div className="flex min-w-0 flex-col gap-1">
             <span className="truncate text-sm font-medium">{getAccountTitle(state)}</span>
             {getDisplayName(state) ? (
               <span className="truncate text-xs text-muted-foreground">{state.profile.user.email}</span>
             ) : null}
           </div>
-        </DropdownMenuLabel>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {onOpenSettings ? (
           <DropdownMenuItem onSelect={onOpenSettings}>

@@ -3,6 +3,7 @@ dist
 admin-dist
 dist-electron
 desktop/electron/generated/deployment-config.generated.ts
+desktop/src/generated/deployment-config.generated.ts
 dist-database
 release
 .DS_Store
