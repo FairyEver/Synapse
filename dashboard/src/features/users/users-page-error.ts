@@ -6,6 +6,14 @@ export function getUsersTableError(
   return null
 }
 
+export function getUsersLiveClientStatusError(
+  isLiveClientsError: boolean,
+  liveClientsError: unknown
+): unknown | null {
+  if (isLiveClientsError) return liveClientsError
+  return null
+}
+
 export function getUsersTableLoading(input: {
   isUsersError: boolean
   isUsersLoading: boolean

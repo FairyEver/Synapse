@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type AdminUserRow, type LiveClientRow } from '@/lib/api'
 import {
@@ -18,7 +19,11 @@ import {
   mergeLiveClientSnapshot,
   upsertLiveClient,
 } from './live-client-utils'
-import { getUsersTableError, getUsersTableLoading } from './users-page-error'
+import {
+  getUsersLiveClientStatusError,
+  getUsersTableError,
+  getUsersTableLoading,
+} from './users-page-error'
 
 export default function UsersPage() {
   const [page, setPage] = useState(1)
@@ -35,7 +40,12 @@ export default function UsersPage() {
     queryFn: () => adminApi.listUsers({ page, pageSize, ...sortQuery }),
   })
 
-  const { data: liveClientSnapshot } = useQuery({
+  const {
+    data: liveClientSnapshot,
+    error: liveClientsError,
+    isError: isLiveClientsError,
+    refetch: refetchLiveClients,
+  } = useQuery({
     queryKey: ['admin-live-clients'],
     queryFn: () => adminApi.listLiveClients(),
   })
@@ -64,8 +74,13 @@ export default function UsersPage() {
     isUsersLoading: isLoading,
   })
   const tableError = getUsersTableError(isError, error)
+  const liveClientStatusError = getUsersLiveClientStatusError(
+    isLiveClientsError,
+    liveClientsError
+  )
   const retryTable = () => {
     void refetch()
+    void refetchLiveClients()
   }
 
   const toggleStatus = useMutation({
@@ -121,11 +136,21 @@ export default function UsersPage() {
         <DataTableColumnHeader column={column} title='客户端' />
       ),
       cell: ({ row }) => {
-        const summary = getLiveClientSummary(row.original.id, liveClients)
+        const summary = getLiveClientSummary(row.original.id, liveClients, {
+          isSnapshotUnavailable: Boolean(liveClientStatusError),
+        })
 
         return (
           <div className='flex flex-wrap items-center gap-2'>
-            <Badge variant={summary.onlineCount > 0 ? 'default' : 'outline'}>
+            <Badge
+              variant={
+                summary.onlineCount > 0
+                  ? 'default'
+                  : summary.isUnknown
+                    ? 'secondary'
+                    : 'outline'
+              }
+            >
               {summary.label}
             </Badge>
             {summary.hasStale ? (
@@ -165,6 +190,15 @@ export default function UsersPage() {
       enableHiding: false,
     },
   ]
+  const liveClientToolbar = liveClientStatusError ? (
+    <div className='flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm'>
+      <span className='text-muted-foreground'>客户端状态未知</span>
+      <Button variant='outline' size='sm' onClick={retryTable}>
+        <RefreshCw className='size-4' />
+        重试
+      </Button>
+    </div>
+  ) : null
 
   return (
     <>
@@ -181,6 +215,7 @@ export default function UsersPage() {
             page={page}
             pageSize={pageSize}
             total={data?.total ?? 0}
+            toolbar={liveClientToolbar}
             error={tableError}
             onRetry={retryTable}
             onPageChange={setPage}

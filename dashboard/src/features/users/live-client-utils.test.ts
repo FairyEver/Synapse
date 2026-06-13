@@ -46,6 +46,7 @@ describe('live client utilities', () => {
       onlineCount: 1,
       totalCount: 2,
       hasStale: false,
+      isUnknown: false,
     })
   })
 
@@ -57,6 +58,17 @@ describe('live client utilities', () => {
     expect(summary.label).toBe('离线')
     expect(summary.onlineCount).toBe(0)
     expect(summary.totalCount).toBe(1)
+  })
+
+  it('uses unknown label when the live client snapshot is unavailable', () => {
+    const summary = getLiveClientSummary('user-1', [], {
+      isSnapshotUnavailable: true,
+    })
+
+    expect(summary.label).toBe('状态未知')
+    expect(summary.onlineCount).toBe(0)
+    expect(summary.totalCount).toBe(0)
+    expect(summary.isUnknown).toBe(true)
   })
 
   it('marks stale clients in the summary', () => {

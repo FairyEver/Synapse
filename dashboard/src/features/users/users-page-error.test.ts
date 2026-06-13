@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { getUsersTableError, getUsersTableLoading } from './users-page-error'
+import {
+  getUsersLiveClientStatusError,
+  getUsersTableError,
+  getUsersTableLoading,
+} from './users-page-error'
 
 describe('getUsersTableError', () => {
   it('returns users query errors only', () => {
@@ -8,6 +12,17 @@ describe('getUsersTableError', () => {
 
     expect(getUsersTableError(true, usersError)).toBe(usersError)
     expect(getUsersTableError(false, null)).toBeNull()
+  })
+})
+
+describe('getUsersLiveClientStatusError', () => {
+  it('returns live client snapshot errors separately from the users table error', () => {
+    const liveClientsError = new Error('客户端快照失败')
+
+    expect(getUsersLiveClientStatusError(true, liveClientsError)).toBe(
+      liveClientsError
+    )
+    expect(getUsersLiveClientStatusError(false, null)).toBeNull()
   })
 })
 

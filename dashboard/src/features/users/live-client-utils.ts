@@ -5,6 +5,7 @@ export type LiveClientSummary = {
   onlineCount: number
   totalCount: number
   hasStale: boolean
+  isUnknown: boolean
 }
 
 export const liveClientStatusLabels: Record<LiveClientRow['status'], string> = {
@@ -24,18 +25,25 @@ export const liveClientStatusVariants: Record<
 
 export function getLiveClientSummary(
   userId: string,
-  clients: readonly LiveClientRow[]
+  clients: readonly LiveClientRow[],
+  options: { isSnapshotUnavailable?: boolean } = {}
 ): LiveClientSummary {
   const matchingClients = clients.filter((client) => client.userId === userId)
   const onlineCount = matchingClients.filter(
     (client) => client.status === 'online'
   ).length
+  const isUnknown = matchingClients.length === 0 && options.isSnapshotUnavailable
 
   return {
-    label: onlineCount === 0 ? '离线' : `${onlineCount} 台在线`,
+    label: isUnknown
+      ? '状态未知'
+      : onlineCount === 0
+        ? '离线'
+        : `${onlineCount} 台在线`,
     onlineCount,
     totalCount: matchingClients.length,
     hasStale: matchingClients.some((client) => client.status === 'stale'),
+    isUnknown,
   }
 }
 
