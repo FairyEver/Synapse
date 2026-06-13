@@ -1,4 +1,4 @@
-import { type HTMLAttributes, type ReactNode } from 'react'
+import { type HTMLAttributes, type ReactNode, useEffect } from 'react'
 import {
   type ColumnDef,
   type Row,
@@ -56,6 +56,23 @@ export function getServerTableSortQuery(sorting: SortingState) {
   } as const
 }
 
+export function getServerDataTablePageCount(total: number, pageSize: number) {
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0
+    ? Math.floor(pageSize)
+    : 1
+  return Math.max(1, Math.ceil(total / safePageSize))
+}
+
+export function getServerDataTableBoundedPage(
+  page: number,
+  total: number,
+  pageSize: number
+) {
+  const pageCount = getServerDataTablePageCount(total, pageSize)
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1
+  return Math.min(safePage, pageCount)
+}
+
 export function ServerDataTable<TData, TValue>({
   columns,
   data,
@@ -72,11 +89,18 @@ export function ServerDataTable<TData, TValue>({
   className,
   getRowProps,
 }: ServerDataTableProps<TData, TValue>) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const pageCount = getServerDataTablePageCount(total, pageSize)
+  const boundedPage = getServerDataTableBoundedPage(page, total, pageSize)
   const pagination = {
-    pageIndex: Math.max(0, page - 1),
+    pageIndex: boundedPage - 1,
     pageSize,
   }
+
+  useEffect(() => {
+    if (page !== boundedPage) {
+      onPageChange(boundedPage)
+    }
+  }, [boundedPage, onPageChange, page])
 
   const table = useReactTable({
     data,
