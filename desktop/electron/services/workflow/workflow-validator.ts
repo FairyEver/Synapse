@@ -180,8 +180,8 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     }
 
     // Provider resolution: prompt/switch nodes must have provider/model/project;
-    // codex nodes only require project resolution.
-    if (node.type === "prompt" || node.type === "switch" || node.type === "codex") {
+    // codex/script nodes only require project resolution.
+    if (node.type === "prompt" || node.type === "switch" || node.type === "codex" || node.type === "script") {
       const cfg = node.config as Record<string, unknown>
       const hasProviderId = typeof cfg.providerId === "string" && cfg.providerId.length > 0
       const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0

@@ -63,6 +63,32 @@ describe("validateWorkflow", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("requires a workflow default project for script nodes", () => {
+    const result = validateWorkflow(definitionWithScriptNode())
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "script-1",
+        field: "defaultProjectId",
+        details: expect.objectContaining({
+          missingField: "defaultProjectId",
+          nodeField: "projectId",
+        }),
+      }),
+    ]))
+  })
+
+  it("accepts script nodes with workflow default project", () => {
+    const result = validateWorkflow(definitionWithScriptNode({
+      defaultProjectId: "project-1",
+    }))
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
   it("checks template placeholders inside codex prompts", () => {
     const result = validateWorkflow(definitionWithCodexNode({
       nodes: [
@@ -114,6 +140,29 @@ function definitionWithDisconnectedNode(): WorkflowDefinition {
       },
     ],
     edges: [{ id: "edge-1", from: "script-1", to: "end" }],
+  }
+}
+
+function definitionWithScriptNode(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+  return {
+    id: "workflow-script",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      {
+        id: "script-1",
+        name: "Script",
+        type: "script",
+        position: { x: 0, y: 0 },
+        config: { shell: "posix", script: "pwd", variables: [] },
+      },
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "script-1", to: "end" }],
+    ...overrides,
   }
 }
 
