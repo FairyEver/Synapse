@@ -1587,6 +1587,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async createFolderZipEntries(userId: string, folderId: string): Promise<DriveFolderZipEntry[]> {
     const entries: DriveFolderZipEntry[] = []
+    const usedPaths = new Set<string>()
     const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: folderId, prefix: "" }]
 
     while (queue.length > 0) {
@@ -1599,7 +1600,7 @@ export class DriveService implements OnApplicationBootstrap {
           continue
         }
         if (!child.storageKey) continue
-        entries.push({ path: childPath, storageKey: child.storageKey })
+        entries.push({ path: createUniqueDriveZipEntryPath(childPath, usedPaths), storageKey: child.storageKey })
       }
     }
 
@@ -1900,6 +1901,35 @@ function buildAdminWhere(filters: DriveAdminFilters): Prisma.DriveItemWhereInput
     ]
   }
   return where
+}
+
+function createUniqueDriveZipEntryPath(path: string, usedPaths: Set<string>): string {
+  const firstKey = driveZipEntryPathKey(path)
+  if (!usedPaths.has(firstKey)) {
+    usedPaths.add(firstKey)
+    return path
+  }
+
+  const slashIndex = path.lastIndexOf("/")
+  const directory = slashIndex >= 0 ? path.slice(0, slashIndex + 1) : ""
+  const filename = slashIndex >= 0 ? path.slice(slashIndex + 1) : path
+  const extensionIndex = filename.lastIndexOf(".")
+  const hasExtension = extensionIndex > 0
+  const baseName = hasExtension ? filename.slice(0, extensionIndex) : filename
+  const extension = hasExtension ? filename.slice(extensionIndex) : ""
+
+  for (let index = 2; ; index += 1) {
+    const candidate = `${directory}${baseName} (${index})${extension}`
+    const candidateKey = driveZipEntryPathKey(candidate)
+    if (!usedPaths.has(candidateKey)) {
+      usedPaths.add(candidateKey)
+      return candidate
+    }
+  }
+}
+
+function driveZipEntryPathKey(path: string): string {
+  return path.toLowerCase()
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

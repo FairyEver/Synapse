@@ -1279,6 +1279,63 @@ describe("DriveService", () => {
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
+  it("disambiguates same-name files in owner folder archive entries", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "交接材料" })
+    const first = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "report.pdf",
+      mimeType: "application/pdf",
+    })
+    const second = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "report.pdf",
+      mimeType: "application/pdf",
+    })
+
+    const entries = await service.createFolderZipEntriesForOwnerBrowserItem({
+      userId: "user-1",
+      rootItemId: folder.id,
+    })
+
+    expect(entries).toEqual([
+      { path: "report.pdf", storageKey: `drive/${first.id}` },
+      { path: "report (2).pdf", storageKey: `drive/${second.id}` },
+    ])
+  })
+
+  it("disambiguates same-name files in shared child folder archive entries", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "共享" })
+    const docs = await service.createFolder("user-1", { parentId: root.id, name: "docs" })
+    const first = await createCompletedUpload(service, "user-1", {
+      parentId: docs.id,
+      name: "report.pdf",
+      mimeType: "application/pdf",
+    })
+    const second = await createCompletedUpload(service, "user-1", {
+      parentId: docs.id,
+      name: "report.pdf",
+      mimeType: "application/pdf",
+    })
+    const share = await service.createShare("user-1", root.id, "https://synapse.test")
+
+    const entries = await service.createFolderZipEntriesForShareBrowserItem({
+      shareId: share.shareId,
+      itemId: docs.id,
+      password: share.password ?? undefined,
+    })
+
+    expect(entries).toEqual([
+      { path: "report.pdf", storageKey: `drive/${first.id}` },
+      { path: "report (2).pdf", storageKey: `drive/${second.id}` },
+    ])
+  })
+
   it("builds owner browser snapshots with child breadcrumbs and html visit urls", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
