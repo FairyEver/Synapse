@@ -706,6 +706,33 @@ describe("DriveController", () => {
     })
   })
 
+  it("unlocks share browser child access and returns the child snapshot", async () => {
+    const snapshot = createBrowserSnapshot()
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      cookie: "access-cookie",
+      value: {
+        type: "folder",
+        item: createDriveItem({ id: "folder-1", name: "folder", type: "folder" }),
+        ownerId: "user-1",
+        storageKey: null,
+      },
+    })
+    drive.getShareBrowserSnapshot.mockResolvedValue(snapshot)
+
+    await request(app!.getHttpServer())
+      .post("/api/drive/browser/shares/shr_folder/items/file-1/access")
+      .send({ password: "letmein" })
+      .expect(201)
+
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
+      shareId: "shr_folder",
+      itemId: "file-1",
+      password: "letmein",
+      cookie: "access-cookie",
+    })
+  })
+
   it("passes password query through share browser APIs and sets access cookies", async () => {
     const snapshot = createBrowserSnapshot()
     drive.resolvePublicShareAccess.mockResolvedValue({

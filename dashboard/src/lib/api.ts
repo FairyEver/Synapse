@@ -708,9 +708,11 @@ export const driveBrowserApi = {
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
       `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}${driveBrowserPasswordSuffix(password)}`
     ),
-  unlockShare: (shareId: string, password: string) =>
+  unlockShare: (shareId: string, password: string, itemId?: string) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/access`,
+      itemId
+        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/access`
+        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/access`,
       {
         method: 'POST',
         body: JSON.stringify({ password }),

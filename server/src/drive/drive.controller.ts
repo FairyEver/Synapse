@@ -270,16 +270,38 @@ export class DrivePublicController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const password = readPasswordFromBody(body)
+    return this.unlockShareBrowserResponse({ shareId, body, request, response })
+  }
+
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/access")
+  async unlockShareBrowserItem(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Body() body: unknown,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.unlockShareBrowserResponse({ shareId, itemId, body, request, response })
+  }
+
+  private async unlockShareBrowserResponse(input: {
+    readonly shareId: string
+    readonly itemId?: string
+    readonly body: unknown
+    readonly request: Request
+    readonly response: Response
+  }): Promise<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto> {
+    const password = readPasswordFromBody(input.body)
     const access = await this.drive.resolvePublicShareAccess({
-      shareId,
+      shareId: input.shareId,
       password,
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(input.request),
     })
     if (access.status !== "ok" || !access.cookie) return driveBrowserPasswordRequired()
-    setDriveAccessCookie(response, access.cookie)
+    setDriveAccessCookie(input.response, access.cookie)
     return this.drive.getShareBrowserSnapshot({
-      shareId,
+      shareId: input.shareId,
+      itemId: input.itemId,
       password,
       cookie: access.cookie,
     })

@@ -47,7 +47,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const unlockMutation = useMutation({
     mutationFn: async (password: string) => {
       if (input.context !== 'share') throw new Error('当前文件不需要密码。')
-      const result = await driveBrowserApi.unlockShare(input.shareId, password)
+      const result = await driveBrowserApi.unlockShare(input.shareId, password, input.itemId)
       if (isDriveBrowserPasswordRequired(result)) throw new Error(result.message)
       return result
     },

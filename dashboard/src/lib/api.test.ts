@@ -207,6 +207,7 @@ describe('driveBrowserApi', () => {
     await driveBrowserApi.getShareRoot('shr/id')
     await driveBrowserApi.getShareItem('shr/id', 'child/id')
     await driveBrowserApi.unlockShare('shr/id', 'letmein')
+    await driveBrowserApi.unlockShare('shr/id', 'letmein', 'child/id')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -221,6 +222,15 @@ describe('driveBrowserApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       '/api/drive/browser/shares/shr%2Fid/access',
+      expect.objectContaining({
+        body: JSON.stringify({ password: 'letmein' }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid/access',
       expect.objectContaining({
         body: JSON.stringify({ password: 'letmein' }),
         credentials: 'include',
