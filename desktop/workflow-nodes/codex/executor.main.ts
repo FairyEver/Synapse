@@ -102,6 +102,24 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       }
     }
 
+    let resolvedPathConfig: Pick<CodexNodeConfig, "additionalWritableDirs" | "images">
+    try {
+      resolvedPathConfig = await resolveCodexAdvancedPaths({
+        cwd,
+        additionalWritableDirs: config.additionalWritableDirs,
+        images: config.images,
+        resolvedVariables,
+      })
+    } catch (error) {
+      return {
+        status: "failed",
+        output: "",
+        error: error instanceof Error ? error.message : String(error),
+        durationMs: Date.now() - start,
+      }
+    }
+    const requestConfig: CodexNodeConfig = { ...config, ...resolvedPathConfig }
+
     const actor = context.actor ?? { kind: "system" as const, id: "workflow-engine" }
     const timeoutMs = config.timeoutMins === undefined ? undefined : config.timeoutMins * 60_000
     const captureDebugArtifacts = config.captureDebugArtifacts
@@ -170,7 +188,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
     })
 
     const request = buildCodexExecRequest({
-      config,
+      config: requestConfig,
       prompt,
       cwd,
       lastMessagePath: lastMessageTarget.path,
@@ -429,6 +447,68 @@ async function resolveCodexWorkingDirectory(input: {
     throw new Error("Codex 工作目录不是文件夹")
   }
   return cwd
+}
+
+async function resolveCodexAdvancedPaths(input: {
+  readonly cwd: string
+  readonly additionalWritableDirs: readonly string[]
+  readonly images: readonly string[]
+  readonly resolvedVariables: Record<string, string>
+}): Promise<Pick<CodexNodeConfig, "additionalWritableDirs" | "images">> {
+  return {
+    additionalWritableDirs: await resolveCodexPathList({
+      basePath: input.cwd,
+      values: input.additionalWritableDirs,
+      resolvedVariables: input.resolvedVariables,
+      label: "Codex 可写目录",
+      expectedType: "directory",
+    }),
+    images: await resolveCodexPathList({
+      basePath: input.cwd,
+      values: input.images,
+      resolvedVariables: input.resolvedVariables,
+      label: "Codex 图片路径",
+      expectedType: "file",
+    }),
+  }
+}
+
+async function resolveCodexPathList(input: {
+  readonly basePath: string
+  readonly values: readonly string[]
+  readonly resolvedVariables: Record<string, string>
+  readonly label: string
+  readonly expectedType: "directory" | "file"
+}): Promise<string[]> {
+  const resolved: string[] = []
+  for (const value of input.values) {
+    let rendered: string
+    try {
+      rendered = interpolatePrompt(value, input.resolvedVariables).trim()
+    } catch (error) {
+      throw new Error(`${input.label}变量解析失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (!rendered) {
+      throw new Error(`${input.label}不能为空`)
+    }
+    const absolutePath = path.isAbsolute(rendered)
+      ? path.resolve(rendered)
+      : path.resolve(input.basePath, rendered)
+    let stats
+    try {
+      stats = await stat(absolutePath)
+    } catch {
+      throw new Error(`${input.label}不存在`)
+    }
+    if (input.expectedType === "directory" && !stats.isDirectory()) {
+      throw new Error(`${input.label}不是文件夹`)
+    }
+    if (input.expectedType === "file" && !stats.isFile()) {
+      throw new Error(`${input.label}不是文件`)
+    }
+    resolved.push(absolutePath)
+  }
+  return resolved
 }
 
 function failureMessageFromResult(result: {

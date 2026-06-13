@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -351,6 +351,50 @@ describe("codexNodeExecutor", () => {
     expect(result).toMatchObject({
       status: "failed",
       error: "Codex 工作目录不存在",
+    })
+    expect(runtimeDeps.processRunner.run).not.toHaveBeenCalled()
+  })
+
+  it("resolves additional writable directories and images before building the codex request", async () => {
+    const runtimeDeps = makeRuntimeDeps()
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-paths-"))
+    const writableDir = path.join(targetDir, "writable")
+    const imagePath = path.join(targetDir, "screen.png")
+    await mkdir(writableDir)
+    await writeFile(imagePath, "image", "utf8")
+    const input = makeInput({
+      workingDirectory: targetDir,
+      additionalWritableDirs: ["./writable"],
+      images: ["{{imagePath}}"],
+    }, runtimeDeps)
+    input.resolvedVariables = { ...input.resolvedVariables, imagePath }
+
+    const result = await codexNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(runtimeDeps.processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
+      args: expect.arrayContaining([
+        "--add-dir",
+        writableDir,
+        "--image",
+        imagePath,
+      ]),
+    }))
+  })
+
+  it("fails before spawning codex when advanced path inputs are missing", async () => {
+    const runtimeDeps = makeRuntimeDeps()
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-missing-paths-"))
+    const input = makeInput({
+      workingDirectory: targetDir,
+      additionalWritableDirs: ["./missing"],
+    }, runtimeDeps)
+
+    const result = await codexNodeExecutor.execute(input)
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "Codex 可写目录不存在",
     })
     expect(runtimeDeps.processRunner.run).not.toHaveBeenCalled()
   })
