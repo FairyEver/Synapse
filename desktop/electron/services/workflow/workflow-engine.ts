@@ -230,6 +230,11 @@ export class WorkflowEngine {
                 modelTier: (rawCfg as Record<string, unknown>).modelTier || def.defaultModelTier,
                 timeoutMins: (rawCfg as Record<string, unknown>).timeoutMins ?? def.defaultNodeTimeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS,
               }
+            : node.type === "codex"
+              ? {
+                  ...(rawCfg as Record<string, unknown>),
+                  timeoutMins: (rawCfg as Record<string, unknown>).timeoutMins ?? def.defaultNodeTimeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS,
+                }
             : rawCfg
           const vars = (cfg as Record<string, unknown>)["variables"]
           const { resolved, skippedReferences } = resolveVariables(
