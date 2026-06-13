@@ -1,6 +1,8 @@
 import { sanitizeError } from "@/lib/error-sanitize"
 
 const CODEX_DEBUG_PATH_KEYS = new Set(["cwd", "stdoutPath", "stderrPath", "promptPath", "lastMessagePath"])
+const SENSITIVE_WORKFLOW_RESULT_KEY_PATTERN =
+  /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
 
 export function sanitizeWorkflowResultText(value: string): string {
   return sanitizeError(value)
@@ -23,7 +25,7 @@ export function sanitizeWorkflowResultValue(
   if (Array.isArray(value)) {
     const next: unknown[] = []
     seen.set(value, next)
-    value.forEach((item) => next.push(sanitizeWorkflowResultValue(item, seen)))
+    value.forEach((item) => next.push(sanitizeWorkflowResultValue(item, seen, key)))
     return next
   }
   const next: Record<string, unknown> = {}
@@ -35,5 +37,5 @@ export function sanitizeWorkflowResultValue(
 }
 
 function isSensitiveWorkflowResultKey(key: string): boolean {
-  return /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential).*|api[-_]?key|session[-_]?key)$/i.test(key)
+  return SENSITIVE_WORKFLOW_RESULT_KEY_PATTERN.test(key)
 }

@@ -131,9 +131,11 @@ describe("NodeResultPanel", () => {
               headers: {
                 authorization: "Bearer raw-header-token",
                 "set-cookie": "sid=raw-cookie",
+                "x-api-key": "raw-prefixed-api-key",
               },
               body: {
                 message: "apiKey=raw-body-key",
+                openai_api_key: "raw-openai-api-key",
               },
               sourcePath: "/Users/liyang/private/source.docx",
             },
@@ -150,6 +152,8 @@ describe("NodeResultPanel", () => {
     expect(renderedText).not.toContain("raw-output-token")
     expect(renderedText).not.toContain("raw-cookie")
     expect(renderedText).not.toContain("raw-header-token")
+    expect(renderedText).not.toContain("raw-prefixed-api-key")
+    expect(renderedText).not.toContain("raw-openai-api-key")
     expect(renderedText).not.toContain("raw-body-key")
     expect(renderedText).not.toContain("/Users/liyang/private")
     expect(renderedText).toContain("[redacted]")

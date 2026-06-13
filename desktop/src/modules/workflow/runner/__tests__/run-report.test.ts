@@ -81,7 +81,15 @@ describe("workflow run reports", () => {
         durationMs: 600,
         input: { variables: { url: "https://example.test" } },
         output: "partial body",
-        outputs: { response: { status: 500 } },
+        outputs: {
+          response: {
+            status: 500,
+            headers: {
+              "x-api-key": "raw-prefixed-api-key",
+              openai_api_key: "raw-openai-api-key",
+            },
+          },
+        },
         activeBranch: "branch1",
         error: "backend failed token=secret-value",
       }),
@@ -99,8 +107,12 @@ describe("workflow run reports", () => {
     expect(report).toContain('"url": "https://example.test"')
     expect(report).toContain("partial body")
     expect(report).toContain('"status": 500')
+    expect(report).toContain('"x-api-key": "[redacted]"')
+    expect(report).toContain('"openai_api_key": "[redacted]"')
     expect(report).toContain("backend failed token=[redacted]")
     expect(report).not.toContain("secret-value")
+    expect(report).not.toContain("raw-prefixed-api-key")
+    expect(report).not.toContain("raw-openai-api-key")
   })
 
   it("includes token usage in node reports", () => {
