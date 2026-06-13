@@ -135,6 +135,7 @@ import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { sanitizeNodeResultsForSnapshot } from "../services/workflow/run-snapshot-sanitize"
+import { agentProviderFailureFromResponse } from "../services/workflow/workflow-utils"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { sanitizeError } from "../services/error-sanitize"
 import type { WorkflowRunResult, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
@@ -1673,10 +1674,13 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
             onConversationCreated?.(target)
           },
         })
+        const providerFailure = result.status === "success" && result.summary
+          ? agentProviderFailureFromResponse(result.summary)
+          : undefined
         return {
-          status: result.status === "success" ? "success" : "failed",
-          response: result.summary ?? "",
-          error: result.error,
+          status: result.status === "success" && !providerFailure ? "success" : "failed",
+          response: providerFailure ? "" : result.summary ?? "",
+          error: providerFailure ?? result.error,
           durationMs: result.durationMs,
           usage: result.usage,
           modelName: result.modelName,

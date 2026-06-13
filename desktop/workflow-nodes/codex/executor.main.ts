@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises"
+import path from "node:path"
 import { app } from "electron"
 
 import { createMainLogger } from "../../electron/services/log-store"
@@ -57,8 +59,8 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
     }
 
     input.onProgress?.("resolving_project", "解析项目…")
-    const cwd = await resolveProjectWorkspacePath(projectId)
-    if (!cwd) {
+    const projectWorkspacePath = await resolveProjectWorkspacePath(projectId)
+    if (!projectWorkspacePath) {
       return {
         status: "failed",
         output: "",
@@ -76,6 +78,22 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         status: "failed",
         output: "",
         error: `模板变量解析失败：${error instanceof Error ? error.message : String(error)}`,
+        durationMs: Date.now() - start,
+      }
+    }
+
+    let cwd: string
+    try {
+      cwd = await resolveCodexWorkingDirectory({
+        projectWorkspacePath,
+        workingDirectoryTemplate: config.workingDirectoryTemplate,
+        resolvedVariables,
+      })
+    } catch (error) {
+      return {
+        status: "failed",
+        output: "",
+        error: error instanceof Error ? error.message : String(error),
         durationMs: Date.now() - start,
       }
     }
@@ -266,6 +284,34 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       }
     }
   },
+}
+
+async function resolveCodexWorkingDirectory(input: {
+  readonly projectWorkspacePath: string
+  readonly workingDirectoryTemplate?: string
+  readonly resolvedVariables: Record<string, string>
+}): Promise<string> {
+  const template = input.workingDirectoryTemplate?.trim()
+  const rendered = template
+    ? interpolatePrompt(template, input.resolvedVariables).trim()
+    : input.projectWorkspacePath
+  if (!rendered) {
+    throw new Error("Codex 工作目录不能为空")
+  }
+
+  const cwd = path.isAbsolute(rendered)
+    ? path.resolve(rendered)
+    : path.resolve(input.projectWorkspacePath, rendered)
+  let stats
+  try {
+    stats = await stat(cwd)
+  } catch {
+    throw new Error("Codex 工作目录不存在")
+  }
+  if (!stats.isDirectory()) {
+    throw new Error("Codex 工作目录不是文件夹")
+  }
+  return cwd
 }
 
 function failureMessageFromResult(result: {

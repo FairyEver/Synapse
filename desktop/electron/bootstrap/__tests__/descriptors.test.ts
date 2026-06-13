@@ -640,6 +640,77 @@ describe("bootstrap descriptors (T1.5)", () => {
     }))
   })
 
+  it("workflow Agent dependency treats provider error summaries as failures", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Repo", localPath: "/repo" }],
+          global: { projects: [] },
+        })),
+      },
+    }))
+    vi.doMock("../../services/log-store", () => ({
+      logStore: {},
+      createMainLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
+    }))
+    const sendScheduled = vi.fn().mockResolvedValue({
+      conversationId: "conversation-1",
+      sessionKey: "workflow-session-1",
+      status: "success",
+      summary: "Failed to authenticate. API Error: 401 User account is not active",
+      durationMs: 5,
+    })
+    const containers = {
+      open: vi.fn(async () => ({
+        get: vi.fn(() => ({ sendScheduled })),
+      })),
+    }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return containers
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      agentDeps: {
+        sendToAgent(input: {
+          providerId?: string
+          modelTier?: string
+          prompt: string
+          projectId?: string
+          abortSignal: AbortSignal
+        }): Promise<{
+          status: "success" | "failed"
+          response: string
+          error?: string
+          durationMs: number
+        }>
+      }
+    }
+
+    const result = await engine.agentDeps.sendToAgent({
+      providerId: "test-provider",
+      modelTier: "sonnet",
+      prompt: "test",
+      projectId: "repo-1",
+      abortSignal: new AbortController().signal,
+    })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      response: "",
+      error: "Failed to authenticate. API Error: 401 User account is not active",
+      durationMs: 5,
+    })
+  })
+
   it("workflow HTTP dependency records denied audits with a sanitized resource", async () => {
     const auditSink = { record: vi.fn() }
     const permissionGuard = {

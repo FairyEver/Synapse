@@ -94,8 +94,9 @@ vi.mock("@/components/ui/select", () => {
         {children}
       </button>
     ),
-    SelectValue: ({ placeholder }: { placeholder?: string }) => {
+    SelectValue: ({ children, placeholder }: { children?: React.ReactNode; placeholder?: string }) => {
       const context = ReactModule.useContext(SelectContext)
+      if (children !== undefined) return <span>{children}</span>
       return <span>{context?.value ? context.labels[context.value] ?? context.value : placeholder}</span>
     },
     SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -264,6 +265,7 @@ describe("CodexNodePanel", () => {
     )
 
     expectTextOrder(["输入映射", "项目", "指令", "执行配置", "高级参数", "调试记录"])
+    expect(getByLabelText("工作目录")).toBeTruthy()
     expect(getByLabelText("审批策略")).toBeTruthy()
     expect(getByLabelText("沙箱")).toBeTruthy()
     expect(getByLabelText("模型")).toBeTruthy()
@@ -273,9 +275,9 @@ describe("CodexNodePanel", () => {
     expect(getByRole("button", { name: "查看可写目录说明" })).toBeTruthy()
     expect(getByLabelText("跳过 Git 仓库检查")).toBeTruthy()
     expect(getByRole("button", { name: "审批策略" }).textContent).toContain("never")
-    expect(getByRole("button", { name: "审批策略" }).textContent).toContain("不请求人工审批")
+    expect(getByRole("button", { name: "审批策略" }).textContent).not.toContain("不请求人工审批")
     expect(getByRole("button", { name: "沙箱" }).textContent).toContain("workspace-write")
-    expect(getByRole("button", { name: "沙箱" }).textContent).toContain("可写工作区")
+    expect(getByRole("button", { name: "沙箱" }).textContent).not.toContain("可写工作区")
     expect(getByRole("button", { name: "模型" }).textContent).toContain("继承当前 Codex 配置")
     expect(getByRole("button", { name: "Goals" }).textContent).toContain("启用")
     expect(getByRole("checkbox", { name: "跳过 Git 仓库检查" }).getAttribute("aria-checked")).toBe("true")
@@ -332,7 +334,7 @@ describe("CodexNodePanel", () => {
     }))
   })
 
-  it("shows legacy custom model values without rejecting the panel", () => {
+  it("shows legacy custom model values as compact selected values", () => {
     render(
       <CodexNodePanel
         config={{ ...defaultCodexNodeConfig, model: "custom-codex-model" }}
@@ -343,7 +345,8 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    expect(getByRole("button", { name: "模型" }).textContent).toContain("当前自定义模型：custom-codex-model")
+    expect(getByRole("button", { name: "模型" }).textContent).toContain("custom-codex-model")
+    expect(getByRole("button", { name: "模型" }).textContent).not.toContain("当前自定义模型：")
   })
 
   it("shows Chinese summaries for approval and sandbox options", () => {
@@ -381,6 +384,28 @@ describe("CodexNodePanel", () => {
     blur(textbox)
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ prompt: "New prompt" }))
+  })
+
+  it("commits working directory template changes on blur", () => {
+    const onChange = vi.fn()
+
+    render(
+      <CodexNodePanel
+        config={{ ...defaultCodexNodeConfig, prompt: "Run" }}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    const input = getByLabelText("工作目录") as HTMLInputElement
+    change(input, "/Users/liyang/worktrees/{{bugId}}")
+    blur(input)
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      workingDirectoryTemplate: "/Users/liyang/worktrees/{{bugId}}",
+    }))
   })
 
   it("toggles bypass approvals and sandbox", () => {

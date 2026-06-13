@@ -67,6 +67,24 @@ const variableBindingSchema = {
   required: ["name", "source"],
 }
 
+const incomingEdgeCreateSchema = {
+  type: "object",
+  properties: {
+    from: { type: "string", description: "Existing upstream node ID to connect into the new node." },
+    branch: { type: "string", description: "Required when the upstream node is a switch branch." },
+  },
+  required: ["from"],
+}
+
+const outgoingEdgeCreateSchema = {
+  type: "object",
+  properties: {
+    to: { type: "string", description: "Existing downstream node ID to connect from the new node." },
+    branch: { type: "string", description: "Use only when the new node itself is a switch node." },
+  },
+  required: ["to"],
+}
+
 const workflowDefinitionSchema = {
   type: "object",
   description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex nodes inherit it, and defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
@@ -105,11 +123,12 @@ const workflowDefinitionSchema = {
           position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
           config: {
             type: "object",
-            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
+            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, optional workingDirectoryTemplate, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
             properties: {
               providerId: { type: "string" },
               modelTier: modelTierSchema,
               projectId: { type: "string" },
+              workingDirectoryTemplate: { type: "string", description: "codex only: optional cwd template with {{variable}} placeholders. Omit to run in the resolved project workspace; when set, the interpolated directory becomes codex cwd/--cd." },
               timeoutMins: { type: "number" },
               variables: { type: "array", items: variableBindingSchema },
               workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
@@ -262,7 +281,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     // Atomic write
     {
       name: "workflow_node_create",
-      description: "Add a node to a workflow. Position is auto-calculated if omitted. Validates before saving.",
+      description: "Add a node to a workflow. Position is auto-calculated if omitted. Validates before saving. Use incomingEdges/outgoingEdges to create the node and its connecting edges in the same validated mutation; for larger DAG rewrites, prefer workflow_definition_update.",
       inputSchema: {
         type: "object",
         properties: {
@@ -277,6 +296,16 @@ export function buildWorkflowTools(): McpToolDefinition[] {
               config: { type: "object", description: "Node configuration. Use workflow_node_type_describe to see required fields." },
             },
             required: ["name", "type"],
+          },
+          incomingEdges: {
+            type: "array",
+            description: "Optional edges from existing nodes into the new node, created in the same validated mutation. Each item is { from, branch? }; branch is required when the upstream node is a switch.",
+            items: incomingEdgeCreateSchema,
+          },
+          outgoingEdges: {
+            type: "array",
+            description: "Optional edges from the new node to existing nodes, created in the same validated mutation. Each item is { to, branch? }; branch is only for switch nodes.",
+            items: outgoingEdgeCreateSchema,
           },
         },
         required: ["workflowId", "node"],

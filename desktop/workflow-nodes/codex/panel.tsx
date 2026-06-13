@@ -34,6 +34,7 @@ import type {
 } from "./schema"
 
 const MODEL_INHERIT_VALUE = "__inherit_codex_config__"
+const MODEL_INHERIT_LABEL = "继承当前 Codex 配置"
 
 type HelpTopic = {
   title: string
@@ -52,6 +53,11 @@ const CODEX_FIELD_HELP = {
     title: "沙箱",
     summary: "限制 Codex 执行命令时能访问和修改的文件范围。",
     impact: "影响范围：命令执行、文件读写和自动化运行的安全边界。",
+  },
+  workingDirectoryTemplate: {
+    title: "工作目录",
+    summary: "设置本次 Codex 实际运行的目录，支持 {{变量}}。",
+    impact: "留空时使用项目目录；workspace-write 写入范围以解析后的工作目录为准。",
   },
   model: {
     title: "模型",
@@ -102,7 +108,7 @@ const CODEX_FIELD_HELP = {
   },
   additionalWritableDirs: {
     title: "可写目录",
-    summary: "除工作区外，额外允许 Codex 写入的目录。",
+    summary: "除实际工作目录外，额外允许 Codex 写入的目录。",
     impact: "影响范围：跨目录修改、产物输出和沙箱写权限。",
   },
   images: {
@@ -132,7 +138,7 @@ type SelectOptionHelp = {
 }
 
 const CODEX_MODEL_OPTIONS: ReadonlyArray<{ value: string; label: string; description: string }> = [
-  { value: MODEL_INHERIT_VALUE, label: "继承当前 Codex 配置", description: "不传 --model" },
+  { value: MODEL_INHERIT_VALUE, label: MODEL_INHERIT_LABEL, description: "不传 --model" },
   { value: "gpt-5.5", label: "GPT-5.5", description: "最高能力模型" },
   { value: "gpt-5.4", label: "GPT-5.4", description: "通用高质量模型" },
   { value: "gpt-5.4-mini", label: "GPT-5.4 mini", description: "轻量模型" },
@@ -296,6 +302,15 @@ export function CodexNodePanel({
           placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
         />
         {errorFor("projectId") ? <p className="text-xs text-destructive">{errorFor("projectId")}</p> : null}
+        <LabeledInput
+          id="codex-working-directory-template"
+          label="工作目录"
+          help={CODEX_FIELD_HELP.workingDirectoryTemplate}
+          value={config.workingDirectoryTemplate ?? ""}
+          placeholder="留空使用项目目录"
+          onChange={(value) => commit({ workingDirectoryTemplate: value === "" ? undefined : value })}
+        />
+        {errorFor("workingDirectoryTemplate") ? <p className="text-xs text-destructive">{errorFor("workingDirectoryTemplate")}</p> : null}
       </CollapsibleSection>
 
       <CollapsibleSection title="指令" summary={promptSummary}>
@@ -316,6 +331,7 @@ export function CodexNodePanel({
             label="审批策略"
             help={CODEX_FIELD_HELP.approvalPolicy}
             value={config.approvalPolicy}
+            displayValue={config.approvalPolicy}
             onValueChange={(value) => commit({ approvalPolicy: value as CodexApprovalPolicy })}
           >
             {CODEX_APPROVAL_OPTIONS.map(renderHelpSelectItem)}
@@ -326,6 +342,7 @@ export function CodexNodePanel({
             label="沙箱"
             help={CODEX_FIELD_HELP.sandbox}
             value={config.sandbox}
+            displayValue={config.sandbox}
             onValueChange={(value) => commit({ sandbox: value as CodexSandbox })}
           >
             {CODEX_SANDBOX_OPTIONS.map(renderHelpSelectItem)}
@@ -370,6 +387,7 @@ export function CodexNodePanel({
             label="Goals"
             help={CODEX_FIELD_HELP.goals}
             value={config.features.goals}
+            displayValue={codexFeatureStateLabel(config.features.goals)}
             onValueChange={(value) => commit({
               features: {
                 ...lastCommittedRef.current.features,
@@ -466,6 +484,7 @@ function LabeledInput({
   onChange,
   type,
   min,
+  placeholder,
 }: {
   id: string
   label: string
@@ -474,6 +493,7 @@ function LabeledInput({
   onChange: (value: string) => void
   type?: "text" | "number"
   min?: number
+  placeholder?: string
 }) {
   return (
     <div className="grid gap-1">
@@ -485,6 +505,7 @@ function LabeledInput({
         value={value}
         type={type}
         min={min}
+        placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
     </div>
@@ -496,6 +517,7 @@ function LabeledSelect({
   label,
   help,
   value,
+  displayValue,
   onValueChange,
   children,
 }: {
@@ -503,6 +525,7 @@ function LabeledSelect({
   label: string
   help?: HelpTopic
   value: string
+  displayValue: string
   onValueChange: (value: string) => void
   children: ReactNode
 }) {
@@ -511,7 +534,7 @@ function LabeledSelect({
       <LabelRow id={id} label={label} help={help} />
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger id={id} aria-label={label} className="h-7 w-full text-xs">
-          <SelectValue />
+          <SelectValue>{displayValue}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {children}
@@ -690,6 +713,9 @@ function ModelSelect({
 }) {
   const knownOption = CODEX_MODEL_OPTIONS.some((option) => option.value === value)
   const selectValue = value && knownOption ? value : value ? value : MODEL_INHERIT_VALUE
+  const displayValue = value
+    ? CODEX_MODEL_OPTIONS.find((option) => option.value === value)?.label ?? value
+    : MODEL_INHERIT_LABEL
 
   return (
     <LabeledSelect
@@ -697,17 +723,18 @@ function ModelSelect({
       label={label}
       help={help}
       value={selectValue}
+      displayValue={displayValue}
       onValueChange={(nextValue) => {
         onValueChange(nextValue === MODEL_INHERIT_VALUE ? undefined : nextValue)
       }}
     >
       {CODEX_MODEL_OPTIONS.map((option) => (
-        <SelectItem key={option.value} value={option.value} className="text-xs">
+        <SelectItem key={option.value} value={option.value} textValue={option.label} className="text-xs">
           {option.label}
         </SelectItem>
       ))}
       {value && !knownOption ? (
-        <SelectItem value={value} className="text-xs">
+        <SelectItem value={value} textValue={value} className="text-xs">
           当前自定义模型：{value}
         </SelectItem>
       ) : null}
@@ -717,12 +744,11 @@ function ModelSelect({
 
 function renderHelpSelectItem(option: SelectOptionHelp) {
   return (
-    <SelectItem key={option.value} value={option.value} className="pr-14 text-xs">
+    <SelectItem key={option.value} value={option.value} textValue={option.label} className="pr-8 text-xs">
       <HoverCard openDelay={100} closeDelay={100}>
         <HoverCardTrigger asChild>
-          <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="flex min-w-0 flex-1 items-center">
             <OptionLabel label={option.label} description={option.description} />
-            <CircleHelp className="h-3.5 w-3.5" />
           </span>
         </HoverCardTrigger>
         <HoverCardContent side="right" align="start" className="w-72">
@@ -739,6 +765,12 @@ function renderHelpSelectItem(option: SelectOptionHelp) {
       </HoverCard>
     </SelectItem>
   )
+}
+
+function codexFeatureStateLabel(value: CodexFeatureState): string {
+  if (value === "enabled") return "启用"
+  if (value === "disabled") return "禁用"
+  return "默认"
 }
 
 function OptionLabel({ label, description }: { readonly label: string; readonly description: string }) {

@@ -64,4 +64,15 @@ describe("workflow MCP tool definitions", () => {
     expect(configDescription).toContain("approvalPolicy")
     expect(configDescription).toContain("configOverrides")
   })
+
+  it("documents atomic edge creation fields on workflow_node_create", () => {
+    const createProperties = toolByName("workflow_node_create").inputSchema.properties
+    expect(createProperties).toHaveProperty("incomingEdges")
+    expect(createProperties).toHaveProperty("outgoingEdges")
+
+    const incomingEdges = objectProperty(createProperties, "incomingEdges")
+    const outgoingEdges = objectProperty(createProperties, "outgoingEdges")
+    expect(stringProperty(incomingEdges, "description")).toContain("same validated mutation")
+    expect(stringProperty(outgoingEdges, "description")).toContain("same validated mutation")
+  })
 })

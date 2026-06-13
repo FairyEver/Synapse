@@ -6,6 +6,7 @@ describe("codexNodeConfigSchema", () => {
     expect(defaultCodexNodeConfig).toEqual({
       variables: [],
       prompt: "",
+      workingDirectoryTemplate: undefined,
       approvalPolicy: "never",
       sandbox: "workspace-write",
       enableSearch: false,
@@ -28,6 +29,24 @@ describe("codexNodeConfigSchema", () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it("trims working directory templates and drops blank values", () => {
+    const parsed = codexNodeConfigSchema.parse({
+      ...defaultCodexNodeConfig,
+      prompt: "run",
+      workingDirectoryTemplate: "  /Users/liyang/worktrees/{{bugId}}  ",
+    })
+
+    expect(parsed.workingDirectoryTemplate).toBe("/Users/liyang/worktrees/{{bugId}}")
+
+    const blank = codexNodeConfigSchema.parse({
+      ...defaultCodexNodeConfig,
+      prompt: "run",
+      workingDirectoryTemplate: "  ",
+    })
+
+    expect(blank.workingDirectoryTemplate).toBeUndefined()
   })
 
   it("rejects duplicate config override keys", () => {

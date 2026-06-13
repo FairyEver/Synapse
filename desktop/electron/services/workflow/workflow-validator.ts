@@ -84,6 +84,7 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
 
   if (node.type === "prompt" || node.type === "switch" || node.type === "codex") {
     pushString(cfg.prompt)
+    if (node.type === "codex") pushString(cfg.workingDirectoryTemplate)
   } else if (node.type === "end") {
     pushString(cfg.template)
   } else if (node.type === "http_request") {

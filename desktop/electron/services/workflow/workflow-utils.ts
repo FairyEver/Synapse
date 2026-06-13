@@ -32,7 +32,7 @@ export function agentFailureMessage(error: string | undefined): string {
 
 export function agentProviderFailureFromResponse(response: string): string | undefined {
   const firstLine = response.split(/\r?\n/, 1)[0]?.trim() ?? ""
-  return /^API Error:\s*\d{3}\b/i.test(firstLine) ? firstLine : undefined
+  return /^(?:Failed to authenticate\.\s*)?API Error:\s*\d{3}\b/i.test(firstLine) ? firstLine : undefined
 }
 
 /**

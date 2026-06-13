@@ -106,6 +106,26 @@ describe("validateWorkflow", () => {
       }),
     ]))
   })
+
+  it("checks template placeholders inside codex working directory templates", () => {
+    const result = validateWorkflow(definitionWithCodexNode({
+      defaultProjectId: "project-1",
+      nodes: [
+        codexNode({
+          prompt: "Run codex",
+          workingDirectoryTemplate: "/Users/liyang/worktrees/{{missingDir}}",
+        }),
+        endNode(),
+      ],
+    }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContainEqual(expect.objectContaining({
+      nodeId: "codex-1",
+      type: "invalid_config",
+      message: expect.stringContaining("missingDir"),
+    }))
+  })
 })
 
 function definitionWithDisconnectedNode(): WorkflowDefinition {

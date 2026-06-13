@@ -53,6 +53,28 @@ function requireArray(params: Record<string, unknown>, key: string): unknown[] {
   return v
 }
 
+function optionalEdgeSpecs(
+  params: Record<string, unknown>,
+  key: "incomingEdges" | "outgoingEdges",
+  endpointKey: "from" | "to",
+): Array<{ endpoint: string; branch?: string }> {
+  const raw = params[key]
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) throw new Error(`Invalid '${key}': expected array`)
+  return raw.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`Invalid '${key}[${index}]': expected object`)
+    }
+    const edge = item as Record<string, unknown>
+    const endpoint = edge[endpointKey]
+    if (typeof endpoint !== "string" || !endpoint) {
+      throw new Error(`Missing or invalid '${key}[${index}].${endpointKey}': expected non-empty string`)
+    }
+    const branch = typeof edge.branch === "string" && edge.branch ? edge.branch : undefined
+    return { endpoint, branch }
+  })
+}
+
 function optionalNonEmptyString(params: Record<string, unknown>, key: string): string | undefined {
   const value = params[key]
   return typeof value === "string" && value.trim() ? value.trim() : undefined
@@ -322,6 +344,10 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const workflowId = requireString(params, "workflowId")
     const node = requireObject(params, "node")
     let nodeId: string
+    const incomingEdges = optionalEdgeSpecs(params, "incomingEdges", "from")
+    const outgoingEdges = optionalEdgeSpecs(params, "outgoingEdges", "to")
+    const incomingEdgeIds: string[] = []
+    const outgoingEdgeIds: string[] = []
     const result = await atomicMutate(deps, workflowId, (def) => {
       const position = "position" in node ? requirePosition(node.position, "workflow.node.create") : autoPosition(def.nodes)
       const id = randomUUID()
@@ -333,8 +359,39 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
         position,
         config: (node.config as Record<string, unknown>) ?? {},
       })
+      for (const edgeSpec of incomingEdges) {
+        const edgeId = randomUUID()
+        incomingEdgeIds.push(edgeId)
+        const edge: { id: string; from: string; to: string; branch?: string } = {
+          id: edgeId,
+          from: edgeSpec.endpoint,
+          to: id,
+        }
+        if (edgeSpec.branch) edge.branch = edgeSpec.branch
+        def.edges.push(edge)
+      }
+      for (const edgeSpec of outgoingEdges) {
+        const edgeId = randomUUID()
+        outgoingEdgeIds.push(edgeId)
+        const edge: { id: string; from: string; to: string; branch?: string } = {
+          id: edgeId,
+          from: id,
+          to: edgeSpec.endpoint,
+        }
+        if (edgeSpec.branch) edge.branch = edgeSpec.branch
+        def.edges.push(edge)
+      }
     })
-    return { ...result, data: { nodeId: nodeId!, ...result.data as Record<string, unknown> } }
+    return {
+      ...result,
+      data: {
+        nodeId: nodeId!,
+        ...result.data as Record<string, unknown>,
+        ...(incomingEdgeIds.length > 0 || outgoingEdgeIds.length > 0
+          ? { edgeIds: { incoming: incomingEdgeIds, outgoing: outgoingEdgeIds } }
+          : {}),
+      },
+    }
   },
 
   "workflow.node.update": async (params, deps) => {

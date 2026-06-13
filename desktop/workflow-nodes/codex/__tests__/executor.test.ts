@@ -1,4 +1,4 @@
-import { access, mkdtemp, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -44,6 +44,8 @@ const context = {
   abortSignal: new AbortController().signal,
 }
 
+let projectWorkspacePath = os.tmpdir()
+
 function makeInput(
   config: Partial<CodexNodeConfig> = {},
   runtimeDeps?: NodeRuntimeDeps,
@@ -78,7 +80,7 @@ function makeRuntimeDeps(
       }),
     },
     sendHttpRequest: vi.fn(),
-    resolveProjectWorkspacePath: vi.fn().mockResolvedValue("/Users/liyang/project"),
+    resolveProjectWorkspacePath: vi.fn().mockResolvedValue(projectWorkspacePath),
     ...overrides,
   }
 }
@@ -228,6 +230,7 @@ describe("codexNodeExecutor", () => {
     logger.info.mockClear()
     logger.warn.mockClear()
     electronState.userDataPath = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-user-data-"))
+    projectWorkspacePath = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-project-"))
   })
 
   it("fails when process runner is missing", async () => {
@@ -300,7 +303,7 @@ describe("codexNodeExecutor", () => {
     expect(runtimeDeps.resolveProjectWorkspacePath).toHaveBeenCalledWith("repo-1")
     expect(runtimeDeps.processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
       command: "codex",
-      cwd: "/Users/liyang/project",
+      cwd: projectWorkspacePath,
       stdin: "Summarize release notes",
       metadata: expect.objectContaining({
         source: "workflow",
@@ -310,6 +313,40 @@ describe("codexNodeExecutor", () => {
         workflowNodeId: "node-1",
       }),
     }))
+  })
+
+  it("uses an interpolated working directory template as the Codex cwd", async () => {
+    const worktreeDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-worktree-"))
+    const runtimeDeps = makeRuntimeDeps()
+    const input = makeInput({
+      workingDirectoryTemplate: `${worktreeDir}/{{topic}}`,
+    }, runtimeDeps)
+    await mkdir(path.join(worktreeDir, "release notes"))
+
+    const result = await codexNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(runtimeDeps.resolveProjectWorkspacePath).toHaveBeenCalledWith("repo-1")
+    expect(runtimeDeps.processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: path.join(worktreeDir, "release notes"),
+      args: expect.arrayContaining(["--cd", path.join(worktreeDir, "release notes")]),
+    }))
+  })
+
+  it("fails before running Codex when the working directory template points to a missing directory", async () => {
+    const runtimeDeps = makeRuntimeDeps()
+    const input = makeInput({
+      workingDirectoryTemplate: path.join(os.tmpdir(), "missing-synapse-codex-worktree-{{topic}}"),
+    }, runtimeDeps)
+
+    const result = await codexNodeExecutor.execute(input)
+
+    expect(result).toMatchObject({
+      status: "failed",
+      output: "",
+      error: "Codex 工作目录不存在",
+    })
+    expect(runtimeDeps.processRunner.run).not.toHaveBeenCalled()
   })
 
   it("prefers last-message.txt over stdout when the file exists", async () => {

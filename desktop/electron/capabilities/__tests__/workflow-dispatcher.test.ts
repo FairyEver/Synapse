@@ -207,6 +207,7 @@ describe("createWorkflowDispatcher", () => {
     const baseDefinition: WorkflowDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
+      defaultProjectId: "project-1",
       nodes: [
         scriptNode("n1", "Prompt", 100, 200),
         endNode(),
@@ -704,10 +705,59 @@ describe("createWorkflowDispatcher", () => {
     expect(storedDefinition.nodes[0]?.id).toBe("end")
   })
 
+  it("workflow.node.create can add a node with connecting edges in one validated save", async () => {
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => ({
+          id: "wf-1", name: "Test", description: "", version: "v1",
+          createdAt: 1, updatedAt: 2, params: [],
+          defaultProjectId: "project-1",
+          nodes: [
+            scriptNode("n1", "Prepare", 200, 200),
+            endNode("end"),
+          ],
+          edges: [{ id: "edge-n1-end", from: "n1", to: "end" }],
+        })),
+        save: vi.fn(async () => ({ versionHash: "v_connected" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch(
+      "workflow.node.create",
+      {
+        workflowId: "wf-1",
+        node: { name: "Generate", type: "script", config: { shell: "posix", script: "printf generated", variables: [] } },
+        incomingEdges: [{ from: "n1" }],
+        outgoingEdges: [{ to: "end" }],
+      },
+      { source: "api" },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual(expect.objectContaining({
+      nodeId: expect.any(String),
+      versionHash: "v_connected",
+      edgeIds: {
+        incoming: [expect.any(String)],
+        outgoing: [expect.any(String)],
+      },
+    }))
+    const savedDef = (deps.workflowService.save as ReturnType<typeof vi.fn>).mock.calls[0][0] as WorkflowDefinition
+    const newNodeId = (result.data as { nodeId: string }).nodeId
+    expect(savedDef.nodes.some((node) => node.id === newNodeId && node.name === "Generate")).toBe(true)
+    expect(savedDef.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: "n1", to: newNodeId }),
+      expect.objectContaining({ from: newNodeId, to: "end" }),
+    ]))
+  })
+
   it("serializes concurrent workflow mutations so later writes include earlier changes", async () => {
     let storedDefinition = {
       id: "wf-1", name: "Test", description: "", version: "v1",
       createdAt: 1, updatedAt: 2, params: [],
+      defaultProjectId: "project-1",
       nodes: [scriptNode("a", "Script A", 200, 200), endNode()],
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
@@ -761,6 +811,7 @@ describe("createWorkflowDispatcher", () => {
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
+          defaultProjectId: "project-1",
           nodes: [
             scriptNode("n1", "Prompt", 200, 200),
             endNode("n2"),
@@ -891,6 +942,7 @@ describe("createWorkflowDispatcher", () => {
     expect(data.configFields).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "approvalPolicy" }),
       expect.objectContaining({ name: "sandbox" }),
+      expect.objectContaining({ name: "workingDirectoryTemplate" }),
       expect.objectContaining({ name: "prompt" }),
     ]))
   })
@@ -902,6 +954,7 @@ describe("createWorkflowDispatcher", () => {
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
+          defaultProjectId: "project-1",
           nodes: [
             scriptNode("a", "Prompt A", 0, 0),
             scriptNode("b", "Prompt B", 0, 0),
@@ -937,6 +990,7 @@ describe("createWorkflowDispatcher", () => {
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
+          defaultProjectId: "project-1",
           nodes: [
             scriptNode("a", "A", 0, 0),
             endNode("b", "B", 0, 0),

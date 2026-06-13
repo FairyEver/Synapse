@@ -32,6 +32,7 @@ These are the key config fields for each node type. Always call `workflow_node_t
 - `prompt` (string) — prompt template text with `{{variable}}` placeholders
 - `variables` (array) — variable bindings
 - `providerId?` / `modelTier?` — override workflow-level provider defaults
+- `timeoutMins?` — override workflow-level timeout; defaults to 60 minutes when neither node nor workflow sets it
 
 ### switch
 
@@ -40,6 +41,7 @@ These are the key config fields for each node type. Always call `workflow_node_t
 - `defaultBranch?` (string) — fallback branch id
 - `variables` (array) — variable bindings
 - `providerId?` / `modelTier?` — override workflow-level provider defaults
+- `timeoutMins?` — override workflow-level timeout; defaults to 60 minutes when neither node nor workflow sets it
 
 ### http_request
 
@@ -67,6 +69,8 @@ No provider needed. Config fields:
 - `timeoutMins?` (number) — execution timeout in minutes
 - `variables` (array) — variable bindings
 
+Output is exact stdout. Use `printf` for single-value outputs that downstream `node_output` bindings will treat as paths, IDs, or JSON scalars.
+
 ### workflow_call
 
 No provider needed on the call node. It invokes another saved workflow and returns that child workflow's End output.
@@ -84,6 +88,7 @@ Runs local `codex exec` in an execution project. No Synapse provider needed; do 
 - `prompt` (string) — Codex instruction template with `{{variable}}` placeholders
 - `variables` (array) — variable bindings from workflow params, upstream node outputs, or static values
 - `projectId?` (string) — execution project override; inherits workflow `defaultProjectId` when omitted
+- `workingDirectoryTemplate?` (string) — optional cwd template with `{{variable}}` placeholders. Omit to use the project workspace.
 - `timeoutMins?` (number) — node timeout in minutes
 - `approvalPolicy` (enum: never/on-request/untrusted, default "never") — Codex approval policy
 - `sandbox` (enum: read-only/workspace-write/danger-full-access, default "workspace-write") — Codex sandbox
@@ -94,7 +99,7 @@ Runs local `codex exec` in an execution project. No Synapse provider needed; do 
 - `strictConfig` (boolean, default false)
 - `bypassApprovalsAndSandbox` (boolean, default false) — when true, execution uses Codex's bypass flag instead of approval/sandbox CLI flags
 - `bypassHookTrust` (boolean, default false)
-- `additionalWritableDirs` (string[]) — repeated `--add-dir` values
+- `additionalWritableDirs` (string[]) — repeated `--add-dir` values outside the actual working directory
 - `images` (string[]) — repeated `--image` values
 - `configOverrides` (array of `{ key, value }`) — repeated `--config key=value` values
 - `captureDebugArtifacts` (boolean, default true)
@@ -120,7 +125,7 @@ Minimal valid config:
 }
 ```
 
-The node passes the prompt through stdin, runs with `--cd` set to the resolved project workspace, and returns only Codex's final reply text as `output`. Debug metadata is available in `outputs.codexDebug`, but downstream `node_output` bindings receive the final reply text only.
+The node passes the prompt through stdin. If `workingDirectoryTemplate` is blank, it runs with `--cd` set to the resolved project workspace. If set, Synapse interpolates the template, verifies the directory exists, and uses that directory for `cwd`/`--cd`. With `workspace-write`, Codex's current workspace is the actual working directory plus any `additionalWritableDirs`. The node returns only Codex's final reply text as `output`. Debug metadata is available in `outputs.codexDebug`, but downstream `node_output` bindings receive the final reply text only.
 
 ### end
 
@@ -203,9 +208,13 @@ Delete a workflow. Cancels active runs and removes snapshots.
 
 Add a node to a workflow.
 
-**Params:** `workflowId` (string, required), `node: { name, type, position?, config? }`
-**Returns:** `{ nodeId, versionHash, validation? }`
-**Notes:** Position auto-calculated if omitted. Save `nodeId` for edge creation.
+**Params:** `workflowId` (string, required), `node: { name, type, position?, config? }`, `incomingEdges?`, `outgoingEdges?`
+**Returns:** `{ nodeId, versionHash, edgeIds?, validation? }`
+**Notes:** Position auto-calculated if omitted. Strict validation runs before saving, so disconnected placeholder nodes are rejected. Use `incomingEdges` / `outgoingEdges` to create a node and its connecting edges in the same validated mutation, or use `workflow_definition_update` for a complete DAG rewrite. Save `nodeId` and returned `edgeIds` for later updates.
+
+`incomingEdges` items are `{ from, branch? }`, where `from` is an existing upstream node ID. Include `branch` when the upstream node is a switch.
+
+`outgoingEdges` items are `{ to, branch? }`, where `to` is an existing downstream node ID. Include `branch` only when the new node is a switch.
 
 ### workflow_node_update
 

@@ -27,6 +27,7 @@ export const codexNodeConfigSchema = z
   .object({
     variables: z.array(variableBindingSchema),
     prompt: z.string().trim().min(1, "指令不能为空"),
+    workingDirectoryTemplate: optionalTrimmedStringSchema,
     projectId: z.string().optional(),
     timeoutMins: z.number().int().min(1).optional(),
     approvalPolicy: codexApprovalPolicySchema,
@@ -70,6 +71,7 @@ export type CodexFeatureState = z.infer<typeof codexFeatureStateSchema>
 export const defaultCodexNodeConfig: CodexNodeConfig = {
   variables: [],
   prompt: "",
+  workingDirectoryTemplate: undefined,
   approvalPolicy: "never",
   sandbox: "workspace-write",
   enableSearch: false,

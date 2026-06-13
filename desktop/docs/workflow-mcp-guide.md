@@ -28,6 +28,8 @@
 变量在节点执行前解析完毕。变量名支持字母、数字、下划线和中文。
 变量可用于 prompt/switch/codex 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入。
 
+script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID、JSON 标量等单值时，脚本里优先用 `printf`，不要让末尾换行混进变量。
+
 ## 3. 图约束
 
 - 必须有且仅有一个 end 节点
@@ -48,7 +50,7 @@
 | `providerId` | string? | 模型提供商 ID；为空时继承工作流 `defaultProviderId` |
 | `modelTier` | `"default"` \| `"haiku"` \| `"sonnet"` \| `"opus"`? | 模型等级；为空时继承工作流 `defaultModelTier` |
 | `projectId` | string? | 执行项目；为空时继承工作流 `defaultProjectId` |
-| `timeoutMins` | number? | 节点超时分钟数 |
+| `timeoutMins` | number? | 节点超时分钟数；为空时继承工作流默认值，仍未配置时为 60 分钟 |
 | `prompt` | string | 提示词模板，支持 `{{变量名}}` |
 | `variables` | VariableBinding[] | 变量绑定列表 |
 
@@ -63,7 +65,7 @@
 | `providerId` | string? | 模型提供商 ID；为空时继承工作流 `defaultProviderId` |
 | `modelTier` | `"default"` \| `"haiku"` \| `"sonnet"` \| `"opus"`? | 模型等级；为空时继承工作流 `defaultModelTier` |
 | `projectId` | string? | 执行项目；为空时继承工作流 `defaultProjectId` |
-| `timeoutMins` | number? | 节点超时分钟数 |
+| `timeoutMins` | number? | 节点超时分钟数；为空时继承工作流默认值，仍未配置时为 60 分钟 |
 | `prompt` | string | 评估提示词，AI 根据此判断走哪个分支 |
 | `branches` | `{ id: string, label: string }[]` | 分支列表（id 必须匹配 `/^[a-z][a-z0-9_]*/`） |
 | `defaultBranch` | string? | 可选默认分支 ID |
@@ -134,6 +136,7 @@
 | `prompt` | string | Codex 指令模板，支持 `{{变量名}}` |
 | `variables` | VariableBinding[] | 从工作流参数、上游节点输出或静态值绑定变量 |
 | `projectId` | string? | 执行项目；为空时继承工作流 `defaultProjectId` |
+| `workingDirectoryTemplate` | string? | 可选工作目录模板，支持 `{{变量名}}`；为空时使用项目目录 |
 | `timeoutMins` | number? | 节点超时分钟数 |
 | `approvalPolicy` | `"never"` \| `"on-request"` \| `"untrusted"` | Codex 审批策略 |
 | `sandbox` | `"read-only"` \| `"workspace-write"` \| `"danger-full-access"` | Codex 沙箱模式 |
@@ -145,7 +148,7 @@
 | `strictConfig` | boolean | 是否启用 Codex strict config |
 | `bypassApprovalsAndSandbox` | boolean | 是否使用 Codex 审批和沙箱绕过模式 |
 | `bypassHookTrust` | boolean | 是否绕过 hook trust |
-| `additionalWritableDirs` | string[] | 额外可写目录，映射为重复 `--add-dir` |
+| `additionalWritableDirs` | string[] | 实际工作目录外的额外可写目录，映射为重复 `--add-dir` |
 | `images` | string[] | 图片路径，映射为重复 `--image` |
 | `configOverrides` | `{ key: string, value: string }[]` | Codex 配置覆盖项，映射为重复 `--config key=value` |
 | `captureDebugArtifacts` | boolean | 是否保存脱敏调试产物 |
@@ -171,7 +174,7 @@
 }
 ```
 
-当 `bypassApprovalsAndSandbox` 为 true 时，配置仍需保留 `approvalPolicy` 和 `sandbox` 以满足 schema，但实际执行会使用 Codex 绕过参数，不再额外传审批和沙箱 CLI 参数。运行历史中的调试信息位于 `outputs.codexDebug`；下游 `node_output` 只接收最终回复文本。
+当 `workingDirectoryTemplate` 为空时，节点在解析后的项目目录运行；非空时先插值并校验目录存在，再把该目录作为 Codex 的 `cwd` / `--cd`。`workspace-write` 的当前工作区就是这个实际工作目录；`additionalWritableDirs` 只用于补充额外可写目录。当 `bypassApprovalsAndSandbox` 为 true 时，配置仍需保留 `approvalPolicy` 和 `sandbox` 以满足 schema，但实际执行会使用 Codex 绕过参数，不再额外传审批和沙箱 CLI 参数。运行历史中的调试信息位于 `outputs.codexDebug`；下游 `node_output` 只接收最终回复文本。
 
 ### end — 终止节点
 
@@ -399,8 +402,9 @@
 2. workflow_node_type_describe({ nodeType })           → 获取本次要用的每种节点配置 JSON Schema
 3. workflow_definition_create({ name: "..." })         → 创建空工作流（自带 end 节点）
 4. workflow_param_update({ workflowId, params })       → 定义工作流参数
-5. workflow_node_create({ workflowId, node })           → 添加节点（position 可省略，自动布局）
-6. workflow_edge_create({ workflowId, from, to })       → 连接节点
+5. workflow_node_create({ workflowId, node, incomingEdges?, outgoingEdges? })
+                                                         → 添加已连接节点（position 可省略，自动布局）
+6. workflow_edge_create({ workflowId, from, to })       → 在单次保存后仍有效时补充连接
 7. workflow_node_update({ workflowId, nodeId, patch })  → 配置节点（设置 prompt、variables、paramTemplates 等）
 8. workflow_layout_update({ workflowId })               → 自动排列节点位置
 9. workflow_definition_inspect({ definition })          → 校验完整性
@@ -410,7 +414,8 @@
 
 关键点：
 - 步骤 3 创建的工作流已包含一个 end 节点，无需手动创建
-- 步骤 5 中 position 可省略，dispatcher 自动计算布局
+- 严格校验会在每次 MCP 写入后执行，不要先保存未连接的占位节点再补边；复杂图优先本地组装完整定义后用 `workflow_definition_update`
+- 步骤 5 中 position 可省略，dispatcher 自动计算布局；`incomingEdges` 为 `{ from, branch? }[]`，`outgoingEdges` 为 `{ to, branch? }[]`
 - 创建 `workflow_call` 前，先读取子工作流定义，按子工作流 `params` 填写 `paramTemplates`
 - 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI
@@ -422,6 +427,7 @@
 | 错误 | 说明 | 修复 |
 |------|------|------|
 | 节点未连接到 end | 所有路径必须最终到达 end 节点 | 补充缺失的边 |
+| 保存占位节点失败 | `workflow_node_create` 保存未连接节点会被严格校验拒绝 | 用 `incomingEdges` / `outgoingEdges` 原子创建已连接节点，或用 `workflow_definition_update` 一次写入完整 DAG |
 | switch 出边缺少 branch | switch 节点的每条出边必须设置 branch 字段 | `workflow_edge_create` 时传入 `branch` |
 | 引用不存在的上游输出 | `node_output` 引用的节点不在当前节点的上游 | 检查 DAG 拓扑，确保被引用节点在上游 |
 | 引用不存在的参数 | `param` 绑定的名称不在 `params` 列表中 | 先用 `workflow_param_update` 添加参数 |
@@ -433,3 +439,4 @@
 | 子工作流参数缺失 | `paramTemplates` 未提供子工作流必填参数，且子参数无默认值 | 读取子工作流 `params` 后补齐模板 |
 | 子工作流模板变量未绑定 | `paramTemplates` 中使用了未出现在 `variables` 的 `{{变量名}}` | 在调用节点 `variables` 中添加绑定 |
 | Codex 项目缺失 | codex 节点没有 `projectId`，工作流也没有 `defaultProjectId` | 设置工作流 `defaultProjectId` 或节点 `projectId` |
+| Codex 工作目录不存在 | `workingDirectoryTemplate` 插值后的目录不可用 | 让上游节点先创建目录，或改为存在的 worktree/checkout 路径 |
