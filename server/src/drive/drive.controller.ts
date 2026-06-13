@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Logger, NotFoundException, Optional, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
+import { Buffer } from "node:buffer"
 import { Readable, Writable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
@@ -19,7 +20,9 @@ import {
 import { DriveService } from "./drive.service"
 import { type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
-const driveAccessCookieName = "synapse_drive_access"
+const driveAccessCookieNamePrefix = "synapse_drive_access"
+const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
+type DriveAccessCookieKind = "share" | "page" | "site"
 
 const prepareUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
@@ -334,10 +337,10 @@ export class DrivePublicController {
     const access = await this.drive.resolvePublicShareAccess({
       shareId: input.shareId,
       password,
-      cookie: readDriveAccessCookie(input.request),
+      cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
     })
     if (access.status !== "ok" || !access.cookie) return driveBrowserPasswordRequired()
-    setDriveAccessCookie(input.response, access.cookie)
+    setDriveAccessCookie(input.response, access.cookie, { kind: "share", publicId: input.shareId })
     return this.drive.getShareBrowserSnapshot({
       shareId: input.shareId,
       itemId: input.itemId,
@@ -495,13 +498,13 @@ export class DrivePublicController {
     const access = await this.drive.resolvePublicShareAccess({
       shareId,
       password: readBodyPassword(request),
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
     if (access.status !== "ok" || !access.cookie) {
       response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
       return
     }
-    setDriveAccessCookie(response, access.cookie)
+    setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
     response.redirect(302, request.path)
   }
 
@@ -515,16 +518,16 @@ export class DrivePublicController {
     const access = await this.drive.resolvePublicShareAccess({
       shareId: input.shareId,
       password,
-      cookie: readDriveAccessCookie(input.request),
+      cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
     })
     if (access.status === "password_required") return driveBrowserPasswordRequired()
     if (access.status === "static_denied") throw new NotFoundException("文件未找到")
-    if (access.cookie) setDriveAccessCookie(input.response, access.cookie)
+    if (access.cookie) setDriveAccessCookie(input.response, access.cookie, { kind: "share", publicId: input.shareId })
     return this.drive.getShareBrowserSnapshot({
       shareId: input.shareId,
       itemId: input.itemId,
       password,
-      cookie: access.cookie ?? readDriveAccessCookie(input.request),
+      cookie: access.cookie ?? readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
     })
   }
 
@@ -535,11 +538,11 @@ export class DrivePublicController {
       const access = await this.drive.resolvePublicShareAccess({
         shareId,
         password,
-        cookie: readDriveAccessCookie(request),
+        cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       })
       if (access.status !== "ok") throw new NotFoundException("文件未找到")
       if (access.cookie) {
-        setDriveAccessCookie(response, access.cookie)
+        setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
       }
       response.redirect(302, cleanPasswordUrl(request))
       return
@@ -547,7 +550,7 @@ export class DrivePublicController {
     const download = await this.drive.createDownloadUrlForShareBrowserItem({
       shareId,
       password,
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
     response.redirect(302, download.url)
   }
@@ -559,11 +562,11 @@ export class DrivePublicController {
       const access = await this.drive.resolvePublicShareAccess({
         shareId,
         password,
-        cookie: readDriveAccessCookie(request),
+        cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       })
       if (access.status !== "ok") throw new NotFoundException("文件未找到")
       if (access.cookie) {
-        setDriveAccessCookie(response, access.cookie)
+        setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
       }
       response.redirect(302, cleanPasswordUrl(request))
       return
@@ -572,7 +575,7 @@ export class DrivePublicController {
       shareId,
       itemId,
       password,
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
     response.redirect(302, download.url)
   }
@@ -583,11 +586,11 @@ export class DrivePublicController {
     const access = await this.drive.resolvePublicShareAccess({
       shareId,
       password,
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
     if (access.status !== "ok") throw new NotFoundException("文件未找到")
     if (access.cookie) {
-      setDriveAccessCookie(response, access.cookie)
+      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
     }
     if (password) {
       response.redirect(302, cleanPasswordUrl(request))
@@ -596,7 +599,7 @@ export class DrivePublicController {
     const entries = await this.drive.createFolderZipEntriesForShareBrowserItem({
       shareId,
       password,
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
     await sendDriveZip(response, `${access.value.item.name}.zip`, entries, this.storage)
   }
@@ -612,11 +615,11 @@ export class DrivePublicController {
     const access = await this.drive.resolvePublicShareAccess({
       shareId,
       password,
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
     if (access.status !== "ok") throw new NotFoundException("文件未找到")
     if (access.cookie) {
-      setDriveAccessCookie(response, access.cookie)
+      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
     }
     if (password) {
       response.redirect(302, cleanPasswordUrl(request))
@@ -626,7 +629,7 @@ export class DrivePublicController {
       shareId,
       itemId,
       password,
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
     await sendDriveZip(response, `${itemId}.zip`, entries, this.storage)
   }
@@ -645,7 +648,7 @@ export class DrivePublicController {
         type: input.type,
         relativePath: input.relativePath,
         password,
-        cookie: readDriveAccessCookie(input.request),
+        cookie: readDriveAccessCookie(input.request, { kind: input.type, publicId: input.publishId }),
       })
       if (access.status === "password_required") {
         response.type("html").send(renderDrivePasswordPage({ actionPath: input.request.path }))
@@ -656,7 +659,7 @@ export class DrivePublicController {
         return
       }
       if (access.cookie) {
-        setDriveAccessCookie(response, access.cookie)
+        setDriveAccessCookie(response, access.cookie, { kind: input.type, publicId: input.publishId })
       }
       if (password) {
         response.redirect(302, input.cleanRedirectUrl ?? cleanPasswordUrl(input.request))
@@ -681,13 +684,13 @@ export class DrivePublicController {
     const access = await this.drive.resolvePublishedAssetAccess({
       ...input,
       password: readBodyPassword(request),
-      cookie: readDriveAccessCookie(request),
+      cookie: readDriveAccessCookie(request, { kind: input.type, publicId: input.publishId }),
     })
     if (access.status !== "ok" || !access.cookie) {
       response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
       return
     }
-    setDriveAccessCookie(response, access.cookie)
+    setDriveAccessCookie(response, access.cookie, { kind: input.type, publicId: input.publishId })
     response.redirect(302, request.path)
   }
 }
@@ -774,22 +777,38 @@ function readPasswordFromBody(value: unknown): string | undefined {
   return typeof password === "string" && password.length > 0 ? password : undefined
 }
 
-function readDriveAccessCookie(request: Request): string | undefined {
+function driveAccessCookieName(scope: { readonly kind: DriveAccessCookieKind; readonly publicId: string }): string {
+  const encodedPublicId = Buffer.from(scope.publicId, "utf8").toString("base64url")
+  return `${driveAccessCookieNamePrefix}_${scope.kind}_${encodedPublicId}`
+}
+
+function readDriveAccessCookie(
+  request: Request,
+  scope: { readonly kind: DriveAccessCookieKind; readonly publicId: string },
+): string | undefined {
+  const cookieName = driveAccessCookieName(scope)
   const cookies = (request as Request & { readonly cookies?: Record<string, unknown> }).cookies
-  const parsed = cookies?.[driveAccessCookieName]
-  if (typeof parsed === "string" && parsed.length > 0) return parsed
+  for (const name of [cookieName, legacyDriveAccessCookieName]) {
+    const parsed = cookies?.[name]
+    if (typeof parsed === "string" && parsed.length > 0) return parsed
+  }
 
   const header = request.headers.cookie
   if (!header) return undefined
+  const acceptedNames = new Set([cookieName, legacyDriveAccessCookieName])
   for (const part of header.split(";")) {
     const [rawName, ...rawValue] = part.trim().split("=")
-    if (rawName === driveAccessCookieName) return decodeCookieValue(rawValue.join("="))
+    if (acceptedNames.has(rawName)) return decodeCookieValue(rawValue.join("="))
   }
   return undefined
 }
 
-function setDriveAccessCookie(response: Response, value: string): void {
-  response.cookie(driveAccessCookieName, value, {
+function setDriveAccessCookie(
+  response: Response,
+  value: string,
+  scope: { readonly kind: DriveAccessCookieKind; readonly publicId: string },
+): void {
+  response.cookie(driveAccessCookieName(scope), value, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

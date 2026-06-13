@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer"
 import { Readable } from "node:stream"
 import { BadRequestException, type INestApplication, NotFoundException, UnauthorizedException } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
@@ -10,6 +11,7 @@ import { DriveService } from "./drive.service"
 type SupertestResponse = { readonly body: unknown; readonly text: string; readonly headers: Record<string, string> }
 type SupertestRequest = {
   readonly send: (body: unknown) => SupertestRequest
+  readonly set: (field: string, value: string | readonly string[]) => SupertestRequest
   readonly expect: (status: number) => Promise<SupertestResponse>
 }
 const request = require("supertest") as (server: unknown) => {
@@ -634,6 +636,32 @@ describe("DriveController", () => {
     expect(site.text).toContain("密码")
   })
 
+  it("reads published access cookies from resource scoped slots", async () => {
+    drive.resolvePublishedAssetAccess.mockResolvedValue({ status: "password_required" })
+    const cookieHeader = [
+      `${driveAccessCookieName("page", "pub_page")}=page-cookie`,
+      `${driveAccessCookieName("site", "pub_site")}=site-cookie`,
+    ].join("; ")
+
+    await request(app!.getHttpServer()).get("/pages/pub_page").set("Cookie", cookieHeader).expect(200)
+    await request(app!.getHttpServer()).get("/sites/pub_site/").set("Cookie", cookieHeader).expect(200)
+
+    expect(drive.resolvePublishedAssetAccess).toHaveBeenNthCalledWith(1, {
+      publishId: "pub_page",
+      type: "page",
+      relativePath: "index.html",
+      password: undefined,
+      cookie: "page-cookie",
+    })
+    expect(drive.resolvePublishedAssetAccess).toHaveBeenNthCalledWith(2, {
+      publishId: "pub_site",
+      type: "site",
+      relativePath: "index.html",
+      password: undefined,
+      cookie: "site-cookie",
+    })
+  })
+
   it("unlocks published password query and redirects to clean html urls", async () => {
     drive.resolvePublishedAssetAccess.mockResolvedValue({
       status: "ok",
@@ -648,13 +676,13 @@ describe("DriveController", () => {
     const page = await request(app!.getHttpServer()).get("/pages/pub_locked?password=AbC234xy").expect(302)
     const pageCookie = page.headers["set-cookie"]
     expect(page.headers.location).toBe("/pages/pub_locked")
-    expect(Array.isArray(pageCookie) ? pageCookie.join(";") : pageCookie).toContain("synapse_drive_access=cookie-value")
+    expect(Array.isArray(pageCookie) ? pageCookie.join(";") : pageCookie).toContain(`${driveAccessCookieName("page", "pub_locked")}=cookie-value`)
     expect(Array.isArray(pageCookie) ? pageCookie.join(";") : pageCookie).toContain("HttpOnly")
 
     const site = await request(app!.getHttpServer()).get("/sites/pub_locked/?password=AbC234xy").expect(302)
     const siteCookie = site.headers["set-cookie"]
     expect(site.headers.location).toBe("/sites/pub_locked/")
-    expect(Array.isArray(siteCookie) ? siteCookie.join(";") : siteCookie).toContain("synapse_drive_access=cookie-value")
+    expect(Array.isArray(siteCookie) ? siteCookie.join(";") : siteCookie).toContain(`${driveAccessCookieName("site", "pub_locked")}=cookie-value`)
     expect(Array.isArray(siteCookie) ? siteCookie.join(";") : siteCookie).toContain("HttpOnly")
   })
 
@@ -673,7 +701,7 @@ describe("DriveController", () => {
     const cookie = response.headers["set-cookie"]
 
     expect(response.headers.location).toBe("/sites/pub_locked/")
-    expect(Array.isArray(cookie) ? cookie.join(";") : cookie).toContain("synapse_drive_access=cookie-value")
+    expect(Array.isArray(cookie) ? cookie.join(";") : cookie).toContain(`${driveAccessCookieName("site", "pub_locked")}=cookie-value`)
     expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
       publishId: "pub_locked",
       type: "site",
@@ -715,6 +743,28 @@ describe("DriveController", () => {
     expect(drive.createDownloadUrlForShare).not.toHaveBeenCalled()
   })
 
+  it("reads share browser access cookies from resource scoped slots", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
+    const cookieHeader = [
+      `${driveAccessCookieName("share", "shr_file")}=file-cookie`,
+      `${driveAccessCookieName("share", "shr_folder")}=folder-cookie`,
+    ].join("; ")
+
+    await request(app!.getHttpServer()).get("/api/drive/browser/shares/shr_file").set("Cookie", cookieHeader).expect(200)
+    await request(app!.getHttpServer()).get("/api/drive/browser/shares/shr_folder").set("Cookie", cookieHeader).expect(200)
+
+    expect(drive.resolvePublicShareAccess).toHaveBeenNthCalledWith(1, {
+      shareId: "shr_file",
+      password: undefined,
+      cookie: "file-cookie",
+    })
+    expect(drive.resolvePublicShareAccess).toHaveBeenNthCalledWith(2, {
+      shareId: "shr_folder",
+      password: undefined,
+      cookie: "folder-cookie",
+    })
+  })
+
   it("unlocks share browser access and returns the browser snapshot", async () => {
     const snapshot = createBrowserSnapshot()
     drive.resolvePublicShareAccess.mockResolvedValue({
@@ -736,7 +786,7 @@ describe("DriveController", () => {
     const setCookie = response.headers["set-cookie"]
 
     expect(response.body).toEqual(snapshot)
-    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain("synapse_drive_access=access-cookie")
+    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain(`${driveAccessCookieName("share", "shr_file")}=access-cookie`)
     expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain("HttpOnly")
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
@@ -795,7 +845,7 @@ describe("DriveController", () => {
     const setCookie = response.headers["set-cookie"]
 
     expect(response.body).toEqual(snapshot)
-    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain("synapse_drive_access=query-cookie")
+    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain(`${driveAccessCookieName("share", "shr_file")}=query-cookie`)
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: "stale",
@@ -836,7 +886,7 @@ describe("DriveController", () => {
     const setCookie = response.headers["set-cookie"]
 
     expect(response.headers.location).toBe("/files/shr_file")
-    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain("synapse_drive_access=posted-cookie")
+    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain(`${driveAccessCookieName("share", "shr_file")}=posted-cookie`)
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
       password: "letmein",
@@ -996,6 +1046,10 @@ function createDriveItem(input: Partial<DriveItemDto> = {}): DriveItemDto {
     updatedAt: "2026-06-09T00:00:00.000Z",
     ...input,
   }
+}
+
+function driveAccessCookieName(kind: "share" | "page" | "site", publicId: string): string {
+  return `synapse_drive_access_${kind}_${Buffer.from(publicId, "utf8").toString("base64url")}`
 }
 
 function restoreEnv(name: string, value: string | undefined): void {
