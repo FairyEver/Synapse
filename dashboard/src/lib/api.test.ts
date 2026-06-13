@@ -256,6 +256,28 @@ describe('driveBrowserApi', () => {
       expect.objectContaining({ credentials: 'include' })
     )
   })
+
+  it('notifies auth expiration for protected owner browser requests only', async () => {
+    const authExpired = vi.fn()
+    const unsubscribe = subscribeAuthExpired(authExpired)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ message: '会话已过期。' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      })
+    )
+
+    try {
+      await expect(driveBrowserApi.getConsoleRoot()).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).toHaveBeenCalledOnce()
+
+      authExpired.mockClear()
+      await expect(driveBrowserApi.getShareRoot('shr/id')).rejects.toMatchObject({ status: 401 })
+      expect(authExpired).not.toHaveBeenCalled()
+    } finally {
+      unsubscribe()
+    }
+  })
 })
 
 describe('dashboardApi auth expiration compatibility', () => {

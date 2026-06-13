@@ -330,7 +330,8 @@ export function shouldNotifyAuthExpired(path: string, status: number) {
     !path.startsWith(adminApiBasePath) &&
     !path.startsWith(consoleApiBasePath) &&
     !path.startsWith(legacyDashboardApiBasePath) &&
-    !path.startsWith(contentStoreApiBasePath)
+    !path.startsWith(contentStoreApiBasePath) &&
+    !isProtectedDriveBrowserPath(path)
   ) {
     return false
   }
@@ -345,6 +346,10 @@ export function shouldNotifyAuthExpired(path: string, status: number) {
   return ![
     ...authExemptPaths,
   ].includes(path)
+}
+
+function isProtectedDriveBrowserPath(path: string) {
+  return path.startsWith(`${driveBrowserApiBasePath}/owner/`)
 }
 
 type PaginationOptions = {
