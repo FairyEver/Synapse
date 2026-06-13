@@ -84,6 +84,7 @@ vi.mock("../node-result-panel", () => ({
 
 import { WorkflowRunnerApp } from "../runner-app"
 import { sanitizeError } from "@/lib/error-sanitize"
+import { useWorkflowEvents } from "../../hooks/use-workflow-events"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -94,6 +95,7 @@ beforeEach(() => {
   rendererLogger.info.mockClear()
   rendererLogger.warn.mockClear()
   toast.mockClear()
+  vi.mocked(useWorkflowEvents).mockReset()
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn(async () => {}) },
@@ -386,6 +388,50 @@ describe("WorkflowRunnerApp", () => {
     expect(runStatus).toHaveBeenCalledWith("run-2")
   })
 
+  it("updates the runner URL after rerun starts a new run", async () => {
+    let workflowEventHandlers: Parameters<typeof useWorkflowEvents>[1] | undefined
+    vi.mocked(useWorkflowEvents).mockImplementation((_runId, handlers) => {
+      workflowEventHandlers = handlers
+    })
+    const rerun = vi.fn(async () => ({ runId: "run-2" }))
+    const runStatus = vi.fn(async () => ({
+      definition: workflowDefinition(),
+      params: {},
+    }))
+    installWorkflowBridge({ rerun, runStatus })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+    const onCompleted = workflowEventHandlers?.onCompleted
+    if (!onCompleted) {
+      throw new Error("workflow completed handler was not registered")
+    }
+    await act(async () => {
+      onCompleted({})
+      await Promise.resolve()
+    })
+    const rerunButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("重新运行"))
+    expect(rerunButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      rerunButton?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(rerun).toHaveBeenCalledWith("run-1", {})
+    expect(new URLSearchParams(window.location.search).get("runId")).toBe("run-2")
+    expect(new URLSearchParams(window.location.search).get("workflowId")).toBe("workflow-1")
+  })
+
   it("copies the whole workflow run report from the toolbar", async () => {
     installWorkflowBridge({
       runStatus: vi.fn(async () => ({
@@ -495,6 +541,7 @@ function installWorkflowBridge(overrides: {
   readonly get?: (workflowId: string) => Promise<unknown>
   readonly onEvent?: (listener: (event: WorkflowEvent) => void) => () => void
   readonly onRunnerSwitchRun?: (listener: (payload: { runId: string }) => void) => () => void
+  readonly rerun?: (runId: string, params: Record<string, unknown>) => Promise<unknown>
   readonly runStatus?: (runId: string) => Promise<unknown>
 }): void {
   ;(window as unknown as { synapse: { workflow: Record<string, unknown> } }).synapse = {
@@ -513,7 +560,7 @@ function installWorkflowBridge(overrides: {
       onEvent: overrides.onEvent ?? vi.fn(() => vi.fn()),
       onRunnerSwitchRun: overrides.onRunnerSwitchRun ?? vi.fn(() => vi.fn()),
       cancel: overrides.cancel ?? vi.fn(),
-      rerun: vi.fn(),
+      rerun: overrides.rerun ?? vi.fn(),
       openEditor: vi.fn(),
     },
   }

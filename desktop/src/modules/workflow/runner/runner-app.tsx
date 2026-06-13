@@ -268,6 +268,7 @@ export function WorkflowRunnerApp() {
       // hydration fetches the new run's metadata (same pattern as workflow:started).
       setDefinition(null)
       setRunParams({})
+      syncRunnerUrl(workflowId, result.runId)
       setRunId(result.runId)
       setRunState("running")
       setNodeResults({})
@@ -298,6 +299,7 @@ export function WorkflowRunnerApp() {
       }
       setDefinition(null)
       setRunParams({})
+      syncRunnerUrl(workflowId, result.runId)
       setRunId(result.runId)
       setRunState("running")
       setNodeResults({})
