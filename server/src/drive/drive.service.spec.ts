@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common"
+import { BadRequestException, Logger, NotFoundException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
@@ -1367,6 +1367,51 @@ describe("DriveService", () => {
     await expect(service.getItem("user-1", prepared.item.id)).rejects.toBeInstanceOf(NotFoundException)
     await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
+
+  it("keeps admin delete pending storage cleanup visible in the admin list", async () => {
+    const prisma = createPrismaMemory()
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => {
+        throw new Error("delete failed")
+      }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    try {
+      await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+      const list = await service.listAdminItems({
+        pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+        filters: {},
+      })
+      expect(list.data).toEqual([
+        expect.objectContaining({
+          id: prepared.item.id,
+          storageStatus: "delete_pending",
+          storageDeletePending: true,
+        }),
+      ])
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        itemId: prepared.item.id,
+        storageKey: `drive/${prepared.item.id}`,
+        errorName: "Error",
+        errorMessage: "delete failed",
+      }), "Drive storage object delete failed")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
 })
 
 async function createCompletedUpload(
@@ -1399,6 +1444,7 @@ function createPrismaMemory() {
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
     ...item,
+    user: users.get(item.userId) ? { email: users.get(item.userId)!.email } : null,
     shares: [...shares.values()].filter((share) => share.itemId === item.id && share.enabled).map((share) => ({ enabled: share.enabled })),
   })
   const withSourceItem = (publication: any) => ({

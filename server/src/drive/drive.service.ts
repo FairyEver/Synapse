@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import {
@@ -129,6 +129,7 @@ const DRIVE_MARKDOWN_RENDER_CSP = "default-src 'none'; style-src 'unsafe-inline'
 @Injectable()
 export class DriveService implements OnApplicationBootstrap {
   private readonly accessSecret = readUserAccessJwtSecret(process.env)
+  private readonly logger = new Logger(DriveService.name)
 
   constructor(
     private readonly prisma: PrismaService,
@@ -1546,7 +1547,13 @@ export class DriveService implements OnApplicationBootstrap {
   private async deleteStorageObject(itemId: string, storageKey: string): Promise<void> {
     try {
       await this.storage.deleteObject(storageKey)
-    } catch {
+    } catch (error) {
+      this.logger.warn({
+        itemId,
+        storageKey,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : undefined,
+      }, "Drive storage object delete failed")
       await this.prisma.driveItem.update({
         where: { id: itemId },
         data: {
@@ -1711,7 +1718,12 @@ function toDrivePasswordUpdateData(material: DrivePasswordMaterial, appliedAt = 
 }
 
 function buildAdminWhere(filters: DriveAdminFilters): Prisma.DriveItemWhereInput {
-  const where: Prisma.DriveItemWhereInput = { deletedAt: null }
+  const where: Prisma.DriveItemWhereInput = {
+    OR: [
+      { deletedAt: null },
+      { storageDeletePending: true, storageStatus: DRIVE_STORAGE_STATUS.deletePending },
+    ],
+  }
   if (filters.userId) where.userId = filters.userId
   if (filters.type) where.type = filters.type
   if (filters.storageStatus) where.storageStatus = filters.storageStatus
