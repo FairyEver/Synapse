@@ -6,8 +6,8 @@ const FALLBACK_USERINFO_PATTERN = /(https?:\/\/)[^/@\s]+@/gi
 export function sanitizeUrl(raw: string): string {
   try {
     const url = new URL(raw)
-    if (url.username) url.username = REDACTED_VALUE
-    if (url.password) url.password = REDACTED_VALUE
+    url.username = ""
+    url.password = ""
     for (const param of Array.from(url.searchParams.keys())) {
       if (SENSITIVE_PARAM_PATTERN.test(param)) {
         url.searchParams.set(param, REDACTED_VALUE)
@@ -16,7 +16,7 @@ export function sanitizeUrl(raw: string): string {
     return url.toString()
   } catch {
     return raw
-      .replace(FALLBACK_USERINFO_PATTERN, `$1${REDACTED_VALUE}@`)
+      .replace(FALLBACK_USERINFO_PATTERN, "$1")
       .replace(FALLBACK_QUERY_SECRET_PATTERN, `$1${REDACTED_VALUE}`)
   }
 }

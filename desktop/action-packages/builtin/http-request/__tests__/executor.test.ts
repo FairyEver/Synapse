@@ -152,11 +152,11 @@ describe("builtin.http-request executor", () => {
 
     expect(request).toEqual(expect.objectContaining({
       action: "network.connect",
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
+      resource: "https://example.com/api?token=%5Bredacted%5D&query=ok",
       context: expect.objectContaining({
         actionType: "builtin.http-request",
         method: "POST",
-        url: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
+        url: "https://example.com/api?token=%5Bredacted%5D&query=ok",
         headerKeys: ["Authorization", "Content-Type"],
         timeoutMins: 2,
       }),
