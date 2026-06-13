@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite"
 import { initUsageAnalysisSchema } from "../../services/usage-analysis/db-schema"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createModelPriceCapabilityDispatcher } from "../model-price-dispatcher"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 
 function createTestDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:")
@@ -60,7 +61,7 @@ describe("model price capability dispatcher", () => {
     const created = await dispatcher.dispatch("model_price.rule.create", {
       modelPattern: "secure-model",
       inputPer1M: 1,
-    }, { source: "mcp-http" })
+    }, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
     const ruleId = (created.data as { id: string }).id
 
     await dispatcher.dispatch("model_price.rule.update", { ruleId, outputPer1M: 2 }, { source: "mcp-http" })
@@ -71,6 +72,7 @@ describe("model price capability dispatcher", () => {
     expect(permissionGuard.check).toHaveBeenCalledTimes(5)
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.mutate",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "model-price-rule:model_price.rule.create",
       context: expect.objectContaining({
         source: "mcp-http",

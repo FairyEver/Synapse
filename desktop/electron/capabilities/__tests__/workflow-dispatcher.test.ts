@@ -10,6 +10,7 @@ const logStoreMock = vi.hoisted(() => ({
 
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
 import type { WorkflowDefinition, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import "../../../workflow-nodes/register.main"
 
 vi.mock("../../services/log-store", () => ({
@@ -275,12 +276,15 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.definition.create", {}, { source: "mcp-http" })
+    const result = await dispatcher.dispatch("workflow.definition.create", {}, {
+      source: "mcp-http",
+      actor: mcpClientActorForSource("mcp-http"),
+    })
 
     expect(result.ok).toBe(true)
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "workflow.mutate",
-      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "workflow:workflow.definition.create",
       context: {
         source: "mcp-http",
@@ -289,7 +293,7 @@ describe("createWorkflowDispatcher", () => {
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "workflow.mutate",
-      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "workflow:workflow.definition.create",
       outcome: "allowed",
       metadata: expect.objectContaining({
@@ -318,12 +322,15 @@ describe("createWorkflowDispatcher", () => {
     const deps = makeDeps({ permissionGuard, auditSink })
     const dispatcher = createWorkflowDispatcher(deps)
 
-    const result = await dispatcher.dispatch("workflow.definition.update", { definition }, { source: "mcp-http" })
+    const result = await dispatcher.dispatch("workflow.definition.update", { definition }, {
+      source: "mcp-http",
+      actor: mcpClientActorForSource("mcp-http"),
+    })
 
     expect(result.ok).toBe(true)
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "workflow.mutate",
-      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "workflow:wf-1",
       context: expect.objectContaining({
         source: "mcp-http",
@@ -334,7 +341,7 @@ describe("createWorkflowDispatcher", () => {
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "workflow.mutate",
-      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "workflow:wf-1",
       outcome: "allowed",
       metadata: expect.objectContaining({

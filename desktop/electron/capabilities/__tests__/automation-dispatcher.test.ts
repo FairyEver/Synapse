@@ -10,6 +10,7 @@ import { AutomationTriggerRegistry, type AutomationTriggerDefinition } from "../
 import type { AutomationItem, AutomationRun } from "../../services/automation/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createAutomationCapabilityDispatcher, toPublicAutomationItemSummary } from "../automation-dispatcher"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 
 const baseItem: AutomationItem = {
   id: "automation:1",
@@ -315,11 +316,14 @@ describe("automation capability dispatcher", () => {
     const { auditSink, dispatcher, permissionGuard, service } = createHarness()
     vi.mocked(service.automationDisable).mockResolvedValueOnce({ ...baseItem, enabled: false })
 
-    await dispatcher.dispatch("automation.item.disable", { automationId: "automation:1" }, { source: "mcp-http" })
+    await dispatcher.dispatch("automation.item.disable", { automationId: "automation:1" }, {
+      source: "mcp-http",
+      actor: mcpClientActorForSource("mcp-http"),
+    })
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "automation.mutate",
-      actor: { kind: "user", id: "automation-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "automation:automation:1",
       context: expect.objectContaining({
         source: "mcp-http",
@@ -329,7 +333,7 @@ describe("automation capability dispatcher", () => {
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "automation.mutate",
-      actor: { kind: "user", id: "automation-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "automation:automation:1",
       outcome: "allowed",
     }))

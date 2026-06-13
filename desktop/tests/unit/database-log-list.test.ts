@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AuditSink, PermissionGuard } from "../../electron/runtime/security"
+import { mcpClientActorForSource } from "../../synapse-capabilities/shared/types"
 
 const electronMock = vi.hoisted(() => ({ app: { getPath: vi.fn() } }))
 
@@ -55,13 +56,13 @@ describe("Database operation log", () => {
     await dispatchDatabaseAction(
       "database.row.create",
       { tableName: "tasks", data: { title: "Ship" } },
-      { source: "mcp-http" },
+      { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") },
       { permissionGuard, auditSink },
     )
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "database.mutate",
-      actor: { kind: "user", id: "database-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "database:tasks",
       context: {
         source: "mcp-http",
@@ -72,7 +73,7 @@ describe("Database operation log", () => {
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.mutate",
-      actor: { kind: "user", id: "database-dispatch:mcp-http" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "database:tasks",
       outcome: "allowed",
       metadata: expect.objectContaining({
@@ -96,7 +97,7 @@ describe("Database operation log", () => {
     await expect(dispatchDatabaseAction(
       "database.row.create",
       { tableName: "tasks", data: { title: "Blocked" } },
-      { source: "mcp-stdio" },
+      { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") },
       { permissionGuard, auditSink },
     )).rejects.toThrow("denied by policy")
 
@@ -104,7 +105,7 @@ describe("Database operation log", () => {
     expect(rows.total).toBe(0)
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "database.mutate",
-      actor: { kind: "user", id: "database-dispatch:mcp-stdio" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: "database:tasks",
       outcome: "denied",
       metadata: expect.objectContaining({
