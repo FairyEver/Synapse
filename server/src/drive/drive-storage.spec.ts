@@ -73,6 +73,27 @@ describe("LocalDriveStorage", () => {
     expect(object.contentType).toBe("text/html")
     await expect(streamToText(object.stream)).resolves.toBe("<h1>Hello</h1>")
   })
+
+  it("allows local download tokens to be resolved multiple times before expiry", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain" })
+    const uploadToken = upload.url.split("/").at(-1)
+    if (!uploadToken) throw new Error("missing upload token")
+    await storage.acceptUpload(uploadToken, Readable.from("hello"))
+    const download = await storage.createDownloadUrl({ key: "drive/item-1", filename: "brief.txt" })
+    const downloadToken = download.url.split("/").at(-1)
+    if (!downloadToken) throw new Error("missing download token")
+
+    const first = storage.resolveDownload(downloadToken)
+    const second = storage.resolveDownload(downloadToken)
+
+    expect(first.filename).toBe("brief.txt")
+    expect(second.filename).toBe("brief.txt")
+    await expect(streamToText(first.stream)).resolves.toBe("hello")
+    await expect(streamToText(second.stream)).resolves.toBe("hello")
+  })
 })
 
 async function streamToText(stream: NodeJS.ReadableStream): Promise<string> {

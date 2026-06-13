@@ -123,7 +123,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   resolveDownload(token: string): { readonly stream: NodeJS.ReadableStream; readonly filename: string } {
-    const entry = this.consumeToken(this.downloadTokens, token)
+    const entry = this.readToken(this.downloadTokens, token)
     return { stream: createReadStream(this.pathForKey(entry.key)), filename: entry.filename ?? "download" }
   }
 
@@ -131,6 +131,15 @@ export class LocalDriveStorage implements DriveStoragePort {
     const entry = tokens.get(token)
     tokens.delete(token)
     if (!entry || entry.expiresAt.getTime() <= Date.now()) throw new Error("Drive storage token expired.")
+    return entry
+  }
+
+  private readToken(tokens: Map<string, LocalStorageToken>, token: string): LocalStorageToken {
+    const entry = tokens.get(token)
+    if (!entry || entry.expiresAt.getTime() <= Date.now()) {
+      tokens.delete(token)
+      throw new Error("Drive storage token expired.")
+    }
     return entry
   }
 
