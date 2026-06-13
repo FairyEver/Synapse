@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises"
+import { appendFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { app } from "electron"
 
@@ -21,6 +21,9 @@ import { buildCodexExecRequest } from "./command"
 import type { CodexNodeConfig } from "./schema"
 
 const logger = createMainLogger("workflow.node.codex-executor")
+const CODEX_STREAM_PREVIEW_MAX_CHARS = 64 * 1024
+const CODEX_STREAM_ARTIFACT_MAX_BYTES = 5 * 1024 * 1024
+const CODEX_STREAM_TRUNCATED_NOTICE = "\n[truncated: codex output exceeded artifact limit]\n"
 
 export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
   async execute(input: NodeExecutionInput<CodexNodeConfig>): Promise<NodeExecutionResult> {
@@ -119,7 +122,29 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         filePath: artifactPaths.promptPath,
         task: () => writeCodexArtifact(artifactPaths.promptPath, prompt),
       })
+      await bestEffortArtifactWrite({
+        logContext,
+        label: "stdout artifact",
+        filePath: artifactPaths.stdoutPath,
+        task: () => writeCodexArtifact(artifactPaths.stdoutPath, ""),
+      })
+      await bestEffortArtifactWrite({
+        logContext,
+        label: "stderr artifact",
+        filePath: artifactPaths.stderrPath,
+        task: () => writeCodexArtifact(artifactPaths.stderrPath, ""),
+      })
     }
+    const stdoutCapture = new CodexStreamCapture({
+      logContext,
+      label: "stdout artifact",
+      filePath: captureDebugArtifacts ? artifactPaths.stdoutPath : undefined,
+    })
+    const stderrCapture = new CodexStreamCapture({
+      logContext,
+      label: "stderr artifact",
+      filePath: captureDebugArtifacts ? artifactPaths.stderrPath : undefined,
+    })
 
     const request = buildCodexExecRequest({
       config,
@@ -129,6 +154,8 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       actor,
       timeoutMs,
       abortSignal: context.abortSignal,
+      onStdoutLine: stdoutCapture.handleLine,
+      onStderrLine: stderrCapture.handleLine,
       metadata: {
         source: "workflow",
         actionType: "workflow.codex",
@@ -150,24 +177,13 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
     input.onProgress?.("running_codex", "执行 Codex…")
     try {
       const result = await processRunner.run(request)
+      await Promise.all([
+        stdoutCapture.waitForArtifactWrites(),
+        stderrCapture.waitForArtifactWrites(),
+      ])
       const durationMs = Date.now() - start
-      const stdout = result.stdout ?? ""
-      const stderr = result.stderr ?? ""
-
-      if (captureDebugArtifacts) {
-        await bestEffortArtifactWrite({
-          logContext,
-          label: "stdout artifact",
-          filePath: artifactPaths.stdoutPath,
-          task: () => writeCodexArtifact(artifactPaths.stdoutPath, stdout),
-        })
-        await bestEffortArtifactWrite({
-          logContext,
-          label: "stderr artifact",
-          filePath: artifactPaths.stderrPath,
-          task: () => writeCodexArtifact(artifactPaths.stderrPath, stderr),
-        })
-      }
+      const stdout = result.stdout ?? stdoutCapture.text()
+      const stderr = result.stderr ?? stderrCapture.text()
 
       const codexDebug = buildCodexDebugOutput({
         args: request.args ?? [],
@@ -257,11 +273,36 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         durationMs,
       }
     } catch (error) {
+      await Promise.all([
+        stdoutCapture.waitForArtifactWrites(),
+        stderrCapture.waitForArtifactWrites(),
+      ])
       const durationMs = Date.now() - start
+      const stdout = stdoutCapture.text()
+      const stderr = stderrCapture.text()
+      const codexDebug = buildCodexDebugOutput({
+        args: request.args ?? [],
+        cwd,
+        exitCode: null,
+        durationMs,
+        ...(captureDebugArtifacts
+          ? {
+              stdoutPath: artifactPaths.stdoutPath,
+              stderrPath: artifactPaths.stderrPath,
+              promptPath: artifactPaths.promptPath,
+            }
+          : {}),
+        lastMessagePath: artifactPaths.lastMessagePath,
+        stdout,
+        stderr,
+      })
+      const outputs = { codexDebug }
+
       if (context.abortSignal.aborted) {
         return {
           status: "cancelled",
           output: "",
+          outputs,
           error: "运行被取消",
           durationMs,
         }
@@ -279,6 +320,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       return {
         status: "failed",
         output: "",
+        outputs,
         error: `Codex 执行异常：${sanitized}`,
         durationMs,
       }
@@ -326,6 +368,85 @@ function failureMessageFromResult(result: {
     || (result.exitCode !== null ? `Codex 退出码 ${String(result.exitCode)}` : "Codex 执行失败")
 
   return `Codex 执行失败：${truncateWithEllipsis(sanitizeError(candidate), 120)}`
+}
+
+class CodexStreamCapture {
+  private readonly logContext: ReturnType<typeof workflowNodeLogContext>
+  private readonly label: string
+  private readonly filePath: string | undefined
+  private textValue = ""
+  private textTruncated = false
+  private artifactBytes = 0
+  private artifactTruncated = false
+  private artifactWrites: Promise<void> = Promise.resolve()
+
+  constructor(input: {
+    readonly logContext: ReturnType<typeof workflowNodeLogContext>
+    readonly label: string
+    readonly filePath?: string
+  }) {
+    this.logContext = input.logContext
+    this.label = input.label
+    this.filePath = input.filePath
+  }
+
+  readonly handleLine = (line: string): void => {
+    const chunk = `${line}\n`
+    this.appendPreview(chunk)
+    this.appendArtifact(chunk)
+  }
+
+  text(): string {
+    return this.textValue
+  }
+
+  async waitForArtifactWrites(): Promise<void> {
+    await this.artifactWrites
+  }
+
+  private appendPreview(chunk: string): void {
+    if (this.textTruncated) return
+    const available = CODEX_STREAM_PREVIEW_MAX_CHARS - this.textValue.length
+    if (chunk.length <= available) {
+      this.textValue += chunk
+      return
+    }
+
+    if (available > 0) {
+      this.textValue += chunk.slice(0, available)
+    }
+    this.textValue = truncateWithEllipsis(this.textValue, CODEX_STREAM_PREVIEW_MAX_CHARS)
+    this.textTruncated = true
+  }
+
+  private appendArtifact(chunk: string): void {
+    if (!this.filePath || this.artifactTruncated) return
+    const sanitized = sanitizeError(chunk)
+    const byteLength = Buffer.byteLength(sanitized, "utf8")
+    if (this.artifactBytes + byteLength > CODEX_STREAM_ARTIFACT_MAX_BYTES) {
+      this.artifactTruncated = true
+      this.enqueueArtifactWrite(CODEX_STREAM_TRUNCATED_NOTICE)
+      return
+    }
+
+    this.artifactBytes += byteLength
+    this.enqueueArtifactWrite(sanitized)
+  }
+
+  private enqueueArtifactWrite(content: string): void {
+    if (!this.filePath) return
+    const filePath = this.filePath
+    this.artifactWrites = this.artifactWrites
+      .then(() => appendFile(filePath, content, "utf8"))
+      .catch((error: unknown) => {
+        warnArtifactFailure({
+          logContext: this.logContext,
+          label: this.label,
+          filePath,
+          error,
+        })
+      })
+  }
 }
 
 async function bestEffortReadArtifact(

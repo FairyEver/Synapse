@@ -1,4 +1,4 @@
-import type { ControlledProcessRunRequest } from "../../electron/runtime/process"
+import type { ControlledProcessLineHandler, ControlledProcessRunRequest } from "../../electron/runtime/process"
 import type { ActorIdentity } from "../../electron/runtime/security"
 import type { CodexNodeConfig } from "./schema"
 
@@ -10,6 +10,8 @@ export interface BuildCodexExecRequestInput {
   readonly actor: ActorIdentity
   readonly timeoutMs?: number
   readonly abortSignal?: AbortSignal
+  readonly onStdoutLine?: ControlledProcessLineHandler
+  readonly onStderrLine?: ControlledProcessLineHandler
   readonly metadata?: Record<string, unknown>
 }
 
@@ -22,9 +24,11 @@ export function buildCodexExecRequest(input: BuildCodexExecRequestInput): Contro
     cwd: input.cwd,
     stdin: input.prompt,
     pathStrategy: "merge",
-    output: { stdout: "buffer", stderr: "buffer" },
+    output: { stdout: "ignore", stderr: "ignore" },
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
     ...(input.abortSignal === undefined ? {} : { abortSignal: input.abortSignal }),
+    ...(input.onStdoutLine === undefined ? {} : { onStdoutLine: input.onStdoutLine }),
+    ...(input.onStderrLine === undefined ? {} : { onStderrLine: input.onStderrLine }),
     ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
   }
 }

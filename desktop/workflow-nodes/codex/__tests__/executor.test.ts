@@ -383,6 +383,54 @@ describe("codexNodeExecutor", () => {
     expect(result.output).toBe("final answer from file")
   })
 
+  it("streams codex stdout and stderr without requiring buffered process output", async () => {
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockImplementation(async (request: {
+          args?: readonly string[]
+          output?: { stdout?: string; stderr?: string }
+          onStdoutLine?: (line: string) => void
+          onStderrLine?: (line: string) => void
+        }) => {
+          const lastMessagePathIndex = request.args?.indexOf("--output-last-message") ?? -1
+          const lastMessagePath = lastMessagePathIndex >= 0 ? request.args?.[lastMessagePathIndex + 1] : undefined
+          if (typeof lastMessagePath === "string") {
+            await writeFile(lastMessagePath, "final answer from file\n", "utf8")
+          }
+          request.onStdoutLine?.(JSON.stringify({ type: "session", thread_id: "thread-stream" }))
+          request.onStderrLine?.("warning token=sk-secret at /Users/liyang/private")
+
+          return {
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            durationMs: 25,
+          }
+        }),
+      },
+    })
+    const artifactPaths = codexArtifactPaths(electronState.userDataPath, context.runId, context.nodeId)
+
+    const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
+
+    expect(result.status).toBe("success")
+    expect(result.output).toBe("final answer from file")
+    const request = vi.mocked(runtimeDeps.processRunner?.run).mock.calls[0]?.[0]
+    expect(request).toMatchObject({
+      output: { stdout: "ignore", stderr: "ignore" },
+    })
+    expect(request?.onStdoutLine).toEqual(expect.any(Function))
+    expect(request?.onStderrLine).toEqual(expect.any(Function))
+    expect(result.outputs?.codexDebug).toMatchObject({
+      stdoutPath: artifactPaths.stdoutPath,
+      stderrPath: artifactPaths.stderrPath,
+      stdoutPreview: expect.stringContaining("thread-stream"),
+      sessionHints: ["thread_id=thread-stream"],
+    })
+    const stderrArtifact = await readCodexArtifact(artifactPaths.stderrPath)
+    expect(stderrArtifact).not.toContain("sk-secret")
+  })
+
   it("falls back to stdout when last-message.txt is missing", async () => {
     const runtimeDeps = makeRuntimeDeps()
 

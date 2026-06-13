@@ -29,7 +29,7 @@ describe("buildCodexExecRequest", () => {
       stdin: "Write a summary",
       timeoutMs: 60_000,
       pathStrategy: "merge",
-      output: { stdout: "buffer", stderr: "buffer" },
+      output: { stdout: "ignore", stderr: "ignore" },
       metadata: { source: "workflow", actionType: "workflow.codex" },
     })
     expect(built.args).toEqual([
