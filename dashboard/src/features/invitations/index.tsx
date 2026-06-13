@@ -3,7 +3,7 @@ import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Copy, Loader2, Plus, Trash2 } from 'lucide-react'
-import { adminApi, type AdminInvitationRow } from '@/lib/api'
+import { adminApi, type AdminInvitationRow, type AdminTeamRow } from '@/lib/api'
 import {
   DataTableColumnHeader,
   DEFAULT_DASHBOARD_PAGE_SIZE,
@@ -32,6 +32,49 @@ import {
 } from '@/components/ui/select'
 import { getInvitationTeamsErrorMessage } from './invitation-teams-error'
 
+const INVITATION_TEAM_PAGE_SIZE = 100
+
+type InvitationTeamListFn = (options: {
+  page: number
+  pageSize: number
+  sortBy: 'name'
+  sortOrder: 'asc'
+}) => Promise<{
+  data: AdminTeamRow[]
+  total: number
+}>
+
+export async function listInvitationCreateTeams(
+  listTeams: InvitationTeamListFn = adminApi.listTeams
+) {
+  const firstPage = await listTeams({
+    page: 1,
+    pageSize: INVITATION_TEAM_PAGE_SIZE,
+    sortBy: 'name',
+    sortOrder: 'asc',
+  })
+  const teams = [...firstPage.data]
+  const seenIds = new Set(teams.map((team) => team.id))
+  const total = Math.max(firstPage.total, teams.length)
+
+  for (let page = 2; teams.length < total; page += 1) {
+    const nextPage = await listTeams({
+      page,
+      pageSize: INVITATION_TEAM_PAGE_SIZE,
+      sortBy: 'name',
+      sortOrder: 'asc',
+    })
+    if (nextPage.data.length === 0) break
+    for (const team of nextPage.data) {
+      if (seenIds.has(team.id)) continue
+      seenIds.add(team.id)
+      teams.push(team)
+    }
+  }
+
+  return teams
+}
+
 export default function InvitationsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
@@ -57,7 +100,7 @@ export default function InvitationsPage() {
     refetch: refetchTeams,
   } = useQuery({
     queryKey: ['admin-teams', 'invitation-create'],
-    queryFn: () => adminApi.listTeams({ page: 1, pageSize: 100, sortBy: 'name', sortOrder: 'asc' }),
+    queryFn: () => listInvitationCreateTeams(),
   })
 
   const createMutation = useMutation({
@@ -224,7 +267,7 @@ export default function InvitationsPage() {
                   <SelectValue placeholder={isTeamsLoading ? '加载中' : '选择团队'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {(teams?.data ?? []).map((team) => (
+                  {(teams ?? []).map((team) => (
                     <SelectItem key={team.id} value={team.id}>
                       {team.name}
                     </SelectItem>
