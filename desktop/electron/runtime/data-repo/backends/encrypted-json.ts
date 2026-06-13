@@ -102,7 +102,6 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     }
 
     const envelope = this.parseEnvelope(raw, "decrypted")
-    await this.removeLegacyPlaintextFile()
 
     this.cache = envelope
     return envelope
