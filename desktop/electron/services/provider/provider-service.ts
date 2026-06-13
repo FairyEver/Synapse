@@ -326,7 +326,7 @@ export class ProviderService {
     })
     await this.providers.upsert(provider)
     if (hasSecretWrite) {
-      this.recordSecretWriteAudit(input.id, "create", "allowed", { secretRef })
+      this.recordSecretWriteAudit(input.id, "create", "allowed", { secretRef, secretEnvRefs })
     }
     if (input.active) {
       await this.setActiveProvider(input.id)
@@ -411,7 +411,10 @@ export class ProviderService {
       throw error
     }
     if (hasSecretChange) {
-      this.recordSecretWriteAudit(id, "update", "allowed", { secretRef })
+      this.recordSecretWriteAudit(id, "update", "allowed", {
+        secretRef,
+        secretEnvRefs: Object.keys(nextSecretEnvRefs).length ? nextSecretEnvRefs : undefined,
+      })
     }
     if (patch.active) {
       await this.setActiveProvider(id)
@@ -459,7 +462,10 @@ export class ProviderService {
       throw error
     }
     await this.providers.remove(id)
-    this.recordSecretWriteAudit(id, "delete", "allowed", { secretRef: provider.secretRef })
+    this.recordSecretWriteAudit(id, "delete", "allowed", {
+      secretRef: provider.secretRef,
+      secretEnvRefs: provider.secretEnvRefs,
+    })
   }
 
   async archiveProvider(id: string): Promise<void> {
