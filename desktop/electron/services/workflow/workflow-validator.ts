@@ -4,6 +4,7 @@ import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
 import { agentTimeoutMinsToMs, resolveAgentTimeoutMins } from "../../../workflow-nodes/agent-timeout"
 import { extractWorkflowCallTemplateVariables } from "../../../workflow-nodes/workflow-call/params"
+import { isSafeWorkflowNodeId } from "./workflow-id"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -151,6 +152,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   }
   const nodeIdsSeen = new Set<string>()
   for (const node of def.nodes) {
+    if (!isSafeWorkflowNodeId(node.id)) {
+      errors.push({ type: "invalid_config", nodeId: node.id, nodeName: node.name, message: `节点 ID「${node.id}」无效，请使用字母、数字、下划线或短横线` })
+      logger.warn("unsafe node id detected", { workflowId: def.id, nodeId: node.id })
+      continue
+    }
     if (nodeIdsSeen.has(node.id)) {
       errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 ID「${node.id}」重复，请删除重复节点后重试` })
       logger.warn("duplicate node id detected", { workflowId: def.id, nodeId: node.id })

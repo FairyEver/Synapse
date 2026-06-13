@@ -103,6 +103,12 @@ describe("codex artifacts", () => {
     })
   })
 
+  it("rejects unsafe artifact path ids", () => {
+    expect(() => codexArtifactPaths("/tmp/synapse", "../run", "node-1")).toThrow("Invalid workflow id")
+    expect(() => codexArtifactPaths("/tmp/synapse", "run-1", "../node")).toThrow("Invalid workflow node id")
+    expect(() => codexArtifactPaths("/tmp/synapse", "run-1", "/tmp/node")).toThrow("Invalid workflow node id")
+  })
+
   it("redacts secret-looking debug previews while keeping normal paths", () => {
     const debug = buildCodexDebugOutput({
       args: ["exec", "--config", "ANTHROPIC_API_KEY=sk-test-secret", "--cd", "/Users/liyang/project"],

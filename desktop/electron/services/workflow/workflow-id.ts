@@ -10,3 +10,14 @@ export function assertSafeWorkflowId(workflowId: string): string {
   }
   return workflowId
 }
+
+export function isSafeWorkflowNodeId(nodeId: string): boolean {
+  return SAFE_WORKFLOW_ID_PATTERN.test(nodeId)
+}
+
+export function assertSafeWorkflowNodeId(nodeId: string): string {
+  if (!isSafeWorkflowNodeId(nodeId)) {
+    throw new Error("Invalid workflow node id")
+  }
+  return nodeId
+}

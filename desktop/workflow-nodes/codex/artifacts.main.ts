@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { sanitizeError } from "../../electron/services/error-sanitize"
+import { assertSafeWorkflowId, assertSafeWorkflowNodeId } from "../../electron/services/workflow/workflow-id"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 
 const DEBUG_PREVIEW_LENGTH = 2000
@@ -48,7 +49,9 @@ export interface BuildCodexDebugOutputInput {
 }
 
 export function codexArtifactPaths(baseDir: string, runId: string, nodeId: string): CodexArtifactPaths {
-  const directory = path.join(baseDir, "workflow-runs", runId, "nodes", nodeId, "codex")
+  const safeRunId = assertSafeWorkflowId(runId)
+  const safeNodeId = assertSafeWorkflowNodeId(nodeId)
+  const directory = path.join(baseDir, "workflow-runs", safeRunId, "nodes", safeNodeId, "codex")
 
   return {
     directory,

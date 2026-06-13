@@ -67,10 +67,16 @@ const variableBindingSchema = {
   required: ["name", "source"],
 }
 
+const workflowNodeIdSchema = {
+  type: "string",
+  pattern: "^[A-Za-z0-9_-]+$",
+  description: "Workflow node ID. Use only letters, numbers, underscore, or hyphen.",
+}
+
 const incomingEdgeCreateSchema = {
   type: "object",
   properties: {
-    from: { type: "string", description: "Existing upstream node ID to connect into the new node." },
+    from: { ...workflowNodeIdSchema, description: "Existing upstream node ID to connect into the new node." },
     branch: { type: "string", description: "Required when the upstream node is a switch branch." },
   },
   required: ["from"],
@@ -79,7 +85,7 @@ const incomingEdgeCreateSchema = {
 const outgoingEdgeCreateSchema = {
   type: "object",
   properties: {
-    to: { type: "string", description: "Existing downstream node ID to connect from the new node." },
+    to: { ...workflowNodeIdSchema, description: "Existing downstream node ID to connect from the new node." },
     branch: { type: "string", description: "Use only when the new node itself is a switch node." },
   },
   required: ["to"],
@@ -117,7 +123,7 @@ const workflowDefinitionSchema = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: workflowNodeIdSchema,
           name: { type: "string" },
           type: { type: "string" },
           position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
@@ -318,7 +324,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID." },
-          nodeId: { type: "string", description: "Node ID to update." },
+          nodeId: { ...workflowNodeIdSchema, description: "Node ID to update." },
           patch: {
             type: "object",
             description: "Fields to update. Only provided fields are changed.",
@@ -339,7 +345,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID." },
-          nodeId: { type: "string", description: "Node ID to delete." },
+          nodeId: { ...workflowNodeIdSchema, description: "Node ID to delete." },
         },
         required: ["workflowId", "nodeId"],
       },
@@ -351,8 +357,8 @@ export function buildWorkflowTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           workflowId: { type: "string", description: "Workflow ID." },
-          from: { type: "string", description: "Source node ID." },
-          to: { type: "string", description: "Target node ID." },
+          from: { ...workflowNodeIdSchema, description: "Source node ID." },
+          to: { ...workflowNodeIdSchema, description: "Target node ID." },
           branch: { type: "string", description: "Optional branch name for switch node edges." },
         },
         required: ["workflowId", "from", "to"],

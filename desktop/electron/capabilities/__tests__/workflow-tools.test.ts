@@ -75,4 +75,21 @@ describe("workflow MCP tool definitions", () => {
     expect(stringProperty(incomingEdges, "description")).toContain("same validated mutation")
     expect(stringProperty(outgoingEdges, "description")).toContain("same validated mutation")
   })
+
+  it("documents safe workflow node id constraints", () => {
+    const inspectProperties = toolByName("workflow_definition_inspect").inputSchema.properties
+    const definitionSchema = objectProperty(inspectProperties, "definition")
+    const definitionProperties = objectProperty(definitionSchema, "properties")
+    const nodesSchema = objectProperty(definitionProperties, "nodes")
+    const nodeItems = objectProperty(nodesSchema, "items")
+    const nodeProperties = objectProperty(nodeItems, "properties")
+    const nodeIdSchema = objectProperty(nodeProperties, "id")
+
+    expect(stringProperty(nodeIdSchema, "pattern")).toBe("^[A-Za-z0-9_-]+$")
+    expect(stringProperty(nodeIdSchema, "description")).toContain("underscore")
+
+    const updateProperties = toolByName("workflow_node_update").inputSchema.properties
+    const updateNodeIdSchema = objectProperty(updateProperties, "nodeId")
+    expect(stringProperty(updateNodeIdSchema, "pattern")).toBe("^[A-Za-z0-9_-]+$")
+  })
 })

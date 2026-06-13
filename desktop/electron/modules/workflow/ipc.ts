@@ -18,7 +18,7 @@ import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapp
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
-import { isSafeWorkflowId } from "../../services/workflow/workflow-id"
+import { isSafeWorkflowId, isSafeWorkflowNodeId } from "../../services/workflow/workflow-id"
 import { sanitizeNodeResultsForSnapshot } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
@@ -251,6 +251,7 @@ function saveRunSnapshot(
 }
 
 const workflowIdSchema = z.string().refine(isSafeWorkflowId, "Invalid workflow id")
+const workflowNodeIdSchema = z.string().refine(isSafeWorkflowNodeId, "Invalid workflow node id")
 
 const workflowDefinitionSchema = z.object({
   id: workflowIdSchema, name: z.string(), description: z.string().optional(),
@@ -261,7 +262,7 @@ const workflowDefinitionSchema = z.object({
   defaultModelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   defaultNodeTimeoutMins: z.number().int().min(1).optional(),
   params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number"]), default: z.union([z.string(), z.number(), z.null()]), description: z.string().optional() })),
-  nodes: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
+  nodes: z.array(z.object({ id: workflowNodeIdSchema, name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),
 })
 

@@ -62,6 +62,8 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 
 Strict validation runs after every MCP mutation. Do not create disconnected placeholders and plan to connect them later; that save will be rejected. Use connected `workflow_node_create` calls or a full `workflow_definition_update` instead.
 
+Workflow node IDs must use only letters, numbers, `_`, or `-`. Never create or preserve node IDs containing path separators, `..`, absolute paths, or spaces.
+
 ## Variable Bindings
 
 Nodes declare a `variables` array. Each binding has:

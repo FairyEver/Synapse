@@ -63,6 +63,26 @@ describe("validateWorkflow", () => {
     expect(result.errors).toEqual([])
   })
 
+  it("rejects unsafe workflow node ids", () => {
+    const result = validateWorkflow(definitionWithCodexNode({
+      defaultProjectId: "project-1",
+      nodes: [
+        { ...codexNode(), id: "../codex" },
+        endNode(),
+      ],
+      edges: [{ id: "edge-1", from: "../codex", to: "end" }],
+    }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "../codex",
+        message: expect.stringContaining("节点 ID"),
+      }),
+    ]))
+  })
+
   it("requires a workflow default project for script nodes", () => {
     const result = validateWorkflow(definitionWithScriptNode())
 
