@@ -307,6 +307,13 @@ export class DriveService implements OnApplicationBootstrap {
         include: driveItemWithShares,
       })
     })
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.upload.complete",
+      targetType: "drive.item",
+      targetId: item.id,
+      detail: { userId, sessionId: session.id, itemId: item.id, name: item.name, size: item.size.toString() },
+    })
     return toDriveItemDto(item)
   }
 
@@ -316,6 +323,13 @@ export class DriveService implements OnApplicationBootstrap {
     })
     if (!session) throw new NotFoundException("上传会话不存在。")
     await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled, new Date(), session.storageKey)
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.upload.cancel",
+      targetType: "drive.uploadSession",
+      targetId: session.id,
+      detail: { userId, sessionId: session.id, itemId: session.itemId, status: DRIVE_UPLOAD_STATUS.cancelled },
+    })
     return { ok: true }
   }
 
@@ -339,6 +353,13 @@ export class DriveService implements OnApplicationBootstrap {
       },
       include: driveItemWithShares,
     })
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.folder.create",
+      targetType: "drive.item",
+      targetId: folder.id,
+      detail: { userId, itemId: folder.id, parentId: folder.parentId, name: folder.name },
+    })
     return toDriveItemDto(folder)
   }
 
@@ -352,11 +373,19 @@ export class DriveService implements OnApplicationBootstrap {
       })
       if (duplicate) throw new BadRequestException("同名文件夹已存在。")
     }
-    return toDriveItemDto(await this.prisma.driveItem.update({
+    const updated = await this.prisma.driveItem.update({
       where: { id: itemId },
       data: { name: nextName },
       include: driveItemWithShares,
-    }))
+    })
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.rename",
+      targetType: "drive.item",
+      targetId: updated.id,
+      detail: { userId, itemId: updated.id, previousName: item.name, nextName },
+    })
+    return toDriveItemDto(updated)
   }
 
   async moveItem(userId: string, itemId: string, parentId: string | null): Promise<DriveItemDto> {
@@ -371,11 +400,19 @@ export class DriveService implements OnApplicationBootstrap {
       })
       if (duplicate) throw new BadRequestException("目标位置已有同名文件夹。")
     }
-    return toDriveItemDto(await this.prisma.driveItem.update({
+    const updated = await this.prisma.driveItem.update({
       where: { id: item.id },
       data: { parentId },
       include: driveItemWithShares,
-    }))
+    })
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.move",
+      targetType: "drive.item",
+      targetId: updated.id,
+      detail: { userId, itemId: updated.id, previousParentId: item.parentId, nextParentId: parentId },
+    })
+    return toDriveItemDto(updated)
   }
 
   async deleteItem(
@@ -414,7 +451,23 @@ export class DriveService implements OnApplicationBootstrap {
         data: toDrivePasswordUpdateData(material),
       })
       : await this.createUniqueShare(item.id, userId, item.type, material)
-    return toDriveShareDto(share, publicAppUrl, material.password)
+    const dto = toDriveShareDto(share, publicAppUrl, material.password)
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.share.create",
+      targetType: "drive.share",
+      targetId: share.id,
+      detail: {
+        userId,
+        itemId: item.id,
+        shareRecordId: share.id,
+        shareId: share.shareId,
+        itemType: item.type,
+        passwordEnabled: dto.passwordEnabled,
+        expiresAt: dto.expiresAt,
+      },
+    })
+    return dto
   }
 
   async disableShare(userId: string, shareId: string): Promise<{ readonly ok: true }> {
@@ -423,6 +476,13 @@ export class DriveService implements OnApplicationBootstrap {
       data: { enabled: false, disabledAt: new Date() },
     })
     if (result.count === 0) throw new NotFoundException("分享不存在。")
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.share.disable",
+      targetType: "drive.share",
+      targetId: shareId,
+      detail: { userId, shareRecordId: shareId, disabledCount: result.count },
+    })
     return { ok: true }
   }
 
@@ -493,13 +553,21 @@ export class DriveService implements OnApplicationBootstrap {
 
     const material = await createDrivePasswordMaterial(settings, this.accessSecret)
     const publication = await this.findOrCreatePublication(userId, item.id, DRIVE_PUBLICATION_TYPE.page, item.name, material)
-    return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
+    const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
       sourceItemId: item.id,
       sourceStorageKey: item.storageKey,
       relativePath: DRIVE_PUBLICATION_INDEX_PATH,
       contentType: "text/html",
       size: item.size,
     }], material)
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.publication.publish",
+      targetType: "drive.publication",
+      targetId: result.id,
+      detail: this.publicationAuditDetail(userId, item.id, result),
+    })
+    return result
   }
 
   async publishSite(
@@ -517,7 +585,15 @@ export class DriveService implements OnApplicationBootstrap {
 
     const material = await createDrivePasswordMaterial(settings, this.accessSecret)
     const publication = await this.findOrCreatePublication(userId, folder.id, DRIVE_PUBLICATION_TYPE.site, folder.name, material)
-    return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files, material)
+    const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files, material)
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.publication.publish",
+      targetType: "drive.publication",
+      targetId: result.id,
+      detail: this.publicationAuditDetail(userId, folder.id, result),
+    })
+    return result
   }
 
   async redeployPublication(userId: string, publicationId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
@@ -533,7 +609,15 @@ export class DriveService implements OnApplicationBootstrap {
       if (!files.some((file) => file.relativePath === DRIVE_PUBLICATION_INDEX_PATH)) {
         throw new BadRequestException("站点根目录需要 index.html。")
       }
-      return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files)
+      const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files)
+      await this.recordDriveAudit({
+        userId,
+        action: "drive.publication.redeploy",
+        targetType: "drive.publication",
+        targetId: result.id,
+        detail: this.publicationAuditDetail(userId, publication.sourceItemId, result),
+      })
+      return result
     }
 
     const item = await this.requireOwnedItem(userId, publication.sourceItemId)
@@ -541,13 +625,21 @@ export class DriveService implements OnApplicationBootstrap {
       throw new BadRequestException("只能发布 HTML 文件。")
     }
     if (!isHtmlDriveItem(item.name, item.mimeType)) throw new BadRequestException("只能发布 HTML 文件。")
-    return this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
+    const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
       sourceItemId: item.id,
       sourceStorageKey: item.storageKey,
       relativePath: DRIVE_PUBLICATION_INDEX_PATH,
       contentType: "text/html",
       size: item.size,
     }])
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.publication.redeploy",
+      targetType: "drive.publication",
+      targetId: result.id,
+      detail: this.publicationAuditDetail(userId, publication.sourceItemId, result),
+    })
+    return result
   }
 
   async disablePublication(userId: string, publicationId: string): Promise<{ readonly ok: true }> {
@@ -556,6 +648,13 @@ export class DriveService implements OnApplicationBootstrap {
       data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: new Date() },
     })
     if (result.count === 0) throw new NotFoundException("发布不存在。")
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.publication.disable",
+      targetType: "drive.publication",
+      targetId: publicationId,
+      detail: { userId, publicationId, disabledCount: result.count },
+    })
     return { ok: true }
   }
 
@@ -1415,6 +1514,40 @@ export class DriveService implements OnApplicationBootstrap {
         }, "Drive publication copied object cleanup failed")
       }
     }
+  }
+
+  private publicationAuditDetail(
+    userId: string,
+    itemId: string | null,
+    publication: DrivePublicationDto,
+  ): Record<string, unknown> {
+    return {
+      userId,
+      itemId,
+      publicationId: publication.id,
+      publishId: publication.publishId,
+      type: publication.type,
+      currentDeploymentId: publication.currentDeploymentId,
+      passwordEnabled: publication.passwordEnabled,
+      expiresAt: publication.expiresAt,
+    }
+  }
+
+  private async recordDriveAudit(input: {
+    readonly userId: string
+    readonly action: string
+    readonly targetType: string
+    readonly targetId: string
+    readonly detail: Record<string, unknown>
+  }): Promise<void> {
+    await this.auditLog?.record({
+      adminEmail: input.userId,
+      action: input.action,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      detail: input.detail,
+      ipAddress: "system",
+    })
   }
 
   private async collectPublicationSiteFiles(userId: string, rootId: string): Promise<PublicationSourceAsset[]> {

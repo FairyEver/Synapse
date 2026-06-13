@@ -261,6 +261,97 @@ describe("DriveService", () => {
     expect(activeShares[0]?.accessSettingsAppliedAt).toBeInstanceOf(Date)
   })
 
+  it("audits completed uploads and item metadata changes", async () => {
+    const prisma = createPrismaMemory()
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.html",
+      size: "11",
+      mimeType: "text/html",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    const completed = await service.completeUpload("user-1", prepared.sessionId)
+    const renamed = await service.renameItem("user-1", completed.id, "index.html")
+    await service.moveItem("user-1", renamed.id, null)
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.upload.complete",
+      targetType: "drive.item",
+      targetId: completed.id,
+      adminEmail: "user-1",
+      ipAddress: "system",
+      detail: expect.objectContaining({ userId: "user-1", sessionId: prepared.sessionId, itemId: completed.id }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.rename",
+      targetType: "drive.item",
+      targetId: completed.id,
+      detail: expect.objectContaining({ previousName: "report.html", nextName: "index.html" }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.move",
+      targetType: "drive.item",
+      targetId: completed.id,
+      detail: expect.objectContaining({ previousParentId: null, nextParentId: null }),
+    }))
+  })
+
+  it("audits share and publication changes without secrets", async () => {
+    const prisma = createPrismaMemory()
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    auditLog.record.mockClear()
+
+    const share = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
+    const redeployed = await service.redeployPublication("user-1", publication.id, "https://synapse.test")
+    await service.disablePublication("user-1", publication.id)
+    await service.disableShare("user-1", share.id)
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.share.create",
+      targetType: "drive.share",
+      targetId: share.id,
+      detail: expect.objectContaining({ userId: "user-1", itemId: file.id, shareId: share.shareId, passwordEnabled: true }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.publication.publish",
+      targetType: "drive.publication",
+      targetId: publication.id,
+      detail: expect.objectContaining({ userId: "user-1", itemId: file.id, type: "page", publishId: publication.publishId }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.publication.redeploy",
+      targetType: "drive.publication",
+      targetId: publication.id,
+      detail: expect.objectContaining({ userId: "user-1", publicationId: publication.id, currentDeploymentId: redeployed.currentDeploymentId }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.publication.disable",
+      targetType: "drive.publication",
+      targetId: publication.id,
+      detail: expect.objectContaining({ userId: "user-1", publicationId: publication.id }),
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "drive.share.disable",
+      targetType: "drive.share",
+      targetId: share.id,
+      detail: expect.objectContaining({ userId: "user-1", shareRecordId: share.id }),
+    }))
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain(share.password ?? "")
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain(publication.url)
+  })
+
   it("publishes an html file as a snapshot page", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
