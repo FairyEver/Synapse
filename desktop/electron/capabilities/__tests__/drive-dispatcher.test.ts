@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 
 type DriveDispatcherDeps = Parameters<typeof createDriveCapabilityDispatcher>[0]
 type DriveAccountService = DriveDispatcherDeps["accountService"]
@@ -22,8 +23,13 @@ describe("createDriveCapabilityDispatcher", () => {
 
   it("uploads a local file without returning the presigned URL", async () => {
     const accountService = createAccountService()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
+      permissionGuard,
       fileSystem: {
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
         readFile: vi.fn(async () => Buffer.from("test")),
@@ -34,7 +40,7 @@ describe("createDriveCapabilityDispatcher", () => {
 
     const result = await dispatcher.dispatch("drive.file.upload", {
       filePath: "/tmp/report.md",
-    }, { source: "mcp-stdio" })
+    }, { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") })
 
     expect(result).toEqual({ ok: true, data: driveItem({ id: "item-1", name: "report.md" }) })
     expect(JSON.stringify(result)).not.toContain("X-Amz-Signature")
@@ -44,6 +50,18 @@ describe("createDriveCapabilityDispatcher", () => {
       size: "4",
       mimeType: null,
     })
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
+      resource: "synapse-drive",
+      context: { source: "mcp-stdio", driveAction: "drive.file.upload" },
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
+      resource: "/tmp/report.md",
+      context: { source: "mcp-stdio", driveAction: "drive.upload" },
+    }))
   })
 })
 
