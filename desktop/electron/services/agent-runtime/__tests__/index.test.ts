@@ -293,6 +293,37 @@ describe("createAgentRuntimeProjectService", () => {
     }
   })
 
+  it("loads managed knowledge base runtime for workflow sends that target a knowledge base project", async () => {
+    createdSessionInputs.values = []
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext({
+      managedKnowledgeBase: true,
+    })
+    const workspacePath = ctx.projectMeta.workspacePath
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      const result = await service.send({
+        projectId: "project-1",
+        sessionKey: "workflow-run-1",
+        platform: "workflow",
+        userId: "workflow",
+        content: "/wiki-query design notes",
+      })
+
+      expect(result.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "result", content: "done" }),
+      ]))
+      expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
+        cwd: workspacePath,
+        plugins: [{ type: "local", path: workspacePath }],
+        allowPluginHooks: true,
+      }))
+    } finally {
+      service.stopIdleReclaim()
+    }
+  })
+
   it("passes managed knowledge base slash commands through to the SDK for renderer sessions", async () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()

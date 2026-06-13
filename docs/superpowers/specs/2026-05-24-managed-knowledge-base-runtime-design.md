@@ -52,9 +52,9 @@ The product promise is:
 - Managed knowledge base projects must still be selectable in the existing Agent conversation project selector.
 - Knowledge Base-specific UI remains allowed only when the selected project is a managed knowledge base.
 - Ordinary projects must not load Knowledge Base plugin, skill, hook, command, prompt, or template files.
-- Scheduler and Workflow Agent launches must not automatically receive Knowledge Base runtime behavior.
+- Scheduler Agent launches must not automatically receive Knowledge Base runtime behavior. Workflow Agent launches may receive Knowledge Base runtime behavior only when the workflow node explicitly targets a managed Knowledge Base project.
 - SDK runtime injection used only to hide Agent assets from visible user vaults should be removed from the new path.
-- Managed Knowledge Base Agent sessions must load only their own backing directory as a local SDK plugin; ordinary projects, Scheduler runs, and Workflow runs must not receive Knowledge Base plugin behavior implicitly.
+- Managed Knowledge Base Agent sessions must load only their own backing directory as a local SDK plugin; ordinary projects and Scheduler runs must not receive Knowledge Base plugin behavior implicitly. Workflow runs receive it only when the selected project is a managed Knowledge Base.
 - Developer template sync tooling is allowed, but it must be exposed through a root `package.json` developer command only and must not run in user workspaces.
 
 ## User Model
@@ -196,9 +196,9 @@ However, `claude-obsidian` is a Claude Code plugin layout: its `skills/`, `comma
 plugins: [{ type: "local", path: backingPath }]
 ```
 
-to the Claude Code SDK for local renderer Agent conversations that are explicitly bound to a managed Knowledge Base project.
+to the Claude Code SDK for local renderer Agent conversations and Workflow Agent launches that are explicitly bound to a managed Knowledge Base project.
 
-Plugin hooks require an explicit Knowledge Base policy. Synapse currently disables hooks globally for SDK sessions; that is incompatible with expecting upstream hot-cache behavior from `claude-obsidian`. The implementation must either allow a reviewed subset of Knowledge Base plugin hooks for managed Knowledge Base sessions, or document and replace those behaviors with Synapse-owned services. When enabling Knowledge Base plugin hooks, the SDK session should avoid loading user-level hook settings; the intended scope is the managed backing directory and its local plugin. The product should not claim automatic hot-cache restoration while `disableAllHooks` prevents the plugin hooks from running.
+Plugin hooks require an explicit Knowledge Base policy. Synapse keeps hooks disabled for ordinary SDK sessions, but managed Knowledge Base runtime sessions may set `disableAllHooks: false` so the embedded plugin hooks and the user's own `user` / `project` / `local` hooks can run together. Do not remove `settingSources: ["user", "project", "local"]` when enabling Knowledge Base hooks.
 
 Agent conversation flow:
 
@@ -298,9 +298,9 @@ Focused tests should cover:
 - Renderer project data does not expose the backing path.
 - Agent launch resolves the managed project to its backing path.
 - Ordinary projects do not load Knowledge Base runtime behavior.
-- Managed Knowledge Base Agent sessions pass the backing path as a local SDK plugin.
+- Managed Knowledge Base Agent sessions pass the backing path as a local SDK plugin, including Workflow Prompt nodes whose selected project is a managed Knowledge Base.
 - Managed Knowledge Base slash commands such as `/wiki`, `/save`, `/canvas`, and `/autoresearch` are passed through or allowlisted instead of being rejected by Synapse's slash router.
-- Managed Knowledge Base hook behavior is covered by an explicit policy: either reviewed plugin hooks are enabled for this project type, or replacement Synapse-owned behavior is tested.
+- Managed Knowledge Base hook behavior is covered by an explicit policy: plugin hooks are enabled for this project type, and user/project/local hooks remain visible when the user has configured them.
 - Knowledge Base quick commands appear only for managed knowledge base projects.
 - Source manager copies files into the managed backing path through Synapse APIs.
 - No temporary SDK runtime injection is called for managed knowledge base Agent sessions.

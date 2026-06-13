@@ -19,7 +19,10 @@
 - Provider 密钥新增、更新和删除的成功审计会记录对应密钥引用，便于追溯且不暴露真实密钥。
 - 生产环境未配置重置链接交付时，找回密码请求会明确不可用且不会创建用户拿不到的重置 token。
 - 工作流包导入包含 Prompt/Switch 节点时，可以选择本地默认项目，导入后不再被项目校验卡住。
+- 工作流 Prompt 节点选择托管知识库项目时，会加载知识库会话能力，可以正常使用知识库查询等命令。
 - 工作流结束日志会汇总本次运行的 token usage 和总费用，排查多节点运行成本时不再需要逐条累加节点日志。
 - 知识库 `/wiki-ingest` 改由 Synapse 受控写入 source manifest，Agent 只输出结构化 ingest 报告。
+- 知识库会话启用 plugin hooks 时保留用户本机 Claude Code 的 user/project/local hooks，行为与用户自己的 Claude 配置保持一致。
+- Webhook `exec` 请求通过认证后会进入默认 shell 执行权限策略，不再被 PermissionGuard 默认拒绝。
 
 ## 技术调整

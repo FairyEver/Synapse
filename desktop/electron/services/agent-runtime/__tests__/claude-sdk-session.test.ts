@@ -228,6 +228,21 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("keeps user project and local settings visible when plugin hooks are enabled", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/kb-plugin" }],
+      allowPluginHooks: true,
+    })
+
+    expect(getOptions()).toMatchObject({
+      settingSources: ["user", "project", "local"],
+      settings: {
+        disableAllHooks: false,
+      },
+    })
+  })
+
   it("passes programmatic SDK agents to Claude Agent SDK", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {

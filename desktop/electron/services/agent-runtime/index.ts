@@ -166,11 +166,16 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         logger: ctx.logger,
       })
       const isManagedKnowledgeBase = ctx.projectMeta.managedKnowledgeBase === true
-      const isManagedKnowledgeBaseRendererMessage = (message: AgentMessage) =>
+      const hasManagedKnowledgeBaseWorkspace =
         isManagedKnowledgeBase
-        && message.platform === "local-renderer"
         && typeof ctx.projectMeta.workspacePath === "string"
         && ctx.projectMeta.workspacePath.length > 0
+      const isManagedKnowledgeBaseRendererMessage = (message: AgentMessage) =>
+        hasManagedKnowledgeBaseWorkspace
+        && message.platform === "local-renderer"
+      const isManagedKnowledgeBaseRuntimeMessage = (message: AgentMessage) =>
+        hasManagedKnowledgeBaseWorkspace
+        && (message.platform === "local-renderer" || message.platform === "workflow")
       const knowledgeBaseIngest = isManagedKnowledgeBase && typeof ctx.projectMeta.workspacePath === "string"
         ? new KnowledgeBaseIngestCoordinator({
           projectId: ctx.projectId,
@@ -201,12 +206,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         commandRunner: runner,
         registeredPromptCommands: async () => [],
         publishedProjectCommands: async () => [],
-        sdkPlugins: async (message) => isManagedKnowledgeBaseRendererMessage(message)
+        sdkPlugins: async (message) => isManagedKnowledgeBaseRuntimeMessage(message)
           ? [{ type: "local", path: ctx.projectMeta.workspacePath as string }]
           : [],
-        allowPluginHooks: async (message) => isManagedKnowledgeBaseRendererMessage(message),
+        allowPluginHooks: async (message) => isManagedKnowledgeBaseRuntimeMessage(message),
         allowAgentNativeSlash: (name, message) =>
-          isManagedKnowledgeBaseRendererMessage(message)
+          isManagedKnowledgeBaseRuntimeMessage(message)
           && MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS.has(name),
         prepareMessage: (message, context) =>
           isManagedKnowledgeBaseRendererMessage(message) && knowledgeBaseIngest
