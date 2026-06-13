@@ -10,7 +10,6 @@ const sampleUser: AuthUser = {
   email: 'user@example.com',
   displayName: 'User',
   role: 'user',
-  modulePermissions: ['module.workflow'],
   sessionId: 'session-1',
 }
 

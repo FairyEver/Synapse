@@ -116,6 +116,17 @@ export const systemShellExecPolicy: PermissionPolicy = {
       : "defer-to-next",
 }
 
+/** Allow authenticated webhook exec requests to launch shell commands. */
+export const webhookShellExecPolicy: PermissionPolicy = {
+  id: "webhook-shell-exec-allow",
+  decide: (req) =>
+    req.actor.kind === "agent"
+    && req.actor.id === "webhook"
+    && req.action === "shell.exec"
+      ? "allow"
+      : "defer-to-next",
+}
+
 /** Allow system actors to perform automation actions (workflow engine, scheduler). */
 export const systemAutomationPolicy: PermissionPolicy = {
   id: "system-automation-allow",

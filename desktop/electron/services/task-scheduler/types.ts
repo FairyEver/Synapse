@@ -2,6 +2,7 @@ import type {
   ActionRunResult,
   ActionStoredConfigValidation,
 } from "../../../action-packages/types"
+import type { SynapseActionSource } from "../../../synapse-capabilities/shared/types"
 
 export const TASK_SCHEDULER_SERVICE_ID = "core.task-scheduler"
 
@@ -30,6 +31,10 @@ export type TaskActionRef = {
   readonly config: Record<string, unknown>
 }
 
+export type ScheduledTaskProvenance = {
+  readonly source: SynapseActionSource
+}
+
 export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
@@ -56,6 +61,7 @@ export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly lastStatus?: ScheduledTaskStatus
   readonly activeRun?: ScheduledTaskActiveRun
   readonly validation?: ScheduledTaskValidation
+  readonly provenance?: ScheduledTaskProvenance
   readonly runCount: number
   readonly configVersion: number
 }
@@ -72,6 +78,7 @@ export interface ScheduledTaskCreateInput {
   readonly enabled?: boolean
   readonly activeDays?: readonly number[]
   readonly missedRunPolicy?: "skip" | "run_once"
+  readonly provenance?: ScheduledTaskProvenance
 }
 
 export interface ScheduledTaskUpdateInput {
@@ -84,6 +91,7 @@ export interface ScheduledTaskUpdateInput {
   readonly enabled?: boolean
   readonly activeDays?: readonly number[]
   readonly missedRunPolicy?: "skip" | "run_once"
+  readonly provenance?: ScheduledTaskProvenance
 }
 
 export interface ScheduledTaskRunEntryV2 extends Record<string, unknown> {

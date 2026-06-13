@@ -35,6 +35,10 @@ export interface WorkflowModelMapping {
   targetModelTier: WorkflowPackageModelTier
 }
 
+export interface WorkflowImportOptions {
+  targetProjectId?: string
+}
+
 export interface WorkflowImportProviderOption {
   providerId: string
   providerName: string
@@ -49,6 +53,7 @@ export interface WorkflowImportPreview {
     name: string
     nodeCount: number
     modelReferenceCount: number
+    requiresProjectMapping: boolean
   }
   modelReferences: WorkflowModelReference[]
   providerOptions: WorkflowImportProviderOption[]

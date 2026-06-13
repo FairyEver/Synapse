@@ -3,6 +3,7 @@ import type { WorkflowDefinition, WorkflowNode } from "../../../src/types/workfl
 import type {
   SynapseWorkflowPackageV1,
   WorkflowImportPreview,
+  WorkflowImportOptions,
   WorkflowImportProviderOption,
   WorkflowModelMapping,
   WorkflowModelReference,
@@ -67,6 +68,7 @@ export class WorkflowPackageService {
         name: pkg.workflow.name,
         nodeCount: pkg.workflow.nodes.length,
         modelReferenceCount: pkg.modelReferences.length,
+        requiresProjectMapping: workflowNeedsProjectMapping(pkg.workflow),
       },
       modelReferences: pkg.modelReferences,
       providerOptions,
@@ -77,6 +79,7 @@ export class WorkflowPackageService {
   async importPackage(
     pkg: SynapseWorkflowPackageV1,
     mappings: readonly WorkflowModelMapping[],
+    options: WorkflowImportOptions = {},
   ): Promise<{ workflowId: string; versionHash: string } | WorkflowSaveError> {
     assertPackage(pkg)
     const providers = await this.providerService.listProviders()
@@ -104,7 +107,18 @@ export class WorkflowPackageService {
       }
     }
 
-    const imported = rewriteWorkflowForImport(pkg.workflow, pkg.modelReferences, mappingByRef, this.createId(), this.now().getTime())
+    if (workflowNeedsProjectMapping(pkg.workflow) && !options.targetProjectId?.trim()) {
+      return {
+        errors: [{
+          type: "invalid_config",
+          field: "defaultProjectId",
+          message: "请选择项目。",
+          retryable: true,
+        }],
+      }
+    }
+
+    const imported = rewriteWorkflowForImport(pkg.workflow, pkg.modelReferences, mappingByRef, this.createId(), this.now().getTime(), options)
     const saveResult = await this.workflowService.save(imported)
     if ("errors" in saveResult) {
       logger.warn("workflow package import blocked by validation", {
@@ -178,6 +192,7 @@ function rewriteWorkflowForImport(
   mappingByRef: ReadonlyMap<string, WorkflowModelMapping>,
   id: string,
   timestamp: number,
+  options: WorkflowImportOptions,
 ): WorkflowDefinition {
   let next: WorkflowDefinition = {
     ...workflow,
@@ -185,7 +200,7 @@ function rewriteWorkflowForImport(
     version: "",
     createdAt: timestamp,
     updatedAt: timestamp,
-    defaultProjectId: undefined,
+    defaultProjectId: workflowNeedsProjectMapping(workflow) ? options.targetProjectId : undefined,
     nodes: workflow.nodes.map((node) => ({ ...node, config: { ...node.config } })),
     edges: workflow.edges.map((edge) => ({ ...edge })),
     params: workflow.params.map((param) => ({ ...param })),
@@ -220,6 +235,10 @@ function rewriteWorkflowForImport(
   }
 
   return next
+}
+
+function workflowNeedsProjectMapping(workflow: WorkflowDefinition): boolean {
+  return workflow.nodes.some(isModelNode)
 }
 
 function withoutProjectId(config: WorkflowNode["config"]): WorkflowNode["config"] {

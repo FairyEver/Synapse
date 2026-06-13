@@ -132,8 +132,6 @@ describe("AdminController", () => {
       listInvitations: list,
       listUsers: list,
       listTeams: list,
-      listModulePermissions: vi.fn().mockReturnValue([{ key: "module.database" }]),
-      listUserModulePermissions: vi.fn().mockResolvedValue({ permissionKeys: ["module.database"] }),
     }
     const controller = createController(service as never, { record })
     const request = { admin: { email: "admin@example.com" }, ip: "203.0.113.11" } as never
@@ -142,8 +140,6 @@ describe("AdminController", () => {
     await controller.listInvitations({}, request)
     await controller.listUsers({}, request)
     await controller.listTeams({}, request)
-    await controller.listModulePermissions(request)
-    await controller.listUserModulePermissions("user-1", request)
 
     expect(record).toHaveBeenCalledWith(expect.objectContaining({
       adminEmail: "admin@example.com",
@@ -166,16 +162,6 @@ describe("AdminController", () => {
       action: "admin.teams.list",
       targetType: "team",
       targetId: "list",
-    }))
-    expect(record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "admin.module_permissions.list",
-      targetType: "module_permission",
-      targetId: "list",
-    }))
-    expect(record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "admin.user_module_permissions.list",
-      targetType: "user",
-      targetId: "user-1",
     }))
   })
 
@@ -428,101 +414,4 @@ describe("AdminController", () => {
       .toThrow("用户状态无效：status 必须是 active 或 disabled")
   })
 
-  it("lists module permission definitions through the service", async () => {
-    const listModulePermissions = vi.fn().mockReturnValue([{ key: "module.database" }])
-    const controller = createController({ listModulePermissions } as never)
-
-    await expect(controller.listModulePermissions()).resolves.toEqual([{ key: "module.database" }])
-    expect(listModulePermissions).toHaveBeenCalledWith()
-  })
-
-  it("lists user module permissions through the service", async () => {
-    const listUserModulePermissions = vi.fn().mockResolvedValue({ permissionKeys: ["module.database"] })
-    const controller = createController({ listUserModulePermissions } as never)
-
-    await expect(controller.listUserModulePermissions("user-1"))
-      .resolves
-      .toEqual({ permissionKeys: ["module.database"] })
-    expect(listUserModulePermissions).toHaveBeenCalledWith("user-1")
-  })
-
-  it("replaces user module permissions through the service", async () => {
-    const replaceUserModulePermissions = vi.fn().mockResolvedValue({ permissionKeys: ["module.database"] })
-    const controller = createController({ replaceUserModulePermissions } as never)
-
-    await expect(controller.replaceUserModulePermissions(
-      "user-1",
-      { permissionKeys: ["module.database"] },
-      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.75" } as never,
-    ))
-      .resolves
-      .toEqual({ permissionKeys: ["module.database"] })
-    expect(replaceUserModulePermissions).toHaveBeenCalledWith(
-      "user-1",
-      ["module.database"],
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.75",
-    )
-  })
-
-  it("allows empty user module permission replacements", async () => {
-    const replaceUserModulePermissions = vi.fn().mockResolvedValue({ permissionKeys: [] })
-    const controller = createController({ replaceUserModulePermissions } as never)
-
-    await expect(controller.replaceUserModulePermissions(
-      "user-1",
-      { permissionKeys: [] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .resolves
-      .toEqual({ permissionKeys: [] })
-    expect(replaceUserModulePermissions).toHaveBeenCalledWith(
-      "user-1",
-      [],
-      { id: "admin-1", email: "admin@example.com" },
-      undefined,
-    )
-  })
-
-  it("rejects invalid user module permission bodies", async () => {
-    const replaceUserModulePermissions = vi.fn()
-    const controller = createController({ replaceUserModulePermissions } as never)
-
-    await expect(controller.replaceUserModulePermissions(
-      "user-1",
-      { permissionKeys: ["database.use"] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("用户模块权限无效：permissionKeys.0 模块权限不存在或已停用。")
-    expect(replaceUserModulePermissions).not.toHaveBeenCalled()
-  })
-
-  it("rejects whitespace-only user module permission keys", async () => {
-    const replaceUserModulePermissions = vi.fn()
-    const controller = createController({ replaceUserModulePermissions } as never)
-
-    await expect(controller.replaceUserModulePermissions(
-      "user-1",
-      { permissionKeys: ["   "] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("用户模块权限无效：permissionKeys.0 至少 1 个字符")
-    expect(replaceUserModulePermissions).not.toHaveBeenCalled()
-  })
-
-  it("rejects extra fields in user module permission bodies", async () => {
-    const replaceUserModulePermissions = vi.fn()
-    const controller = createController({ replaceUserModulePermissions } as never)
-
-    await expect(controller.replaceUserModulePermissions(
-      "user-1",
-      { permissionKeys: ["module.database"], roleIds: ["role-1"] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("用户模块权限无效：包含不支持的字段：roleIds")
-    expect(replaceUserModulePermissions).not.toHaveBeenCalled()
-  })
 })

@@ -35,6 +35,23 @@ vi.mock("sonner", () => ({
   },
 }))
 
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: {
+      activeRepoUuid: "repo-1",
+      repositories: [],
+      global: {
+        projects: [{ id: "project-1", name: "Project", path: "/repo" }],
+      },
+    },
+    error: null,
+    isReady: true,
+    refreshConfig: vi.fn(),
+    resetKey: 0,
+    updateConfig: vi.fn(),
+  }),
+}))
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => ({
     debug: vi.fn(),
@@ -50,7 +67,7 @@ vi.mock("../components/workflow-list", () => ({
 
 vi.mock("../components/workflow-import-dialog", () => ({
   WorkflowImportDialog: ({ open, onImport }: WorkflowImportDialogProps) => (
-    open ? <button type="button" onClick={() => onImport([])}>确认导入</button> : null
+    open ? <button type="button" onClick={() => onImport([], { targetProjectId: "project-1" })}>确认导入</button> : null
   ),
 }))
 
@@ -143,21 +160,15 @@ describe("WorkflowModule", () => {
     workflowInspectImportPackage.mockResolvedValue({
       packagePath: "/tmp/workflow.synapse-workflow.json",
       workflow: {
-        appVersion: "0.0.0",
-        createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
-        definition: {
-          createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
-          edges: [],
-          id: "workflow-imported",
-          name: "Imported",
-          nodes: [],
-          version: 1,
-          updatedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
-        },
-        exportedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
-        packageVersion: 1,
+        id: "workflow-imported",
+        name: "Imported",
+        nodeCount: 1,
+        modelReferenceCount: 0,
+        requiresProjectMapping: true,
       },
-      mappings: [],
+      modelReferences: [],
+      providerOptions: [],
+      suggestedMappings: [],
     })
     workflowImportPackage.mockResolvedValue({ workflowId: "workflow-imported", versionHash: "hash-1" })
     workflowOpenEditor.mockRejectedValue(new Error("open failed token=sk-secret /Users/example/repo"))
@@ -184,7 +195,9 @@ describe("WorkflowModule", () => {
       await Promise.resolve()
     })
 
-    expect(workflowImportPackage).toHaveBeenCalledWith("/tmp/workflow.synapse-workflow.json", [])
+    expect(workflowImportPackage).toHaveBeenCalledWith("/tmp/workflow.synapse-workflow.json", [], {
+      targetProjectId: "project-1",
+    })
     expect(workflowOpenEditor).toHaveBeenCalledWith("workflow-imported")
     expect(toastSuccess).toHaveBeenCalledWith("工作流已导入")
     expect(toastError).toHaveBeenCalledWith("工作流已导入，但打开编辑器失败")

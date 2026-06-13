@@ -51,6 +51,11 @@ function requireNumber(params: Record<string, unknown>, key: string): number {
   return v
 }
 
+function optionalNumber(params: Record<string, unknown>, key: string): number | undefined {
+  if (params[key] === undefined) return undefined
+  return requireNumber(params, key)
+}
+
 function requireObject(params: Record<string, unknown>, key: string): Record<string, unknown> {
   const v = params[key]
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error(`Missing or invalid '${key}': expected object`)
@@ -163,8 +168,8 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       table: requireString(params, "tableName"),
       where: params.where as DatabaseWhereClause | undefined,
       orderBy: params.orderBy as DatabaseQueryParams["orderBy"],
-      limit: params.limit as number | undefined,
-      offset: params.offset as number | undefined,
+      limit: optionalNumber(params, "limit"),
+      offset: optionalNumber(params, "offset"),
     })
     return { ok: true, data: result.rows, total: result.total }
   },

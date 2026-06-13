@@ -13,7 +13,7 @@ import type {
   CcRecordListInput,
   CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
-import { sanitizeError } from "../../../src/lib/error-sanitize"
+import { errorLogMeta as baseErrorLogMeta } from "../../../src/lib/error-sanitize"
 import { roundModelUsageCost } from "../model-price"
 import { parseCcConversationFile } from "./cc-conversation-parser"
 import { createUsageRangeFilter } from "./range"
@@ -108,13 +108,8 @@ function sqlBindList(values: readonly string[]): string {
   return values.map(() => "?").join(", ")
 }
 
-function errorLogMeta(error: unknown): { errorName: string; errorMessage: string } {
-  const errorName = error instanceof Error ? error.name : typeof error
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName,
-    errorMessage: sanitizeError(message),
-  }
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  return baseErrorLogMeta(error, { includeMessage: true })
 }
 
 function conversationFilterSummary(input: CcConversationListInput): Record<string, unknown> {

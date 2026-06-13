@@ -24,7 +24,6 @@ describe('getSidebarData', () => {
     const data = getSidebarData({
       email: 'user@example.com',
       displayName: 'Ada Lovelace',
-      modulePermissions: [],
       role: 'user',
       sessionId: 'session-1',
     })
@@ -51,7 +50,6 @@ describe('getSidebarData', () => {
     const data = getSidebarData({
       email: 'admin@example.com',
       displayName: null,
-      modulePermissions: [],
       role: 'admin',
       sessionId: 'session-1',
     })

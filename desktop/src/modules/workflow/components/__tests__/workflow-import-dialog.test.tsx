@@ -34,6 +34,7 @@ function renderDialog(props: Partial<Parameters<typeof WorkflowImportDialog>[0]>
       <WorkflowImportDialog
         open
         preview={preview()}
+        projects={[{ id: "project-1", name: "Project", path: "/repo" }]}
         importing={false}
         onOpenChange={vi.fn()}
         onImport={onImport}
@@ -47,7 +48,7 @@ function renderDialog(props: Partial<Parameters<typeof WorkflowImportDialog>[0]>
 function preview(): WorkflowImportPreview {
   return {
     packagePath: "/tmp/shared.synapse-workflow.json",
-    workflow: { id: "workflow-1", name: "Shared Workflow", nodeCount: 3, modelReferenceCount: 2 },
+    workflow: { id: "workflow-1", name: "Shared Workflow", nodeCount: 3, modelReferenceCount: 2, requiresProjectMapping: true },
     modelReferences: [
       {
         id: "ref-1",
@@ -111,7 +112,7 @@ describe("WorkflowImportDialog", () => {
     expect(onImport).toHaveBeenCalledWith([
       { sourceRefId: "ref-1", targetProviderId: "local-deepseek", targetModelTier: "sonnet" },
       { sourceRefId: "ref-2", targetProviderId: "local-openai", targetModelTier: "opus" },
-    ] satisfies WorkflowModelMapping[])
+    ] satisfies WorkflowModelMapping[], { targetProjectId: "project-1" })
   })
 
   it("maps all rows to the active default model", () => {
@@ -124,7 +125,7 @@ describe("WorkflowImportDialog", () => {
     expect(onImport).toHaveBeenCalledWith([
       { sourceRefId: "ref-1", targetProviderId: "local-openai", targetModelTier: "default" },
       { sourceRefId: "ref-2", targetProviderId: "local-openai", targetModelTier: "default" },
-    ])
+    ], { targetProjectId: "project-1" })
   })
 
   it("changes a row through the shared provider model dialog", async () => {
@@ -164,7 +165,15 @@ describe("WorkflowImportDialog", () => {
     expect(onImport).toHaveBeenCalledWith([
       { sourceRefId: "ref-1", targetProviderId: "local-openai", targetModelTier: "haiku" },
       { sourceRefId: "ref-2", targetProviderId: "local-openai", targetModelTier: "opus" },
-    ])
+    ], { targetProjectId: "project-1" })
+  })
+
+  it("requires a project before importing workflows with model nodes", () => {
+    renderDialog({ projects: [] })
+
+    expect(document.body.textContent).toContain("先添加项目后再导入")
+    const importButton = Array.from(document.querySelectorAll("button")).find((node) => node.textContent === "导入")
+    expect(importButton?.disabled).toBe(true)
   })
 })
 

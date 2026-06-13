@@ -91,6 +91,14 @@ describe("server deployment configuration", () => {
     expect(entrypoint).toContain("exec node server/dist/main.js")
   })
 
+  it("checks the server node process health through compose", () => {
+    const compose = readRepoFile("server/compose.yml")
+
+    expect(compose).toContain("healthcheck:")
+    expect(compose).toContain("http://127.0.0.1:3001/healthz")
+    expect(compose).not.toContain("http://127.0.0.1:3000/healthz")
+  })
+
   it("includes the shared workspace package in the server Docker image", () => {
     const dockerfile = readRepoFile("server/Dockerfile")
 

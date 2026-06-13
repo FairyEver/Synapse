@@ -444,6 +444,102 @@ describe("ProviderService", () => {
     ])
   })
 
+  it("audits allowed provider secret creation without raw secret values", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const { service } = makeProviderService({ auditSink })
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-test",
+      secretEnv: {
+        CUSTOM_TOKEN: "secret-token",
+      },
+      env: {},
+    })
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "allowed",
+        resource: "provider:anthropic",
+        metadata: expect.objectContaining({
+          operation: "create",
+          providerId: "anthropic",
+          secretRef: "provider:anthropic:api-key",
+          secretEnvRefs: {
+            CUSTOM_TOKEN: "provider:anthropic:env:CUSTOM_TOKEN",
+          },
+        }),
+      }),
+    ])
+    const serialized = JSON.stringify(auditSink.list())
+    expect(serialized).not.toContain("sk-test")
+    expect(serialized).not.toContain("secret-token")
+  })
+
+  it("audits allowed provider secret update and deletion with secret env refs", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const { service } = makeProviderService({ auditSink })
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-old",
+      secretEnv: {
+        CUSTOM_TOKEN: "old-token",
+      },
+      env: {},
+    })
+    auditSink.clearForTests()
+
+    await service.updateProvider("anthropic", {
+      apiKey: "sk-new",
+      secretEnv: {
+        CUSTOM_TOKEN: "new-token",
+      },
+    })
+    await service.deleteProvider("anthropic")
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "allowed",
+        resource: "provider:anthropic",
+        metadata: expect.objectContaining({
+          operation: "update",
+          providerId: "anthropic",
+          secretRef: "provider:anthropic:api-key",
+          secretEnvRefs: {
+            CUSTOM_TOKEN: "provider:anthropic:env:CUSTOM_TOKEN",
+          },
+        }),
+      }),
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "allowed",
+        resource: "provider:anthropic",
+        metadata: expect.objectContaining({
+          operation: "delete",
+          providerId: "anthropic",
+          secretRef: "provider:anthropic:api-key",
+          secretEnvRefs: {
+            CUSTOM_TOKEN: "provider:anthropic:env:CUSTOM_TOKEN",
+          },
+        }),
+      }),
+    ])
+    const serialized = JSON.stringify(auditSink.list())
+    expect(serialized).not.toContain("sk-old")
+    expect(serialized).not.toContain("sk-new")
+    expect(serialized).not.toContain("old-token")
+    expect(serialized).not.toContain("new-token")
+  })
+
   it("lists public supported provider presets", async () => {
     const { service } = makeProviderService()
 

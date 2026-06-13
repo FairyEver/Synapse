@@ -3,7 +3,7 @@ import { lstat, readFile, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
 import { TextDecoder } from "node:util"
 
-import { sanitizeError } from "../../error-sanitize"
+import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 import { createMainLogger } from "../../log-store"
 import {
   DRAGONSCALE_BOUNDARY_DEFAULT_TOP,
@@ -338,13 +338,8 @@ function increment(counts: Record<string, number>, key: string): void {
   counts[key] = (counts[key] ?? 0) + 1
 }
 
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
-  const raw = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: raw.length,
-    errorMessage: sanitizeError(raw),
-  }
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  return baseErrorLogMeta(error, { includeMessage: true })
 }
 
 function localDateString(date: Date): string {

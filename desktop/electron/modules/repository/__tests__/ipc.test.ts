@@ -232,6 +232,28 @@ describe("repositoryIpcModule", () => {
     ])).not.toContain("secret-token")
   })
 
+  it("keeps repository directory validation read-only", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.repositoryStructureService.validateDirectoryStructure.mockResolvedValueOnce({
+      isValid: false,
+      initializationPreview: {
+        isEmpty: false,
+        nonGitEntries: ["notes.md"],
+        operationToken: "preview-token",
+        dangerFlags: [],
+      },
+      missingDirectories: ["rules"],
+      message: "missing rules",
+    })
+
+    await repositoryIpcModule.methods.validateDirectory.handler(createContext() as never, {
+      targetPath: "/repo",
+    })
+
+    expect(mocks.repositoryStructureService.ensureContentDirectories).not.toHaveBeenCalled()
+    expect(mocks.repositoryStructureService.validateDirectoryStructure).toHaveBeenCalledWith("/repo")
+  })
+
   it("refreshes and broadcasts changed install status after repository sync", async () => {
     const { repositoryIpcModule } = await import("../ipc")
 

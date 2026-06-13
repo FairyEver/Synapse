@@ -211,6 +211,43 @@ describe("WorkflowEngine", () => {
     }))
   })
 
+  it("logs aggregate usage and total cost when workflow completes", async () => {
+    const def: WorkflowDefinition = {
+      id: "wf-aggregate-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeB, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }],
+    }
+    const agent = {
+      sendToAgent: vi.fn()
+        .mockResolvedValueOnce({
+          status: "success" as const,
+          response: "hello",
+          durationMs: 5,
+          usage: { input_tokens: 10, output_tokens: 2 },
+          costUsd: 0.01,
+        })
+        .mockResolvedValueOnce({
+          status: "success" as const,
+          response: "bye",
+          durationMs: 5,
+          usage: { input_tokens: 5, cache_read_input_tokens: 30, ignored: "text" },
+          costUsd: 0.02,
+        }),
+    }
+
+    await new WorkflowEngine(agent).run(def, {}, "run-aggregate-usage", () => {})
+
+    expect(logger.info).toHaveBeenCalledWith("workflow run completed", expect.objectContaining({
+      runId: "run-aggregate-usage",
+      totalCostUsd: 0.03,
+      usage: {
+        input_tokens: 15,
+        output_tokens: 2,
+        cache_read_input_tokens: 30,
+      },
+    }))
+  })
+
   it("does not treat bare SDK cost fields as Synapse workflow cost snapshots", async () => {
     const def: WorkflowDefinition = {
       id: "wf-sdk-cost", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
@@ -338,6 +375,10 @@ describe("WorkflowEngine", () => {
     expect(logger.warn).toHaveBeenCalledWith("node failed", expect.objectContaining({
       usage,
       costUsd: 0.02,
+    }))
+    expect(logger.error).toHaveBeenCalledWith("workflow run failed", expect.objectContaining({
+      totalCostUsd: 0.02,
+      usage,
     }))
   })
 

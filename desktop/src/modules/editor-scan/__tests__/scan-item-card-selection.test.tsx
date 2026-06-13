@@ -72,13 +72,44 @@ describe("ScanItemCard selection", () => {
 
   it("keeps card click behavior for the card body", async () => {
     const { onClick } = await renderCard()
-    const card = document.querySelector<HTMLElement>("[data-scan-item-card]")
+    const cardAction = document.querySelector<HTMLElement>("[data-scan-item-card-action]")
 
     await act(async () => {
-      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      cardAction?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     })
 
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it("exposes the card body as a keyboard button", async () => {
+    const { onClick } = await renderCard()
+    const card = document.querySelector<HTMLElement>("[data-scan-item-card]")
+    const cardAction = document.querySelector<HTMLElement>("[data-scan-item-card-action]")
+
+    expect(card?.getAttribute("role")).toBeNull()
+    expect(cardAction?.getAttribute("role")).toBe("button")
+    expect(cardAction?.tabIndex).toBe(0)
+
+    await act(async () => {
+      cardAction?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      cardAction?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }))
+    })
+
+    expect(onClick).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not open the card from keyboard events on nested controls", async () => {
+    const { onClick } = await renderCard()
+    const checkbox = document.querySelector<HTMLElement>('button[role="checkbox"]')
+    const pathButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("/skills/jenkins"))
+
+    await act(async () => {
+      checkbox?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }))
+      pathButton?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+
+    expect(onClick).not.toHaveBeenCalled()
   })
 
   it("reports an open-in-folder error when the bridge is unavailable", async () => {

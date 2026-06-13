@@ -45,6 +45,7 @@ export function createFileBackedDataRepository(
           schemaVersion: schema.currentVersion,
           backend: "encrypted-json",
           filePath: path.join(options.rootDir, `${safeFileName(schema.name)}.bin`),
+          legacyPlaintextFilePath: path.join(options.rootDir, `${safeFileName(schema.name)}.json`),
           safeStorage: options.safeStorage,
           defaults: recordSchema.defaults,
           validate: recordSchema.validate,

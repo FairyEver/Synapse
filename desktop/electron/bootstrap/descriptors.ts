@@ -100,6 +100,7 @@ import {
   createBuiltinAutomationTriggerRegistry,
 } from "../services/automation"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
+import { configureGitCommandSecurity } from "../services/git-command"
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
@@ -109,7 +110,7 @@ import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
 import type { DataRepository } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { PermissionGuard, AuditSink } from "../runtime/security"
-import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy } from "../runtime/security"
+import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
 import {
   buildHostEnvironment,
@@ -350,6 +351,10 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
   create(ctx) {
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    configureGitCommandSecurity({
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      actor: { kind: "system", id: "repository-git" },
+    })
     const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
     const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
     const snapshotService = ctx.registry.get<RunSnapshotService>("core.workflow.snapshots")
@@ -1177,6 +1182,7 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     const guard = createPermissionGuard()
     guard.registerPolicy(userInitiatedAllowPolicy)
     guard.registerPolicy(systemShellExecPolicy)
+    guard.registerPolicy(webhookShellExecPolicy)
     guard.registerPolicy(systemAutomationPolicy)
     guard.registerPolicy(systemMcpAutoRegisterPolicy)
     return guard

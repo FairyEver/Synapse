@@ -8,6 +8,7 @@ export {
   createPermissionGuard,
   userInitiatedAllowPolicy,
   systemShellExecPolicy,
+  webhookShellExecPolicy,
   systemAutomationPolicy,
   systemMcpAutoRegisterPolicy,
 } from "./permission-guard"

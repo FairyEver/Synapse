@@ -170,6 +170,52 @@ describe("AuditLogInterceptor", () => {
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 
+  it("records successful authenticated admin write operations as fallback audits", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "POST",
+        path: "/api/admin/settings",
+        body: { displayName: "Synapse" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => of({ id: "settings" }) },
+    ))
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "current-admin@example.com",
+      action: "settings.post",
+      targetType: "settings",
+      targetId: "settings",
+      detail: {
+        method: "POST",
+        path: "/api/admin/settings",
+        body: { displayName: "Synapse" },
+      },
+      ipAddress: "127.0.0.1",
+    })
+  })
+
+  it("does not fallback-audit successful authenticated admin read operations", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/users",
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => of({ data: [], total: 0 }) },
+    ))
+
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
   it("records unauthenticated backup list reads without attributing them to the first admin", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
@@ -362,32 +408,6 @@ describe("AuditLogInterceptor", () => {
     expect(JSON.stringify(detail)).not.toContain("plain-api-key")
     expect(JSON.stringify(detail)).not.toContain("internal.example.com")
     expect(JSON.stringify(detail)).not.toContain("/Users/liyang/private")
-  })
-
-  it("records failed module permission updates with the module permission audit action", async () => {
-    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
-    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
-
-    await expect(lastValueFrom(interceptor.intercept(
-      createContext({
-        method: "PUT",
-        path: "/api/admin/users/user-1/module-permissions",
-        params: { id: "user-1" },
-        body: { permissionKeys: ["module.unknown"] },
-        admin: { id: "admin-1", email: "current-admin@example.com" },
-      }),
-      { handle: () => throwError(() => new Error("用户模块权限无效。")) },
-    ))).rejects.toThrow("用户模块权限无效。")
-
-    await vi.waitFor(() => {
-      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-        adminEmail: "current-admin@example.com",
-        action: "admin.user_module_permissions.replace.failed",
-        targetType: "user",
-        targetId: "user-1",
-      }))
-    })
   })
 
   it("records failed team role permission updates with the role permission audit action", async () => {

@@ -3,7 +3,7 @@ import type { DataNamespace } from "../runtime/data-repo"
 import type { CheatCodeStatesEntryV1 } from "../runtime/data-repo/schemas"
 import type { EventBus } from "../runtime/event-bus"
 import { createMainLogger } from "./log-store"
-import { sanitizeError } from "./error-sanitize"
+import { errorLogMeta as baseErrorLogMeta } from "./error-sanitize"
 
 export const CHEAT_CODE_STATE_SERVICE_ID = "core.cheat-code-state"
 
@@ -124,10 +124,6 @@ function assertCheatCodeName(name: string): void {
   }
 }
 
-function errorLogMeta(error: unknown): { errorName: string; errorMessage: string } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorMessage: sanitizeError(message),
-  }
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  return baseErrorLogMeta(error, { includeMessage: true })
 }

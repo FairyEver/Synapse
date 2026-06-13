@@ -32,6 +32,7 @@ import {
   webFetchPreflightFailureMeta,
 } from "./agent-error-messages"
 import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
+import { errorLogMessage, errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import {
   buildClaudeUserMessageContent,
@@ -802,8 +803,7 @@ function allowedWriteRootsMessage(agentType: string, allowedWriteRoots: readonly
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return typeof error === "string" ? error : "SDK query failed"
+  return errorLogMessage(error, "SDK query failed")
 }
 
 function errorDiagnosticMessage(error: unknown): string | undefined {
@@ -815,8 +815,7 @@ function errorDiagnosticMessage(error: unknown): string | undefined {
 function errorLogMeta(error: unknown): Record<string, unknown> {
   const message = errorMessage(error)
   return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
+    ...baseErrorLogMeta(error, { fallbackMessage: "SDK query failed" }),
     ...webFetchPreflightFailureMeta(message),
   }
 }

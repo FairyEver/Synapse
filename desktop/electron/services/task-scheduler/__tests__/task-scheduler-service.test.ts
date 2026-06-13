@@ -119,6 +119,33 @@ describe("TaskSchedulerService", () => {
     await runPromise
   })
 
+  it("does not expose an activeRun id before the run repository returns one", async () => {
+    const harness = createHarness({ action: longRunningAction() })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+    const start = harness.runs.start.bind(harness.runs)
+    let releaseStart: (() => void) | undefined
+    harness.runs.start = vi.fn((taskId, triggeredBy) =>
+      new Promise<ScheduledTaskRunEntry>((resolve) => {
+        releaseStart = () => {
+          void start(taskId, triggeredBy).then(resolve)
+        }
+      }))
+
+    const runPromise = harness.service.runNow("task:1")
+    await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
+
+    const [task] = await harness.service.schedulerTaskList()
+    expect(task).toEqual(expect.objectContaining({ id: "task:1" }))
+    expect(task).not.toHaveProperty("activeRun")
+
+    releaseStart?.()
+    await waitFor(async () => (await harness.runs.listByTask("task:1")).some((run) => run.status === "running"))
+    const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+    await harness.service.stopRun(running!.id)
+    await runPromise
+  })
+
   it("emits scheduler change events when a scheduled run finishes", async () => {
     const emit = vi.fn()
     const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }

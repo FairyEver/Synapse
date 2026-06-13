@@ -18,7 +18,6 @@ import type {
 export type AdminSession = {
   email: string
   displayName: string | null
-  modulePermissions: string[]
   role: 'admin' | 'user'
   sessionId: string
 }
@@ -30,7 +29,6 @@ export type SystemOverview = {
     users: number
     teams: number
     invitations: number
-    userModulePermissions: number
   }
   userStatus: {
     active: number
@@ -78,7 +76,6 @@ export type AdminUserRow = {
     role: 'owner' | 'member'
     team: { id: string; name: string }
   }>
-  modulePermissions: Array<{ permissionKey: string }>
   createdAt: string
   updatedAt: string
 }
@@ -131,14 +128,6 @@ export type AdminTeamRow = {
   }>
   createdAt: string
   updatedAt: string
-}
-
-export type ModulePermissionDefinition = {
-  key: string
-  label: string
-  group: string
-  sortOrder: number
-  status: 'active' | 'deprecated'
 }
 
 export type DashboardMe = {
@@ -778,19 +767,6 @@ export const adminApi = {
   listTeams: (options: PaginationOptions = {}) =>
     request<PaginatedResponse<AdminTeamRow>>(
       `${adminApiBasePath}/teams${paginationSuffix(options)}`
-    ),
-  listModulePermissions: () =>
-    request<ModulePermissionDefinition[]>(
-      `${adminApiBasePath}/module-permissions`
-    ),
-  listUserModulePermissions: (id: string) =>
-    request<{ permissionKeys: string[] }>(
-      `${adminApiBasePath}/users/${encodeURIComponent(id)}/module-permissions`
-    ),
-  replaceUserModulePermissions: (id: string, permissionKeys: string[]) =>
-    request<{ permissionKeys: string[] }>(
-      `${adminApiBasePath}/users/${encodeURIComponent(id)}/module-permissions`,
-      { method: 'PUT', body: JSON.stringify({ permissionKeys }) }
     ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>

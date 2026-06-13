@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Logger, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -8,7 +8,6 @@ import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { LiveDeviceService } from "../live/live-device.service"
-import { isActiveModulePermissionKey } from "../permissions/permission-registry"
 import { WebhookService } from "../webhooks/webhook.service"
 import { AdminService } from "./admin.service"
 
@@ -22,14 +21,6 @@ const bulkInvitationDeleteSchema = z.object({
 
 const createInvitationSchema = z.object({
   teamId: z.string().trim().min(1),
-}).strict()
-
-const modulePermissionKeysSchema = z.array(
-  z.string().trim().min(1).refine(isActiveModulePermissionKey, "模块权限不存在或已停用。"),
-)
-
-const userModulePermissionsSchema = z.object({
-  permissionKeys: modulePermissionKeysSchema,
 }).strict()
 
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
@@ -187,39 +178,6 @@ export class AdminController {
       detail: { page: pagination.page, pageSize: pagination.pageSize },
     })
     return result
-  }
-
-  @Get("/module-permissions")
-  async listModulePermissions(@Req() request?: AdminRequest) {
-    const result = this.admin.listModulePermissions()
-    await this.recordAdminRead(request, {
-      action: "admin.module_permissions.list",
-      targetType: "module_permission",
-      targetId: "list",
-    })
-    return result
-  }
-
-  @Get("/users/:id/module-permissions")
-  async listUserModulePermissions(@Param("id") id: string, @Req() request?: AdminRequest) {
-    const result = await this.admin.listUserModulePermissions(id)
-    await this.recordAdminRead(request, {
-      action: "admin.user_module_permissions.list",
-      targetType: "user",
-      targetId: id,
-    })
-    return result
-  }
-
-  @Put("/users/:id/module-permissions")
-  async replaceUserModulePermissions(
-    @Param("id") id: string,
-    @Body() body: unknown,
-    @Req() request: AdminRequest,
-  ) {
-    const result = userModulePermissionsSchema.safeParse(body)
-    if (!result.success) throw badRequestFromZodError(result.error, "用户模块权限无效。")
-    return this.admin.replaceUserModulePermissions(id, result.data.permissionKeys, request.admin!, request.ip)
   }
 
   @Get("/audit-logs/export")

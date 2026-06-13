@@ -1,4 +1,3 @@
-import { homedir } from "node:os"
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { ScriptNodeConfig } from "./schema"
 import { runShellAction } from "../../action-packages/builtin/shell-process.main"
@@ -18,6 +17,22 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
 
     if (!runtimeDeps?.processRunner) {
       return { status: "failed", output: "", error: "脚本执行能力不可用", durationMs: Date.now() - start }
+    }
+
+    const projectId = context.projectId?.trim()
+    if (!projectId) {
+      return { status: "failed", output: "", error: "脚本节点缺少项目", durationMs: Date.now() - start }
+    }
+
+    const resolveProjectWorkspacePath = runtimeDeps.resolveProjectWorkspacePath
+    if (!resolveProjectWorkspacePath) {
+      return { status: "failed", output: "", error: "脚本项目路径解析能力不可用", durationMs: Date.now() - start }
+    }
+
+    input.onProgress?.("resolving_project", "解析项目…")
+    const cwd = await resolveProjectWorkspacePath(projectId)
+    if (!cwd) {
+      return { status: "failed", output: "", error: "脚本节点项目不存在", durationMs: Date.now() - start }
     }
 
     input.onProgress?.("preparing", "准备脚本…")
@@ -41,7 +56,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
           actor: context.actor ?? { kind: "system" as const, id: "workflow-engine" },
           taskId: context.runId,
           runId: context.runId,
-          cwd: homedir(),
+          cwd,
           triggeredBy: "manual",
           abortSignal: context.abortSignal,
         },

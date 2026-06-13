@@ -103,14 +103,6 @@ export class DataRepositoryImpl implements DataRepository {
       const data = ns.data as { singleton?: unknown; items?: unknown[] }
 
       if (!options.merge) {
-        // Append-only JSONL namespaces (audit, diagnostics) do not support
-        // remove; skip the clear phase entirely — their data is preserved
-        // across imports by design.
-        if (entry.handle.backend === "jsonl") {
-          await this.importNamespaceData(entry, data)
-          continue
-        }
-
         // Replace mode: snapshot existing data before clearing so we can
         // restore if the import fails partway through.
         const snapshot = await entry.handle.list()
@@ -151,13 +143,12 @@ export class DataRepositoryImpl implements DataRepository {
   }
 
   private async clearNamespaceSingleton(entry: RegistrationEntry<unknown>): Promise<void> {
+    if (await entry.handle.getSingleton() === null) return
     if (entry.handle.clearSingleton) {
       await entry.handle.clearSingleton()
       return
     }
-    if (await entry.handle.getSingleton() !== null) {
-      throw new Error(`Namespace "${entry.schema.name}" does not support clearing singleton data`)
-    }
+    throw new Error(`Namespace "${entry.schema.name}" does not support clearing singleton data`)
   }
 
   private async importNamespaceData(

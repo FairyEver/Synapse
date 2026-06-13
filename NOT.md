@@ -52,7 +52,7 @@ Synapse 里的 Claude 需要复用本机 Claude Code 的全局和项目上下文
 - 保留 `skills: "all"`，让已发现的 skill 可用。
 - 通过 `settings.env: options.env` 把 Synapse 当前 provider 的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 和模型环境变量放入更高优先级的 flag settings 层。
 - `ProviderService.buildEnv()` 必须在两种 key 字段之间显式清空另一个字段：使用 `ANTHROPIC_AUTH_TOKEN` 时清空 `ANTHROPIC_API_KEY`，使用 `ANTHROPIC_API_KEY` 时清空 `ANTHROPIC_AUTH_TOKEN`，避免 `~/.claude/settings.json` 或进程环境中的旧凭证残留。
-- `disableAllHooks: true` 继续保留，避免全局或项目 hook 在 Synapse 托管会话中执行。
+- 普通会话默认保持 `disableAllHooks: true`。当托管知识库 runtime 明确启用 plugin hooks 时，`disableAllHooks` 可以设为 `false`，并保留 `user` / `project` / `local` settings；用户自己配置的 hooks 在该会话中运行是当前产品允许的行为。
 
 审查时不要把 `settings.env: options.env` 误判为重复配置。它和顶层 `env: { ...process.env, ...options.env }` 不是同一层：顶层 `env` 传给 Claude Code 子进程，`settings.env` 用于覆盖从 `~/.claude/settings.json` / 项目 settings 读取到的同名 provider 鉴权配置。
 

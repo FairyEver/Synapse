@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises"
+import { mkdtemp, rm, writeFile, readFile, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -40,6 +40,79 @@ function makeFakeSafeStorage(available = true): SafeStorage {
 }
 
 describe("EncryptedJsonNamespace (T2.3)", () => {
+  it("migrates a legacy plaintext JSON envelope into encrypted storage", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "secrets.bin")
+    const legacyFile = path.join(dir, "secrets.json")
+    try {
+      await writeFile(legacyFile, JSON.stringify({
+        schemaVersion: 1,
+        singleton: null,
+        items: {
+          k1: { id: "k1", provider: "anthropic", token: "sk-legacy-token" },
+        },
+      }))
+      const ns = new EncryptedJsonNamespace<ApiKey>({
+        name: "secrets",
+        schemaVersion: 1,
+        backend: "encrypted-json",
+        filePath: file,
+        legacyPlaintextFilePath: legacyFile,
+        safeStorage: makeFakeSafeStorage(),
+      })
+
+      expect(await ns.get("k1")).toEqual({
+        id: "k1",
+        provider: "anthropic",
+        token: "sk-legacy-token",
+      })
+      await expect(stat(legacyFile)).rejects.toMatchObject({ code: "ENOENT" })
+      const onDisk = await readFile(file)
+      expect(onDisk.toString("utf8")).not.toContain("sk-legacy-token")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps a legacy plaintext file untouched when encrypted storage already exists", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "secrets.bin")
+    const legacyFile = path.join(dir, "secrets.json")
+    try {
+      const existing = new EncryptedJsonNamespace<ApiKey>({
+        name: "secrets",
+        schemaVersion: 1,
+        backend: "encrypted-json",
+        filePath: file,
+        safeStorage: makeFakeSafeStorage(),
+      })
+      await existing.setSingleton({ id: "encrypted", provider: "anthropic", token: "sk-encrypted" })
+      await writeFile(legacyFile, JSON.stringify({
+        schemaVersion: 1,
+        singleton: { id: "legacy", provider: "openai", token: "sk-legacy" },
+        items: {},
+      }))
+
+      const ns = new EncryptedJsonNamespace<ApiKey>({
+        name: "secrets",
+        schemaVersion: 1,
+        backend: "encrypted-json",
+        filePath: file,
+        legacyPlaintextFilePath: legacyFile,
+        safeStorage: makeFakeSafeStorage(),
+      })
+
+      expect(await ns.getSingleton()).toEqual({
+        id: "encrypted",
+        provider: "anthropic",
+        token: "sk-encrypted",
+      })
+      await expect(stat(legacyFile)).resolves.toBeDefined()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("singleton roundtrip via fake safeStorage; on-disk bytes differ from plaintext", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "secrets.bin")

@@ -18,9 +18,6 @@ import {
   mergeLiveClientSnapshot,
   upsertLiveClient,
 } from './live-client-utils'
-import { formatModulePermissionSummary } from './module-permissions'
-import { UserModulePermissionsSheet } from './user-module-permissions-sheet'
-import { useUserModulePermissionsEditor } from './use-user-module-permissions-editor'
 import { getUsersTableError, getUsersTableLoading } from './users-page-error'
 
 export default function UsersPage() {
@@ -32,23 +29,12 @@ export default function UsersPage() {
   const [liveClients, setLiveClients] = useState<LiveClientRow[]>([])
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
-  const permissionEditor = useUserModulePermissionsEditor()
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-users', page, pageSize, sortQuery],
     queryFn: () => adminApi.listUsers({ page, pageSize, ...sortQuery }),
   })
 
-  const {
-    data: modulePermissionDefinitions = [],
-    error: modulePermissionDefinitionsError,
-    isError: isModulePermissionDefinitionsError,
-    isLoading: isModulePermissionDefinitionsLoading,
-    refetch: refetchModulePermissionDefinitions,
-  } = useQuery({
-    queryKey: ['admin-module-permissions'],
-    queryFn: () => adminApi.listModulePermissions(),
-  })
   const { data: liveClientSnapshot } = useQuery({
     queryKey: ['admin-live-clients'],
     queryFn: () => adminApi.listLiveClients(),
@@ -76,17 +62,10 @@ export default function UsersPage() {
   const isTableLoading = getUsersTableLoading({
     isUsersError: isError,
     isUsersLoading: isLoading,
-    isModulePermissionDefinitionsLoading,
   })
-  const tableError = getUsersTableError(
-    isError,
-    error,
-    isModulePermissionDefinitionsError,
-    modulePermissionDefinitionsError
-  )
+  const tableError = getUsersTableError(isError, error)
   const retryTable = () => {
     void refetch()
-    void refetchModulePermissionDefinitions()
   }
 
   const toggleStatus = useMutation({
@@ -137,18 +116,6 @@ export default function UsersPage() {
       enableSorting: false,
     },
     {
-      id: 'modulePermissions',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='模块' />
-      ),
-      cell: ({ row }) =>
-        formatModulePermissionSummary(
-          row.original.modulePermissions.map((item) => item.permissionKey),
-          modulePermissionDefinitions
-        ),
-      enableSorting: false,
-    },
-    {
       id: 'liveClients',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='客户端' />
@@ -181,13 +148,6 @@ export default function UsersPage() {
       id: 'actions',
       cell: ({ row }) => (
         <div className='flex justify-end gap-2'>
-          <Button
-            variant='ghost'
-            className='h-8 px-2'
-            onClick={() => void permissionEditor.open(row.original)}
-          >
-            模块权限
-          </Button>
           <Button
             variant='ghost'
             className='h-8 px-2'
@@ -229,23 +189,6 @@ export default function UsersPage() {
             onSortingChange={setSorting}
           />
         )}
-        <UserModulePermissionsSheet
-          open={permissionEditor.isOpen}
-          user={permissionEditor.user}
-          definitions={
-            permissionEditor.definitions.length > 0
-              ? permissionEditor.definitions
-              : modulePermissionDefinitions
-          }
-          permissionKeys={permissionEditor.permissionKeys}
-          isLoading={permissionEditor.isLoading}
-          isSaving={permissionEditor.isSaving}
-          error={permissionEditor.error}
-          onClose={permissionEditor.close}
-          onRetry={permissionEditor.retry}
-          onSave={() => void permissionEditor.save()}
-          onToggle={permissionEditor.toggle}
-        />
       </Main>
     </>
   )

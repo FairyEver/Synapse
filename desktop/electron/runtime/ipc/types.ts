@@ -14,10 +14,6 @@
 
 import type { ZodSchema } from "zod"
 
-/** Bumped on every breaking IPC change. SPEC §15.2. */
-export const IPC_PROTOCOL_VERSION = 1 as const
-export type IpcProtocolVersion = typeof IPC_PROTOCOL_VERSION
-
 export type IpcMethodKind = "invoke" | "send"
 
 export interface IpcHandlerLogger {
@@ -72,11 +68,3 @@ export interface IpcRegistry {
   register(module: IpcModule, ctx: IpcHandlerContext): IpcRegisterResult
   list(): readonly { moduleId: string; channels: readonly string[] }[]
 }
-
-export interface IpcHandshakeRequest {
-  readonly clientVersion: number
-}
-
-export type IpcHandshakeResponse =
-  | { readonly ok: true; readonly serverVersion: number }
-  | { readonly ok: false; readonly serverVersion: number; readonly minimumClientVersion: number }

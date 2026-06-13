@@ -9,6 +9,7 @@ import {
   formatTaskAction,
   formatTaskNextRun,
   parseTaskImportFile,
+  serializeTasksForExport,
 } from "../utils"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
@@ -251,6 +252,75 @@ describe("task scheduler utils", () => {
       version: 1,
       tasks: [{}],
     }))).toThrow("文件格式无效")
+  })
+
+  it("strips HTTP auth secrets when exporting scheduled tasks", () => {
+    const exportFile = serializeTasksForExport([
+      createTask({
+        id: "task-http-1",
+        action: {
+          type: "builtin.http-request",
+          config: {
+            method: "GET",
+            url: "https://api.example.test",
+            auth: {
+              type: "bearer",
+              bearerToken: "sk-live-token",
+            },
+          },
+        },
+      }),
+      createTask({
+        id: "task-http-2",
+        action: {
+          type: "builtin.http-request",
+          config: {
+            method: "GET",
+            url: "https://api.example.test/basic",
+            auth: {
+              type: "basic",
+              basicUsername: "alice",
+              basicPassword: "secret-password",
+            },
+          },
+        },
+      }),
+    ])
+
+    expect(JSON.stringify(exportFile)).not.toContain("sk-live-token")
+    expect(JSON.stringify(exportFile)).not.toContain("secret-password")
+    expect(exportFile.tasks[0]?.action.config).toMatchObject({
+      auth: { type: "bearer" },
+    })
+    expect(exportFile.tasks[1]?.action.config).toMatchObject({
+      auth: { type: "basic", basicUsername: "alice" },
+    })
+  })
+
+  it("strips HTTP auth secrets when parsing imported task files", () => {
+    const parsed = parseTaskImportFile(JSON.stringify({
+      version: 1,
+      exportedAt: "2026-05-21T00:00:00.000Z",
+      tasks: [{
+        name: "Ping",
+        scope: { type: "global" },
+        trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+        action: {
+          type: "builtin.http-request",
+          config: {
+            method: "GET",
+            url: "https://api.example.test",
+            auth: { type: "bearer", bearerToken: "old-token" },
+          },
+        },
+        missedRunPolicy: "skip",
+      }],
+    }))
+
+    expect(JSON.stringify(parsed)).not.toContain("old-token")
+    expect(parsed.tasks[0]?.action.config).toMatchObject({
+      auth: { type: "bearer" },
+    })
   })
 })
 

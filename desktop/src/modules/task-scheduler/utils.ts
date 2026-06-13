@@ -278,7 +278,7 @@ function serializeTasksForExport(tasks: ScheduledTask[]): TaskExportFile {
       scope: task.scope,
       cwd: task.cwd,
       trigger: task.trigger,
-      action: task.action,
+      action: stripTaskActionSecrets(task.action),
       activeDays: task.activeDays,
       missedRunPolicy: task.missedRunPolicy,
     })),
@@ -303,8 +303,28 @@ function parseTaskImportFile(content: string): TaskExportFile {
     exportedAt: typeof data.exportedAt === "string"
       ? data.exportedAt
       : "",
-    tasks,
+    tasks: tasks.map((task) => ({
+      ...task,
+      action: stripTaskActionSecrets(task.action),
+    })),
   }
+}
+
+function stripTaskActionSecrets(action: ScheduledTaskActionRef): ScheduledTaskActionRef {
+  if (action.type !== "builtin.http-request") return action
+  const config = { ...action.config }
+  if (!isRecord(config.auth)) {
+    return { ...action, config }
+  }
+  const auth = { ...config.auth }
+  if (auth.type === "bearer") {
+    delete auth.bearerToken
+  }
+  if (auth.type === "basic") {
+    delete auth.basicPassword
+  }
+  config.auth = auth
+  return { ...action, config }
 }
 
 function isTaskExportEntry(value: unknown): value is TaskExportFile["tasks"][number] {

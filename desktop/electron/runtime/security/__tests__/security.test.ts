@@ -6,7 +6,9 @@ import {
   createPermissionGuard,
   systemAutomationPolicy,
   systemMcpAutoRegisterPolicy,
+  systemShellExecPolicy,
   userInitiatedAllowPolicy,
+  webhookShellExecPolicy,
   type PermissionPolicy,
   type PermissionRequest,
 } from "../index"
@@ -136,6 +138,31 @@ describe("PermissionGuard (T6.6)", () => {
       actor: { kind: "system", id: "automation" },
       resource: "wf-1",
       context: { source: "automation" },
+    })).allowed).toBe(false)
+  })
+
+  it("default shell policies allow authenticated webhook exec requests", async () => {
+    const guard = createPermissionGuard()
+    guard.registerPolicy(userInitiatedAllowPolicy)
+    guard.registerPolicy(systemShellExecPolicy)
+    guard.registerPolicy(systemAutomationPolicy)
+    guard.registerPolicy(systemMcpAutoRegisterPolicy)
+    guard.registerPolicy(webhookShellExecPolicy)
+
+    expect((await guard.check({
+      action: "shell.exec",
+      actor: { kind: "agent", id: "webhook" },
+      resource: "webhook:/hooks/wh_123",
+      context: {
+        source: "automation-ingress.webhook",
+        runId: "run-1",
+      },
+    })).allowed).toBe(true)
+    expect((await guard.check({
+      action: "shell.exec",
+      actor: { kind: "agent", id: "claude" },
+      resource: "bash",
+      context: {},
     })).allowed).toBe(false)
   })
 })

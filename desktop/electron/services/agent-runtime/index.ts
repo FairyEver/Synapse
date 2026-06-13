@@ -20,6 +20,7 @@ import {
 import { getUsageAnalysisDb } from "../usage-analysis"
 import { listModelPriceRules } from "../model-price"
 import { ReplyOutboxService } from "../reply-target"
+import { KnowledgeBaseIngestCoordinator } from "../knowledge-base/ingest-finalizer"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
 import { validateWorkspaceDirectory } from "./session-manager"
@@ -165,11 +166,22 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         logger: ctx.logger,
       })
       const isManagedKnowledgeBase = ctx.projectMeta.managedKnowledgeBase === true
-      const isManagedKnowledgeBaseRendererMessage = (message: AgentMessage) =>
+      const hasManagedKnowledgeBaseWorkspace =
         isManagedKnowledgeBase
-        && message.platform === "local-renderer"
         && typeof ctx.projectMeta.workspacePath === "string"
         && ctx.projectMeta.workspacePath.length > 0
+      const isManagedKnowledgeBaseRendererMessage = (message: AgentMessage) =>
+        hasManagedKnowledgeBaseWorkspace
+        && message.platform === "local-renderer"
+      const isManagedKnowledgeBaseRuntimeMessage = (message: AgentMessage) =>
+        hasManagedKnowledgeBaseWorkspace
+        && (message.platform === "local-renderer" || message.platform === "workflow")
+      const knowledgeBaseIngest = isManagedKnowledgeBase && typeof ctx.projectMeta.workspacePath === "string"
+        ? new KnowledgeBaseIngestCoordinator({
+          projectId: ctx.projectId,
+          projectPath: ctx.projectMeta.workspacePath,
+        })
+        : undefined
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -194,13 +206,21 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         commandRunner: runner,
         registeredPromptCommands: async () => [],
         publishedProjectCommands: async () => [],
-        sdkPlugins: async (message) => isManagedKnowledgeBaseRendererMessage(message)
+        sdkPlugins: async (message) => isManagedKnowledgeBaseRuntimeMessage(message)
           ? [{ type: "local", path: ctx.projectMeta.workspacePath as string }]
           : [],
-        allowPluginHooks: async (message) => isManagedKnowledgeBaseRendererMessage(message),
+        allowPluginHooks: async (message) => isManagedKnowledgeBaseRuntimeMessage(message),
         allowAgentNativeSlash: (name, message) =>
-          isManagedKnowledgeBaseRendererMessage(message)
+          isManagedKnowledgeBaseRuntimeMessage(message)
           && MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS.has(name),
+        prepareMessage: (message, context) =>
+          isManagedKnowledgeBaseRendererMessage(message) && knowledgeBaseIngest
+            ? knowledgeBaseIngest.prepareTurn(message, context)
+            : message,
+        afterTurn: (input) =>
+          isManagedKnowledgeBaseRendererMessage(input.message) && knowledgeBaseIngest
+            ? knowledgeBaseIngest.finalizeTurn(input)
+            : undefined,
         sdkAgents: async () => ({}),
         sdkSubagentToolPolicies: async () => ({}),
       })

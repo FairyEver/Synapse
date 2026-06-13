@@ -44,6 +44,15 @@ services:
       PORT: "3001"
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:3001/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     volumes:
       - ./logs:/app/logs
       - ./data/drive:/app/data/drive

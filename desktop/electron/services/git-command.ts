@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process"
 import { access } from "node:fs/promises"
 import path from "node:path"
+import type { ControlledProcessRunner } from "../runtime/process"
+import type { ActorIdentity } from "../runtime/security"
 
 type GitCommandSource = "stderr" | "stdout"
 
@@ -18,6 +20,21 @@ type GitCommandOptions = {
   onLine?: (line: string, source: GitCommandSource) => void
   timeoutMessage?: string
   timeoutMs?: number
+}
+
+type GitCommandSecurity = {
+  readonly processRunner: Pick<ControlledProcessRunner, "run">
+  readonly actor?: ActorIdentity
+}
+
+let gitCommandSecurity: GitCommandSecurity | null = null
+
+function configureGitCommandSecurity(security: GitCommandSecurity): void {
+  gitCommandSecurity = security
+}
+
+function resetGitCommandSecurityForTests(): void {
+  gitCommandSecurity = null
 }
 
 function formatDefaultGitSpawnError(error: unknown): string {
@@ -70,6 +87,21 @@ function runGitCommand({
   timeoutMessage,
   timeoutMs,
 }: GitCommandOptions): Promise<GitCommandResult> {
+  const security = gitCommandSecurity
+  if (security) {
+    return runControlledGitCommand({
+      args,
+      cwd,
+      fallbackMessage,
+      formatFailureMessage,
+      formatSpawnError,
+      onLine,
+      security,
+      timeoutMessage,
+      timeoutMs,
+    })
+  }
+
   return new Promise((resolve, reject) => {
     const childProcess = spawn("git", args, {
       cwd,
@@ -152,6 +184,60 @@ function runGitCommand({
   })
 }
 
+async function runControlledGitCommand({
+  args,
+  cwd,
+  fallbackMessage,
+  formatFailureMessage,
+  formatSpawnError,
+  onLine,
+  security,
+  timeoutMessage,
+  timeoutMs,
+}: GitCommandOptions & { readonly security: GitCommandSecurity }): Promise<GitCommandResult> {
+  try {
+    const result = await security.processRunner.run({
+      action: "shell.exec",
+      actor: security.actor ?? { kind: "system", id: "git-command" },
+      command: "git",
+      args,
+      cwd,
+      env: {
+        GIT_TERMINAL_PROMPT: "0",
+        LANG: "C",
+        LC_ALL: "C",
+      },
+      envAllowlist: ["GIT_TERMINAL_PROMPT", "LANG", "LC_ALL"],
+      timeoutMs,
+      output: { stdout: "buffer", stderr: "buffer" },
+      onStdoutLine: (line) => onLine?.(line, "stdout"),
+      onStderrLine: (line) => onLine?.(line, "stderr"),
+      metadata: {
+        source: "git-command",
+        gitArgs: args,
+      },
+    })
+    const stdout = result.stdout ?? ""
+    const stderr = result.stderr ?? ""
+    if (result.timedOut) {
+      throw new Error(timeoutMessage ?? fallbackMessage)
+    }
+    if (result.exitCode === 0) {
+      return { stderr, stdout }
+    }
+    const combinedOutput = `${stdout}${stderr}`
+    const message = formatFailureMessage
+      ? formatFailureMessage(combinedOutput, fallbackMessage)
+      : stderr.trim() || stdout.trim() || fallbackMessage
+    throw new Error(message)
+  } catch (error) {
+    if (error instanceof Error && error.message) {
+      throw error
+    }
+    throw new Error((formatSpawnError ?? formatDefaultGitSpawnError)(error))
+  }
+}
+
 function runGitTextCommand(options: GitCommandOptions): Promise<string> {
   return runGitCommand(options).then((result) => result.stdout.trim())
 }
@@ -189,7 +275,9 @@ async function isGitRebaseInProgress(cwd: string): Promise<boolean> {
 
 export {
   formatDefaultGitSpawnError,
+  configureGitCommandSecurity,
   isGitRebaseInProgress,
+  resetGitCommandSecurityForTests,
   runGitCommand,
   runGitTextCommand,
 }

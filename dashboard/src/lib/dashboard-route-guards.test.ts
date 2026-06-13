@@ -8,7 +8,6 @@ function signInAs(role: 'admin' | 'user') {
     email: `${role}@example.com`,
     displayName: null,
     role,
-    modulePermissions: [],
     sessionId: `${role}-session`,
   })
 }

@@ -55,12 +55,13 @@ export function createHttpRequestAction(deps: {
     manifest: httpRequestActionManifest,
     buildPermissionRequest: ({ config, context }) => {
       const renderedConfig = renderHttpConfig(config, context.templateVariables)
+      const permissionUrl = buildPermissionUrl(renderedConfig)
       const authType = getPermissionAuthType(renderedConfig)
 
       return {
         action: "network.connect",
         actor: context.actor,
-        resource: sanitizeUrl(renderedConfig.url),
+        resource: sanitizeUrl(permissionUrl),
         context: {
           source: "task-scheduler",
           actionType: httpRequestActionManifest.id,
@@ -68,7 +69,7 @@ export function createHttpRequestAction(deps: {
           runId: context.runId,
           triggeredBy: context.triggeredBy,
           method: renderedConfig.method,
-          url: sanitizeUrl(renderedConfig.url),
+          url: sanitizeUrl(permissionUrl),
           headerKeys: buildPermissionHeaderKeys(renderedConfig, authType),
           authType: authType ?? undefined,
           timeoutMins: renderedConfig.timeoutMins,
@@ -137,6 +138,14 @@ export function createHttpRequestAction(deps: {
 
 function isTemplateVariableError(err: unknown): err is Error {
   return err instanceof Error && err.message.startsWith("未知变量：")
+}
+
+function buildPermissionUrl(config: HttpRequestActionConfig): string {
+  try {
+    return buildHttpRequestUrl(config)
+  } catch {
+    return config.url
+  }
 }
 
 function renderHttpConfig(

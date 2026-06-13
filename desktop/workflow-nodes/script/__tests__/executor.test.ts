@@ -21,7 +21,11 @@ const ctx = {
   abortSignal: new AbortController().signal,
 }
 
-function makeInput(config: Partial<ScriptNodeConfig>, runtimeDeps?: NodeRuntimeDeps): NodeExecutionInput<ScriptNodeConfig> {
+function makeInput(
+  config: Partial<ScriptNodeConfig>,
+  runtimeDeps?: NodeRuntimeDeps,
+  context: Partial<NodeExecutionInput<ScriptNodeConfig>["context"]> = {},
+): NodeExecutionInput<ScriptNodeConfig> {
   return {
     config: {
       script: "echo hello",
@@ -30,7 +34,7 @@ function makeInput(config: Partial<ScriptNodeConfig>, runtimeDeps?: NodeRuntimeD
       ...config,
     } as ScriptNodeConfig,
     resolvedVariables: {},
-    context: ctx,
+    context: { ...ctx, ...context },
     agentDeps: { sendToAgent: vi.fn() },
     runtimeDeps,
   }
@@ -50,6 +54,7 @@ function fakeRuntimeDeps(exitCode = 0, stdout = "hello\n", stderr = ""): NodeRun
         diagnostics: undefined,
       }),
     },
+    resolveProjectWorkspacePath: vi.fn().mockResolvedValue("/Users/liyang/project"),
     sendHttpRequest: vi.fn(),
   }
 }
@@ -79,6 +84,7 @@ describe("scriptNodeExecutor", () => {
   it("returns failed when processRunner.run throws", async () => {
     const deps: NodeRuntimeDeps = {
       processRunner: { run: vi.fn().mockRejectedValue(new Error("Spawn failed")) },
+      resolveProjectWorkspacePath: vi.fn().mockResolvedValue("/Users/liyang/project"),
       sendHttpRequest: vi.fn(),
     }
     const result = await scriptNodeExecutor.execute(makeInput({}, deps))
@@ -102,6 +108,25 @@ describe("scriptNodeExecutor", () => {
         actionType: "workflow.script",
       }),
     }))
+  })
+
+  it("runs scripts from the resolved workflow project directory", async () => {
+    const deps = fakeRuntimeDeps()
+    await scriptNodeExecutor.execute(makeInput({}, deps))
+
+    expect(deps.resolveProjectWorkspacePath).toHaveBeenCalledWith("p1")
+    expect(deps.processRunner?.run).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: "/Users/liyang/project",
+    }))
+  })
+
+  it("fails before spawning when the workflow has no project", async () => {
+    const deps = fakeRuntimeDeps()
+    const result = await scriptNodeExecutor.execute(makeInput({}, deps, { projectId: undefined }))
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("脚本节点缺少项目")
+    expect(deps.processRunner?.run).not.toHaveBeenCalled()
   })
 
   it("does not let resolved variables override protected process env names", async () => {

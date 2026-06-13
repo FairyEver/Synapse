@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest"
 import { sanitizeUrl } from "../url-sanitize"
 
 describe("sanitizeUrl", () => {
-  it("redacts URL userinfo and sensitive query parameters", () => {
+  it("removes URL userinfo and redacts sensitive query parameters", () => {
     expect(sanitizeUrl("https://user:secret@example.com/api?token=sk-secret&query=ok")).toBe(
-      "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
+      "https://example.com/api?token=%5Bredacted%5D&query=ok",
     )
   })
 
@@ -23,7 +23,7 @@ describe("sanitizeUrl", () => {
 
   it("falls back to text redaction when URL parsing fails", () => {
     expect(sanitizeUrl("fetch https://user:pass@example.com/api?token=sk-secret failed")).toBe(
-      "fetch https://[redacted]@example.com/api?token=[redacted] failed",
+      "fetch https://example.com/api?token=[redacted] failed",
     )
   })
 })

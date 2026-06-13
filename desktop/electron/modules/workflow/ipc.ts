@@ -14,7 +14,7 @@ import type { EventBus } from "../../runtime/event-bus"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../../services/workflow/workflow-validator"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
-import type { SynapseWorkflowPackageV1, WorkflowModelMapping } from "../../../src/types/workflow-package"
+import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
@@ -301,6 +301,10 @@ const workflowModelMappingSchema = z.object({
   targetModelTier: modelTierSchema,
 })
 
+const workflowImportOptionsSchema = z.object({
+  targetProjectId: z.string().optional(),
+}).optional()
+
 const workflowImportPreviewSchema = z.object({
   packagePath: z.string(),
   workflow: z.object({
@@ -308,6 +312,7 @@ const workflowImportPreviewSchema = z.object({
     name: z.string(),
     nodeCount: z.number(),
     modelReferenceCount: z.number(),
+    requiresProjectMapping: z.boolean(),
   }),
   modelReferences: z.array(workflowModelReferenceSchema),
   providerOptions: z.array(z.object({
@@ -737,12 +742,12 @@ export const workflowIpcModule: IpcModule = {
     },
     importPackage: {
       channel: "synapse:workflow:import-package", kind: "invoke",
-      request: z.object({ packagePath: z.string(), mappings: z.array(workflowModelMappingSchema) }),
+      request: z.object({ packagePath: z.string(), mappings: z.array(workflowModelMappingSchema), options: workflowImportOptionsSchema }),
       response: z.union([
         z.object({ workflowId: workflowIdSchema, versionHash: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
       ]),
-      handler: async (ctx, { packagePath, mappings }: { packagePath: string; mappings: WorkflowModelMapping[] }) => {
+      handler: async (ctx, { packagePath, mappings, options }: { packagePath: string; mappings: WorkflowModelMapping[]; options?: WorkflowImportOptions }) => {
         const action: PermissionAction = "fs.read.outside-userdata"
         const source = "workflow.importPackage"
         const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
@@ -773,7 +778,7 @@ export const workflowIpcModule: IpcModule = {
           mappingCount: mappings.length,
         })
         try {
-          const result = await ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings)
+          const result = await ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings, options ?? {})
           if ("errors" in result) {
             logger.warn("workflow:importPackage blocked by validation", {
               fileBase: path.basename(packagePath),

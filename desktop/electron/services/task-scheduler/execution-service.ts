@@ -1,6 +1,6 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import { ControlledProcessPermissionError } from "../../runtime/process"
-import type { AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
 import { sanitizeError } from "../error-sanitize"
 import { createMainLogger } from "../log-store"
 import type { ScheduledTaskRunRepository } from "./run-repository"
@@ -71,7 +71,7 @@ export class TaskSchedulerExecutionService {
         runId: run.id,
         triggeredBy,
         cwd: resolveCwd(task, this.deps.defaultCwd),
-        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" } as const,
+        actor: actorForTask(task),
         abortSignal: controller.signal,
         configVersion: task.configVersion ?? 0,
       }
@@ -85,6 +85,7 @@ export class TaskSchedulerExecutionService {
           outcome: "denied",
           metadata: {
             source: "task-scheduler",
+            taskSource: task.provenance?.source,
             taskId: task.id,
             runId: run.id,
             actionType: task.action.type,
@@ -102,6 +103,7 @@ export class TaskSchedulerExecutionService {
         outcome: "allowed",
         metadata: {
           source: "task-scheduler",
+          taskSource: task.provenance?.source,
           taskId: task.id,
           runId: run.id,
           actionType: task.action.type,
@@ -335,6 +337,14 @@ export class TaskSchedulerExecutionService {
 function resolveCwd(task: ScheduledTaskEntry, defaultCwd: string): string {
   const cwd = task.cwd?.trim()
   return cwd ? cwd : defaultCwd
+}
+
+function actorForTask(task: ScheduledTaskEntry): ActorIdentity {
+  const source = task.provenance?.source
+  if (source) {
+    return { kind: "connector", id: `scheduler:${source}` }
+  }
+  return { kind: "user", id: "task-scheduler", display: "Task Scheduler" }
 }
 
 function errorMessage(error: unknown): string {

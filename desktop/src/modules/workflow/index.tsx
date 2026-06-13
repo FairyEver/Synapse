@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { ModulePage } from "@/components/module-page"
 import { Button } from "@/components/ui/button"
@@ -12,7 +13,7 @@ import { WorkflowImportDialog } from "./components/workflow-import-dialog"
 // be pulled into the Vite renderer bundle.
 import "../../../workflow-nodes/register.renderer"
 
-import type { WorkflowImportPreview, WorkflowModelMapping } from "@/types/workflow-package"
+import type { WorkflowImportOptions, WorkflowImportPreview, WorkflowModelMapping } from "@/types/workflow-package"
 import { errorDiagnostic } from "./lib/error-utils"
 
 const logger = createRendererLogger("workflow")
@@ -22,6 +23,7 @@ export function WorkflowModule() {
   const [creating, setCreating] = useState(false)
   const [importPreview, setImportPreview] = useState<WorkflowImportPreview | null>(null)
   const [importing, setImporting] = useState(false)
+  const appConfig = useAppConfig()
 
   const handleCreate = async () => {
     if (creating) return
@@ -70,11 +72,11 @@ export function WorkflowModule() {
     }
   }
 
-  const handleImportConfirm = async (mappings: WorkflowModelMapping[]) => {
+  const handleImportConfirm = async (mappings: WorkflowModelMapping[], options: WorkflowImportOptions) => {
     if (!importPreview) return
     setImporting(true)
     try {
-      const result = await requireBridgeDomain("workflow").importPackage(importPreview.packagePath, mappings)
+      const result = await requireBridgeDomain("workflow").importPackage(importPreview.packagePath, mappings, options)
       if ("errors" in result) {
         toast.error(result.errors[0]?.message ?? "导入失败：校验未通过")
         return
@@ -122,9 +124,10 @@ export function WorkflowModule() {
         <WorkflowImportDialog
           open={!!importPreview}
           preview={importPreview}
+          projects={appConfig.config.global.projects}
           importing={importing}
           onOpenChange={(open) => { if (!open) setImportPreview(null) }}
-          onImport={(mappings) => void handleImportConfirm(mappings)}
+          onImport={(mappings, options) => void handleImportConfirm(mappings, options)}
         />
       )}
     >

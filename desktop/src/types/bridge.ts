@@ -96,6 +96,7 @@ import type {
 } from "./backup"
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
+  WorkflowImportOptions,
   WorkflowImportPreview,
   WorkflowModelMapping,
 } from "./workflow-package"
@@ -1265,7 +1266,7 @@ export type SynapseBridge = {
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
     exportPackage: (workflowId: string, workflowName?: string) => Promise<{ path: string } | null>
     inspectImportPackage: () => Promise<WorkflowImportPreview | null>
-    importPackage: (packagePath: string, mappings: WorkflowModelMapping[]) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
+    importPackage: (packagePath: string, mappings: WorkflowModelMapping[], options?: WorkflowImportOptions) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
     onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void

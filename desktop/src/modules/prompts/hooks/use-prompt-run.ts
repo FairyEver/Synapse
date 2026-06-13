@@ -4,6 +4,7 @@ import { readContent } from "@/app-shell/content"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requestOpenAgentSession } from "@/app-shell/navigation"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { errorLogMeta } from "@/lib/error-sanitize"
 import type { SynapseContentMeta } from "@/types/content"
 
 const logger = createRendererLogger("prompts.run")
@@ -130,14 +131,6 @@ function usePromptRun() {
   }, [])
 
   return { run, isRunning }
-}
-
-function errorLogMeta(error: unknown): Record<string, unknown> {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-  }
 }
 
 export { usePromptRun }

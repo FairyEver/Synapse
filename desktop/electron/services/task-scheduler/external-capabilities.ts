@@ -112,7 +112,10 @@ export async function dispatchSchedulerAction(
       }
 
       case "scheduler.task.create": {
-        const input = toCreateInput(parseCreateParams(params), actions)
+        const input = {
+          ...toCreateInput(parseCreateParams(params), actions),
+          provenance: schedulerTaskProvenance(context),
+        }
         result = { ok: true, data: toPublicTaskSummary(await service.schedulerTaskCreate(input)) }
         break
       }
@@ -158,7 +161,13 @@ export async function dispatchSchedulerAction(
 
       case "scheduler.task.update": {
         const input = parseUpdateParams(params)
-        result = { ok: true, data: toPublicTaskSummary(await service.schedulerTaskUpdate(input.taskId, toUpdatePatch(input))) }
+        result = {
+          ok: true,
+          data: toPublicTaskSummary(await service.schedulerTaskUpdate(input.taskId, {
+            ...toUpdatePatch(input),
+            provenance: schedulerTaskProvenance(context),
+          })),
+        }
         break
       }
 
@@ -192,6 +201,10 @@ export async function dispatchSchedulerAction(
     }
     throw error
   }
+}
+
+function schedulerTaskProvenance(context: DispatchContext) {
+  return { source: context.source ?? "api" }
 }
 
 async function authorizeSchedulerMutation(

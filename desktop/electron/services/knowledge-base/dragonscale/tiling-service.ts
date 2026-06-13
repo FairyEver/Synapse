@@ -9,7 +9,7 @@ import {
   resolveDragonScaleOllamaUrl,
 } from "./ollama-embedding-provider"
 import { createMainLogger } from "../../log-store"
-import { sanitizeError } from "../../error-sanitize"
+import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 import {
   DRAGONSCALE_TILING_DEFAULT_MODEL,
   DRAGONSCALE_TILING_MAX_BODY_BYTES,
@@ -849,11 +849,6 @@ function isMissingPathError(error: unknown): boolean {
       || (error as { readonly code?: unknown }).code === "ENOTDIR")
 }
 
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
-  const raw = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: raw.length,
-    errorMessage: sanitizeError(raw),
-  }
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  return baseErrorLogMeta(error, { includeMessage: true })
 }

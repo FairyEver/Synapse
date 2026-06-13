@@ -1578,6 +1578,44 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(lastRawMutationSuccessMessage(uploadResult)).toBe("已上传 1 项，跳过 1 项（读取失败 1）")
   })
 
+  it("reports all-skipped uploads instead of a no-file success message", async () => {
+    const uploadResult: SynapseKnowledgeBaseRawMutationResult = {
+      projectId: "project-1",
+      entries: [],
+      skipped: [{ path: "/tmp/locked.pdf", reason: "read-error" }],
+    }
+    bridgeMocks.knowledgeBase.uploadRawItems.mockResolvedValueOnce(uploadResult)
+    bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/locked.pdf")
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("客户")
+    })
+
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽上传资料"]')
+    if (!dropTarget) throw new Error("Drop target not found.")
+    const event = new Event("drop", { bubbles: true, cancelable: true })
+    Object.defineProperty(event, "dataTransfer", {
+      value: {
+        files: [new File(["file"], "locked.pdf", { type: "application/pdf" })],
+      },
+    })
+
+    await act(async () => {
+      dropTarget.dispatchEvent(event)
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.uploadRawItems).toHaveBeenCalledWith({
+        projectId: "project-1",
+        targetDirectoryPath: "",
+        itemPaths: ["/tmp/locked.pdf"],
+      })
+    })
+    expect(lastRawMutationSuccessMessage(uploadResult)).toBe("跳过 1 项（读取失败 1）")
+  })
+
   it("reports skipped entries in the move success message", async () => {
     const moveResult: SynapseKnowledgeBaseRawMutationResult = {
       projectId: "project-1",

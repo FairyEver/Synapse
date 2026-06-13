@@ -52,7 +52,7 @@ export function ForgotPasswordForm({
     return (
       <div className='flex flex-col gap-4'>
         <p className='text-sm text-muted-foreground'>
-          {result.resetUrl ? '重置链接已生成。' : '如果账号存在，重置请求已提交。'}
+          {result.resetUrl ? '重置链接已生成。' : '如果账号存在，请按收到的重置链接继续。'}
         </p>
         {result.resetUrl ? (
           <Button asChild>

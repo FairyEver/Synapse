@@ -580,23 +580,32 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("does not return password reset URLs when disabled by options", async () => {
+  it("rejects password reset requests before creating tokens when delivery is disabled", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "u@example.com",
       status: "active",
     })
-    const service = createService(prisma, undefined, { exposePasswordResetUrl: false })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog, { exposePasswordResetUrl: false })
 
     await expect(service.requestPasswordReset({
-      email: "u@example.com",
+      email: "U@example.com",
       publicAppUrl: "https://app.example.com",
-    }))
-      .resolves
-      .toEqual({ ok: true })
+    }, "203.0.113.42"))
+      .rejects
+      .toThrow("找回密码暂不可用。")
 
-    expect(prisma.userPasswordResetToken.create).toHaveBeenCalledTimes(1)
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+    expect(prisma.userPasswordResetToken.create).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.password_reset.request_unavailable",
+      targetType: "user",
+      targetId: "unknown",
+      ipAddress: "203.0.113.42",
+    })
   })
 
   it("resets a password, consumes tokens, and revokes sessions", async () => {

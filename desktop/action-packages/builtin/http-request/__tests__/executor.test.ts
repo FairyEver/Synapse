@@ -52,6 +52,37 @@ describe("builtin.http-request executor", () => {
     })
   })
 
+  it("auto-prepends https:// when action URL has no scheme", async () => {
+    const sendRequest = vi.fn(async () => ({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      body: "",
+    }))
+    const action = createHttpRequestAction({ sendRequest })
+
+    await action.execute({
+      config: {
+        method: "GET",
+        url: "example.com/api",
+        query: { page: "1" },
+        bodyType: "none",
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "manual",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(sendRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://example.com/api?page=1",
+    }))
+  })
+
   it("adds JSON content-type and redacts sensitive response body content", async () => {
     const sendRequest = vi.fn(async () => ({
       status: 200,
@@ -152,17 +183,44 @@ describe("builtin.http-request executor", () => {
 
     expect(request).toEqual(expect.objectContaining({
       action: "network.connect",
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
+      resource: "https://example.com/api?token=%5Bredacted%5D&query=ok",
       context: expect.objectContaining({
         actionType: "builtin.http-request",
         method: "POST",
-        url: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
+        url: "https://example.com/api?token=%5Bredacted%5D&query=ok",
         headerKeys: ["Authorization", "Content-Type"],
         timeoutMins: 2,
       }),
     }))
     expect(JSON.stringify(request)).not.toContain("user:secret")
     expect(JSON.stringify(request)).not.toContain("sk-secret")
+  })
+
+  it("uses the normalized URL in permission context when URL has no scheme", () => {
+    const action = createHttpRequestAction({ sendRequest: vi.fn() })
+    const request = action.buildPermissionRequest({
+      config: {
+        method: "GET",
+        url: "example.com/api",
+        query: { page: "1" },
+        bodyType: "none",
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "schedule",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(request).toEqual(expect.objectContaining({
+      resource: "https://example.com/api?page=1",
+      context: expect.objectContaining({
+        url: "https://example.com/api?page=1",
+      }),
+    }))
   })
 
   it("includes built-in auth in permission context without exposing credentials", () => {
