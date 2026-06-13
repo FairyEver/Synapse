@@ -11,6 +11,15 @@ import { defaultCodexNodeConfig } from "../schema"
 vi.mock("@/lib/ui-tracking", () => ({
   track: vi.fn(),
   extractLabel: vi.fn(() => "control"),
+  mergeRefs: (...refs: Array<React.Ref<unknown> | undefined>) => (value: unknown) => {
+    refs.forEach((ref) => {
+      if (typeof ref === "function") {
+        ref(value)
+      } else if (ref && "current" in ref) {
+        ;(ref as React.MutableRefObject<unknown>).current = value
+      }
+    })
+  },
 }))
 
 vi.mock("../../prompt-editor", () => ({
@@ -139,7 +148,7 @@ function render(element: React.ReactElement) {
 }
 
 function allElements(): HTMLElement[] {
-  return Array.from(container?.querySelectorAll<HTMLElement>("*") ?? [])
+  return Array.from(document.body.querySelectorAll<HTMLElement>("*"))
 }
 
 function elementName(element: HTMLElement): string {
@@ -247,7 +256,11 @@ describe("CodexNodePanel", () => {
     expect(getByText("执行配置")).toBeTruthy()
     expect(getByLabelText("审批策略")).toBeTruthy()
     expect(getByLabelText("沙箱")).toBeTruthy()
+    expect(getByLabelText("模型")).toBeTruthy()
     expect(getByLabelText("Goals")).toBeTruthy()
+    expect(getByRole("button", { name: "查看模型说明" })).toBeTruthy()
+    expect(getByRole("button", { name: "查看审批策略说明" })).toBeTruthy()
+    expect(getByRole("button", { name: "查看可写目录说明" })).toBeTruthy()
     expect(getByLabelText("跳过 Git 仓库检查")).toBeTruthy()
     expect(getByText("输入映射")).toBeTruthy()
     expect(getByText("项目")).toBeTruthy()
@@ -255,10 +268,94 @@ describe("CodexNodePanel", () => {
     expect(getByText("高级参数")).toBeTruthy()
     expect(getByText("调试记录")).toBeTruthy()
     expect(getByRole("button", { name: "审批策略" }).textContent).toContain("never")
+    expect(getByRole("button", { name: "审批策略" }).textContent).toContain("不请求人工审批")
     expect(getByRole("button", { name: "沙箱" }).textContent).toContain("workspace-write")
+    expect(getByRole("button", { name: "沙箱" }).textContent).toContain("可写工作区")
+    expect(getByRole("button", { name: "模型" }).textContent).toContain("继承当前 Codex 配置")
     expect(getByRole("button", { name: "Goals" }).textContent).toContain("启用")
     expect(getByRole("checkbox", { name: "跳过 Git 仓库检查" }).getAttribute("aria-checked")).toBe("true")
     expect(getByRole("checkbox", { name: "保存调试文件" }).getAttribute("aria-checked")).toBe("true")
+  })
+
+  it("opens and closes field help dialogs", () => {
+    render(
+      <CodexNodePanel
+        config={{ ...defaultCodexNodeConfig, prompt: "Run" }}
+        onChange={vi.fn()}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    click(getByRole("button", { name: "查看沙箱说明" }))
+
+    expect(getByText("沙箱")).toBeTruthy()
+    expect(getByText("限制 Codex 执行命令时能访问和修改的文件范围。")).toBeTruthy()
+    expect(getByText("影响范围：命令执行、文件读写和自动化运行的安全边界。")).toBeTruthy()
+
+    click(getByRole("button", { name: "关闭" }))
+
+    expect(allElements().some((element) => (
+      element.textContent?.trim() === "限制 Codex 执行命令时能访问和修改的文件范围。"
+    ))).toBe(false)
+  })
+
+  it("commits fixed model selections and can return to inherited config", () => {
+    const onChange = vi.fn()
+
+    render(
+      <CodexNodePanel
+        config={defaultCodexNodeConfig}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    click(getByRole("option", { name: "GPT-5.4 mini" }))
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      model: "gpt-5.4-mini",
+    }))
+
+    click(getByRole("option", { name: "继承当前 Codex 配置" }))
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      model: undefined,
+    }))
+  })
+
+  it("shows legacy custom model values without rejecting the panel", () => {
+    render(
+      <CodexNodePanel
+        config={{ ...defaultCodexNodeConfig, model: "custom-codex-model" }}
+        onChange={vi.fn()}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    expect(getByRole("button", { name: "模型" }).textContent).toContain("当前自定义模型：custom-codex-model")
+  })
+
+  it("shows Chinese summaries for approval and sandbox options", () => {
+    render(
+      <CodexNodePanel
+        config={{ ...defaultCodexNodeConfig, prompt: "Run" }}
+        onChange={vi.fn()}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    expect(getByRole("option", { name: "on-request模型按需请求审批" })).toBeTruthy()
+    expect(getByRole("option", { name: "untrusted只自动执行可信命令" })).toBeTruthy()
+    expect(getByRole("option", { name: "read-only只读沙箱" })).toBeTruthy()
+    expect(getByRole("option", { name: "danger-full-access无沙箱限制" })).toBeTruthy()
   })
 
   it("commits prompt changes on blur", () => {
