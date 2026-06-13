@@ -170,6 +170,52 @@ describe("AuditLogInterceptor", () => {
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 
+  it("records successful authenticated admin write operations as fallback audits", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "POST",
+        path: "/api/admin/settings",
+        body: { displayName: "Synapse" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => of({ id: "settings" }) },
+    ))
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "current-admin@example.com",
+      action: "settings.post",
+      targetType: "settings",
+      targetId: "settings",
+      detail: {
+        method: "POST",
+        path: "/api/admin/settings",
+        body: { displayName: "Synapse" },
+      },
+      ipAddress: "127.0.0.1",
+    })
+  })
+
+  it("does not fallback-audit successful authenticated admin read operations", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/users",
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => of({ data: [], total: 0 }) },
+    ))
+
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
   it("records unauthenticated backup list reads without attributing them to the first admin", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
