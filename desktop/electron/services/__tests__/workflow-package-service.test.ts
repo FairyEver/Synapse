@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
-import type { WorkflowModelMapping } from "../../../src/types/workflow-package"
+import type { SynapseWorkflowPackageV1, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import type { CCProvider } from "../provider/types"
 import { WorkflowPackageService } from "../workflow/workflow-package-service"
 
@@ -53,6 +53,40 @@ function workflowDefinition(): WorkflowDefinition {
       { id: "e1", from: "n1", to: "n2" },
       { id: "e2", from: "n2", to: "end" },
     ],
+  }
+}
+
+function codexOnlyPackage(): SynapseWorkflowPackageV1 {
+  return {
+    format: "synapse-workflow-package-v1",
+    exportedAt: nowIso,
+    modelReferences: [],
+    workflow: {
+      id: "codex-source",
+      name: "Code X Workflow",
+      version: "v_old",
+      createdAt: 1,
+      updatedAt: 2,
+      defaultProjectId: "exporter-project",
+      params: [],
+      nodes: [
+        {
+          id: "codex-1",
+          name: "Code X",
+          type: "codex",
+          position: { x: 0, y: 0 },
+          config: { prompt: "Run codex" },
+        },
+        {
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: { outputType: "text", template: "", variables: [] },
+        },
+      ],
+      edges: [{ id: "e1", from: "codex-1", to: "end" }],
+    },
   }
 }
 
@@ -172,6 +206,21 @@ describe("WorkflowPackageService", () => {
     ]))
   })
 
+  it("requires project mapping for Code X-only workflow packages", async () => {
+    const { service } = createService()
+    const preview = await service.buildImportPreview("/tmp/codex.synapse-workflow.json", codexOnlyPackage())
+
+    expect(preview.workflow).toEqual({
+      id: "codex-source",
+      name: "Code X Workflow",
+      nodeCount: 2,
+      modelReferenceCount: 0,
+      requiresProjectMapping: true,
+    })
+    expect(preview.modelReferences).toEqual([])
+    expect(preview.suggestedMappings).toEqual([])
+  })
+
   it("imports as a new workflow and preserves inherited provider structure", async () => {
     const { service, saved } = createService()
     const pkg = await service.buildExportPackage("workflow-source")
@@ -216,6 +265,31 @@ describe("WorkflowPackageService", () => {
     }))
 
     await expect(service.importPackage(pkg, mappings)).resolves.toEqual({
+      errors: [{
+        type: "invalid_config",
+        field: "defaultProjectId",
+        message: "请选择项目。",
+        retryable: true,
+      }],
+    })
+    expect(saved).toHaveLength(0)
+  })
+
+  it("imports Code X-only workflows with a target project mapping", async () => {
+    const { service, saved } = createService()
+
+    const result = await service.importPackage(codexOnlyPackage(), [], { targetProjectId: "local-project" })
+
+    expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v_imported" })
+    expect(saved).toHaveLength(1)
+    expect(saved[0]?.defaultProjectId).toBe("local-project")
+    expect(saved[0]?.nodes.find((node) => node.id === "codex-1")?.config.projectId).toBeUndefined()
+  })
+
+  it("blocks importing Code X-only workflows without a local project mapping", async () => {
+    const { service, saved } = createService()
+
+    await expect(service.importPackage(codexOnlyPackage(), [])).resolves.toEqual({
       errors: [{
         type: "invalid_config",
         field: "defaultProjectId",

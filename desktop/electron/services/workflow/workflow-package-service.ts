@@ -228,7 +228,7 @@ function rewriteWorkflowForImport(
   next = {
     ...next,
     nodes: next.nodes.map((node) =>
-      isModelNode(node)
+      isProjectBoundNode(node)
         ? { ...node, config: withoutProjectId(node.config) }
         : node,
     ),
@@ -238,7 +238,7 @@ function rewriteWorkflowForImport(
 }
 
 function workflowNeedsProjectMapping(workflow: WorkflowDefinition): boolean {
-  return workflow.nodes.some(isModelNode)
+  return workflow.nodes.some(isProjectBoundNode)
 }
 
 function withoutProjectId(config: WorkflowNode["config"]): WorkflowNode["config"] {
@@ -253,6 +253,10 @@ function modelNodeOccurrence(node: WorkflowNode, inherited: boolean): WorkflowMo
 
 function isModelNode(node: WorkflowNode): boolean {
   return node.type === "prompt" || node.type === "switch"
+}
+
+function isProjectBoundNode(node: WorkflowNode): boolean {
+  return isModelNode(node) || node.type === "codex" || node.type === "script"
 }
 
 function isModelTier(value: unknown): value is WorkflowPackageModelTier {
