@@ -39,6 +39,49 @@ describe("WorkflowEngine", () => {
     expect(result.status).toBe("completed")
     expect(receivedConfigs[0]?.timeoutMins).toBe(30)
   })
+
+  it("preserves executor outputs when a codex node returns after cancellation", async () => {
+    const abortController = new AbortController()
+    const codexDebug = {
+      command: "codex exec",
+      cwd: "/tmp/project",
+      stdoutPreview: "partial output",
+      stderrPreview: "",
+    }
+    const codexExecutor: NodeExecutor<CodexNodeConfig> = {
+      execute: vi.fn(async () => {
+        abortController.abort()
+        return {
+          status: "cancelled" as const,
+          output: "",
+          error: "运行被取消",
+          durationMs: 9,
+          outputs: { codexDebug },
+        }
+      }),
+    }
+    nodeTypeRegistry.register(codexNodeManifest, codexExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine({
+      sendToAgent: vi.fn(),
+    })
+
+    const result = await engine.run(
+      workflowWithCodexNode(),
+      {},
+      "run-1",
+      vi.fn(),
+      abortController.signal,
+      "project-1",
+    )
+
+    expect(result.status).toBe("cancelled")
+    expect(result.nodeResults["codex-1"]).toMatchObject({
+      status: "cancelled",
+      outputs: { codexDebug },
+      durationMs: 9,
+    })
+  })
 })
 
 function workflowWithCodexNode(): WorkflowDefinition {

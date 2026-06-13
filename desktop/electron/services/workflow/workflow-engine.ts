@@ -300,7 +300,15 @@ export class WorkflowEngine {
           })
 
           if (effectiveAbortSignal.aborted) {
-            return { nodeId, status: "cancelled", error: "运行被取消", durationMs: execResult.durationMs }
+            return {
+              nodeId,
+              status: "cancelled",
+              output: execResult.output,
+              outputs: mergeAgentConversationOutput(execResult.outputs, execResult.agentConversation),
+              agentConversation: execResult.agentConversation,
+              error: "运行被取消",
+              durationMs: execResult.durationMs,
+            }
           }
           const usageCost = buildWorkflowUsageCostSnapshot(execResult)
 
