@@ -1,5 +1,7 @@
 import { sanitizeError } from "@/lib/error-sanitize"
 
+const CODEX_DEBUG_PATH_KEYS = new Set(["cwd", "stdoutPath", "stderrPath", "promptPath", "lastMessagePath"])
+
 export function sanitizeWorkflowResultText(value: string): string {
   return sanitizeError(value)
 }
@@ -11,6 +13,7 @@ export function sanitizeWorkflowResultValue(
 ): unknown {
   if (typeof value === "string") {
     if (isSensitiveWorkflowResultKey(key) && value) return "[redacted]"
+    if (CODEX_DEBUG_PATH_KEYS.has(key)) return value
     return sanitizeWorkflowResultText(value)
   }
   if (typeof value === "bigint" || value === null || value === undefined) return value

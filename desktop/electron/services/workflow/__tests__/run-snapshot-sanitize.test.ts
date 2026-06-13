@@ -87,6 +87,11 @@ describe("sanitizeNodeResultsForSnapshot", () => {
       input: { variables: {}, prompt: "run codex" },
       outputs: {
         codexDebug: {
+          cwd: "/Users/liyang/project",
+          stdoutPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/stdout.log",
+          stderrPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/stderr.log",
+          promptPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/prompt.txt",
+          lastMessagePath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/last-message.txt",
           stdoutPreview: "Authorization: Bearer secret\ntoken=abc123\n/Users/liyang/project",
           stderrPreview: "Authorization: Bearer secret\ntoken=abc123\n/Users/liyang/project",
         },
@@ -101,8 +106,13 @@ describe("sanitizeNodeResultsForSnapshot", () => {
     expect(codexDebug.stderrPreview).toContain("[redacted]")
     expect(codexDebug.stdoutPreview).toContain("[path]")
     expect(codexDebug.stderrPreview).toContain("[path]")
+    expect(codexDebug.cwd).toBe("/Users/liyang/project")
+    expect(codexDebug.stdoutPath).toContain("/workflow-runs/run-1/nodes/codex-1/codex/stdout.log")
+    expect(codexDebug.stderrPath).toContain("/workflow-runs/run-1/nodes/codex-1/codex/stderr.log")
+    expect(codexDebug.promptPath).toContain("/workflow-runs/run-1/nodes/codex-1/codex/prompt.txt")
+    expect(codexDebug.lastMessagePath).toContain("/workflow-runs/run-1/nodes/codex-1/codex/last-message.txt")
     expect(raw).not.toContain("Bearer secret")
     expect(raw).not.toContain("abc123")
-    expect(raw).not.toContain("/Users/liyang/project")
+    expect(codexDebug.stdoutPreview).not.toContain("/Users/liyang/project")
   })
 })

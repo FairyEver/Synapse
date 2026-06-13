@@ -195,6 +195,51 @@ describe("workflow run reports", () => {
     }
   })
 
+  it("preserves Code X debug artifact paths in copied reports", () => {
+    const definition = workflowDefinition()
+    const codexNode: WorkflowNode = {
+      id: "codex-1",
+      name: "Code X",
+      type: "codex",
+      position: { x: 300, y: 0 },
+      config: {
+        prompt: "Run task",
+        variables: [],
+      },
+    }
+    const nextDefinition: WorkflowDefinition = {
+      ...definition,
+      nodes: [...definition.nodes, codexNode],
+    }
+    const result = nodeResult("codex-1", {
+      outputs: {
+        codexDebug: {
+          command: "codex exec",
+          cwd: "/Users/liyang/project",
+          stdoutPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/stdout.log",
+          stderrPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/stderr.log",
+          lastMessagePath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/last-message.txt",
+          stderrPreview: "Authorization: Bearer raw-secret at /Users/liyang/project",
+        },
+      },
+    })
+
+    const report = formatNodeRunReport({
+      definition: nextDefinition,
+      node: codexNode,
+      result,
+      orderIndex: 4,
+    })
+
+    expect(report).toContain('"cwd": "/Users/liyang/project"')
+    expect(report).toContain('"stdoutPath": "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/stdout.log"')
+    expect(report).toContain('"stderrPath": "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/stderr.log"')
+    expect(report).toContain('"lastMessagePath": "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/codex-1/codex/last-message.txt"')
+    expect(report).toContain("Authorization=[redacted] [redacted]")
+    expect(report).toContain("[path]")
+    expect(report).not.toContain("raw-secret")
+  })
+
   it("does not include agent conversation session keys in copied reports", () => {
     const result = nodeResult("node-1", {
       outputs: {

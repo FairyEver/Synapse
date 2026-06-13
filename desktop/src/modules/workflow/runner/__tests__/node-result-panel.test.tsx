@@ -483,7 +483,8 @@ describe("NodeResultPanel", () => {
                 signal: "SIGTERM",
                 durationMs: 100,
                 stdoutPath: "/tmp/stdout.log",
-                stderrPreview: "Authorization: Bearer raw-secret warning",
+                lastMessagePath: "/tmp/last-message.txt",
+                stderrPreview: "Authorization: Bearer raw-secret warning at /Users/liyang/project",
               },
             },
           }}
@@ -495,11 +496,12 @@ describe("NodeResultPanel", () => {
 
     const renderedText = container.textContent ?? ""
     expect(renderedText).toContain("codex exec")
-    expect(renderedText).toContain("[path]")
-    expect(renderedText).not.toContain("/Users/liyang/project")
+    expect(renderedText).toContain("/Users/liyang/project")
     expect(renderedText).toContain("0")
     expect(renderedText).toContain("SIGTERM")
-    expect(renderedText).not.toContain("/tmp/stdout.log")
+    expect(renderedText).toContain("/tmp/stdout.log")
+    expect(renderedText).toContain("/tmp/last-message.txt")
+    expect(renderedText).toContain("[path]")
     expect(renderedText).toContain("warning")
     expect(renderedText).not.toContain("codexDebug")
     expect(renderedText).not.toContain("raw-secret")
