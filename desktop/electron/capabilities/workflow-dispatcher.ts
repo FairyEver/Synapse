@@ -580,11 +580,7 @@ function workflowMutationSecurity(
 
 async function authorizeWorkflowMutation(
   deps: WorkflowDispatchDeps,
-  security: {
-    readonly actor: { kind: "user"; id: string }
-    readonly resource: string
-    readonly metadata: Record<string, unknown>
-  },
+  security: NonNullable<ReturnType<typeof workflowMutationSecurity>>,
 ): Promise<void> {
   const permission = await deps.permissionGuard?.check({
     action: "workflow.mutate",
