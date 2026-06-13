@@ -108,7 +108,7 @@ describe("drive browser helpers", () => {
       route: { context: "owner", surface: "console", rootItemId: "root-1" },
     })
 
-    expect(item.browserUrl).toBe("/console/drive/items/root-1/items/child-1")
+    expect(item.browserUrl).toBe("/drive/items/root-1/items/child-1")
     expect(item.downloadUrl).toBe("/drive/items/root-1/items/child-1/download")
   })
 })

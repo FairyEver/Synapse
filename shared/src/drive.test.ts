@@ -52,10 +52,10 @@ describe("drive URL helpers", () => {
   })
 
   it("builds console drive browser URLs with the same child pattern", () => {
-    expect(buildConsoleDriveRootUrl()).toBe("/console/drive")
-    expect(buildConsoleDriveBrowserUrl("root/a")).toBe("/console/drive/items/root%2Fa")
+    expect(buildConsoleDriveRootUrl()).toBe("/drive")
+    expect(buildConsoleDriveBrowserUrl("root/a")).toBe("/drive/items/root%2Fa")
     expect(buildConsoleDriveChildBrowserUrl("root/a", "child/b"))
-      .toBe("/console/drive/items/root%2Fa/items/child%2Fb")
+      .toBe("/drive/items/root%2Fa/items/child%2Fb")
   })
 
   it("builds share browser URLs with root and child item ids", () => {
@@ -149,6 +149,6 @@ describe("drive URL helpers", () => {
     expect(DRIVE_PUBLIC_PATH_PREFIX).toBe("/files")
     expect(DRIVE_SHARE_BROWSER_PATH_PREFIX).toBe("/files")
     expect(DRIVE_OWNER_BROWSER_PATH_PREFIX).toBe("/drive/items")
-    expect(DRIVE_CONSOLE_BROWSER_PATH_PREFIX).toBe("/console/drive")
+    expect(DRIVE_CONSOLE_BROWSER_PATH_PREFIX).toBe("/drive")
   })
 })

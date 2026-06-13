@@ -1,6 +1,6 @@
 export const DRIVE_PUBLIC_PATH_PREFIX = "/files"
 export const DRIVE_OWNER_BROWSER_PATH_PREFIX = "/drive/items"
-export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/console/drive"
+export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/drive"
 export const DRIVE_SHARE_BROWSER_PATH_PREFIX = DRIVE_PUBLIC_PATH_PREFIX
 export const DRIVE_PAGE_PUBLIC_PATH_PREFIX = "/pages"
 export const DRIVE_SITE_PUBLIC_PATH_PREFIX = "/sites"

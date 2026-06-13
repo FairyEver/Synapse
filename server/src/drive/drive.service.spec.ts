@@ -1453,11 +1453,11 @@ describe("DriveService", () => {
 
     const snapshot = await service.getOwnerConsoleRootBrowserSnapshot("user-1")
 
-    expect(snapshot.current.browserUrl).toBe("/console/drive")
-    expect(snapshot.breadcrumbs).toEqual([{ id: "root", name: "网盘", browserUrl: "/console/drive" }])
+    expect(snapshot.current.browserUrl).toBe("/drive")
+    expect(snapshot.breadcrumbs).toEqual([{ id: "root", name: "网盘", browserUrl: "/drive" }])
     expect(snapshot.children).toEqual([expect.objectContaining({
       id: folder.id,
-      browserUrl: `/console/drive/items/${folder.id}`,
+      browserUrl: `/drive/items/${folder.id}`,
       downloadUrl: `/drive/items/${folder.id}/zip`,
     })])
   })
