@@ -514,10 +514,9 @@ export class DrivePublicController {
     readonly request: Request
     readonly response: Response
   }): Promise<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto> {
-    const password = readPasswordQuery(input.request)
     const access = await this.drive.resolvePublicShareAccess({
       shareId: input.shareId,
-      password,
+      password: undefined,
       cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
     })
     if (access.status === "password_required") return driveBrowserPasswordRequired()
@@ -526,7 +525,7 @@ export class DrivePublicController {
     return this.drive.getShareBrowserSnapshot({
       shareId: input.shareId,
       itemId: input.itemId,
-      password,
+      password: undefined,
       cookie: access.cookie ?? readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
     })
   }

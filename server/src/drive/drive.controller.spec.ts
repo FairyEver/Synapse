@@ -827,30 +827,23 @@ describe("DriveController", () => {
     })
   })
 
-  it("passes password query through share browser APIs and sets access cookies", async () => {
-    const snapshot = createBrowserSnapshot()
+  it("ignores password query on share browser APIs", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({
-      status: "ok",
-      cookie: "query-cookie",
-      value: {
-        type: "file",
-        item: createDriveItem({ id: "file-1", name: "brief.txt", size: "11" }),
-        ownerId: "user-1",
-        storageKey: "drive/file-1",
-      },
+      status: "password_required",
     })
-    drive.getShareBrowserSnapshot.mockResolvedValue(snapshot)
 
     const response = await request(app!.getHttpServer()).get("/api/drive/browser/shares/shr_file?password=stale").expect(200)
-    const setCookie = response.headers["set-cookie"]
 
-    expect(response.body).toEqual(snapshot)
-    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain(`${driveAccessCookieName("share", "shr_file")}=query-cookie`)
+    expect(response.body).toEqual({
+      message: "请输入密码。",
+      passwordRequired: true,
+    })
     expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
-      password: "stale",
+      password: undefined,
       cookie: undefined,
     })
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
   })
 
   it("does not serve protected site static assets before unlock", async () => {

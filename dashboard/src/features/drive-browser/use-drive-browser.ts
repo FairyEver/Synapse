@@ -92,16 +92,19 @@ function fingerprintInitialPassword(value: string | undefined) {
   return hash.toString(36)
 }
 
-async function loadDriveBrowser(input: DriveBrowserInput) {
+export async function loadDriveBrowser(input: DriveBrowserInput) {
   if (input.context === 'console-root') return driveBrowserApi.getConsoleRoot()
   if (input.context === 'owner') {
     return input.itemId
       ? driveBrowserApi.getOwnerChild(input.rootItemId, input.itemId, input.surface)
       : driveBrowserApi.getOwnerRoot(input.rootItemId, input.surface)
   }
+  if (input.initialPassword) {
+    return driveBrowserApi.unlockShare(input.shareId, input.initialPassword, input.itemId)
+  }
   return input.itemId
-    ? driveBrowserApi.getShareItem(input.shareId, input.itemId, input.initialPassword)
-    : driveBrowserApi.getShareRoot(input.shareId, input.initialPassword)
+    ? driveBrowserApi.getShareItem(input.shareId, input.itemId)
+    : driveBrowserApi.getShareRoot(input.shareId)
 }
 
 export function isDriveBrowserPasswordRequired(

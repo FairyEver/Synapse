@@ -239,7 +239,7 @@ describe('driveBrowserApi', () => {
     )
   })
 
-  it('passes share password query when loading public browser snapshots', async () => {
+  it('does not pass share password query when loading public browser snapshots', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 
     await driveBrowserApi.getShareRoot('shr/id', 'CtekZGNr')
@@ -247,12 +247,12 @@ describe('driveBrowserApi', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/drive/browser/shares/shr%2Fid?password=CtekZGNr',
+      '/api/drive/browser/shares/shr%2Fid',
       expect.objectContaining({ credentials: 'include' })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid?password=CtekZGNr',
+      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid',
       expect.objectContaining({ credentials: 'include' })
     )
   })
