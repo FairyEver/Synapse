@@ -108,7 +108,7 @@ type DrivePublishedAssetValue = {
 
 type DriveFolderZipEntry = {
   readonly path: string
-  readonly url: string
+  readonly storageKey: string
 }
 
 type DriveItemRecordWithStorage = DriveItemRecord & {
@@ -1364,8 +1364,7 @@ export class DriveService implements OnApplicationBootstrap {
           continue
         }
         if (!child.storageKey) continue
-        const download = await this.storage.createDownloadUrl({ key: child.storageKey, filename: child.name })
-        entries.push({ path: childPath, url: download.url })
+        entries.push({ path: childPath, storageKey: child.storageKey })
       }
     }
 

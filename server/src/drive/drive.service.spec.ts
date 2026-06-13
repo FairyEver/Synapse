@@ -960,13 +960,15 @@ describe("DriveService", () => {
     })
     await service.completeUpload("user-1", prepared.entries[0]!.sessionId)
     const share = await service.createShare("user-1", prepared.root.id, "https://synapse.test")
+    vi.mocked(storageMock.createDownloadUrl).mockClear()
 
     const entries = await service.createFolderZipEntriesForShare({
       shareId: share.shareId,
       password: share.password ?? undefined,
     })
 
-    expect(entries).toEqual([{ path: "docs/spec.txt", url: "https://cos.example/download" }])
+    expect(entries).toEqual([{ path: "docs/spec.txt", storageKey: `drive/${prepared.entries[0]!.item.id}` }])
+    expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
   it("builds owner browser snapshots with child breadcrumbs and html visit urls", async () => {

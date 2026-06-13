@@ -49,6 +49,9 @@ describe("DriveController", () => {
     createDownloadUrlForShareBrowserItem: vi.fn(),
     createFolderZipEntriesForShareBrowserItem: vi.fn(),
   }
+  const storage = {
+    getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
+  }
 
   beforeEach(async () => {
     drive.listItems.mockReset()
@@ -76,13 +79,18 @@ describe("DriveController", () => {
     drive.resolveOwnerRenderAccess.mockReset()
     drive.createDownloadUrlForShareBrowserItem.mockReset()
     drive.createFolderZipEntriesForShareBrowserItem.mockReset()
+    storage.getObjectStream.mockReset()
+    storage.getObjectStream.mockResolvedValue({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })
     restoreEnv("PAGES_PUBLIC_URL", originalPagesPublicUrl)
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
     drive.resolvePublishedAssetAccess.mockRejectedValue(new NotFoundException("网页未找到"))
     drive.resolvePublicShareAccess.mockRejectedValue(new NotFoundException("文件未找到"))
     const moduleRef = await Test.createTestingModule({
       controllers: [DriveUserController, DrivePublicController],
-      providers: [{ provide: DriveService, useValue: drive }],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
     })
       .overrideGuard(UserAuthGuard)
       .useValue({ canActivate: vi.fn(() => { throw new UnauthorizedException("未登录或登录已过期。") }) })
@@ -149,7 +157,10 @@ describe("DriveController", () => {
   it("redirects owner direct downloads and renders owner files", async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [DrivePublicController],
-      providers: [{ provide: DriveService, useValue: drive }],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
     })
       .overrideGuard(UserAuthGuard)
       .useValue({ canActivate: vi.fn((context) => {
@@ -831,8 +842,9 @@ describe("DriveController", () => {
         storageKey: null,
       },
     })
-    drive.createFolderZipEntriesForShareBrowserItem.mockResolvedValue([{ path: "brief.txt", url: "https://cos.example/brief.txt" }])
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("brief")))
+    drive.createFolderZipEntriesForShareBrowserItem.mockResolvedValue([{ path: "brief.txt", storageKey: "drive/file-1" }])
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
 
     const response = await request(app!.getHttpServer()).get("/files/shr_folder/items/folder-2/zip").expect(200)
 
@@ -843,6 +855,8 @@ describe("DriveController", () => {
       cookie: undefined,
       password: undefined,
     })
+    expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "drive/file-1" })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 

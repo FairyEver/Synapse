@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Inject, NotFoundException, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
-import { Writable } from "node:stream"
+import { Readable, Writable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -16,7 +16,7 @@ import {
   type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
-import { LocalDriveStorage } from "./drive-storage"
+import { type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
 const driveAccessCookieName = "synapse_drive_access"
 
@@ -239,7 +239,10 @@ export class DriveAdminController {
 
 @Controller()
 export class DrivePublicController {
-  constructor(private readonly drive: DriveService) {}
+  constructor(
+    private readonly drive: DriveService,
+    @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
+  ) {}
 
   @Get("/api/drive/browser/shares/:shareId")
   async getShareRootSnapshot(
@@ -315,7 +318,7 @@ export class DrivePublicController {
       userId: request.user!.id,
       rootItemId,
     })
-    await sendDriveZip(response, `${rootItemId}.zip`, entries)
+    await sendDriveZip(response, `${rootItemId}.zip`, entries, this.storage)
   }
 
   @UseGuards(UserAuthGuard)
@@ -331,7 +334,7 @@ export class DrivePublicController {
       rootItemId,
       currentItemId: itemId,
     })
-    await sendDriveZip(response, `${itemId}.zip`, entries)
+    await sendDriveZip(response, `${itemId}.zip`, entries, this.storage)
   }
 
   @UseGuards(UserAuthGuard)
@@ -534,7 +537,7 @@ export class DrivePublicController {
       password,
       cookie: readDriveAccessCookie(request),
     })
-    await sendDriveZip(response, `${access.value.item.name}.zip`, entries)
+    await sendDriveZip(response, `${access.value.item.name}.zip`, entries, this.storage)
   }
 
   @Get("/files/:shareId/items/:itemId/zip")
@@ -564,7 +567,7 @@ export class DrivePublicController {
       password,
       cookie: readDriveAccessCookie(request),
     })
-    await sendDriveZip(response, `${itemId}.zip`, entries)
+    await sendDriveZip(response, `${itemId}.zip`, entries, this.storage)
   }
 
   private async sendPublishedAsset(response: Response, input: {
@@ -762,18 +765,30 @@ function decodeCookieValue(value: string): string | undefined {
 async function sendDriveZip(
   response: Response,
   filename: string,
-  entries: readonly { readonly path: string; readonly url: string }[],
+  entries: readonly { readonly path: string; readonly storageKey: string }[],
+  storage: DriveStoragePort,
 ): Promise<void> {
   response.setHeader("Content-Type", "application/zip")
   response.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`)
   const archive = archiver("zip", { zlib: { level: 6 } })
+  const archiveError = new Promise<never>((_, reject) => {
+    archive.once("error", reject)
+  })
   archive.pipe(response)
-  for (const entry of entries) {
-    const objectResponse = await fetch(entry.url)
-    if (!objectResponse.ok) throw new NotFoundException("文件未找到")
-    archive.append(Buffer.from(await objectResponse.arrayBuffer()), { name: entry.path })
+  try {
+    for (const entry of entries) {
+      const object = await storage.getObjectStream({ key: entry.storageKey })
+      archive.append(object.stream as unknown as Readable, { name: entry.path })
+    }
+    await Promise.race([archive.finalize(), archiveError])
+  } catch (error) {
+    archive.destroy()
+    if (!response.headersSent) {
+      throw error
+    }
+    response.destroy(error instanceof Error ? error : new Error("Drive zip stream failed."))
+    throw error
   }
-  await archive.finalize()
 }
 
 async function sendPublishedAsset(response: Response, asset: {
