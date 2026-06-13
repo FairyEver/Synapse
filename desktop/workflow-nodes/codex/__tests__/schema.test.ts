@@ -6,7 +6,6 @@ describe("codexNodeConfigSchema", () => {
     expect(defaultCodexNodeConfig).toEqual({
       variables: [],
       prompt: "",
-      workingDirectoryTemplate: undefined,
       approvalPolicy: "never",
       sandbox: "workspace-write",
       enableSearch: false,
@@ -31,22 +30,22 @@ describe("codexNodeConfigSchema", () => {
     expect(result.success).toBe(false)
   })
 
-  it("trims working directory templates and drops blank values", () => {
+  it("trims working directories and drops blank values", () => {
     const parsed = codexNodeConfigSchema.parse({
       ...defaultCodexNodeConfig,
       prompt: "run",
-      workingDirectoryTemplate: "  /Users/liyang/worktrees/{{bugId}}  ",
+      workingDirectory: "  /Users/liyang/worktrees/{{bugId}}  ",
     })
 
-    expect(parsed.workingDirectoryTemplate).toBe("/Users/liyang/worktrees/{{bugId}}")
+    expect(parsed.workingDirectory).toBe("/Users/liyang/worktrees/{{bugId}}")
 
     const blank = codexNodeConfigSchema.parse({
       ...defaultCodexNodeConfig,
       prompt: "run",
-      workingDirectoryTemplate: "  ",
+      workingDirectory: "  ",
     })
 
-    expect(blank.workingDirectoryTemplate).toBeUndefined()
+    expect(blank.workingDirectory).toBeUndefined()
   })
 
   it("rejects duplicate config override keys", () => {
@@ -79,6 +78,7 @@ describe("codexNodeConfigSchema", () => {
       variables: [{ name: "input", source: { type: "static", value: "hello" } }],
       prompt: "run {{input}}",
       projectId: "project-1",
+      workingDirectory: " /Users/liyang/task ",
       timeoutMins: 15,
       approvalPolicy: "on-request",
       sandbox: "danger-full-access",
@@ -94,6 +94,7 @@ describe("codexNodeConfigSchema", () => {
     })
 
     expect(parsed).toMatchObject({
+      workingDirectory: "/Users/liyang/task",
       model: "gpt-5-codex",
       profile: "automation",
       enableSearch: true,
@@ -107,10 +108,12 @@ describe("codexNodeConfigSchema", () => {
     const parsed = codexNodeConfigSchema.parse({
       ...defaultCodexNodeConfig,
       prompt: "run",
+      workingDirectory: "  ",
       model: "  gpt-5-codex  ",
       profile: "  ",
     })
 
+    expect(parsed.workingDirectory).toBeUndefined()
     expect(parsed.model).toBe("gpt-5-codex")
     expect(parsed.profile).toBeUndefined()
   })

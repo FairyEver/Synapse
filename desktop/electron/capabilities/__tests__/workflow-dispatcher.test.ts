@@ -54,7 +54,7 @@ function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispat
     } as unknown as WorkflowDispatchDeps["nodeTypeRegistry"],
     eventBus: { emit: vi.fn() } as unknown as WorkflowDispatchDeps["eventBus"],
     runWorkflow: vi.fn(async () => ({ runId: "run-1" })),
-    cancelRun: vi.fn(),
+    cancelRun: vi.fn(() => true),
     cancelRunsForWorkflow: vi.fn(),
     getRunStatus: vi.fn(async () => null),
     ...overrides,
@@ -624,7 +624,17 @@ describe("createWorkflowDispatcher", () => {
     const dispatcher = createWorkflowDispatcher(deps)
     const result = await dispatcher.dispatch("workflow.run.disable", { runId: "run-1" }, { source: "api" })
     expect(result.ok).toBe(true)
+    expect(result.data).toEqual({ runId: "run-1", cancelRequested: true })
     expect(deps.cancelRun).toHaveBeenCalledWith("run-1")
+  })
+
+  it("workflow.run.disable stays idempotent when the run is no longer active", async () => {
+    const deps = makeDeps({ cancelRun: vi.fn(() => false) })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch("workflow.run.disable", { runId: "run-missing" }, { source: "api" })
+
+    expect(result).toEqual({ ok: true, data: { runId: "run-missing", cancelRequested: false } })
+    expect(deps.cancelRun).toHaveBeenCalledWith("run-missing")
   })
 
   it("reads workflow.node.delete state only through the mutation lock", async () => {
@@ -841,6 +851,7 @@ describe("createWorkflowDispatcher", () => {
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
+          defaultProjectId: "project-1",
           nodes: [
             scriptNode("n1", "Prompt", 200, 200),
             endNode("n2"),
@@ -875,6 +886,7 @@ describe("createWorkflowDispatcher", () => {
         get: vi.fn(async () => ({
           id: "wf-1", name: "Test", description: "", version: "v1",
           createdAt: 1, updatedAt: 2, params: [],
+          defaultProjectId: "project-1",
           nodes: [
             scriptNode("n1", "Prompt", 200, 200),
             endNode("n2"),
@@ -940,9 +952,9 @@ describe("createWorkflowDispatcher", () => {
     expect(data.type).toBe("codex")
     expect(data).not.toHaveProperty("availableProviders")
     expect(data.configFields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "workingDirectory" }),
       expect.objectContaining({ name: "approvalPolicy" }),
       expect.objectContaining({ name: "sandbox" }),
-      expect.objectContaining({ name: "workingDirectoryTemplate" }),
       expect.objectContaining({ name: "prompt" }),
     ]))
   })

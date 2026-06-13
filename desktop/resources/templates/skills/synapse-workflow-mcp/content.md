@@ -17,7 +17,7 @@ If a user asks for another Synapse MCP domain while this skill is active, switch
 - **http_request** — Sends an HTTP request (GET/POST/PUT/PATCH/DELETE) and returns the response. Supports headers, query params, JSON/text body, auth (bearer/basic), and timeout. No provider needed.
 - **script** — Executes a shell script (posix/cmd/powershell) and returns stdout as output. Supports env vars, timeout, and login shell mode. No provider needed.
 - **workflow_call** — Calls another saved workflow, maps parent context into the child workflow params, and returns the child workflow End output. No provider needed on the call node.
-- **codex** — Runs local `codex exec` in the selected project, passes the prompt through stdin, and returns Codex's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
+- **codex** — Runs local `codex exec` in the selected project or an optional task working directory, passes the prompt through stdin, and returns Codex's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
 - **end** — Terminal node (every workflow has exactly one). Defines the final output template. Cannot be deleted.
 
 ## Provider / Model Configuration
@@ -25,7 +25,7 @@ If a user asks for another Synapse MCP domain while this skill is active, switch
 Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **codex** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **script**, and **workflow_call** nodes execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child codex nodes still need an effective project. Configure project/provider/model with these exact field names:
 
 - **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override; when no timeout is configured, the default is 60 minutes. Codex nodes inherit only `defaultProjectId`; set `timeoutMins` directly on the codex node when needed.
-- **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. Set only `projectId` and optionally `timeoutMins` on codex config.
+- **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. Set only `projectId`, `workingDirectory`, and optionally `timeoutMins` on codex config.
 
 To discover available providers, call `workflow_node_type_describe` with `nodeType: "prompt"` (or `"switch"`). The response includes an `availableProviders` array:
 ```json
@@ -141,7 +141,7 @@ Config fields:
 - `prompt` — Codex instruction template. Use `{{variableName}}` placeholders declared in `variables`.
 - `variables` — bindings from workflow params, upstream node outputs, or static values.
 - `projectId?` — execution project. If omitted, the node inherits workflow `defaultProjectId`.
-- `workingDirectoryTemplate?` — optional cwd template with `{{variableName}}` placeholders. Omit to use the project directory.
+- `workingDirectory?` — per-task working directory. Supports `{{variableName}}`, must already exist, and becomes both process cwd and Codex `--cd`. It is not automatically added to `additionalWritableDirs`.
 - `timeoutMins?` — optional node timeout in minutes.
 - `approvalPolicy` — `"never"`, `"on-request"`, or `"untrusted"`.
 - `sandbox` — `"read-only"`, `"workspace-write"`, or `"danger-full-access"`.
@@ -156,7 +156,7 @@ Config fields:
 
 Do not set `providerId` or `modelTier` on codex nodes. They run local `codex exec`, not a Synapse provider. When `bypassApprovalsAndSandbox` is true, keep `approvalPolicy` and `sandbox` in the config for schema validity, but Codex execution uses the bypass flag instead of approval/sandbox CLI flags.
 
-At runtime, the node passes the interpolated prompt through stdin. If `workingDirectoryTemplate` is blank, it runs in the resolved project via `--cd`; if set, Synapse interpolates the template, verifies the directory exists, and uses that directory for `cwd`/`--cd`. With `workspace-write`, Codex's current workspace is the actual working directory plus any `additionalWritableDirs`. The node returns only Codex's final reply as the node output. Debug metadata is stored under `outputs.codexDebug`; downstream `node_output` bindings receive the final reply text, not stdout/stderr or debug JSON.
+At runtime, the node passes the interpolated prompt through stdin and returns only Codex's final reply as the node output. By default it runs in the resolved project via `--cd`. If `workingDirectory` is set, Synapse interpolates and trims it, requires an existing directory, then uses it as both process cwd and Codex `--cd`; with `workspace-write`, Codex's current workspace is the actual working directory plus any `additionalWritableDirs`. Debug metadata is stored under `outputs.codexDebug`; downstream `node_output` bindings receive the final reply text, not stdout/stderr or debug JSON.
 
 ## Switch Branching
 

@@ -86,7 +86,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
     try {
       cwd = await resolveCodexWorkingDirectory({
         projectWorkspacePath,
-        workingDirectoryTemplate: config.workingDirectoryTemplate,
+        workingDirectory: config.workingDirectory,
         resolvedVariables,
       })
     } catch (error) {
@@ -288,10 +288,10 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
 
 async function resolveCodexWorkingDirectory(input: {
   readonly projectWorkspacePath: string
-  readonly workingDirectoryTemplate?: string
+  readonly workingDirectory?: string
   readonly resolvedVariables: Record<string, string>
 }): Promise<string> {
-  const template = input.workingDirectoryTemplate?.trim()
+  const template = input.workingDirectory?.trim()
   const rendered = template
     ? interpolatePrompt(template, input.resolvedVariables).trim()
     : input.projectWorkspacePath

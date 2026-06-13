@@ -54,11 +54,6 @@ const CODEX_FIELD_HELP = {
     summary: "限制 Codex 执行命令时能访问和修改的文件范围。",
     impact: "影响范围：命令执行、文件读写和自动化运行的安全边界。",
   },
-  workingDirectoryTemplate: {
-    title: "工作目录",
-    summary: "设置本次 Codex 实际运行的目录，支持 {{变量}}。",
-    impact: "留空时使用项目目录；workspace-write 写入范围以解析后的工作目录为准。",
-  },
   model: {
     title: "模型",
     summary: "指定本节点使用的 Codex 模型；继承配置时不传 --model。",
@@ -73,6 +68,11 @@ const CODEX_FIELD_HELP = {
     title: "超时分钟",
     summary: "限制本节点最多运行多久，留空时使用工作流默认超时。",
     impact: "影响范围：长任务等待时间、失败判定和后续节点启动时间。",
+  },
+  workingDirectory: {
+    title: "工作目录",
+    summary: "设置本次 Codex 实际运行的目录，支持 {{变量}}。",
+    impact: "留空时使用项目目录；workspace-write 写入范围以解析后的工作目录为准。",
   },
   enableSearch: {
     title: "启用搜索",
@@ -303,14 +303,14 @@ export function CodexNodePanel({
         />
         {errorFor("projectId") ? <p className="text-xs text-destructive">{errorFor("projectId")}</p> : null}
         <LabeledInput
-          id="codex-working-directory-template"
+          id="codex-working-directory"
           label="工作目录"
-          help={CODEX_FIELD_HELP.workingDirectoryTemplate}
-          value={config.workingDirectoryTemplate ?? ""}
+          help={CODEX_FIELD_HELP.workingDirectory}
+          value={config.workingDirectory ?? ""}
           placeholder="留空使用项目目录"
-          onChange={(value) => commit({ workingDirectoryTemplate: value === "" ? undefined : value })}
+          onChange={(value) => commit({ workingDirectory: value === "" ? undefined : value })}
         />
-        {errorFor("workingDirectoryTemplate") ? <p className="text-xs text-destructive">{errorFor("workingDirectoryTemplate")}</p> : null}
+        {errorFor("workingDirectory") ? <p className="text-xs text-destructive">{errorFor("workingDirectory")}</p> : null}
       </CollapsibleSection>
 
       <CollapsibleSection title="指令" summary={promptSummary}>

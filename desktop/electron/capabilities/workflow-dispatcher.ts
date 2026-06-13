@@ -21,7 +21,7 @@ export type WorkflowDispatchDeps = {
   nodeTypeRegistry: NodeTypeRegistry
   eventBus: EventBus
   runWorkflow: (id: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
-  cancelRun: (runId: string) => void
+  cancelRun: (runId: string) => boolean
   cancelRunsForWorkflow: (workflowId: string) => Promise<void>
   getRunStatus: (runId: string) => Promise<WorkflowRunStatus | null>
   listProviders?: () => Promise<readonly { id: string; name: string; model?: string; haikuModel?: string; sonnetModel?: string; opusModel?: string }[]>
@@ -336,8 +336,8 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   "workflow.run.disable": async (params, deps) => {
     const runId = requireString(params, "runId")
-    deps.cancelRun(runId)
-    return { ok: true }
+    const cancelRequested = deps.cancelRun(runId)
+    return { ok: true, data: { runId, cancelRequested } }
   },
 
   "workflow.node.create": async (params, deps) => {

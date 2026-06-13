@@ -107,13 +107,13 @@ describe("validateWorkflow", () => {
     ]))
   })
 
-  it("checks template placeholders inside codex working directory templates", () => {
+  it("checks template placeholders inside codex working directories", () => {
     const result = validateWorkflow(definitionWithCodexNode({
       defaultProjectId: "project-1",
       nodes: [
         codexNode({
           prompt: "Run codex",
-          workingDirectoryTemplate: "/Users/liyang/worktrees/{{missingDir}}",
+          workingDirectory: "/Users/liyang/worktrees/{{missingDir}}",
         }),
         endNode(),
       ],

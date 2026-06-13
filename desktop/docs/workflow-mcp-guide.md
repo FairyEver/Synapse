@@ -11,7 +11,7 @@
 - 节点通过有向边连接（`from` → `to`）
 - switch 节点的出边必须携带 `branch` 字段
 - `workflow_call` 节点可调用另一个已保存工作流，并把子工作流 End 输出作为自身输出
-- `codex` 节点在执行项目中运行本机 `codex exec`，并把 Codex 最终回复作为自身输出
+- `codex` 节点在执行项目或任务工作目录中运行本机 `codex exec`，并把 Codex 最终回复作为自身输出
 
 ## 2. 变量系统
 
@@ -127,7 +127,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 
 ### codex — Codex 节点
 
-不需要 provider/modelTier。它在解析后的项目目录中运行本机 `codex exec`，把插值后的提示词通过 stdin 传入，并把 Codex 最终回复作为节点输出。
+不需要 provider/modelTier。它默认在解析后的项目目录中运行本机 `codex exec`；也可以通过 `workingDirectory` 指定任务级工作目录。节点会把插值后的提示词通过 stdin 传入，并把 Codex 最终回复作为节点输出。
 
 配置字段：
 
@@ -136,7 +136,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | `prompt` | string | Codex 指令模板，支持 `{{变量名}}` |
 | `variables` | VariableBinding[] | 从工作流参数、上游节点输出或静态值绑定变量 |
 | `projectId` | string? | 执行项目；为空时继承工作流 `defaultProjectId` |
-| `workingDirectoryTemplate` | string? | 可选工作目录模板，支持 `{{变量名}}`；为空时使用项目目录 |
+| `workingDirectory` | string? | 可选任务工作目录，支持 `{{变量名}}`；非空时必须已存在，并作为进程 cwd 和 Codex `--cd` |
 | `timeoutMins` | number? | 节点超时分钟数 |
 | `approvalPolicy` | `"never"` \| `"on-request"` \| `"untrusted"` | Codex 审批策略 |
 | `sandbox` | `"read-only"` \| `"workspace-write"` \| `"danger-full-access"` | Codex 沙箱模式 |
@@ -174,7 +174,9 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 }
 ```
 
-当 `workingDirectoryTemplate` 为空时，节点在解析后的项目目录运行；非空时先插值并校验目录存在，再把该目录作为 Codex 的 `cwd` / `--cd`。`workspace-write` 的当前工作区就是这个实际工作目录；`additionalWritableDirs` 只用于补充额外可写目录。当 `bypassApprovalsAndSandbox` 为 true 时，配置仍需保留 `approvalPolicy` 和 `sandbox` 以满足 schema，但实际执行会使用 Codex 绕过参数，不再额外传审批和沙箱 CLI 参数。运行历史中的调试信息位于 `outputs.codexDebug`；下游 `node_output` 只接收最终回复文本。
+未配置 `workingDirectory` 时，Codex 的进程 cwd 和 `--cd` 都使用项目目录。配置后会先插值并去除首尾空白，空值或不存在的目录会让节点直接失败；`workspace-write` 的当前工作区就是这个实际工作目录。该目录不会自动加入 `additionalWritableDirs`，跨目录写入仍需显式配置可写目录。
+
+当 `bypassApprovalsAndSandbox` 为 true 时，配置仍需保留 `approvalPolicy` 和 `sandbox` 以满足 schema，但实际执行会使用 Codex 绕过参数，不再额外传审批和沙箱 CLI 参数。运行历史中的调试信息位于 `outputs.codexDebug`；下游 `node_output` 只接收最终回复文本。
 
 ### end — 终止节点
 
@@ -439,4 +441,4 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | 子工作流参数缺失 | `paramTemplates` 未提供子工作流必填参数，且子参数无默认值 | 读取子工作流 `params` 后补齐模板 |
 | 子工作流模板变量未绑定 | `paramTemplates` 中使用了未出现在 `variables` 的 `{{变量名}}` | 在调用节点 `variables` 中添加绑定 |
 | Codex 项目缺失 | codex 节点没有 `projectId`，工作流也没有 `defaultProjectId` | 设置工作流 `defaultProjectId` 或节点 `projectId` |
-| Codex 工作目录不存在 | `workingDirectoryTemplate` 插值后的目录不可用 | 让上游节点先创建目录，或改为存在的 worktree/checkout 路径 |
+| Codex 工作目录不可用 | `workingDirectory` 插值后为空或目录不存在 | 修正工作目录变量或先创建目标目录 |

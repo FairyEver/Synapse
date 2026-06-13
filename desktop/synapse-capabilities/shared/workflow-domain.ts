@@ -22,7 +22,7 @@ const workflowCapabilities: readonly CapabilityDefinition[] = [
   { id: "workflow.definition.delete" as CapabilityId, title: "Delete workflow", description: "Delete a workflow, cancel active runs, and clean up snapshots.", mutates: true },
   // Execute
   { id: "workflow.run.execute" as CapabilityId, title: "Run workflow", description: "Execute a workflow with parameters. Returns runId for polling.", mutates: true },
-  { id: "workflow.run.disable" as CapabilityId, title: "Cancel run", description: "Cancel a running workflow execution.", mutates: true },
+  { id: "workflow.run.disable" as CapabilityId, title: "Cancel run", description: "Cancel a running workflow execution. Returns whether an active run received the abort signal.", mutates: true },
   // Atomic write
   { id: "workflow.node.create" as CapabilityId, title: "Add node", description: "Add a node to a workflow. Position is auto-calculated if omitted.", mutates: true },
   { id: "workflow.node.update" as CapabilityId, title: "Update node", description: "Update a node's name, position, or config (config is replaced, not merged).", mutates: true },
@@ -47,7 +47,7 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntr
 // MCP tool definitions (JSON Schema input schemas)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Available node types include prompt, switch, http_request, script, workflow_call, codex, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps its child params through paramTemplates, and returns the child workflow's End output. A codex node runs local codex exec, needs an effective project, and returns Codex's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
+const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Available node types include prompt, switch, http_request, script, workflow_call, codex, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps its child params through paramTemplates, and returns the child workflow's End output. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
 const modelTierSchema = {
   type: "string",
@@ -123,18 +123,18 @@ const workflowDefinitionSchema = {
           position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
           config: {
             type: "object",
-            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, optional workingDirectoryTemplate, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
+            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, optional workingDirectory, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
             properties: {
               providerId: { type: "string" },
               modelTier: modelTierSchema,
               projectId: { type: "string" },
-              workingDirectoryTemplate: { type: "string", description: "codex only: optional cwd template with {{variable}} placeholders. Omit to run in the resolved project workspace; when set, the interpolated directory becomes codex cwd/--cd." },
               timeoutMins: { type: "number" },
               variables: { type: "array", items: variableBindingSchema },
               workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
               paramTemplates: { type: "object", description: "workflow_call only: child parameter name to template string map." },
               approvalPolicy: { type: "string", description: "codex only: Codex approval policy, e.g. never, on-request, or untrusted." },
               sandbox: { type: "string", description: "codex only: Codex sandbox mode, e.g. read-only, workspace-write, or danger-full-access." },
+              workingDirectory: { type: "string", description: "codex only: optional per-task working directory. Supports {{variable}} interpolation, must already exist, and becomes both process cwd and Codex --cd. It is not automatically added to additionalWritableDirs." },
               model: { type: "string", description: "codex only: optional Codex model name passed to codex exec." },
               profile: { type: "string", description: "codex only: optional Codex profile passed to codex exec." },
               configOverrides: { type: "array", description: "codex only: repeated Codex config overrides as { key, value } entries." },
@@ -271,7 +271,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_run_disable",
-      description: "Cancel a running workflow execution by sending an abort signal.",
+      description: "Cancel a running workflow execution by sending an abort signal. Returns { runId, cancelRequested }, where cancelRequested=false means the run was not in the active run table and the request was treated as an idempotent success.",
       inputSchema: {
         type: "object",
         properties: { runId: { type: "string", description: "Run ID to cancel." } },

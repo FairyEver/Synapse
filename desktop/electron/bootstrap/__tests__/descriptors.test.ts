@@ -744,12 +744,12 @@ describe("bootstrap descriptors (T1.5)", () => {
     })).rejects.toThrow("HTTP request denied by workflow engine: blocked by policy")
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?client_secret=%5Bredacted%5D&refresh_token=%5Bredacted%5D&id_token=%5Bredacted%5D&ok=1",
+      resource: "https://example.test/hook?client_secret=%5Bredacted%5D&refresh_token=%5Bredacted%5D&id_token=%5Bredacted%5D&ok=1",
     }))
     expect(auditSink.record).toHaveBeenCalledWith({
       action: "network.connect",
       actor: { kind: "system" },
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?client_secret=%5Bredacted%5D&refresh_token=%5Bredacted%5D&id_token=%5Bredacted%5D&ok=1",
+      resource: "https://example.test/hook?client_secret=%5Bredacted%5D&refresh_token=%5Bredacted%5D&id_token=%5Bredacted%5D&ok=1",
       outcome: "denied",
       metadata: {
         source: "workflow",
@@ -793,7 +793,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     })
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?api_key=%5Bredacted%5D&ok=1",
+      resource: "https://example.test/hook?api_key=%5Bredacted%5D&ok=1",
       outcome: "allowed",
       metadata: { source: "workflow", status: 200 },
     }))
@@ -831,7 +831,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     })).rejects.toThrow("request failed")
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?access_token=%5Bredacted%5D&ok=1",
+      resource: "https://example.test/hook?access_token=%5Bredacted%5D&ok=1",
       outcome: "failed",
       metadata: { source: "workflow", error: "request failed" },
     }))
@@ -1068,6 +1068,81 @@ describe("bootstrap descriptors (T1.5)", () => {
     }))
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/repo")
+  })
+
+  it("createRunWorkflowHandler keeps resolved node input and progress in live run status", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Test", localPath: "/test" }],
+        })),
+      },
+    }))
+
+    const { createRunWorkflowHandler } = await importBootstrap()
+    const workflowDef = {
+      id: "wf-1",
+      name: "Test",
+      version: "",
+      defaultProjectId: "repo-1",
+      defaultProviderId: "provider-1",
+      defaultModelTier: "default" as const,
+      nodes: [
+        { id: "node-1", type: "prompt" as const, name: "Prompt", position: { x: 0, y: 0 }, config: { prompt: "Hi {{topic}}", variables: [{ name: "topic", source: { type: "static" as const, value: "release notes" } }] } },
+        { id: "end-1", type: "end" as const, name: "End", position: { x: 400, y: 200 }, config: { outputType: "text" as const, template: "", variables: [] } },
+      ],
+      edges: [{ id: "edge-node-end", from: "node-1", to: "end-1" }],
+      params: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    const workflowService = { get: vi.fn().mockResolvedValue(workflowDef) }
+    const runAborts = new Map<string, AbortController>()
+    const runStatuses = new Map<string, { runId: string; workflowId: string; status: string; nodeResults: Record<string, { input?: unknown; progressLabel?: string; status?: string }>; startedAt: number; params?: Record<string, unknown>; definition?: unknown }>()
+    const runCompletions = new Map<string, Promise<unknown>>()
+    const eventBus = { emit: vi.fn() }
+    const snapshotService = { save: vi.fn() }
+    const capabilityLogger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const liveResult = {
+      nodeId: "node-1",
+      status: "running" as const,
+      input: {
+        variables: { topic: "release notes" },
+        prompt: "Hi release notes",
+      },
+      startedAt: 10,
+    }
+    const workflowEngine = {
+      run: vi.fn((_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
+        emit({ type: "node:started", runId, nodeId: "node-1", startedAt: 10, result: liveResult })
+        emit({ type: "node:progress", runId, nodeId: "node-1", phase: "awaiting_response", label: "等待响应…" })
+        return new Promise(() => undefined)
+      }),
+    }
+
+    const handler = createRunWorkflowHandler({
+      workflowService: workflowService as never,
+      workflowEngine: workflowEngine as never,
+      snapshotService: snapshotService as never,
+      eventBus: eventBus as never,
+      runAborts: runAborts as never,
+      runStatuses: runStatuses as never,
+      runCompletions,
+      capabilityLogger: capabilityLogger as never,
+    })
+
+    const result = await handler("wf-1", {})
+    const runId = (result as { runId: string }).runId
+
+    expect(runStatuses.get(runId)?.nodeResults["node-1"]).toMatchObject({
+      status: "running",
+      input: {
+        variables: { topic: "release notes" },
+        prompt: "Hi release notes",
+      },
+      progressLabel: "等待响应…",
+    })
   })
 
   it("createRunWorkflowHandler skips snapshots after workflow deletion tombstone", async () => {

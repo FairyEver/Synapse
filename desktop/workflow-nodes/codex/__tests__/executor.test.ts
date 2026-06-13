@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises"
+import { access, mkdtemp, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -315,35 +315,35 @@ describe("codexNodeExecutor", () => {
     }))
   })
 
-  it("uses an interpolated working directory template as the Codex cwd", async () => {
-    const worktreeDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-worktree-"))
+  it("uses an interpolated workingDirectory as process cwd and codex --cd", async () => {
     const runtimeDeps = makeRuntimeDeps()
-    const input = makeInput({
-      workingDirectoryTemplate: `${worktreeDir}/{{topic}}`,
-    }, runtimeDeps)
-    await mkdir(path.join(worktreeDir, "release notes"))
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-workdir-"))
+    const input = makeInput({ workingDirectory: "{{targetDir}}" }, runtimeDeps)
+    input.resolvedVariables = { ...input.resolvedVariables, targetDir }
 
     const result = await codexNodeExecutor.execute(input)
 
     expect(result.status).toBe("success")
     expect(runtimeDeps.resolveProjectWorkspacePath).toHaveBeenCalledWith("repo-1")
     expect(runtimeDeps.processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: path.join(worktreeDir, "release notes"),
-      args: expect.arrayContaining(["--cd", path.join(worktreeDir, "release notes")]),
+      cwd: targetDir,
+      args: expect.arrayContaining(["--cd", targetDir]),
     }))
+    const request = vi.mocked(runtimeDeps.processRunner.run).mock.calls[0]?.[0]
+    expect(request?.args).not.toEqual(expect.arrayContaining(["--add-dir", targetDir]))
   })
 
-  it("fails before running Codex when the working directory template points to a missing directory", async () => {
+  it("fails when workingDirectory resolves to a missing path", async () => {
     const runtimeDeps = makeRuntimeDeps()
-    const input = makeInput({
-      workingDirectoryTemplate: path.join(os.tmpdir(), "missing-synapse-codex-worktree-{{topic}}"),
-    }, runtimeDeps)
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-workdir-parent-"))
+    const missingDir = path.join(tempDir, "missing")
+    const input = makeInput({ workingDirectory: "{{targetDir}}" }, runtimeDeps)
+    input.resolvedVariables = { ...input.resolvedVariables, targetDir: missingDir }
 
     const result = await codexNodeExecutor.execute(input)
 
     expect(result).toMatchObject({
       status: "failed",
-      output: "",
       error: "Codex 工作目录不存在",
     })
     expect(runtimeDeps.processRunner.run).not.toHaveBeenCalled()

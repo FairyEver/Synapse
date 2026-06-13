@@ -386,7 +386,7 @@ describe("CodexNodePanel", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ prompt: "New prompt" }))
   })
 
-  it("commits working directory template changes on blur", () => {
+  it("commits working directory changes on blur", () => {
     const onChange = vi.fn()
 
     render(
@@ -404,7 +404,7 @@ describe("CodexNodePanel", () => {
     blur(input)
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
-      workingDirectoryTemplate: "/Users/liyang/worktrees/{{bugId}}",
+      workingDirectory: "/Users/liyang/worktrees/{{bugId}}",
     }))
   })
 

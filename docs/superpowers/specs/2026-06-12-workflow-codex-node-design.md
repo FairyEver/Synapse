@@ -68,7 +68,7 @@ A Script node template could run `codex exec`, but users would have to manage CL
 interface CodexNodeConfig {
   variables: WorkflowVariableBinding[]
   prompt: string
-  workingDirectoryTemplate?: string
+  workingDirectory?: string
   projectId?: string
   timeoutMins?: number
 
@@ -98,7 +98,6 @@ Default config:
 {
   variables: [],
   prompt: "",
-  workingDirectoryTemplate: undefined,
   approvalPolicy: "never",
   sandbox: "workspace-write",
   enableSearch: false,
@@ -175,7 +174,7 @@ The Codex node uses the same project mechanism as Prompt nodes:
 node projectId -> workflow defaultProjectId -> inherited run project context
 ```
 
-At runtime the project id resolves to a workspace path through existing repository/project configuration. If `workingDirectoryTemplate` is empty, the executor passes that path to Codex via `--cd`. If `workingDirectoryTemplate` is set, the executor interpolates it with node variables, resolves relative paths against the project workspace, verifies the directory exists, and passes that directory as both process `cwd` and Codex `--cd`.
+At runtime the project id resolves to a workspace path through existing repository/project configuration. If `workingDirectory` is empty, the executor passes that path to Codex via `--cd`. If `workingDirectory` is set, the executor interpolates it with node variables, resolves relative paths against the project workspace, verifies the directory exists, and passes that directory as both process `cwd` and Codex `--cd`.
 
 `workspace-write` applies to the actual Codex working directory selected above. `additionalWritableDirs` remains only for extra writable roots outside that working directory.
 

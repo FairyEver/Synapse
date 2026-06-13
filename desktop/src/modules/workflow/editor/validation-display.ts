@@ -17,7 +17,7 @@ type ZodIssueLike = {
 
 const FIELD_MESSAGES: Record<string, string> = {
   projectId: "请选择项目，或设置工作流默认项目。",
-  workingDirectoryTemplate: "请检查工作目录。",
+  workingDirectory: "请检查工作目录。",
   providerId: "请选择供应商，或设置工作流默认供应商。",
   modelTier: "请选择模型，或设置工作流默认模型。",
   prompt: "提示词不能为空。",
