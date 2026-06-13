@@ -383,6 +383,26 @@ describe("CodexNodePanel", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ prompt: "New prompt" }))
   })
 
+  it("commits working directory changes", () => {
+    const onChange = vi.fn()
+
+    render(
+      <CodexNodePanel
+        config={{ ...defaultCodexNodeConfig, prompt: "Run" }}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    change(getByLabelText("工作目录") as HTMLInputElement, "{{taskDir}}")
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      workingDirectory: "{{taskDir}}",
+    }))
+  })
+
   it("toggles bypass approvals and sandbox", () => {
     const onChange = vi.fn()
 

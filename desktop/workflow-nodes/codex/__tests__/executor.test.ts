@@ -312,6 +312,40 @@ describe("codexNodeExecutor", () => {
     }))
   })
 
+  it("uses an interpolated workingDirectory as process cwd and codex --cd", async () => {
+    const runtimeDeps = makeRuntimeDeps()
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-workdir-"))
+    const input = makeInput({ workingDirectory: "{{targetDir}}" }, runtimeDeps)
+    input.resolvedVariables = { ...input.resolvedVariables, targetDir }
+
+    const result = await codexNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(runtimeDeps.resolveProjectWorkspacePath).toHaveBeenCalledWith("repo-1")
+    expect(runtimeDeps.processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: targetDir,
+      args: expect.arrayContaining(["--cd", targetDir]),
+    }))
+    const request = vi.mocked(runtimeDeps.processRunner.run).mock.calls[0]?.[0]
+    expect(request?.args).not.toEqual(expect.arrayContaining(["--add-dir", targetDir]))
+  })
+
+  it("fails when workingDirectory resolves to a missing path", async () => {
+    const runtimeDeps = makeRuntimeDeps()
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-workdir-parent-"))
+    const missingDir = path.join(tempDir, "missing")
+    const input = makeInput({ workingDirectory: "{{targetDir}}" }, runtimeDeps)
+    input.resolvedVariables = { ...input.resolvedVariables, targetDir: missingDir }
+
+    const result = await codexNodeExecutor.execute(input)
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "Codex 工作目录不存在",
+    })
+    expect(runtimeDeps.processRunner.run).not.toHaveBeenCalled()
+  })
+
   it("prefers last-message.txt over stdout when the file exists", async () => {
     const runtimeDeps = makeRuntimeDeps({
       processRunner: {

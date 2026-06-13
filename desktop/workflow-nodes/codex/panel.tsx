@@ -68,6 +68,11 @@ const CODEX_FIELD_HELP = {
     summary: "限制本节点最多运行多久，留空时使用工作流默认超时。",
     impact: "影响范围：长任务等待时间、失败判定和后续节点启动时间。",
   },
+  workingDirectory: {
+    title: "工作目录",
+    summary: "指定本次 Codex 任务的运行目录，支持变量占位符。",
+    impact: "影响范围：Codex --cd、进程 cwd 和相对路径解析。",
+  },
   enableSearch: {
     title: "启用搜索",
     summary: "允许 Codex 在本次执行中使用实时网页搜索。",
@@ -296,6 +301,13 @@ export function CodexNodePanel({
           placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
         />
         {errorFor("projectId") ? <p className="text-xs text-destructive">{errorFor("projectId")}</p> : null}
+        <LabeledInput
+          id="codex-working-directory"
+          label="工作目录"
+          help={CODEX_FIELD_HELP.workingDirectory}
+          value={config.workingDirectory ?? ""}
+          onChange={(value) => commit({ workingDirectory: value === "" ? undefined : value })}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="指令" summary={promptSummary}>

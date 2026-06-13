@@ -28,6 +28,7 @@ export const codexNodeConfigSchema = z
     variables: z.array(variableBindingSchema),
     prompt: z.string().trim().min(1, "指令不能为空"),
     projectId: z.string().optional(),
+    workingDirectory: optionalTrimmedStringSchema,
     timeoutMins: z.number().int().min(1).optional(),
     approvalPolicy: codexApprovalPolicySchema,
     sandbox: codexSandboxSchema,

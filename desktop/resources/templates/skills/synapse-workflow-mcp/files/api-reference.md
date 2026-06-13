@@ -84,6 +84,7 @@ Runs local `codex exec` in an execution project. No Synapse provider needed; do 
 - `prompt` (string) — Codex instruction template with `{{variable}}` placeholders
 - `variables` (array) — variable bindings from workflow params, upstream node outputs, or static values
 - `projectId?` (string) — execution project override; inherits workflow `defaultProjectId` when omitted
+- `workingDirectory?` (string) — per-task working directory. Supports `{{variable}}` interpolation, must already exist, and becomes both process cwd and Codex `--cd`. It is not automatically added to `additionalWritableDirs`.
 - `timeoutMins?` (number) — node timeout in minutes
 - `approvalPolicy` (enum: never/on-request/untrusted, default "never") — Codex approval policy
 - `sandbox` (enum: read-only/workspace-write/danger-full-access, default "workspace-write") — Codex sandbox
@@ -120,7 +121,7 @@ Minimal valid config:
 }
 ```
 
-The node passes the prompt through stdin, runs with `--cd` set to the resolved project workspace, and returns only Codex's final reply text as `output`. Debug metadata is available in `outputs.codexDebug`, but downstream `node_output` bindings receive the final reply text only.
+The node passes the prompt through stdin and returns only Codex's final reply text as `output`. By default it runs with `--cd` set to the resolved project workspace. If `workingDirectory` is set, Synapse interpolates and trims it, requires an existing directory, then uses it as both process cwd and Codex `--cd`; configure `additionalWritableDirs` separately for cross-directory writes. Debug metadata is available in `outputs.codexDebug`, but downstream `node_output` bindings receive the final reply text only.
 
 ### end
 
@@ -275,4 +276,6 @@ Execute a workflow with parameters.
 Cancel a running workflow execution.
 
 **Params:** `runId` (string, required)
-**Returns:** `{ ok: true }`
+**Returns:** `{ runId, cancelRequested }`
+
+**Notes:** `cancelRequested` is true when Synapse found an active run and sent an abort signal. It is false when the run is no longer active; the request still succeeds idempotently.

@@ -60,6 +60,7 @@ describe("codexNodeConfigSchema", () => {
       variables: [{ name: "input", source: { type: "static", value: "hello" } }],
       prompt: "run {{input}}",
       projectId: "project-1",
+      workingDirectory: " /Users/liyang/task ",
       timeoutMins: 15,
       approvalPolicy: "on-request",
       sandbox: "danger-full-access",
@@ -75,6 +76,7 @@ describe("codexNodeConfigSchema", () => {
     })
 
     expect(parsed).toMatchObject({
+      workingDirectory: "/Users/liyang/task",
       model: "gpt-5-codex",
       profile: "automation",
       enableSearch: true,
@@ -88,10 +90,12 @@ describe("codexNodeConfigSchema", () => {
     const parsed = codexNodeConfigSchema.parse({
       ...defaultCodexNodeConfig,
       prompt: "run",
+      workingDirectory: "  ",
       model: "  gpt-5-codex  ",
       profile: "  ",
     })
 
+    expect(parsed.workingDirectory).toBeUndefined()
     expect(parsed.model).toBe("gpt-5-codex")
     expect(parsed.profile).toBeUndefined()
   })

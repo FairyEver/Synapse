@@ -450,7 +450,9 @@ export function createRunWorkflowHandler(deps: {
       const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
       const nextNodeResults = { ...current.nodeResults }
       if (event.type === "node:started") {
-        nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
+        nextNodeResults[event.nodeId] = event.result ?? { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
+      } else if (event.type === "node:progress") {
+        nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} }, status: "running" as const }), progressLabel: event.label }
       } else if (event.type === "node:agent-conversation") {
         const existing = nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "running" as const, input: { variables: {} } }
         nextNodeResults[event.nodeId] = {
@@ -667,7 +669,13 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         capabilityLogger,
         isWorkflowDeleted: (workflowId) => deletedWorkflowIds.has(workflowId),
       }),
-      cancelRun: (runId: string) => { runAborts.get(runId)?.abort(); runAborts.delete(runId) },
+      cancelRun: (runId: string) => {
+        const controller = runAborts.get(runId)
+        if (!controller) return false
+        controller.abort()
+        runAborts.delete(runId)
+        return true
+      },
       cancelRunsForWorkflow: async (workflowId: string) => {
         deletedWorkflowIds.add(workflowId)
         const runningRunIds: string[] = []

@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises"
 import { app } from "electron"
 
 import { createMainLogger } from "../../electron/services/log-store"
@@ -57,8 +58,8 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
     }
 
     input.onProgress?.("resolving_project", "解析项目…")
-    const cwd = await resolveProjectWorkspacePath(projectId)
-    if (!cwd) {
+    const projectCwd = await resolveProjectWorkspacePath(projectId)
+    if (!projectCwd) {
       return {
         status: "failed",
         output: "",
@@ -66,6 +67,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         durationMs: Date.now() - start,
       }
     }
+    let cwd = projectCwd
 
     input.onProgress?.("resolving_variables", "解析变量…")
     let prompt: string
@@ -78,6 +80,39 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         error: `模板变量解析失败：${error instanceof Error ? error.message : String(error)}`,
         durationMs: Date.now() - start,
       }
+    }
+    if (config.workingDirectory !== undefined) {
+      let workingDirectory: string
+      try {
+        workingDirectory = interpolatePrompt(config.workingDirectory, resolvedVariables).trim()
+      } catch (error) {
+        return {
+          status: "failed",
+          output: "",
+          error: `工作目录变量解析失败：${error instanceof Error ? error.message : String(error)}`,
+          durationMs: Date.now() - start,
+        }
+      }
+
+      if (!workingDirectory) {
+        return {
+          status: "failed",
+          output: "",
+          error: "Codex 工作目录不能为空",
+          durationMs: Date.now() - start,
+        }
+      }
+
+      const directoryStats = await stat(workingDirectory).catch(() => null)
+      if (!directoryStats?.isDirectory()) {
+        return {
+          status: "failed",
+          output: "",
+          error: "Codex 工作目录不存在",
+          durationMs: Date.now() - start,
+        }
+      }
+      cwd = workingDirectory
     }
 
     const actor = context.actor ?? { kind: "system" as const, id: "workflow-engine" }
