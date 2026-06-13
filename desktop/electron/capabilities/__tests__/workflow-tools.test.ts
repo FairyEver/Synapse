@@ -30,21 +30,24 @@ function stringProperty(source: unknown, key: string): string {
 }
 
 describe("workflow MCP tool definitions", () => {
-  it("teaches agents that workflow_call is a supported node type", () => {
+  it("teaches agents that workflow_call and codex are supported node types", () => {
     expect(toolByName("workflow_node_type_list").description).toContain("workflow_call")
+    expect(toolByName("workflow_node_type_list").description).toContain("codex")
 
     const describeProperties = toolByName("workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
     expect(stringProperty(describeNodeType, "description")).toContain("workflow_call")
+    expect(stringProperty(describeNodeType, "description")).toContain("codex")
 
     const createProperties = toolByName("workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
     const nodeProperties = objectProperty(nodeSchema, "properties")
     const typeSchema = objectProperty(nodeProperties, "type")
     expect(stringProperty(typeSchema, "description")).toContain("workflow_call")
+    expect(stringProperty(typeSchema, "description")).toContain("codex")
   })
 
-  it("documents workflow_call config fields in the full definition schema", () => {
+  it("documents workflow_call and codex config fields in the full definition schema", () => {
     const inspectProperties = toolByName("workflow_definition_inspect").inputSchema.properties
     const definitionSchema = objectProperty(inspectProperties, "definition")
     const definitionProperties = objectProperty(definitionSchema, "properties")
@@ -57,5 +60,8 @@ describe("workflow MCP tool definitions", () => {
     expect(configDescription).toContain("workflow_call")
     expect(configDescription).toContain("workflowId")
     expect(configDescription).toContain("paramTemplates")
+    expect(configDescription).toContain("codex")
+    expect(configDescription).toContain("approvalPolicy")
+    expect(configDescription).toContain("configOverrides")
   })
 })

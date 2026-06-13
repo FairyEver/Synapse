@@ -6,11 +6,12 @@
 
 - 工作流是有向无环图（DAG）
 - 节点按拓扑序执行；无依赖关系的节点并行运行
-- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call` 和 `end`
+- 内置节点类型包括 `prompt`、`switch`、`http_request`、`script`、`workflow_call`、`codex` 和 `end`
 - 每个工作流必须有且仅有一个 `end` 节点，不允许环
 - 节点通过有向边连接（`from` → `to`）
 - switch 节点的出边必须携带 `branch` 字段
 - `workflow_call` 节点可调用另一个已保存工作流，并把子工作流 End 输出作为自身输出
+- `codex` 节点在执行项目中运行本机 `codex exec`，并把 Codex 最终回复作为自身输出
 
 ## 2. 变量系统
 
@@ -25,7 +26,7 @@
 | `static` | 硬编码值 | `{ "type": "static", "value": "你是一个翻译助手" }` |
 
 变量在节点执行前解析完毕。变量名支持字母、数字、下划线和中文。
-变量可用于 prompt/switch 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入。
+变量可用于 prompt/switch/codex 提示词、end 输出模板、HTTP 文本字段，以及 `workflow_call.paramTemplates`。script 节点会把变量作为环境变量注入。
 
 ## 3. 图约束
 
@@ -120,7 +121,57 @@
 | `variables` | VariableBinding[] | 从父工作流参数、上游节点输出或静态值绑定变量 |
 | `paramTemplates` | `Record<string, string>` | 子工作流参数名到模板文本的映射，支持 `{{变量名}}` |
 
-配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 的 key 应来自子工作流参数名。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project。
+配置前先用 `workflow_definition_list` 找到子工作流，再用 `workflow_definition_get` 读取子工作流当前 `params`。`paramTemplates` 的 key 应来自子工作流参数名。子工作流内部 prompt/switch 节点仍需要通过子工作流默认值或子节点覆盖获得 provider/model/project；codex 节点仍需要有效项目。
+
+### codex — Codex 节点
+
+不需要 provider/modelTier。它在解析后的项目目录中运行本机 `codex exec`，把插值后的提示词通过 stdin 传入，并把 Codex 最终回复作为节点输出。
+
+配置字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `prompt` | string | Codex 指令模板，支持 `{{变量名}}` |
+| `variables` | VariableBinding[] | 从工作流参数、上游节点输出或静态值绑定变量 |
+| `projectId` | string? | 执行项目；为空时继承工作流 `defaultProjectId` |
+| `timeoutMins` | number? | 节点超时分钟数 |
+| `approvalPolicy` | `"never"` \| `"on-request"` \| `"untrusted"` | Codex 审批策略 |
+| `sandbox` | `"read-only"` \| `"workspace-write"` \| `"danger-full-access"` | Codex 沙箱模式 |
+| `model` | string? | 可选 Codex 模型名 |
+| `profile` | string? | 可选 Codex profile |
+| `enableSearch` | boolean | 是否启用 Codex 搜索 |
+| `features.goals` | `"default"` \| `"enabled"` \| `"disabled"` | Codex goals 功能开关 |
+| `skipGitRepoCheck` | boolean | 是否跳过 Git 仓库检查 |
+| `strictConfig` | boolean | 是否启用 Codex strict config |
+| `bypassApprovalsAndSandbox` | boolean | 是否使用 Codex 审批和沙箱绕过模式 |
+| `bypassHookTrust` | boolean | 是否绕过 hook trust |
+| `additionalWritableDirs` | string[] | 额外可写目录，映射为重复 `--add-dir` |
+| `images` | string[] | 图片路径，映射为重复 `--image` |
+| `configOverrides` | `{ key: string, value: string }[]` | Codex 配置覆盖项，映射为重复 `--config key=value` |
+| `captureDebugArtifacts` | boolean | 是否保存脱敏调试产物 |
+
+最小有效配置：
+
+```json
+{
+  "prompt": "总结 {{input}}",
+  "variables": [],
+  "approvalPolicy": "never",
+  "sandbox": "workspace-write",
+  "enableSearch": false,
+  "features": { "goals": "enabled" },
+  "skipGitRepoCheck": true,
+  "strictConfig": false,
+  "bypassApprovalsAndSandbox": false,
+  "bypassHookTrust": false,
+  "additionalWritableDirs": [],
+  "images": [],
+  "configOverrides": [],
+  "captureDebugArtifacts": true
+}
+```
+
+当 `bypassApprovalsAndSandbox` 为 true 时，配置仍需保留 `approvalPolicy` 和 `sandbox` 以满足 schema，但实际执行会使用 Codex 绕过参数，不再额外传审批和沙箱 CLI 参数。运行历史中的调试信息位于 `outputs.codexDebug`；下游 `node_output` 只接收最终回复文本。
 
 ### end — 终止节点
 
@@ -361,6 +412,7 @@
 - 步骤 3 创建的工作流已包含一个 end 节点，无需手动创建
 - 步骤 5 中 position 可省略，dispatcher 自动计算布局
 - 创建 `workflow_call` 前，先读取子工作流定义，按子工作流 `params` 填写 `paramTemplates`
+- 创建 `codex` 前，先用 `workflow_node_type_describe({ nodeType: "codex" })` 读取最新 schema；不要给 codex 节点设置 `providerId` 或 `modelTier`
 - 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI
 - 步骤 9 可在任何修改后调用，提前发现问题
 - 步骤 11 需轮询直到 status 变为 `completed` / `failed` / `cancelled`
@@ -380,3 +432,4 @@
 | 调用当前工作流 | `workflow_call.workflowId` 等于当前工作流 ID | 选择另一个已保存工作流 |
 | 子工作流参数缺失 | `paramTemplates` 未提供子工作流必填参数，且子参数无默认值 | 读取子工作流 `params` 后补齐模板 |
 | 子工作流模板变量未绑定 | `paramTemplates` 中使用了未出现在 `variables` 的 `{{变量名}}` | 在调用节点 `variables` 中添加绑定 |
+| Codex 项目缺失 | codex 节点没有 `projectId`，工作流也没有 `defaultProjectId` | 设置工作流 `defaultProjectId` 或节点 `projectId` |
