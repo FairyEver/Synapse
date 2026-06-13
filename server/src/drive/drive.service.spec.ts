@@ -587,6 +587,37 @@ describe("DriveService", () => {
       .rejects.toThrow("站点根目录需要 index.html。")
   })
 
+  it("disables first publication records when initial deployment copy fails", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => { throw new Error("copy failed") }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+
+    await expect(service.publishPage("user-1", file.id, "https://synapse.test")).rejects.toThrow("copy failed")
+
+    const [publication] = await prisma.drivePublication.findMany()
+    expect(publication).toMatchObject({
+      sourceItemId: file.id,
+      status: "disabled",
+      currentDeploymentId: null,
+    })
+    expect(publication.disabledAt).toBeInstanceOf(Date)
+    const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: publication.id } })
+    expect(deployments).toHaveLength(1)
+    expect(deployments[0]).toMatchObject({ status: "failed", error: "copy failed" })
+    const publications = await service.listPublications("user-1", "https://synapse.test")
+    expect(publications).toHaveLength(1)
+    expect(publications[0]).toMatchObject({ id: publication.id, status: "disabled", currentDeploymentId: null })
+  })
+
   it("keeps the previous deployment active when redeploy copy fails", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

@@ -91,7 +91,7 @@ export function toDrivePublicationDto(item: DrivePublicationRecord, publicAppUrl
     publishId: item.publishId,
     type,
     name: item.name,
-    status: item.status === "disabled" ? "disabled" : "active",
+    status: item.status === "active" && item.currentDeploymentId ? "active" : "disabled",
     sourceItemId: item.sourceItemId,
     sourceDeleted: item.sourceItem?.deletedAt !== null && item.sourceItem?.deletedAt !== undefined,
     url,

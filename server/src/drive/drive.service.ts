@@ -1363,13 +1363,22 @@ export class DriveService implements OnApplicationBootstrap {
       })
       return toDrivePublicationDto(updated, publicAppUrl, this.decryptStoredPassword(updated.passwordEncrypted))
     } catch (error) {
-      await this.prisma.drivePublicationDeployment.update({
-        where: { id: deployment.id },
-        data: {
-          status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.failed,
-          error: error instanceof Error ? error.message : "Publication failed.",
-        },
-      })
+      const failedAt = new Date()
+      await this.prisma.$transaction([
+        this.prisma.drivePublicationDeployment.update({
+          where: { id: deployment.id },
+          data: {
+            status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.failed,
+            error: error instanceof Error ? error.message : "Publication failed.",
+          },
+        }),
+        ...(publication.currentDeploymentId
+          ? []
+          : [this.prisma.drivePublication.update({
+            where: { id: publicationId },
+            data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: failedAt },
+          })]),
+      ])
       throw error
     }
   }
