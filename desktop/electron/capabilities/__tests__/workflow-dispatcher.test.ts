@@ -502,7 +502,24 @@ describe("createWorkflowDispatcher", () => {
     const result = await dispatcher.dispatch("workflow.run.execute", { workflowId: "wf-1", params: { key: "val" } }, { source: "api" })
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({ runId: "run-1" })
-    expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" })
+    expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" }, {
+      actor: { kind: "user", id: "workflow-dispatch:api" },
+    })
+  })
+
+  it("workflow.run.execute passes the dispatch actor into the workflow run", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+    const actor = mcpClientActorForSource("mcp-http")
+
+    const result = await dispatcher.dispatch(
+      "workflow.run.execute",
+      { workflowId: "wf-1", params: { key: "val" } },
+      { source: "mcp-http", actor },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(deps.runWorkflow).toHaveBeenCalledWith("wf-1", { key: "val" }, { actor })
   })
 
   it("workflow.run.execute returns structured run validation errors", async () => {

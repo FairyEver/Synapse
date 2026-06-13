@@ -20,7 +20,7 @@ export type WorkflowDispatchDeps = {
   snapshotService: RunSnapshotService
   nodeTypeRegistry: NodeTypeRegistry
   eventBus: EventBus
-  runWorkflow: (id: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
+  runWorkflow: (id: string, params: Record<string, unknown>, options?: { readonly actor?: ActorIdentity }) => Promise<{ runId: string } | { errors: ValidationError[] }>
   cancelRun: (runId: string) => boolean
   cancelRunsForWorkflow: (workflowId: string) => Promise<void>
   getRunStatus: (runId: string) => Promise<WorkflowRunStatus | null>
@@ -185,7 +185,13 @@ function snapshotToRunStatus(snapshot: WorkflowRunSnapshot): WorkflowRunStatus {
   }
 }
 
-type ActionHandler = (params: Record<string, unknown>, deps: WorkflowDispatchDeps) => Promise<DispatchResult>
+type WorkflowMutationSecurity = {
+  readonly actor: ActorIdentity
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
+
+type ActionHandler = (params: Record<string, unknown>, deps: WorkflowDispatchDeps, security: WorkflowMutationSecurity | null) => Promise<DispatchResult>
 
 const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.node_type.list": async (_params, deps) => {
@@ -326,10 +332,10 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     })
   },
 
-  "workflow.run.execute": async (params, deps) => {
+  "workflow.run.execute": async (params, deps, security) => {
     const workflowId = requireString(params, "workflowId")
     const runParams = (params.params as Record<string, unknown>) ?? {}
-    const result = await deps.runWorkflow(workflowId, runParams)
+    const result = await deps.runWorkflow(workflowId, runParams, { actor: security?.actor })
     if ("errors" in result) return { ok: false, errors: result.errors }
     return { ok: true, data: result }
   },
@@ -562,7 +568,7 @@ export function createWorkflowDispatcher(deps: WorkflowDispatchDeps) {
       const security = workflowMutationSecurity(action, params, context)
       if (security) await authorizeWorkflowMutation(deps, security)
       try {
-        const result = await handler(params, deps)
+        const result = await handler(params, deps, security)
         const resultCorrelation = dispatchResultCorrelation(action, result)
         if (security) {
           deps.auditSink?.record({
@@ -611,11 +617,7 @@ function workflowMutationSecurity(
   action: string,
   params: Record<string, unknown>,
   context: DispatchContext,
-): {
-  readonly actor: ActorIdentity
-  readonly resource: string
-  readonly metadata: Record<string, unknown>
-} | null {
+): WorkflowMutationSecurity | null {
   if (!MUTATING_WORKFLOW_ACTIONS.has(action)) return null
   const source = context.source ?? "api"
   const correlation = dispatchCorrelation(params)

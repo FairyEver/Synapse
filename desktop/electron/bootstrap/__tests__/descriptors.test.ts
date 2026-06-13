@@ -1145,6 +1145,62 @@ describe("bootstrap descriptors (T1.5)", () => {
     })
   })
 
+  it("createRunWorkflowHandler passes the dispatch actor into workflow engine runs", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn().mockResolvedValue({
+          repositories: [{ uuid: "repo-1", localPath: "/tmp/repo" }],
+          activeRepoUuid: "repo-1",
+        }),
+      },
+    }))
+
+    const { createRunWorkflowHandler } = await importBootstrap()
+    const workflowDef = {
+      id: "wf-1",
+      name: "Test",
+      version: "v1",
+      nodes: [
+        { id: "end-1", type: "end" as const, name: "End", position: { x: 400, y: 200 }, config: { outputType: "text" as const, template: "", variables: [] } },
+      ],
+      edges: [],
+      params: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    const actor = { kind: "user" as const, id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" }
+    const workflowEngine = {
+      run: vi.fn((_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
+        emit({ type: "workflow:completed", runId, workflowId: "wf-1", result: { status: "completed", nodeResults: {}, durationMs: 1 } })
+        return Promise.resolve({ status: "completed", nodeResults: {}, durationMs: 1 })
+      }),
+    }
+
+    const handler = createRunWorkflowHandler({
+      workflowService: { get: vi.fn().mockResolvedValue(workflowDef) } as never,
+      workflowEngine: workflowEngine as never,
+      snapshotService: { save: vi.fn() } as never,
+      eventBus: { emit: vi.fn() } as never,
+      runAborts: new Map(),
+      runStatuses: new Map() as never,
+      runCompletions: new Map(),
+      capabilityLogger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } as never,
+    })
+
+    await handler("wf-1", {}, { triggerSource: "mcp", actor })
+
+    expect(workflowEngine.run).toHaveBeenCalledWith(
+      expect.anything(),
+      {},
+      expect.any(String),
+      expect.any(Function),
+      expect.any(AbortSignal),
+      "repo-1",
+      "mcp",
+      actor,
+    )
+  })
+
   it("createRunWorkflowHandler skips snapshots after workflow deletion tombstone", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {

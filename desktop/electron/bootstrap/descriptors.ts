@@ -109,7 +109,7 @@ import { createEventBus } from "../runtime/event-bus/bus"
 import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
 import type { DataRepository } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
-import type { PermissionGuard, AuditSink } from "../runtime/security"
+import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
 import {
@@ -158,6 +158,7 @@ type RunWorkflowHandlerOptions = {
   readonly triggerSource?: "mcp" | "automation"
   readonly automationId?: string
   readonly automationRunId?: string
+  readonly actor?: ActorIdentity
 }
 
 /**
@@ -482,7 +483,7 @@ export function createRunWorkflowHandler(deps: {
           })
         }
       }
-    }, ac.signal, projectId, source).catch((err) => {
+    }, ac.signal, projectId, source, options?.actor).catch((err) => {
       const diagnostic = capabilityRejectionDiagnostic(err)
       capabilityLogger.error("workflow engine rejected (mcp dispatch)", { workflowId: id, runId, ...diagnostic })
       runAborts.delete(runId)
