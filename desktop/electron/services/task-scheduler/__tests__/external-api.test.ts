@@ -8,6 +8,7 @@ import {
 } from "../../../action-runtime/action-registry"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { dispatchSchedulerAction, toPublicTaskSummary } from "../external-api"
+import { mcpClientActorForSource } from "../../../../synapse-capabilities/shared/types"
 import type { TaskSchedulerService } from "../task-scheduler-service"
 import type { ScheduledTaskEntry, ScheduledTaskRunEntry } from "../types"
 
@@ -441,13 +442,13 @@ describe("task scheduler external api", () => {
       actionRegistry(),
       "scheduler.task.enable",
       { taskId: "task:1" },
-      { source: "mcp-stdio" },
+      { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") },
       { permissionGuard, auditSink },
     )
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "scheduler.mutate",
-      actor: { kind: "user", id: "scheduler-dispatch:mcp-stdio" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: "scheduler:task:1",
       context: {
         source: "mcp-stdio",
@@ -458,7 +459,7 @@ describe("task scheduler external api", () => {
     expect(service.schedulerTaskEnable).toHaveBeenCalledWith("task:1")
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "scheduler.mutate",
-      actor: { kind: "user", id: "scheduler-dispatch:mcp-stdio" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: "scheduler:task:1",
       outcome: "allowed",
       metadata: expect.objectContaining({

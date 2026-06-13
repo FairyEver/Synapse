@@ -4,6 +4,7 @@ import { createDefaultConfig } from "../../../src/lib/config"
 import type { SynapseConfig, SynapseConfigPatch } from "../../../src/types/config"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createVariableCapabilityDispatcher } from "../variable-dispatcher"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 
 function configFixture(patch: Partial<SynapseConfig> = {}): SynapseConfig {
   return {
@@ -102,7 +103,10 @@ describe("variable capability dispatcher", () => {
     const { auditEvents, dispatcher, permissionGuard } = createHarness(baseConfig)
 
     await expect(
-      dispatcher.dispatch("variable.item.get", { name: "TOKEN", includeValue: true }, { source: "mcp-http" }),
+      dispatcher.dispatch("variable.item.get", { name: "TOKEN", includeValue: true }, {
+        source: "mcp-http",
+        actor: mcpClientActorForSource("mcp-http"),
+      }),
     ).resolves.toMatchObject({
       data: {
         variable: { name: "TOKEN", value: "secret", hasValue: true },
@@ -111,7 +115,7 @@ describe("variable capability dispatcher", () => {
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "secret.read",
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "variable:user:TOKEN",
       context: {
         source: "mcp-http",
@@ -255,7 +259,7 @@ describe("variable capability dispatcher", () => {
       dispatcher.dispatch(
         "variable.item.update",
         { name: "TOKEN", newName: "RENAMED_TOKEN" },
-        { source: "mcp-http" },
+        { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") },
       ),
     ).resolves.toMatchObject({
       data: {
@@ -266,7 +270,7 @@ describe("variable capability dispatcher", () => {
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "secret.write",
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "variable:user:RENAMED_TOKEN",
       context: {
         source: "mcp-http",

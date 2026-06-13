@@ -4,6 +4,7 @@ import { createDefaultConfig } from "../../../src/lib/config"
 import type { SynapseConfig } from "../../../src/types/config"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createRepositoryCapabilityDispatcher } from "../repository-dispatcher"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 
 function configFixture(patch: Partial<SynapseConfig> = {}): SynapseConfig {
   return {
@@ -21,13 +22,16 @@ describe("repository capability dispatcher", () => {
       auditSink,
     })
 
-    await expect(dispatcher.dispatch("repository.item.list", {}, { source: "mcp-http" })).resolves.toMatchObject({
+    await expect(dispatcher.dispatch("repository.item.list", {}, {
+      source: "mcp-http",
+      actor: mcpClientActorForSource("mcp-http"),
+    })).resolves.toMatchObject({
       ok: true,
     })
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.read.outside-userdata",
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "repository:list",
       context: {
         source: "mcp-http",

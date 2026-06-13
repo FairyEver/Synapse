@@ -18,6 +18,7 @@ import type {
 } from "../../../src/types/content"
 import { ContentCapabilityError } from "../../services/content-capability-errors"
 import { createContentCapabilityDispatcher } from "../content-dispatcher"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 
 function contentMeta(overrides: Partial<SynapseContentMeta> = {}): SynapseContentMeta {
   return {
@@ -305,6 +306,7 @@ describe("content capability dispatcher", () => {
       security: { actor, auditSink, permissionGuard },
     }
     const dispatcher = createContentCapabilityDispatcher(deps)
+    const contextActor = mcpClientActorForSource("mcp-stdio")
 
     const result = await dispatcher.dispatch("content.rule.create", {
       name: "team-rule",
@@ -315,12 +317,12 @@ describe("content capability dispatcher", () => {
       icon: "wrench",
       iconBg: "graphite",
       content: "# Rule",
-    }, { source: "mcp-stdio" })
+    }, { source: "mcp-stdio", actor: contextActor })
 
     expect(result.ok).toBe(true)
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "content.mutate",
-      actor,
+      actor: contextActor,
       resource: "content:rule:create",
       context: {
         source: "mcp-stdio",
@@ -331,7 +333,7 @@ describe("content capability dispatcher", () => {
     })
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "content.mutate",
-      actor,
+      actor: contextActor,
       resource: "content:rule:create",
       outcome: "allowed",
       metadata: expect.objectContaining({
