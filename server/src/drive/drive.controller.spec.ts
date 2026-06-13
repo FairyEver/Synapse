@@ -4,7 +4,7 @@ import { Test } from "@nestjs/testing"
 import type { DriveBrowserSnapshotDto, DriveItemDto, DrivePublicationDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
-import { DrivePublicController, DriveUserController } from "./drive.controller"
+import { DriveAdminController, DrivePublicController, DriveUserController } from "./drive.controller"
 import { DriveService } from "./drive.service"
 
 type SupertestResponse = { readonly body: unknown; readonly text: string; readonly headers: Record<string, string> }
@@ -48,6 +48,7 @@ describe("DriveController", () => {
     resolveOwnerRenderAccess: vi.fn(),
     createDownloadUrlForShareBrowserItem: vi.fn(),
     createFolderZipEntriesForShareBrowserItem: vi.fn(),
+    listAdminItems: vi.fn(),
   }
   const storage = {
     getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
@@ -79,6 +80,7 @@ describe("DriveController", () => {
     drive.resolveOwnerRenderAccess.mockReset()
     drive.createDownloadUrlForShareBrowserItem.mockReset()
     drive.createFolderZipEntriesForShareBrowserItem.mockReset()
+    drive.listAdminItems.mockReset()
     storage.getObjectStream.mockReset()
     storage.getObjectStream.mockResolvedValue({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })
     restoreEnv("PAGES_PUBLIC_URL", originalPagesPublicUrl)
@@ -152,6 +154,48 @@ describe("DriveController", () => {
     } finally {
       await userApp.close()
     }
+  })
+
+  it("records audit when admins list drive items", async () => {
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const controller = new DriveAdminController(drive as unknown as DriveService, auditLog as never)
+    drive.listAdminItems.mockResolvedValue({
+      data: [{ id: "item-1" }],
+      total: 1,
+      page: 2,
+      pageSize: 10,
+    })
+
+    const result = await controller.listItems({
+      page: "2",
+      pageSize: "10",
+      userId: "user-1",
+      storageStatus: "active",
+      search: "report",
+    }, {
+      admin: { email: "admin@example.com" },
+      ip: "127.0.0.1",
+    } as never)
+
+    expect(result).toMatchObject({ total: 1, page: 2, pageSize: 10 })
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.drive.items.list",
+      targetType: "drive_item",
+      targetId: "list",
+      ipAddress: "127.0.0.1",
+      detail: expect.objectContaining({
+        page: 2,
+        pageSize: 10,
+        count: 1,
+        total: 1,
+        filters: expect.objectContaining({
+          userId: "user-1",
+          storageStatus: "active",
+          search: "report",
+        }),
+      }),
+    }))
   })
 
   it("redirects owner direct downloads and renders owner files", async () => {

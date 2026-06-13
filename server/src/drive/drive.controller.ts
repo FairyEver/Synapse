@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, NotFoundException, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Inject, Logger, NotFoundException, Optional, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
 import { Readable, Writable } from "node:stream"
@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
+import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
@@ -50,6 +51,7 @@ const driveAccessSettingsSchema = z.object({
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
 }).strict()
 const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatus"] as const
+type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(UserAuthGuard)
 @Controller("/api/drive")
@@ -215,25 +217,62 @@ export class DriveUserController {
 @UseGuards(AdminAuthGuard)
 @Controller("/api/admin/drive")
 export class DriveAdminController {
-  constructor(private readonly drive: DriveService) {}
+  private readonly logger = new Logger(DriveAdminController.name)
+
+  constructor(
+    private readonly drive: DriveService,
+    @Optional() private readonly auditLog?: AuditLogService,
+  ) {}
 
   @Get("/items")
-  listItems(@Query() query: Record<string, unknown>) {
-    return this.drive.listAdminItems({
-      pagination: parsePagination(query, { allowedSortFields: adminSortFields }),
-      filters: {
-        userId: typeof query.userId === "string" ? query.userId : undefined,
-        type: typeof query.type === "string" ? query.type : undefined,
-        storageStatus: typeof query.storageStatus === "string" ? query.storageStatus : undefined,
-        shared: typeof query.shared === "string" ? query.shared : undefined,
-        search: typeof query.search === "string" ? query.search : undefined,
-      },
+  async listItems(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: adminSortFields })
+    const filters = {
+      userId: typeof query.userId === "string" ? query.userId : undefined,
+      type: typeof query.type === "string" ? query.type : undefined,
+      storageStatus: typeof query.storageStatus === "string" ? query.storageStatus : undefined,
+      shared: typeof query.shared === "string" ? query.shared : undefined,
+      search: typeof query.search === "string" ? query.search : undefined,
+    }
+    const result = await this.drive.listAdminItems({
+      pagination,
+      filters,
     })
+    await this.recordAuditSafely({
+      adminEmail: request?.admin?.email ?? "system",
+      action: "admin.drive.items.list",
+      targetType: "drive_item",
+      targetId: "list",
+      detail: {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        sortBy: pagination.sortBy,
+        sortOrder: pagination.sortOrder,
+        filters,
+        count: result.data.length,
+        total: result.total,
+      },
+      ipAddress: request?.ip ?? "system",
+    })
+    return result
   }
 
   @Delete("/items/:id")
   deleteItem(@Param("id") id: string, @Req() request: AdminRequest) {
     return this.drive.deleteItemAsAdmin(id, request.admin!.email, request.ip ?? "system")
+  }
+
+  private async recordAuditSafely(input: AuditRecordInput): Promise<void> {
+    try {
+      await this.auditLog?.record(input)
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      }, "Failed to record drive admin audit log")
+    }
   }
 }
 
