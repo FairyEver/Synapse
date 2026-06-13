@@ -72,14 +72,24 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   return { status: 'loading' }
 }
 
-function toDriveBrowserQueryKey(input: DriveBrowserInput) {
+export function toDriveBrowserQueryKey(input: DriveBrowserInput) {
   if (input.context !== 'share') return input
   return {
     context: input.context,
     shareId: input.shareId,
     itemId: input.itemId,
-    hasInitialPassword: Boolean(input.initialPassword),
+    initialPasswordFingerprint: fingerprintInitialPassword(input.initialPassword),
   }
+}
+
+function fingerprintInitialPassword(value: string | undefined) {
+  if (!value) return null
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash.toString(36)
 }
 
 async function loadDriveBrowser(input: DriveBrowserInput) {
