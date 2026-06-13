@@ -16,10 +16,12 @@
  * `safeStorage` shim so tests can swap in a deterministic implementation.
  */
 
+import { rm } from "node:fs/promises"
 import { AbstractDataNamespace, type NamespaceBaseDeps } from "../namespace-base"
 import {
   fileExists,
   readBinaryFile,
+  readTextFile,
   writeBinaryFileAtomic,
 } from "../atomic-io"
 import {
@@ -37,6 +39,7 @@ export interface SafeStorage {
 
 export interface EncryptedJsonBackendDeps<T> extends NamespaceBaseDeps<T> {
   readonly filePath: string
+  readonly legacyPlaintextFilePath?: string
   readonly safeStorage: SafeStorage
   readonly validate?: (data: unknown) => data is T
 }
@@ -45,6 +48,7 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
   extends AbstractDataNamespace<T>
 {
   private readonly filePath: string
+  private readonly legacyPlaintextFilePath: string | undefined
   private readonly safeStorage: SafeStorage
   private readonly validate?: (data: unknown) => data is T
   private cache: JsonFileEnvelope<T> | null = null
@@ -52,6 +56,7 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
   constructor(deps: EncryptedJsonBackendDeps<T>) {
     super({ ...deps, backend: "encrypted-json" })
     this.filePath = deps.filePath
+    this.legacyPlaintextFilePath = deps.legacyPlaintextFilePath
     this.safeStorage = deps.safeStorage
     this.validate = deps.validate
   }
@@ -68,6 +73,11 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     if (this.cache) return this.cache
 
     if (!(await fileExists(this.filePath))) {
+      const migrated = await this.loadLegacyPlaintextEnvelope()
+      if (migrated) {
+        this.cache = migrated
+        return migrated
+      }
       this.cache = this.makeEmpty()
       return this.cache
     }
@@ -91,26 +101,60 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
       )
     }
 
+    const envelope = this.parseEnvelope(raw, "decrypted")
+    await this.removeLegacyPlaintextFile()
+
+    this.cache = envelope
+    return envelope
+  }
+
+  private async loadLegacyPlaintextEnvelope(): Promise<JsonFileEnvelope<T> | null> {
+    if (!this.legacyPlaintextFilePath) return null
+    const plaintext = await readTextFile(this.legacyPlaintextFilePath)
+    if (plaintext === null) return null
+
+    this.ensureEncryptionAvailable()
+
+    let raw: unknown
+    try {
+      raw = JSON.parse(plaintext)
+    } catch (err) {
+      throw new InvalidNamespaceDataError(
+        this.name,
+        `legacy plaintext JSON is malformed: ${(err as Error).message}`,
+      )
+    }
+
+    const envelope = this.parseEnvelope(raw, "legacy plaintext")
+    await this.persist(envelope)
+    await this.removeLegacyPlaintextFile()
+    return envelope
+  }
+
+  private parseEnvelope(raw: unknown, source: string): JsonFileEnvelope<T> {
     if (!isEnvelopeShape<T>(raw)) {
-      throw new InvalidNamespaceDataError(this.name, "envelope shape mismatch after decrypt")
+      throw new InvalidNamespaceDataError(this.name, `envelope shape mismatch in ${source}`)
     }
 
     if (this.validate) {
       if (raw.singleton !== null && !this.validate(raw.singleton)) {
-        throw new InvalidNamespaceDataError(this.name, "decrypted singleton failed validate()")
+        throw new InvalidNamespaceDataError(this.name, `${source} singleton failed validate()`)
       }
       for (const [id, item] of Object.entries(raw.items)) {
         if (!this.validate(item)) {
           throw new InvalidNamespaceDataError(
             this.name,
-            `decrypted item id="${id}" failed validate()`,
+            `${source} item id="${id}" failed validate()`,
           )
         }
       }
     }
-
-    this.cache = raw
     return raw
+  }
+
+  private async removeLegacyPlaintextFile(): Promise<void> {
+    if (!this.legacyPlaintextFilePath) return
+    await rm(this.legacyPlaintextFilePath, { force: true })
   }
 
   private async persist(envelope: JsonFileEnvelope<T>): Promise<void> {

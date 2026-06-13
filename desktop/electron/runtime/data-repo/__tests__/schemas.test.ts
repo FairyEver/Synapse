@@ -87,7 +87,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(outboxSchema.backend).toBe("sqlite")
     expect(repoPendingPushesSchema.backend).toBe("sqlite")
     expect(repoRepositoriesSchema.backend).toBe("json")
-    expect(taskSchedulerTasksSchema.backend).toBe("json")
+    expect(taskSchedulerTasksSchema.backend).toBe("encrypted-json")
+    expect(taskSchedulerTasksSchema.encrypted).toBe(true)
     expect(taskSchedulerRunsSchema.backend).toBe("json")
     expect(automationItemsSchema.backend).toBe("json")
     expect(automationRunsSchema.backend).toBe("json")
@@ -107,6 +108,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     for (const schema of allSchemas) {
       const expected = schema.name === "secrets"
         || schema.name === "webhook.config"
+        || schema.name === "task-scheduler.tasks"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }
   })

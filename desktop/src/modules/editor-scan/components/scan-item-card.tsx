@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react"
+import type { KeyboardEvent, MouseEvent } from "react"
 import { FolderOpen } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -52,6 +52,12 @@ function ScanItemCard({
     event.stopPropagation()
   }
 
+  const handleCardKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return
+    event.preventDefault()
+    onClick?.()
+  }
+
   const metaEntries = metadata
     ? Object.entries(metadata).filter(([, v]) => v)
     : []
@@ -61,8 +67,11 @@ function ScanItemCard({
   return (
     <div
       data-scan-item-card
+      role="button"
+      tabIndex={0}
       className="group cursor-pointer rounded-lg bg-card px-3.5 py-3"
       onClick={onClick}
+      onKeyDown={handleCardKeyDown}
     >
       <div className="flex items-center gap-2">
         {selectable ? (

@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { errorLogMeta } from "@/lib/error-sanitize"
 import type { AutomationItem, AutomationRun } from "@/types/automation"
 import { AutomationList } from "./components/automation-list"
 import { AutomationRunsDialog } from "./components/automation-runs-dialog"
@@ -398,14 +399,6 @@ function AutomationModule() {
       </div>
     </TooltipProvider>
   )
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-  }
 }
 
 export { AutomationModule }

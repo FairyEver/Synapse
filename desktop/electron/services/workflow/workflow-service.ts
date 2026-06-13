@@ -3,7 +3,8 @@ import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../..
 import { normalizeWorkflowEntry, type DataNamespace, type DataRepository, type WorkflowEntryV1 } from "../../runtime/data-repo"
 import { validateWorkflow } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
-import { errorCode, sanitizeAgentError, truncateWithEllipsis } from "./workflow-utils"
+import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
+import { sanitizeAgentError } from "./workflow-utils"
 import { DEFAULT_AGENT_TIMEOUT_MINS } from "../../../workflow-nodes/agent-timeout"
 
 const logger = createMainLogger("service.workflow")
@@ -174,14 +175,11 @@ export class WorkflowService {
   }
 }
 
-function errorLogMeta(error: unknown): { errorName: string; errorCode?: string; errorLength: number; errorMessage: string } {
-  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : String(error)
-  const sanitized = sanitizeAgentError(raw)
-  const truncated = truncateWithEllipsis(sanitized, 200)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorCode: errorCode(error),
-    errorLength: raw.length,
-    errorMessage: truncated,
-  }
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  return baseErrorLogMeta(error, {
+    includeCode: true,
+    includeMessage: true,
+    messageLimit: 200,
+    sanitizeMessage: sanitizeAgentError,
+  })
 }

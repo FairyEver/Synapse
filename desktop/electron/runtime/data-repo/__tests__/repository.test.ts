@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
   JsonNamespace,
+  JsonLinesNamespace,
   NamespaceNotFoundError,
   coreConfigSchema,
   createDataRepository,
@@ -261,6 +262,101 @@ describe("DataRepositoryImpl (T2.13)", () => {
 
       const list = await handle.list()
       expect(list.map((p) => p.id).sort()).toEqual(["p1", "p2"])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("importAll() replace mode rewrites removable JSONL namespaces", async () => {
+    const dir = await tempDir()
+    try {
+      const repo = createDataRepository()
+      const fakeSchema = {
+        name: "outbox",
+        backend: "jsonl" as const,
+        currentVersion: 1,
+        migrations: [],
+        validate: (v: unknown): v is { id: string; name: string } & Record<string, unknown> =>
+          typeof v === "object"
+          && v !== null
+          && typeof (v as { id?: string }).id === "string"
+          && typeof (v as { name?: string }).name === "string",
+      }
+      const filePath = path.join(dir, "outbox.jsonl")
+      const handle = new JsonLinesNamespace<{ id: string; name: string } & Record<string, unknown>>({
+        name: "outbox",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath,
+        allowRemove: true,
+        validate: fakeSchema.validate,
+      })
+      repo.register(fakeSchema, handle)
+      await handle.upsert({ id: "p1", name: "old-project" })
+      await handle.upsert({ id: "p2", name: "stale-project" })
+
+      await repo.importAll({
+        format: "synapse-backup-v1",
+        exportedAt: "2026-04-25T00:00:00Z",
+        namespaces: [{
+          name: "outbox",
+          schemaVersion: 1,
+          encrypted: false,
+          data: {
+            items: [{ id: "p1", name: "imported-project" }],
+          },
+        }],
+      })
+
+      expect(await handle.list()).toEqual([{ id: "p1", name: "imported-project" }])
+      const lines = (await readFile(filePath, "utf8")).trim().split("\n")
+      expect(lines).toHaveLength(2)
+      expect(lines[1]).toContain("imported-project")
+      expect(lines.join("\n")).not.toContain("stale-project")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("importAll() replace mode rejects append-only JSONL namespaces", async () => {
+    const dir = await tempDir()
+    try {
+      const repo = createDataRepository()
+      const fakeSchema = {
+        name: "audit",
+        backend: "jsonl" as const,
+        currentVersion: 1,
+        migrations: [],
+        validate: (v: unknown): v is { id: string; action: string } & Record<string, unknown> =>
+          typeof v === "object"
+          && v !== null
+          && typeof (v as { id?: string }).id === "string"
+          && typeof (v as { action?: string }).action === "string",
+      }
+      const handle = new JsonLinesNamespace<{ id: string; action: string } & Record<string, unknown>>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: path.join(dir, "audit.jsonl"),
+        validate: fakeSchema.validate,
+      })
+      repo.register(fakeSchema, handle)
+      await handle.upsert({ id: "e1", action: "old" })
+
+      await expect(repo.importAll({
+        format: "synapse-backup-v1",
+        exportedAt: "2026-04-25T00:00:00Z",
+        namespaces: [{
+          name: "audit",
+          schemaVersion: 1,
+          encrypted: false,
+          data: {
+            items: [{ id: "e2", action: "imported" }],
+          },
+        }],
+      })).rejects.toThrow(/remove is not supported/)
+
+      expect(await handle.list()).toEqual([{ id: "e1", action: "old" }])
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

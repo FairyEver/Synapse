@@ -603,9 +603,10 @@ export interface AutomationRunEntryV1 extends Record<string, unknown> {
 
 export const taskSchedulerTasksSchema: NamespaceSchema<ScheduledTaskEntryV1> = {
   name: "task-scheduler.tasks",
-  backend: "json",
+  backend: "encrypted-json",
   currentVersion: 2,
   migrations: noMigrations,
+  encrypted: true,
   validate: (v): v is ScheduledTaskEntryV1 =>
     isAnyRecord<ScheduledTaskEntryV1>(v)
     && (v as ScheduledTaskEntryV1).schemaVersion === 2

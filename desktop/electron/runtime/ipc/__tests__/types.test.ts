@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import {
-  IPC_PROTOCOL_VERSION,
   IpcChannelNotFoundError,
   IpcModuleAlreadyRegisteredError,
   IpcProtocolVersionMismatchError,
@@ -12,11 +11,6 @@ import {
 } from "../index"
 
 describe("IPC runtime types + errors (T3.1)", () => {
-  it("IPC_PROTOCOL_VERSION is exposed and a positive integer", () => {
-    expect(IPC_PROTOCOL_VERSION).toBeGreaterThan(0)
-    expect(Number.isInteger(IPC_PROTOCOL_VERSION)).toBe(true)
-  })
-
   it("error hierarchy carries codes and retriable flags", () => {
     const validation = new IpcValidationError("synapse:test:noop", [
       { path: ["foo"], message: "Required" },

@@ -4,7 +4,7 @@ import {
   type DragonScaleEmbeddingProvider,
 } from "./tiling-types"
 import { createMainLogger } from "../../log-store"
-import { sanitizeError } from "../../error-sanitize"
+import { errorLogMeta as baseErrorLogMeta } from "../../error-sanitize"
 
 const OLLAMA_TIMEOUT_MS = 3000
 const EMBED_TIMEOUT_MS = 30000
@@ -132,11 +132,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
-  const raw = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: raw.length,
-    errorMessage: sanitizeError(raw),
-  }
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  return baseErrorLogMeta(error, { includeMessage: true })
 }

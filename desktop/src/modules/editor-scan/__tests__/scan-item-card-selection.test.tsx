@@ -81,6 +81,21 @@ describe("ScanItemCard selection", () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
+  it("exposes the card as a keyboard button", async () => {
+    const { onClick } = await renderCard()
+    const card = document.querySelector<HTMLElement>("[data-scan-item-card]")
+
+    expect(card?.getAttribute("role")).toBe("button")
+    expect(card?.tabIndex).toBe(0)
+
+    await act(async () => {
+      card?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      card?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }))
+    })
+
+    expect(onClick).toHaveBeenCalledTimes(2)
+  })
+
   it("reports an open-in-folder error when the bridge is unavailable", async () => {
     const { onClick } = await renderCard()
     const pathButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))

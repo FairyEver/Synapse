@@ -18,9 +18,6 @@ export {
   resolveDragonScaleOllamaUrl,
 } from "./dragonscale/ollama-embedding-provider"
 export {
-  KnowledgeBaseHotCacheStateStore,
-} from "./hot-cache-state"
-export {
   diffWikiSnapshots,
   snapshotWikiMarkdown,
 } from "./wiki-snapshot"
@@ -61,10 +58,6 @@ export type {
   DragonScaleTilingStatus,
   DragonScaleTilingThresholds,
 } from "./dragonscale/tiling-types"
-export type {
-  KnowledgeBaseHotCacheShouldInjectInput,
-  KnowledgeBaseHotCacheState,
-} from "./hot-cache-state"
 export type {
   WikiSnapshot,
   WikiSnapshotDiff,

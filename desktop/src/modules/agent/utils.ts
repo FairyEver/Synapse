@@ -8,6 +8,7 @@ import {
   formatEntryTime,
   sanitizeAgentRawInput,
 } from "@/lib/agent-transcript"
+import { errorLogMeta } from "@/lib/error-sanitize"
 import { formatProviderModelLabel, resolveModelName } from "@/lib/provider-model"
 import type { ModelTier } from "@/types/provider-model"
 
@@ -61,31 +62,6 @@ function defaultSessionId(sessions: readonly SynapseAgentSessionSummary[]): stri
 function thinkingIndicatorText(frame: number): string {
   const dotCount = ((frame % 4) + 4) % 4
   return `thinking${THINKING_DOT.repeat(dotCount)}`
-}
-
-function errorLogMeta(error: unknown): {
-  readonly errorName: string
-  readonly errorLength: number
-} {
-  const named = error && typeof error === "object"
-    ? error as { readonly name?: unknown; readonly message?: unknown }
-    : undefined
-  const text = error instanceof Error
-    ? error.message
-    : typeof named?.message === "string"
-      ? named.message
-      : typeof error === "string"
-        ? error
-        : String(error)
-  const errorName = error instanceof Error
-    ? error.name
-    : typeof named?.name === "string"
-      ? named.name
-      : typeof error
-  return {
-    errorName,
-    errorLength: text.length,
-  }
 }
 
 export {

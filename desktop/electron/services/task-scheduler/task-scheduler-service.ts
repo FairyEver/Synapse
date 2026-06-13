@@ -620,6 +620,7 @@ export class TaskSchedulerService {
       : await this.disableInvalidTask(task, validation)
     if (!this.runningTaskIds.has(task.id)) return baseTask
     const runId = this.deps.execution.getActiveRunIdForTask(task.id)
+    if (!runId) return baseTask
     return {
       ...baseTask,
       activeRun: { status: "running", id: runId },

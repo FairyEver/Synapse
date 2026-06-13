@@ -11,7 +11,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { cancelWatchNextAgentSession, requestWatchNextAgentSession } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { sanitizeError } from "@/lib/error-sanitize"
+import { errorLogMeta, sanitizeError } from "@/lib/error-sanitize"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { Button } from "@/components/ui/button"
 import {
@@ -76,14 +76,6 @@ type ValidationIssue = {
 
 function isAcceptedManualRun(run: ScheduledTaskRun | null): run is AcceptedManualRun {
   return run !== null && (run.status === "running" || run.status === "success")
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-  }
 }
 
 function getMigrationDescription(task: ScheduledTask | null): string {

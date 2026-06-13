@@ -24,5 +24,15 @@
 - 知识库 `/wiki-ingest` 改由 Synapse 受控写入 source manifest，Agent 只输出结构化 ingest 报告。
 - 知识库会话启用 plugin hooks 时保留用户本机 Claude Code 的 user/project/local hooks，行为与用户自己的 Claude 配置保持一致。
 - Webhook `exec` 请求通过认证后会进入默认 shell 执行权限策略，不再被 PermissionGuard 默认拒绝。
+- 定时 HTTP 请求的鉴权密钥会存入加密存储，导入导出任务时也会移除 Bearer token 和 Basic 密码。
+- 导入数据备份时，JSONL 数据的替换模式会真正清空旧记录后再导入，不再把旧数据和新数据追加混在一起。
+- 数据库行列表接口会校验分页参数，非法 `limit` 或 `offset` 会直接返回明确错误。
+- 定时任务启动但运行记录尚未创建完成时，不再展示缺少 id 的运行状态。
+- 编辑器扫描结果卡片可以通过键盘聚焦并用 Enter 或空格触发。
+- 知识库资料上传全部被跳过时，会显示跳过原因汇总，不再误报为没有文件上传。
 
 ## 技术调整
+
+- 清理未接入生产路径的 IPC handshake 和 runtime scheduling 示例模块，减少仅靠测试自证的死代码。
+- 收敛多处重复的错误日志元信息提取逻辑，统一记录错误名称、长度、可选错误码和脱敏消息。
+- 知识库只保留实际有生产消费者的公开服务出口，未接入的 hot-cache 状态不再从模块 barrel 暴露。

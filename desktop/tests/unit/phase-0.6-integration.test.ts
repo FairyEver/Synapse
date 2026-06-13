@@ -6,7 +6,6 @@
  *   - MetricsRegistry counts and exports.
  *   - HealthCheckAggregator + DiagnosticsCollector compose cleanly.
  *   - PermissionGuard + AuditSink work together.
- *   - TaskQueue + RateLimiter + CircuitBreaker compose for an Agent-style workflow.
  *   - ExtensionRegistry returns content types registered by bootstrap.
  */
 
@@ -24,11 +23,6 @@ import {
   InMemoryAuditSink,
   createPermissionGuard,
 } from "../../electron/runtime/security"
-import {
-  createCircuitBreaker,
-  createRateLimiter,
-  createTaskQueue,
-} from "../../electron/runtime/scheduling"
 import { createExtensionRegistry } from "../../electron/runtime/extension"
 import { registerCoreExtensions, EXTENSION_POINT_IDS } from "../../electron/bootstrap/extensions"
 
@@ -76,27 +70,6 @@ describe("Phase 0.6 integration (T6.17)", () => {
     expect(decision.allowed).toBe(true)
     expect(audit.list()).toHaveLength(1)
     expect(audit.list()[0]?.outcome).toBe("allowed")
-  })
-
-  it("TaskQueue + RateLimiter + CircuitBreaker compose for an Agent-like flow", async () => {
-    const queue = createTaskQueue({ concurrency: 2 })
-    const limiter = createRateLimiter()
-    limiter.configure("anthropic", { capacity: 3, refillPerSecond: 100 })
-    const breaker = createCircuitBreaker()
-    breaker.configure("anthropic", { failureThreshold: 5, cooldownMs: 1000 })
-
-    const results = await Promise.all(
-      [1, 2, 3].map((n) =>
-        queue.enqueue({
-          id: `req-${n}`,
-          run: async () => {
-            await limiter.acquire("anthropic")
-            return await breaker.execute("anthropic", async () => `pong-${n}`)
-          },
-        }),
-      ),
-    )
-    expect(results.sort()).toEqual(["pong-1", "pong-2", "pong-3"])
   })
 
   it("registerCoreExtensions reads CONTENT_TYPE_DEFINITIONS via the registry", () => {

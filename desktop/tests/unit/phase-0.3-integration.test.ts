@@ -3,28 +3,36 @@
  *
  * SPEC §6 verification:
  *   - "DevTools 调 window.synapse.content.list(...) 返回正确数据" → covered by
- *     in-memory IPC harness round-trip via synapse:system:handshake (the only
- *     migrated module so far; full coverage lands when T3.4-T3.10 follow-up
- *     PR migrates real handlers).
+ *     in-memory IPC harness round-trip with a local typed module.
  *   - "NetworkServiceRegistry 单测：端口冲突自动选下一个、auth token 生成、
  *     conflict policy 生效" → see runtime/network/__tests__.
  *   - "CI 闸门：generated 与源一致性比对" → check-ipc-codegen.mjs script.
  */
 
 import { describe, expect, it } from "vitest"
+import { z } from "zod"
 import {
-  IPC_PROTOCOL_VERSION,
   createInMemoryHarness,
-  systemIpcModule,
+  type IpcMethodDescriptor,
+  type IpcModule,
 } from "../../electron/runtime/ipc"
 import { createWindowManager, type ManagedWindow } from "../../electron/runtime/window"
 import { createNetworkServiceRegistry } from "../../electron/runtime/network"
 
-const ctx = {
-  moduleId: "system",
-  resolve: <T,>(): T => {
-    throw new Error("unused")
+const demoEchoMethod: IpcMethodDescriptor<{ text: string }, { text: string }> = {
+  kind: "invoke",
+  channel: "synapse:demo:echo",
+  request: z.object({ text: z.string() }),
+  response: z.object({ text: z.string() }),
+  handler: (_ctx, request) => ({ text: request.text }),
+}
+
+const demoIpcModule: IpcModule = {
+  id: "demo",
+  methods: {
+    echo: demoEchoMethod,
   },
+  events: {},
 }
 
 const fakeWindow = (id: number, role: "main" | "detail" | "overlay" = "main"): ManagedWindow & { sent: Array<{ channel: string; payload: unknown }> } => {
@@ -45,13 +53,16 @@ const fakeWindow = (id: number, role: "main" | "detail" | "overlay" = "main"): M
 }
 
 describe("Phase 0.3 integration (T3.16)", () => {
-  it("system handshake works end-to-end through the IpcRegistry", async () => {
+  it("typed IPC modules work end-to-end through the IpcRegistry", async () => {
     const harness = createInMemoryHarness()
-    harness.registry.register(systemIpcModule, ctx)
-    const reply = await harness.invoke("synapse:system:handshake", {
-      clientVersion: IPC_PROTOCOL_VERSION,
+    harness.registry.register(demoIpcModule, {
+      moduleId: "demo",
+      resolve: <T,>(): T => {
+        throw new Error("unused")
+      },
     })
-    expect(reply).toEqual({ ok: true, serverVersion: IPC_PROTOCOL_VERSION })
+    const reply = await harness.invoke("synapse:demo:echo", { text: "ok" })
+    expect(reply).toEqual({ text: "ok" })
   })
 
   it("WindowManager broadcast targets only alive windows that pass the filter", () => {

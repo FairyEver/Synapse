@@ -20,8 +20,3 @@ export {
   tryValidateResponse,
 } from "./validation"
 export type { ValidationResult } from "./validation"
-export {
-  IPC_MINIMUM_CLIENT_VERSION,
-  computeHandshakeResponse,
-  systemIpcModule,
-} from "./handshake"
