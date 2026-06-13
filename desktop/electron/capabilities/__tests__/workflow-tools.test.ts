@@ -63,6 +63,17 @@ describe("workflow MCP tool definitions", () => {
     expect(configDescription).toContain("codex")
     expect(configDescription).toContain("approvalPolicy")
     expect(configDescription).toContain("configOverrides")
+
+    const configProperties = objectProperty(configSchema, "properties")
+    expect(configProperties).toHaveProperty("enableSearch")
+    expect(configProperties).toHaveProperty("features")
+    expect(configProperties).toHaveProperty("skipGitRepoCheck")
+    expect(configProperties).toHaveProperty("strictConfig")
+    expect(configProperties).toHaveProperty("bypassApprovalsAndSandbox")
+    expect(configProperties).toHaveProperty("bypassHookTrust")
+    expect(configProperties).toHaveProperty("additionalWritableDirs")
+    expect(configProperties).toHaveProperty("images")
+    expect(configProperties).toHaveProperty("captureDebugArtifacts")
   })
 
   it("documents atomic edge creation fields on workflow_node_create", () => {

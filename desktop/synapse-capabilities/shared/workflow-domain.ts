@@ -91,6 +91,21 @@ const outgoingEdgeCreateSchema = {
   required: ["to"],
 }
 
+const codexFeatureStateSchema = {
+  type: "string",
+  enum: ["default", "enabled", "disabled"],
+  description: "codex only: feature state passed as --enable/--disable when not default.",
+}
+
+const codexConfigOverrideSchema = {
+  type: "object",
+  properties: {
+    key: { type: "string", minLength: 1, description: "codex only: non-empty Codex config key." },
+    value: { type: "string", description: "codex only: raw Codex config value." },
+  },
+  required: ["key", "value"],
+}
+
 const workflowDefinitionSchema = {
   type: "object",
   description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex nodes inherit it, and defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
@@ -135,15 +150,30 @@ const workflowDefinitionSchema = {
               modelTier: modelTierSchema,
               projectId: { type: "string" },
               timeoutMins: { type: "number" },
+              prompt: { type: "string", description: "prompt/switch/codex only: prompt or instruction template. Codex prompt is sent to codex exec via stdin." },
               variables: { type: "array", items: variableBindingSchema },
               workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
               paramTemplates: { type: "object", description: "workflow_call only: child parameter name to template string map." },
-              approvalPolicy: { type: "string", description: "codex only: Codex approval policy, e.g. never, on-request, or untrusted." },
-              sandbox: { type: "string", description: "codex only: Codex sandbox mode, e.g. read-only, workspace-write, or danger-full-access." },
+              approvalPolicy: { type: "string", enum: ["never", "on-request", "untrusted"], description: "codex only: Codex approval policy, e.g. never, on-request, or untrusted." },
+              sandbox: { type: "string", enum: ["read-only", "workspace-write", "danger-full-access"], description: "codex only: Codex sandbox mode, e.g. read-only, workspace-write, or danger-full-access." },
               workingDirectory: { type: "string", description: "codex only: optional per-task working directory. Supports {{variable}} interpolation, must already exist, and becomes both process cwd and Codex --cd. It is not automatically added to additionalWritableDirs." },
               model: { type: "string", description: "codex only: optional Codex model name passed to codex exec." },
               profile: { type: "string", description: "codex only: optional Codex profile passed to codex exec." },
-              configOverrides: { type: "array", description: "codex only: repeated Codex config overrides as { key, value } entries." },
+              enableSearch: { type: "boolean", description: "codex only: pass --search before exec." },
+              features: {
+                type: "object",
+                description: "codex only: Codex feature flags.",
+                properties: { goals: codexFeatureStateSchema },
+                required: ["goals"],
+              },
+              skipGitRepoCheck: { type: "boolean", description: "codex only: pass --skip-git-repo-check." },
+              strictConfig: { type: "boolean", description: "codex only: pass --strict-config." },
+              bypassApprovalsAndSandbox: { type: "boolean", description: "codex only: pass --dangerously-bypass-approvals-and-sandbox instead of approval/sandbox flags." },
+              bypassHookTrust: { type: "boolean", description: "codex only: pass --dangerously-bypass-hook-trust." },
+              additionalWritableDirs: { type: "array", items: { type: "string", minLength: 1 }, description: "codex only: repeated --add-dir entries. Values may use {{variable}} interpolation and must resolve to existing directories before run." },
+              images: { type: "array", items: { type: "string", minLength: 1 }, description: "codex only: repeated --image entries. Values may use {{variable}} interpolation and must resolve to existing files before run." },
+              configOverrides: { type: "array", items: codexConfigOverrideSchema, description: "codex only: repeated Codex config overrides as { key, value } entries." },
+              captureDebugArtifacts: { type: "boolean", description: "codex only: when true, store sanitized debug artifacts and expose codexDebug paths in run output." },
             },
           },
         },
