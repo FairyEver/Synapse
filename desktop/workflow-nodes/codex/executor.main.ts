@@ -1,4 +1,5 @@
-import { appendFile, stat } from "node:fs/promises"
+import { appendFile, mkdtemp, rm, stat } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import { app } from "electron"
 
@@ -109,13 +110,35 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       context.runId,
       context.nodeId ?? "unknown-node",
     )
+    let lastMessageTarget: CodexLastMessageTarget
+    try {
+      lastMessageTarget = await prepareCodexLastMessageTarget({
+        captureDebugArtifacts,
+        artifactPaths,
+      })
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : String(error)
+      const sanitized = truncateWithEllipsis(sanitizeError(rawMessage), 120)
+      logger.warn("codex node temporary output path failed", {
+        ...logContext,
+        projectId,
+        cwd,
+        errorMessage: sanitized,
+      })
+      return {
+        status: "failed",
+        output: "",
+        error: `Codex 临时输出文件创建失败：${sanitized}`,
+        durationMs: Date.now() - start,
+      }
+    }
 
-    await bestEffortArtifactWrite({
-      logContext,
-      label: "artifact directory",
-      task: () => ensureCodexArtifactDirectory(artifactPaths),
-    })
     if (captureDebugArtifacts) {
+      await bestEffortArtifactWrite({
+        logContext,
+        label: "artifact directory",
+        task: () => ensureCodexArtifactDirectory(artifactPaths),
+      })
       await bestEffortArtifactWrite({
         logContext,
         label: "prompt artifact",
@@ -150,7 +173,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       config,
       prompt,
       cwd,
-      lastMessagePath: artifactPaths.lastMessagePath,
+      lastMessagePath: lastMessageTarget.path,
       actor,
       timeoutMs,
       abortSignal: context.abortSignal,
@@ -198,7 +221,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
               promptPath: artifactPaths.promptPath,
             }
           : {}),
-        lastMessagePath: artifactPaths.lastMessagePath,
+        lastMessagePath: lastMessageTarget.debugPath,
         stdout,
         stderr,
       })
@@ -256,7 +279,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         }
       }
 
-      const lastMessage = await bestEffortReadArtifact(artifactPaths.lastMessagePath, logContext)
+      const lastMessage = await bestEffortReadArtifact(lastMessageTarget.path, logContext)
       const output = finalOutputFromResult(lastMessage, stdout)
       input.onProgress?.("processing_output", "处理输出…")
       logger.info("codex node succeeded", {
@@ -292,7 +315,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
               promptPath: artifactPaths.promptPath,
             }
           : {}),
-        lastMessagePath: artifactPaths.lastMessagePath,
+        lastMessagePath: lastMessageTarget.debugPath,
         stdout,
         stderr,
       })
@@ -324,8 +347,51 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
         error: `Codex 执行异常：${sanitized}`,
         durationMs,
       }
+    } finally {
+      await cleanupCodexLastMessageTarget(lastMessageTarget, logContext)
     }
   },
+}
+
+interface CodexLastMessageTarget {
+  readonly path: string
+  readonly debugPath?: string
+  readonly cleanupDirectory?: string
+}
+
+async function prepareCodexLastMessageTarget(input: {
+  readonly captureDebugArtifacts: boolean
+  readonly artifactPaths: ReturnType<typeof codexArtifactPaths>
+}): Promise<CodexLastMessageTarget> {
+  if (input.captureDebugArtifacts) {
+    return {
+      path: input.artifactPaths.lastMessagePath,
+      debugPath: input.artifactPaths.lastMessagePath,
+    }
+  }
+
+  const directory = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-last-message-"))
+  return {
+    path: path.join(directory, "last-message.txt"),
+    cleanupDirectory: directory,
+  }
+}
+
+async function cleanupCodexLastMessageTarget(
+  target: CodexLastMessageTarget,
+  logContext: ReturnType<typeof workflowNodeLogContext>,
+): Promise<void> {
+  if (!target.cleanupDirectory) return
+  try {
+    await rm(target.cleanupDirectory, { recursive: true, force: true })
+  } catch (error) {
+    warnArtifactFailure({
+      logContext,
+      label: "last message temporary file",
+      filePath: target.cleanupDirectory,
+      error,
+    })
+  }
 }
 
 async function resolveCodexWorkingDirectory(input: {

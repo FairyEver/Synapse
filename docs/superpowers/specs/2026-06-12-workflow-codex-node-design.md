@@ -135,7 +135,7 @@ Default generated flags:
 exec
 --sandbox workspace-write
 --json
---output-last-message <artifact-dir>/last-message.txt
+--output-last-message <last-message-path>
 --skip-git-repo-check
 --cd <workspace-path>
 -
@@ -185,22 +185,24 @@ If no usable project path is available, the node fails with a short actionable e
 1. Resolve node variables with the existing Workflow variable resolver.
 2. Interpolate `config.prompt` with resolved variables.
 3. Resolve the effective project and workspace path.
-4. Create a per-run Codex artifact directory:
+4. When `captureDebugArtifacts` is true, create a per-run Codex artifact directory:
 
    ```text
    workflow-runs/<runId>/nodes/<nodeId>/codex/
    ```
 
-5. Prepare artifact paths:
+5. Prepare debug artifact paths:
    - `prompt.txt`
-   - `last-message.txt`
    - `stdout.jsonl` or `stdout.log`
    - `stderr.log`
-6. Build the `codex exec` request with argv array and stdin.
-7. Run through `runtimeDeps.processRunner.run(...)`.
-8. Read `last-message.txt`.
-9. Return `last-message.txt` content as node `output` when exit code is successful.
-10. Attach sanitized debug metadata to `outputs.codexDebug`.
+6. Prepare the Codex final-message output path:
+   - When `captureDebugArtifacts` is true, use `<artifact-dir>/last-message.txt` and include it in `codexDebug.lastMessagePath`.
+   - When `captureDebugArtifacts` is false, use a temporary `last-message.txt`, read it for the node output, delete it after the run, and do not include the path in `codexDebug`.
+7. Build the `codex exec` request with argv array and stdin.
+8. Run through `runtimeDeps.processRunner.run(...)`.
+9. Read `last-message.txt`.
+10. Return `last-message.txt` content as node `output` when exit code is successful.
+11. Attach sanitized debug metadata to `outputs.codexDebug`.
 
 Progress phases:
 
@@ -252,7 +254,7 @@ Artifacts are best-effort debug aids.
 - If `last-message.txt` cannot be read after a successful exit, fall back to a sanitized final stdout segment.
 - If both final message and stdout fallback are empty, return an empty output and keep debug metadata.
 
-Prompt artifacts are written only when `captureDebugArtifacts` is true. Even then, content must pass shared redaction before persistence.
+Prompt, stdout, stderr, and last-message artifacts are written only when `captureDebugArtifacts` is true. Even then, content must pass shared redaction before persistence when Synapse writes it. When debug capture is disabled, the last-message file is temporary and must be deleted after extracting the node output.
 
 ## Security And Redaction
 
@@ -382,6 +384,7 @@ Runtime and node tests:
 - `bypassApprovalsAndSandbox` emits the bypass flag and suppresses approval/sandbox flags.
 - Model, profile, search, strict config, hook trust bypass, add-dir, image, and config overrides map correctly to argv.
 - Successful run returns final reply text from `last-message.txt`.
+- Debug-disabled successful run returns final reply text from a temporary last-message file, deletes that file, and omits `lastMessagePath` from `codexDebug`.
 - Missing final message falls back to stdout.
 - Non-zero exit code fails and preserves sanitized debug metadata.
 - Timeout and abort terminate the child process.

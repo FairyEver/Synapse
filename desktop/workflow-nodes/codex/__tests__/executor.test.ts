@@ -513,12 +513,14 @@ describe("codexNodeExecutor", () => {
     expect(result.outputs?.codexDebug).toBeDefined()
   })
 
-  it("skips prompt/stdout/stderr artifact persistence when captureDebugArtifacts is false", async () => {
+  it("skips persistent artifacts when captureDebugArtifacts is false", async () => {
+    let capturedLastMessagePath: string | undefined
     const runtimeDeps = makeRuntimeDeps({
       processRunner: {
         run: vi.fn().mockImplementation(async (request: { args?: readonly string[] }) => {
           const lastMessagePathIndex = request.args?.indexOf("--output-last-message") ?? -1
           const lastMessagePath = lastMessagePathIndex >= 0 ? request.args?.[lastMessagePathIndex + 1] : undefined
+          capturedLastMessagePath = lastMessagePath
           if (typeof lastMessagePath === "string") {
             await writeFile(lastMessagePath, "final answer from file\n", "utf8")
           }
@@ -541,12 +543,14 @@ describe("codexNodeExecutor", () => {
 
     expect(result.status).toBe("success")
     expect(result.output).toBe("final answer from file")
-    expect(result.outputs?.codexDebug).toMatchObject({
-      lastMessagePath: artifactPaths.lastMessagePath,
-    })
+    expect(result.outputs?.codexDebug).not.toHaveProperty("lastMessagePath")
     expect(result.outputs?.codexDebug).not.toHaveProperty("promptPath")
     expect(result.outputs?.codexDebug).not.toHaveProperty("stdoutPath")
     expect(result.outputs?.codexDebug).not.toHaveProperty("stderrPath")
+    expect(capturedLastMessagePath).toBeDefined()
+    expect(capturedLastMessagePath).not.toBe(artifactPaths.lastMessagePath)
+    await expect(access(capturedLastMessagePath!)).rejects.toThrow()
+    await expect(access(artifactPaths.lastMessagePath)).rejects.toThrow()
     await expect(access(artifactPaths.promptPath)).rejects.toThrow()
     await expect(access(artifactPaths.stdoutPath)).rejects.toThrow()
     await expect(access(artifactPaths.stderrPath)).rejects.toThrow()
