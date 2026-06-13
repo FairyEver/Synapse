@@ -100,6 +100,7 @@ import {
   createBuiltinAutomationTriggerRegistry,
 } from "../services/automation"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
+import { configureGitCommandSecurity } from "../services/git-command"
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
@@ -350,6 +351,10 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
   create(ctx) {
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    configureGitCommandSecurity({
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      actor: { kind: "system", id: "repository-git" },
+    })
     const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
     const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
     const snapshotService = ctx.registry.get<RunSnapshotService>("core.workflow.snapshots")

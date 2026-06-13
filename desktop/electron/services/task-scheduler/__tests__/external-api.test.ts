@@ -241,6 +241,29 @@ describe("task scheduler external api", () => {
       .not.toContain("summarize private repository context")
   })
 
+  it("persists external scheduler source on create and update requests", async () => {
+    const service = serviceMock()
+
+    await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "External command",
+      scope: { type: "global" },
+      schedule: { type: "interval", everyMinutes: 30 },
+      action: { type: "builtin.command", config: { command: "echo ok" } },
+    }, { source: "mcp-stdio" })
+    await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.update", {
+      taskId: "task:1",
+      name: "External update",
+    }, { source: "mcp-http" })
+
+    expect(service.schedulerTaskCreate).toHaveBeenCalledWith(expect.objectContaining({
+      provenance: { source: "mcp-stdio" },
+    }))
+    expect(service.schedulerTaskUpdate).toHaveBeenCalledWith("task:1", expect.objectContaining({
+      name: "External update",
+      provenance: { source: "mcp-http" },
+    }))
+  })
+
   it("lists run summaries without log payloads", async () => {
     const service = serviceMock()
     const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.run.list", {
@@ -317,6 +340,7 @@ describe("task scheduler external api", () => {
       cwd: undefined,
       trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", timezone: "Asia/Shanghai" } },
       missedRunPolicy: "run_once",
+      provenance: { source: "api" },
     })
   })
 

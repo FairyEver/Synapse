@@ -20,6 +20,7 @@ import {
 import { getUsageAnalysisDb } from "../usage-analysis"
 import { listModelPriceRules } from "../model-price"
 import { ReplyOutboxService } from "../reply-target"
+import { KnowledgeBaseIngestCoordinator } from "../knowledge-base/ingest-finalizer"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
 import { validateWorkspaceDirectory } from "./session-manager"
@@ -170,6 +171,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         && message.platform === "local-renderer"
         && typeof ctx.projectMeta.workspacePath === "string"
         && ctx.projectMeta.workspacePath.length > 0
+      const knowledgeBaseIngest = isManagedKnowledgeBase && typeof ctx.projectMeta.workspacePath === "string"
+        ? new KnowledgeBaseIngestCoordinator({
+          projectId: ctx.projectId,
+          projectPath: ctx.projectMeta.workspacePath,
+        })
+        : undefined
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -201,6 +208,14 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         allowAgentNativeSlash: (name, message) =>
           isManagedKnowledgeBaseRendererMessage(message)
           && MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS.has(name),
+        prepareMessage: (message, context) =>
+          isManagedKnowledgeBaseRendererMessage(message) && knowledgeBaseIngest
+            ? knowledgeBaseIngest.prepareTurn(message, context)
+            : message,
+        afterTurn: (input) =>
+          isManagedKnowledgeBaseRendererMessage(input.message) && knowledgeBaseIngest
+            ? knowledgeBaseIngest.finalizeTurn(input)
+            : undefined,
         sdkAgents: async () => ({}),
         sdkSubagentToolPolicies: async () => ({}),
       })

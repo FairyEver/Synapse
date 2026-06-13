@@ -16,7 +16,7 @@ export function ForgotPassword() {
       <Card className='w-full max-w-sm gap-4 sm:min-w-sm'>
         <CardHeader>
           <CardTitle className='text-lg'>找回密码</CardTitle>
-          <CardDescription>输入注册邮箱获取重置链接。</CardDescription>
+          <CardDescription>输入注册邮箱申请重置密码。</CardDescription>
         </CardHeader>
         <CardContent>
           <ForgotPasswordForm />

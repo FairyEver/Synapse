@@ -95,6 +95,26 @@ describe("TaskSchedulerExecutionService", () => {
     ])
   })
 
+  it("uses connector actor for tasks created by external scheduler capabilities", async () => {
+    const harness = await createExecutionHarness({
+      taskPatch: {
+        provenance: { source: "mcp-stdio" },
+      },
+    })
+
+    await harness.service.runTask(harness.task, "schedule")
+
+    expect(harness.permissionRequests[0]).toEqual(expect.objectContaining({
+      actor: { kind: "connector", id: "scheduler:mcp-stdio" },
+    }))
+    expect(harness.auditEvents[0]).toEqual(expect.objectContaining({
+      actor: { kind: "connector", id: "scheduler:mcp-stdio" },
+      metadata: expect.objectContaining({
+        taskSource: "mcp-stdio",
+      }),
+    }))
+  })
+
   it("persists inner process permission denial reasons without raw secrets", async () => {
     const harness = await createExecutionHarness({
       action: innerPermissionDeniedAction,
@@ -490,6 +510,7 @@ async function createExecutionHarness(options: {
     warn: (message: string, metadata: Record<string, unknown>) => void
   }
   readonly permissionGuard?: PermissionGuard
+  readonly taskPatch?: Partial<ScheduledTaskEntry>
 } = {}) {
   const tasks = new ScheduledTaskRepository({
     tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),
@@ -501,20 +522,31 @@ async function createExecutionHarness(options: {
     now: () => new Date("2026-04-29T00:01:00.000Z"),
     idFactory: () => "run:1",
   })
-  const task = await tasks.create({
+  let task = await tasks.create({
     name: "Build",
     scope: { type: "global" },
     trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
     action: { type: "builtin.test", config: { message: "ok" } },
   })
+  if (options.taskPatch) {
+    task = { ...task, ...options.taskPatch }
+  }
   const actions = new MainActionRegistry()
   actions.register(options.action ?? testAction)
   const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+  const permissionRequests: Parameters<PermissionGuard["check"]>[0][] = []
+  const delegatePermissionGuard = options.permissionGuard ?? permissionGuard({ allowed: true })
   const deps = {
     tasks,
     runs,
     actions,
-    permissionGuard: options.permissionGuard ?? permissionGuard({ allowed: true }),
+    permissionGuard: {
+      registerPolicy: delegatePermissionGuard.registerPolicy.bind(delegatePermissionGuard),
+      check: async (request: Parameters<PermissionGuard["check"]>[0]) => {
+        permissionRequests.push(request)
+        return delegatePermissionGuard.check(request)
+      },
+    },
     auditSink: {
       record: (event: Parameters<AuditSink["record"]>[0]) => {
         auditEvents.push(event)
@@ -526,7 +558,7 @@ async function createExecutionHarness(options: {
     logger: options.logger ?? { warn: () => {} },
   }
   const service = new TaskSchedulerExecutionService(deps)
-  return { service, task, tasks, runs, auditEvents }
+  return { service, task, tasks, runs, auditEvents, permissionRequests }
 }
 
 const testAction: MainActionDefinition<TestActionConfig> = {

@@ -241,6 +241,17 @@ export class UserAuthService {
     ipAddress = "system",
   ): Promise<PasswordResetRequestResult> {
     const email = input.email.trim().toLowerCase()
+    if (!this.options.exposePasswordResetUrl) {
+      await this.auditLog?.record({
+        adminEmail: email,
+        action: "user.password_reset.request_unavailable",
+        targetType: "user",
+        targetId: "unknown",
+        ipAddress,
+      })
+      throw new ServiceUnavailableException("找回密码暂不可用。")
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { email },
       select: { id: true, email: true, status: true },
@@ -272,8 +283,6 @@ export class UserAuthService {
       targetId: user.id,
       ipAddress,
     })
-
-    if (!this.options.exposePasswordResetUrl) return { ok: true }
 
     return {
       ok: true,

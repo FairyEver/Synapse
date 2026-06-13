@@ -422,7 +422,7 @@ export class ConversationRouter {
     try {
       let conversation = await this.repository.get(conversationId)
       if (!conversation) {
-        conversation = await this.getOrCreateConversation(message)
+        throw new Error(`Conversation "${conversationId}" was deleted while queued`)
       }
       conversation = await this.repository.appendHistory(
         conversation.id,

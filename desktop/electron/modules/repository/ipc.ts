@@ -399,7 +399,6 @@ export const repositoryIpcModule: IpcModule = {
       response: validationResultSchema,
       handler: async (_ctx, request: { targetPath: string }): Promise<SynapseRepositoryValidationResult> => {
         logger.info(`Validating directory structure. targetPath: ${request.targetPath}`)
-        await repositoryStructureService.ensureContentDirectories(request.targetPath)
         return repositoryStructureService.validateDirectoryStructure(request.targetPath)
       },
     },

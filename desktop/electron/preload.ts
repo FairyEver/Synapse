@@ -1049,8 +1049,8 @@ const synapseBridge: SynapseBridge = {
     exportPackage: (workflowId: string, workflowName?: string) =>
       invoke(IPC_CHANNELS.workflow.exportPackage)({ workflowId, workflowName }),
     inspectImportPackage: () => invoke(IPC_CHANNELS.workflow.inspectImportPackage)(),
-    importPackage: (packagePath: string, mappings) =>
-      invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, mappings }),
+    importPackage: (packagePath: string, mappings, options) =>
+      invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, mappings, options }),
     onEvent: (listener) =>
       subscribe(EVENT_CHANNELS.workflow.event)((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)

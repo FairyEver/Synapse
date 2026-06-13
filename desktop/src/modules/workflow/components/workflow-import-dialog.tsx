@@ -9,10 +9,19 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import { ChevronDown } from "lucide-react"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
 import type {
+  WorkflowImportOptions,
   WorkflowImportPreview,
   WorkflowModelMapping,
   WorkflowModelReference,
@@ -22,33 +31,42 @@ import type {
 interface WorkflowImportDialogProps {
   open: boolean
   preview: WorkflowImportPreview | null
+  projects: readonly SynapseProjectConfig[]
   importing?: boolean
   onOpenChange: (open: boolean) => void
-  onImport: (mappings: WorkflowModelMapping[]) => void
+  onImport: (mappings: WorkflowModelMapping[], options: WorkflowImportOptions) => void
 }
 
 function WorkflowImportDialog({
   open,
   preview,
+  projects,
   importing = false,
   onOpenChange,
   onImport,
 }: WorkflowImportDialogProps) {
   const [mappings, setMappings] = useState<Record<string, WorkflowModelMapping>>({})
+  const [targetProjectId, setTargetProjectId] = useState("")
   const [selectingRefId, setSelectingRefId] = useState<string | null>(null)
   const activeProvider = preview?.providerOptions.find((provider) => provider.active) ?? preview?.providerOptions[0]
 
   useEffect(() => {
     if (!preview) {
       setMappings({})
+      setTargetProjectId("")
       return
     }
     setMappings(Object.fromEntries(preview.suggestedMappings.map((mapping) => [mapping.sourceRefId, mapping])))
-  }, [preview])
+    setTargetProjectId(projects[0]?.id ?? "")
+  }, [preview, projects])
 
   const rows = preview?.modelReferences ?? []
   const missingProviders = Boolean(preview && rows.length > 0 && preview.providerOptions.length === 0)
-  const canImport = Boolean(preview) && rows.every((row) => mappings[row.id]?.targetProviderId && mappings[row.id]?.targetModelTier)
+  const missingProject = Boolean(preview?.workflow.requiresProjectMapping && projects.length === 0)
+  const canImport = Boolean(preview)
+    && !missingProject
+    && (!preview?.workflow.requiresProjectMapping || Boolean(targetProjectId))
+    && rows.every((row) => mappings[row.id]?.targetProviderId && mappings[row.id]?.targetModelTier)
 
   const providerById = useMemo(
     () => new Map((preview?.providerOptions ?? []).map((provider) => [provider.providerId, provider])),
@@ -79,7 +97,9 @@ function WorkflowImportDialog({
 
   function handleImport() {
     if (!preview || !canImport) return
-    onImport(preview.modelReferences.map((ref) => mappings[ref.id]))
+    onImport(preview.modelReferences.map((ref) => mappings[ref.id]), {
+      ...(preview.workflow.requiresProjectMapping ? { targetProjectId } : {}),
+    })
   }
 
   function handleSelectModel(selection: ProviderModelSelection) {
@@ -107,6 +127,28 @@ function WorkflowImportDialog({
               <Alert>
                 <AlertDescription>先配置供应商后再导入。</AlertDescription>
               </Alert>
+            ) : null}
+            {missingProject ? (
+              <Alert>
+                <AlertDescription>先添加项目后再导入。</AlertDescription>
+              </Alert>
+            ) : null}
+            {preview.workflow.requiresProjectMapping && projects.length > 0 ? (
+              <div className="grid gap-2 border-b pb-3">
+                <div className="text-sm font-medium">默认项目</div>
+                <Select value={targetProjectId} onValueChange={setTargetProjectId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="选择项目" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             ) : null}
             <ScrollArea className="min-h-0 flex-1 pr-3">
               <div className="space-y-3">

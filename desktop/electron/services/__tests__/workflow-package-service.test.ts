@@ -159,6 +159,7 @@ describe("WorkflowPackageService", () => {
       name: "Shared Workflow",
       nodeCount: 3,
       modelReferenceCount: 2,
+      requiresProjectMapping: true,
     })
     expect(preview.providerOptions.map((p) => p.providerId)).toEqual([
       "provider-deepseek",
@@ -180,7 +181,7 @@ describe("WorkflowPackageService", () => {
       targetModelTier: ref.sourceModelTier === "opus" ? "opus" : "sonnet",
     }))
 
-    const result = await service.importPackage(pkg, mappings)
+    const result = await service.importPackage(pkg, mappings, { targetProjectId: "local-project" })
 
     expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v_imported" })
     expect(logger.info).toHaveBeenCalledWith("workflow package import succeeded", {
@@ -198,11 +199,31 @@ describe("WorkflowPackageService", () => {
     expect(imported.createdAt).toBe(Date.parse(nowIso))
     expect(imported.defaultProviderId).toBe("local-openai")
     expect(imported.defaultModelTier).toBe("sonnet")
-    expect(imported.defaultProjectId).toBeUndefined()
+    expect(imported.defaultProjectId).toBe("local-project")
     expect(imported.nodes.find((node) => node.id === "n1")?.config.projectId).toBeUndefined()
     expect(imported.nodes.find((node) => node.id === "n1")?.config.providerId).toBeUndefined()
     expect(imported.nodes.find((node) => node.id === "n2")?.config.providerId).toBe("local-openai")
     expect(imported.nodes.find((node) => node.id === "n2")?.config.modelTier).toBe("opus")
+  })
+
+  it("blocks importing model workflows without a local project mapping", async () => {
+    const { service, saved } = createService()
+    const pkg = await service.buildExportPackage("workflow-source")
+    const mappings: WorkflowModelMapping[] = pkg.modelReferences.map((ref) => ({
+      sourceRefId: ref.id,
+      targetProviderId: "local-openai",
+      targetModelTier: "default",
+    }))
+
+    await expect(service.importPackage(pkg, mappings)).resolves.toEqual({
+      errors: [{
+        type: "invalid_config",
+        field: "defaultProjectId",
+        message: "请选择项目。",
+        retryable: true,
+      }],
+    })
+    expect(saved).toHaveLength(0)
   })
 
   it("rejects import when a model reference has no mapping", async () => {

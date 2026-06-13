@@ -98,6 +98,46 @@ describe("ConversationRouter", () => {
     })
   })
 
+  it("fails queued turns when the target conversation was deleted before processing", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({
+      history: [{ role: "user", content: "previous context", timestamp: "2026-04-26T00:00:00.000Z" }],
+      sdkSessionId: "sdk-old",
+    })
+    await conversations.upsert(existing)
+    let releaseCommandRoute: (() => void) | undefined
+    const commandRouter = {
+      handle: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          releaseCommandRoute = resolve
+        })
+        return undefined
+      }),
+    } as unknown as AgentCommandRouter
+    const session = new ScriptedSession([
+      { type: "result", content: "should not run", done: true },
+    ])
+    const { router } = createRouter({
+      conversations,
+      commandRouter,
+      session,
+    })
+
+    const pending = router.sendToConversation(baseMessage("continue"), existing.id)
+    await flushAsync()
+    expect(commandRouter.handle).toHaveBeenCalledTimes(1)
+    await conversations.remove(existing.id)
+    releaseCommandRoute?.()
+
+    await expect(pending).resolves.toEqual(expect.objectContaining({
+      conversationId: existing.id,
+      error: expect.stringContaining("was deleted"),
+      events: [expect.objectContaining({ type: "error" })],
+    }))
+    expect(session.sent).toEqual([])
+    await expect(conversations.get(existing.id)).resolves.toBeNull()
+  })
+
   it("does not dispatch reply targets when the outbox record fails", async () => {
     const outbox = {
       recordAgentEvent: vi.fn(async () => {

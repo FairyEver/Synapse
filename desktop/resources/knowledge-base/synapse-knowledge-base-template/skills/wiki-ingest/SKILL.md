@@ -20,7 +20,7 @@ Before ingesting any file, list the actual files under `.raw/` and check `.raw/.
 [ -f .raw/.manifest.json ] && echo "exists" || echo "no manifest yet"
 ```
 
-**Manifest format** (create if missing only after confirming at least one real `.raw/` source exists):
+**Manifest format** (read-only context; Synapse writes the final manifest after your turn):
 ```json
 {
   "sources": {
@@ -42,8 +42,8 @@ Before ingesting any file, list the actual files under `.raw/` and check `.raw/.
 4. If missing or hash differs, proceed with ingest.
 
 **After ingesting a file:**
-1. Record `{hash, ingested_at, pages_created, pages_updated}` in `.manifest.json` for the real source path.
-2. Write the updated manifest back. Preserve unrelated existing manifest entries and `address_map`.
+1. Do not edit `.raw/.manifest.json`.
+2. Emit the `synapse_kb_ingest_report` block described below. Synapse records `{hash, ingested_at, pages_created, pages_updated}` for accepted real source paths and preserves unrelated manifest entries and `address_map`.
 
 Skip delta checking if the user says "force ingest" or "re-ingest".
 
@@ -178,7 +178,7 @@ Do not silently overwrite old claims. Flag and let the user decide.
 
 ## What Not to Do
 
-- **Source files under `.raw/` are immutable.** Do not modify the files that users drop there (articles, transcripts, images). The `.raw/.manifest.json` delta tracker and its `address_map` (DragonScale Mechanism 2) are the only files under `.raw/` that `wiki-ingest` itself maintains. Treat every other file under `.raw/` as read-only source content.
+- **Source files under `.raw/` are immutable.** Do not modify the files that users drop there (articles, transcripts, images). Do not edit `.raw/.manifest.json`; Synapse owns final manifest writes after the turn. Treat every other file under `.raw/` as read-only source content.
 - Do not create duplicate pages. Always check the index and search before creating.
 - Do not skip the log entry. Every ingest must be recorded.
 - Do not skip the hot cache update. It is what keeps future sessions fast.
@@ -236,7 +236,7 @@ ADDR=$(./scripts/allocate-address.sh)
 
 1. Before writing a new non-meta page, call `./scripts/allocate-address.sh` and capture the output.
 2. Include `address: c-XXXXXX` in the page's frontmatter.
-3. Record the path-to-address mapping in `.raw/.manifest.json` under a new top-level key `address_map` (see schema below).
+3. Do not edit `.raw/.manifest.json`. Keep the address in page frontmatter and include the page path in the ingest report.
 
 ### `address_map` in `.raw/.manifest.json`
 
@@ -252,7 +252,26 @@ ADDR=$(./scripts/allocate-address.sh)
 
 On re-ingest of the same source (whether by `--force` or a changed hash), always consult `address_map` first. If the target page path has a prior address, REUSE it. Do not allocate a new one.
 
-On a page rename, the skill must update the `address_map` key (old path -> new path) while preserving the address value.
+On a page rename, preserve the page's `address:` frontmatter and include the new path in the ingest report. Do not edit `address_map` directly.
+
+## Synapse Ingest Report
+
+At the end of every successful ingest, include exactly one fenced block tagged `synapse_kb_ingest_report`:
+
+```synapse_kb_ingest_report
+{
+  "schema": "synapse.kb.ingest.report.v1",
+  "processed_sources": [
+    {
+      "source": ".raw/example.md",
+      "pages_created": ["wiki/sources/example.md"],
+      "pages_updated": ["wiki/index.md", "wiki/hot.md", "wiki/log.md"]
+    }
+  ]
+}
+```
+
+Only list real `.raw/` source paths you processed and wiki `.md` pages you created or updated. Synapse ignores paths outside `.raw/` and `wiki/`.
 
 ### Exclusions (do NOT assign an address to)
 

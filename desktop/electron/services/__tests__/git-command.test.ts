@@ -1,8 +1,13 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
-import { isGitRebaseInProgress, runGitCommand } from "../git-command"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import {
+  configureGitCommandSecurity,
+  isGitRebaseInProgress,
+  resetGitCommandSecurityForTests,
+  runGitCommand,
+} from "../git-command"
 
 const roots: string[] = []
 
@@ -23,7 +28,47 @@ async function git(cwd: string, args: string[]): Promise<string> {
 
 describe("git-command helpers", () => {
   afterEach(async () => {
+    resetGitCommandSecurityForTests()
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  it("routes git commands through the configured controlled process runner", async () => {
+    const run = vi.fn(async () => ({
+      durationMs: 12,
+      exitCode: 0,
+      signal: null,
+      stdout: "abc\n",
+      stderr: "",
+      timedOut: false,
+    }))
+    configureGitCommandSecurity({
+      processRunner: { run },
+      actor: { kind: "system", id: "repository-git" },
+    })
+
+    const result = await runGitCommand({
+      args: ["rev-parse", "--show-toplevel"],
+      cwd: "/repo",
+      fallbackMessage: "probe failed",
+    })
+
+    expect(result.stdout).toBe("abc\n")
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      action: "shell.exec",
+      actor: { kind: "system", id: "repository-git" },
+      command: "git",
+      args: ["rev-parse", "--show-toplevel"],
+      cwd: "/repo",
+      env: {
+        GIT_TERMINAL_PROMPT: "0",
+        LANG: "C",
+        LC_ALL: "C",
+      },
+      metadata: {
+        source: "git-command",
+        gitArgs: ["rev-parse", "--show-toplevel"],
+      },
+    }))
   })
 
   it("detects rebase state in a Git worktree", async () => {
