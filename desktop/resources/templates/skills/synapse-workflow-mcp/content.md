@@ -17,14 +17,15 @@ If a user asks for another Synapse MCP domain while this skill is active, switch
 - **http_request** — Sends an HTTP request (GET/POST/PUT/PATCH/DELETE) and returns the response. Supports headers, query params, JSON/text body, auth (bearer/basic), and timeout. No provider needed.
 - **script** — Executes a shell script (posix/cmd/powershell) and returns stdout as output. Supports env vars, timeout, and login shell mode. No provider needed.
 - **workflow_call** — Calls another saved workflow, maps parent context into the child workflow params, and returns the child workflow End output. No provider needed on the call node.
+- **codex** — Runs local `codex exec` in the selected project, passes the prompt through stdin, and returns Codex's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
 - **end** — Terminal node (every workflow has exactly one). Defines the final output template. Cannot be deleted.
 
 ## Provider / Model Configuration
 
-Only **prompt** and **switch** nodes require a provider (AI service) and an execution project. **http_request**, **script**, and **workflow_call** nodes execute without provider configuration on that node. Child prompt/switch nodes inside a workflow called by **workflow_call** still need their own effective project/provider/model through the child workflow defaults or child node overrides. Configure project/provider/model with these exact field names:
+Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **codex** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **script**, and **workflow_call** nodes execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child codex nodes still need an effective project. Configure project/provider/model with these exact field names:
 
-- **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit these unless they override.
-- **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on a node's config.
+- **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model defaults unless they override. Codex nodes inherit only `defaultProjectId` and timeout unless they override.
+- **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. Set only `projectId` and optionally `timeoutMins` on codex config.
 
 To discover available providers, call `workflow_node_type_describe` with `nodeType: "prompt"` (or `"switch"`). The response includes an `availableProviders` array:
 ```json
@@ -44,13 +45,13 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 ## Creating a Workflow (Standard Flow)
 
 1. Call `workflow_node_type_list` to see available node types.
-2. Call `workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node.
+2. Call `workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node; use `nodeType: "codex"` before setting Codex CLI options.
 3. Call `workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
 4. If defaults were not set during create, call `workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `workflow_definition_update`.
 5. Call `workflow_param_update` to define input parameters.
-6. Create schema-valid node placeholders with `workflow_node_create`. For prompt/switch placeholders, include minimal valid prompt text and `variables: []`; for workflow_call placeholders, include `{ workflowId, variables: [], paramTemplates: {} }`. Do not bind `node_output` variables yet. Save every returned `nodeId`.
+6. Create schema-valid node placeholders with `workflow_node_create`. For prompt/switch/codex placeholders, include minimal valid prompt text and `variables: []`; for workflow_call placeholders, include `{ workflowId, variables: [], paramTemplates: {} }`. Do not bind `node_output` variables yet. Save every returned `nodeId`.
 7. Create all structural edges with `workflow_edge_create`. For switch nodes, include a `branch` field matching a branch id.
-8. Update node configs with `workflow_node_update`: add final prompt templates, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings now that upstream edges exist.
+8. Update node configs with `workflow_node_update`: add final prompt templates, Codex CLI options, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings now that upstream edges exist.
 9. Call `workflow_layout_update` after node/edge changes.
 10. Call `workflow_definition_inspect` and fix errors before executing.
 11. Call `workflow_run_execute` with params to start execution. Returns `{ runId }`.
@@ -69,7 +70,7 @@ Nodes declare a `variables` array. Each binding has:
 
 ## Template Fields
 
-Use `{{variableName}}` to interpolate bound variables into prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text. All referenced template variables must be declared in the node's `variables` array.
+Use `{{variableName}}` to interpolate bound variables into prompt text, codex prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text. All referenced template variables must be declared in the node's `variables` array.
 
 ## Calling Another Workflow
 
@@ -105,6 +106,52 @@ Recommended MCP flow:
 
 At runtime, the call node reads the child workflow's latest saved definition. It returns only the child workflow End output as the workflow_call node output. It does not lock a child version and does not expose arbitrary child node outputs.
 
+## Running Codex
+
+Use a **codex** node when the workflow should run the user's local Codex CLI in a project directory.
+
+Minimal valid config:
+
+```json
+{
+  "prompt": "Summarize {{input}}",
+  "variables": [],
+  "approvalPolicy": "never",
+  "sandbox": "workspace-write",
+  "enableSearch": false,
+  "features": { "goals": "enabled" },
+  "skipGitRepoCheck": true,
+  "strictConfig": false,
+  "bypassApprovalsAndSandbox": false,
+  "bypassHookTrust": false,
+  "additionalWritableDirs": [],
+  "images": [],
+  "configOverrides": [],
+  "captureDebugArtifacts": true
+}
+```
+
+Config fields:
+
+- `prompt` — Codex instruction template. Use `{{variableName}}` placeholders declared in `variables`.
+- `variables` — bindings from workflow params, upstream node outputs, or static values.
+- `projectId?` — execution project. If omitted, the node inherits workflow `defaultProjectId`.
+- `timeoutMins?` — optional node timeout in minutes.
+- `approvalPolicy` — `"never"`, `"on-request"`, or `"untrusted"`.
+- `sandbox` — `"read-only"`, `"workspace-write"`, or `"danger-full-access"`.
+- `model?` / `profile?` — optional Codex CLI model/profile.
+- `enableSearch` — passes Codex search support when enabled.
+- `features.goals` — `"default"`, `"enabled"`, or `"disabled"`.
+- `skipGitRepoCheck`, `strictConfig`, `bypassApprovalsAndSandbox`, `bypassHookTrust` — Codex CLI execution flags.
+- `additionalWritableDirs` — extra writable directories passed as repeated `--add-dir`.
+- `images` — image paths passed as repeated `--image`.
+- `configOverrides` — array of `{ "key": "...", "value": "..." }` entries passed as repeated `--config key=value`.
+- `captureDebugArtifacts` — stores sanitized debug artifacts and paths when true.
+
+Do not set `providerId` or `modelTier` on codex nodes. They run local `codex exec`, not a Synapse provider. When `bypassApprovalsAndSandbox` is true, keep `approvalPolicy` and `sandbox` in the config for schema validity, but Codex execution uses the bypass flag instead of approval/sandbox CLI flags.
+
+At runtime, the node passes the interpolated prompt through stdin, runs in the resolved project via `--cd`, and returns only Codex's final reply as the node output. Debug metadata is stored under `outputs.codexDebug`; downstream `node_output` bindings receive the final reply text, not stdout/stderr or debug JSON.
+
 ## Switch Branching
 
 A switch node's config includes `branches: [{ id, label }]` and an optional `defaultBranch`. The AI evaluates the prompt and returns one branch id. Only edges with matching `branch` field activate downstream nodes.
@@ -120,7 +167,8 @@ Switch branches are mutually exclusive paths:
 - Always store returned `nodeId` and `edgeId` after creation — you cannot retrieve them later without fetching the full definition.
 - Call `workflow_node_type_describe` with a node type to get its full config JSON Schema and available providers before configuring.
 - Always query available providers before setting `providerId` — do not guess provider IDs.
-- Prefer setting `defaultProjectId`/`defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every node.
+- Prefer setting `defaultProjectId`/`defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every prompt/switch node. Codex nodes inherit only `defaultProjectId`.
+- For codex nodes, use `workflow_node_type_describe` and configure Codex CLI fields directly; do not set `providerId` or `modelTier`.
 - For workflow_call nodes, configure child workflow params explicitly from the child workflow's current `params`; do not invent param names without reading the child definition.
 - Validate with `workflow_definition_inspect` before executing.
 - Treat `duplicate_switch_branch_targets` warnings as a likely wiring mistake unless the workflow intentionally merges branches immediately.

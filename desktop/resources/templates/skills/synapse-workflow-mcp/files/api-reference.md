@@ -8,7 +8,7 @@ All tools are accessed via the `synapse-mcp` MCP server.
 
 ### workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, and `end`.
+List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `codex`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -19,7 +19,7 @@ Get full manifest and config JSON Schema for a node type.
 
 **Params:** `nodeType` (string, required)
 **Returns:** `{ type, title, color, ports, configFields, configSchema, availableProviders? }`
-**Notes:** Always call this before configuring a node to get the current schema. For `prompt` and `switch` nodes, the response also includes `availableProviders` — an array of `{ id, name, models: { default?, haiku?, sonnet?, opus? } }`. Use this to discover valid `providerId` values. If the user provides a copied reference such as `synapse-provider-model://local-claude-code/sonnet`, parse it as `providerId = "local-claude-code"` and `modelTier = "sonnet"`.
+**Notes:** Always call this before configuring a node to get the current schema. For `prompt` and `switch` nodes, the response also includes `availableProviders` — an array of `{ id, name, models: { default?, haiku?, sonnet?, opus? } }`. Use this to discover valid `providerId` values. `codex` nodes do not use `providerId` or `modelTier`; inspect `nodeType: "codex"` for Codex CLI fields. If the user provides a copied reference such as `synapse-provider-model://local-claude-code/sonnet`, parse it as `providerId = "local-claude-code"` and `modelTier = "sonnet"`.
 
 ---
 
@@ -75,7 +75,52 @@ No provider needed on the call node. It invokes another saved workflow and retur
 - `variables` (array) — variable bindings from parent workflow params, upstream node outputs, or static values
 - `paramTemplates` (object) — child param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
 
-Before configuring `paramTemplates`, call `workflow_definition_get` for the child workflow and read its current `params`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
+Before configuring `paramTemplates`, call `workflow_definition_get` for the child workflow and read its current `params`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
+
+### codex
+
+Runs local `codex exec` in an execution project. No Synapse provider needed; do not set `providerId` or `modelTier`.
+
+- `prompt` (string) — Codex instruction template with `{{variable}}` placeholders
+- `variables` (array) — variable bindings from workflow params, upstream node outputs, or static values
+- `projectId?` (string) — execution project override; inherits workflow `defaultProjectId` when omitted
+- `timeoutMins?` (number) — node timeout in minutes
+- `approvalPolicy` (enum: never/on-request/untrusted, default "never") — Codex approval policy
+- `sandbox` (enum: read-only/workspace-write/danger-full-access, default "workspace-write") — Codex sandbox
+- `model?` / `profile?` (string) — optional Codex CLI model/profile
+- `enableSearch` (boolean, default false) — enables Codex search support
+- `features.goals` (enum: default/enabled/disabled, default "enabled") — Codex goals feature flag
+- `skipGitRepoCheck` (boolean, default true)
+- `strictConfig` (boolean, default false)
+- `bypassApprovalsAndSandbox` (boolean, default false) — when true, execution uses Codex's bypass flag instead of approval/sandbox CLI flags
+- `bypassHookTrust` (boolean, default false)
+- `additionalWritableDirs` (string[]) — repeated `--add-dir` values
+- `images` (string[]) — repeated `--image` values
+- `configOverrides` (array of `{ key, value }`) — repeated `--config key=value` values
+- `captureDebugArtifacts` (boolean, default true)
+
+Minimal valid config:
+
+```json
+{
+  "prompt": "Summarize {{input}}",
+  "variables": [],
+  "approvalPolicy": "never",
+  "sandbox": "workspace-write",
+  "enableSearch": false,
+  "features": { "goals": "enabled" },
+  "skipGitRepoCheck": true,
+  "strictConfig": false,
+  "bypassApprovalsAndSandbox": false,
+  "bypassHookTrust": false,
+  "additionalWritableDirs": [],
+  "images": [],
+  "configOverrides": [],
+  "captureDebugArtifacts": true
+}
+```
+
+The node passes the prompt through stdin, runs with `--cd` set to the resolved project workspace, and returns only Codex's final reply text as `output`. Debug metadata is available in `outputs.codexDebug`, but downstream `node_output` bindings receive the final reply text only.
 
 ### end
 
@@ -133,7 +178,7 @@ Create a new empty workflow with a default end node.
 
 **Params:** `name?` (string), `defaultProjectId?` (string), `defaultProviderId?` (string), `defaultModelTier?` (`"default"|"haiku"|"sonnet"|"opus"`), `defaultNodeTimeoutMins?` (number)
 **Returns:** `{ id, versionHash }`
-**Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node.
+**Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Codex nodes require an effective project but no provider/model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node and `projectId` on each codex node.
 
 ### workflow_definition_update
 
