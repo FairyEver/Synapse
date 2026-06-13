@@ -276,12 +276,12 @@ export class DriveService implements OnApplicationBootstrap {
     })
     if (!session || session.item.deletedAt) throw new NotFoundException("上传会话不存在。")
     if (session.expiresAt.getTime() <= Date.now()) {
-      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired)
+      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired, new Date(), session.storageKey)
       throw new BadRequestException("上传会话已过期。")
     }
     const object = await this.storage.headObject(session.storageKey)
     if (!object || object.size !== session.expectedSize) {
-      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.failed)
+      await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.failed, new Date(), session.storageKey)
       throw new BadRequestException("上传文件校验失败。")
     }
 
@@ -314,7 +314,7 @@ export class DriveService implements OnApplicationBootstrap {
       where: { id: sessionId, userId, status: DRIVE_UPLOAD_STATUS.pending },
     })
     if (!session) throw new NotFoundException("上传会话不存在。")
-    await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled)
+    await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled, new Date(), session.storageKey)
     return { ok: true }
   }
 
@@ -977,10 +977,10 @@ export class DriveService implements OnApplicationBootstrap {
   async expirePendingUploadSessions(now = new Date()): Promise<{ readonly expired: number }> {
     const sessions = await this.prisma.driveUploadSession.findMany({
       where: { status: DRIVE_UPLOAD_STATUS.pending, expiresAt: { lte: now } },
-      select: { id: true, userId: true, expectedSize: true, itemId: true },
+      select: { id: true, userId: true, expectedSize: true, itemId: true, storageKey: true },
     })
     for (const session of sessions) {
-      await this.failUploadSession(session.userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired, now)
+      await this.failUploadSession(session.userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired, now, session.storageKey)
     }
     return { expired: sessions.length }
   }
@@ -1183,6 +1183,7 @@ export class DriveService implements OnApplicationBootstrap {
     expectedSize: bigint,
     status: string,
     now = new Date(),
+    storageKey?: string,
   ): Promise<void> {
     await this.prisma.$transaction([
       this.prisma.driveUploadSession.update({
@@ -1198,6 +1199,7 @@ export class DriveService implements OnApplicationBootstrap {
         data: { reservedBytes: { decrement: expectedSize } },
       }),
     ])
+    if (storageKey) await this.deleteStorageObject(itemId, storageKey)
   }
 
   private async rollbackFolderUploadPrepare(userId: string, rootItemId: string, now = new Date()): Promise<void> {

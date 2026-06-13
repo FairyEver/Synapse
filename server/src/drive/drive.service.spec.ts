@@ -89,6 +89,86 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("deletes uploaded objects when storage verification fails", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async () => ({ key: "drive/item-file", size: 10n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await expect(service.completeUpload("user-1", prepared.sessionId)).rejects.toBeInstanceOf(BadRequestException)
+
+    expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    expect(item.storageStatus).toBe("failed")
+    expect(item.storageDeletePending).toBe(false)
+  })
+
+  it("marks failed uploads pending cleanup when object deletion fails", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async () => ({ key: "drive/item-file", size: 10n, etag: "etag" })),
+      deleteObject: vi.fn(async () => {
+        throw new Error("delete failed")
+      }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await expect(service.completeUpload("user-1", prepared.sessionId)).rejects.toBeInstanceOf(BadRequestException)
+
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    expect(item.storageStatus).toBe("delete_pending")
+    expect(item.storageDeletePending).toBe(true)
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    expect(session?.status).toBe("failed")
+  })
+
+  it("deletes uploaded objects when upload sessions are cancelled", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await service.cancelUpload("user-1", prepared.sessionId)
+
+    expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    expect(session?.status).toBe("cancelled")
+  })
+
   it("marks sessions failed and releases quota when upload instruction creation fails", async () => {
     const prisma = createPrismaMemory()
     const failingStorage: DriveStoragePort = {
@@ -1243,7 +1323,11 @@ describe("DriveService", () => {
 
   it("expires pending sessions and releases reserved quota", async () => {
     const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
     const prepared = await service.prepareUpload("user-1", {
       parentId: null,
@@ -1259,6 +1343,7 @@ describe("DriveService", () => {
 
     const result = await service.expirePendingUploadSessions(new Date("2026-06-07T00:00:00.000Z"))
     expect(result.expired).toBe(1)
+    expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.reservedBytes).toBe(0n)
   })
@@ -1395,7 +1480,15 @@ function createPrismaMemory() {
     },
     driveItem: {
       create: async ({ data, include }: any) => {
-        const item = { id: id("item"), ...data, storageKey: data.storageKey ?? null, deletedAt: null, createdAt: now(), updatedAt: now() }
+        const item = {
+          id: id("item"),
+          ...data,
+          storageKey: data.storageKey ?? null,
+          storageDeletePending: data.storageDeletePending ?? false,
+          deletedAt: null,
+          createdAt: now(),
+          updatedAt: now(),
+        }
         items.set(item.id, item)
         return include ? withShares(item) : item
       },
