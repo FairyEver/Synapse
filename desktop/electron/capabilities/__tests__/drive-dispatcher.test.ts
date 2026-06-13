@@ -2,12 +2,21 @@ import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
+import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-domain"
 
 type DriveDispatcherDeps = Parameters<typeof createDriveCapabilityDispatcher>[0]
 type DriveAccountService = DriveDispatcherDeps["accountService"]
 type DriveItem = Awaited<ReturnType<DriveAccountService["listDriveItems"]>>[number]
 
 describe("createDriveCapabilityDispatcher", () => {
+  it("exposes access settings on share creation", () => {
+    const shareCreateTool = buildDriveTools().find((tool) => tool.name === "drive_share_create")
+    expect(shareCreateTool?.inputSchema.properties).toMatchObject({
+      passwordEnabled: { type: "boolean" },
+      expiresIn: { type: "string", enum: ["3d", "7d", "30d", "1y", "forever"] },
+    })
+  })
+
   it("lists Drive items under root by default", async () => {
     const accountService = createAccountService({
       listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
@@ -99,6 +108,57 @@ describe("createDriveCapabilityDispatcher", () => {
       headers: expect.objectContaining({ "Content-Length": String(1024 * 1024 * 1024) }),
     }))
   })
+
+  it("creates shares with the default access settings when omitted", async () => {
+    const accountService = createAccountService({
+      shareDriveItem: vi.fn(async () => driveShare({ id: "share-1" })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.share.create", {
+      itemId: "item-1",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
+      passwordEnabled: true,
+      expiresIn: "3d",
+    })
+  })
+
+  it("creates shares with custom no-password access settings", async () => {
+    const accountService = createAccountService({
+      shareDriveItem: vi.fn(async () => driveShare({ id: "share-1", passwordEnabled: false, password: null })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.share.create", {
+      itemId: "item-1",
+      passwordEnabled: false,
+      expiresIn: "forever",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
+      passwordEnabled: false,
+      expiresIn: "forever",
+    })
+  })
+
+  it("creates shares with a non-default expiry", async () => {
+    const accountService = createAccountService({
+      shareDriveItem: vi.fn(async () => driveShare({ id: "share-1" })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.share.create", {
+      itemId: "item-1",
+      expiresIn: "30d",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
+      passwordEnabled: true,
+      expiresIn: "30d",
+    })
+  })
 })
 
 function createAccountService(overrides: Partial<DriveAccountService> = {}): DriveAccountService {
@@ -140,6 +200,24 @@ function driveItem(overrides: Partial<DriveItem>): DriveItem {
     activeShareId: null,
     createdAt: "2026-06-07T00:00:00.000Z",
     updatedAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+type DriveShare = Awaited<ReturnType<DriveAccountService["shareDriveItem"]>>
+
+function driveShare(overrides: Partial<DriveShare>): DriveShare {
+  return {
+    id: "share-1",
+    shareId: "shr_1",
+    itemId: "item-1",
+    enabled: true,
+    url: "https://synapse.test/files/shr_1",
+    urlWithPassword: "https://synapse.test/files/shr_1?password=secret",
+    passwordEnabled: true,
+    password: "secret",
+    expiresAt: "2026-06-10T00:00:00.000Z",
+    createdAt: "2026-06-07T00:00:00.000Z",
     ...overrides,
   }
 }

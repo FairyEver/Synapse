@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs"
 import { readdir, stat } from "node:fs/promises"
 
 import type {
+  DriveAccessExpiresIn,
   DriveAccessSettingsInput,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
@@ -60,6 +61,7 @@ type LocalFileEntry = {
 
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const defaultFileSystem: FileSystemPort = { createReadStream, readdir, stat }
+const DRIVE_ACCESS_EXPIRES_IN_VALUES = new Set<DriveAccessExpiresIn>(["3d", "7d", "30d", "1y", "forever"])
 
 export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherDeps) {
   const fileSystem = deps.fileSystem ?? defaultFileSystem
@@ -100,11 +102,12 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "drive.share.create": {
           await authorizeDriveMutation(deps, action, context)
           const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
+          const settings = parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS)
           return {
             ok: true,
             data: await deps.accountService.shareDriveItem(
               requireString(params, "itemId"),
-              DRIVE_DEFAULT_ACCESS_SETTINGS,
+              settings,
             ),
           }
         }
@@ -319,6 +322,30 @@ function requireString(params: Record<string, unknown>, key: string): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== "boolean") throw new Error("Expected boolean parameter.")
+  return value
+}
+
+function optionalDriveAccessExpiresIn(value: unknown): DriveAccessExpiresIn | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== "string" || !DRIVE_ACCESS_EXPIRES_IN_VALUES.has(value as DriveAccessExpiresIn)) {
+    throw new Error("Expected expiresIn to be one of 3d, 7d, 30d, 1y, or forever.")
+  }
+  return value as DriveAccessExpiresIn
+}
+
+function parseDriveAccessSettings(
+  params: Record<string, unknown>,
+  defaults: DriveAccessSettingsInput,
+): DriveAccessSettingsInput {
+  return {
+    passwordEnabled: optionalBoolean(params.passwordEnabled) ?? defaults.passwordEnabled,
+    expiresIn: optionalDriveAccessExpiresIn(params.expiresIn) ?? defaults.expiresIn,
+  }
 }
 
 function optionalNullableString(value: unknown): string | null {

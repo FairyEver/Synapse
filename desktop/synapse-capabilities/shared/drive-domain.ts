@@ -25,6 +25,7 @@ export const DRIVE_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries
 
 const stringField = (description: string) => ({ type: "string", description })
 const optionalParentId = stringField("Parent folder item id. Omit or pass null to use the Drive root directory.")
+const driveAccessExpiresInValues = ["3d", "7d", "30d", "1y", "forever"]
 
 export function buildDriveTools(): McpToolDefinition[] {
   return [
@@ -107,6 +108,8 @@ export function buildDriveTools(): McpToolDefinition[] {
         type: "object",
         properties: {
           itemId: stringField("Drive item id."),
+          passwordEnabled: { type: "boolean", description: "Whether the share should require a password. Defaults to true." },
+          expiresIn: { type: "string", enum: driveAccessExpiresInValues, description: "Share expiration. Defaults to 3d." },
         },
         required: ["itemId"],
       },
