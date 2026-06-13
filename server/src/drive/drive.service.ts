@@ -227,39 +227,46 @@ export class DriveService implements OnApplicationBootstrap {
 
   async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput): Promise<DriveFolderUploadPrepareResult> {
     if (input.files.length === 0) throw new BadRequestException("文件夹不能为空。")
-    const root = await this.createFolder(userId, { parentId: input.parentId, name: input.folderName })
-    const folderIdsByPath = new Map<string, string>([["", root.id]])
+    let root: DriveItemDto | null = null
     const entries: DriveFolderUploadPrepareResult["entries"] = []
 
-    for (const file of input.files) {
-      const parts = normalizeRelativePath(file.relativePath)
-      const fileName = parts.at(-1)
-      if (!fileName) throw new BadRequestException("文件路径无效。")
-      const folderParts = parts.slice(0, -1)
-      let parentId = root.id
-      let currentPath = ""
-      for (const folderName of folderParts) {
-        currentPath = currentPath ? `${currentPath}/${folderName}` : folderName
-        const existingId = folderIdsByPath.get(currentPath)
-        if (existingId) {
-          parentId = existingId
-          continue
-        }
-        const folder = await this.createFolder(userId, { parentId, name: folderName })
-        folderIdsByPath.set(currentPath, folder.id)
-        parentId = folder.id
-      }
-      const prepared = await this.prepareUpload(userId, {
-        parentId,
-        name: fileName,
-        size: file.size,
-        mimeType: file.mimeType ?? null,
-        publicAppUrl: input.publicAppUrl,
-      })
-      entries.push({ relativePath: parts.join("/"), ...prepared })
-    }
+    try {
+      root = await this.createFolder(userId, { parentId: input.parentId, name: input.folderName })
+      const folderIdsByPath = new Map<string, string>([["", root.id]])
 
-    return { root, entries }
+      for (const file of input.files) {
+        const parts = normalizeRelativePath(file.relativePath)
+        const fileName = parts.at(-1)
+        if (!fileName) throw new BadRequestException("文件路径无效。")
+        const folderParts = parts.slice(0, -1)
+        let parentId = root.id
+        let currentPath = ""
+        for (const folderName of folderParts) {
+          currentPath = currentPath ? `${currentPath}/${folderName}` : folderName
+          const existingId = folderIdsByPath.get(currentPath)
+          if (existingId) {
+            parentId = existingId
+            continue
+          }
+          const folder = await this.createFolder(userId, { parentId, name: folderName })
+          folderIdsByPath.set(currentPath, folder.id)
+          parentId = folder.id
+        }
+        const prepared = await this.prepareUpload(userId, {
+          parentId,
+          name: fileName,
+          size: file.size,
+          mimeType: file.mimeType ?? null,
+          publicAppUrl: input.publicAppUrl,
+        })
+        entries.push({ relativePath: parts.join("/"), ...prepared })
+      }
+
+      return { root, entries }
+    } catch (error) {
+      if (root) await this.rollbackFolderUploadPrepare(userId, root.id)
+      throw error
+    }
   }
 
   async completeUpload(userId: string, sessionId: string): Promise<DriveItemDto> {
@@ -1191,6 +1198,58 @@ export class DriveService implements OnApplicationBootstrap {
         data: { reservedBytes: { decrement: expectedSize } },
       }),
     ])
+  }
+
+  private async rollbackFolderUploadPrepare(userId: string, rootItemId: string, now = new Date()): Promise<void> {
+    const itemIds = await this.listDriveSubtreeItemIds(this.prisma, userId, rootItemId)
+    if (itemIds.length === 0) return
+
+    await this.prisma.$transaction(async (tx) => {
+      const pendingSessions = await tx.driveUploadSession.findMany({
+        where: { userId, itemId: { in: itemIds }, status: DRIVE_UPLOAD_STATUS.pending },
+        select: { id: true, expectedSize: true },
+      })
+      const pendingSessionIds = pendingSessions.map((session) => session.id)
+      const reservedBytes = pendingSessions.reduce((sum, session) => sum + session.expectedSize, 0n)
+
+      if (pendingSessionIds.length > 0) {
+        await tx.driveUploadSession.updateMany({
+          where: { id: { in: pendingSessionIds }, userId, status: DRIVE_UPLOAD_STATUS.pending },
+          data: { status: DRIVE_UPLOAD_STATUS.failed, failedAt: now },
+        })
+      }
+      await tx.driveItem.updateMany({
+        where: { id: { in: itemIds }, userId, deletedAt: null },
+        data: {
+          deletedAt: now,
+          storageStatus: DRIVE_STORAGE_STATUS.failed,
+          uploadStatus: DRIVE_UPLOAD_STATUS.failed,
+        },
+      })
+      if (reservedBytes > 0n) {
+        await tx.driveUsage.update({
+          where: { userId },
+          data: { reservedBytes: { decrement: reservedBytes } },
+        })
+      }
+    })
+  }
+
+  private async listDriveSubtreeItemIds(prisma: DrivePrismaClient, userId: string, rootItemId: string): Promise<string[]> {
+    const itemIds: string[] = []
+    const queue = [rootItemId]
+
+    while (queue.length > 0) {
+      const itemId = queue.shift()!
+      itemIds.push(itemId)
+      const children = await prisma.driveItem.findMany({
+        where: { userId, parentId: itemId },
+        select: { id: true },
+      })
+      queue.push(...children.map((child) => child.id))
+    }
+
+    return itemIds
   }
 
   private async createUniqueShare(itemId: string, userId: string, type: string, material: DrivePasswordMaterial) {

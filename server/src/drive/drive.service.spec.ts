@@ -888,6 +888,44 @@ describe("DriveService", () => {
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
   })
 
+  it("rolls back folder upload prepare artifacts when a later file fails", async () => {
+    const prisma = createPrismaMemory()
+    const createUploadInstruction = vi.fn()
+      .mockResolvedValueOnce({
+        method: "PUT" as const,
+        url: "https://cos.example/upload-1",
+        expiresAt: new Date("2026-06-07T12:15:00.000Z"),
+        headers: { "Content-Type": "text/plain" },
+      })
+      .mockRejectedValueOnce(new Error("COS unavailable"))
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      createUploadInstruction,
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    await expect(service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      files: [
+        { relativePath: "brief.txt", size: "11", mimeType: "text/plain" },
+        { relativePath: "docs/spec.txt", size: "11", mimeType: "text/plain" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })).rejects.toThrow("COS unavailable")
+
+    expect(await service.listItems("user-1", null)).toEqual([])
+    const sessions = await prisma.driveUploadSession.findMany()
+    expect(sessions).toHaveLength(2)
+    expect(sessions.every((session: any) => session.status === "failed")).toBe(true)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+    const items = await prisma.driveItem.findMany()
+    expect(items).toHaveLength(4)
+    expect(items.every((item: any) => item.deletedAt instanceof Date)).toBe(true)
+  })
+
   it("lists public folder share children and keeps file share downloads scoped", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -1385,6 +1423,16 @@ function createPrismaMemory() {
         if (!session) throw new Error("session not found")
         Object.assign(session, data)
         return session
+      },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0
+        for (const session of sessions.values()) {
+          if (matchesWhere(session, where)) {
+            Object.assign(session, data)
+            count += 1
+          }
+        }
+        return { count }
       },
       findMany: async ({ where, select }: any = {}) => {
         const found = [...sessions.values()].filter((session) => matchesWhere(session, where ?? {}))
