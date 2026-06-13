@@ -6,6 +6,7 @@ import { buildDriveTools } from "../../../synapse-capabilities/shared/drive-doma
 
 type DriveDispatcherDeps = Parameters<typeof createDriveCapabilityDispatcher>[0]
 type DriveAccountService = DriveDispatcherDeps["accountService"]
+type DriveAuditSink = NonNullable<DriveDispatcherDeps["auditSink"]>
 type DriveItem = Awaited<ReturnType<DriveAccountService["listDriveItems"]>>[number]
 
 describe("createDriveCapabilityDispatcher", () => {
@@ -35,6 +36,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const accountService = createAccountService()
     const fileStream = Readable.from(["test"])
     const readFile = vi.fn(async () => Buffer.from("test"))
+    const auditSink = createAuditSink()
     const permissionGuard = {
       registerPolicy: vi.fn(),
       check: vi.fn(async () => ({ allowed: true as const })),
@@ -42,6 +44,7 @@ describe("createDriveCapabilityDispatcher", () => {
     const dispatcher = createDriveCapabilityDispatcher({
       accountService,
       permissionGuard,
+      auditSink,
       fileSystem: {
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
         readFile,
@@ -75,6 +78,18 @@ describe("createDriveCapabilityDispatcher", () => {
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: "/tmp/report.md",
       context: { source: "mcp-stdio", driveAction: "drive.upload" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "allowed",
+      resource: "/tmp/report.md",
+      metadata: expect.objectContaining({ driveAction: "drive.upload" }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "synapse-drive:drive.file.upload",
+      metadata: expect.objectContaining({ driveAction: "drive.file.upload", itemId: "item-1" }),
     }))
   })
 
@@ -159,6 +174,56 @@ describe("createDriveCapabilityDispatcher", () => {
       expiresIn: "30d",
     })
   })
+
+  it("audits successful share creation", async () => {
+    const auditSink = createAuditSink()
+    const accountService = createAccountService({
+      shareDriveItem: vi.fn(async () => driveShare({ id: "share-1", shareId: "shr_1" })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
+
+    await expect(dispatcher.dispatch("drive.share.create", {
+      itemId: "item-1",
+      expiresIn: "30d",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "synapse-drive:item-1",
+      metadata: expect.objectContaining({
+        driveAction: "drive.share.create",
+        itemId: "item-1",
+        shareId: "shr_1",
+        expiresIn: "30d",
+      }),
+    }))
+  })
+
+  it("audits failed share creation", async () => {
+    const auditSink = createAuditSink()
+    const accountService = createAccountService({
+      shareDriveItem: vi.fn(async () => {
+        throw new Error("share failed")
+      }),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
+
+    await expect(dispatcher.dispatch("drive.share.create", {
+      itemId: "item-1",
+    }, { source: "mcp-stdio" })).rejects.toThrow("share failed")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "failed",
+      resource: "synapse-drive:item-1",
+      metadata: expect.objectContaining({
+        driveAction: "drive.share.create",
+        itemId: "item-1",
+        errorName: "Error",
+      }),
+    }))
+  })
 })
 
 function createAccountService(overrides: Partial<DriveAccountService> = {}): DriveAccountService {
@@ -185,6 +250,14 @@ function createAccountService(overrides: Partial<DriveAccountService> = {}): Dri
     getDriveUsage: vi.fn(),
     ...overrides,
   } as unknown as DriveAccountService
+}
+
+function createAuditSink(): DriveAuditSink {
+  return {
+    record: vi.fn(),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
 }
 
 function driveItem(overrides: Partial<DriveItem>): DriveItem {

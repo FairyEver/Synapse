@@ -59,6 +59,12 @@ type LocalFileEntry = {
   readonly sizeBytes: number
 }
 
+type DriveMutationSecurity = {
+  readonly actor: ActorIdentity
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
+
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const defaultFileSystem: FileSystemPort = { createReadStream, readdir, stat }
 const DRIVE_ACCESS_EXPIRES_IN_VALUES = new Set<DriveAccessExpiresIn>(["3d", "7d", "30d", "1y", "forever"])
@@ -76,45 +82,49 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return { ok: true, data: items, total: items.length }
         }
         case "drive.file.upload":
-          return uploadFile(deps, fileSystem, fetchImpl, params, context)
+          return dispatchDriveMutation(deps, action, params, context, () =>
+            uploadFile(deps, fileSystem, fetchImpl, params, context))
         case "drive.folder.upload":
-          return uploadFolder(deps, fileSystem, fetchImpl, params, context)
-        case "drive.folder.create": {
-          await authorizeDriveMutation(deps, action, context)
-          const item = await deps.accountService.createDriveFolder({
-            parentId: optionalNullableString(params.parentId),
-            name: requireString(params, "name"),
+          return dispatchDriveMutation(deps, action, params, context, () =>
+            uploadFolder(deps, fileSystem, fetchImpl, params, context))
+        case "drive.folder.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const item = await deps.accountService.createDriveFolder({
+              parentId: optionalNullableString(params.parentId),
+              name: requireString(params, "name"),
+            })
+            return { ok: true, data: item }
           })
-          return { ok: true, data: item }
-        }
-        case "drive.item.move": {
-          await authorizeDriveMutation(deps, action, context)
-          const item = await deps.accountService.moveDriveItem(
-            requireString(params, "itemId"),
-            optionalNullableString(params.parentId),
-          )
-          return { ok: true, data: item }
-        }
-        case "drive.item.delete": {
-          await authorizeDriveMutation(deps, action, context)
-          return { ok: true, data: await deps.accountService.deleteDriveItem(requireString(params, "itemId")) }
-        }
-        case "drive.share.create": {
-          await authorizeDriveMutation(deps, action, context)
-          const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
-          const settings = parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS)
-          return {
-            ok: true,
-            data: await deps.accountService.shareDriveItem(
+        case "drive.item.move":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const item = await deps.accountService.moveDriveItem(
               requireString(params, "itemId"),
-              settings,
-            ),
-          }
-        }
-        case "drive.share.disable": {
-          await authorizeDriveMutation(deps, action, context)
-          return { ok: true, data: await deps.accountService.disableDriveShare(requireString(params, "shareId")) }
-        }
+              optionalNullableString(params.parentId),
+            )
+            return { ok: true, data: item }
+          })
+        case "drive.item.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.deleteDriveItem(requireString(params, "itemId")),
+          }))
+        case "drive.share.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
+            const settings = parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS)
+            return {
+              ok: true,
+              data: await deps.accountService.shareDriveItem(
+                requireString(params, "itemId"),
+                settings,
+              ),
+            }
+          })
+        case "drive.share.disable":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.disableDriveShare(requireString(params, "shareId")),
+          }))
         case "drive.usage.get":
           return { ok: true, data: await deps.accountService.getDriveUsage() }
         default:
@@ -131,7 +141,6 @@ async function uploadFile(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
-  await authorizeDriveMutation(deps, "drive.file.upload", context)
   const filePath = requireString(params, "filePath")
   await authorizeFileRead(deps, filePath, context)
   const fileStat = await fileSystem.stat(filePath)
@@ -161,7 +170,6 @@ async function uploadFolder(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): Promise<DispatchResult> {
-  await authorizeDriveMutation(deps, "drive.folder.upload", context)
   const folderPath = requireString(params, "folderPath")
   await authorizeFileRead(deps, folderPath, context)
   const folderStat = await fileSystem.stat(folderPath)
@@ -262,26 +270,124 @@ async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Pro
   return result
 }
 
-async function authorizeDriveMutation(
+async function dispatchDriveMutation(
   deps: DriveCapabilityDispatcherDeps,
   action: string,
+  params: Record<string, unknown>,
   context: DispatchContext,
+  operation: () => Promise<DispatchResult>,
+): Promise<DispatchResult> {
+  const security = driveMutationSecurity(deps, action, params, context)
+  await authorizeDriveMutation(deps, security)
+  try {
+    const result = await operation()
+    deps.auditSink?.record({
+      action: "network.connect",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: driveResultAuditOutcome(result),
+      metadata: {
+        ...security.metadata,
+        ...driveResultCorrelation(result),
+      },
+    })
+    return result
+  } catch (error) {
+    deps.auditSink?.record({
+      action: "network.connect",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "failed",
+      metadata: {
+        ...security.metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    throw error
+  }
+}
+
+function driveMutationSecurity(
+  deps: DriveCapabilityDispatcherDeps,
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+): DriveMutationSecurity {
+  const correlation = driveParamCorrelation(params)
+  const target = typeof correlation.itemId === "string"
+    ? correlation.itemId
+    : typeof correlation.shareId === "string"
+      ? correlation.shareId
+      : action
+  return {
+    actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
+    resource: `synapse-drive:${target}`,
+    metadata: {
+      source: context.source ?? "api",
+      driveAction: action,
+      ...correlation,
+    },
+  }
+}
+
+function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {}
+  for (const key of ["itemId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn"]) {
+    const value = params[key]
+    if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
+  }
+  return metadata
+}
+
+function driveResultAuditOutcome(result: DispatchResult): "allowed" | "failed" {
+  if (!result.ok) return "failed"
+  const data = result.data
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const failed = (data as Record<string, unknown>).failed
+    if (typeof failed === "number" && failed > 0) return "failed"
+  }
+  return "allowed"
+}
+
+function driveResultCorrelation(result: DispatchResult): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {}
+  if (!result.ok) {
+    if (result.error) metadata.error = result.error
+    return metadata
+  }
+  const data = result.data
+  if (!data || typeof data !== "object" || Array.isArray(data)) return metadata
+  const record = data as Record<string, unknown>
+  if (typeof record.itemId === "string") metadata.itemId = record.itemId
+  if (typeof record.shareId === "string") metadata.shareId = record.shareId
+  if (typeof record.id === "string" && !metadata.itemId && !metadata.shareId) metadata.itemId = record.id
+  if (typeof record.completed === "number") metadata.completed = record.completed
+  if (typeof record.failed === "number") metadata.failed = record.failed
+  if (record.root && typeof record.root === "object" && !Array.isArray(record.root)) {
+    const rootId = (record.root as Record<string, unknown>).id
+    if (typeof rootId === "string") metadata.rootItemId = rootId
+  }
+  return metadata
+}
+
+async function authorizeDriveMutation(
+  deps: DriveCapabilityDispatcherDeps,
+  security: DriveMutationSecurity,
 ): Promise<void> {
-  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
-  const metadata = { source: context.source ?? "api", driveAction: action }
   const permission = await deps.permissionGuard?.check({
     action: "network.connect",
-    actor,
+    actor: security.actor,
     resource: "synapse-drive",
-    context: metadata,
+    context: security.metadata,
   })
   if (permission && !permission.allowed) {
     deps.auditSink?.record({
       action: "network.connect",
-      actor,
+      actor: security.actor,
       resource: "synapse-drive",
       outcome: "denied",
-      metadata: { ...metadata, reason: permission.reason, policyId: permission.policyId },
+      metadata: { ...security.metadata, reason: permission.reason, policyId: permission.policyId },
     })
     throw new Error(permission.reason)
   }
@@ -310,6 +416,13 @@ async function authorizeFileRead(
     })
     throw new Error(permission.reason)
   }
+  deps.auditSink?.record({
+    action: "fs.read.outside-userdata",
+    actor,
+    resource: filePath,
+    outcome: "allowed",
+    metadata,
+  })
 }
 
 function requireString(params: Record<string, unknown>, key: string): string {
