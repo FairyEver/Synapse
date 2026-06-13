@@ -78,6 +78,34 @@ function buildWorkflowUsageCostSnapshot(result: NodeExecutionResult): WorkflowNo
   }
 }
 
+function summarizeWorkflowUsageAndCost(
+  nodeResults: Record<string, NodeRunResult>,
+): { readonly usage?: Record<string, number>; readonly totalCostUsd?: number } {
+  const usage: Record<string, number> = {}
+  let hasUsage = false
+  let totalCostUsd = 0
+  let hasCostUsd = false
+
+  for (const result of Object.values(nodeResults)) {
+    if (result.usage) {
+      for (const [key, value] of Object.entries(result.usage)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) continue
+        usage[key] = (usage[key] ?? 0) + value
+        hasUsage = true
+      }
+    }
+    if (typeof result.costUsd === "number" && Number.isFinite(result.costUsd)) {
+      totalCostUsd += result.costUsd
+      hasCostUsd = true
+    }
+  }
+
+  return {
+    ...(hasUsage ? { usage } : {}),
+    ...(hasCostUsd ? { totalCostUsd: Number(totalCostUsd.toFixed(12)) } : {}),
+  }
+}
+
 type EventCallback = (event: WorkflowEvent) => void
 
 export class WorkflowEngine {
@@ -483,6 +511,7 @@ export class WorkflowEngine {
       nodeResults, durationMs,
       output: endNodeId ? nodeOutputs[endNodeId] : undefined,
     }
+    const usageAndCost = summarizeWorkflowUsageAndCost(nodeResults)
     if (overallFailed) {
       const failedNode = Object.values(nodeResults).find((nr) => nr.status === "failed" && nr.error)
       const failedNodeName = failedNode ? def.nodes.find((n) => n.id === failedNode.nodeId)?.name : undefined
@@ -495,6 +524,7 @@ export class WorkflowEngine {
         durationMs,
         triggerSource: triggerSource ?? "unknown",
         firstFailedNode: failedNode?.nodeId,
+        ...usageAndCost,
         ...stringDiagnostic(detailedError, "workflow"),
       })
       emit({ type: "workflow:failed", runId, workflowId: def.id, error: detailedError, result })
@@ -502,6 +532,7 @@ export class WorkflowEngine {
       logger.info("workflow run completed", {
         runId, workflowId: def.id, durationMs,
         triggerSource: triggerSource ?? "unknown",
+        ...usageAndCost,
         ...(result.output !== undefined ? { outputLength: result.output.length } : {}),
       })
       emit({ type: "workflow:completed", runId, workflowId: def.id, result })
