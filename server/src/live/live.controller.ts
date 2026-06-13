@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Patch, Req, Sse, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Logger, Optional, Param, Patch, Req, Sse, UseGuards } from "@nestjs/common"
 import { map } from "rxjs"
 import { z } from "zod"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { UserAuthGuard, type AuthenticatedUserRequest } from "../auth/user-auth.guard"
+import { AuditLogService } from "../common/audit-log.service"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { LiveDeviceService } from "./live-device.service"
 import { LiveQueryService } from "./live-query.service"
@@ -12,30 +13,60 @@ import { LiveStreamService } from "./live-stream.service"
 const renameDeviceSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
 }).strict()
+type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @Controller()
 export class LiveController {
+  private readonly logger = new Logger(LiveController.name)
+
   constructor(
     private readonly query: LiveQueryService,
     private readonly streams: LiveStreamService,
     private readonly devices: LiveDeviceService,
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   @UseGuards(AdminAuthGuard)
   @Get("/api/admin/live-clients")
-  listAdminClients() {
-    return this.query.listAdminClients()
+  async listAdminClients(@Req() request?: AdminRequest) {
+    const result = this.query.listAdminClients()
+    await this.recordAuditSafely({
+      adminEmail: request?.admin?.email ?? "system",
+      action: "admin.live_clients.list",
+      targetType: "live_client",
+      targetId: "list",
+      detail: { scope: "all", count: result.length },
+      ipAddress: request?.ip ?? "system",
+    })
+    return result
   }
 
   @UseGuards(AdminAuthGuard)
   @Get("/api/admin/users/:id/live-clients")
-  listAdminUserClients(@Param("id") userId: string) {
-    return this.query.listAdminUserClients(userId)
+  async listAdminUserClients(@Param("id") userId: string, @Req() request?: AdminRequest) {
+    const result = this.query.listAdminUserClients(userId)
+    await this.recordAuditSafely({
+      adminEmail: request?.admin?.email ?? "system",
+      action: "admin.live_clients.list",
+      targetType: "live_client",
+      targetId: userId,
+      detail: { scope: "user", userId, count: result.length },
+      ipAddress: request?.ip ?? "system",
+    })
+    return result
   }
 
   @UseGuards(AdminAuthGuard)
   @Sse("/api/admin/live/stream")
-  adminStream(@Req() _request: AdminRequest) {
+  adminStream(@Req() request: AdminRequest) {
+    void this.recordAuditSafely({
+      adminEmail: request.admin?.email ?? "system",
+      action: "admin.live_clients.stream",
+      targetType: "live_client",
+      targetId: "stream",
+      detail: { scope: "all" },
+      ipAddress: request.ip ?? "system",
+    })
     return this.streams.adminEvents().pipe(map((event) => ({ type: event.type, data: event })))
   }
 
@@ -73,5 +104,18 @@ export class LiveController {
   @Sse("/api/dashboard/live/stream")
   legacyDashboardStream(@Req() request: AuthenticatedUserRequest) {
     return this.dashboardStream(request)
+  }
+
+  private async recordAuditSafely(input: AuditRecordInput): Promise<void> {
+    try {
+      await this.auditLog?.record(input)
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      }, "Failed to record live admin audit log")
+    }
   }
 }

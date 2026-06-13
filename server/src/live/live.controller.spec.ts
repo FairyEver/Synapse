@@ -1,6 +1,7 @@
 import { firstValueFrom, of } from "rxjs"
 import { describe, expect, it, vi } from "vitest"
 import { PATH_METADATA } from "@nestjs/common/constants"
+import type { AuditLogService } from "../common/audit-log.service"
 import { LiveController } from "./live.controller"
 import type { LiveDeviceService } from "./live-device.service"
 import type { LiveQueryService } from "./live-query.service"
@@ -11,16 +12,19 @@ function createController(
   query: Partial<LiveQueryService> = {},
   stream: Partial<LiveStreamService> = {},
   devices: Partial<LiveDeviceService> = {},
+  auditLog: Partial<AuditLogService> = {},
 ) {
   const ControllerCtor = LiveController as new (
     query: LiveQueryService,
     stream: LiveStreamService,
     devices: LiveDeviceService,
+    auditLog: AuditLogService,
   ) => LiveController
   return new ControllerCtor(
     query as LiveQueryService,
     stream as LiveStreamService,
     devices as LiveDeviceService,
+    { record: vi.fn().mockResolvedValue(undefined), ...auditLog } as AuditLogService,
   )
 }
 
@@ -59,20 +63,42 @@ describe("LiveController", () => {
     expect(Reflect.getMetadata(PATH_METADATA, LiveController.prototype.legacyDashboardStream)).toBe("/api/dashboard/live/stream")
   })
 
-  it("returns all live clients for admins", () => {
+  it("returns all live clients for admins", async () => {
     const listAdminClients = vi.fn().mockReturnValue([{ userId: "user-1", clientInstanceId: "client-a" }])
-    const controller = createController({ listAdminClients })
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const controller = createController({ listAdminClients }, {}, {}, auditLog)
 
-    expect(controller.listAdminClients()).toEqual([{ userId: "user-1", clientInstanceId: "client-a" }])
+    await expect(Promise.resolve(
+      controller.listAdminClients({ admin: { email: "admin@example.com" }, ip: "127.0.0.1" } as never),
+    )).resolves.toEqual([{ userId: "user-1", clientInstanceId: "client-a" }])
     expect(listAdminClients).toHaveBeenCalledWith()
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.live_clients.list",
+      targetType: "live_client",
+      targetId: "list",
+      ipAddress: "127.0.0.1",
+      detail: { scope: "all", count: 1 },
+    }))
   })
 
-  it("returns one user's live clients for admins", () => {
+  it("returns one user's live clients for admins", async () => {
     const listAdminUserClients = vi.fn().mockReturnValue([{ userId: "user-1", clientInstanceId: "client-a" }])
-    const controller = createController({ listAdminUserClients })
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const controller = createController({ listAdminUserClients }, {}, {}, auditLog)
 
-    expect(controller.listAdminUserClients("user-1")).toEqual([{ userId: "user-1", clientInstanceId: "client-a" }])
+    await expect(Promise.resolve(
+      controller.listAdminUserClients("user-1", { admin: { email: "admin@example.com" }, ip: "127.0.0.1" } as never),
+    )).resolves.toEqual([{ userId: "user-1", clientInstanceId: "client-a" }])
     expect(listAdminUserClients).toHaveBeenCalledWith("user-1")
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.live_clients.list",
+      targetType: "live_client",
+      targetId: "user-1",
+      ipAddress: "127.0.0.1",
+      detail: { scope: "user", userId: "user-1", count: 1 },
+    }))
   })
 
   it("returns only current user's live clients for dashboard users", () => {
