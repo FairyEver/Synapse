@@ -400,6 +400,33 @@ describe("AdminService", () => {
     })
   })
 
+  it("returns successful invitation mutations when service-managed audit writes fail", async () => {
+    const prisma = createPrismaMock()
+    prisma.invitation.create.mockResolvedValue({
+      id: "invite-1",
+      inviteUrl: "https://app.example.com/console/team-invite?token=token-1",
+      expiresAt: new Date("2026-06-08T00:00:00.000Z"),
+    })
+    prisma.invitation.delete.mockResolvedValue({ id: "invite-1" })
+    prisma.invitation.deleteMany.mockResolvedValue({ count: 2 })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.createInvitation(
+      { teamId: "team-1" },
+      { id: "admin-1", email: "admin@example.com" },
+      "https://app.example.com",
+      "203.0.113.44",
+    )).resolves.toMatchObject({ id: "invite-1" })
+    await expect(service.deleteInvitation("invite-1", "admin@example.com", "203.0.113.20"))
+      .resolves
+      .toEqual({ ok: true })
+    await expect(service.deleteInvitations(["invite-1", "invite-2"], "admin@example.com", "203.0.113.30"))
+      .resolves
+      .toEqual({ ok: true, count: 2 })
+    expect(auditLog.record).toHaveBeenCalledTimes(3)
+  })
+
   it("rejects bulk invitation deletes when any id does not exist", async () => {
     const prisma = createPrismaMock()
     prisma.invitation.deleteMany.mockResolvedValue({ count: 1 })
@@ -423,6 +450,26 @@ describe("AdminService", () => {
 
     await service.updateUserStatus("user-1", { status: "disabled" }, "admin@example.com", "203.0.113.40")
 
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.user.status_update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { status: "disabled" },
+      ipAddress: "203.0.113.40",
+    })
+  })
+
+  it("returns the updated user when status update audit writes fail", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.update.mockResolvedValue({ id: "user-1", status: "disabled" })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.updateUserStatus("user-1", { status: "disabled" }, "admin@example.com", "203.0.113.40"))
+      .resolves
+      .toEqual({ id: "user-1", status: "disabled" })
+    expect(prisma.user.update).toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
       action: "admin.user.status_update",

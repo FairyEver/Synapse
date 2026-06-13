@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type UserStatus } from "@prisma/client"
+import { PinoLogger } from "nestjs-pino"
 import { createOpaqueToken, hashToken } from "../auth/token"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
@@ -8,6 +9,7 @@ import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { PrismaService } from "../prisma/prisma.service"
 
 type AdminPrismaClient = PrismaService | Prisma.TransactionClient
+type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 const invitationDays = 7
 
 const adminUserSelect = {
@@ -96,6 +98,7 @@ export class AdminService {
     private readonly prisma: PrismaService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly liveDesktopGateway?: LiveDesktopGateway,
+    @Optional() private readonly logger?: PinoLogger,
   ) {}
 
   async getSystemOverview() {
@@ -185,7 +188,7 @@ export class AdminService {
       }
       throw error
     }
-    await this.auditLog?.record({
+    await this.recordServiceManagedAuditSafely({
       adminEmail: actorEmail,
       action: "admin.invitation.delete",
       targetType: "invitation",
@@ -206,7 +209,7 @@ export class AdminService {
       }
       return deleted
     })
-    await this.auditLog?.record({
+    await this.recordServiceManagedAuditSafely({
       adminEmail: actorEmail,
       action: "admin.invitation.delete_many",
       targetType: "invitation",
@@ -255,7 +258,7 @@ export class AdminService {
     if (input.status === "disabled") {
       this.liveDesktopGateway?.disconnectUser(id)
     }
-    await this.auditLog?.record({
+    await this.recordServiceManagedAuditSafely({
       adminEmail: actorEmail,
       action: "admin.user.status_update",
       targetType: "user",
@@ -326,7 +329,7 @@ export class AdminService {
         teamId: input.teamId,
       },
     })
-    await this.auditLog?.record({
+    await this.recordServiceManagedAuditSafely({
       adminEmail: admin.email,
       action: "admin.invitation.create",
       targetType: "invitation",
@@ -363,5 +366,26 @@ export class AdminService {
       this.prisma.invitation.count(),
     ])
     return { data, total, page: page.page, pageSize: page.pageSize }
+  }
+
+  private async recordServiceManagedAuditSafely(input: AuditRecordInput): Promise<void> {
+    try {
+      await this.auditLog?.record(input)
+    } catch (error) {
+      this.logger?.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        ...auditWriteErrorMetadata(error),
+      }, "Failed to record admin service audit log")
+    }
+  }
+}
+
+function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
   }
 }
