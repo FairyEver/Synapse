@@ -230,7 +230,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(document.body.textContent).toContain("公开链接")
-    expect(document.body.textContent).toContain("全部")
+    expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("分享")
     expect(document.body.textContent).toContain("发布")
   })
@@ -1329,6 +1329,8 @@ describe("DriveModule", () => {
 
     await clickButtonText("公开链接")
     await flushAct()
+    await clickTabText("发布")
+    await flushAct()
 
     expect(document.body.textContent).toContain("report.html")
     expect(document.body.textContent).toContain("链接信息")
@@ -1371,9 +1373,9 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
 
-  it("uses a wider dialog for public link history tables", async () => {
+  it("defaults public link management to a narrower share tab with fixed tabs", async () => {
     mocks.listDrivePublications.mockResolvedValue([
-      createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
+      createDrivePublication({ id: "pub-row-1", name: "index.html", type: "page" }),
     ])
     mocks.listDriveShares.mockResolvedValue([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
@@ -1385,7 +1387,12 @@ describe("DriveModule", () => {
     await flushAct()
 
     const dialogContent = document.querySelector('[data-slot="dialog-content"]')
-    expect(dialogContent?.className).toContain("sm:max-w-5xl")
+    expect(dialogContent?.className).toContain("sm:max-w-4xl")
+    expect(document.body.textContent).not.toContain("全部")
+    expect(document.body.textContent).toContain("report.txt")
+    expect(document.body.textContent).not.toContain("index.html")
+    const tabsHeader = document.querySelector('[data-testid="drive-public-links-tabs-header"]')
+    expect(tabsHeader?.className).toContain("sticky")
     const tableContainer = document.querySelector('[data-slot="table-container"]')
     expect(tableContainer?.className).toContain("overflow-x-hidden")
   })
@@ -1407,6 +1414,12 @@ describe("DriveModule", () => {
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(1)
     expect(mocks.listDrivePublications).toHaveBeenCalledTimes(2)
     expect(document.body.textContent).toContain("notes.md")
+    expect(document.body.textContent).not.toContain("index.html")
+
+    await clickTabText("发布")
+    await flushAct()
+
+    expect(document.body.textContent).not.toContain("notes.md")
     expect(document.body.textContent).toContain("index.html")
   })
 

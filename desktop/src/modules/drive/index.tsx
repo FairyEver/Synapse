@@ -1574,7 +1574,7 @@ function DriveAccessSettingsDialog({
   )
 }
 
-type DrivePublicLinkTab = "all" | "shares" | "publications"
+type DrivePublicLinkTab = "shares" | "publications"
 
 function DrivePublicLinksDialog({
   open,
@@ -1585,7 +1585,7 @@ function DrivePublicLinksDialog({
   readonly onOpenChange: (open: boolean) => void
   readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
 }) {
-  const [tab, setTab] = useState<DrivePublicLinkTab>("all")
+  const [tab, setTab] = useState<DrivePublicLinkTab>("shares")
   const [shares, setShares] = useState<DriveShareListItemDto[]>([])
   const [publications, setPublications] = useState<DrivePublicationDto[]>([])
   const [loading, setLoading] = useState(false)
@@ -1611,34 +1611,27 @@ function DrivePublicLinksDialog({
   }, [])
 
   useEffect(() => {
-    if (open) void loadPublicLinks()
+    if (open) {
+      setTab("shares")
+      void loadPublicLinks()
+    }
   }, [loadPublicLinks, open])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <FormDialog
         title="公开链接"
-        contentClassName="sm:max-w-5xl"
+        contentClassName="sm:max-w-4xl"
         onSubmit={(event) => event.preventDefault()}
         footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
       >
         <Tabs value={tab} onValueChange={(value) => setTab(value as DrivePublicLinkTab)}>
-          <TabsList>
-            <TabsTrigger type="button" value="all" onClick={() => setTab("all")}>全部</TabsTrigger>
-            <TabsTrigger type="button" value="shares" onClick={() => setTab("shares")}>分享</TabsTrigger>
-            <TabsTrigger type="button" value="publications" onClick={() => setTab("publications")}>发布</TabsTrigger>
-          </TabsList>
-          <TabsContent value="all">
-            <DrivePublicLinkList
-              emptyTitle="暂无公开链接"
-              error={loadError}
-              loading={loading}
-              publications={publications}
-              shares={shares}
-              onPublicationDeployed={onPublicationDeployed}
-              onReload={loadPublicLinks}
-            />
-          </TabsContent>
+          <div className="sticky top-0 z-10 bg-background pb-2" data-testid="drive-public-links-tabs-header">
+            <TabsList>
+              <TabsTrigger type="button" value="shares" onClick={() => setTab("shares")}>分享</TabsTrigger>
+              <TabsTrigger type="button" value="publications" onClick={() => setTab("publications")}>发布</TabsTrigger>
+            </TabsList>
+          </div>
           <TabsContent value="shares">
             <DrivePublicLinkList
               emptyTitle="暂无分享"
