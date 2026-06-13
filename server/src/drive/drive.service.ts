@@ -272,10 +272,14 @@ export class DriveService implements OnApplicationBootstrap {
 
   async completeUpload(userId: string, sessionId: string): Promise<DriveItemDto> {
     const session = await this.prisma.driveUploadSession.findFirst({
-      where: { id: sessionId, userId, status: DRIVE_UPLOAD_STATUS.pending },
+      where: { id: sessionId, userId },
       include: { item: { include: driveItemWithShares } },
     })
     if (!session || session.item.deletedAt) throw new NotFoundException("上传会话不存在。")
+    if (session.status === DRIVE_UPLOAD_STATUS.completed) {
+      return toDriveItemDto(session.item)
+    }
+    if (session.status !== DRIVE_UPLOAD_STATUS.pending) throw new NotFoundException("上传会话不存在。")
     if (session.expiresAt.getTime() <= Date.now()) {
       await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.expired, new Date(), session.storageKey)
       throw new BadRequestException("上传会话已过期。")
@@ -286,11 +290,29 @@ export class DriveService implements OnApplicationBootstrap {
       throw new BadRequestException("上传文件校验失败。")
     }
 
-    const item = await this.prisma.$transaction(async (tx) => {
-      await tx.driveUploadSession.update({
-        where: { id: session.id },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const transitioned = await tx.driveUploadSession.updateMany({
+        where: { id: session.id, userId, status: DRIVE_UPLOAD_STATUS.pending },
         data: { status: DRIVE_UPLOAD_STATUS.completed, completedAt: new Date() },
       })
+      if (transitioned.count === 0) {
+        const current = await tx.driveUploadSession.findFirst({
+          where: { id: session.id, userId, status: DRIVE_UPLOAD_STATUS.completed },
+          include: { item: { include: driveItemWithShares } },
+        })
+        if (!current || current.item.deletedAt) throw new NotFoundException("上传会话不存在。")
+        const item = current.item.storageStatus === DRIVE_STORAGE_STATUS.active && current.item.uploadStatus === DRIVE_UPLOAD_STATUS.completed
+          ? current.item
+          : await tx.driveItem.update({
+            where: { id: current.itemId },
+            data: {
+              storageStatus: DRIVE_STORAGE_STATUS.active,
+              uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+            },
+            include: driveItemWithShares,
+          })
+        return { item, completedNow: false }
+      }
       await tx.driveUsage.update({
         where: { userId },
         data: {
@@ -298,7 +320,7 @@ export class DriveService implements OnApplicationBootstrap {
           usedBytes: { increment: session.expectedSize },
         },
       })
-      return tx.driveItem.update({
+      const item = await tx.driveItem.update({
         where: { id: session.itemId },
         data: {
           storageStatus: DRIVE_STORAGE_STATUS.active,
@@ -306,15 +328,18 @@ export class DriveService implements OnApplicationBootstrap {
         },
         include: driveItemWithShares,
       })
+      return { item, completedNow: true }
     })
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.upload.complete",
-      targetType: "drive.item",
-      targetId: item.id,
-      detail: { userId, sessionId: session.id, itemId: item.id, name: item.name, size: item.size.toString() },
-    })
-    return toDriveItemDto(item)
+    if (result.completedNow) {
+      await this.recordDriveAudit({
+        userId,
+        action: "drive.upload.complete",
+        targetType: "drive.item",
+        targetId: result.item.id,
+        detail: { userId, sessionId: session.id, itemId: result.item.id, name: result.item.name, size: result.item.size.toString() },
+      })
+    }
+    return toDriveItemDto(result.item)
   }
 
   async cancelUpload(userId: string, sessionId: string): Promise<{ readonly ok: true }> {

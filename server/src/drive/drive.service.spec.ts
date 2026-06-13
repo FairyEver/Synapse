@@ -89,6 +89,58 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("returns the completed item when upload completion is retried", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    const completed = await service.completeUpload("user-1", prepared.sessionId)
+    const retried = await service.completeUpload("user-1", prepared.sessionId)
+
+    expect(retried.id).toBe(completed.id)
+    expect(retried.storageStatus).toBe("active")
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(11n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
+  it("applies quota once when upload completion requests race", async () => {
+    const prisma = createPrismaMemory()
+    const pendingHeads: Array<(value: { key: string; size: bigint; etag: string }) => void> = []
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(() => new Promise<{ key: string; size: bigint; etag: string }>((resolve) => pendingHeads.push(resolve))),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    const first = service.completeUpload("user-1", prepared.sessionId)
+    const second = service.completeUpload("user-1", prepared.sessionId)
+    while (pendingHeads.length < 2) await new Promise((resolve) => setTimeout(resolve, 0))
+    pendingHeads.forEach((resolve) => resolve({ key: "drive/item-file", size: 11n, etag: "etag" }))
+    const completed = await Promise.all([first, second])
+
+    expect(completed[0].id).toBe(prepared.item.id)
+    expect(completed[1].id).toBe(prepared.item.id)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(11n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("deletes uploaded objects when storage verification fails", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
