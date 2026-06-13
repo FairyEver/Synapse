@@ -83,7 +83,7 @@ function repositoryAccessSecurity(
   context: DispatchContext,
 ): RepositoryAccessSecurity {
   return {
-    actor: deps.actor ?? DEFAULT_ACTOR,
+    actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
     resource: "repository:list",
     metadata: {
       source: context.source ?? "api",

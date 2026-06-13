@@ -246,7 +246,7 @@ async function authorizeDriveMutation(
   action: string,
   context: DispatchContext,
 ): Promise<void> {
-  const actor = deps.actor ?? DEFAULT_ACTOR
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
   const metadata = { source: context.source ?? "api", driveAction: action }
   const permission = await deps.permissionGuard?.check({
     action: "network.connect",
@@ -271,7 +271,7 @@ async function authorizeFileRead(
   filePath: string,
   context: DispatchContext,
 ): Promise<void> {
-  const actor = deps.actor ?? DEFAULT_ACTOR
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
   const metadata = { source: context.source ?? "api", driveAction: "drive.upload" }
   const permission = await deps.permissionGuard?.check({
     action: "fs.read.outside-userdata",

@@ -9,7 +9,7 @@
 
 import { databaseService } from "./service"
 import { getMutatingActions } from "../../database/shared/capability-registry"
-import type { AuditSink, PermissionGuard } from "../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type { Column, DatabaseOperationSource, DatabaseQueryParams, DatabaseWhereClause } from "./types"
 
 type DispatchResult = {
@@ -20,13 +20,13 @@ type DispatchResult = {
 }
 
 type ActionHandler = (params: Record<string, unknown>) => DispatchResult
-type DispatchContext = { source?: DatabaseOperationSource }
+type DispatchContext = { source?: DatabaseOperationSource; actor?: ActorIdentity }
 type DatabaseDispatchSecurityDeps = {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
 }
 type DatabaseMutationSecurity = {
-  readonly actor: { kind: "user"; id: string }
+  readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
 }
@@ -410,7 +410,7 @@ function databaseMutationSecurity(
   const table = extractTableName(action, params)
   const dryRun = params.dryRun === true
   return {
-    actor: { kind: "user", id: `database-dispatch:${source}` },
+    actor: context.actor ?? { kind: "user", id: `database-dispatch:${source}` },
     resource: `database:${table ?? action}`,
     metadata: {
       source,
