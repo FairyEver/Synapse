@@ -122,6 +122,24 @@ function listActiveRunItems(runStatuses: Map<string, WorkflowRunStatus>, workflo
     .sort(compareRunListItems)
 }
 
+function listHistoryMemoryRunItems(runStatuses: Map<string, WorkflowRunStatus>, workflowId: string): WorkflowRunListItem[] {
+  return [...runStatuses.values()]
+    .filter((status) => status.workflowId === workflowId)
+    .filter((status) => status.status === "running" || status.status === "completed" || status.status === "failed" || status.status === "cancelled")
+    .map(runStatusToListItem)
+    .sort(compareRunListItems)
+}
+
+function mergeRunHistoryItems(
+  memoryItems: readonly WorkflowRunListItem[],
+  snapshotItems: readonly WorkflowRunListItem[],
+): WorkflowRunListItem[] {
+  const byRunId = new Map<string, WorkflowRunListItem>()
+  for (const item of memoryItems) byRunId.set(item.runId, item)
+  for (const item of snapshotItems) byRunId.set(item.runId, item)
+  return [...byRunId.values()].sort(compareRunListItems)
+}
+
 function compareRunListItems(a: WorkflowRunListItem, b: WorkflowRunListItem): number {
   if (a.status === "running" && b.status !== "running") return -1
   if (a.status !== "running" && b.status === "running") return 1
@@ -1207,11 +1225,9 @@ export const workflowIpcModule: IpcModule = {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const snapshots = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId)
         const activeItems = listActiveRunItems(runStatuses, workflowId)
+        const memoryItems = listHistoryMemoryRunItems(runStatuses, workflowId)
         const snapshotItems = snapshots.map(snapshotToListItem)
-        const history = [
-          ...activeItems,
-          ...snapshotItems,
-        ].sort(compareRunListItems)
+        const history = mergeRunHistoryItems(memoryItems, snapshotItems)
         logger.info("workflow:runHistory", {
           workflowId,
           count: history.length,

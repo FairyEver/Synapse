@@ -1012,6 +1012,44 @@ describe("workflowIpcModule", () => {
     })
   })
 
+  it("keeps terminal in-memory workflow runs in history until snapshots are available", async () => {
+    const definition = workflowDefinition()
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    runStatuses.set("completed-run", {
+      runId: "completed-run",
+      workflowId: "workflow-1",
+      status: "completed",
+      nodeResults: {},
+      startedAt: 10,
+      endedAt: 25,
+      durationMs: 15,
+      params: { query: "done" },
+      definition,
+    })
+    const snapshots = { list: vi.fn(async () => []) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const history = await harness.invoke("synapse:workflow:run-history", { workflowId: "workflow-1" })
+
+    expect(history).toEqual([
+      expect.objectContaining({
+        runId: "completed-run",
+        status: "completed",
+        startedAt: 10,
+        endedAt: 25,
+        durationMs: 15,
+        params: { query: "done" },
+        definition,
+      }),
+    ])
+  })
+
   it("rejects unsafe workflow ids before reading run history snapshots", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const snapshots = { list: vi.fn(async () => []) }
