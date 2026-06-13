@@ -119,7 +119,7 @@ Defaults are optimized for unattended local workflow runs without defaulting to 
 Base command:
 
 ```text
-codex exec
+codex [global flags] exec [exec flags]
 ```
 
 Prompt delivery:
@@ -131,6 +131,7 @@ Default generated flags:
 
 ```text
 --ask-for-approval never
+exec
 --sandbox workspace-write
 --json
 --output-last-message <artifact-dir>/last-message.txt
@@ -141,19 +142,22 @@ Default generated flags:
 
 The trailing `-` is the `codex exec` prompt argument that tells Codex to read the initial instruction from stdin.
 
-Config mapping:
+Global config mapping before `exec`:
 
 - `approvalPolicy` -> `--ask-for-approval <value>`
+- `enableSearch` -> `--search`
+- `bypassApprovalsAndSandbox` -> `--dangerously-bypass-approvals-and-sandbox`
+
+Exec config mapping after `exec`:
+
 - `sandbox` -> `--sandbox <value>`
 - `model` -> `--model <value>`
 - `profile` -> `--profile <value>`
-- `enableSearch` -> `--search`
 - `features.goals === "enabled"` -> `--enable goals`
 - `features.goals === "disabled"` -> `--disable goals`
 - `features.goals === "default"` -> no goals feature flag
 - `skipGitRepoCheck` -> `--skip-git-repo-check`
 - `strictConfig` -> `--strict-config`
-- `bypassApprovalsAndSandbox` -> `--dangerously-bypass-approvals-and-sandbox`
 - `bypassHookTrust` -> `--dangerously-bypass-hook-trust`
 - `additionalWritableDirs[]` -> repeated `--add-dir <path>`
 - `images[]` -> repeated `--image <path>`
@@ -369,7 +373,7 @@ Logs must not include raw prompt text, raw stdout/stderr, token values, Authoriz
 Runtime and node tests:
 
 - Schema defaults match unattended-friendly defaults.
-- Default command includes `codex exec`, `--ask-for-approval never`, `--sandbox workspace-write`, `--json`, `--skip-git-repo-check`, `--output-last-message`, and `--cd`.
+- Default command includes `codex --ask-for-approval never exec`, `--sandbox workspace-write`, `--json`, `--skip-git-repo-check`, `--output-last-message`, and `--cd`.
 - Default command includes `--enable goals`.
 - Prompt goes through stdin and is absent from argv.
 - `bypassApprovalsAndSandbox` emits the bypass flag and suppresses approval/sandbox flags.

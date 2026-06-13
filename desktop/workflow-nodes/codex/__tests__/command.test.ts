@@ -33,9 +33,9 @@ describe("buildCodexExecRequest", () => {
       metadata: { source: "workflow", actionType: "workflow.codex" },
     })
     expect(built.args).toEqual([
-      "exec",
       "--ask-for-approval",
       "never",
+      "exec",
       "--sandbox",
       "workspace-write",
       "--json",
@@ -53,10 +53,12 @@ describe("buildCodexExecRequest", () => {
 
   it("suppresses sandbox and approval flags when bypass is enabled", () => {
     const built = request({ bypassApprovalsAndSandbox: true })
+    const args = built.args ?? []
 
-    expect(built.args).toContain("--dangerously-bypass-approvals-and-sandbox")
-    expect(built.args).not.toContain("--ask-for-approval")
-    expect(built.args).not.toContain("--sandbox")
+    expect(args).toContain("--dangerously-bypass-approvals-and-sandbox")
+    expect(args.indexOf("--dangerously-bypass-approvals-and-sandbox")).toBeLessThan(args.indexOf("exec"))
+    expect(args).not.toContain("--ask-for-approval")
+    expect(args).not.toContain("--sandbox")
   })
 
   it("maps optional CLI flags", () => {
@@ -73,8 +75,9 @@ describe("buildCodexExecRequest", () => {
         { key: "sandbox_workspace_write.network_access", value: "true" },
       ],
     })
+    const args = built.args ?? []
 
-    expect(built.args).toEqual(expect.arrayContaining([
+    expect(args).toEqual(expect.arrayContaining([
       "--model",
       "gpt-5-codex",
       "--profile",
@@ -93,6 +96,7 @@ describe("buildCodexExecRequest", () => {
       "--config",
       "sandbox_workspace_write.network_access=true",
     ]))
+    expect(args.indexOf("--search")).toBeLessThan(args.indexOf("exec"))
   })
 
   it("maps disabled goals to the disable feature flag", () => {
