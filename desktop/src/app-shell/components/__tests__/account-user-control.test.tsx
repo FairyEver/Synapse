@@ -45,6 +45,10 @@ const accountActions = vi.hoisted(() => ({
   startLogin: vi.fn(),
 }))
 
+const shellBridge = vi.hoisted(() => ({
+  openExternal: vi.fn(),
+}))
+
 vi.mock("@/app-shell/account", () => ({
   useAccount: () => ({
     state: accountState.current,
@@ -60,6 +64,13 @@ vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({ warning: vi.fn() }),
 }))
 
+vi.mock("@/lib/electron-bridge", () => ({
+  requireBridgeDomain: (domain: string) => {
+    if (domain === "shell") return shellBridge
+    throw new Error(`${domain} bridge not available`)
+  },
+}))
+
 import { AccountUserControl } from "../account-user-control"
 import { AppShellActions } from "../app-shell-actions"
 
@@ -72,6 +83,7 @@ beforeEach(() => {
   accountActions.startLogin.mockResolvedValue({ status: "authenticating", loginUrl: "https://example.com/login" })
   accountActions.refresh.mockResolvedValue(accountState.current)
   accountActions.logout.mockResolvedValue({ status: "unauthenticated" })
+  shellBridge.openExternal.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -195,5 +207,29 @@ describe("AccountUserControl", () => {
 
     expect(container.textContent).toContain("Ada")
     expect(container.querySelector("button")?.textContent).toContain("Ada")
+  })
+
+  it("opens the user dashboard home from the account summary", async () => {
+    const container = renderControl("toolbar")
+    const trigger = container.querySelector("button")
+
+    await act(async () => {
+      trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }))
+      await Promise.resolve()
+    })
+
+    const accountSummary = Array.from(document.body.querySelectorAll<HTMLElement>("[role='menuitem']"))
+      .find((item) => item.textContent?.includes("Ada") && item.textContent.includes("user@example.com"))
+
+    expect(accountSummary).toBeTruthy()
+
+    await act(async () => {
+      accountSummary?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }))
+      accountSummary?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0 }))
+      accountSummary?.click()
+      await Promise.resolve()
+    })
+
+    expect(shellBridge.openExternal).toHaveBeenCalledWith("http://localhost:3000/console/")
   })
 })

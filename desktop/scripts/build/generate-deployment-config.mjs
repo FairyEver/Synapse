@@ -12,14 +12,17 @@ import {
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const desktopRoot = path.resolve(scriptDir, "../..")
 const defaultOutputPath = path.join(desktopRoot, "electron", "generated", "deployment-config.generated.ts")
+const defaultRendererOutputPath = path.join(desktopRoot, "src", "generated", "deployment-config.generated.ts")
 const developmentPublicAppUrl = "http://localhost:3000"
 const ciPublicAppUrl = "https://synapse.invalid"
 
 function parseArgs(args) {
   const options = {
     outputPath: defaultOutputPath,
+    rendererOutputPath: defaultRendererOutputPath,
     requirePublicAppUrl: process.env.SYNAPSE_DESKTOP_REQUIRE_PUBLIC_APP_URL === "1",
   }
+  let rendererOutputConfigured = false
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -27,6 +30,17 @@ function parseArgs(args) {
       const value = args[index + 1]
       if (!value) throw new Error("--output requires a path")
       options.outputPath = path.resolve(desktopRoot, value)
+      if (!rendererOutputConfigured) {
+        options.rendererOutputPath = null
+      }
+      index += 1
+      continue
+    }
+    if (arg === "--renderer-output") {
+      const value = args[index + 1]
+      if (!value) throw new Error("--renderer-output requires a path")
+      options.rendererOutputPath = path.resolve(desktopRoot, value)
+      rendererOutputConfigured = true
       index += 1
       continue
     }
@@ -84,9 +98,13 @@ export const SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG = {
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   const publicAppUrl = resolvePublicAppUrl(process.env, options.requirePublicAppUrl)
-  await mkdir(path.dirname(options.outputPath), { recursive: true })
-  await writeFile(options.outputPath, renderConfig(publicAppUrl), "utf8")
-  console.log(`generated ${path.relative(process.cwd(), options.outputPath)}`)
+  const output = renderConfig(publicAppUrl)
+  const outputPaths = Array.from(new Set([options.outputPath, options.rendererOutputPath].filter(Boolean)))
+  await Promise.all(outputPaths.map(async (outputPath) => {
+    await mkdir(path.dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, output, "utf8")
+  }))
+  console.log(`generated ${outputPaths.map((outputPath) => path.relative(process.cwd(), outputPath)).join(", ")}`)
 }
 
 main().catch((error) => {
