@@ -34,12 +34,21 @@ export function buildCodexExecArgs(
   cwd: string,
   lastMessagePath: string,
 ): string[] {
-  const args: string[] = ["exec"]
+  const args: string[] = []
 
   if (config.bypassApprovalsAndSandbox) {
     args.push("--dangerously-bypass-approvals-and-sandbox")
   } else {
     args.push("--ask-for-approval", config.approvalPolicy)
+  }
+
+  if (config.enableSearch) {
+    args.push("--search")
+  }
+
+  args.push("exec")
+
+  if (!config.bypassApprovalsAndSandbox) {
     args.push("--sandbox", config.sandbox)
   }
 
@@ -56,10 +65,6 @@ export function buildCodexExecArgs(
 
   if (config.profile) {
     args.push("--profile", config.profile)
-  }
-
-  if (config.enableSearch) {
-    args.push("--search")
   }
 
   if (config.features.goals === "enabled") {
