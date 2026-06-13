@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Activity,
   Clock,
   FileText,
   Mail,
@@ -389,12 +388,6 @@ function buildStats(data: SystemOverview | undefined): StatCard[] {
       value: data?.counts.auditLogs ?? '-',
       detail: '累计管理记录',
       icon: FileText,
-    },
-    {
-      title: '权限记录',
-      value: data?.counts.userModulePermissions ?? '-',
-      detail: '用户模块授权',
-      icon: Activity,
     },
     {
       title: '服务器时间',

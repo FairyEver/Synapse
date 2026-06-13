@@ -5,7 +5,9 @@ Scope: `server/`, `dashboard/`, future desktop permission consumption
 
 ## Status
 
-Approved for planning.
+Superseded on 2026-06-13.
+
+The current module-permission implementation has been withdrawn from the product surface: dashboard entry points, admin APIs, and session payloads no longer expose module permissions. If Synapse needs module permissions later, redesign the full enforcement chain before reintroducing configuration UI or APIs. This document remains only as historical context for the removed approach.
 
 This design supersedes the team permission direction in:
 

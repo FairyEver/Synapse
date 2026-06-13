@@ -31,7 +31,6 @@ describe("AdminAuthController", () => {
         displayName: "Ada",
         role: "user",
         token: "dashboard-token",
-        modulePermissions: ["module.database"],
       }),
     }
     const controller = new AdminAuthController(auth as never)
@@ -45,7 +44,6 @@ describe("AdminAuthController", () => {
       email: "user@example.com",
       displayName: "Ada",
       role: "user",
-      modulePermissions: ["module.database"],
       sessionId: hashToken("dashboard-token"),
     })
 
@@ -179,7 +177,6 @@ describe("AdminAuthController", () => {
         email: "user@example.com",
         displayName: "Ada",
         role: "user",
-        modulePermissions: ["module.database"],
       }),
     }
     const controller = new AdminAuthController(auth as never)
@@ -190,7 +187,6 @@ describe("AdminAuthController", () => {
       email: "user@example.com",
       displayName: "Ada",
       role: "user",
-      modulePermissions: ["module.database"],
       sessionId: hashToken("dashboard-token"),
     })
   })

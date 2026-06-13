@@ -212,37 +212,13 @@ describe("AdminAuthService", () => {
     expect(result.email).toBe("user@example.com")
     expect(result.displayName).toBe("Ada")
     expect(result.role).toBe("user")
-    expect(result.modulePermissions).toEqual([])
     expect(result.token.length).toBeGreaterThan(20)
-  })
-
-  it("returns dashboard module permissions for normal user login", async () => {
-    const { service, prisma } = await createTestService()
-    prisma.user.findUnique.mockResolvedValueOnce({
-      id: "user-1",
-      email: "user@example.com",
-      passwordHash: await hashPassword("user-password"),
-      status: "active",
-      modulePermissions: [
-        { permissionKey: "module.workflow" },
-        { permissionKey: "module.database" },
-      ],
-    })
-
-    await expect(service.login("user@example.com", "user-password"))
-      .resolves
-      .toMatchObject({
-        email: "user@example.com",
-        role: "user",
-        modulePermissions: ["module.workflow", "module.database"],
-      })
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "user@example.com" },
-      include: { modulePermissions: { select: { permissionKey: true } } },
     })
   })
 
-  it("filters inactive dashboard module permissions and records them on login audits", async () => {
+  it("records dashboard user login audits without module permission detail", async () => {
     const auditLog = { record: vi.fn() }
     const { service, prisma } = await createTestService(auditLog)
     prisma.user.findUnique.mockResolvedValueOnce({
@@ -250,23 +226,17 @@ describe("AdminAuthService", () => {
       email: "user@example.com",
       passwordHash: await hashPassword("user-password"),
       status: "active",
-      modulePermissions: [
-        { permissionKey: "module.workflow" },
-        { permissionKey: "module.removed" },
-      ],
     })
 
-    await expect(service.login("user@example.com", "user-password", "203.0.113.14"))
-      .resolves
-      .toMatchObject({
-        modulePermissions: ["module.workflow"],
-      })
+    await expect(service.login("user@example.com", "user-password", "203.0.113.14")).resolves.toMatchObject({
+      email: "user@example.com",
+      role: "user",
+    })
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "user@example.com",
       action: "user.dashboard_login.success",
       targetType: "user",
       targetId: "user-1",
-      detail: { modulePermissions: ["module.workflow"] },
       ipAddress: "203.0.113.14",
     })
   })
@@ -312,7 +282,6 @@ describe("AdminAuthService", () => {
       email: "user@example.com",
       displayName: "Ada",
       role: "user",
-      modulePermissions: [],
     })
   })
 
@@ -330,7 +299,6 @@ describe("AdminAuthService", () => {
         email: "user@example.com",
         status: "active",
         passwordChangedAt: new Date(Date.now() + 1000),
-        modulePermissions: [],
       })
 
     const result = await service.login("user@example.com", "user-password")
@@ -354,57 +322,9 @@ describe("AdminAuthService", () => {
       email: "user@example.com",
       status: "active",
       passwordChangedAt: new Date((payload.iat * 1000) + 900),
-      modulePermissions: [],
     })
 
     await expect(service.verifyDashboardSession(result.token)).resolves.toBeNull()
-  })
-
-  it("returns dashboard module permissions for verified normal user sessions", async () => {
-    const { service, prisma } = await createTestService()
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user-1",
-      email: "user@example.com",
-      displayName: "Ada",
-      passwordHash: await hashPassword("user-password"),
-      status: "active",
-      modulePermissions: [{ permissionKey: "module.workflow" }],
-    })
-
-    const result = await service.login("user@example.com", "user-password")
-
-    await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
-      id: "user-1",
-      email: "user@example.com",
-      displayName: "Ada",
-      role: "user",
-      modulePermissions: ["module.workflow"],
-    })
-  })
-
-  it("filters inactive dashboard module permissions for verified sessions", async () => {
-    const { service, prisma } = await createTestService()
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user-1",
-      email: "user@example.com",
-      displayName: "Ada",
-      passwordHash: await hashPassword("user-password"),
-      status: "active",
-      modulePermissions: [
-        { permissionKey: "module.workflow" },
-        { permissionKey: "module.removed" },
-      ],
-    })
-
-    const result = await service.login("user@example.com", "user-password")
-
-    await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
-      id: "user-1",
-      email: "user@example.com",
-      displayName: "Ada",
-      role: "user",
-      modulePermissions: ["module.workflow"],
-    })
   })
 
   it("rejects revoked dashboard sessions", async () => {

@@ -16,7 +16,6 @@ import { AuditLogService } from "./audit-log.service"
 const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
-const USER_MODULE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/module-permissions$/
 const TEAM_ROLE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/access-roles\/[^/]+\/permissions$/
 const UNAUTHENTICATED_ADMIN_EMAIL = "unauthenticated"
 const ADMIN_WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
@@ -139,7 +138,6 @@ function hasControllerManagedAdminSuccessAudit(method: string, path: string): bo
   if (method === "DELETE" && path === "/api/admin/invitations") return true
   if (method === "DELETE" && path.startsWith("/api/admin/invitations/")) return true
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) return true
-  if (method === "PUT" && USER_MODULE_PERMISSIONS_PATH_PATTERN.test(path)) return true
   if (method === "PUT" && TEAM_ROLE_PERMISSIONS_PATH_PATTERN.test(path)) return true
   return method === "DELETE" && path === "/api/admin/logs/cleanup"
 }
@@ -180,9 +178,6 @@ function resolveKnownAdminAuditTarget(
   }
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
     return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
-  }
-  if (method === "PUT" && USER_MODULE_PERMISSIONS_PATH_PATTERN.test(path)) {
-    return { action: "admin.user_module_permissions.replace", targetType: "user", targetId: params.id ?? readId(responseBody) }
   }
   if (method === "PUT" && TEAM_ROLE_PERMISSIONS_PATH_PATTERN.test(path)) {
     return { action: "admin.team_role_permissions.update", targetType: "team_access_role", targetId: params.roleId ?? readId(responseBody) }

@@ -5,7 +5,6 @@ import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { buildTeamInviteUrl } from "../invitations/invitation-url"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
-import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 type AdminPrismaClient = PrismaService | Prisma.TransactionClient
@@ -22,10 +21,6 @@ const adminUserSelect = {
       createdAt: true,
       team: { select: { id: true, name: true } },
     },
-  },
-  modulePermissions: {
-    select: { permissionKey: true },
-    orderBy: { permissionKey: "asc" },
   },
   createdAt: true,
   updatedAt: true,
@@ -99,7 +94,6 @@ function buildDailyTrend(
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly liveDesktopGateway?: LiveDesktopGateway,
   ) {}
@@ -112,7 +106,6 @@ export class AdminService {
       users,
       teams,
       invitations,
-      userModulePermissions,
       activeUsers,
       disabledUsers,
       pendingInvitations,
@@ -127,7 +120,6 @@ export class AdminService {
       this.prisma.user.count(),
       this.prisma.team.count(),
       this.prisma.invitation.count(),
-      this.prisma.userModulePermission.count(),
       this.prisma.user.count({ where: { status: "active" } }),
       this.prisma.user.count({ where: { status: "disabled" } }),
       this.prisma.invitation.count({ where: { usedAt: null, expiresAt: { gt: now } } }),
@@ -163,7 +155,6 @@ export class AdminService {
         users,
         teams,
         invitations,
-        userModulePermissions,
       },
       userStatus: {
         active: activeUsers,
@@ -309,46 +300,6 @@ export class AdminService {
       this.prisma.team.count(),
     ])
     return { data, total, page: page.page, pageSize: page.pageSize }
-  }
-
-  listModulePermissions() {
-    return this.permissions.listModulePermissionDefinitions()
-  }
-
-  async listUserModulePermissions(userId: string) {
-    await this.assertUserExists(userId)
-    return { permissionKeys: await this.permissions.listUserModulePermissions(userId) }
-  }
-
-  async replaceUserModulePermissions(
-    userId: string,
-    permissionKeys: readonly string[],
-    admin: { readonly id: string; readonly email: string },
-    ipAddress = "system",
-  ) {
-    await this.assertUserExists(userId)
-    const result = await this.permissions.replaceUserModulePermissions({
-      userId,
-      permissionKeys,
-      grantedByAdminId: admin.id,
-    })
-    await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.user_module_permissions.replace",
-      targetType: "user",
-      targetId: userId,
-      detail: result,
-      ipAddress,
-    })
-    return { permissionKeys: result.after }
-  }
-
-  private async assertUserExists(userId: string): Promise<void> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    })
-    if (!user) throw new NotFoundException("用户不存在。")
   }
 
   async createInvitation(

@@ -1,18 +1,15 @@
 export function getUsersTableError(
   isUsersError: boolean,
-  usersError: unknown,
-  isModulePermissionDefinitionsError = false,
-  modulePermissionDefinitionsError: unknown = null
+  usersError: unknown
 ): unknown | null {
   if (isUsersError) return usersError
-  return isModulePermissionDefinitionsError ? modulePermissionDefinitionsError : null
+  return null
 }
 
 export function getUsersTableLoading(input: {
   isUsersError: boolean
   isUsersLoading: boolean
-  isModulePermissionDefinitionsLoading: boolean
 }): boolean {
   if (input.isUsersError) return false
-  return input.isUsersLoading || input.isModulePermissionDefinitionsLoading
+  return input.isUsersLoading
 }

@@ -54,7 +54,6 @@ export class AdminAuthController {
       email: session.email,
       displayName: session.displayName,
       role: session.role,
-      modulePermissions: session.modulePermissions,
       sessionId: hashToken(session.token),
     }
   }
@@ -94,7 +93,6 @@ export class AdminAuthController {
       email: session.email,
       displayName: session.displayName,
       role: session.role,
-      modulePermissions: session.modulePermissions,
       sessionId: hashToken(token),
     }
   }
