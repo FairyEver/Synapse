@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type {
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
@@ -51,6 +51,7 @@ export type DriveBrowserPageProps =
       shareId: string
       itemId?: string
       initialPassword?: string
+      onInitialPasswordAccepted?: () => void
     }
 
 type DriveBrowserLayoutMode = 'auto' | 'fixed'
@@ -58,6 +59,16 @@ type DriveFileRendererMode = DriveBrowserLayoutMode | 'reader'
 
 export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const state = useDriveBrowser(props)
+  const initialPassword = props.context === 'share' ? props.initialPassword : undefined
+  const onInitialPasswordAccepted = props.context === 'share'
+    ? props.onInitialPasswordAccepted
+    : undefined
+
+  useEffect(() => {
+    if (!initialPassword || state.status !== 'ready') return
+    onInitialPasswordAccepted?.()
+  }, [initialPassword, onInitialPasswordAccepted, state.status])
+
   const framed = props.context === 'share' || props.surface === 'standalone'
   const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
   const shouldCenterState = framed && state.status !== 'ready'
