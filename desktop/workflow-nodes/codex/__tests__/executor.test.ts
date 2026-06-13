@@ -1,4 +1,4 @@
-import { access, mkdtemp, writeFile } from "node:fs/promises"
+import { access, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -356,13 +356,15 @@ describe("codexNodeExecutor", () => {
   })
 
   it("prefers last-message.txt over stdout when the file exists", async () => {
+    let capturedLastMessagePath: string | undefined
     const runtimeDeps = makeRuntimeDeps({
       processRunner: {
         run: vi.fn().mockImplementation(async (request: { args?: readonly string[] }) => {
           const lastMessagePathIndex = request.args?.indexOf("--output-last-message") ?? -1
           const lastMessagePath = lastMessagePathIndex >= 0 ? request.args?.[lastMessagePathIndex + 1] : undefined
+          capturedLastMessagePath = lastMessagePath
           if (typeof lastMessagePath === "string") {
-            await writeFile(lastMessagePath, "final answer from file\n", "utf8")
+            await writeFile(lastMessagePath, "final answer token=sk-secret from file\n", "utf8")
           }
 
           return {
@@ -378,9 +380,19 @@ describe("codexNodeExecutor", () => {
     })
 
     const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
+    const artifactPaths = codexArtifactPaths(electronState.userDataPath, context.runId, context.nodeId)
+    const persistedLastMessage = await readFile(artifactPaths.lastMessagePath, "utf8")
 
     expect(result.status).toBe("success")
-    expect(result.output).toBe("final answer from file")
+    expect(result.output).toBe("final answer token=sk-secret from file")
+    expect(result.outputs?.codexDebug).toMatchObject({
+      lastMessagePath: artifactPaths.lastMessagePath,
+    })
+    expect(capturedLastMessagePath).toBeDefined()
+    expect(capturedLastMessagePath).not.toBe(artifactPaths.lastMessagePath)
+    await expect(access(capturedLastMessagePath!)).rejects.toThrow()
+    expect(persistedLastMessage).toContain("token=[redacted]")
+    expect(persistedLastMessage).not.toContain("sk-secret")
   })
 
   it("streams codex stdout and stderr without requiring buffered process output", async () => {

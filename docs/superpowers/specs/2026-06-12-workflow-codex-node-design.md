@@ -196,8 +196,9 @@ If no usable project path is available, the node fails with a short actionable e
    - `stdout.jsonl` or `stdout.log`
    - `stderr.log`
 6. Prepare the Codex final-message output path:
-   - When `captureDebugArtifacts` is true, use `<artifact-dir>/last-message.txt` and include it in `codexDebug.lastMessagePath`.
-   - When `captureDebugArtifacts` is false, use a temporary `last-message.txt`, read it for the node output, delete it after the run, and do not include the path in `codexDebug`.
+   - Always pass a temporary `last-message.txt` to Codex CLI, then read it for the node output and delete it after the run.
+   - When `captureDebugArtifacts` is true, write a sanitized copy to `<artifact-dir>/last-message.txt` through Synapse's artifact helper and include that path in `codexDebug.lastMessagePath`.
+   - When `captureDebugArtifacts` is false, do not write a persistent last-message artifact and do not include the temporary path in `codexDebug`.
 7. Build the `codex exec` request with argv array and stdin.
 8. Run through `runtimeDeps.processRunner.run(...)`.
 9. Read `last-message.txt`.
@@ -254,7 +255,7 @@ Artifacts are best-effort debug aids.
 - If `last-message.txt` cannot be read after a successful exit, fall back to a sanitized final stdout segment.
 - If both final message and stdout fallback are empty, return an empty output and keep debug metadata.
 
-Prompt, stdout, stderr, and last-message artifacts are written only when `captureDebugArtifacts` is true. Even then, content must pass shared redaction before persistence when Synapse writes it. When debug capture is disabled, the last-message file is temporary and must be deleted after extracting the node output.
+Prompt, stdout, stderr, and last-message artifacts are written only when `captureDebugArtifacts` is true. Persistent artifact content must pass shared redaction before persistence. Codex CLI always writes final message output to a temporary file first; Synapse reads it, writes a sanitized persistent copy only when debug capture is enabled, then deletes the temporary file.
 
 ## Security And Redaction
 
@@ -384,6 +385,7 @@ Runtime and node tests:
 - `bypassApprovalsAndSandbox` emits the bypass flag and suppresses approval/sandbox flags.
 - Model, profile, search, strict config, hook trust bypass, add-dir, image, and config overrides map correctly to argv.
 - Successful run returns final reply text from `last-message.txt`.
+- Debug-enabled successful run writes a sanitized persistent copy of the final reply to the exposed `lastMessagePath`; the raw CLI-written temporary file is deleted.
 - Debug-disabled successful run returns final reply text from a temporary last-message file, deletes that file, and omits `lastMessagePath` from `codexDebug`.
 - Missing final message falls back to stdout.
 - Non-zero exit code fails and preserves sanitized debug metadata.

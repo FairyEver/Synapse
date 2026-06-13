@@ -280,6 +280,14 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       }
 
       const lastMessage = await bestEffortReadArtifact(lastMessageTarget.path, logContext)
+      if (captureDebugArtifacts && lastMessage !== undefined) {
+        await bestEffortArtifactWrite({
+          logContext,
+          label: "last message artifact",
+          filePath: artifactPaths.lastMessagePath,
+          task: () => writeCodexArtifact(artifactPaths.lastMessagePath, lastMessage),
+        })
+      }
       const output = finalOutputFromResult(lastMessage, stdout)
       input.onProgress?.("processing_output", "处理输出…")
       logger.info("codex node succeeded", {
@@ -363,14 +371,15 @@ async function prepareCodexLastMessageTarget(input: {
   readonly captureDebugArtifacts: boolean
   readonly artifactPaths: ReturnType<typeof codexArtifactPaths>
 }): Promise<CodexLastMessageTarget> {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-last-message-"))
   if (input.captureDebugArtifacts) {
     return {
-      path: input.artifactPaths.lastMessagePath,
+      path: path.join(directory, "last-message.txt"),
       debugPath: input.artifactPaths.lastMessagePath,
+      cleanupDirectory: directory,
     }
   }
 
-  const directory = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-last-message-"))
   return {
     path: path.join(directory, "last-message.txt"),
     cleanupDirectory: directory,
