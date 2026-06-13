@@ -28,6 +28,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { holdBeforeUnloadForCustomDialog } from "@/lib/before-unload"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { sanitizeError } from "@/lib/error-sanitize"
 import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode } from "../types"
@@ -177,8 +178,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirtyRef.current) return
-      event.preventDefault()
-      event.returnValue = ""
+      holdBeforeUnloadForCustomDialog(event)
       setShowCloseDialog(true)
     }
     window.addEventListener("beforeunload", handleBeforeUnload)

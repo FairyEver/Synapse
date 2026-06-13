@@ -6,6 +6,7 @@ import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { holdBeforeUnloadForCustomDialog } from "@/lib/before-unload"
 // Side-effect: populate node type registry in the editor window's renderer process.
 // Without this, NodePalette.listTypes() returns [] and users cannot add nodes.
 // Use the renderer-only entry so we don't pull main-process executors into the
@@ -138,8 +139,7 @@ export function WorkflowEditorApp() {
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!isDirtyRef.current) return
-      e.preventDefault()
-      e.returnValue = ""
+      holdBeforeUnloadForCustomDialog(e)
       setShowCloseDialogRef.current(true)
     }
     window.addEventListener("beforeunload", handler)
