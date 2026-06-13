@@ -82,7 +82,7 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   const sections = [
     `# 节点运行报告：${node.name}`,
     formatNodeBasicInfo(definition, node, result, input.orderIndex),
-    ["## 设置", codeBlock("json", formatJson(sanitizeWorkflowResultValue(node.config)))].join("\n"),
+    ["## 设置", codeBlock("json", formatJson(sanitizeNodeConfigForReport(node)))].join("\n"),
   ]
 
   const variables = node.config.variables
@@ -123,6 +123,26 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   }
 
   return `${sections.join("\n\n").trimEnd()}\n`
+}
+
+function sanitizeNodeConfigForReport(node: WorkflowNode): unknown {
+  const sanitized = sanitizeWorkflowResultValue(node.config)
+  if (node.type !== "codex" || !isRecord(sanitized)) return sanitized
+  const overrides = sanitized.configOverrides
+  if (!Array.isArray(overrides)) return sanitized
+
+  return {
+    ...sanitized,
+    configOverrides: overrides.map((override) => (
+      isRecord(override) && "value" in override
+        ? { ...override, value: "[redacted]" }
+        : override
+    )),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function orderNodes(definition: WorkflowDefinition, nodeResults: Record<string, NodeRunResult>): OrderedNodeRun[] {

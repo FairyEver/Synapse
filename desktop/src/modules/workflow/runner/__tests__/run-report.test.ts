@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowNode } from "@/types/workflow"
 import { formatNodeRunReport, formatWorkflowRunReport } from "../run-report"
 
 describe("workflow run reports", () => {
@@ -144,6 +144,55 @@ describe("workflow run reports", () => {
 
     expect(report).toContain('"count": "1"')
     expect(report).toContain('"self": "[Circular]"')
+  })
+
+  it("redacts Code X config override values in copied reports", () => {
+    const definition = workflowDefinition()
+    const codexNode: WorkflowNode = {
+      id: "codex-1",
+      name: "Code X",
+      type: "codex",
+      position: { x: 300, y: 0 },
+      config: {
+        prompt: "Run task",
+        model: "gpt-5-codex",
+        configOverrides: [
+          { key: "model_reasoning_effort", value: "customer-alpha" },
+          { key: "sandbox_workspace_write.network_access", value: "true" },
+        ],
+        variables: [],
+      },
+    }
+    const nextDefinition: WorkflowDefinition = {
+      ...definition,
+      nodes: [...definition.nodes, codexNode],
+    }
+    const result = nodeResult("codex-1", {
+      status: "failed",
+      error: "Codex failed",
+    })
+
+    const nodeReport = formatNodeRunReport({
+      definition: nextDefinition,
+      node: codexNode,
+      result,
+      orderIndex: 4,
+    })
+    const workflowReport = formatWorkflowRunReport({
+      definition: nextDefinition,
+      runId: "run-1",
+      runState: "failed",
+      runParams: {},
+      nodeResults: { "codex-1": result },
+    })
+
+    for (const report of [nodeReport, workflowReport]) {
+      expect(report).toContain('"key": "model_reasoning_effort"')
+      expect(report).toContain('"key": "sandbox_workspace_write.network_access"')
+      expect(report).toContain('"value": "[redacted]"')
+      expect(report).not.toContain("customer-alpha")
+      expect(report).not.toContain('"value": "true"')
+    }
   })
 
   it("does not include agent conversation session keys in copied reports", () => {
