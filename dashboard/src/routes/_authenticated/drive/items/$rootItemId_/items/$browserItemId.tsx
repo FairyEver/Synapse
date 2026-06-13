@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { DriveConsoleItemPage } from '@/features/drive-browser/drive-console-page'
+import { requireDashboardUser } from '@/lib/dashboard-route-guards'
 
 export const Route = createFileRoute('/_authenticated/drive/items/$rootItemId_/items/$browserItemId')({
+  beforeLoad: requireDashboardUser,
   component: RouteComponent,
 })
 
