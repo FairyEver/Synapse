@@ -4,6 +4,7 @@ import { interpolatePrompt } from "../../electron/services/workflow/variable-res
 import { createMainLogger } from "../../electron/services/log-store"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 import { sanitizeError } from "../../electron/services/error-sanitize"
+import { buildHttpRequestUrl } from "../../action-packages/builtin/http-request/request-builders.main"
 import { workflowNodeLogContext } from "../log-context"
 
 const logger = createMainLogger("workflow.node.http-request-executor")
@@ -32,7 +33,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
 
     input.onProgress?.("sending_request", "发送请求…")
     try {
-      const url = buildUrl(interpolated)
+      const url = buildHttpRequestUrl(interpolated)
       const response = await runtimeDeps.sendHttpRequest({
         method: interpolated.method,
         url,
@@ -111,23 +112,6 @@ function buildHeaders(config: HttpRequestNodeConfig): Record<string, string> | u
   }
 
   return Object.keys(headers).length > 0 ? headers : undefined
-}
-
-function buildUrl(config: HttpRequestNodeConfig): string {
-  let raw = config.url
-  if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(raw)) {
-    raw = `https://${raw}`
-  }
-  let url: URL
-  try {
-    url = new URL(raw)
-  } catch {
-    throw new Error("URL 无法解析，请确保包含合法协议前缀（如 https://）")
-  }
-  for (const [key, value] of Object.entries(config.query ?? {})) {
-    url.searchParams.set(key, value)
-  }
-  return url.toString()
 }
 
 function buildBody(config: HttpRequestNodeConfig): string | undefined {

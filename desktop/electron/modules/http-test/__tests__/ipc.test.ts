@@ -127,6 +127,33 @@ describe("sendHttpTestRequest", () => {
     }))
   })
 
+  it("auto-prepends https:// when test URL has no scheme", async () => {
+    const guard = permissionGuard(true)
+    const audit = auditSink()
+    const sendRequest = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      body: "ok",
+    })
+
+    await sendHttpTestRequest(config({
+      url: "example.com/api",
+      query: { page: "1" },
+    }), {
+      permissionGuard: guard,
+      auditSink: audit,
+      sendRequest,
+    })
+
+    expect(sendRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://example.com/api?page=1",
+    }))
+    expect(guard.check).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "https://example.com/api?page=1",
+    }))
+  })
+
   it("adds JSON content-type and redacts sensitive response bodies", async () => {
     const guard = permissionGuard(true)
     const audit = auditSink()
@@ -206,10 +233,10 @@ describe("sendHttpTestRequest", () => {
     })
 
     expect(guard.check).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D",
+      resource: "https://example.com/api?token=%5Bredacted%5D",
     }))
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D",
+      resource: "https://example.com/api?token=%5Bredacted%5D",
       outcome: "allowed",
     }))
     expect(JSON.stringify(vi.mocked(guard.check).mock.calls)).not.toContain("user:secret")

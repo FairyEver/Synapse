@@ -14,7 +14,12 @@ export function parseHttpRequestConfig(config: HttpRequestActionConfig): HttpReq
 }
 
 export function buildHttpRequestUrl(config: HttpRequestActionConfig): string {
-  const url = new URL(config.url)
+  let url: URL
+  try {
+    url = new URL(withDefaultProtocol(config.url))
+  } catch {
+    throw new Error("URL 无法解析，请确保包含合法协议前缀（如 https://）")
+  }
   for (const [key, value] of Object.entries(config.query ?? {})) {
     url.searchParams.set(key, value)
   }
@@ -78,6 +83,10 @@ function assertMethodAllowsBody(config: HttpRequestActionConfig): void {
 
 function methodDisallowsBody(method: string): boolean {
   return method === "GET" || method === "HEAD"
+}
+
+function withDefaultProtocol(raw: string): string {
+  return /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(raw) ? raw : `https://${raw}`
 }
 
 function hasHeader(headers: Record<string, string>, key: string): boolean {
