@@ -46,7 +46,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import type { DriveLocalUploadFolderItem, DriveLocalUploadItem, DriveLocalUploadRequest, DriveLocalUploadResult } from "@/types/bridge"
 import {
   Empty,
@@ -67,6 +73,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -1619,43 +1626,63 @@ function DrivePublicLinksDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <FormDialog
-        title="公开链接"
-        contentClassName="sm:max-w-4xl"
-        onSubmit={(event) => event.preventDefault()}
-        footer={<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>}
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"
       >
-        <Tabs value={tab} onValueChange={(value) => setTab(value as DrivePublicLinkTab)}>
-          <div className="sticky top-0 z-10 bg-background pb-2" data-testid="drive-public-links-tabs-header">
-            <TabsList>
-              <TabsTrigger type="button" value="shares" onClick={() => setTab("shares")}>分享</TabsTrigger>
-              <TabsTrigger type="button" value="publications" onClick={() => setTab("publications")}>发布</TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value="shares">
-            <DrivePublicLinkList
-              emptyTitle="暂无分享"
-              error={loadError}
-              loading={loading}
-              publications={[]}
-              shares={shares}
-              onPublicationDeployed={onPublicationDeployed}
-              onReload={loadPublicLinks}
-            />
-          </TabsContent>
-          <TabsContent value="publications">
-            <DrivePublicLinkList
-              emptyTitle="暂无发布"
-              error={loadError}
-              loading={loading}
-              publications={publications}
-              shares={[]}
-              onPublicationDeployed={onPublicationDeployed}
-              onReload={loadPublicLinks}
-            />
-          </TabsContent>
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value as DrivePublicLinkTab)}
+          className="h-full min-h-0 max-h-[calc(100vh-2rem)] overflow-hidden"
+        >
+          <form
+            className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <DialogHeader
+              className="px-5 pt-5 sm:grid sm:min-h-8 sm:grid-cols-3 sm:items-start"
+              data-testid="drive-public-links-dialog-header"
+            >
+              <DialogTitle className="pr-10 sm:pr-0">公开链接</DialogTitle>
+              <div className="mt-3 sm:mt-0 sm:justify-self-center" data-testid="drive-public-links-tabs-header">
+                <TabsList>
+                  <TabsTrigger type="button" value="shares" onClick={() => setTab("shares")}>分享</TabsTrigger>
+                  <TabsTrigger type="button" value="publications" onClick={() => setTab("publications")}>发布</TabsTrigger>
+                </TabsList>
+              </div>
+            </DialogHeader>
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="px-5 py-4">
+                <TabsContent value="shares">
+                  <DrivePublicLinkList
+                    emptyTitle="暂无分享"
+                    error={loadError}
+                    loading={loading}
+                    publications={[]}
+                    shares={shares}
+                    onPublicationDeployed={onPublicationDeployed}
+                    onReload={loadPublicLinks}
+                  />
+                </TabsContent>
+                <TabsContent value="publications">
+                  <DrivePublicLinkList
+                    emptyTitle="暂无发布"
+                    error={loadError}
+                    loading={loading}
+                    publications={publications}
+                    shares={[]}
+                    onPublicationDeployed={onPublicationDeployed}
+                    onReload={loadPublicLinks}
+                  />
+                </TabsContent>
+              </div>
+            </ScrollArea>
+            <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+            </DialogFooter>
+          </form>
         </Tabs>
-      </FormDialog>
+      </DialogContent>
     </Dialog>
   )
 }

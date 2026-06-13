@@ -168,7 +168,7 @@ function AccountUserControl({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuItem className="h-auto py-3" onSelect={handleOpenDashboard}>
+        <DropdownMenuItem className="h-auto py-2" onSelect={handleOpenDashboard}>
           <div className="flex min-w-0 flex-col gap-1">
             <span className="truncate text-sm font-medium">{getAccountTitle(state)}</span>
             {getDisplayName(state) ? (

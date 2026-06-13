@@ -1373,7 +1373,7 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
 
-  it("defaults public link management to a narrower share tab with fixed tabs", async () => {
+  it("defaults public link management to a narrower share tab with header tabs", async () => {
     mocks.listDrivePublications.mockResolvedValue([
       createDrivePublication({ id: "pub-row-1", name: "index.html", type: "page" }),
     ])
@@ -1391,8 +1391,10 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("report.txt")
     expect(document.body.textContent).not.toContain("index.html")
+    const dialogHeader = document.querySelector('[data-testid="drive-public-links-dialog-header"]')
+    expect(dialogHeader?.className).toContain("sm:grid-cols-3")
     const tabsHeader = document.querySelector('[data-testid="drive-public-links-tabs-header"]')
-    expect(tabsHeader?.className).toContain("sticky")
+    expect(tabsHeader?.className).toContain("sm:justify-self-center")
     const tableContainer = document.querySelector('[data-slot="table-container"]')
     expect(tableContainer?.className).toContain("overflow-x-hidden")
   })
