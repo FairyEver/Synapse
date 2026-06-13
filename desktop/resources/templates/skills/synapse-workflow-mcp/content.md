@@ -24,7 +24,7 @@ If a user asks for another Synapse MCP domain while this skill is active, switch
 
 Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **codex** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **script**, and **workflow_call** nodes execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child codex nodes still need an effective project. Configure project/provider/model with these exact field names:
 
-- **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model defaults unless they override. Codex nodes inherit only `defaultProjectId` and timeout unless they override.
+- **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override. Codex nodes inherit only `defaultProjectId`; set `timeoutMins` directly on the codex node when needed.
 - **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. Set only `projectId` and optionally `timeoutMins` on codex config.
 
 To discover available providers, call `workflow_node_type_describe` with `nodeType: "prompt"` (or `"switch"`). The response includes an `availableProviders` array:

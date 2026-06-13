@@ -69,7 +69,7 @@ const variableBindingSchema = {
 
 const workflowDefinitionSchema = {
   type: "object",
-  description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId, defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch/codex nodes inherit them.",
+  description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex nodes inherit it, and defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
   properties: {
     id: { type: "string", minLength: 1 },
     name: { type: "string" },
