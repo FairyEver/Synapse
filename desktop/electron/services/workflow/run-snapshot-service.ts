@@ -6,6 +6,7 @@ import { createMainLogger } from "../log-store"
 import { errorCode } from "./workflow-utils"
 import { sanitizeError } from "../error-sanitize"
 import { assertSafeWorkflowId } from "./workflow-id"
+import { sanitizeWorkflowRunSnapshot } from "./run-snapshot-sanitize"
 
 const logger = createMainLogger("service.workflow.snapshots")
 
@@ -38,7 +39,7 @@ export class RunSnapshotService {
           logger.warn("run snapshot file has invalid structure, skipping", { workflowId, file })
           return null
         }
-        return { file, snapshot: raw as WorkflowRunSnapshot }
+        return { file, snapshot: sanitizeWorkflowRunSnapshot(raw as WorkflowRunSnapshot) }
       } catch (err) {
         logger.warn("run snapshot file corrupted or unreadable, skipping", {
           workflowId, file,
@@ -51,14 +52,15 @@ export class RunSnapshotService {
   }
 
   async save(s: WorkflowRunSnapshot): Promise<void> {
-    const dir = this.dir(s.workflowId)
+    const snapshot = sanitizeWorkflowRunSnapshot(s)
+    const dir = this.dir(snapshot.workflowId)
     try {
       await mkdir(dir, { recursive: true })
-      const target = path.join(dir, `${s.runId}.json`)
+      const target = path.join(dir, `${snapshot.runId}.json`)
       const tmp = `${target}.tmp`
-      await writeFile(tmp, JSON.stringify(s, null, 2), "utf-8")
+      await writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf-8")
       await rename(tmp, target)
-      logger.info("run snapshot saved", { runId: s.runId, workflowId: s.workflowId, status: s.status, nodeCount: Object.keys(s.nodeResults).length })
+      logger.info("run snapshot saved", { runId: snapshot.runId, workflowId: snapshot.workflowId, status: snapshot.status, nodeCount: Object.keys(snapshot.nodeResults).length })
     } catch (err) {
       logger.error("run snapshot save failed", {
         runId: s.runId,
@@ -143,7 +145,7 @@ export class RunSnapshotService {
           logger.warn("findByRunId snapshot has invalid structure, skipping", { runId, workflowId: dirent.name })
           continue
         }
-        return raw as WorkflowRunSnapshot
+        return sanitizeWorkflowRunSnapshot(raw as WorkflowRunSnapshot)
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue
         logger.warn("findByRunId snapshot read error, skipping", {
@@ -164,7 +166,7 @@ export class RunSnapshotService {
         logger.warn("run snapshot get: invalid structure", { runId, workflowId })
         return null
       }
-      return raw as WorkflowRunSnapshot
+      return sanitizeWorkflowRunSnapshot(raw as WorkflowRunSnapshot)
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
       // ENOENT is expected when the snapshot simply doesn't exist — no need to warn

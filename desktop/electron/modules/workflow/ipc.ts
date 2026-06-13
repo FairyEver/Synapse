@@ -19,7 +19,7 @@ import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 import { isSafeWorkflowId, isSafeWorkflowNodeId } from "../../services/workflow/workflow-id"
-import { sanitizeNodeResultsForSnapshot } from "../../services/workflow/run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
 const logger = createMainLogger("workflow.ipc")
@@ -95,7 +95,7 @@ function runStatusToListItem(status: WorkflowRunStatus): WorkflowRunListItem {
     durationMs: status.durationMs,
     error: status.error,
     params: status.params,
-    definition: status.definition,
+    definition: status.definition ? sanitizeWorkflowDefinitionForSnapshot(status.definition) : undefined,
   }
 }
 
@@ -1243,7 +1243,10 @@ export const workflowIpcModule: IpcModule = {
         const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
         if (live) {
           logger.info("run-status served from memory", { runId, workflowId: live.workflowId, status: live.status })
-          return live
+          return {
+            ...live,
+            definition: live.definition ? sanitizeWorkflowDefinitionForSnapshot(live.definition) : undefined,
+          }
         }
         // Fallback: terminal runs pruned from the in-memory map (MAX_TERMINAL_STATUSES_PER_WORKFLOW = 5)
         // are still on disk (up to MAX = 20 snapshots per workflow). Without this, opening an

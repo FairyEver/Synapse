@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readdir, rm, utimes, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -101,6 +101,41 @@ describe("RunSnapshotService", () => {
     await svc.save(snapshot("run", 100))
 
     expect((await readdir(dir)).some((file) => file.endsWith(".tmp"))).toBe(false)
+  })
+
+  it("redacts Code X config override values before writing snapshot files", async () => {
+    const root = await tmpDir()
+    const svc = new RunSnapshotService(root)
+    await svc.save({
+      ...snapshot("run-secret", 100),
+      definition: {
+        id: "wf",
+        name: "Workflow",
+        version: "v1",
+        createdAt: 1,
+        updatedAt: 2,
+        params: [],
+        edges: [],
+        nodes: [
+          {
+            id: "codex-1",
+            name: "Code X",
+            type: "codex",
+            position: { x: 0, y: 0 },
+            config: {
+              configOverrides: [{ key: "ANTHROPIC_API_KEY", value: "sk-raw-secret" }],
+            },
+          },
+        ],
+      },
+    })
+
+    const raw = await readFile(path.join(root, "workflow-runs", "wf", "run-secret.json"), "utf-8")
+    const listed = await svc.list("wf")
+
+    expect(raw).not.toContain("sk-raw-secret")
+    expect(raw).toContain("[redacted]")
+    expect(JSON.stringify(listed)).not.toContain("sk-raw-secret")
   })
 
   it("sanitizes file paths from error messages in logs", async () => {

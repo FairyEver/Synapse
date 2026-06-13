@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { sanitizeNodeResultsForSnapshot } from "../run-snapshot-sanitize"
-import type { NodeRunResult } from "../../../../src/types/workflow"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot } from "../run-snapshot-sanitize"
+import type { NodeRunResult, WorkflowDefinition } from "../../../../src/types/workflow"
 
 describe("sanitizeNodeResultsForSnapshot", () => {
   it("removes agent conversation session keys from persisted outputs", () => {
@@ -114,5 +114,59 @@ describe("sanitizeNodeResultsForSnapshot", () => {
     expect(raw).not.toContain("Bearer secret")
     expect(raw).not.toContain("abc123")
     expect(codexDebug.stdoutPreview).not.toContain("/Users/liyang/project")
+  })
+})
+
+describe("sanitizeWorkflowDefinitionForSnapshot", () => {
+  it("redacts Code X config override values from persisted definitions", () => {
+    const definition: WorkflowDefinition = {
+      id: "workflow-1",
+      name: "Secret workflow",
+      version: "1.0.0",
+      createdAt: 1,
+      updatedAt: 2,
+      params: [],
+      edges: [],
+      nodes: [
+        {
+          id: "codex-1",
+          name: "Code X",
+          type: "codex",
+          position: { x: 0, y: 0 },
+          config: {
+            prompt: "ship it",
+            configOverrides: [
+              { key: "ANTHROPIC_API_KEY", value: "sk-raw-secret" },
+              { key: "model_reasoning_effort", value: "high" },
+            ],
+          },
+        },
+        {
+          id: "http-1",
+          name: "HTTP",
+          type: "http",
+          position: { x: 100, y: 0 },
+          config: {
+            configOverrides: [{ key: "not-codex", value: "preserved" }],
+          },
+        },
+      ],
+    }
+
+    const sanitized = sanitizeWorkflowDefinitionForSnapshot(definition)
+    const codexNode = sanitized.nodes[0]
+    const httpNode = sanitized.nodes[1]
+
+    expect(codexNode?.config.configOverrides).toEqual([
+      { key: "ANTHROPIC_API_KEY", value: "[redacted]" },
+      { key: "model_reasoning_effort", value: "[redacted]" },
+    ])
+    expect(httpNode?.config.configOverrides).toEqual([{ key: "not-codex", value: "preserved" }])
+    expect(JSON.stringify(sanitized)).not.toContain("sk-raw-secret")
+    expect(JSON.stringify(sanitized)).not.toContain("high")
+    expect(definition.nodes[0]?.config.configOverrides).toEqual([
+      { key: "ANTHROPIC_API_KEY", value: "sk-raw-secret" },
+      { key: "model_reasoning_effort", value: "high" },
+    ])
   })
 })

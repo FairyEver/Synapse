@@ -1,4 +1,4 @@
-import type { NodeRunResult } from "../../../src/types/workflow"
+import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
@@ -12,6 +12,43 @@ export function sanitizeNodeResultsForSnapshot(
     sanitized[nodeId] = sanitizeNodeResultForSnapshot(result)
   }
   return sanitized
+}
+
+export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
+  return {
+    ...snapshot,
+    nodeResults: sanitizeNodeResultsForSnapshot(snapshot.nodeResults),
+    ...(snapshot.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(snapshot.definition) } : {}),
+    ...(snapshot.error !== undefined ? { error: sanitizeError(snapshot.error) } : {}),
+  }
+}
+
+export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefinition): WorkflowDefinition {
+  return {
+    ...definition,
+    nodes: definition.nodes.map(sanitizeWorkflowNodeForSnapshot),
+  }
+}
+
+function sanitizeWorkflowNodeForSnapshot(node: WorkflowNode): WorkflowNode {
+  if (node.type !== "codex") return node
+  const configOverrides = node.config.configOverrides
+  if (!Array.isArray(configOverrides)) return node
+  return {
+    ...node,
+    config: {
+      ...node.config,
+      configOverrides: configOverrides.map(redactConfigOverrideValue),
+    },
+  }
+}
+
+function redactConfigOverrideValue(entry: unknown): unknown {
+  if (!isRecord(entry) || !Object.hasOwn(entry, "value")) return entry
+  return {
+    ...entry,
+    value: "[redacted]",
+  }
 }
 
 function sanitizeNodeResultForSnapshot(result: NodeRunResult): NodeRunResult {
