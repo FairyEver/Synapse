@@ -1,3 +1,4 @@
+import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { createDriveCapabilityDispatcher } from "../drive-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
@@ -23,6 +24,8 @@ describe("createDriveCapabilityDispatcher", () => {
 
   it("uploads a local file without returning the presigned URL", async () => {
     const accountService = createAccountService()
+    const fileStream = Readable.from(["test"])
+    const readFile = vi.fn(async () => Buffer.from("test"))
     const permissionGuard = {
       registerPolicy: vi.fn(),
       check: vi.fn(async () => ({ allowed: true as const })),
@@ -32,7 +35,8 @@ describe("createDriveCapabilityDispatcher", () => {
       permissionGuard,
       fileSystem: {
         stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 4 })),
-        readFile: vi.fn(async () => Buffer.from("test")),
+        readFile,
+        createReadStream: vi.fn(() => fileStream),
         readdir: vi.fn(),
       } as unknown as DriveDispatcherDeps["fileSystem"],
       fetch: vi.fn(async () => ({ ok: true }) as Response),
@@ -50,6 +54,7 @@ describe("createDriveCapabilityDispatcher", () => {
       size: "4",
       mimeType: null,
     })
+    expect(readFile).not.toHaveBeenCalled()
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
@@ -61,6 +66,37 @@ describe("createDriveCapabilityDispatcher", () => {
       actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
       resource: "/tmp/report.md",
       context: { source: "mcp-stdio", driveAction: "drive.upload" },
+    }))
+  })
+
+  it("streams MCP file uploads instead of reading the full file into memory", async () => {
+    const accountService = createAccountService()
+    const readFile = vi.fn(async () => Buffer.alloc(1024 * 1024))
+    const uploadStream = Readable.from(["large"])
+    const createReadStream = vi.fn(() => uploadStream)
+    const fetchImpl = vi.fn(async () => ({ ok: true }) as Response)
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      fileSystem: {
+        stat: vi.fn(async () => ({ isFile: () => true, isDirectory: () => false, size: 1024 * 1024 * 1024 })),
+        readFile,
+        createReadStream,
+        readdir: vi.fn(),
+      } as unknown as DriveDispatcherDeps["fileSystem"],
+      fetch: fetchImpl,
+    })
+
+    await expect(dispatcher.dispatch("drive.file.upload", {
+      filePath: "/tmp/large.bin",
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(readFile).not.toHaveBeenCalled()
+    expect(createReadStream).toHaveBeenCalledWith("/tmp/large.bin")
+    expect(fetchImpl).toHaveBeenCalledWith("https://cos.example/upload?X-Amz-Signature=secret", expect.objectContaining({
+      method: "PUT",
+      body: uploadStream,
+      duplex: "half",
+      headers: expect.objectContaining({ "Content-Length": String(1024 * 1024 * 1024) }),
     }))
   })
 })

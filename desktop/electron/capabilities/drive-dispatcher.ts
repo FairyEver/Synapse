@@ -1,5 +1,6 @@
 import path from "node:path"
-import { readdir, readFile, stat } from "node:fs/promises"
+import { createReadStream } from "node:fs"
+import { readdir, stat } from "node:fs/promises"
 
 import type {
   DriveAccessSettingsInput,
@@ -36,7 +37,7 @@ type DriveAccountServicePort = {
 }
 
 type FileSystemPort = {
-  readonly readFile: typeof readFile
+  readonly createReadStream: typeof createReadStream
   readonly readdir: typeof readdir
   readonly stat: typeof stat
 }
@@ -54,10 +55,11 @@ type LocalFileEntry = {
   readonly absolutePath: string
   readonly relativePath: string
   readonly size: string
+  readonly sizeBytes: number
 }
 
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
-const defaultFileSystem: FileSystemPort = { readFile, readdir, stat }
+const defaultFileSystem: FileSystemPort = { createReadStream, readdir, stat }
 
 export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherDeps) {
   const fileSystem = deps.fileSystem ?? defaultFileSystem
@@ -140,7 +142,7 @@ async function uploadFile(
   })
 
   try {
-    await putPreparedUpload(fetchImpl, prepared.upload, await fileSystem.readFile(filePath))
+    await putPreparedUploadFromPath(fetchImpl, fileSystem, prepared.upload, filePath, fileStat.size)
     const item = await deps.accountService.completeDriveUpload(prepared.sessionId)
     return { ok: true, data: item }
   } catch (error) {
@@ -185,7 +187,7 @@ async function uploadFolder(
       continue
     }
     try {
-      await putPreparedUpload(fetchImpl, preparedEntry.upload, await fileSystem.readFile(entry.absolutePath))
+      await putPreparedUploadFromPath(fetchImpl, fileSystem, preparedEntry.upload, entry.absolutePath, entry.sizeBytes)
       await deps.accountService.completeDriveUpload(preparedEntry.sessionId)
       completed += 1
     } catch (error) {
@@ -208,16 +210,32 @@ async function uploadFolder(
 async function putPreparedUpload(
   fetchImpl: typeof fetch,
   upload: DriveUploadPrepareResult["upload"],
-  body: Buffer,
+  body: RequestInit["body"],
+  sizeBytes: number,
 ): Promise<void> {
-  const bodyBytes = new Uint8Array(body.byteLength)
-  bodyBytes.set(body)
-  const response = await fetchImpl(upload.url, {
+  const init: RequestInit & { duplex: "half" } = {
     method: upload.method,
-    headers: upload.headers,
-    body: bodyBytes.buffer,
-  })
+    headers: withContentLengthHeader(upload.headers, sizeBytes),
+    body,
+    duplex: "half",
+  }
+  const response = await fetchImpl(upload.url, init)
   if (!response.ok) throw new Error("Drive upload failed.")
+}
+
+async function putPreparedUploadFromPath(
+  fetchImpl: typeof fetch,
+  fileSystem: FileSystemPort,
+  upload: DriveUploadPrepareResult["upload"],
+  filePath: string,
+  sizeBytes: number,
+): Promise<void> {
+  const stream = fileSystem.createReadStream(filePath)
+  try {
+    await putPreparedUpload(fetchImpl, upload, stream as unknown as RequestInit["body"], sizeBytes)
+  } finally {
+    stream.destroy()
+  }
 }
 
 async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Promise<LocalFileEntry[]> {
@@ -232,7 +250,7 @@ async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Pro
         await walk(absolutePath, relativePath)
       } else if (entry.isFile()) {
         const fileStat = await fileSystem.stat(absolutePath)
-        result.push({ absolutePath, relativePath, size: String(fileStat.size) })
+        result.push({ absolutePath, relativePath, size: String(fileStat.size), sizeBytes: fileStat.size })
       }
     }
   }
@@ -307,4 +325,9 @@ function optionalNullableString(value: unknown): string | null {
   if (value === undefined || value === null) return null
   if (typeof value !== "string") throw new Error("Expected string or null.")
   return value.trim() || null
+}
+
+function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {
+  if (Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) return headers
+  return { ...headers, "Content-Length": String(sizeBytes) }
 }
