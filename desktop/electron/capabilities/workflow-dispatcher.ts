@@ -10,7 +10,7 @@ import type { DispatchContext, DispatchResult } from "../../synapse-capabilities
 import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
 import { layoutWorkflowNodes } from "../../src/lib/workflow-auto-layout"
-import type { AuditSink, PermissionGuard } from "../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 
 const logger = createMainLogger("capability.workflow-dispatcher")
 const workflowMutationChains = new WeakMap<WorkflowDispatchDeps, Map<string, Promise<void>>>()
@@ -555,7 +555,7 @@ function workflowMutationSecurity(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): {
-  readonly actor: { kind: "user"; id: string }
+  readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
 } | null {
@@ -568,7 +568,7 @@ function workflowMutationSecurity(
       ? correlation.runId
       : action
   return {
-    actor: { kind: "user", id: `workflow-dispatch:${source}` },
+    actor: context.actor ?? { kind: "user", id: `workflow-dispatch:${source}` },
     resource: `workflow:${targetId}`,
     metadata: {
       source,

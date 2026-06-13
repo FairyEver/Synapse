@@ -1,7 +1,7 @@
 import { zodToJsonSchema } from "zod-to-json-schema"
 
 import type { MainActionRegistry } from "../action-runtime/action-registry"
-import type { AuditSink, PermissionGuard } from "../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type { AutomationService } from "../services/automation"
 import type { AutomationTriggerRegistry } from "../services/automation/trigger-registry"
 import type {
@@ -42,7 +42,7 @@ type AutomationItemListParams = {
 }
 
 type AutomationMutationSecurity = {
-  readonly actor: { kind: "user"; id: string }
+  readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
 }
@@ -536,7 +536,7 @@ function automationMutationSecurity(
     ? params.runId.trim()
     : undefined
   return {
-    actor: { kind: "user", id: `automation-dispatch:${source}` },
+    actor: context.actor ?? { kind: "user", id: `automation-dispatch:${source}` },
     resource: `automation:${runId ?? automationId}`,
     metadata: {
       source,

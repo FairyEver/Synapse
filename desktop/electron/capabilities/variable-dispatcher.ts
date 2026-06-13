@@ -159,7 +159,7 @@ async function authorizeSecret(
   variableName: string,
   includeValue: boolean,
 ): Promise<SecretAuditContext> {
-  const actor = deps.actor ?? DEFAULT_ACTOR
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
   const resource = `variable:user:${variableName}`
   const metadata = {
     source: context.source ?? "api",

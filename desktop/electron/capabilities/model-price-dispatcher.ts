@@ -162,7 +162,7 @@ function modelPriceMutationSecurity(
   if (!MODEL_PRICE_MUTATION_ACTIONS.has(action)) return null
   const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : action
   return {
-    actor: deps.actor ?? DEFAULT_ACTOR,
+    actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
     resource: `model-price-rule:${ruleId}`,
     metadata: {
       source: context.source ?? "api",

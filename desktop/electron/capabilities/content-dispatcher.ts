@@ -90,9 +90,9 @@ function createContentCapabilityDispatcher(deps: ContentCapabilityDispatcherDeps
         case "get":
           return getContent(deps, parsed.type, params)
         case "create":
-          return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, () => createContent(deps, parsed.type, params))
+          return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, (security) => createContent(deps, parsed.type, params, security))
         case "update":
-          return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, () => updateContent(deps, parsed.type, params))
+          return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, (security) => updateContent(deps, parsed.type, params, security))
         case "delete":
           return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, () => deleteContent(deps, parsed.type, params))
       }
@@ -107,7 +107,7 @@ async function dispatchContentMutation(
   action: string,
   params: ContentToolParams,
   context: DispatchContext,
-  task: () => Promise<DispatchResult>,
+  task: (security?: ContentIconImageSecurityDeps) => Promise<DispatchResult>,
 ): Promise<DispatchResult> {
   const logMeta = contentDispatchCorrelation(contentType, operation, action, params, context)
   logger.info("content capability dispatch", logMeta)
@@ -125,7 +125,7 @@ async function dispatchContentMutation(
   }
 
   try {
-    const result = await task()
+    const result = await task(security?.deps)
     security?.deps.auditSink.record({
       action: "content.mutate",
       actor: security.deps.actor,
@@ -234,15 +234,16 @@ async function createContent(
   deps: ContentCapabilityDispatcherDeps,
   contentType: SynapseContentType,
   params: ContentToolParams,
+  security?: ContentIconImageSecurityDeps,
 ): Promise<DispatchResult> {
-  const merged = await mergeSkillSourceParams(deps, contentType, params)
+  const merged = await mergeSkillSourceParams(deps, contentType, params, undefined, security)
   const payload = normalizeCreateContentParams(contentType, merged.params)
 
   if (contentType === "skill" && merged.sourceFiles) {
     const skillPayload = payload as SynapseCreateContentPayload<"skill">
     skillPayload.files = merged.sourceFiles
   }
-  await applyIconImageBytes(deps, payload, merged.params)
+  await applyIconImageBytes(deps, payload, merged.params, security)
 
   const result = await deps.contentWriter.createContent({
     contentType,
@@ -257,18 +258,19 @@ async function updateContent(
   deps: ContentCapabilityDispatcherDeps,
   contentType: SynapseContentType,
   params: ContentToolParams,
+  security?: ContentIconImageSecurityDeps,
 ): Promise<DispatchResult> {
   const id = requireTrimmedString(params.id, "id")
   const currentDetail = await assertOwnedByCurrentUser(deps, contentType, id)
 
-  const merged = await mergeSkillSourceParams(deps, contentType, params, currentDetail)
+  const merged = await mergeSkillSourceParams(deps, contentType, params, currentDetail, security)
   const payload = normalizeUpdateContentParams(contentType, merged.params)
 
   if (contentType === "skill" && merged.sourceFiles) {
     const skillPayload = payload as SynapseUpdateContentPayload<"skill">
     skillPayload.files = merged.sourceFiles
   }
-  await applyIconImageBytes(deps, payload, merged.params)
+  await applyIconImageBytes(deps, payload, merged.params, security)
 
   const result = await deps.contentWriter.updateContent({
     contentType,
@@ -340,6 +342,7 @@ async function mergeSkillSourceParams(
   contentType: SynapseContentType,
   params: ContentToolParams,
   currentDetail?: SynapseContentDetail,
+  security?: ContentIconImageSecurityDeps,
 ): Promise<SkillSourceMergeResult> {
   if (contentType !== "skill") {
     return { params }
@@ -354,7 +357,7 @@ async function mergeSkillSourceParams(
     return { params }
   }
 
-  const sourceDraft = await deps.readSkillDraftFromDirectory(sourceDirectoryPath, deps.security)
+  const sourceDraft = await deps.readSkillDraftFromDirectory(sourceDirectoryPath, security ?? deps.security)
   const parsed = parseFrontmatter(sourceDraft.content)
   const metadata = sourceDraft.metadata
   const fallbackName = path.basename(sourceDirectoryPath)
@@ -417,6 +420,7 @@ async function applyIconImageBytes(
   deps: ContentCapabilityDispatcherDeps,
   payload: { iconImageBytes?: Uint8Array; iconType?: string },
   params: ContentToolParams,
+  security?: ContentIconImageSecurityDeps,
 ): Promise<void> {
   if (payload.iconType !== "image") {
     return
@@ -425,7 +429,7 @@ async function applyIconImageBytes(
     return
   }
 
-  const iconImageBytes = await deps.prepareIconImageBytes(params, deps.security)
+  const iconImageBytes = await deps.prepareIconImageBytes(params, security ?? deps.security)
   if (!iconImageBytes) {
     throw new ContentCapabilityError("CONTENT_INVALID_INPUT", "使用图片背景时必须提供图片。", {
       fields: { iconImage: "使用图片背景时必须提供图片。" },
@@ -481,7 +485,7 @@ function buildContentMutationSecurity(
   if (contentId) metadata.contentId = contentId
 
   return {
-    deps,
+    deps: { ...deps, actor: context.actor ?? deps.actor },
     metadata,
     resource: contentId ? `content:${contentType}:${contentId}` : `content:${contentType}:${operation}`,
   }

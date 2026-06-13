@@ -112,7 +112,10 @@ describe("MCP HTTP server", () => {
     })
 
     expect(response.status).toBe(200)
-    expect(dispatch).toHaveBeenCalledWith("automation.item.list", { enabled: true }, { source: "mcp-http" })
+    expect(dispatch).toHaveBeenCalledWith("automation.item.list", { enabled: true }, {
+      source: "mcp-http",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
+    })
     expect(JSON.parse(response.body).result.content[0].text).toBe(JSON.stringify([{ id: "automation:1" }], null, 2))
   })
 })

@@ -1,5 +1,5 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
-import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
   SchedulerSchedule,
   SchedulerTaskCreateParams,
@@ -59,7 +59,7 @@ export type SchedulerDispatchSecurityDeps = {
 }
 
 type SchedulerMutationSecurity = {
-  readonly actor: { kind: "user"; id: string }
+  readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
 }
@@ -244,7 +244,7 @@ function schedulerMutationSecurity(
     ? params.taskId.trim()
     : action
   return {
-    actor: { kind: "user", id: `scheduler-dispatch:${source}` },
+    actor: context.actor ?? { kind: "user", id: `scheduler-dispatch:${source}` },
     resource: `scheduler:${taskId}`,
     metadata: {
       source,

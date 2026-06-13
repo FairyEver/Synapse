@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createMainLogger } from "../services/log-store"
 import type { SynapseActionRouter } from "../capabilities/action-router"
 import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
+import { mcpClientActorForSource } from "../../synapse-capabilities/shared/types"
 import {
   processMcpRequest,
   serializeJsonRpcPayload,
@@ -24,7 +25,10 @@ async function executeTool(toolName: string, args: Record<string, unknown>): Pro
   const action = MCP_TOOL_ACTIONS[toolName]
   if (!action) throw new Error(`Unknown tool: ${toolName}`)
   if (!actionRouter) throw new Error("Synapse action router is not initialized")
-  return actionRouter.dispatch(action, args, { source: "mcp-http" })
+  return actionRouter.dispatch(action, args, {
+    source: "mcp-http",
+    actor: mcpClientActorForSource("mcp-http"),
+  })
 }
 
 // --- HTTP transport ---
