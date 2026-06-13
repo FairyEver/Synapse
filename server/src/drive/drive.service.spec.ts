@@ -698,6 +698,74 @@ describe("DriveService", () => {
     expect(publications[0]).toMatchObject({ id: publication.id, status: "disabled", currentDeploymentId: null })
   })
 
+  it("deletes copied publication objects when a later site copy fails", async () => {
+    const prisma = createPrismaMemory()
+    const copiedKeys: string[] = []
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async ({ toKey }) => {
+        copiedKeys.push(toKey)
+        if (copiedKeys.length === 2) throw new Error("copy failed")
+      }),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "app.js",
+      mimeType: "application/javascript",
+    })
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test")).rejects.toThrow("copy failed")
+
+    expect(copiedKeys).toHaveLength(2)
+    expect(storage.deleteObject).toHaveBeenCalledTimes(1)
+    expect(storage.deleteObject).toHaveBeenCalledWith(copiedKeys[0])
+    expect(await prisma.drivePublicationAsset.findMany()).toHaveLength(0)
+  })
+
+  it("deletes copied publication objects when deployment asset persistence fails", async () => {
+    const prisma = createPrismaMemory()
+    const copiedKeys: string[] = []
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async ({ toKey }) => {
+        copiedKeys.push(toKey)
+      }),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "app.js",
+      mimeType: "application/javascript",
+    })
+    prisma.drivePublicationAsset.createMany = async () => {
+      throw new Error("asset persistence failed")
+    }
+
+    await expect(service.publishSite("user-1", folder.id, "https://synapse.test")).rejects.toThrow("asset persistence failed")
+
+    expect(copiedKeys).toHaveLength(2)
+    expect(storage.deleteObject).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(storage.deleteObject).mock.calls.map(([key]) => key)).toEqual(copiedKeys)
+    expect(await prisma.drivePublicationAsset.findMany()).toHaveLength(0)
+  })
+
   it("keeps the previous deployment active when redeploy copy fails", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

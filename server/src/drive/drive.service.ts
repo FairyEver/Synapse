@@ -1322,6 +1322,7 @@ export class DriveService implements OnApplicationBootstrap {
     const deployment = await this.prisma.drivePublicationDeployment.create({
       data: { publicationId, status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.pending },
     })
+    const copiedStorageKeys: string[] = []
 
     try {
       const assetRows: Prisma.DrivePublicationAssetCreateManyInput[] = []
@@ -1337,6 +1338,7 @@ export class DriveService implements OnApplicationBootstrap {
           toKey: storageKey,
           contentType: asset.contentType,
         })
+        copiedStorageKeys.push(storageKey)
         assetRows.push({
           publicationId,
           deploymentId: deployment.id,
@@ -1366,6 +1368,12 @@ export class DriveService implements OnApplicationBootstrap {
       })
       return toDrivePublicationDto(updated, publicAppUrl, this.decryptStoredPassword(updated.passwordEncrypted))
     } catch (error) {
+      await this.cleanupCopiedPublicationObjects({
+        publicationId,
+        deploymentId: deployment.id,
+        storageKeys: copiedStorageKeys,
+        failure: error,
+      })
       const failedAt = new Date()
       await this.prisma.$transaction([
         this.prisma.drivePublicationDeployment.update({
@@ -1383,6 +1391,29 @@ export class DriveService implements OnApplicationBootstrap {
           })]),
       ])
       throw error
+    }
+  }
+
+  private async cleanupCopiedPublicationObjects(input: {
+    readonly publicationId: string
+    readonly deploymentId: string
+    readonly storageKeys: readonly string[]
+    readonly failure: unknown
+  }): Promise<void> {
+    for (const storageKey of input.storageKeys) {
+      try {
+        await this.storage.deleteObject(storageKey)
+      } catch (error) {
+        this.logger.warn({
+          publicationId: input.publicationId,
+          deploymentId: input.deploymentId,
+          storageKey,
+          failureName: input.failure instanceof Error ? input.failure.name : typeof input.failure,
+          failureMessage: input.failure instanceof Error ? input.failure.message : undefined,
+          cleanupErrorName: error instanceof Error ? error.name : typeof error,
+          cleanupErrorMessage: error instanceof Error ? error.message : undefined,
+        }, "Drive publication copied object cleanup failed")
+      }
     }
   }
 
