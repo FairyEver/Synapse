@@ -581,7 +581,7 @@ function workflowMutationSecurity(
 async function authorizeWorkflowMutation(
   deps: WorkflowDispatchDeps,
   security: {
-    readonly actor: { kind: "user"; id: string }
+    readonly actor: ActorIdentity
     readonly resource: string
     readonly metadata: Record<string, unknown>
   },
