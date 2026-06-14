@@ -32,6 +32,20 @@ const initialState: ThemeProviderState = {
 
 const ThemeContext = createContext<ThemeProviderState>(initialState)
 
+export function syncThemeColorMeta(root: HTMLElement) {
+  const color = window.getComputedStyle(root).getPropertyValue('--background').trim()
+  if (!color) return
+
+  const doc = root.ownerDocument
+  let metaThemeColor = doc.querySelector<HTMLMetaElement>("meta[name='theme-color']")
+  if (!metaThemeColor) {
+    metaThemeColor = doc.createElement('meta')
+    metaThemeColor.name = 'theme-color'
+    doc.head.append(metaThemeColor)
+  }
+  metaThemeColor.content = color
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = DEFAULT_THEME,
@@ -59,6 +73,7 @@ export function ThemeProvider({
     const applyTheme = (currentResolvedTheme: ResolvedTheme) => {
       root.classList.remove('light', 'dark') // Remove existing theme classes
       root.classList.add(currentResolvedTheme) // Add the new theme class
+      syncThemeColorMeta(root)
     }
 
     const handleChange = () => {
