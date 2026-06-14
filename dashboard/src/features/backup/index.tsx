@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Download, Trash2, Plus, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type BackupFile } from '@/lib/api'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   DataTableColumnHeader,
   ServerDataTable,
@@ -23,6 +25,7 @@ function noop() {}
 
 export default function BackupPage() {
   const queryClient = useQueryClient()
+  const [deleteTarget, setDeleteTarget] = useState<BackupFile | null>(null)
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-backups'],
@@ -41,6 +44,7 @@ export default function BackupPage() {
   const deleteBackup = useMutation({
     mutationFn: adminApi.deleteBackup,
     onSuccess: () => {
+      setDeleteTarget(null)
       queryClient.invalidateQueries({ queryKey: ['admin-backups'] })
       toast.success('备份已删除')
     },
@@ -99,7 +103,8 @@ export default function BackupPage() {
             variant='ghost'
             size='icon'
             aria-label={`删除 ${row.original.filename}`}
-            onClick={() => deleteBackup.mutate(row.original.filename)}
+            disabled={deleteBackup.isPending}
+            onClick={() => setDeleteTarget(row.original)}
           >
             <Trash2 className='h-4 w-4' />
           </Button>
@@ -145,6 +150,21 @@ export default function BackupPage() {
             showPagination={false}
           />
         )}
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null)
+          }}
+          title='删除备份'
+          desc={deleteTarget ? `${deleteTarget.filename} 删除后不可恢复。` : ''}
+          cancelBtnText='取消'
+          confirmText='删除'
+          destructive
+          isLoading={deleteBackup.isPending}
+          handleConfirm={() => {
+            if (deleteTarget) deleteBackup.mutate(deleteTarget.filename)
+          }}
+        />
       </Main>
     </>
   )
