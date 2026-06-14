@@ -128,7 +128,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   async acceptUpload(token: string, stream: NodeJS.ReadableStream): Promise<void> {
-    const entry = this.consumeToken(this.uploadTokens, token)
+    const entry = this.readToken(this.uploadTokens, token)
     const contentLength = readContentLength(stream)
     if (entry.expectedSize !== undefined && contentLength !== undefined && contentLength > entry.expectedSize) {
       throw new DriveUploadTooLargeError()
@@ -145,6 +145,7 @@ export class LocalDriveStorage implements DriveStoragePort {
       await rm(objectPath, { force: true })
       throw error
     }
+    this.uploadTokens.delete(token)
     this.contentTypes.set(entry.key, entry.contentType ?? null)
   }
 
@@ -158,14 +159,6 @@ export class LocalDriveStorage implements DriveStoragePort {
       throw error
     }
     return { stream: createReadStream(objectPath), filename: entry.filename ?? "download", key: entry.key }
-  }
-
-  private consumeToken(tokens: Map<string, LocalStorageToken>, token: string): LocalStorageToken {
-    this.cleanupExpiredTokenMap(tokens)
-    const entry = tokens.get(token)
-    tokens.delete(token)
-    if (!entry || entry.expiresAt.getTime() <= Date.now()) throw new Error("Drive storage token expired.")
-    return entry
   }
 
   private readToken(tokens: Map<string, LocalStorageToken>, token: string): LocalStorageToken {

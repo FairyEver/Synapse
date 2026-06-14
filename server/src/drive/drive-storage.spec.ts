@@ -85,6 +85,36 @@ describe("LocalDriveStorage", () => {
     await expect(readFile(path.join(root, "drive/item-1"), "utf8")).rejects.toThrow()
   })
 
+  it("keeps local upload tokens reusable after failed writes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
+    const token = upload.url.split("/").pop()
+    if (!token) throw new Error("missing upload token")
+
+    await expect(storage.acceptUpload(token, Readable.from(["hello", "world"]))).rejects.toBeInstanceOf(DriveUploadTooLargeError)
+    await storage.acceptUpload(token, Readable.from(["hello"]))
+
+    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).resolves.toBe("hello")
+  })
+
+  it("consumes local upload tokens after successful writes", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
+    const token = upload.url.split("/").pop()
+    if (!token) throw new Error("missing upload token")
+
+    await storage.acceptUpload(token, Readable.from(["hello"]))
+
+    await expect(storage.acceptUpload(token, Readable.from(["again"]))).rejects.toThrow("Drive storage token expired.")
+    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).resolves.toBe("hello")
+  })
+
   it("copies and streams local drive objects", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)
