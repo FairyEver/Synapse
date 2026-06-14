@@ -212,6 +212,30 @@ describe("webhook sanitize", () => {
     expect(summary.bodyPreview).not.toContain("secret-b")
   })
 
+  it("redacts JSON-shaped sensitive keys in text bodies", () => {
+    const summary = summarizeWebhookBody(
+      Buffer.from(JSON.stringify({
+        access_token: "plain-secret",
+        api_key: "key-secret",
+        refreshToken: "refresh-secret",
+        event: "visible",
+      })),
+      "text/plain",
+    )
+
+    expect(summary.bodyKind).toBe("text")
+    expect(summary.bodyText).toContain("\"access_token\":\"[redacted]\"")
+    expect(summary.bodyText).toContain("\"api_key\":\"[redacted]\"")
+    expect(summary.bodyText).toContain("\"refreshToken\":\"[redacted]\"")
+    expect(summary.bodyText).toContain("\"event\":\"visible\"")
+    expect(summary.bodyText).not.toContain("plain-secret")
+    expect(summary.bodyText).not.toContain("key-secret")
+    expect(summary.bodyText).not.toContain("refresh-secret")
+    expect(summary.bodyPreview).not.toContain("plain-secret")
+    expect(summary.bodyPreview).not.toContain("key-secret")
+    expect(summary.bodyPreview).not.toContain("refresh-secret")
+  })
+
   it("rejects unsupported content types", () => {
     expect(() => summarizeWebhookBody(Buffer.from([0, 1, 2]), "application/octet-stream"))
       .toThrow(UnsupportedMediaTypeException)

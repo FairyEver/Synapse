@@ -1,10 +1,11 @@
 import { BadRequestException, UnsupportedMediaTypeException } from "@nestjs/common"
 
 const sensitiveKeyPattern = /authorization|cookie|token|secret|password|credential|signature|api[-_]?key/i
-const sensitiveTextLinePattern = /^([^=\s:]+)\s*[:=]\s*(.+)$/u
+const sensitiveTextLinePattern = /^([A-Za-z0-9_.-]+)\s*[:=]\s*(.+)$/u
 const bearerPattern = /\bbearer\s+[^,\s;]+/giu
 const cookieFragmentPattern = /\bcookie\s*[:=]\s*.+?(?=(?:\s+(?:and|plus|with)\s+\b(?:authorization|bearer|token|secret|password|credential|api[-_]?key)\b)|[,\n]|$)/giu
 const sensitiveAssignmentPattern = /\b(authorization|token|secret|password|credential|api[-_]?key)\s*[:=]\s*[^,\s;]+/giu
+const quotedJsonStringAssignmentPattern = /(["'])([^"'\\]*(?:\\.[^"'\\]*)*)\1(\s*:\s*)(["'])([^"'\\]*(?:\\.[^"'\\]*)*)\4/gu
 const maxPreviewChars = 2_000
 
 export interface WebhookBodySummary {
@@ -228,6 +229,12 @@ function redactText(value: string): string {
     return key && isSensitiveKey(key) ? `${key}=[redacted]` : line
   }).join("\n")
   return lineRedacted
+    .replace(
+      quotedJsonStringAssignmentPattern,
+      (match, keyQuote: string, key: string, separator: string, valueQuote: string) => (
+        isSensitiveKey(key) ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}[redacted]${valueQuote}` : match
+      ),
+    )
     .replace(bearerPattern, "Bearer [redacted]")
     .replace(cookieFragmentPattern, "Cookie: [redacted]")
     .replace(sensitiveAssignmentPattern, (_match, key: string) => `${key}=[redacted]`)
