@@ -55,6 +55,7 @@ import { Input } from "@/components/ui/input"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { validateKnowledgeBaseRawEntryNameInput } from "@/lib/knowledge-base-raw-entry-name"
 import { cn } from "@/lib/utils"
 import type {
   SynapseKnowledgeBaseOpenSourceManagerPayload,
@@ -1020,8 +1021,12 @@ function KnowledgeBaseSourceManagerWindow() {
 
   const createFolder = useCallback(async () => {
     if (!payload || !bridge) return
+    const validationError = validateKnowledgeBaseRawEntryNameInput(newFolderName)
+    if (validationError) {
+      showError(validationError)
+      return
+    }
     const name = newFolderName.trim()
-    if (!name) return
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.createRawFolder({
@@ -1040,12 +1045,16 @@ function KnowledgeBaseSourceManagerWindow() {
     )
     setNewFolderName("")
     setCreateFolderOpen(false)
-  }, [bridge, currentDirectory, newFolderName, payload, promise, refreshDirectory])
+  }, [bridge, currentDirectory, newFolderName, payload, promise, refreshDirectory, showError])
 
   const renameEntry = useCallback(async () => {
     if (!payload || !bridge || !renameTarget) return
+    const validationError = validateKnowledgeBaseRawEntryNameInput(renameValue)
+    if (validationError) {
+      showError(validationError)
+      return
+    }
     const newName = renameValue.trim()
-    if (!newName) return
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.renameRawEntry({
@@ -1067,7 +1076,7 @@ function KnowledgeBaseSourceManagerWindow() {
     )
     setRenameTarget(null)
     setRenameValue("")
-  }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory, renameTarget, renameValue])
+  }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory, renameTarget, renameValue, showError])
 
   const runMoveRawEntries = useCallback(async (relativePaths: string[], targetDirectoryPath: string) => {
     if (!payload || !bridge || relativePaths.length === 0) return

@@ -41,7 +41,7 @@ describe("KnowledgeBaseRawFileManager", () => {
     const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
 
     for (const name of ["CON", "con.txt", "AUX", "COM1", "LPT9", "bad:name", "bad?name", "tail.", "tail "]) {
-      await expect(manager.createFolder(rawRoot, "", name)).rejects.toThrow("名称不可用。")
+      await expect(manager.createFolder(rawRoot, "", name)).rejects.toThrow("名称包含 Windows 不支持的字符或保留名。")
       await expect(lstat(path.join(rawRoot, name))).rejects.toMatchObject({ code: "ENOENT" })
     }
   })
@@ -52,7 +52,7 @@ describe("KnowledgeBaseRawFileManager", () => {
     const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
 
     for (const name of ["NUL", "PRN.txt", "bad|name", "bad<name", "tail.", "tail "]) {
-      await expect(manager.renameEntry(rawRoot, "note.md", name)).rejects.toThrow("名称不可用。")
+      await expect(manager.renameEntry(rawRoot, "note.md", name)).rejects.toThrow("名称包含 Windows 不支持的字符或保留名。")
       await expect(readFile(path.join(rawRoot, "note.md"), "utf8")).resolves.toBe("note\n")
       await expect(lstat(path.join(rawRoot, name))).rejects.toMatchObject({ code: "ENOENT" })
     }
