@@ -6,9 +6,11 @@
  */
 
 import { z } from "zod"
+import path from "node:path"
 import { BrowserWindow, dialog, type OpenDialogOptions } from "electron"
-import type { IpcModule } from "../../runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
 import type { SynapseCreateLocalRepositoryPayload, SynapseRepositoryValidationResult } from "../../../src/types/repository"
 import { configStore } from "../../services/config-store"
@@ -53,6 +55,65 @@ function normalizeInstallStatusEntries(entries: InstallStatusEntry[] | undefined
 
 function sanitizeErrorForRepositoryLog(error: unknown): string {
   return sanitizeError(String(error)) || "unknown error"
+}
+
+async function guardCreateLocalRepository(
+  ctx: IpcHandlerContext,
+  payload: SynapseCreateLocalRepositoryPayload,
+): Promise<string> {
+  const actor = { kind: "user" } as const
+  const resource = path.resolve(payload.parentPath, payload.name.trim())
+  const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+  const permission = await permissionGuard.check({
+    action: "fs.write.outside-userdata",
+    actor,
+    resource,
+    context: {
+      source: "repository.createLocalRepository",
+      parentPath: path.resolve(payload.parentPath),
+    },
+  })
+
+  if (!permission.allowed) {
+    auditSink.record({
+      action: "fs.write.outside-userdata",
+      actor,
+      resource,
+      outcome: "denied",
+      metadata: {
+        source: "repository.createLocalRepository",
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+
+  return resource
+}
+
+function recordCreateLocalRepositoryAudit(
+  ctx: IpcHandlerContext,
+  resource: string,
+  outcome: "allowed" | "failed",
+  error?: unknown,
+): void {
+  ctx.resolve<AuditSink>("core.audit-sink").record({
+    action: "fs.write.outside-userdata",
+    actor: { kind: "user" },
+    resource,
+    outcome,
+    metadata: {
+      source: "repository.createLocalRepository",
+      ...(error
+        ? {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: String(error).length,
+          }
+        : {}),
+    },
+  })
 }
 
 function installStatusEntriesEqual(
@@ -279,9 +340,17 @@ export const repositoryIpcModule: IpcModule = {
       channel: "synapse:repository:create-local-repository",
       request: createLocalRepositoryPayloadSchema,
       response: createLocalRepositoryResultSchema,
-      handler: async (_ctx, payload: SynapseCreateLocalRepositoryPayload) => {
+      handler: async (ctx, payload: SynapseCreateLocalRepositoryPayload) => {
         logger.info(`Handling repository.createLocalRepository request. name: ${payload.name}, parentPath: ${payload.parentPath}`)
-        return repositoryStructureService.createLocalRepository(payload)
+        const resource = await guardCreateLocalRepository(ctx, payload)
+        try {
+          const result = await repositoryStructureService.createLocalRepository(payload)
+          recordCreateLocalRepositoryAudit(ctx, resource, "allowed")
+          return result
+        } catch (error) {
+          recordCreateLocalRepositoryAudit(ctx, resource, "failed", error)
+          throw error
+        }
       },
     },
     getPendingPushes: {

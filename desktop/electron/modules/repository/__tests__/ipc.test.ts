@@ -37,6 +37,11 @@ const mocks = vi.hoisted(() => {
     eventBus: {
       emit: vi.fn(),
     },
+    auditSink: {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    },
     installStatusCacheService: {
       buildCache: vi.fn(async () => {
         installStatus = nextInstallStatus
@@ -68,6 +73,10 @@ const mocks = vi.hoisted(() => {
       ensureContentDirectories: vi.fn(),
       initializeStructure: vi.fn(),
       validateDirectoryStructure: vi.fn(),
+    },
+    permissionGuard: {
+      check: vi.fn(),
+      registerPolicy: vi.fn(),
     },
     resetInstallStatus: () => {
       installStatus = {
@@ -147,6 +156,12 @@ function createContext() {
       if (id === "repo.sync-coordinator") {
         return mocks.coordinator
       }
+      if (id === "core.permission-guard") {
+        return mocks.permissionGuard
+      }
+      if (id === "core.audit-sink") {
+        return mocks.auditSink
+      }
       throw new Error(`Unexpected service id: ${id}`)
     }),
   }
@@ -181,6 +196,73 @@ describe("repositoryIpcModule", () => {
       repository: mocks.repositoryState,
     })
     mocks.contentSubmissionService.readPendingPushState.mockResolvedValue({ count: 0, items: [] })
+    mocks.permissionGuard.check.mockResolvedValue({ allowed: true })
+    mocks.repositoryStructureService.createLocalRepository.mockResolvedValue({
+      createdAt: "2026-05-21T12:00:00.000Z",
+      repository: {
+        uuid: "repo-local",
+        name: "Local Repo",
+        localPath: "/parent/Local Repo",
+        contentDirs: {},
+      },
+    })
+  })
+
+  it("guards local repository creation with write permission and audit", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+
+    await repositoryIpcModule.methods.createLocalRepository.handler(createContext() as never, {
+      name: "Local Repo",
+      parentPath: "/parent",
+    })
+
+    expect(mocks.permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/parent/Local Repo",
+      context: {
+        source: "repository.createLocalRepository",
+        parentPath: "/parent",
+      },
+    })
+    expect(mocks.repositoryStructureService.createLocalRepository).toHaveBeenCalledWith({
+      name: "Local Repo",
+      parentPath: "/parent",
+    })
+    expect(mocks.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/parent/Local Repo",
+      outcome: "allowed",
+      metadata: { source: "repository.createLocalRepository" },
+    }))
+  })
+
+  it("does not create a local repository when write permission is denied", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.permissionGuard.check.mockResolvedValueOnce({
+      allowed: false,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })
+
+    await expect(repositoryIpcModule.methods.createLocalRepository.handler(createContext() as never, {
+      name: "Local Repo",
+      parentPath: "/parent",
+    })).rejects.toThrow("denied by test-policy")
+
+    expect(mocks.repositoryStructureService.createLocalRepository).not.toHaveBeenCalled()
+    expect(mocks.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/parent/Local Repo",
+      outcome: "denied",
+      metadata: {
+        source: "repository.createLocalRepository",
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      },
+    }))
   })
 
   it("logs repository initialization preview lifecycle", async () => {
