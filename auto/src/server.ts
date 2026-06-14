@@ -216,6 +216,11 @@ function assertCsrfToken(req: IncomingMessage, csrfToken: string): void {
   }
 }
 
+function isClientInputError(error: unknown): error is Error {
+  if (!(error instanceof Error)) return false
+  return /\bmust\b/.test(error.message) || error.message === 'Active prompt not found'
+}
+
 export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuffer, paths: HandlerPaths = {}) {
   const csrfToken = randomBytes(32).toString('base64url')
 
@@ -345,6 +350,10 @@ export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuff
     } catch (err) {
       if (err instanceof HttpError) {
         sendError(res, err.statusCode, err.message)
+        return
+      }
+      if (err instanceof SyntaxError || isClientInputError(err)) {
+        sendError(res, 400, err.message)
         return
       }
       sendError(res, 500, err instanceof Error ? err.message : String(err))

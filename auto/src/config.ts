@@ -8,6 +8,9 @@ export const PACKAGE_ROOT = resolve(__dirname, '..')
 export const STATE_DIR = resolve(PACKAGE_ROOT, 'state')
 export const UI_CONFIG_PATH = resolve(STATE_DIR, 'ui-config.json')
 export const PROMPT_PATH = resolve(PACKAGE_ROOT, 'prompt.md')
+export const MAX_CONCURRENCY = 8
+export const MAX_TIMEOUT_MINUTES = 240
+export const MAX_LOGS = 500
 
 export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 export type ApprovalPolicy = 'untrusted' | 'on-failure' | 'on-request' | 'never'
@@ -75,11 +78,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function positiveInteger(value: unknown, name: string): number {
+function positiveInteger(value: unknown, name: string, max?: number): number {
   if (!Number.isInteger(value) || Number(value) < 1) {
     throw new Error(`${name} must be an integer >= 1`)
   }
-  return Number(value)
+  const nextValue = Number(value)
+  if (max !== undefined && nextValue > max) {
+    throw new Error(`${name} must be <= ${max}`)
+  }
+  return nextValue
 }
 
 function stringValue(value: unknown, name: string): string {
@@ -154,9 +161,9 @@ export function validateUiConfig(raw: unknown): UiConfig {
     activePromptName,
     prompts,
     workingDirectory: resolveFromPackageRoot(workingDirectory),
-    concurrency: positiveInteger(merged.concurrency, 'concurrency'),
-    timeoutMinutes: positiveInteger(merged.timeoutMinutes, 'timeoutMinutes'),
-    maxLogs: positiveInteger(merged.maxLogs, 'maxLogs'),
+    concurrency: positiveInteger(merged.concurrency, 'concurrency', MAX_CONCURRENCY),
+    timeoutMinutes: positiveInteger(merged.timeoutMinutes, 'timeoutMinutes', MAX_TIMEOUT_MINUTES),
+    maxLogs: positiveInteger(merged.maxLogs, 'maxLogs', MAX_LOGS),
     provider,
     codex: {
       command: codexCommand,

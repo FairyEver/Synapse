@@ -3,7 +3,15 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { DEFAULT_UI_CONFIG, loadUiConfig, saveUiConfig, validateUiConfig } from './config.js'
+import {
+  DEFAULT_UI_CONFIG,
+  MAX_CONCURRENCY,
+  MAX_LOGS,
+  MAX_TIMEOUT_MINUTES,
+  loadUiConfig,
+  saveUiConfig,
+  validateUiConfig,
+} from './config.js'
 
 test('DEFAULT_UI_CONFIG uses GPT-5.5 as the default model', () => {
   assert.equal(DEFAULT_UI_CONFIG.codex.model, 'gpt-5.5')
@@ -11,6 +19,21 @@ test('DEFAULT_UI_CONFIG uses GPT-5.5 as the default model', () => {
 
 test('validateUiConfig rejects invalid concurrency', () => {
   assert.throws(() => validateUiConfig({ concurrency: 0 }), /concurrency/)
+})
+
+test('validateUiConfig rejects resource limit values above supported bounds', () => {
+  assert.throws(() => validateUiConfig({ concurrency: MAX_CONCURRENCY + 1 }), /concurrency/)
+  assert.throws(() => validateUiConfig({ timeoutMinutes: MAX_TIMEOUT_MINUTES + 1 }), /timeoutMinutes/)
+  assert.throws(() => validateUiConfig({ maxLogs: MAX_LOGS + 1 }), /maxLogs/)
+
+  const config = validateUiConfig({
+    concurrency: MAX_CONCURRENCY,
+    timeoutMinutes: MAX_TIMEOUT_MINUTES,
+    maxLogs: MAX_LOGS,
+  })
+  assert.equal(config.concurrency, MAX_CONCURRENCY)
+  assert.equal(config.timeoutMinutes, MAX_TIMEOUT_MINUTES)
+  assert.equal(config.maxLogs, MAX_LOGS)
 })
 
 test('validateUiConfig fills blank model with GPT-5.5', () => {

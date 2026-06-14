@@ -6,6 +6,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { AutoScheduler } from './scheduler.js'
 import { createHandler, OutputBuffer } from './server.js'
+import { MAX_CONCURRENCY } from './config.js'
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>(resolve => {
@@ -232,6 +233,48 @@ test('mutable API rejects missing CSRF token, cross-origin requests, and non-JSO
     })
 
     assert.equal(startCount, 1)
+  } finally {
+    server.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('start API rejects concurrency above the local worker limit', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
+  let startCount = 0
+  const scheduler = {
+    start: async () => {
+      startCount += 1
+    },
+    getSnapshot: () => ({ running: false }),
+  } as unknown as AutoScheduler
+  const server = createServer(createHandler(scheduler, new OutputBuffer(), {
+    configPath: join(dir, 'ui-config.json'),
+    promptPath: join(dir, 'prompt.md'),
+    promptsDir: join(dir, 'prompts'),
+  }))
+  try {
+    await mkdir(join(dir, 'prompts'), { recursive: true })
+    const baseUrl = await listen(server)
+    const config = record(await requestJson(baseUrl, '/api/config'))
+    const token = record(await requestJson(baseUrl, '/api/csrf-token')).token
+    assert.equal(typeof token, 'string')
+
+    const response = await fetch(`${baseUrl}/api/start`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-auto-csrf-token': token as string,
+      },
+      body: JSON.stringify({
+        ...config,
+        concurrency: MAX_CONCURRENCY + 1,
+      }),
+    })
+
+    assert.equal(response.status, 400)
+    assert.match(JSON.stringify(await response.json()), /concurrency/)
+    assert.equal(startCount, 0)
   } finally {
     server.close()
     await rm(dir, { recursive: true, force: true })
