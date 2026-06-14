@@ -39,6 +39,7 @@ const DEFAULT_RATE_LIMIT_PER_MINUTE = 60
 const DEFAULT_WAIT_MS = 30_000
 const NETWORK_SERVICE_ID = "automation.webhook"
 const MAX_REPLY_CHARS = 3000
+const MAX_REQUEST_TIMEOUT_MINS = 120
 const INTERRUPTED_WEBHOOK_RUN_ERROR = "Webhook 运行因应用关闭或重启而中断。"
 const SAFE_WEBHOOK_REQUEST_METADATA_KEYS = new Set([
   "correlationId",
@@ -323,7 +324,8 @@ export class AutomationIngressService {
       const body = parseJsonBody(request.body)
       const mode = stringValue(body.replyMode) === "wait" ? "wait" : "async"
       const prepared = await this.prepareWebhook(body)
-      const promise = this.executeWebhook(prepared, body, request, config.path)
+      const timeoutMins = prepared.exec ? requestTimeoutMinsValue(body) : undefined
+      const promise = this.executeWebhook(prepared, body, request, config.path, timeoutMins)
       if (mode === "wait") {
         promise.catch((error) => {
           this.deps.logger?.warn("Webhook wait-mode run failed after response.", {
@@ -376,6 +378,7 @@ export class AutomationIngressService {
     body: Record<string, unknown>,
     request: LocalHttpRequest,
     path: string,
+    timeoutMins: number | undefined,
   ): Promise<Record<string, unknown>> {
     const { project, prompt, exec } = prepared
     const sessionKey = stringValue(body.sessionKey) ?? stringValue(body.session_key)
@@ -388,7 +391,7 @@ export class AutomationIngressService {
     try {
       const result = prompt
         ? await this.executePrompt(run, project, body, prompt)
-        : await this.executeShell(run, project, body, exec ?? "")
+        : await this.executeShell(run, project, body, exec ?? "", timeoutMins)
       const resultStatus = stringValue(result.status)
       const finalStatus: WebhookRunEntryV1["status"] = resultStatus === "failed" || resultStatus === "timeout"
         ? resultStatus
@@ -509,10 +512,11 @@ export class AutomationIngressService {
     project: AutomationIngressProjectSummary,
     body: Record<string, unknown>,
     exec: string,
+    timeoutMins: number | undefined,
   ): Promise<Record<string, unknown>> {
     const workDir = stringValue(body.workDir) ?? stringValue(body.workspacePath) ?? project.workspacePath
     if (!workDir) throw new WebhookError("workspace_required", "workDir is required", 400)
-    const timeoutMs = timeoutMinsToMs(numberValue(body.timeoutMins) ?? numberValue(body.timeout_mins))
+    const timeoutMs = timeoutMinsToMs(timeoutMins)
     const env: Record<string, string> = {}
     const shell = resolveShellCommand(shellValue(body.shell), exec, {
       windowsDefault: "powershell",
@@ -904,6 +908,24 @@ function timeoutMinsToMs(value: number | undefined): number | undefined {
   return value * 60_000
 }
 
+function requestTimeoutMinsValue(body: Record<string, unknown>): number | undefined {
+  const value = body.timeoutMins !== undefined ? body.timeoutMins : body.timeout_mins
+  if (value === undefined || value === null) return undefined
+  if (
+    typeof value !== "number"
+    || !Number.isInteger(value)
+    || value < 1
+    || value > MAX_REQUEST_TIMEOUT_MINS
+  ) {
+    throw new WebhookError(
+      "invalid_timeout",
+      `timeoutMins must be an integer from 1 to ${MAX_REQUEST_TIMEOUT_MINS}`,
+      400,
+    )
+  }
+  return value
+}
+
 function formatShellOutput(stdout: string | undefined, stderr: string | undefined): string {
   return [stdout?.trim(), stderr?.trim()].filter(Boolean).join("\n")
 }
@@ -955,10 +977,6 @@ function webhookListenResource(input: {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
-
-function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {

@@ -1034,6 +1034,102 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("rejects invalid webhook exec timeout overrides before creating runs", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    const run = vi.fn()
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: { run } as unknown as ControlledProcessRunner,
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+
+    for (const timeoutMins of [0, -1, 1.5, 121, "2"]) {
+      const response = await handleWebhookRequest(service, {
+        method: "POST",
+        url: "/hook",
+        headers: {
+          authorization: `Bearer ${config.token ?? ""}`,
+          "Content-Type": "application/json",
+        },
+        body: Buffer.from(JSON.stringify({
+          project: "project-1",
+          exec: "echo ok",
+          timeoutMins,
+          replyMode: "wait",
+        })),
+        remoteAddress: "127.0.0.1",
+      })
+
+      expect(response.status).toBe(400)
+      expect(response.body).toEqual({
+        ok: false,
+        error: {
+          code: "invalid_timeout",
+          message: "timeoutMins must be an integer from 1 to 120",
+        },
+      })
+    }
+
+    expect(await runs.list()).toEqual([])
+    expect(run).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Webhook request validation failed.",
+      expect.objectContaining({
+        boundary: "webhook.validation",
+        status: 400,
+        errorCode: "invalid_timeout",
+      }),
+    )
+  })
+
+  it("passes valid snake_case webhook exec timeout overrides to the process runner", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      stdout: "ok",
+      stderr: "",
+      timedOut: false,
+    }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: { run } as unknown as ControlledProcessRunner,
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+
+    const response = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: {
+        authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: Buffer.from(JSON.stringify({
+        project: "project-1",
+        exec: "echo ok",
+        timeout_mins: 2,
+        replyMode: "wait",
+      })),
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(response.status).toBe(200)
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: 120_000,
+    }))
+  })
+
   it("returns a fixed internal error when webhook config loading fails during a request", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
