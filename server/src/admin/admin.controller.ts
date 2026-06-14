@@ -9,14 +9,14 @@ import { badRequestFromZodError } from "../common/zod-validation"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { LiveDeviceService } from "../live/live-device.service"
 import { WebhookService } from "../webhooks/webhook.service"
-import { AdminService } from "./admin.service"
+import { AdminService, maxBulkInvitationDeleteIds } from "./admin.service"
 
 const userStatusSchema = z.object({
   status: z.enum(["active", "disabled"]),
 }).strict()
 
 const bulkInvitationDeleteSchema = z.object({
-  ids: z.array(z.string().min(1)).min(1),
+  ids: z.array(z.string().min(1)).min(1).max(maxBulkInvitationDeleteIds, `最多选择 ${maxBulkInvitationDeleteIds} 项`),
 }).strict()
 
 const createInvitationSchema = z.object({

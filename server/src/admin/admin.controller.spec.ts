@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { AdminController } from "./admin.controller"
-import type { AdminService } from "./admin.service"
+import { maxBulkInvitationDeleteIds, type AdminService } from "./admin.service"
 import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.service"
 import type { LiveDeviceService } from "../live/live-device.service"
 import type { WebhookService } from "../webhooks/webhook.service"
@@ -409,6 +409,18 @@ describe("AdminController", () => {
 
     expect(() => controller.deleteInvitations({ ids: [] }, {} as never))
       .toThrow("邀请 ID 无效：ids 至少选择 1 项")
+  })
+
+  it("rejects oversized bulk invitation deletion", async () => {
+    const deleteInvitations = vi.fn()
+    const controller = createController({ deleteInvitations } as never)
+
+    expect(() => controller.deleteInvitations(
+      { ids: Array.from({ length: maxBulkInvitationDeleteIds + 1 }, (_, index) => `invite-${index}`) },
+      {} as never,
+    ))
+      .toThrow(`邀请 ID 无效：ids 最多选择 ${maxBulkInvitationDeleteIds} 项`)
+    expect(deleteInvitations).not.toHaveBeenCalled()
   })
 
   it("rejects invalid user status", async () => {

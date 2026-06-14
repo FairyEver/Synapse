@@ -14,6 +14,8 @@ type TeamListFilters = {
   readonly search?: string
 }
 const invitationDays = 7
+export const maxBulkInvitationDeleteIds = 100
+const bulkInvitationDeleteAuditSampleSize = 10
 
 const adminUserSelect = {
   id: true,
@@ -175,6 +177,9 @@ export class AdminService {
 
   async deleteInvitations(ids: readonly string[], actorEmail = "system", ipAddress = "system") {
     const uniqueIds = [...new Set(ids)]
+    if (uniqueIds.length > maxBulkInvitationDeleteIds) {
+      throw new BadRequestException(`一次最多删除 ${maxBulkInvitationDeleteIds} 个邀请。`)
+    }
     const result = await this.prisma.$transaction(async (tx) => {
       const deleted = await tx.invitation.deleteMany({
         where: { id: { in: uniqueIds } },
@@ -189,7 +194,11 @@ export class AdminService {
       action: "admin.invitation.delete_many",
       targetType: "invitation",
       targetId: `batch:${result.count}`,
-      detail: { ids: uniqueIds, count: result.count },
+      detail: {
+        count: result.count,
+        ids: uniqueIds.slice(0, bulkInvitationDeleteAuditSampleSize),
+        idsTruncated: uniqueIds.length > bulkInvitationDeleteAuditSampleSize,
+      },
       ipAddress,
     })
     return { ok: true, count: result.count }

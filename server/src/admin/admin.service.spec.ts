@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Prisma } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
-import { AdminService } from "./admin.service"
+import { AdminService, maxBulkInvitationDeleteIds } from "./admin.service"
 
 type DailyTrendCountMock = {
   readonly users?: number
@@ -470,9 +470,47 @@ describe("AdminService", () => {
       action: "admin.invitation.delete_many",
       targetType: "invitation",
       targetId: "batch:2",
-      detail: { ids: ["invite-1", "invite-2"], count: 2 },
+      detail: { ids: ["invite-1", "invite-2"], idsTruncated: false, count: 2 },
       ipAddress: "203.0.113.30",
     })
+  })
+
+  it("rejects oversized bulk invitation deletes before touching the database", async () => {
+    const prisma = createPrismaMock()
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.deleteInvitations(
+      Array.from({ length: maxBulkInvitationDeleteIds + 1 }, (_, index) => `invite-${index}`),
+      "admin@example.com",
+      "203.0.113.30",
+    ))
+      .rejects
+      .toThrow(`一次最多删除 ${maxBulkInvitationDeleteIds} 个邀请。`)
+
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+    expect(prisma.invitation.deleteMany).not.toHaveBeenCalled()
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("truncates bulk invitation ids in audit details", async () => {
+    const prisma = createPrismaMock()
+    const ids = Array.from({ length: 12 }, (_, index) => `invite-${index + 1}`)
+    prisma.invitation.deleteMany.mockResolvedValue({ count: ids.length })
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.deleteInvitations(ids, "admin@example.com", "203.0.113.30"))
+      .resolves
+      .toEqual({ ok: true, count: ids.length })
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      detail: {
+        count: ids.length,
+        ids: ids.slice(0, 10),
+        idsTruncated: true,
+      },
+    }))
   })
 
   it("returns successful invitation mutations when service-managed audit writes fail", async () => {
