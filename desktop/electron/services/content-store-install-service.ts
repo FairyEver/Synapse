@@ -362,7 +362,7 @@ export class ContentStoreInstallService {
         logger.warn("Failed to clean rejected content store install package.", {
           cleanupErrorName: cleanupError instanceof Error ? cleanupError.name : typeof cleanupError,
           errorName: error instanceof Error ? error.name : typeof error,
-          sessionId,
+          sessionIdLength: sessionId.length,
         })
       })
       if (error instanceof AccountAuthenticationRequiredError) {

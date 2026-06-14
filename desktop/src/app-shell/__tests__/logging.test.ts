@@ -67,6 +67,34 @@ describe("renderer logging", () => {
     expect(JSON.stringify(logWrite.mock.calls)).not.toContain("sk-secret")
   })
 
+  it("redacts content store install session IDs before writing renderer logs", () => {
+    const logger = createRendererLogger("content-store-install.window")
+
+    logger.error("Failed to prepare content store install.", {
+      sessionId: "install-session-secret",
+      installSessionId: "install-session-secret-2",
+      contentStoreInstallSessionId: "install-session-secret-3",
+      nested: {
+        session_id: "install-session-secret-4",
+      },
+    })
+
+    expect(logWrite).toHaveBeenCalledWith({
+      level: "error",
+      category: "content-store-install.window",
+      message: "Failed to prepare content store install.",
+      details: expect.objectContaining({
+        sessionId: "[redacted]",
+        installSessionId: "[redacted]",
+        contentStoreInstallSessionId: "[redacted]",
+        nested: {
+          session_id: "[redacted]",
+        },
+      }),
+    })
+    expect(JSON.stringify(logWrite.mock.calls)).not.toContain("install-session-secret")
+  })
+
   it("sanitizes unhandled rejection reasons before writing renderer diagnostics", () => {
     const uninstall = installRendererLogForwarding()
     const reason = new Error("failed with authorization=Bearer raw-token and prompt text")

@@ -103,7 +103,7 @@ function createContentStoreInstallWindowService(deps: ContentStoreInstallWindowS
         void deps.cleanupSession?.(request.session).catch((error) => {
           deps.logger.warn("Failed to clean content store install window session.", {
             error,
-            sessionId: request.session,
+            sessionIdLength: request.session.length,
           })
         })
       }

@@ -54,6 +54,32 @@ describe("logStore", () => {
     expect(entry.details).not.toContain("inline-token")
   })
 
+  it("redacts content store install session IDs from structured log details", () => {
+    const entry = logStore.write({
+      source: "main",
+      level: "warn",
+      category: "content-store-install",
+      message: "contentStoreInstallSessionId=inline-install-session",
+      details: {
+        sessionId: "install-session-secret",
+        installSessionId: "install-session-secret-2",
+        contentStoreInstallSessionId: "install-session-secret-3",
+        nested: {
+          note: "sessionId=inline-session installSessionId=inline-install",
+        },
+      },
+    })
+
+    expect(entry.message).toContain("contentStoreInstallSessionId=[redacted]")
+    expect(entry.details).toContain("[redacted]")
+    expect(entry.message).not.toContain("inline-install-session")
+    expect(entry.details).not.toContain("install-session-secret")
+    expect(entry.details).not.toContain("install-session-secret-2")
+    expect(entry.details).not.toContain("install-session-secret-3")
+    expect(entry.details).not.toContain("inline-session")
+    expect(entry.details).not.toContain("inline-install")
+  })
+
   it("redacts bare bearer and platform tokens without removing paths", () => {
     const entry = logStore.write({
       source: "main",

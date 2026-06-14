@@ -36,7 +36,7 @@ function useContentStoreInstall(sessionId: string) {
 
       setState({ status: "ready", source: prepared.source })
     } catch (error) {
-      logger.error("Failed to prepare content store install.", { error, sessionId })
+      logger.error("Failed to prepare content store install.", { error, sessionIdLength: sessionId.length })
       setState({
         status: "error",
         message: error instanceof Error ? error.message : "安装包准备失败。",
