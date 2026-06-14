@@ -30,6 +30,7 @@ import { builtinContentService } from "./builtin-content-service"
 import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 import {
+  createEditorWriteErrorLogMeta,
   formatEditorWriteFailure,
   readExistingTextFile,
   replaceDirectoryAtomically,
@@ -433,7 +434,10 @@ export class ContentInstallService {
                 recordEditorWriteAudit(security, backupPath, "allowed", backupAuditMetadata)
               } catch (error) {
                 recordEditorWriteAudit(security, backupPath, "failed", backupAuditMetadata)
-                logger.warn("Failed to backup existing skill directory", { targetPath: path.basename(target.targetPath), error })
+                logger.warn("Failed to backup existing skill directory", {
+                  targetPath: path.basename(target.targetPath),
+                  ...createEditorWriteErrorLogMeta(error),
+                })
                 throw new Error("备份旧 Skill 失败，未替换目标。", { cause: error })
               }
             }
@@ -510,7 +514,7 @@ export class ContentInstallService {
                 logger.warn("Failed to restore backed up skill directory", {
                   backupPath: path.basename(backupPathForRestore),
                   targetPath: path.basename(target.targetPath),
-                  error: restoreError,
+                  ...createEditorWriteErrorLogMeta(restoreError),
                 })
                 throw createSkillBackupRestoreFailureError(backupPathForRestore)
               }
@@ -526,7 +530,10 @@ export class ContentInstallService {
             try {
               await rm(previousSkillDirectoryPath, { recursive: true, force: true })
             } catch (err) {
-              logger.warn("Failed to clean up previous skill directory", err)
+              logger.warn("Failed to clean up previous skill directory", {
+                targetPath: path.basename(previousSkillDirectoryPath),
+                ...createEditorWriteErrorLogMeta(err),
+              })
               installWarning = "旧 Skill 目录清理失败，编辑器可能残留旧文件。"
             }
           }
@@ -550,7 +557,7 @@ export class ContentInstallService {
         } catch (error) {
           logger.warn("Failed to release prepared install lock.", {
             contentId: payload.contentId,
-            error,
+            ...createEditorWriteErrorLogMeta(error),
           })
         }
       }

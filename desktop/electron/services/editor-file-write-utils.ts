@@ -1,12 +1,32 @@
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { errorLogCode, errorLogName } from "./error-sanitize"
 import { isFileNotFoundError, isPermissionError, pathExists } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.editor-file-write")
 
+interface EditorWriteErrorLogMeta {
+  errorName: string
+  errorCode?: string
+}
+
 function normalizeMarkdownContent(content: string): string {
   return content.endsWith("\n") ? content : `${content}\n`
+}
+
+function createEditorWriteErrorLogMeta(error: unknown): EditorWriteErrorLogMeta {
+  const errorCode = errorLogCode(error)
+  return {
+    errorName: errorLogName(error),
+    ...(errorCode ? { errorCode } : {}),
+  }
+}
+
+function isRawEditorWriteError(error: unknown, targetPath: string): boolean {
+  if (!error || typeof error !== "object") return false
+  if (errorLogCode(error)) return true
+  return error instanceof Error && error.message.includes(targetPath)
 }
 
 async function swapPathAtomically(replacementPath: string, targetPath: string): Promise<void> {
@@ -33,13 +53,15 @@ async function swapPathAtomically(replacementPath: string, targetPath: string): 
     movedReplacement = true
   } catch (error) {
     if (movedExistingTarget && !movedReplacement) {
-      await rename(backupPath, targetPath).catch((err) => logger.warn("Failed to restore backup", err))
+      await rename(backupPath, targetPath)
+        .catch((err) => logger.warn("Failed to restore backup", createEditorWriteErrorLogMeta(err)))
     }
 
     throw error
   } finally {
     if (movedExistingTarget && movedReplacement) {
-      await rm(backupPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up backup", err))
+      await rm(backupPath, { recursive: true, force: true })
+        .catch((err) => logger.warn("Failed to clean up backup", createEditorWriteErrorLogMeta(err)))
     }
   }
 }
@@ -69,7 +91,8 @@ async function replaceFileAtomically(targetPath: string, content: string): Promi
     await swapPathAtomically(tempFilePath, targetPath)
     logger.info("Wrote file atomically.", { targetPath })
   } finally {
-    await rm(tempDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up temp directory", err))
+    await rm(tempDirectoryPath, { recursive: true, force: true })
+      .catch((err) => logger.warn("Failed to clean up temp directory", createEditorWriteErrorLogMeta(err)))
   }
 }
 
@@ -87,14 +110,19 @@ async function replaceDirectoryAtomically(
     await populate(stagingDirectoryPath)
     await swapPathAtomically(stagingDirectoryPath, targetPath)
   } catch (error) {
-    await rm(stagingDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging directory", err))
+    await rm(stagingDirectoryPath, { recursive: true, force: true })
+      .catch((err) => logger.warn("Failed to clean up staging directory", createEditorWriteErrorLogMeta(err)))
     throw error
   }
 }
 
 function formatEditorWriteFailure(error: unknown, targetPath: string): Error {
   if (isPermissionError(error)) {
-    return new Error(`目标位置不可写：${targetPath}`)
+    return new Error(`目标位置不可写：${path.basename(targetPath)}`)
+  }
+
+  if (isRawEditorWriteError(error, targetPath)) {
+    return new Error("写入失败，请稍后重试。")
   }
 
   if (error instanceof Error) {
@@ -105,6 +133,7 @@ function formatEditorWriteFailure(error: unknown, targetPath: string): Error {
 }
 
 export {
+  createEditorWriteErrorLogMeta,
   formatEditorWriteFailure,
   normalizeMarkdownContent,
   readExistingTextFile,
