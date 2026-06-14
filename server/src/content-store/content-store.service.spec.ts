@@ -433,6 +433,37 @@ describe("ContentStoreService", () => {
     }))
   })
 
+  it("does not expose package storage keys in public detail responses", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      visibility: "public",
+      latestVersionId: "version-1",
+    }))
+    prisma.contentStoreInstallEvent.count.mockResolvedValue(3)
+    prisma.contentStoreVersion.findFirst
+      .mockResolvedValueOnce(version({
+        id: "version-1",
+        itemId: "item-1",
+        packageKey: "content-store/packages/item-1/version-1.zip",
+        packageSha256: "a".repeat(64),
+        packageSize: 128n,
+      }))
+      .mockResolvedValueOnce({ versionNumber: 1 })
+
+    const result = await service.getDetail("user-2", "item-1")
+
+    expect(result.latestVersion).toEqual({
+      id: "version-1",
+      itemId: "item-1",
+      versionNumber: 1,
+      packageSha256: "a".repeat(64),
+      packageSize: "128",
+      createdAt: "2026-06-09T00:00:00.000Z",
+    })
+    expect(JSON.stringify(result)).not.toContain("packageKey")
+    expect(JSON.stringify(result)).not.toContain("content-store/packages/item-1/version-1.zip")
+  })
+
   it("sorts list results by install count", async () => {
     prisma.contentStoreItem.count.mockResolvedValue(2)
     prisma.contentStoreItem.findMany.mockResolvedValue([

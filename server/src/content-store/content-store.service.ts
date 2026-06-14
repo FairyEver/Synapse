@@ -1020,7 +1020,6 @@ function versionDto(version: ContentStoreVersionRow): ContentStoreVersionDto {
     id: version.id,
     itemId: version.itemId,
     versionNumber: version.versionNumber,
-    packageKey: version.packageKey,
     packageSha256: version.packageSha256,
     packageSize: formatOptionalBigInt(version.packageSize),
     createdAt: version.createdAt.toISOString(),

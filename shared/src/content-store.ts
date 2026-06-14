@@ -39,7 +39,6 @@ export interface ContentStoreVersionDto {
   readonly id: string
   readonly itemId: string
   readonly versionNumber: number
-  readonly packageKey: string | null
   readonly packageSha256: string | null
   readonly packageSize: string | null
   readonly createdAt: string
