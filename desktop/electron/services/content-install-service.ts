@@ -1,5 +1,5 @@
 import { app } from "electron"
-import { cp, mkdir, rename, rm, writeFile } from "node:fs/promises"
+import { cp, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
@@ -24,7 +24,6 @@ import { editorAdapterById } from "./editor-adapters"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import {
   findSkillDirectoryByContentId,
-  SYNAPSE_SKILL_ID_FILE_NAME,
 } from "./editor-adapters/skill-identity"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
 import { builtinContentService } from "./builtin-content-service"
@@ -92,6 +91,7 @@ const unavailablePreparedSourceProvider: PreparedContentInstallSourceProvider = 
 
 const UNTRUSTED_PROJECT_PATH_ERROR = "项目路径不在已配置项目中。"
 const UNTRUSTED_INSTALL_TARGET_ERROR = "安装目标不在已配置编辑器路径中。"
+const MAX_SKILL_BACKUP_PATH_ATTEMPTS = 1000
 
 function isCrossDeviceRenameError(error: unknown): boolean {
   return typeof error === "object"
@@ -229,6 +229,28 @@ function isSamePath(left: string, right: string): boolean {
 
 function getDesktopSkillBackupPath(targetPath: string): string {
   return path.join(app.getPath("desktop"), `${path.basename(targetPath)}-synapse备份`)
+}
+
+async function getAvailableDesktopSkillBackupPath(targetPath: string): Promise<string> {
+  const preferredPath = getDesktopSkillBackupPath(targetPath)
+  if (!await pathEntryExists(preferredPath)) return preferredPath
+  for (let index = 2; index <= MAX_SKILL_BACKUP_PATH_ATTEMPTS; index += 1) {
+    const candidate = `${preferredPath}-${index}`
+    if (!await pathEntryExists(candidate)) return candidate
+  }
+  throw new Error("无法创建唯一的 Skill 备份路径。")
+}
+
+async function pathEntryExists(targetPath: string): Promise<boolean> {
+  try {
+    await lstat(targetPath)
+    return true
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false
+    }
+    throw error
+  }
 }
 
 function createSkillBackupRestoreFailureError(backupPath: string): Error {
@@ -397,13 +419,20 @@ export class ContentInstallService {
           if (payload.contentType === "skill" && payload.replaceConfirmed) {
             const targetExists = await pathExists(target.targetPath)
             if (targetExists && target.targetPath !== previousSkillDirectoryPath) {
-              const backupPath = getDesktopSkillBackupPath(target.targetPath)
+              const backupPath = await getAvailableDesktopSkillBackupPath(target.targetPath)
+              const backupAuditMetadata = {
+                ...auditMetadata,
+                operation: "install-backup",
+                targetName: path.basename(target.targetPath),
+              }
+              await checkEditorWritePermission(security, backupPath, backupAuditMetadata)
               try {
                 await mkdir(path.dirname(backupPath), { recursive: true })
-                await rm(backupPath, { recursive: true, force: true })
                 await moveDirectoryAllowingCrossDevice(target.targetPath, backupPath)
                 backupPathForRestore = backupPath
+                recordEditorWriteAudit(security, backupPath, "allowed", backupAuditMetadata)
               } catch (error) {
+                recordEditorWriteAudit(security, backupPath, "failed", backupAuditMetadata)
                 logger.warn("Failed to backup existing skill directory", { targetPath: path.basename(target.targetPath), error })
                 throw new Error("备份旧 Skill 失败，未替换目标。", { cause: error })
               }
@@ -467,10 +496,17 @@ export class ContentInstallService {
             })
           } catch (error) {
             if (backupPathForRestore && await pathExists(backupPathForRestore)) {
+              const restoreAuditMetadata = {
+                ...auditMetadata,
+                operation: "install-backup-restore",
+                targetName: path.basename(target.targetPath),
+              }
               try {
                 await rm(target.targetPath, { recursive: true, force: true })
                 await moveDirectoryAllowingCrossDevice(backupPathForRestore, target.targetPath)
+                recordEditorWriteAudit(security, backupPathForRestore, "allowed", restoreAuditMetadata)
               } catch (restoreError) {
+                recordEditorWriteAudit(security, backupPathForRestore, "failed", restoreAuditMetadata)
                 logger.warn("Failed to restore backed up skill directory", {
                   backupPath: path.basename(backupPathForRestore),
                   targetPath: path.basename(target.targetPath),

@@ -157,6 +157,13 @@ describe("ContentInstallService security", () => {
       outcome: "allowed",
       resource: targetPath,
     }))
+    expect(auditSink.list()).toContainEqual(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      outcome: "allowed",
+      resource: backupPath,
+      metadata: expect.objectContaining({ operation: "install-backup" }),
+    }))
   })
 
   it("copies the old Skill to desktop backup when rename crosses devices", async () => {
@@ -208,10 +215,11 @@ describe("ContentInstallService security", () => {
     await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
   })
 
-  it("replaces Skill when a stale desktop backup symlink already exists", async () => {
+  it("uses a unique Skill backup path when a stale desktop backup symlink already exists", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")
     const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    const uniqueBackupPath = `${backupPath}-2`
     await mkdir(targetPath, { recursive: true })
     await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
     await rm(backupPath, { recursive: true, force: true })
@@ -255,12 +263,73 @@ describe("ContentInstallService security", () => {
     })
 
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# New Skill\n")
-    await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
+    await expect(readFile(path.join(uniqueBackupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
+    expect(auditSink.list()).toContainEqual(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      outcome: "allowed",
+      resource: uniqueBackupPath,
+      metadata: expect.objectContaining({ operation: "install-backup" }),
+    }))
+  })
+
+  it("requires write permission for the desktop Skill backup path before replacing", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    const auditSink = new InMemoryAuditSink()
+    const permissionGuard = createPermissionGuard()
+    permissionGuard.registerPolicy({
+      id: "deny-backup",
+      decide: (request) => request.resource === backupPath ? "deny" : "defer-to-next",
+    })
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      replaceConfirmed: true,
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard,
+    })).rejects.toThrow("没有写入该位置的权限。")
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
+    expect(auditSink.list()).toContainEqual(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      outcome: "denied",
+      resource: backupPath,
+      metadata: expect.objectContaining({ operation: "install-backup" }),
+    }))
+    expect(auditSink.list()).not.toContainEqual(expect.objectContaining({
+      outcome: "allowed",
+      resource: targetPath,
+    }))
   })
 
   it("restores the old Skill directory when replacement fails after backup", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
     await mkdir(targetPath, { recursive: true })
     await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
 
@@ -294,14 +363,28 @@ describe("ContentInstallService security", () => {
     })).rejects.toThrow("prepare failed")
 
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
-    expect(auditSink.list()).toEqual([
+    expect(auditSink.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        outcome: "allowed",
+        resource: backupPath,
+        metadata: expect.objectContaining({ operation: "install-backup" }),
+      }),
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        outcome: "allowed",
+        resource: backupPath,
+        metadata: expect.objectContaining({ operation: "install-backup-restore" }),
+      }),
       expect.objectContaining({
         action: "fs.write",
         actor: { kind: "user" },
         outcome: "failed",
         resource: targetPath,
       }),
-    ])
+    ]))
   })
 
   it("reports restore failure when replacement fails after backup", async () => {
@@ -352,13 +435,27 @@ describe("ContentInstallService security", () => {
     })).rejects.toThrow("旧 Skill 备份恢复失败")
 
     await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
-    expect(auditSink.list()).toEqual([
+    expect(auditSink.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        outcome: "allowed",
+        resource: backupPath,
+        metadata: expect.objectContaining({ operation: "install-backup" }),
+      }),
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        outcome: "failed",
+        resource: backupPath,
+        metadata: expect.objectContaining({ operation: "install-backup-restore" }),
+      }),
       expect.objectContaining({
         action: "fs.write",
         actor: { kind: "user" },
         outcome: "failed",
         resource: targetPath,
       }),
-    ])
+    ]))
   })
 })
