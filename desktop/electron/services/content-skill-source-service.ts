@@ -133,13 +133,14 @@ async function readSkillDraftFromDirectory(
       throwInvalid("sourceDirectoryPath", "未找到 Skill 主文件。")
     }
 
+    const mainFileSize = await inspectSkillMainFileSize(mainFilePath)
     const content = await readFile(mainFilePath, "utf8")
     if (!content.trim()) {
       throwInvalid("content", "Skill 主说明为空。")
     }
 
     const skip = new Set<string>([path.basename(mainFilePath), SYNAPSE_SKILL_ID_FILE])
-    const state: SkillFileCollectionState = { fileCount: 0, totalSize: 0, files: [] }
+    const state: SkillFileCollectionState = { fileCount: 0, totalSize: mainFileSize, files: [] }
     await collectSkillFiles(dirPath, dirPath, skip, state)
     state.files.sort((a, b) => a.originalName.localeCompare(b.originalName))
     assertUniqueSkillAttachmentPaths(state.files)
@@ -156,6 +157,25 @@ async function readSkillDraftFromDirectory(
     recordSkillSourceAudit(security, dirPath, "failed", auditMetadata)
     throw error
   }
+}
+
+async function inspectSkillMainFileSize(mainFilePath: string): Promise<number> {
+  let fileStat: Awaited<ReturnType<typeof lstat>>
+  try {
+    fileStat = await lstat(mainFilePath)
+  } catch (error) {
+    logger.warn("Failed to inspect skill main file.", {
+      ...sourcePathDiagnostic(mainFilePath),
+      error: sanitizeSkillSourceError(error),
+    })
+    throwInvalid("content", "无法检查 Skill 主文件。")
+  }
+
+  if (fileStat.size > CONTENT_SKILL_ATTACHMENT_MAX_SIZE) {
+    throwInvalid("content", "Skill 主文件超过 10MB。")
+  }
+
+  return fileStat.size
 }
 
 async function collectSkillFiles(
@@ -227,7 +247,7 @@ async function collectSkillFile(
 
   state.totalSize += size
   if (state.totalSize > CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE) {
-    throwInvalid("files", "附件总大小超过 50MB。")
+    throwInvalid("files", "Skill 文件总大小超过 50MB。")
   }
 
   try {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -122,6 +122,15 @@ describe("content skill source service", () => {
     await writeText(path.join(root, "secrets", "id_rsa"), "secret")
 
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(ContentCapabilityError)
+  })
+
+  it("rejects oversized skill main files before reading draft content", async () => {
+    const root = await createTempRoot()
+    const mainFilePath = path.join(root, "SKILL.md")
+    await writeText(mainFilePath, "# Demo Skill")
+    await truncate(mainFilePath, 10 * 1024 * 1024 + 1)
+
+    await expect(readSkillDraftFromDirectory(root)).rejects.toThrow("Skill 主文件超过 10MB。")
   })
 
   it.skipIf(process.platform === "win32")("rejects unreadable attachments instead of returning an incomplete draft", async () => {
