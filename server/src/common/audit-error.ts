@@ -9,7 +9,7 @@ const COOKIE_PATTERN = /\bCookie\s*[:=]\s*[^\r\n]+/gi
 const SENSITIVE_KEY_PATTERN = String.raw`[A-Za-z0-9_-]*(?:token|api[_-]?key|secret|password|credential)`
 const SENSITIVE_ASSIGNMENT_PATTERN = new RegExp(String.raw`\b(${SENSITIVE_KEY_PATTERN})\s*=\s*[^&\s,;]+`, "gi")
 const SENSITIVE_JSON_FIELD_PATTERN = new RegExp(String.raw`(["']?(?:${SENSITIVE_KEY_PATTERN})["']?\s*:\s*)["'][^"']*["']`, "gi")
-const URL_PATTERN = /\bhttps?:\/\/[^\s<>"']+/gi
+const URL_PATTERN = /\b[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s<>"']+/g
 const POSIX_PATH_PATTERN = /(?:\/(?:Users|home|private|tmp|var|opt)\/[^\s,;)]*)/g
 const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\[^\s,;)]+/g
 

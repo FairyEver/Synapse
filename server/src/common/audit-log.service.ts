@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Optional } from "@nestjs/common"
 import { PinoLogger } from "nestjs-pino"
 import { PrismaService } from "../prisma/prisma.service"
+import { formatAuditError } from "./audit-error"
 import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./pagination"
 
 const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "targetId"] as const
@@ -19,6 +20,13 @@ interface AuditLogFilterOptions {
   readonly action?: string
   readonly from?: string
   readonly to?: string
+}
+
+interface AuditPersistenceErrorMetadata {
+  readonly errorName: string
+  readonly errorCode?: string
+  readonly errorLength: number
+  readonly errorMessage: string
 }
 
 function buildAuditLogWhere(options: AuditLogFilterOptions): Record<string, unknown> {
@@ -95,7 +103,7 @@ export class AuditLogService {
       } catch (error) {
         this.recordFailureCount += 1
         this.logger?.warn({
-          err: error,
+          error: auditPersistenceErrorMetadata(error),
           action: input.action,
           targetType: input.targetType,
           targetId: input.targetId,
@@ -134,5 +142,18 @@ export class AuditLogService {
       orderBy: { createdAt: "desc" },
       take: limit + 1,
     })
+  }
+}
+
+function auditPersistenceErrorMetadata(error: unknown): AuditPersistenceErrorMetadata {
+  const message = error instanceof Error ? error.message : String(error)
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? (error as { readonly code?: unknown }).code
+    : undefined
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    ...(typeof code === "string" ? { errorCode: code } : {}),
+    errorLength: message.length,
+    errorMessage: formatAuditError(error),
   }
 }

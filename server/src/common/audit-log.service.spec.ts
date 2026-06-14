@@ -40,7 +40,11 @@ describe("AuditLogService", () => {
 
     expect(prisma.auditLog.create).toHaveBeenCalledTimes(2)
     expect(logger.warn).toHaveBeenLastCalledWith({
-      err: error,
+      error: {
+        errorName: "Error",
+        errorLength: "database unavailable".length,
+        errorMessage: "database unavailable",
+      },
       action: auditInput.action,
       targetType: auditInput.targetType,
       targetId: auditInput.targetId,
@@ -64,7 +68,11 @@ describe("AuditLogService", () => {
 
     expect(prisma.auditLog.create).toHaveBeenCalledTimes(2)
     expect(logger.warn).toHaveBeenCalledWith({
-      err: error,
+      error: {
+        errorName: "Error",
+        errorLength: "database unavailable".length,
+        errorMessage: "database unavailable",
+      },
       action: auditInput.action,
       targetType: auditInput.targetType,
       targetId: auditInput.targetId,
@@ -92,6 +100,35 @@ describe("AuditLogService", () => {
       attempt: 2,
       recordFailureCount: 4,
     }), "Failed to record audit log")
+  })
+
+  it("redacts audit persistence failure logs without passing the raw error object", async () => {
+    const error = Object.assign(
+      new Error("postgres://user:pass@example.internal/db Authorization: Bearer raw-token password=db-secret at /Users/admin/private/schema.prisma"),
+      { code: "P1001" },
+    )
+    const prisma = {
+      auditLog: { create: vi.fn().mockRejectedValue(error) },
+    }
+    const logger = { warn: vi.fn() }
+    const service = new AuditLogService(prisma as unknown as PrismaService, logger as never)
+
+    await expect(service.record(auditInput)).rejects.toThrow(AuditLogWriteError)
+
+    const serializedLogs = JSON.stringify(logger.warn.mock.calls)
+    expect(serializedLogs).not.toContain("raw-token")
+    expect(serializedLogs).not.toContain("db-secret")
+    expect(serializedLogs).not.toContain("/Users/admin/private")
+    expect(serializedLogs).not.toContain("postgres://user:pass@example.internal")
+    expect(logger.warn).toHaveBeenLastCalledWith(expect.objectContaining({
+      error: expect.objectContaining({
+        errorName: "Error",
+        errorCode: "P1001",
+        errorLength: error.message.length,
+        errorMessage: expect.stringContaining("[REDACTED]"),
+      }),
+    }), "Failed to record audit log")
+    expect(logger.warn.mock.calls.at(-1)?.[0]).not.toHaveProperty("err")
   })
 
   it("lists audit logs for export without pagination", async () => {
