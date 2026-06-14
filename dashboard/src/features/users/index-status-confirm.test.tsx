@@ -1,0 +1,160 @@
+// @vitest-environment jsdom
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act } from 'react'
+import type { ReactNode } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { adminApi } from '@/lib/api'
+import UsersPage from './index'
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+vi.mock('@/lib/api', () => ({
+  adminApi: {
+    listLiveClients: vi.fn(),
+    listUsers: vi.fn(),
+    subscribeLiveClients: vi.fn(),
+    updateUserStatus: vi.fn(),
+  },
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}))
+
+vi.mock('@/components/layout/header', () => ({
+  Header: ({ children }: { children: ReactNode }) => <header>{children}</header>,
+}))
+
+vi.mock('@/components/layout/main', () => ({
+  Main: ({ children }: { children: ReactNode }) => <main>{children}</main>,
+}))
+
+const mockedAdminApi = vi.mocked(adminApi)
+
+let root: Root | null = null
+let host: HTMLDivElement | null = null
+
+afterEach(() => {
+  if (root) {
+    act(() => {
+      root?.unmount()
+    })
+  }
+  host?.remove()
+  root = null
+  host = null
+  document.body.innerHTML = ''
+  vi.clearAllMocks()
+})
+
+describe('UsersPage status confirmation', () => {
+  it('requires confirmation before disabling a user', async () => {
+    mockedAdminApi.listUsers.mockResolvedValue({
+      data: [{
+        id: 'user-1',
+        email: 'ada@example.com',
+        status: 'active',
+        memberships: [],
+        createdAt: '2026-06-14T00:00:00.000Z',
+        updatedAt: '2026-06-14T00:00:00.000Z',
+      }],
+      total: 1,
+    })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+    mockedAdminApi.updateUserStatus.mockResolvedValue({
+      id: 'user-1',
+      email: 'ada@example.com',
+      status: 'disabled',
+      memberships: [],
+      createdAt: '2026-06-14T00:00:00.000Z',
+      updatedAt: '2026-06-14T00:00:00.000Z',
+    })
+
+    renderPage()
+    const disableButton = await waitFor(() => tableButtonByText('禁用'))
+
+    await click(disableButton)
+
+    expect(mockedAdminApi.updateUserStatus).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('禁用用户')
+    expect(document.body.textContent).toContain('ada@example.com 将被禁用，并断开桌面连接。')
+
+    await click(buttonByText('取消'))
+
+    expect(mockedAdminApi.updateUserStatus).not.toHaveBeenCalled()
+
+    await click(tableButtonByText('禁用'))
+    await click(dialogButtonByText('禁用'))
+
+    expect(mockedAdminApi.updateUserStatus).toHaveBeenCalledWith('user-1', 'disabled')
+  })
+})
+
+function renderPage() {
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={queryClient}>
+        <UsersPage />
+      </QueryClientProvider>
+    )
+  })
+}
+
+async function click(element: HTMLElement) {
+  await act(async () => {
+    element.click()
+    await Promise.resolve()
+  })
+}
+
+async function waitFor<T>(read: () => T): Promise<T> {
+  let lastError: unknown
+  for (let index = 0; index < 10; index += 1) {
+    try {
+      return read()
+    } catch (error) {
+      lastError = error
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+    }
+  }
+  throw lastError
+}
+
+function tableButtonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll('table button'))
+    .find((item) => item.textContent === text)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} table button not found`)
+  return button
+}
+
+function dialogButtonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll('button'))
+    .find((item) => item.textContent === text && !item.closest('table'))
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} dialog button not found`)
+  return button
+}
+
+function buttonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll('button'))
+    .find((item) => item.textContent === text)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} button not found`)
+  return button
+}

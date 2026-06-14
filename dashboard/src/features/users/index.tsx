@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type AdminUserRow, type LiveClientRow } from '@/lib/api'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   DataTableColumnHeader,
   DEFAULT_DASHBOARD_PAGE_SIZE,
@@ -32,6 +33,10 @@ export default function UsersPage() {
     { id: 'createdAt', desc: true },
   ])
   const [liveClients, setLiveClients] = useState<LiveClientRow[]>([])
+  const [statusTarget, setStatusTarget] = useState<{
+    user: AdminUserRow
+    status: AdminUserRow['status']
+  } | null>(null)
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
 
@@ -88,6 +93,7 @@ export default function UsersPage() {
       adminApi.updateUserStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setStatusTarget(null)
       toast.success('用户状态已更新')
     },
     onError: (err: Error) => toast.error(err.message),
@@ -95,7 +101,15 @@ export default function UsersPage() {
 
   function handleToggle(user: AdminUserRow) {
     const newStatus = user.status === 'active' ? 'disabled' : 'active'
-    toggleStatus.mutate({ id: user.id, status: newStatus })
+    setStatusTarget({ user, status: newStatus })
+  }
+
+  function confirmStatusChange() {
+    if (!statusTarget) return
+    toggleStatus.mutate({
+      id: statusTarget.user.id,
+      status: statusTarget.status,
+    })
   }
 
   const columns: ColumnDef<AdminUserRow>[] = [
@@ -176,6 +190,10 @@ export default function UsersPage() {
           <Button
             variant='ghost'
             className='h-8 px-2'
+            disabled={
+              toggleStatus.isPending &&
+              statusTarget?.user.id === row.original.id
+            }
             onClick={() => handleToggle(row.original)}
           >
             {row.original.status === 'active' ? '禁用' : '启用'}
@@ -224,6 +242,25 @@ export default function UsersPage() {
             onSortingChange={setSorting}
           />
         )}
+        <ConfirmDialog
+          open={Boolean(statusTarget)}
+          onOpenChange={(open) => {
+            if (!open) setStatusTarget(null)
+          }}
+          title={statusTarget?.status === 'disabled' ? '禁用用户' : '启用用户'}
+          desc={
+            statusTarget
+              ? statusTarget.status === 'disabled'
+                ? `${statusTarget.user.email} 将被禁用，并断开桌面连接。`
+                : `${statusTarget.user.email} 将恢复登录。`
+              : ''
+          }
+          cancelBtnText='取消'
+          confirmText={statusTarget?.status === 'disabled' ? '禁用' : '启用'}
+          destructive={statusTarget?.status === 'disabled'}
+          isLoading={toggleStatus.isPending}
+          handleConfirm={confirmStatusChange}
+        />
       </Main>
     </>
   )
