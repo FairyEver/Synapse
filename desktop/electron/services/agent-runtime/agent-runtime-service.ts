@@ -34,6 +34,7 @@ import {
   AGENT_COMPRESSION_STATE_UNAVAILABLE_MESSAGE,
   AGENT_PERMISSION_NOT_PENDING_MESSAGE,
   AGENT_PERMISSION_SESSION_MISMATCH_MESSAGE,
+  AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
   AGENT_SCHEDULED_SPAWN_DENIED_MESSAGE,
   commandExecutionStatusMessage,
@@ -773,6 +774,10 @@ export class AgentRuntimeService {
       })
       this.sessionManager.settlePendingPermission(pending)
       return
+    }
+
+    if (request.updatedInput !== undefined) {
+      throw new Error(AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE)
     }
 
     const action = permissionActionForTool(pending.toolName)

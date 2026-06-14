@@ -10,6 +10,7 @@ import type {
 } from "../../../runtime/data-repo"
 import type { ProviderService } from "../../provider"
 import { AgentRuntimeService, conversationId, permissionActionForTool } from "../agent-runtime-service"
+import { AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE } from "../agent-error-messages"
 import { CustomCommandRegistry } from "../command-registry"
 import type {
   AgentEvent,
@@ -599,6 +600,60 @@ describe("AgentRuntimeService", () => {
       behavior: "allow",
     }])
     expect(JSON.stringify(session.responses)).not.toContain("[truncated]")
+    await expect(turn).resolves.toMatchObject({ resultText: "write allowed" })
+  })
+
+  it("rejects updated input on regular tool permission responses", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new PermissionSession("conversation-a-permission-1", "write allowed", {
+      toolName: "Write",
+      toolInput: JSON.stringify({
+        file_path: "/repo/output.md",
+        content: "# Title",
+      }),
+      toolInputRaw: {
+        file_path: "/repo/output.md",
+        content: "# Title",
+      },
+    })
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionGuard: permissionGuard as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs write"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await expect(service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: {
+        file_path: "/repo/other.md",
+        content: "# Changed",
+      },
+      actor: { kind: "user" },
+    })).rejects.toThrow(AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE)
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(session.responses).toEqual([])
+    expect(service.listPendingPermissions()).toHaveLength(1)
+
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })
+
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+    }])
     await expect(turn).resolves.toMatchObject({ resultText: "write allowed" })
   })
 
