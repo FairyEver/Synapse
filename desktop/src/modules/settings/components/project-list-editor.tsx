@@ -45,6 +45,17 @@ function isKnowledgeBaseProject(project: SynapseProjectConfig): boolean {
   return project.capabilities?.knowledgeBase?.managed === true
 }
 
+function formatDeleteProjectDescription(target: { project: SynapseProjectConfig; sessionCount: number | null } | null): string {
+  if (!target) return ""
+  if (target.sessionCount === null) {
+    return `无法确认「${target.project.name}」下的 Agent 对话。删除项目后，相关对话将移入「已归档」分组，不会被删除。`
+  }
+  if (target.sessionCount === 0) {
+    return `确认删除「${target.project.name}」？`
+  }
+  return `「${target.project.name}」下有 ${target.sessionCount} 条 Agent 对话，删除项目后这些对话将移入「已归档」分组，不会被删除。`
+}
+
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const platform = getRendererPlatform()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -527,7 +538,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                               return
                             }
                             void bridge.listSessions(project.id).then((sessions) => {
-                              if (sessions.length > 0) {
+                              if (sessions.length > 0 || isKnowledgeBaseProject(project)) {
                                 setDeleteTarget({ project, sessionCount: sessions.length })
                               } else {
                                 void handleRemoveProject(project)
@@ -624,10 +635,13 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>删除项目</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget?.sessionCount === null
-                ? `无法确认「${deleteTarget.project.name}」下的 Agent 对话。删除项目后，相关对话将移入「已归档」分组，不会被删除。`
-                : `「${deleteTarget?.project.name}」下有 ${deleteTarget?.sessionCount} 条 Agent 对话，删除项目后这些对话将移入「已归档」分组，不会被删除。`}
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>{formatDeleteProjectDescription(deleteTarget)}</p>
+                {deleteTarget && isKnowledgeBaseProject(deleteTarget.project) ? (
+                  <p>会同时删除该知识库的托管数据。</p>
+                ) : null}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

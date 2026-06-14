@@ -322,6 +322,16 @@ describe("ProjectListEditor knowledge base actions", () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+    expect(document.body.textContent).toContain("确认删除「Knowledge」？")
+    expect(document.body.textContent).toContain("会同时删除该知识库的托管数据。")
+    expect(onSave).not.toHaveBeenCalled()
+    expect(bridgeMocks.knowledgeBase.deleteManaged).not.toHaveBeenCalled()
+
+    await act(async () => {
+      buttonByText("删除项目").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
 
     await waitForExpectation(() => {
       expect(onSave).toHaveBeenCalledWith([])
@@ -342,6 +352,11 @@ describe("ProjectListEditor knowledge base actions", () => {
 
     await act(async () => {
       buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("删除项目").click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -367,6 +382,11 @@ describe("ProjectListEditor knowledge base actions", () => {
 
     await act(async () => {
       buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText("删除项目").click()
       await Promise.resolve()
       await Promise.resolve()
     })
