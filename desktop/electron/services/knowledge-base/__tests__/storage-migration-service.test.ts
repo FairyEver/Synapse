@@ -58,6 +58,28 @@ describe("KnowledgeBaseStorageMigrationService", () => {
       .resolves.toBe("# Knowledge\n")
   })
 
+  it("rejects dangerous custom storage roots before migration starts", async () => {
+    const targetRoots = [...new Set([
+      path.parse(process.cwd()).root,
+      os.homedir(),
+      os.tmpdir(),
+    ])]
+
+    for (const targetRoot of targetRoots) {
+      const harness = await migrationHarness()
+      await harness.seedRuntime("kb-1")
+
+      await expect(harness.service.startMigration({
+        target: { mode: "custom", rootPath: targetRoot },
+        requestedBy: "test",
+      })).rejects.toThrow("知识库存储位置不能选择系统根目录、用户主目录、临时目录或其它过宽的系统目录。")
+
+      expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+      await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+        .resolves.toBe("# Knowledge\n")
+    }
+  })
+
   it("keeps new config when trashing the old directory fails", async () => {
     const harness = await migrationHarness({ trashError: new Error("trash unavailable") })
     await harness.seedRuntime("kb-1")

@@ -1,5 +1,6 @@
 import { constants } from "node:fs"
 import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import type {
   SynapseConfig,
@@ -477,6 +478,9 @@ export class KnowledgeBaseStorageMigrationService {
     if (!path.isAbsolute(newRoot)) {
       throw new Error("知识库存储位置必须是绝对路径。")
     }
+    if (target.mode === "custom" && isDangerousCustomStorageRoot(newRoot)) {
+      throw new Error("知识库存储位置不能选择系统根目录、用户主目录、临时目录或其它过宽的系统目录。")
+    }
     if (isPathInside(newRoot, path.join(oldRoot, "knowledge-bases"))) {
       throw new Error("目标位置不能位于当前知识库目录内。")
     }
@@ -713,6 +717,50 @@ async function hasDirectoryEntries(targetPath: string): Promise<boolean> {
     }
     throw error
   }
+}
+
+function isDangerousCustomStorageRoot(rootPath: string): boolean {
+  const normalized = normalizeAbsolutePathForSafety(rootPath)
+  const filesystemRoot = normalizeAbsolutePathForSafety(path.parse(normalized).root)
+  if (normalized === filesystemRoot) return true
+
+  const exactDangerousRoots = [
+    os.homedir(),
+    os.tmpdir(),
+    ...commonTempRootsForPlatform(process.platform),
+  ].map(normalizeAbsolutePathForSafety)
+  if (exactDangerousRoots.includes(normalized)) return true
+
+  const parent = normalizeAbsolutePathForSafety(path.dirname(normalized))
+  if (parent !== filesystemRoot) return false
+
+  return commonTopLevelSystemNamesForPlatform(process.platform)
+    .has(path.basename(normalized).toLowerCase())
+}
+
+function normalizeAbsolutePathForSafety(value: string): string {
+  const resolved = path.resolve(value)
+  const root = path.parse(resolved).root
+  let normalized = resolved
+  while (normalized !== root && normalized.endsWith(path.sep)) {
+    normalized = normalized.slice(0, -path.sep.length)
+  }
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized
+}
+
+function commonTempRootsForPlatform(platform: NodeJS.Platform): string[] {
+  if (platform === "win32") return []
+  return ["/tmp", "/var/tmp", "/private/tmp"]
+}
+
+function commonTopLevelSystemNamesForPlatform(platform: NodeJS.Platform): Set<string> {
+  if (platform === "win32") {
+    return new Set(["windows", "program files", "program files (x86)", "programdata", "users"])
+  }
+  if (platform === "darwin") {
+    return new Set(["applications", "library", "system", "users", "bin", "sbin", "etc", "var", "tmp", "usr"])
+  }
+  return new Set(["bin", "boot", "dev", "etc", "home", "lib", "lib64", "media", "mnt", "opt", "proc", "root", "run", "sbin", "sys", "tmp", "usr", "var"])
 }
 
 async function moveExistingKnowledgeBasesAside(knowledgeBasesPath: string): Promise<string | null> {
