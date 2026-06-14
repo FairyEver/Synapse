@@ -85,13 +85,25 @@ describe("model price IPC handlers", () => {
 
   it("keeps clear and reset channels mapped to clear semantics", async () => {
     mocks.modelPriceService.clearRules.mockReturnValue([])
+    mocks.modelPriceService.listRules.mockReturnValue([{ id: "mpr_1" }, { id: "mpr_2" }])
 
     const { registerModelPriceHandlers } = await import("../ipc-handlers")
     registerModelPriceHandlers()
 
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.rulesClear)?.({})).toEqual([])
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.rulesReset)?.({})).toEqual([])
+    expect(mocks.modelPriceService.listRules).toHaveBeenCalledTimes(2)
     expect(mocks.modelPriceService.clearRules).toHaveBeenCalledTimes(2)
+    expect(mocks.logger.info).toHaveBeenCalledWith("Model price rules clear completed.", {
+      operation: "rulesClear",
+      previousRuleCount: 2,
+      resultingRuleCount: 0,
+    })
+    expect(mocks.logger.info).toHaveBeenCalledWith("Model price rules clear completed.", {
+      operation: "rulesReset",
+      previousRuleCount: 2,
+      resultingRuleCount: 0,
+    })
   })
 
   it("caps oversized coverage limits before calling the service", async () => {

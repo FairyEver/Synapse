@@ -73,8 +73,26 @@ export function registerModelPriceHandlers(): void {
     })
     return savedRules
   })
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesClear, async () => modelPrice.clearRules())
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesReset, async () => modelPrice.clearRules())
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesClear, async () => {
+    const previousRuleCount = modelPrice.listRules().length
+    const clearedRules = modelPrice.clearRules()
+    logger.info("Model price rules clear completed.", {
+      operation: "rulesClear",
+      previousRuleCount,
+      resultingRuleCount: clearedRules.length,
+    })
+    return clearedRules
+  })
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesReset, async () => {
+    const previousRuleCount = modelPrice.listRules().length
+    const clearedRules = modelPrice.clearRules()
+    logger.info("Model price rules clear completed.", {
+      operation: "rulesReset",
+      previousRuleCount,
+      resultingRuleCount: clearedRules.length,
+    })
+    return clearedRules
+  })
 
   registered = true
 }
