@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseRepoProfileState,
@@ -126,6 +126,18 @@ async function writeJsonFileAtomically(filePath: string, value: unknown): Promis
 
   await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
   await rename(temporaryPath, filePath)
+}
+
+async function restoreProfileFile(
+  profilePath: string,
+  existingProfile: SynapseUserProfile | null,
+): Promise<void> {
+  if (existingProfile) {
+    await writeJsonFileAtomically(profilePath, existingProfile)
+    return
+  }
+
+  await rm(profilePath, { force: true })
 }
 
 async function checkProfileWritePermission(
@@ -293,8 +305,20 @@ class UserProfileService {
       const gitRootPath = repositoryState.gitRootPath ?? repository.localPath
       const action = existingProfile ? "rename" : "join"
 
-      await stageProfilePath(gitRootPath, repository, userId)
-      const commitHash = await commitProfileChange(gitRootPath, userId, action)
+      let commitHash: string
+      try {
+        await stageProfilePath(gitRootPath, repository, userId)
+        commitHash = await commitProfileChange(gitRootPath, userId, action)
+      } catch (error) {
+        await restoreProfileFile(profilePath, existingProfile).catch((rollbackError: unknown) => {
+          logger.warn("Failed to roll back profile after git commit failure.", {
+            errorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
+            repoId,
+            userId,
+          })
+        })
+        throw error
+      }
 
       try {
         await pushRepository(repository)

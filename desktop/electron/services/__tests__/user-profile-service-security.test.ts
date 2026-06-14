@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -12,6 +12,7 @@ import {
 const mocks = vi.hoisted(() => ({
   configLoad: vi.fn(),
   getRepositoryState: vi.fn(),
+  runGitTextCommand: vi.fn(),
   writeFileError: null as Error | null,
 }))
 
@@ -51,6 +52,10 @@ vi.mock("../repository-store", () => ({
   },
 }))
 
+vi.mock("../git-command", () => ({
+  runGitTextCommand: mocks.runGitTextCommand,
+}))
+
 import { userProfileService } from "../user-profile-service"
 import { resolveUserProfilePath, userProfileCache } from "../user-profile-cache"
 
@@ -83,7 +88,7 @@ function denyPermissionGuard(): PermissionGuard {
   }
 }
 
-function mockRepository(repository: SynapseRepositoryConfig): void {
+function mockRepository(repository: SynapseRepositoryConfig, gitRootPath: string | null = null): void {
   mocks.configLoad.mockResolvedValue({
     activeRepoUuid: repository.uuid,
     agent: {
@@ -100,8 +105,8 @@ function mockRepository(repository: SynapseRepositoryConfig): void {
     repositories: [repository],
   })
   mocks.getRepositoryState.mockResolvedValue({
-    gitRootPath: null,
-    isGitRepository: false,
+    gitRootPath,
+    isGitRepository: gitRootPath !== null,
     localPath: repository.localPath,
     status: "ready",
   })
@@ -111,6 +116,7 @@ describe("UserProfileService security", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.writeFileError = null
+    mocks.runGitTextCommand.mockResolvedValue("")
     userProfileCache.clearAll()
   })
 
@@ -216,5 +222,40 @@ describe("UserProfileService security", () => {
         outcome: "failed",
       },
     ])
+  })
+
+  it("restores the previous profile file when git commit fails after writing", async () => {
+    const root = await createTempRoot()
+    const repository = createRepository(root)
+    const auditSink = new InMemoryAuditSink()
+    const profilePath = resolveUserProfilePath(root, testUserId)
+    await mkdir(path.dirname(profilePath), { recursive: true })
+    await writeFile(profilePath, `${JSON.stringify({
+      schemaVersion: 1,
+      userId: testUserId,
+      displayName: "Old Name",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    }, null, 2)}\n`, "utf8")
+    mockRepository(repository, root)
+    mocks.runGitTextCommand.mockImplementation(async (input: { args: string[] }) => {
+      if (input.args[0] === "commit") {
+        throw new Error("commit rejected")
+      }
+      return ""
+    })
+
+    await expect(userProfileService.updateDisplayName(
+      repository.uuid,
+      testUserId,
+      "Alice",
+      {
+        actor: { kind: "user", id: testUserId },
+        auditSink,
+        permissionGuard: createPermissionGuard(),
+      },
+    )).rejects.toThrow("commit rejected")
+
+    const rawProfile = JSON.parse(await readFile(profilePath, "utf8")) as { displayName: string }
+    expect(rawProfile.displayName).toBe("Old Name")
   })
 })
