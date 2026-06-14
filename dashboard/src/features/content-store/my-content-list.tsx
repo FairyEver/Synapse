@@ -25,7 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { canDeleteMyContent, canSetContentPublic } from './content-store-actions'
+import {
+  canChangeMyContentVisibility,
+  canDeleteMyContent,
+  canSetContentPublic,
+} from './content-store-actions'
 import {
   formatContentStoreDate,
   getContentStoreTypeLabel,
@@ -162,6 +166,10 @@ export default function MyContentListPage({
             row.original.visibility === 'public' ? 'private' : 'public'
           const isPublicDisabled =
             nextVisibility === 'public' && !canSetContentPublic(row.original)
+          const isVisibilityDisabled =
+            visibilityMutation.isPending ||
+            !canChangeMyContentVisibility(row.original) ||
+            isPublicDisabled
 
           return (
             <div className='flex justify-end gap-2'>
@@ -194,7 +202,7 @@ export default function MyContentListPage({
               <Button
                 variant='ghost'
                 className='h-8 px-2'
-                disabled={visibilityMutation.isPending || isPublicDisabled}
+                disabled={isVisibilityDisabled}
                 onClick={(event) => {
                   event.stopPropagation()
                   visibilityMutation.mutate({

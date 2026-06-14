@@ -510,6 +510,9 @@ export class ContentStoreService {
   async setVisibility(userId: string, itemId: string, visibility: ContentStoreVisibility): Promise<ContentStoreItemDto> {
     const item = await this.prisma.contentStoreItem.findFirst({ where: { id: itemId, ownerUserId: userId } }) as ContentStoreItemRow | null
     if (!item) throw new NotFoundException("内容不存在。")
+    if (item.moderationStatus === "removed") {
+      throw new BadRequestException("下架内容不能修改公开状态。")
+    }
     if (visibility === "public" && !item.description?.trim()) {
       throw new BadRequestException("公开内容必须填写描述。")
     }
@@ -528,6 +531,7 @@ export class ContentStoreService {
     const objectKeys = await this.prisma.$transaction(async (tx) => {
       const item = await tx.contentStoreItem.findFirst({ where: { id: itemId, ownerUserId: userId } }) as ContentStoreItemRow | null
       if (!item) throw new NotFoundException("内容不存在。")
+      if (item.moderationStatus === "removed") throw new BadRequestException("下架内容不能删除。")
       if (item.visibility !== "private") throw new BadRequestException("公开内容不能直接删除。")
       const packages = await tx.contentStoreVersion.findMany({
         where: { itemId },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ContentStoreItemDto } from '@synapse/shared'
 import {
+  canChangeMyContentVisibility,
   canCopyContent,
   canCopyPromptText,
   canDeleteMyContent,
@@ -71,10 +72,19 @@ describe('content store action helpers', () => {
   it('only allows deleting private owned content from the shell', () => {
     expect(canDeleteMyContent(item({ visibility: 'private' }))).toBe(true)
     expect(canDeleteMyContent(item({ visibility: 'public' }))).toBe(false)
+    expect(
+      canDeleteMyContent(item({ visibility: 'private', moderationStatus: 'removed' }))
+    ).toBe(false)
+  })
+
+  it('only allows changing visibility for normal content', () => {
+    expect(canChangeMyContentVisibility(item({ moderationStatus: 'normal' }))).toBe(true)
+    expect(canChangeMyContentVisibility(item({ moderationStatus: 'removed' }))).toBe(false)
   })
 
   it('only allows public visibility after a published version exists', () => {
     expect(canSetContentPublic(item({ latestVersionId: 'version-1' }))).toBe(true)
     expect(canSetContentPublic(item({ latestVersionId: null }))).toBe(false)
+    expect(canSetContentPublic(item({ moderationStatus: 'removed' }))).toBe(false)
   })
 })

@@ -12,7 +12,10 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { canSetContentPublic } from '../content-store-actions'
+import {
+  canChangeMyContentVisibility,
+  canSetContentPublic,
+} from '../content-store-actions'
 import { getContentStoreTypeLabel } from '../content-store-display'
 import { ContentStorePublishDialog } from './content-store-publish-dialog'
 import { RulePromptEditor } from './rule-prompt-editor'
@@ -41,7 +44,10 @@ export function ContentStoreEditorPage({
   const [publishOpen, setPublishOpen] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const canChangeVisibility =
-    detail?.visibility === 'public' || (detail ? canSetContentPublic(detail) : false)
+    detail
+      ? canChangeMyContentVisibility(detail) &&
+        (detail.visibility === 'public' || canSetContentPublic(detail))
+      : false
 
   useEffect(() => {
     if (!selectedPath && state) {

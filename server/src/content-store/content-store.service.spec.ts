@@ -223,6 +223,21 @@ describe("ContentStoreService", () => {
     await expect(service.setVisibility("user-1", "item-1", "public")).rejects.toThrow(BadRequestException)
   })
 
+  it("rejects visibility changes for removed content", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      ownerUserId: "user-1",
+      visibility: "public",
+      moderationStatus: "removed",
+      description: "Ready",
+      latestVersionId: "version-1",
+    }))
+
+    await expect(service.setVisibility("user-1", "item-1", "private")).rejects.toThrow(BadRequestException)
+
+    expect(prisma.contentStoreItem.update).not.toHaveBeenCalled()
+  })
+
   it("rejects public visibility before content has a published version", async () => {
     prisma.contentStoreItem.findFirst.mockResolvedValue(item({
       id: "item-1",
@@ -691,6 +706,18 @@ describe("ContentStoreService", () => {
     prisma.contentStoreItem.findFirst.mockResolvedValue(item({ id: "item-1", visibility: "public" }))
 
     await expect(service.deletePrivateItem("user-1", "item-1")).rejects.toThrow(BadRequestException)
+  })
+
+  it("rejects deleting removed private items", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      visibility: "private",
+      moderationStatus: "removed",
+    }))
+
+    await expect(service.deletePrivateItem("user-1", "item-1")).rejects.toThrow(BadRequestException)
+
+    expect(prisma.contentStoreItem.delete).not.toHaveBeenCalled()
   })
 
   it("deletes private item package and file objects after database deletion", async () => {

@@ -19,9 +19,13 @@ export function canCopyPromptText(item: ContentStoreItemDto) {
 }
 
 export function canDeleteMyContent(item: ContentStoreItemDto) {
-  return item.visibility === 'private'
+  return item.moderationStatus === 'normal' && item.visibility === 'private'
+}
+
+export function canChangeMyContentVisibility(item: ContentStoreItemDto) {
+  return item.moderationStatus === 'normal'
 }
 
 export function canSetContentPublic(item: ContentStoreItemDto) {
-  return Boolean(item.latestVersionId)
+  return item.moderationStatus === 'normal' && Boolean(item.latestVersionId)
 }
