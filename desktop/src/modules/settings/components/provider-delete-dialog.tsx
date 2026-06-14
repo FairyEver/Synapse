@@ -83,12 +83,23 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
     if (!provider) return
     setBusy(true)
     try {
-      await requireSynapseBridge().agent.migrateProviderReferences({
+      const migrationResult = await requireSynapseBridge().agent.migrateProviderReferences({
         sourceProviderId: provider.id,
         targetProviderId: selection.providerId,
         targetModelTier: selection.modelTier,
         scope: ["scheduled-task", "workflow-node"],
       })
+      if (migrationResult.errors.length > 0) {
+        logger.error("Provider reference migration returned errors.", {
+          boundary: "settings.providers.migrate",
+          providerId: provider.id,
+          errorCount: migrationResult.errors.length,
+          migratedTasks: migrationResult.migratedTasks,
+          migratedWorkflowNodes: migrationResult.migratedWorkflowNodes,
+        })
+        toast(`迁移失败 ${migrationResult.errors.length} 项，已停止删除`)
+        return
+      }
       toast("引用已迁移")
       await requireSynapseBridge().agent.deleteProvider({ providerId: provider.id })
       toast("供应商已删除")

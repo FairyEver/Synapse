@@ -1025,6 +1025,79 @@ describe("ProviderPanel dialog editor", () => {
     })
     expect(deleteProvider).not.toHaveBeenCalled()
   })
+
+  it("stops provider deletion when reference migration returns item errors", async () => {
+    const sourceProvider = customProvider({ active: true })
+    const targetProvider = customProvider({
+      id: "target-provider",
+      name: "Target Provider",
+      readonly: true,
+    })
+    const deleteProvider = vi.fn().mockResolvedValue(undefined)
+    const migrateProviderReferences = vi.fn().mockResolvedValue({
+      migratedTasks: 1,
+      migratedWorkflowNodes: 0,
+      errors: [{ entityId: "workflow-1", error: "write failed" }],
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([sourceProvider, targetProvider]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          scanProviderReferences: vi.fn().mockResolvedValue({
+            providerId: "custom-provider",
+            references: [
+              { kind: "scheduled-task", entityId: "task-1", entityName: "日报", providerId: "custom-provider", modelTier: "default" },
+            ],
+            taskCount: 1,
+            workflowNodeCount: 0,
+            conversationCount: 0,
+          }),
+          migrateProviderReferences,
+          deleteProvider,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText(document.body, "迁移到其他供应商").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText(document.body, "确认").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(migrateProviderReferences).toHaveBeenCalledWith({
+      sourceProviderId: "custom-provider",
+      targetProviderId: "target-provider",
+      targetModelTier: "default",
+      scope: ["scheduled-task", "workflow-node"],
+    })
+    expect(deleteProvider).not.toHaveBeenCalled()
+    expect(toast).toHaveBeenCalledWith("迁移失败 1 项，已停止删除")
+    expect(toast).not.toHaveBeenCalledWith("引用已迁移")
+    expect(rendererLogger.error).toHaveBeenCalledWith("Provider reference migration returned errors.", {
+      boundary: "settings.providers.migrate",
+      providerId: "custom-provider",
+      errorCount: 1,
+      migratedTasks: 1,
+      migratedWorkflowNodes: 0,
+    })
+  })
 })
 
 function renderProviderPanel(): void {
