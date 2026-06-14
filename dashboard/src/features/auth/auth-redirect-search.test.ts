@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildAuthRedirectSearch, normalizeAuthRedirect } from './auth-redirect-search'
+import {
+  appendAuthRedirectToUrl,
+  buildAuthRedirectSearch,
+  normalizeAuthRedirect,
+} from './auth-redirect-search'
 
 describe('auth redirect search', () => {
   it('keeps team invitation redirects for auth links', () => {
@@ -17,5 +21,16 @@ describe('auth redirect search', () => {
 
     expect(redirectTo).toBeUndefined()
     expect(buildAuthRedirectSearch(redirectTo)).toEqual({})
+  })
+
+  it('appends safe redirects to password reset links', () => {
+    expect(
+      appendAuthRedirectToUrl(
+        'https://app.example.com/console/reset-password?token=reset_123',
+        '/team-invite?token=invite_123'
+      )
+    ).toBe(
+      'https://app.example.com/console/reset-password?token=reset_123&redirect=%2Fteam-invite%3Ftoken%3Dinvite_123'
+    )
   })
 })

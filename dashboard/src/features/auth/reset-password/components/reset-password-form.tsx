@@ -17,6 +17,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { zodResolver } from '../../zod-resolver'
+import { buildAuthRedirectSearch } from '../../auth-redirect-search'
 
 const formSchema = z
   .object({
@@ -30,10 +31,12 @@ const formSchema = z
 
 type ResetPasswordFormProps = React.HTMLAttributes<HTMLFormElement> & {
   token: string
+  redirectTo?: string
 }
 
 export function ResetPasswordForm({
   className,
+  redirectTo,
   token,
   ...props
 }: ResetPasswordFormProps) {
@@ -65,7 +68,7 @@ export function ResetPasswordForm({
       <div className='flex flex-col gap-4'>
         <p className='text-sm text-muted-foreground'>密码已更新。</p>
         <Button asChild>
-          <Link to='/sign-in'>去登录</Link>
+          <Link to='/sign-in' search={buildAuthRedirectSearch(redirectTo)}>去登录</Link>
         </Button>
       </div>
     )

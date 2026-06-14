@@ -15,6 +15,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { appendAuthRedirectToUrl } from '../../auth-redirect-search'
 import { zodResolver } from '../../zod-resolver'
 
 const formSchema = z.object({
@@ -23,8 +24,9 @@ const formSchema = z.object({
 
 export function ForgotPasswordForm({
   className,
+  redirectTo,
   ...props
-}: React.HTMLAttributes<HTMLFormElement>) {
+}: React.HTMLAttributes<HTMLFormElement> & { redirectTo?: string }) {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<PasswordResetRequestResult | null>(null)
 
@@ -56,7 +58,7 @@ export function ForgotPasswordForm({
         </p>
         {result.resetUrl ? (
           <Button asChild>
-            <a href={result.resetUrl}>打开重置链接</a>
+            <a href={appendAuthRedirectToUrl(result.resetUrl, redirectTo)}>打开重置链接</a>
           </Button>
         ) : null}
       </div>

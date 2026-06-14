@@ -8,11 +8,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { buildAuthRedirectSearch, normalizeAuthRedirect } from '../auth-redirect-search'
 import { AuthLayout } from '../auth-layout'
 import { ResetPasswordForm } from './components/reset-password-form'
 
 export function ResetPassword() {
-  const { token } = useSearch({ from: '/(auth)/reset-password' })
+  const { token, redirect } = useSearch({ from: '/(auth)/reset-password' })
+  const redirectTo = normalizeAuthRedirect(redirect)
 
   return (
     <AuthLayout>
@@ -23,12 +25,12 @@ export function ResetPassword() {
         </CardHeader>
         <CardContent>
           {token ? (
-            <ResetPasswordForm token={token} />
+            <ResetPasswordForm token={token} redirectTo={redirectTo} />
           ) : (
             <div className='flex flex-col gap-4'>
               <p className='text-sm text-muted-foreground'>链接无效。</p>
               <Button asChild>
-                <Link to='/forgot-password'>重新获取链接</Link>
+                <Link to='/forgot-password' search={buildAuthRedirectSearch(redirectTo)}>重新获取链接</Link>
               </Button>
             </div>
           )}
@@ -38,6 +40,7 @@ export function ResetPassword() {
             返回{' '}
             <Link
               to='/sign-in'
+              search={buildAuthRedirectSearch(redirectTo)}
               className='underline underline-offset-4 hover:text-primary'
             >
               登录

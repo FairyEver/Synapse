@@ -4,6 +4,7 @@ import { ResetPassword } from '@/features/auth/reset-password'
 
 const searchSchema = z.object({
   token: z.string().optional(),
+  redirect: z.string().optional(),
 })
 
 export const Route = createFileRoute('/(auth)/reset-password')({
