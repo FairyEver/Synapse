@@ -1,4 +1,4 @@
-import { Injectable, Optional, UnauthorizedException } from "@nestjs/common"
+import { Injectable, Logger, Optional, ServiceUnavailableException, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
 import { hashToken } from "../auth/token"
@@ -32,8 +32,31 @@ function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, pas
   return payload.iat <= Math.floor(passwordChangedAt.getTime() / 1000)
 }
 
+function isExpectedDashboardSessionFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.name === "JsonWebTokenError" ||
+    error.name === "TokenExpiredError" ||
+    error.name === "NotBeforeError"
+}
+
+function safeDashboardAuthErrorDetail(error: unknown): { readonly errorName?: string; readonly errorCode?: string } {
+  if (error === undefined) return {}
+  const errorCode = typeof error === "object"
+    && error !== null
+    && "code" in error
+    && typeof error.code === "string"
+    ? error.code
+    : undefined
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    ...(errorCode ? { errorCode } : {}),
+  }
+}
+
 @Injectable()
 export class AdminAuthService {
+  private readonly logger = new Logger(AdminAuthService.name)
+
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
@@ -139,8 +162,10 @@ export class AdminAuthService {
       const admin = await this.prisma.adminUser.findUnique({ where: { id: payload.sub } })
       if (!admin || admin.status !== "active" || admin.email !== payload.email) return null
       return { id: admin.id, email: admin.email, displayName: null, role: "admin" }
-    } catch {
-      return null
+    } catch (error) {
+      if (isExpectedDashboardSessionFailure(error)) return null
+      this.logger.warn(safeDashboardAuthErrorDetail(error), "Dashboard session verification failed")
+      throw new ServiceUnavailableException("认证服务暂时不可用，请稍后重试。")
     }
   }
 

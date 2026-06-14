@@ -1,3 +1,4 @@
+import { Logger, ServiceUnavailableException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { describe, expect, it, vi } from "vitest"
 import { hashPassword } from "../auth/password"
@@ -333,6 +334,30 @@ describe("AdminAuthService", () => {
     prisma.dashboardRevokedToken.findUnique.mockResolvedValueOnce({ id: "revoked-1" })
 
     await expect(service.verifyDashboardSession(result.token)).resolves.toBeNull()
+  })
+
+  it("returns null for invalid dashboard session tokens", async () => {
+    const { service } = await createTestService()
+
+    await expect(service.verifyDashboardSession("not-a-token")).resolves.toBeNull()
+  })
+
+  it("throws service unavailable for dashboard session database failures", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const { service, prisma } = await createTestService()
+    const result = await service.login("admin@d2.com", "admin@pwd1234!")
+    prisma.dashboardRevokedToken.findUnique.mockRejectedValueOnce(Object.assign(new Error("database password=secret"), { code: "P1001" }))
+
+    try {
+      await expect(service.verifyDashboardSession(result.token)).rejects.toThrow(ServiceUnavailableException)
+      expect(warnSpy).toHaveBeenCalledWith(
+        { errorName: "Error", errorCode: "P1001" },
+        "Dashboard session verification failed",
+      )
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("database password=secret")
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it("revokes dashboard sessions by token hash", async () => {
