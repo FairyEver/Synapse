@@ -3,6 +3,8 @@ import { lstat } from "node:fs/promises"
 import { detectConversionFormat, FileExtractorRegistry } from "./registry"
 import { FileConversionError, type FileConversionInput, type FileConversionResult, type FileExtractor } from "./types"
 
+export const DEFAULT_FILE_CONVERSION_MAX_BYTES = 50 * 1024 * 1024
+
 export interface FileConversionServiceOptions {
   readonly extractors: readonly FileExtractor[]
   readonly maxBytes?: number
@@ -14,7 +16,7 @@ export class FileConversionService {
 
   constructor(options: FileConversionServiceOptions) {
     this.registry = new FileExtractorRegistry(options.extractors)
-    this.maxBytes = options.maxBytes ?? 50 * 1024 * 1024
+    this.maxBytes = options.maxBytes ?? DEFAULT_FILE_CONVERSION_MAX_BYTES
   }
 
   async convert(input: FileConversionInput): Promise<FileConversionResult> {

@@ -8,7 +8,7 @@ import { FileConversionService } from "./service"
 import type { LocalOcrEngine } from "./ocr/types"
 
 export { detectConversionFormat, FileExtractorRegistry } from "./registry"
-export { FileConversionService, type FileConversionServiceOptions } from "./service"
+export { DEFAULT_FILE_CONVERSION_MAX_BYTES, FileConversionService, type FileConversionServiceOptions } from "./service"
 export { DocxExtractor, type DocxExtractorOptions } from "./extractors/docx"
 export { ImageExtractor, type ImageExtractorOptions } from "./extractors/image"
 export { LegacyOfficeExtractor, type LegacyOfficeExtractorOptions } from "./extractors/legacy-office"
