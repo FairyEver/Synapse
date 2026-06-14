@@ -1655,7 +1655,7 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: deployment.id },
           data: {
             status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.failed,
-            error: error instanceof Error ? error.message : "Publication failed.",
+            error: formatAuditError(error) || "Publication failed.",
           },
         }),
         ...(publication.currentDeploymentId

@@ -939,9 +939,16 @@ describe("DriveService", () => {
 
   it("disables first publication records when initial deployment copy fails", async () => {
     const prisma = createPrismaMemory()
+    const rawError = [
+      "copy failed",
+      "token=copy-secret",
+      "Authorization: Bearer copy-bearer",
+      "https://user:pass@example.test/private?signature=secret",
+      "/Users/example/site",
+    ].join(" ")
     const storage: DriveStoragePort = {
       ...storageMock,
-      copyObject: vi.fn(async () => { throw new Error("copy failed") }),
+      copyObject: vi.fn(async () => { throw new Error(rawError) }),
     }
     const service = new DriveService(prisma as unknown as PrismaService, storage)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -962,7 +969,18 @@ describe("DriveService", () => {
     expect(publication.disabledAt).toBeInstanceOf(Date)
     const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: publication.id } })
     expect(deployments).toHaveLength(1)
-    expect(deployments[0]).toMatchObject({ status: "failed", error: "copy failed" })
+    expect(deployments[0]).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("copy failed"),
+    })
+    expect(deployments[0]?.error).toContain("token=[REDACTED]")
+    expect(deployments[0]?.error).toContain("Authorization: [REDACTED]")
+    expect(deployments[0]?.error).toContain("[URL]")
+    expect(deployments[0]?.error).toContain("[PATH]")
+    expect(deployments[0]?.error).not.toContain("copy-secret")
+    expect(deployments[0]?.error).not.toContain("copy-bearer")
+    expect(deployments[0]?.error).not.toContain("user:pass")
+    expect(deployments[0]?.error).not.toContain("/Users/example/site")
     const publications = await service.listPublications("user-1", "https://synapse.test")
     expect(publications).toHaveLength(1)
     expect(publications[0]).toMatchObject({ id: publication.id, status: "disabled", currentDeploymentId: null })
