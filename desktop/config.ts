@@ -46,6 +46,12 @@ export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILE_BYTES = 256 * 1024 * 1024
 // 知识库资料目录上传总字节数：限制外部文件夹递归复制进托管 .raw 时的单次总写入体积，避免误选大目录占满磁盘。
 export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 
+// CC Switch JSON 配置导入最大字节数：限制设置页读取外部 .cc-switch/config.json 的单次解析体积。
+export const CC_SWITCH_IMPORT_JSON_MAX_BYTES = 2 * 1024 * 1024
+
+// CC Switch SQLite Provider 导入最大行数：限制设置页预览 cc-switch.db 时单次读取的 Claude provider 数量。
+export const CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS = 500
+
 // 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
 export const DEFAULT_APP_NAVIGATION_TAB_ID = "skill" satisfies AppNavigationTabId
 

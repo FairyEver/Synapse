@@ -1,8 +1,12 @@
-import { existsSync, readFileSync } from "node:fs"
-import { readFile } from "node:fs/promises"
+import { existsSync, readFileSync, statSync } from "node:fs"
+import { readFile, stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
+import {
+  CC_SWITCH_IMPORT_JSON_MAX_BYTES,
+  CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS,
+} from "../../../config"
 
 import type {
   CcSwitchClaudeImportPreview,
@@ -90,7 +94,7 @@ export async function readCcSwitchClaudeProvidersFromSourceAsync(
 
   return {
     kind: source.kind,
-    providers: parseLegacyJsonProviders(await readFile(source.path, "utf8")),
+    providers: parseLegacyJsonProviders(await readLegacyJsonProviderFile(source.path)),
   }
 }
 
@@ -181,16 +185,29 @@ function readSqliteProviders(filePath: string): readonly CcSwitchClaudeProviderI
       FROM providers
       WHERE app_type = 'claude'
       ORDER BY sort_index ASC, created_at ASC, name ASC
+      LIMIT ${CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS + 1}
     `).all() as unknown as readonly CcSwitchProviderRow[]
 
-    return rows.map(rowToCandidate).filter(isImportCandidate)
+    return rows.slice(0, CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS).map(rowToCandidate).filter(isImportCandidate)
   } finally {
     db.close()
   }
 }
 
 function readLegacyJsonProviders(filePath: string): readonly CcSwitchClaudeProviderImportCandidate[] {
+  assertLegacyJsonFileSize(statSync(filePath).size)
   return parseLegacyJsonProviders(readFileSync(filePath, "utf8"))
+}
+
+async function readLegacyJsonProviderFile(filePath: string): Promise<string> {
+  assertLegacyJsonFileSize((await stat(filePath)).size)
+  return readFile(filePath, "utf8")
+}
+
+function assertLegacyJsonFileSize(size: number): void {
+  if (size > CC_SWITCH_IMPORT_JSON_MAX_BYTES) {
+    throw new Error("CC Switch 配置文件过大，无法导入。")
+  }
 }
 
 function parseLegacyJsonProviders(raw: string): readonly CcSwitchClaudeProviderImportCandidate[] {

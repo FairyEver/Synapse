@@ -5,6 +5,10 @@ import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  CC_SWITCH_IMPORT_JSON_MAX_BYTES,
+  CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS,
+} from "../../../../config"
+import {
   buildCcSwitchClaudeImportPreview,
   buildProviderInputFromCcSwitchCandidate,
   readCcSwitchClaudeProvidersFromSource,
@@ -97,6 +101,53 @@ function createCcSwitchDb(filePath: string): void {
   }
 }
 
+function createManyCcSwitchDb(filePath: string, count: number): void {
+  mkdirSync(path.dirname(filePath), { recursive: true })
+  const db = new DatabaseSync(filePath)
+  try {
+    db.exec(`
+      CREATE TABLE providers (
+        id TEXT NOT NULL,
+        app_type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        settings_config TEXT NOT NULL,
+        website_url TEXT,
+        category TEXT,
+        created_at INTEGER,
+        sort_index INTEGER,
+        notes TEXT,
+        icon TEXT,
+        icon_color TEXT,
+        meta TEXT NOT NULL DEFAULT '{}',
+        is_current BOOLEAN NOT NULL DEFAULT 0,
+        in_failover_queue BOOLEAN NOT NULL DEFAULT 0,
+        PRIMARY KEY (id, app_type)
+      );
+    `)
+    const insert = db.prepare(`
+      INSERT INTO providers (
+        id, app_type, name, settings_config, website_url, category, created_at, sort_index, notes, meta
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    for (let index = 0; index < count; index += 1) {
+      insert.run(
+        `provider-${String(index).padStart(4, "0")}`,
+        "claude",
+        `Provider ${index}`,
+        JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: `sk-${index}` } }),
+        null,
+        "custom",
+        index,
+        index,
+        null,
+        "{}",
+      )
+    }
+  } finally {
+    db.close()
+  }
+}
+
 describe("cc-switch importer", () => {
   it("resolves default and Windows HOME fallback sources", () => {
     const homeDir = path.join(tempRoot(), "User Profile")
@@ -143,6 +194,16 @@ describe("cc-switch importer", () => {
     ])
   })
 
+  it("limits SQLite provider preview rows", () => {
+    const dbPath = path.join(tempRoot(), ".cc-switch", "cc-switch.db")
+    createManyCcSwitchDb(dbPath, CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS + 1)
+
+    const source = readCcSwitchClaudeProvidersFromSource({ kind: "sqlite", path: dbPath })
+
+    expect(source.providers).toHaveLength(CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS)
+    expect(source.providers.at(-1)?.id).toBe(`provider-${String(CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS - 1).padStart(4, "0")}`)
+  })
+
   it("reads legacy config.json as an explicit JSON source", () => {
     const jsonPath = path.join(tempRoot(), ".cc-switch", "config.json")
     mkdirSync(path.dirname(jsonPath), { recursive: true })
@@ -180,6 +241,15 @@ describe("cc-switch importer", () => {
         selectedByDefault: true,
       }),
     ])
+  })
+
+  it("rejects oversized legacy config.json before parsing", () => {
+    const jsonPath = path.join(tempRoot(), ".cc-switch", "config.json")
+    mkdirSync(path.dirname(jsonPath), { recursive: true })
+    writeFileSync(jsonPath, " ".repeat(CC_SWITCH_IMPORT_JSON_MAX_BYTES + 1))
+
+    expect(() => readCcSwitchClaudeProvidersFromSource({ kind: "json", path: jsonPath }))
+      .toThrow("CC Switch 配置文件过大，无法导入。")
   })
 
   it("moves imported API keys to apiKey and redacts stored settings config", () => {
