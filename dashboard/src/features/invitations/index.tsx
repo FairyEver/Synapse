@@ -34,6 +34,11 @@ import { getInvitationTeamsErrorMessage } from './invitation-teams-error'
 
 const INVITATION_TEAM_PAGE_SIZE = 100
 
+type CreatedInvite = {
+  teamId: string
+  inviteUrl: string
+}
+
 type InvitationTeamListFn = (options: {
   page: number
   pageSize: number
@@ -80,7 +85,7 @@ export default function InvitationsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [selectedTeamId, setSelectedTeamId] = useState('')
-  const [createdInviteUrl, setCreatedInviteUrl] = useState('')
+  const [createdInvite, setCreatedInvite] = useState<CreatedInvite | null>(null)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
@@ -105,8 +110,8 @@ export default function InvitationsPage() {
 
   const createMutation = useMutation({
     mutationFn: adminApi.createInvitation,
-    onSuccess: (result) => {
-      setCreatedInviteUrl(result.inviteUrl)
+    onSuccess: (result, variables) => {
+      setCreatedInvite({ teamId: variables.teamId, inviteUrl: result.inviteUrl })
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] })
       toast.success('邀请已创建')
     },
@@ -135,10 +140,19 @@ export default function InvitationsPage() {
     setIsCreateOpen(open)
     if (!open) {
       setSelectedTeamId('')
-      setCreatedInviteUrl('')
+      setCreatedInvite(null)
       createMutation.reset()
     }
   }
+
+  function handleSelectedTeamChange(teamId: string) {
+    setSelectedTeamId(teamId)
+    setCreatedInvite(null)
+    createMutation.reset()
+  }
+
+  const createdInviteUrl =
+    createdInvite?.teamId === selectedTeamId ? createdInvite.inviteUrl : ''
 
   const columns: ColumnDef<AdminInvitationRow>[] = [
     {
@@ -260,7 +274,7 @@ export default function InvitationsPage() {
               <Label htmlFor='team-id'>团队</Label>
               <Select
                 value={selectedTeamId}
-                onValueChange={setSelectedTeamId}
+                onValueChange={handleSelectedTeamChange}
                 disabled={isTeamsLoading || isTeamsError}
               >
                 <SelectTrigger id='team-id' className='w-full'>
