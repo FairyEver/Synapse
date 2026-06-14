@@ -31,13 +31,14 @@ type MammothImage = {
 }
 
 type MammothImageAttributes = {
-  readonly src: string
+  readonly src?: string
 }
 
 type MammothImageConverter = unknown
+type MammothImageConversionResult = MammothImageAttributes | readonly []
 
 type MammothImages = {
-  imgElement(convertImage: (image: MammothImage) => Promise<MammothImageAttributes>): MammothImageConverter
+  imgElement(convertImage: (image: MammothImage) => Promise<MammothImageConversionResult>): MammothImageConverter
 }
 
 type MammothConvertOptions = {
@@ -54,20 +55,35 @@ type MammothModule = {
   readonly images: MammothImages
 }
 
+type DocxImageAssetLimits = {
+  readonly maxCount: number
+  readonly maxBytes: number
+  readonly maxTotalBytes: number
+}
+
+const DEFAULT_DOCX_IMAGE_ASSET_LIMITS: DocxImageAssetLimits = {
+  maxCount: 100,
+  maxBytes: 10 * 1024 * 1024,
+  maxTotalBytes: 50 * 1024 * 1024,
+}
+
 export interface DocxExtractorOptions {
   readonly convertToHtml?: ConvertToHtml
   readonly images?: MammothImages
+  readonly imageAssetLimits?: Partial<DocxImageAssetLimits>
 }
 
 export class DocxExtractor implements FileExtractor {
   readonly formats = ["docx"] as const
   private readonly convertToHtml: ConvertToHtml
   private readonly images: MammothImages
+  private readonly imageAssetLimits: DocxImageAssetLimits
 
   constructor(options: DocxExtractorOptions = {}) {
     const mammoth = requireFromHere("mammoth") as MammothModule
     this.convertToHtml = options.convertToHtml ?? mammoth.convertToHtml
     this.images = options.images ?? mammoth.images
+    this.imageAssetLimits = { ...DEFAULT_DOCX_IMAGE_ASSET_LIMITS, ...options.imageAssetLimits }
   }
 
   async extract(input: FileConversionInput): Promise<FileConversionResult> {
@@ -129,12 +145,36 @@ export class DocxExtractor implements FileExtractor {
     const state = {
       assets,
       omittedCount: 0,
+      seenImageCount: 0,
+      totalAssetBytes: 0,
       convertImage: this.images.imgElement(async (image) => {
+        state.seenImageCount += 1
+        if (state.seenImageCount > this.imageAssetLimits.maxCount) {
+          state.omittedCount += 1
+          return []
+        }
         const index = assets.length + 1
         const extension = extensionForMimeType(image.contentType)
         const fileName = `image-${index}${extension}`
         const relativePath = `${normalizeAssetDirectoryName(mode.assetDirectoryName)}/${fileName}`
-        const content = Buffer.from(await image.readAsBase64String(), "base64")
+        const base64 = await image.readAsBase64String()
+        const estimatedBytes = decodedBase64ByteLength(base64)
+        if (
+          estimatedBytes > this.imageAssetLimits.maxBytes
+          || state.totalAssetBytes + estimatedBytes > this.imageAssetLimits.maxTotalBytes
+        ) {
+          state.omittedCount += 1
+          return []
+        }
+        const content = Buffer.from(base64, "base64")
+        if (
+          content.byteLength > this.imageAssetLimits.maxBytes
+          || state.totalAssetBytes + content.byteLength > this.imageAssetLimits.maxTotalBytes
+        ) {
+          state.omittedCount += 1
+          return []
+        }
+        state.totalAssetBytes += content.byteLength
         assets.push({
           relativePath,
           fileName,
@@ -178,4 +218,11 @@ function extensionForMimeType(mimeType: string): string {
 
 function normalizeAssetDirectoryName(directoryName: string): string {
   return directoryName.replace(/\\/g, "/").replace(/^\.\/+/, "")
+}
+
+function decodedBase64ByteLength(value: string): number {
+  const normalized = value.replace(/\s/g, "")
+  if (!normalized) return 0
+  const padding = normalized.endsWith("==") ? 2 : normalized.endsWith("=") ? 1 : 0
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding)
 }

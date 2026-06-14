@@ -156,6 +156,106 @@ describe("modern file extractors", () => {
     expect(result.warnings).toEqual([])
   })
 
+  it("omits DOCX inline image assets after the image count limit", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "report.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [new DocxExtractor({
+        imageAssetLimits: { maxCount: 1, maxBytes: 100, maxTotalBytes: 100 },
+        convertToHtml: async (_input, options?: MockMammothOptions) => {
+          const convertImage = readMockConvertImage(options)
+          const first = await convertImage?.(mockDocxImage("image/png", "first")) ?? []
+          const second = await convertImage?.(mockDocxImage("image/png", "second")) ?? []
+          return {
+            value: `<h1>Quarterly Report</h1>${renderMockImageNodes([...first, ...second])}<p>Body</p>`,
+            messages: [],
+          }
+        },
+      })],
+    })
+
+    const result = await service.convert({
+      filePath,
+      imageHandling: { mode: "assets", assetDirectoryName: "report.assets" },
+    })
+
+    expect(result.markdown).toContain("![](./report.assets/image-1.png)")
+    expect(result.markdown).not.toContain("image-2")
+    expect(result.assets).toHaveLength(1)
+    expect(result.warnings).toEqual([{
+      code: "docx_inline_images_omitted",
+      message: "DOCX inline images were omitted from the Markdown output.",
+    }])
+  })
+
+  it("omits DOCX inline image assets after the aggregate asset byte limit", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "report.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [new DocxExtractor({
+        imageAssetLimits: { maxCount: 10, maxBytes: 10, maxTotalBytes: 6 },
+        convertToHtml: async (_input, options?: MockMammothOptions) => {
+          const convertImage = readMockConvertImage(options)
+          const first = await convertImage?.(mockDocxImage("image/png", "abc")) ?? []
+          const second = await convertImage?.(mockDocxImage("image/png", "defg")) ?? []
+          return {
+            value: `<h1>Quarterly Report</h1>${renderMockImageNodes([...first, ...second])}<p>Body</p>`,
+            messages: [],
+          }
+        },
+      })],
+    })
+
+    const result = await service.convert({
+      filePath,
+      imageHandling: { mode: "assets", assetDirectoryName: "report.assets" },
+    })
+
+    expect(result.markdown).toContain("![](./report.assets/image-1.png)")
+    expect(result.markdown).not.toContain("image-2")
+    expect(result.assets).toEqual([expect.objectContaining({
+      relativePath: "report.assets/image-1.png",
+      content: Buffer.from("abc"),
+    })])
+    expect(result.warnings).toEqual([{
+      code: "docx_inline_images_omitted",
+      message: "DOCX inline images were omitted from the Markdown output.",
+    }])
+  })
+
+  it("omits DOCX inline image assets above the single image byte limit", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "report.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [new DocxExtractor({
+        imageAssetLimits: { maxCount: 10, maxBytes: 3, maxTotalBytes: 100 },
+        convertToHtml: async (_input, options?: MockMammothOptions) => {
+          const convertImage = readMockConvertImage(options)
+          const image = await convertImage?.(mockDocxImage("image/png", "abcd")) ?? []
+          return {
+            value: `<h1>Quarterly Report</h1>${renderMockImageNodes(image)}<p>Body</p>`,
+            messages: [],
+          }
+        },
+      })],
+    })
+
+    const result = await service.convert({
+      filePath,
+      imageHandling: { mode: "assets", assetDirectoryName: "report.assets" },
+    })
+
+    expect(result.markdown).not.toContain("![](")
+    expect(result.assets).toEqual([])
+    expect(result.warnings).toEqual([{
+      code: "docx_inline_images_omitted",
+      message: "DOCX inline images were omitted from the Markdown output.",
+    }])
+  })
+
   it("drops unexpected data URI images from converted DOCX HTML", async () => {
     const root = await tempDir()
     const filePath = path.join(root, "report.docx")
