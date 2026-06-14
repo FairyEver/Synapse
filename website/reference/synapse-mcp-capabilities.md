@@ -57,7 +57,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | --- | --- | --- |
 | `database` | 本地表、文件夹、字段、行、选项、日志和 SQL 操作 | `desktop/database/shared/capability-registry.ts` |
 | `repository` | 已配置 Synapse 仓库发现 | `desktop/synapse-capabilities/shared/repository-domain.ts` |
-| `variable` | 仓库本机变量的查询、写入和删除 | `desktop/synapse-capabilities/shared/variable-domain.ts` |
+| `variable` | 用户本机变量的查询、写入和删除 | `desktop/synapse-capabilities/shared/variable-domain.ts` |
 | `scheduler` | 定时任务、运行记录、运行时状态检查和 action type 查询 | `desktop/synapse-capabilities/shared/scheduler-domain.ts` |
 | `workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
 | `content` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
@@ -125,7 +125,7 @@ Drive MCP 暴露云盘文件、文件夹和分享能力。上传未指定 `paren
 
 ## Repository And Variable MCP
 
-Repository MCP 第一版只提供只读仓库发现。Variable MCP 管理仓库本机变量，变量值默认不返回；只有单个变量读取显式传 `includeValue: true` 时才会返回明文。
+Repository MCP 第一版只提供只读仓库发现。Variable MCP 管理用户本机变量，变量值默认不返回；只有单个变量读取显式传 `includeValue: true` 时才会返回明文。
 
 ## 新增或修改能力
 
