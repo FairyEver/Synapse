@@ -338,6 +338,32 @@ describe("LiveDesktopGateway", () => {
     warn.mockRestore()
   })
 
+  it("redacts sensitive websocket close reasons before logging", () => {
+    const warn = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const socket = new FakeSocket()
+    const gateway = createGateway({ randomId: () => "connection-1" })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit(
+      "close",
+      1006,
+      Buffer.from("Authorization: Bearer bearer-secret token=plain-secret Cookie: sid=cookie-secret /Users/liyang/private"),
+    )
+
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({
+      closeCode: 1006,
+      closeReason: "Authorization: [REDACTED] token=[REDACTED] Cookie: [REDACTED]",
+      connectionId: "connection-1",
+      userId: "user-1",
+    }), "Live desktop websocket closed")
+    const logged = JSON.stringify(warn.mock.calls)
+    expect(logged).not.toContain("bearer-secret")
+    expect(logged).not.toContain("plain-secret")
+    expect(logged).not.toContain("cookie-secret")
+    expect(logged).not.toContain("/Users/liyang/private")
+    warn.mockRestore()
+  })
+
   it("closes when ping arrives before hello", () => {
     const socket = new FakeSocket()
     const gateway = createGateway()

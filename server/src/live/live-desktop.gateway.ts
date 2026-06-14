@@ -11,6 +11,7 @@ import {
 } from "@synapse/shared"
 import { RawData, WebSocket, WebSocketServer } from "ws"
 import { UserAuthService } from "../auth/user-auth.service"
+import { formatAuditError } from "../common/audit-error"
 import { LiveClientRegistry } from "./live-client-registry"
 import { LiveDeviceService } from "./live-device.service"
 import { toPublicDto } from "./live-query.service"
@@ -543,7 +544,7 @@ function liveClientKey(client: Pick<LiveClientInstance, "clientInstanceId" | "us
 
 function closeReasonLogMeta(reason: Buffer | undefined): { readonly closeReason?: string } {
   const closeReason = reason?.toString("utf8")
-  return closeReason ? { closeReason } : {}
+  return closeReason ? { closeReason: formatAuditError(closeReason) } : {}
 }
 
 function upgradePath(request: IncomingMessage): string {
