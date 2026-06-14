@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
-import { createReadStream, createWriteStream } from "node:fs"
+import { createReadStream, createWriteStream, statSync } from "node:fs"
 import { copyFile, mkdir, rm, stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -122,9 +122,16 @@ export class LocalDriveStorage implements DriveStoragePort {
     this.contentTypes.set(entry.key, entry.contentType ?? null)
   }
 
-  resolveDownload(token: string): { readonly stream: NodeJS.ReadableStream; readonly filename: string } {
+  resolveDownload(token: string): { readonly stream: NodeJS.ReadableStream; readonly filename: string; readonly key: string } {
     const entry = this.readToken(this.downloadTokens, token)
-    return { stream: createReadStream(this.pathForKey(entry.key)), filename: entry.filename ?? "download" }
+    const objectPath = this.pathForKey(entry.key)
+    try {
+      statSync(objectPath)
+    } catch (error) {
+      attachLocalDriveStorageKey(error, entry.key)
+      throw error
+    }
+    return { stream: createReadStream(objectPath), filename: entry.filename ?? "download", key: entry.key }
   }
 
   private consumeToken(tokens: Map<string, LocalStorageToken>, token: string): LocalStorageToken {
@@ -151,6 +158,15 @@ export class LocalDriveStorage implements DriveStoragePort {
     }
     return objectPath
   }
+}
+
+function attachLocalDriveStorageKey(error: unknown, key: string): void {
+  if (typeof error !== "object" || error === null) return
+  Object.defineProperty(error, "storageKey", {
+    configurable: true,
+    enumerable: false,
+    value: key,
+  })
 }
 
 @Injectable()

@@ -705,6 +705,8 @@ export class DrivePublicController {
 
 @Controller("/api/drive")
 export class DriveLocalStorageController {
+  private readonly logger = new Logger(DriveLocalStorageController.name)
+
   constructor(private readonly storage: LocalDriveStorage) {}
 
   @Put("/local-upload/:token")
@@ -714,11 +716,46 @@ export class DriveLocalStorageController {
   }
 
   @Get("/local-download/:token")
-  download(@Param("token") token: string, @Res() response: Response) {
-    const download = this.storage.resolveDownload(token)
-    response.attachment(download.filename)
-    download.stream.pipe(response)
+  async download(@Param("token") token: string, @Res() response: Response): Promise<void> {
+    let storageKey: string | undefined
+    try {
+      const download = this.storage.resolveDownload(token)
+      storageKey = download.key
+      response.attachment(download.filename)
+      await pipeline(download.stream, response)
+    } catch (error) {
+      storageKey = readLocalDriveStorageKey(error) ?? storageKey
+      this.logger.warn({
+        message: "drive local download stream failed",
+        storageKey,
+        tokenLength: token.length,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      })
+      if (response.headersSent) {
+        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+        return
+      }
+      if (response.destroyed) return
+      response.removeHeader("Content-Disposition")
+      const missing = isMissingLocalDriveObjectError(error)
+      response.status(missing ? 404 : 500).json({
+        error: missing ? "文件不存在或已被删除。" : "文件下载失败。",
+      })
+    }
   }
+}
+
+function isMissingLocalDriveObjectError(error: unknown): boolean {
+  return error instanceof Error
+    && "code" in error
+    && (error as { readonly code?: unknown }).code === "ENOENT"
+}
+
+function readLocalDriveStorageKey(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("storageKey" in error)) return undefined
+  const storageKey = (error as { readonly storageKey?: unknown }).storageKey
+  return typeof storageKey === "string" ? storageKey : undefined
 }
 
 function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: string): z.infer<T> {

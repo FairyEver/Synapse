@@ -1,12 +1,16 @@
 import { Buffer } from "node:buffer"
+import { mkdtemp, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { Readable } from "node:stream"
 import { BadRequestException, type INestApplication, NotFoundException, UnauthorizedException } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
 import type { DriveBrowserSnapshotDto, DriveItemDto, DrivePublicationDto } from "@synapse/shared"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
-import { DriveAdminController, DrivePublicController, DriveUserController } from "./drive.controller"
+import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
 import { DriveService } from "./drive.service"
+import { LocalDriveStorage } from "./drive-storage"
 
 type SupertestResponse = { readonly body: unknown; readonly text: string; readonly headers: Record<string, string> }
 type SupertestRequest = {
@@ -251,6 +255,36 @@ describe("DriveController", () => {
       })
     } finally {
       await userApp.close()
+    }
+  })
+
+  it("returns a controlled error when a local download object is missing", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-download-"))
+    const localStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveLocalStorageController],
+      providers: [{ provide: LocalDriveStorage, useValue: localStorage }],
+    }).compile()
+    const localApp = moduleRef.createNestApplication()
+    await localApp.init()
+    try {
+      const upload = await localStorage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain" })
+      const uploadToken = upload.url.split("/").at(-1)
+      if (!uploadToken) throw new Error("missing upload token")
+      await localStorage.acceptUpload(uploadToken, Readable.from("brief"))
+      const download = await localStorage.createDownloadUrl({ key: "drive/item-1", filename: "brief.txt" })
+      const downloadToken = download.url.split("/").at(-1)
+      if (!downloadToken) throw new Error("missing download token")
+      await localStorage.deleteObject("drive/item-1")
+
+      const response = await request(localApp.getHttpServer())
+        .get(`/api/drive/local-download/${downloadToken}`)
+        .expect(404)
+
+      expect(response.body).toEqual({ error: "文件不存在或已被删除。" })
+    } finally {
+      await localApp.close()
+      await rm(root, { force: true, recursive: true })
     }
   })
 
