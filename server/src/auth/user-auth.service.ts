@@ -274,10 +274,9 @@ export class UserAuthService {
         expiresAt,
       },
     })
-    await this.auditLog?.record({
+    await this.recordUserAuthSuccessAuditSafely({
       adminEmail: user.email,
       action: "user.password_reset.request",
-      targetType: "user",
       targetId: user.id,
       ipAddress,
     })

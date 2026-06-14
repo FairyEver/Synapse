@@ -753,6 +753,46 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("returns password reset URLs when request audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+    })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const service = createService(prisma, auditLog)
+
+    try {
+      const result = await service.requestPasswordReset({
+        email: "U@example.com",
+        publicAppUrl: "https://app.example.com/",
+      }, "203.0.113.41")
+
+      expect(result.ok).toBe(true)
+      expect(result.resetUrl).toMatch(/^https:\/\/app\.example\.com\/console\/reset-password\?token=/)
+      expect(result.expiresAt).toEqual(expect.any(Date))
+      const token = new URL(result.resetUrl!).searchParams.get("token")
+      expect(prisma.userPasswordResetToken.create).toHaveBeenCalledWith({
+        data: {
+          tokenHash: hashToken(token!),
+          userId: "user-1",
+          expiresAt: result.expiresAt,
+        },
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.password_reset.request",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user authentication success audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("rejects password reset requests before creating tokens when delivery is disabled", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue({
