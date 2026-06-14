@@ -92,6 +92,15 @@ sync_remote_env() {
   ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' ENV_BACKUP_FILE='$ENV_BACKUP_FILE' DEPLOY_ID='$DEPLOY_ID' PROTECTED_ENV_KEYS='$PROTECTED_ENV_KEYS' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
+merged_tmp=""
+cleanup_env_sync_tmp() {
+  rm -f "$remote_tmp"
+  if [ -n "$merged_tmp" ]; then
+    rm -f "$merged_tmp"
+  fi
+}
+trap cleanup_env_sync_tmp EXIT
+
 chmod 600 "$remote_tmp"
 cd "$(dirname "$REMOTE_ENV_FILE")"
 
