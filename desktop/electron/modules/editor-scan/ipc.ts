@@ -17,6 +17,7 @@ import {
   scanAll,
   readItemContent,
   listSkillFiles,
+  assertTrustedEditorReadTarget,
   prepareQuickPublishDraft,
   trashScanItem,
 } from "../../services/editor-scan-service"
@@ -223,13 +224,19 @@ export const editorScanIpcModule: IpcModule = {
         if (request.itemType !== "skill") {
           throw new Error("只有 Skill 可以发布到商店。")
         }
+        const security = {
+          actor: { kind: "user" } as const,
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        }
+        await assertTrustedEditorReadTarget(security, request.itemPath, {
+          contentType: request.itemType,
+          itemName: request.itemName,
+          operation: "upload-skill-draft-to-content-store",
+        }, "skill")
         return contentStoreUploadService.uploadSkillDraftToContentStore(
           request as EditorScanContentStoreUploadRequest,
-          {
-            actor: { kind: "user" },
-            auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-            permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
-          },
+          security,
         )
       },
     },

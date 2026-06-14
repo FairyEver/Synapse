@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   uploadService: {
     uploadSkillDraftToContentStore: vi.fn(),
   },
+  editorScanService: {
+    assertTrustedEditorReadTarget: vi.fn(),
+  },
 }))
 
 vi.mock("../../../services/content-store-upload-service", () => ({
@@ -16,6 +19,7 @@ vi.mock("../../../services/editor-scan-service", () => ({
   scanAll: vi.fn(),
   readItemContent: vi.fn(),
   listSkillFiles: vi.fn(),
+  assertTrustedEditorReadTarget: mocks.editorScanService.assertTrustedEditorReadTarget,
   prepareQuickPublishDraft: vi.fn(),
   trashScanItem: vi.fn(),
 }))
@@ -32,6 +36,7 @@ describe("editorScanIpcModule", () => {
       consoleEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
       dashboardEditUrl: "https://synapse.example.test/console/my-content/item-1/edit",
     })
+    mocks.editorScanService.assertTrustedEditorReadTarget.mockResolvedValue(undefined)
   })
 
   it("uploads Skill drafts through the content store upload service", async () => {
@@ -67,6 +72,38 @@ describe("editorScanIpcModule", () => {
         permissionGuard: expect.objectContaining({ check: expect.any(Function) }),
       },
     )
+    expect(mocks.editorScanService.assertTrustedEditorReadTarget).toHaveBeenCalledWith(
+      {
+        actor: { kind: "user" },
+        auditSink: expect.objectContaining({ record: expect.any(Function) }),
+        permissionGuard: expect.objectContaining({ check: expect.any(Function) }),
+      },
+      "/tmp/skills/review",
+      {
+        contentType: "skill",
+        itemName: "review",
+        operation: "upload-skill-draft-to-content-store",
+      },
+      "skill",
+    )
+  })
+
+  it("rejects Skill uploads outside trusted editor roots", async () => {
+    const harness = createHarness()
+    mocks.editorScanService.assertTrustedEditorReadTarget.mockRejectedValueOnce(
+      new Error("扫描项不在当前编辑器扫描范围内。"),
+    )
+
+    await expect(harness.invoke("synapse:editor-scan:upload-skill-draft-to-content-store", {
+      itemType: "skill",
+      itemPath: "/tmp/outside/review",
+      itemName: "review",
+      editorId: "claude-code",
+      scope: "project",
+      projectPath: "/tmp/project",
+    })).rejects.toThrow("扫描项不在当前编辑器扫描范围内。")
+
+    expect(mocks.uploadService.uploadSkillDraftToContentStore).not.toHaveBeenCalled()
   })
 
   it("rejects Rule and Prompt uploads before calling the service", async () => {

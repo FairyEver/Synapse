@@ -882,6 +882,7 @@ export {
   scanAll,
   readItemContent,
   listSkillFiles,
+  assertTrustedEditorReadTarget,
   prepareQuickPublishDraft,
   scanSkillDirectories,
   trashScanItem,

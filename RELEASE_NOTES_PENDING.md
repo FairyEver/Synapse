@@ -81,6 +81,7 @@
 - 团队创建、邀请、加入、移除成员和退出团队时，如果成功审计日志短暂写入失败，业务结果仍会正常返回，不再出现提示失败但团队数据已改变。
 - Server 备份失败、过期备份清理失败和临时文件清理失败的服务日志会先脱敏，不再写入 token、API key 或本地路径原文。
 - Server 全局 500 异常日志改为安全错误摘要，不再把原始异常对象、凭据或本地路径直接写进服务日志。
+- 内容商店从 Editor Scan 上传 Skill 草稿时会先校验来源仍在扫描根内，伪造路径不能越过扫描边界读取本地目录。
 - Automation MCP 内置 skill 补充了工作流执行器说明，Agent 创建自动化时能直接选择已保存工作流并配置参数模板。
 - Scheduler MCP 内置 skill 补充了工作流动作说明，Agent 创建定时任务时能识别 `builtin.workflow` 及其 `workflowId`、`paramTemplates` 配置。
 - Webhook `exec` 请求通过认证后会进入默认 shell 执行权限策略，不再被 PermissionGuard 默认拒绝。
