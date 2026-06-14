@@ -79,6 +79,26 @@ export function buildPgDumpOptions(
   }
 }
 
+async function writeStreamChunk(stream: fs.WriteStream, chunk: string): Promise<void> {
+  if (stream.write(chunk)) return
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      stream.off("drain", handleDrain)
+      stream.off("error", handleError)
+    }
+    const handleDrain = () => {
+      cleanup()
+      resolve()
+    }
+    const handleError = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+    stream.once("drain", handleDrain)
+    stream.once("error", handleError)
+  })
+}
+
 @Injectable()
 export class BackupService {
   private readonly env: ServerEnv
@@ -355,59 +375,69 @@ export class BackupService {
     }
 
     const driveCos = this.createDriveCosClient()
-    const objects: Array<{
-      key: string
-      size: number
-      etag?: string
-      lastModified?: string
-    }> = []
+    const stream = fs.createWriteStream(filePath, { encoding: "utf8" })
     let marker: string | undefined
+    let completed = false
+    let firstObject = true
 
-    do {
-      const page = await new Promise<{
-        readonly Contents?: Array<{
-          readonly Key?: string
-          readonly Size?: string | number
-          readonly ETag?: string
-          readonly LastModified?: string
-        }>
-        readonly IsTruncated?: string | boolean
-        readonly NextMarker?: string
-      }>((resolve, reject) => {
-        driveCos.getBucket(
-          {
-            Bucket: this.env.driveCosBucket!,
-            Region: this.env.driveCosRegion!,
-            Prefix: "drive/",
-            ...(marker ? { Marker: marker } : {}),
-          },
-          (err, data) => {
-            if (err) reject(err)
-            else resolve(data)
-          },
-        )
-      })
+    try {
+      await writeStreamChunk(stream, "{\n")
+      await writeStreamChunk(stream, `  "bucket": ${JSON.stringify(this.env.driveCosBucket)},\n`)
+      await writeStreamChunk(stream, `  "region": ${JSON.stringify(this.env.driveCosRegion)},\n`)
+      await writeStreamChunk(stream, '  "prefix": "drive/",\n')
+      await writeStreamChunk(stream, '  "objects": [\n')
 
-      for (const item of page.Contents ?? []) {
-        if (!item.Key) continue
-        objects.push({
-          key: item.Key,
-          size: Number(item.Size ?? 0),
-          ...(item.ETag ? { etag: item.ETag } : {}),
-          ...(item.LastModified ? { lastModified: item.LastModified } : {}),
+      do {
+        const page = await new Promise<{
+          readonly Contents?: Array<{
+            readonly Key?: string
+            readonly Size?: string | number
+            readonly ETag?: string
+            readonly LastModified?: string
+          }>
+          readonly IsTruncated?: string | boolean
+          readonly NextMarker?: string
+        }>((resolve, reject) => {
+          driveCos.getBucket(
+            {
+              Bucket: this.env.driveCosBucket!,
+              Region: this.env.driveCosRegion!,
+              Prefix: "drive/",
+              ...(marker ? { Marker: marker } : {}),
+            },
+            (err, data) => {
+              if (err) reject(err)
+              else resolve(data)
+            },
+          )
         })
+
+        for (const item of page.Contents ?? []) {
+          if (!item.Key) continue
+          const object = {
+            key: item.Key,
+            size: Number(item.Size ?? 0),
+            ...(item.ETag ? { etag: item.ETag } : {}),
+            ...(item.LastModified ? { lastModified: item.LastModified } : {}),
+          }
+          await writeStreamChunk(stream, `${firstObject ? "" : ",\n"}    ${JSON.stringify(object)}`)
+          firstObject = false
+        }
+
+        marker = page.NextMarker
+        if (page.IsTruncated !== true && page.IsTruncated !== "true") marker = undefined
+      } while (marker)
+
+      await writeStreamChunk(stream, "\n  ]\n}\n")
+      stream.end()
+      await finished(stream)
+      completed = true
+    } finally {
+      if (!completed) {
+        stream.destroy()
+        fs.rmSync(filePath, { force: true })
       }
-
-      marker = page.NextMarker
-      if (page.IsTruncated !== true && page.IsTruncated !== "true") marker = undefined
-    } while (marker)
-
-    await writeJsonFile(filePath, {
-      bucket: this.env.driveCosBucket,
-      region: this.env.driveCosRegion,
-      prefix: "drive/",
-      objects,
-    })
+    }
   }
 
   private async packDirectory(directoryPath: string): Promise<string> {
