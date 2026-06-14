@@ -231,6 +231,12 @@ function migrationService(ctx: IpcHandlerContext): KnowledgeBaseStorageMigration
   return ctx.resolve<KnowledgeBaseStorageMigrationService>("knowledge-base.storage-migration-service")
 }
 
+function assertStorageMigrationInactive(ctx: IpcHandlerContext): void {
+  if (migrationService(ctx).isActive()) {
+    throw new Error("知识库存储迁移正在进行，请稍后再试。")
+  }
+}
+
 function trackRawMutation<T>(run: () => Promise<T>): Promise<T> {
   return knowledgeBaseSourceManagerWindowService.trackMutation(run)
 }
@@ -445,7 +451,10 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.write",
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.createManaged",
-        run: () => service(ctx).createManaged(request),
+        run: () => {
+          assertStorageMigrationInactive(ctx)
+          return service(ctx).createManaged(request)
+        },
       }),
     },
     deleteManaged: {
@@ -458,7 +467,10 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.write",
         resource: `managed-knowledge-base:${request.runtimeId ?? request.projectId}`,
         source: "knowledgeBase.deleteManaged",
-        run: () => service(ctx).deleteManaged(request),
+        run: () => {
+          assertStorageMigrationInactive(ctx)
+          return service(ctx).deleteManaged(request)
+        },
       }),
     },
     listRawDirectory: {

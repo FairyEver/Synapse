@@ -6,6 +6,8 @@ import type { ConversationEntryV1, DataRepository } from "../../runtime/data-rep
 import type { WindowManager } from "../../runtime/window"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
+import { isManagedKnowledgeBaseProject } from "../../services/knowledge-base/managed-path"
+import type { KnowledgeBaseStorageMigrationService } from "../../services/knowledge-base/storage-migration-service"
 import {
   OPEN_AGENT_SESSION_EVENT,
   type SynapseAgentConversationTarget,
@@ -21,6 +23,7 @@ import {
 } from "./ipc-shared"
 
 const logger = createMainLogger("agent.ipc")
+const KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR = "知识库存储迁移正在进行，请稍后再试。"
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
@@ -201,6 +204,13 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
           providerId: request.providerId,
           modelTier: request.modelTier,
           ...(mode ? { mode } : undefined),
+        }
+        const project = config.global.projects.find((item) => item.id === request.projectId)
+        if (isManagedKnowledgeBaseProject(project)) {
+          const storageMigration = ctx.resolve<KnowledgeBaseStorageMigrationService>("knowledge-base.storage-migration-service")
+          if (storageMigration.isActive()) {
+            throw new Error(KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR)
+          }
         }
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         const session = await agent.createSession(input)

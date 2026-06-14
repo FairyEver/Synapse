@@ -154,6 +154,18 @@ describe("knowledgeBaseIpcModule", () => {
     expect(loggedFailure).not.toContain("/Users/liyang/private")
   })
 
+  it("blocks managed knowledge base creation during storage migration", async () => {
+    const createManaged = vi.fn()
+    const { harness } = createHarness({ migrationActive: true, service: { createManaged } })
+
+    await expect(harness.invoke("synapse:knowledge-base:create-managed", {
+      projectId: "kb-1",
+      name: "Knowledge",
+    })).rejects.toThrow("知识库存储迁移正在进行")
+
+    expect(createManaged).not.toHaveBeenCalled()
+  })
+
   it("deletes a managed knowledge base through guarded write permission", async () => {
     const deleteManaged = vi.fn().mockResolvedValue({
       projectId: "kb-1",
@@ -214,6 +226,18 @@ describe("knowledgeBaseIpcModule", () => {
       outcome: "allowed",
       metadata: { source: "knowledgeBase.deleteManaged" },
     })
+  })
+
+  it("blocks managed knowledge base deletion during storage migration", async () => {
+    const deleteManaged = vi.fn()
+    const { harness } = createHarness({ migrationActive: true, service: { deleteManaged } })
+
+    await expect(harness.invoke("synapse:knowledge-base:delete-managed", {
+      projectId: "kb-1",
+      runtimeId: "kb-1",
+    })).rejects.toThrow("知识库存储迁移正在进行")
+
+    expect(deleteManaged).not.toHaveBeenCalled()
   })
 
   it("adds a URL source through guarded network and write permissions", async () => {
@@ -754,6 +778,7 @@ describe("knowledgeBaseIpcModule", () => {
 })
 
 function createHarness(options: {
+  migrationActive?: boolean
   permissions?: Awaited<ReturnType<PermissionGuard["check"]>>[]
   service: unknown
 }) {
@@ -774,6 +799,7 @@ function createHarness(options: {
   const migrationService = {
     cancelMigration: vi.fn(),
     getStorageStatus: vi.fn(),
+    isActive: vi.fn(() => options.migrationActive ?? false),
     startMigration: vi.fn(),
   }
   harness.registry.register(knowledgeBaseIpcModule, {

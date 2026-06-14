@@ -136,6 +136,48 @@ describe("agent session IPC methods", () => {
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("sk-test")
   })
 
+  it("blocks managed knowledge base session creation during storage migration", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [],
+      global: {
+        themeMode: "system",
+        projects: [{
+          id: "kb-1",
+          name: "Knowledge",
+          path: "synapse-kb://kb-1",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              managed: true,
+              runtimeId: "kb-1",
+            },
+          },
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const createSession = vi.fn()
+    const storageMigration = { isActive: vi.fn(() => true) }
+    const ctx = createContext({
+      agent: { createSession },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+      storageMigration,
+    })
+
+    await expect(sessionMethods.createSession.handler(ctx, {
+      projectId: "kb-1",
+      agentType: "claude-code",
+    })).rejects.toThrow("创建 Agent 会话失败")
+
+    expect(storageMigration.isActive).toHaveBeenCalled()
+    expect(createSession).not.toHaveBeenCalled()
+    expect(ctx.projectContainers.open).not.toHaveBeenCalled()
+  })
+
   it("creates sessions in the built-in local conversation workspace", async () => {
     const workspacePath = path.join("/user-data", "agent-workspaces", "default")
     vi.mocked(configStore.load).mockResolvedValue({
@@ -354,6 +396,7 @@ describe("agent session IPC methods", () => {
 function createContext(overrides: {
   readonly agent: Record<string, unknown>
   readonly dataRepo: DataRepository
+  readonly storageMigration?: { isActive: ReturnType<typeof vi.fn> }
   readonly windowManager?: WindowManager
 }): IpcHandlerContext & {
   readonly projectContainers: Pick<ProjectContainerRegistry, "open">
@@ -379,6 +422,7 @@ function createContext(overrides: {
       if (serviceId === "core.project-containers") return projectContainers as T
       if (serviceId === "core.data-repository") return overrides.dataRepo as T
       if (serviceId === "core.window-manager" && overrides.windowManager) return overrides.windowManager as T
+      if (serviceId === "knowledge-base.storage-migration-service" && overrides.storageMigration) return overrides.storageMigration as T
       throw new Error(`Unknown service: ${serviceId}`)
     },
   }
