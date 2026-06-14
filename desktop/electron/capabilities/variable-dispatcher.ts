@@ -235,14 +235,30 @@ async function persistVariablesWithAudit(
   variables: SynapseVariable[],
   audit: SecretAuditContext,
 ): Promise<void> {
+  await persistVariablesWithAudits(deps, variables, [{ audit }])
+}
+
+async function persistVariablesWithAudits(
+  deps: VariableCapabilityDispatcherDeps,
+  variables: SynapseVariable[],
+  audits: ReadonlyArray<{
+    readonly audit: SecretAuditContext
+    readonly metadata?: Record<string, unknown>
+  }>,
+): Promise<void> {
   try {
     await persistVariables(deps, variables)
-    recordSecretAudit(deps, audit, "allowed")
+    for (const entry of audits) {
+      recordSecretAudit(deps, entry.audit, "allowed", entry.metadata)
+    }
   } catch (error) {
-    recordSecretAudit(deps, audit, "failed", {
-      errorName: error instanceof Error ? error.name : typeof error,
-      errorLength: String(error).length,
-    })
+    for (const entry of audits) {
+      recordSecretAudit(deps, entry.audit, "failed", {
+        ...entry.metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      })
+    }
     throw error
   }
 }
@@ -342,8 +358,21 @@ async function updateVariable(
       ...(description ? { description } : undefined),
     }
     variables[index] = updated
-    const audit = await authorizeSecret(deps, "secret.write", action, context, updated.name, false)
-    await persistVariablesWithAudit(deps, variables, audit)
+    if (updated.name !== variable.name) {
+      const renameMetadata = {
+        fromVariableName: variable.name,
+        toVariableName: updated.name,
+      }
+      const fromAudit = await authorizeSecret(deps, "secret.write", action, context, variable.name, false)
+      const toAudit = await authorizeSecret(deps, "secret.write", action, context, updated.name, false)
+      await persistVariablesWithAudits(deps, variables, [
+        { audit: fromAudit, metadata: renameMetadata },
+        { audit: toAudit, metadata: renameMetadata },
+      ])
+    } else {
+      const audit = await authorizeSecret(deps, "secret.write", action, context, updated.name, false)
+      await persistVariablesWithAudit(deps, variables, audit)
+    }
     return { ok: true, data: { ...variableResponse(updated), updated: true } }
   })
 }

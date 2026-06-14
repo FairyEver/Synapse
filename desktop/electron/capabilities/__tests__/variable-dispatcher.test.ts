@@ -252,7 +252,7 @@ describe("variable capability dispatcher", () => {
     }))
   })
 
-  it("authorizes and audits variable renames against the new variable name", async () => {
+  it("authorizes and audits variable renames against the old and new variable names", async () => {
     const { auditEvents, dispatcher, permissionGuard } = createHarness(baseConfig)
 
     await expect(
@@ -268,7 +268,18 @@ describe("variable capability dispatcher", () => {
       },
     })
 
-    expect(permissionGuard.check).toHaveBeenCalledWith({
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "secret.write",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
+      resource: "variable:user:TOKEN",
+      context: {
+        source: "mcp-http",
+        variableAction: "variable.item.update",
+        variableName: "TOKEN",
+        includeValue: false,
+      },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
       action: "secret.write",
       actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
       resource: "variable:user:RENAMED_TOKEN",
@@ -282,12 +293,58 @@ describe("variable capability dispatcher", () => {
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "secret.write",
       outcome: "allowed",
+      resource: "variable:user:TOKEN",
+      metadata: expect.objectContaining({
+        variableName: "TOKEN",
+        fromVariableName: "TOKEN",
+        toVariableName: "RENAMED_TOKEN",
+      }),
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
       resource: "variable:user:RENAMED_TOKEN",
-      metadata: expect.objectContaining({ variableName: "RENAMED_TOKEN" }),
+      metadata: expect.objectContaining({
+        variableName: "RENAMED_TOKEN",
+        fromVariableName: "TOKEN",
+        toVariableName: "RENAMED_TOKEN",
+      }),
+    }))
+  })
+
+  it("rejects variable renames when the old variable name cannot be written", async () => {
+    const { auditEvents, dispatcher, getConfig, permissionGuard, updateConfig } = createHarness(baseConfig)
+    vi.mocked(permissionGuard.check).mockImplementation(async ({ resource }) => {
+      if (resource === "variable:user:TOKEN") {
+        return { allowed: false as const, reason: "old variable denied", policyId: "old-variable-policy" }
+      }
+      return { allowed: true as const }
+    })
+
+    await expect(
+      dispatcher.dispatch(
+        "variable.item.update",
+        { name: "TOKEN", newName: "RENAMED_TOKEN" },
+        { source: "mcp-http" },
+      ),
+    ).rejects.toThrow("old variable denied")
+
+    expect(updateConfig).not.toHaveBeenCalled()
+    expect(getConfig().global.variables.map((variable) => variable.name)).toEqual(["TOKEN", "EMPTY"])
+    expect(permissionGuard.check).toHaveBeenCalledTimes(1)
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      outcome: "denied",
+      resource: "variable:user:TOKEN",
+      metadata: expect.objectContaining({
+        variableName: "TOKEN",
+        reason: "old variable denied",
+        policyId: "old-variable-policy",
+      }),
     }))
     expect(auditEvents).not.toContainEqual(expect.objectContaining({
       action: "secret.write",
-      resource: "variable:user:TOKEN",
+      resource: "variable:user:RENAMED_TOKEN",
     }))
   })
 
