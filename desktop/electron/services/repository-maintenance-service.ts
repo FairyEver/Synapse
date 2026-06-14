@@ -567,7 +567,6 @@ class RepositoryMaintenanceService {
     if (commitQueue.length > 0) {
       try {
         await pushRepository(repository, options.onProgress)
-        await pendingPushesService.clear(repository)
       } catch (error) {
         const message = error instanceof Error ? error.message : "推送到仓库失败。"
 
@@ -575,7 +574,6 @@ class RepositoryMaintenanceService {
           try {
             await pullWithRebase(repository, options.onProgress)
             await pushRepository(repository, options.onProgress)
-            await pendingPushesService.clear(repository)
           } catch (retryError) {
             pushed = false
 

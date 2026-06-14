@@ -120,6 +120,7 @@ describe("repositoryMaintenanceService", () => {
       isGitRepository: true,
       gitRootPath: root,
     })
+    mocks.pendingPushesService.readState.mockResolvedValue({ count: 1, items: [] })
     await mkdir(historyDirectoryPath, { recursive: true })
     await writeJson(path.join(historyDirectoryPath, "snapshot.json"), {
       schemaVersion: 1,
@@ -146,6 +147,8 @@ describe("repositoryMaintenanceService", () => {
 
     await expect(access(contentDirectoryPath)).rejects.toMatchObject({ code: "ENOENT" })
     expect(result.compactedCount).toBe(1)
+    expect(result.pendingPushCount).toBe(1)
     expect(result.message).toBe("整理了 1 条内容，已同步。")
+    expect(mocks.pendingPushesService.clear).not.toHaveBeenCalled()
   })
 })
