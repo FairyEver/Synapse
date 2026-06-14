@@ -79,11 +79,12 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
   return {
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
       switch (action) {
-        case "drive.item.list": {
-          const parentId = optionalNullableString(params.parentId)
-          const items = await deps.accountService.listDriveItems(parentId)
-          return { ok: true, data: items, total: items.length }
-        }
+        case "drive.item.list":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const parentId = optionalNullableString(params.parentId)
+            const items = await deps.accountService.listDriveItems(parentId)
+            return { ok: true, data: items, total: items.length }
+          })
         case "drive.file.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
             uploadFile(deps, fileSystem, fetchImpl, params, context))
@@ -135,7 +136,10 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             data: await deps.accountService.disableDriveShare(requireString(params, "shareId")),
           }))
         case "drive.usage.get":
-          return { ok: true, data: await deps.accountService.getDriveUsage() }
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.getDriveUsage(),
+          }))
         default:
           throw new Error(`Unknown drive action: ${action}`)
       }
@@ -290,6 +294,44 @@ async function listLocalFiles(fileSystem: FileSystemPort, rootPath: string): Pro
   return result
 }
 
+async function dispatchDriveRead(
+  deps: DriveCapabilityDispatcherDeps,
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+  operation: () => Promise<DispatchResult>,
+): Promise<DispatchResult> {
+  const security = driveMutationSecurity(deps, action, params, context)
+  await authorizeDriveMutation(deps, security)
+  try {
+    const result = await operation()
+    deps.auditSink?.record({
+      action: "network.connect",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: driveResultAuditOutcome(result),
+      metadata: {
+        ...security.metadata,
+        ...driveReadResultCorrelation(result),
+      },
+    })
+    return result
+  } catch (error) {
+    deps.auditSink?.record({
+      action: "network.connect",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "failed",
+      metadata: {
+        ...security.metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    throw error
+  }
+}
+
 async function dispatchDriveMutation(
   deps: DriveCapabilityDispatcherDeps,
   action: string,
@@ -356,6 +398,20 @@ function driveParamCorrelation(params: Record<string, unknown>): Record<string, 
   for (const key of ["itemId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "disablePublications"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
+  }
+  return metadata
+}
+
+function driveReadResultCorrelation(result: DispatchResult): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {}
+  const total = (result as { readonly total?: unknown }).total
+  if (typeof total === "number") metadata.total = total
+  const data = result.data
+  if (!data || typeof data !== "object" || Array.isArray(data)) return metadata
+  const record = data as Record<string, unknown>
+  for (const key of ["usedBytes", "reservedBytes", "quotaBytes"]) {
+    const value = record[key]
+    if (typeof value === "string" || typeof value === "number") metadata[key] = value
   }
   return metadata
 }

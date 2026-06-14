@@ -40,6 +40,85 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.listDriveItems).toHaveBeenCalledWith(null)
   })
 
+  it("authorizes and audits Drive item reads", async () => {
+    const accountService = createAccountService({
+      listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
+    })
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
+
+    await expect(dispatcher.dispatch("drive.item.list", {
+      parentId: "folder-1",
+    }, { source: "mcp-stdio", actor: mcpClientActorForSource("mcp-stdio") })).resolves.toMatchObject({
+      ok: true,
+      total: 1,
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      actor: { kind: "user", id: "mcp-client:synapse-mcp/stdio", display: "Synapse MCP stdio" },
+      resource: "synapse-drive",
+      context: expect.objectContaining({ source: "mcp-stdio", driveAction: "drive.item.list", parentId: "folder-1" }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "synapse-drive:drive.item.list",
+      metadata: expect.objectContaining({ driveAction: "drive.item.list", parentId: "folder-1", total: 1 }),
+    }))
+  })
+
+  it("denies Drive read tools before calling account services", async () => {
+    const accountService = createAccountService({
+      getDriveUsage: vi.fn(async () => ({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })),
+    })
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false as const, reason: "drive read denied", policyId: "deny-drive-read" })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
+
+    await expect(dispatcher.dispatch("drive.usage.get", {}, { source: "mcp-stdio" }))
+      .rejects.toThrow("drive read denied")
+
+    expect(accountService.getDriveUsage).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "denied",
+      resource: "synapse-drive",
+      metadata: expect.objectContaining({
+        driveAction: "drive.usage.get",
+        reason: "drive read denied",
+        policyId: "deny-drive-read",
+      }),
+    }))
+  })
+
+  it("audits failed Drive read tools", async () => {
+    const accountService = createAccountService({
+      getDriveUsage: vi.fn(async () => {
+        throw new Error("usage failed")
+      }),
+    })
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
+
+    await expect(dispatcher.dispatch("drive.usage.get", {}, { source: "mcp-stdio" }))
+      .rejects.toThrow("usage failed")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "failed",
+      resource: "synapse-drive:drive.usage.get",
+      metadata: expect.objectContaining({ driveAction: "drive.usage.get", errorName: "Error" }),
+    }))
+  })
+
   it("uploads a local file without returning the presigned URL", async () => {
     const accountService = createAccountService()
     const fileStream = Readable.from(["test"])
