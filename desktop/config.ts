@@ -25,6 +25,9 @@ export const APP_NAVIGATION_TABS = [
 // 工作流入口默认显示开关：为 true 时所有用户直接看到工作流入口；为 false 时继续通过金手指状态控制入口显隐。
 export const WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT = false
 
+// 日志复制到剪贴板的最大总字节数：限制设置页复制日志和主进程读取日志的单次文本体积，完整日志应通过导出 zip 获取。
+export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
+
 // 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
 export const DEFAULT_APP_NAVIGATION_TAB_ID = "skill" satisfies AppNavigationTabId
 

@@ -27,6 +27,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseLogFileInfo } from "@/types/log"
 import { Badge } from "@/components/ui/badge"
+import { LOG_CLIPBOARD_MAX_BYTES } from "../../../../config"
 
 const LOG_ACTION_TIMEOUT_MS = 15000
 
@@ -57,6 +58,14 @@ function formatFileSize(bytes: number): string {
 
 const logger = createRendererLogger("settings.logs")
 
+function getSelectedLogSize(files: SynapseLogFileInfo[], selected: Set<string>): number {
+  return files.reduce((sum, file) => selected.has(file.name) ? sum + file.sizeBytes : sum, 0)
+}
+
+function formatLogCopyLimitMessage(selectedBytes: number): string {
+  return `已选日志 ${formatFileSize(selectedBytes)}，超过复制上限 ${formatFileSize(LOG_CLIPBOARD_MAX_BYTES)}，请导出全部日志。`
+}
+
 function LogExportPanel() {
   const { error: showError, promise } = useAppNotifications()
   const [activeAction, setActiveAction] = useState<"clear" | "copy" | "export" | null>(null)
@@ -77,6 +86,10 @@ function LogExportPanel() {
   const isCopying = activeAction === "copy"
   const isClearing = activeAction === "clear"
   const isBusy = activeAction !== null
+  const selectedLogSize = logFilePickerState
+    ? getSelectedLogSize(logFilePickerState.files, logFilePickerState.selected)
+    : 0
+  const isSelectedLogSizeOverLimit = selectedLogSize > LOG_CLIPBOARD_MAX_BYTES
 
   const handleExport = useCallback(async () => {
     setActiveAction("export")
@@ -127,6 +140,10 @@ function LogExportPanel() {
       }
 
       if (files.length === 1) {
+        if (files[0].sizeBytes > LOG_CLIPBOARD_MAX_BYTES) {
+          showError(formatLogCopyLimitMessage(files[0].sizeBytes))
+          return
+        }
         await promise(
           async () => {
             const content = await withTimeout(
@@ -188,6 +205,11 @@ function LogExportPanel() {
 
     const selectedNames = Array.from(logFilePickerState.selected)
     if (selectedNames.length === 0) return
+    const selectedBytes = getSelectedLogSize(logFilePickerState.files, logFilePickerState.selected)
+    if (selectedBytes > LOG_CLIPBOARD_MAX_BYTES) {
+      showError(formatLogCopyLimitMessage(selectedBytes))
+      return
+    }
 
     setActiveAction("copy")
     logger.info("Selected log copy initiated.", { selectedCount: selectedNames.length, selectedNames })
@@ -213,7 +235,7 @@ function LogExportPanel() {
     } finally {
       setActiveAction(null)
     }
-  }, [logFilePickerState, promise])
+  }, [logFilePickerState, promise, showError])
 
   return (
     <>
@@ -306,7 +328,7 @@ function LogExportPanel() {
           <DialogHeader>
             <DialogTitle>选择要复制的日志文件</DialogTitle>
             <DialogDescription>
-              共 {logFilePickerState?.files.length ?? 0} 个日志文件，已选中 {logFilePickerState?.selected.size ?? 0} 个。
+              共 {logFilePickerState?.files.length ?? 0} 个日志文件，已选 {formatFileSize(selectedLogSize)}，复制上限 {formatFileSize(LOG_CLIPBOARD_MAX_BYTES)}。
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-64">
@@ -347,12 +369,15 @@ function LogExportPanel() {
               })}
             </div>
           </ScrollArea>
+          {isSelectedLogSizeOverLimit ? (
+            <p className="text-sm text-destructive">{formatLogCopyLimitMessage(selectedLogSize)}</p>
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setLogFilePickerState(null)}>
               取消
             </Button>
             <Button
-              disabled={isCopying || !logFilePickerState?.selected.size}
+              disabled={isCopying || !logFilePickerState?.selected.size || isSelectedLogSizeOverLimit}
               onClick={() => void handleCopySelectedFiles()}
             >
               {isCopying ? (

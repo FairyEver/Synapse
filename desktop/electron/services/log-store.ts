@@ -27,6 +27,7 @@ import type { LogSink, LogRecord, StructuredLogger } from "../runtime/logging"
 import { createLogger } from "../runtime/logging"
 import { createMacCompatibilitySnapshot } from "./mac-compatibility"
 import { createWindowsCompatibilitySnapshot } from "./windows-compatibility"
+import { LOG_CLIPBOARD_MAX_BYTES } from "../../config"
 
 const LOG_DIR_NAME = "logs"
 const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -579,12 +580,16 @@ class LogService {
 
       const allowedNames = new Set(fileNames)
       const logFiles = await this.listLogFiles()
+      let selectedBytes = 0
       const parts: string[] = []
 
       for (const logFile of logFiles) {
         if (!allowedNames.has(logFile.name)) {
           continue
         }
+        const fileStats = await stat(logFile.path)
+        selectedBytes += fileStats.size
+        assertLogClipboardReadSize(selectedBytes)
         const content = await readFile(logFile.path, "utf-8")
         parts.push(content)
       }
@@ -640,6 +645,12 @@ class LogService {
 }
 
 export const logStore = new LogService()
+
+export function assertLogClipboardReadSize(totalBytes: number): void {
+  if (totalBytes > LOG_CLIPBOARD_MAX_BYTES) {
+    throw new Error("选择的日志文件超过复制上限，请导出全部日志。")
+  }
+}
 
 /**
  * Creates a StructuredLogger for the given module category.
