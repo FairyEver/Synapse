@@ -34,6 +34,14 @@ Canonical capability ids use `<domain>.<resource>.<action>`. The local HTTP API 
 | `database.folder.delete` | `database_folder_delete` | `database.folder.delete` | `databaseFolderDelete` |
 | `database.folder.reorder` | `database_folder_reorder` | `database.folder.reorder` | `databaseFolderReorder` |
 | `database.table.move` | `database_table_move` | `database.table.move` | `databaseTableMove` |
+| `model_price.used_model.list` | `model_price_used_model_list` | `model_price.used_model.list` | `modelPriceUsedModelList` |
+| `model_price.rule.list` | `model_price_rule_list` | `model_price.rule.list` | `modelPriceRuleList` |
+| `model_price.rule.get` | `model_price_rule_get` | `model_price.rule.get` | `modelPriceRuleGet` |
+| `model_price.rule.create` | `model_price_rule_create` | `model_price.rule.create` | `modelPriceRuleCreate` |
+| `model_price.rule.update` | `model_price_rule_update` | `model_price.rule.update` | `modelPriceRuleUpdate` |
+| `model_price.rule.delete` | `model_price_rule_delete` | `model_price.rule.delete` | `modelPriceRuleDelete` |
+| `model_price.rule.enable` | `model_price_rule_enable` | `model_price.rule.enable` | `modelPriceRuleEnable` |
+| `model_price.rule.disable` | `model_price_rule_disable` | `model_price.rule.disable` | `modelPriceRuleDisable` |
 | `repository.item.list` | `repository_item_list` | `repository.item.list` | `repositoryItemList` |
 | `variable.item.list` | `variable_item_list` | `variable.item.list` | `variableItemList` |
 | `variable.item.get` | `variable_item_get` | `variable.item.get` | `variableItemGet` |
