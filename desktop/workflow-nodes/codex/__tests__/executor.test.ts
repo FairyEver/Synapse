@@ -518,6 +518,7 @@ describe("codexNodeExecutor", () => {
 
     expect(result.status).toBe("success")
     expect(result.output).toBe("stdout answer")
+    expect(result.outputs?.codexDebug).not.toHaveProperty("lastMessagePath")
   })
 
   it("does not use raw JSONL stdout as successful fallback output", async () => {

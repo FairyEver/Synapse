@@ -226,7 +226,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       const stdout = result.stdout ?? stdoutCapture.text()
       const stderr = result.stderr ?? stderrCapture.text()
 
-      const codexDebug = buildCodexDebugOutput({
+      let codexDebug = buildCodexDebugOutput({
         args: request.args ?? [],
         cwd,
         exitCode: result.exitCode,
@@ -239,7 +239,6 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
               promptPath: artifactPaths.promptPath,
             }
           : {}),
-        lastMessagePath: lastMessageTarget.debugPath,
         stdout,
         stderr,
       })
@@ -299,12 +298,28 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
 
       const lastMessage = await bestEffortReadArtifact(lastMessageTarget.path, logContext)
       if (captureDebugArtifacts && lastMessage !== undefined) {
-        await bestEffortArtifactWrite({
+        const lastMessageWritten = await bestEffortArtifactWrite({
           logContext,
           label: "last message artifact",
           filePath: artifactPaths.lastMessagePath,
           task: () => writeCodexArtifact(artifactPaths.lastMessagePath, lastMessage),
         })
+        if (lastMessageWritten) {
+          codexDebug = buildCodexDebugOutput({
+            args: request.args ?? [],
+            cwd,
+            exitCode: result.exitCode,
+            signal: result.signal ?? undefined,
+            durationMs: result.durationMs,
+            stdoutPath: artifactPaths.stdoutPath,
+            stderrPath: artifactPaths.stderrPath,
+            promptPath: artifactPaths.promptPath,
+            lastMessagePath: artifactPaths.lastMessagePath,
+            stdout,
+            stderr,
+          })
+          outputs.codexDebug = codexDebug
+        }
       }
       const output = finalOutputFromResult(lastMessage, stdout)
       input.onProgress?.("processing_output", "处理输出…")
@@ -341,7 +356,6 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
               promptPath: artifactPaths.promptPath,
             }
           : {}),
-        lastMessagePath: lastMessageTarget.debugPath,
         stdout,
         stderr,
       })
@@ -628,9 +642,10 @@ async function bestEffortArtifactWrite(input: {
   readonly label: string
   readonly filePath?: string
   readonly task: () => Promise<void>
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     await input.task()
+    return true
   } catch (error) {
     warnArtifactFailure({
       logContext: input.logContext,
@@ -638,6 +653,7 @@ async function bestEffortArtifactWrite(input: {
       filePath: input.filePath,
       error,
     })
+    return false
   }
 }
 
