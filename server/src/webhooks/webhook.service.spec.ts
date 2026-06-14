@@ -643,6 +643,10 @@ describe("WebhookService", () => {
         userId: "user-1",
         webhookId: "webhook-1",
         status: WEBHOOK_DELIVERY_STATUS.delivered,
+        receivedAt: {
+          gte: new Date("2026-06-07T00:00:00.000Z"),
+          lte: new Date("2026-06-08T23:59:59.999Z"),
+        },
       }),
       include: expect.objectContaining({
         receipts: { orderBy: { sentAt: "asc" } },

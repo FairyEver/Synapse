@@ -794,9 +794,12 @@ function normalizeWebhookName(name: string): string {
   return value
 }
 
-function parseDeliveryHistoryDate(value: string): Date {
+function parseDeliveryHistoryDate(value: string, boundary: "start" | "end" = "start"): Date {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) throw new BadRequestException("日期参数无效。")
+  if (boundary === "end" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    date.setUTCHours(23, 59, 59, 999)
+  }
   return date
 }
 
@@ -823,7 +826,7 @@ function buildDeliveryHistoryWhere(
   if (filters.from || filters.to) {
     where.receivedAt = {
       ...(filters.from ? { gte: parseDeliveryHistoryDate(filters.from) } : {}),
-      ...(filters.to ? { lte: parseDeliveryHistoryDate(filters.to) } : {}),
+      ...(filters.to ? { lte: parseDeliveryHistoryDate(filters.to, "end") } : {}),
     }
   }
   return where
