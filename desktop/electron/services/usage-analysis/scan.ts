@@ -10,10 +10,34 @@ export interface UsageFileFingerprint {
 export interface UsageJsonlScanOptions {
   readonly maxDepth?: number
   readonly modifiedSinceMs?: number
+  readonly maxFiles?: number
+  readonly maxDirectoryEntries?: number
 }
 
-function collectJsonlFilesFromDir(dir: string, out: string[], maxDepth: number, options: UsageJsonlScanOptions): void {
-  if (maxDepth <= 0) return
+export interface UsageJsonlScanResult {
+  readonly files: string[]
+  readonly truncated: boolean
+  readonly visitedEntries: number
+}
+
+const DEFAULT_MAX_JSONL_FILES = 20_000
+const DEFAULT_MAX_DIRECTORY_ENTRIES = 100_000
+
+type ScanState = {
+  files: string[]
+  truncated: boolean
+  visitedEntries: number
+}
+
+type ResolvedUsageJsonlScanOptions = {
+  readonly maxDepth: number
+  readonly maxFiles: number
+  readonly maxDirectoryEntries: number
+  readonly modifiedSinceMs?: number
+}
+
+function collectJsonlFilesFromDir(dir: string, state: ScanState, maxDepth: number, options: ResolvedUsageJsonlScanOptions): void {
+  if (maxDepth <= 0 || state.truncated) return
   let entries: fs.Dirent[]
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -23,16 +47,26 @@ function collectJsonlFilesFromDir(dir: string, out: string[], maxDepth: number, 
   }
 
   for (const entry of entries) {
+    if (state.truncated) return
+    state.visitedEntries += 1
+    if (state.visitedEntries > options.maxDirectoryEntries) {
+      state.truncated = true
+      return
+    }
     const fullPath = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      collectJsonlFilesFromDir(fullPath, out, maxDepth - 1, options)
+      collectJsonlFilesFromDir(fullPath, state, maxDepth - 1, options)
       continue
     }
     if (entry.isFile() && entry.name.endsWith(".jsonl")) {
       if (options.modifiedSinceMs !== undefined && fs.statSync(fullPath).mtimeMs < options.modifiedSinceMs) {
         continue
       }
-      out.push(fullPath)
+      if (state.files.length >= options.maxFiles) {
+        state.truncated = true
+        return
+      }
+      state.files.push(fullPath)
     }
   }
 }
@@ -44,13 +78,31 @@ function isMissingDirectoryError(error: unknown): boolean {
   return code === "ENOENT" || code === "ENOTDIR"
 }
 
-export function collectJsonlFiles(roots: string[], options: UsageJsonlScanOptions = {}): string[] {
-  const files: string[] = []
-  const maxDepth = options.maxDepth ?? 8
-  for (const root of roots) {
-    collectJsonlFilesFromDir(root, files, maxDepth, options)
+export function collectJsonlFilesWithStats(roots: string[], options: UsageJsonlScanOptions = {}): UsageJsonlScanResult {
+  const scanOptions: ResolvedUsageJsonlScanOptions = {
+    maxDepth: options.maxDepth ?? 8,
+    maxFiles: options.maxFiles ?? DEFAULT_MAX_JSONL_FILES,
+    maxDirectoryEntries: options.maxDirectoryEntries ?? DEFAULT_MAX_DIRECTORY_ENTRIES,
+    modifiedSinceMs: options.modifiedSinceMs,
   }
-  return [...new Set(files)].sort()
+  const state: ScanState = {
+    files: [],
+    truncated: false,
+    visitedEntries: 0,
+  }
+  for (const root of roots) {
+    collectJsonlFilesFromDir(root, state, scanOptions.maxDepth, scanOptions)
+    if (state.truncated) break
+  }
+  return {
+    files: [...new Set(state.files)].sort(),
+    truncated: state.truncated,
+    visitedEntries: state.visitedEntries,
+  }
+}
+
+export function collectJsonlFiles(roots: string[], options: UsageJsonlScanOptions = {}): string[] {
+  return collectJsonlFilesWithStats(roots, options).files
 }
 
 export function fingerprintFile(filePath: string): UsageFileFingerprint {

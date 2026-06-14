@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { collectJsonlFiles, fingerprintFile } from "../scan"
+import { collectJsonlFiles, collectJsonlFilesWithStats, fingerprintFile } from "../scan"
 
 describe("usage analysis scan utilities", () => {
   it("collects jsonl files recursively", () => {
@@ -60,6 +60,38 @@ describe("usage analysis scan utilities", () => {
 
   it("keeps missing scan directories empty", () => {
     expect(collectJsonlFiles([path.join(os.tmpdir(), "synapse-missing-usage-root")])).toEqual([])
+  })
+
+  it("truncates jsonl scans at the file budget", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-scan-"))
+    try {
+      fs.writeFileSync(path.join(dir, "a.jsonl"), "{}\n")
+      fs.writeFileSync(path.join(dir, "b.jsonl"), "{}\n")
+      fs.writeFileSync(path.join(dir, "c.jsonl"), "{}\n")
+
+      const result = collectJsonlFilesWithStats([dir], { maxFiles: 2 })
+
+      expect(result.truncated).toBe(true)
+      expect(result.files).toHaveLength(2)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("truncates jsonl scans at the directory entry budget", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-scan-"))
+    try {
+      fs.writeFileSync(path.join(dir, "a.jsonl"), "{}\n")
+      fs.writeFileSync(path.join(dir, "b.jsonl"), "{}\n")
+
+      const result = collectJsonlFilesWithStats([dir], { maxDirectoryEntries: 1 })
+
+      expect(result.truncated).toBe(true)
+      expect(result.visitedEntries).toBe(2)
+      expect(result.files.length).toBeLessThanOrEqual(1)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it("creates file fingerprints", () => {

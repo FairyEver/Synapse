@@ -25,7 +25,7 @@ import {
 } from "../model-price"
 import { normalizeModelPatternKey } from "../model-price/rule-id"
 import { createUsageRangeFilter } from "./range"
-import { collectJsonlFiles, fingerprintFile } from "./scan"
+import { collectJsonlFilesWithStats, fingerprintFile, type UsageJsonlScanResult } from "./scan"
 import type {
   UsageDetailRow,
   UsageDetailInput,
@@ -1031,7 +1031,8 @@ async function refreshClaudeUsageNamespace(options: {
   readonly scope?: UsageRefreshInput
 }): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
-  const files = collectRefreshJsonlFiles(options.roots, options.scope)
+  const scan = collectRefreshJsonlFiles(options.roots, options.scope)
+  const files = scan.files
   const priceRules = listModelPriceRules(options.db)
   const pricingRulesHash = hashUsagePriceRules(priceRules)
   const pricedAt = new Date().toISOString()
@@ -1042,7 +1043,7 @@ async function refreshClaudeUsageNamespace(options: {
   let toolEvents = 0
   const affectedDates: string[] = []
   const affectedHours: string[] = []
-  if (!options.scope) {
+  if (!options.scope && !scan.truncated) {
     const scanResultCanPrune = canPruneFromScanResult(options.roots)
     const prunedBuckets = await runWithUsageDatabaseLockRetry(() => {
       return pruneMissingSourceFiles(options.db, options.prefix, files, scanResultCanPrune)
@@ -1149,7 +1150,8 @@ async function refreshLegacyUsageNamespace(options: {
   readonly scope?: UsageRefreshInput
 }): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
-  const files = collectRefreshJsonlFiles(options.roots, options.scope)
+  const scan = collectRefreshJsonlFiles(options.roots, options.scope)
+  const files = scan.files
   const priceRules = listModelPriceRules(options.db)
   const pricedAt = new Date().toISOString()
   let parsedFiles = 0
@@ -1158,7 +1160,7 @@ async function refreshLegacyUsageNamespace(options: {
   let usageEvents = 0
   let toolEvents = 0
 
-  if (!options.scope) {
+  if (!options.scope && !scan.truncated) {
     const scanResultCanPrune = canPruneFromScanResult(options.roots)
     await runWithUsageDatabaseLockRetry(() => {
       pruneMissingSourceFiles(options.db, options.prefix, files, scanResultCanPrune)
@@ -1510,10 +1512,10 @@ function canPruneFromScanResult(roots: readonly string[]): boolean {
   })
 }
 
-function collectRefreshJsonlFiles(roots: string[], scope: UsageRefreshInput | undefined): string[] {
-  if (scope?.preset !== "today") return collectJsonlFiles(roots)
+function collectRefreshJsonlFiles(roots: string[], scope: UsageRefreshInput | undefined): UsageJsonlScanResult {
+  if (scope?.preset !== "today") return collectJsonlFilesWithStats(roots)
   const filter = createUsageRangeFilter({ preset: "today" })
-  return collectJsonlFiles(roots, { modifiedSinceMs: filter.sinceTimestampMs })
+  return collectJsonlFilesWithStats(roots, { modifiedSinceMs: filter.sinceTimestampMs })
 }
 
 function shouldPruneMissingSource(filePath: string, currentFiles: ReadonlySet<string>, scanResultCanPrune: boolean): boolean {
