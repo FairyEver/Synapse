@@ -7,13 +7,31 @@
 
 import { z } from "zod"
 import { mkdir } from "node:fs/promises"
+import path from "node:path"
 import { shell } from "electron"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import { editorAdapterService } from "../../services/editor-adapter-service"
 import { runGuardedShellOperation } from "../shell/guarded-shell"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 
+async function resolveAllowedGlobalEditorDirectory(dirPath: string): Promise<string> {
+  const requestedPath = path.resolve(dirPath)
+  const directories = await editorAdapterService.getGlobalDirectories()
+  const allowedPaths = new Set(
+    directories.flatMap((entry) => [entry.rulesPath, entry.skillsPath])
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .map((value) => path.resolve(value)),
+  )
+
+  if (!allowedPaths.has(requestedPath)) {
+    throw new Error("只能创建已知编辑器目录。")
+  }
+
+  return requestedPath
+}
+
 async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): Promise<void> {
+  const allowedDirPath = await resolveAllowedGlobalEditorDirectory(dirPath)
   const actor = { kind: "user" } as const
   const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
   const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
@@ -21,14 +39,14 @@ async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): 
   const permission = await permissionGuard.check({
     action: "fs.write",
     actor,
-    resource: dirPath,
+    resource: allowedDirPath,
     context: { source: "editor.createDirectory" },
   })
   if (!permission.allowed) {
     auditSink.record({
       action: "fs.write",
       actor,
-      resource: dirPath,
+      resource: allowedDirPath,
       outcome: "denied",
       metadata: {
         source: "editor.createDirectory",
@@ -40,11 +58,11 @@ async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): 
   }
 
   try {
-    await mkdir(dirPath, { recursive: true })
+    await mkdir(allowedDirPath, { recursive: true })
     auditSink.record({
       action: "fs.write",
       actor,
-      resource: dirPath,
+      resource: allowedDirPath,
       outcome: "allowed",
       metadata: { source: "editor.createDirectory" },
     })
@@ -52,7 +70,7 @@ async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): 
     auditSink.record({
       action: "fs.write",
       actor,
-      resource: dirPath,
+      resource: allowedDirPath,
       outcome: "failed",
       metadata: {
         source: "editor.createDirectory",
@@ -65,9 +83,9 @@ async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): 
 
   await runGuardedShellOperation({
     ctx,
-    resource: dirPath,
+    resource: allowedDirPath,
     source: "editor.createDirectory",
-    run: () => shell.showItemInFolder(dirPath),
+    run: () => shell.showItemInFolder(allowedDirPath),
   })
 }
 

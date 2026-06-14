@@ -14,6 +14,10 @@ const fsMock = vi.hoisted(() => ({
   mkdir: vi.fn(),
 }))
 
+const editorAdapterServiceMock = vi.hoisted(() => ({
+  getGlobalDirectories: vi.fn(),
+}))
+
 vi.mock("electron", () => ({
   shell: electronMock.shell,
 }))
@@ -22,10 +26,24 @@ vi.mock("node:fs/promises", () => ({
   mkdir: fsMock.mkdir,
 }))
 
+vi.mock("../../../services/editor-adapter-service", () => ({
+  editorAdapterService: editorAdapterServiceMock,
+}))
+
 describe("editorIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     fsMock.mkdir.mockResolvedValue(undefined)
+    editorAdapterServiceMock.getGlobalDirectories.mockResolvedValue([
+      {
+        editorId: "codex",
+        label: "Codex",
+        rulesPath: "/Users/test/.claude/rules",
+        rulesExists: false,
+        skillsPath: "/Users/test/.claude/skills",
+        skillsExists: false,
+      },
+    ])
   })
 
   it("creates directories and shows them through PermissionGuard and AuditSink", async () => {
@@ -63,6 +81,19 @@ describe("editorIpcModule", () => {
       outcome: "allowed",
       metadata: { source: "editor.createDirectory" },
     }))
+  })
+
+  it("rejects directory creation outside known global editor directories", async () => {
+    const { harness, permissionGuard, auditSink } = createHarness()
+
+    await expect(harness.invoke("synapse:editor:create-directory", {
+      dirPath: "/Users/test/Documents/unexpected",
+    })).rejects.toThrow("只能创建已知编辑器目录。")
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(fsMock.mkdir).not.toHaveBeenCalled()
+    expect(electronMock.shell.showItemInFolder).not.toHaveBeenCalled()
+    expect(auditSink.record).not.toHaveBeenCalled()
   })
 
   it("does not create directories when fs.write permission is denied", async () => {
