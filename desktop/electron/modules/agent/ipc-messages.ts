@@ -36,6 +36,8 @@ import {
 
 const MAX_CLIENT_SKEW_MS = 60_000
 const MAX_AGENT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
+const MAX_AGENT_IMAGE_ATTACHMENTS = 8
+const MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
 const logger = createMainLogger("agent.ipc")
 const agentImageMimeTypeSchema = z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const binaryAttachmentDataSchema = z.custom<ArrayBuffer | Uint8Array>(
@@ -99,11 +101,21 @@ async function normalizeSendAttachments(
 ): Promise<AgentMessage["attachments"]> {
   if (!attachments || attachments.length === 0) return undefined
   const normalized: AgentAttachment[] = []
+  let imageCount = 0
+  let totalImageBytes = 0
   for (const attachment of attachments) {
     if (attachment.kind === "image") {
+      imageCount += 1
+      if (imageCount > MAX_AGENT_IMAGE_ATTACHMENTS) {
+        throw new Error(`图片附件最多 ${MAX_AGENT_IMAGE_ATTACHMENTS} 张。`)
+      }
       const byteLength = binaryAttachmentByteLength(attachment.data)
       if (byteLength > MAX_AGENT_IMAGE_ATTACHMENT_BYTES) {
         throw new Error("图片附件过大。")
+      }
+      totalImageBytes += byteLength
+      if (totalImageBytes > MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES) {
+        throw new Error("图片附件总大小过大。")
       }
       normalized.push({
         ...attachment,

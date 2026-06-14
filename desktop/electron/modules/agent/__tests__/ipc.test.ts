@@ -439,6 +439,97 @@ describe("agentIpcModule", () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it("blocks too many image attachments before sending to AgentRuntime", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "",
+      attachments: Array.from({ length: 9 }, () => ({
+        kind: "image",
+        mimeType: "image/png",
+        data: new Uint8Array([1]),
+      })),
+    })).rejects.toThrow("图片附件最多 8 张。")
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("blocks aggregate image attachment bytes before sending to AgentRuntime", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "",
+      attachments: [
+        {
+          kind: "image",
+          mimeType: "image/png",
+          data: new Uint8Array(10 * 1024 * 1024),
+        },
+        {
+          kind: "image",
+          mimeType: "image/png",
+          data: new Uint8Array(10 * 1024 * 1024),
+        },
+        {
+          kind: "image",
+          mimeType: "image/png",
+          data: new Uint8Array([1]),
+        },
+      ],
+    })).rejects.toThrow("图片附件总大小过大。")
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it("allows image attachments at the count and aggregate size boundary", async () => {
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    await harness.invoke("synapse:agent:send", {
+      projectId: "project-1",
+      content: "",
+      attachments: Array.from({ length: 8 }, () => ({
+        kind: "image",
+        mimeType: "image/png",
+        data: new Uint8Array(1),
+      })),
+    })
+
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      attachments: expect.arrayContaining([
+        expect.objectContaining({ kind: "image", size: 1 }),
+      ]),
+    }))
+  })
+
   it("validates SDK events in local renderer send responses", async () => {
     const sdkEvents = [
       {
