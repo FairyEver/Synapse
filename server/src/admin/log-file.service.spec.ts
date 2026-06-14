@@ -280,6 +280,40 @@ describe("LogFileService", () => {
     expect(mockedReadFile).not.toHaveBeenCalled();
   });
 
+  it("includes active log files in bounded zip downloads by modified date", async () => {
+    mockedReaddir.mockResolvedValue([
+      "server.log",
+      "server.2026-05-01.log",
+      "server.2026-05-03.log",
+    ] as never);
+    mockedLstat.mockImplementation(async (path) => {
+      const name = String(path).split("/").at(-1);
+      return {
+        size: 12,
+        mtime: new Date(name === "server.log"
+          ? "2026-05-02T12:00:00.000Z"
+          : "2026-05-23T00:00:00.000Z"),
+        isFile: () => true,
+      } as never;
+    });
+    const service = new LogFileService("/tmp/synapse-logs");
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+
+    await expect(service.streamZipTo(output, { from: "2026-05-02", to: "2026-05-02" }))
+      .resolves
+      .toEqual({ bytes: 42, fileCount: 1 });
+
+    expect(archiverMock.archive.file).toHaveBeenCalledTimes(1);
+    expect(archiverMock.archive.file).toHaveBeenCalledWith(
+      "/tmp/synapse-logs/server.log",
+      { name: "server.log" },
+    );
+  });
+
   it("does not include symlinked log entries in zip downloads", async () => {
     mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "secret.2026-05-01.log"] as never);
     mockedLstat.mockImplementation(async (path) => ({

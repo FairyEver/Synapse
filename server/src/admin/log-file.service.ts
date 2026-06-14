@@ -169,13 +169,16 @@ export class LogFileService {
     const files = await this.listFiles();
 
     return files.filter((file) => {
-      const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
-      if (!dateMatch) return !from && !to;
-      const fileDate = dateMatch[1];
+      const fileDate = this.getDownloadFileDate(file);
       if (from && fileDate < from) return false;
       if (to && fileDate > to) return false;
       return true;
     });
+  }
+
+  private getDownloadFileDate(file: LogFileInfo): string {
+    const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
+    return dateMatch?.[1] ?? file.modifiedAt.slice(0, 10);
   }
 
   async cleanup(before: string): Promise<LogCleanupResult> {
