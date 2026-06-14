@@ -1,6 +1,7 @@
 import { app, dialog } from "electron"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { CONFIG_BACKUP_IMPORT_MAX_BYTES } from "../../config"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_KNOWLEDGE_BASE_STORAGE } from "../../src/constants/defaults"
 import type {
@@ -82,6 +83,20 @@ function validateKnowledgeBaseStorageConfig(
 
 function formatValidationErrors(errors: string[]): string {
   return `备份文件校验失败：\n${errors.join("\n")}`
+}
+
+async function readBackupImportFile(filePath: string): Promise<string> {
+  const fileStats = await stat(filePath)
+  if (fileStats.size > CONFIG_BACKUP_IMPORT_MAX_BYTES) {
+    throw new Error(`备份文件超过 ${CONFIG_BACKUP_IMPORT_MAX_BYTES} 字节上限。`)
+  }
+
+  const content = await readFile(filePath)
+  if (content.byteLength > CONFIG_BACKUP_IMPORT_MAX_BYTES) {
+    throw new Error(`备份文件超过 ${CONFIG_BACKUP_IMPORT_MAX_BYTES} 字节上限。`)
+  }
+
+  return content.toString("utf8")
 }
 
 function readRequiredField(
@@ -947,7 +962,7 @@ class ConfigBackupService {
    * Returns null if cancelled (unreachable from code path where path is provided).
    */
   async readImport(filePath: string): Promise<SynapseConfigBackupImportResult> {
-    const fileContent = await readFile(filePath, "utf8")
+    const fileContent = await readBackupImportFile(filePath)
     let parsedValue: unknown
 
     try {

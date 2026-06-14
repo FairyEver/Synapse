@@ -151,6 +151,36 @@ describe("configIpcModule", () => {
     expect(result).toEqual({ filePath: "/tmp/synapse-backup.json" })
   })
 
+  it("does not record successful config writes when backup import is rejected", async () => {
+    const { configBackupService } = await import("../../../services/config-backup-service")
+    vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/large-synapse-backup.json")
+    vi.mocked(configBackupService.readImport).mockRejectedValue(new Error("备份文件超过 2097152 字节上限。"))
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const harness = createHarness({ auditSink })
+
+    await expect(harness.invoke("synapse:config:import-backup", undefined)).rejects.toThrow("备份文件超过")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "allowed",
+      resource: "/tmp/large-synapse-backup.json",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      resource: "config+identity",
+    }))
+    expect(auditSink.record).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "config+identity",
+    }))
+  })
+
   it("relaunches even when resetApp cannot delete every userData entry", async () => {
     mocks.fs.readdir.mockResolvedValue([
       { name: "stale-cache", isDirectory: () => true },

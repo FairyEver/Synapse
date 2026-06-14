@@ -1,8 +1,9 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { dialog } from "electron"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { CONFIG_BACKUP_IMPORT_MAX_BYTES } from "../../../config"
 import type { SynapseConfig } from "../../../src/types/config"
 import { createDefaultConfig } from "../../../src/lib/config"
 import { SYNAPSE_APP_VERSION } from "../../../src/lib/app-version"
@@ -274,6 +275,22 @@ describe("ConfigBackupService quick inputs", () => {
       }))
     } finally {
       await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
+  it("rejects oversized imports before replacing config or identity", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-backup-large-"))
+    const filePath = path.join(dir, "backup.json")
+    await writeFile(filePath, "{", "utf8")
+    await truncate(filePath, CONFIG_BACKUP_IMPORT_MAX_BYTES + 1)
+
+    try {
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow("备份文件超过")
+
+      expect(configStore.replace).not.toHaveBeenCalled()
+      expect(userIdentityService.importIdentity).not.toHaveBeenCalled()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
     }
   })
 

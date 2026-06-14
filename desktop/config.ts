@@ -28,6 +28,9 @@ export const WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT = false
 // 日志复制到剪贴板的最大总字节数：限制设置页复制日志和主进程读取日志的单次文本体积，完整日志应通过导出 zip 获取。
 export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 
+// 配置备份导入文件最大字节数：限制设置页从外部 JSON 恢复配置时主进程读取和解析的单文件体积。
+export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
+
 // 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
 export const DEFAULT_APP_NAVIGATION_TAB_ID = "skill" satisfies AppNavigationTabId
 
