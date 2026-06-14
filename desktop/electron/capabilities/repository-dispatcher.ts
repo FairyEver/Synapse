@@ -1,6 +1,7 @@
 import type { SynapseConfig, SynapseRepositoryConfig } from "../../src/types/config"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import { checkCapabilityPermission } from "./permission-audit"
 
 type RepositoryCapabilityDispatcherDeps = {
   readonly loadConfig: () => Promise<SynapseConfig>
@@ -96,7 +97,9 @@ async function authorizeRepositoryAccess(
   deps: RepositoryCapabilityDispatcherDeps,
   security: RepositoryAccessSecurity,
 ): Promise<void> {
-  const permission = await deps.permissionGuard?.check({
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
     action: "fs.read.outside-userdata",
     actor: security.actor,
     resource: security.resource,

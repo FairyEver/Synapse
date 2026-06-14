@@ -99,6 +99,37 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("audits failed Drive permission checks without raw error text", async () => {
+    const accountService = createAccountService({
+      getDriveUsage: vi.fn(async () => ({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })),
+    })
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => {
+        throw new Error("policy backend failed token=secret at /Users/example/config.json")
+      }),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
+
+    await expect(dispatcher.dispatch("drive.usage.get", {}, { source: "mcp-stdio" }))
+      .rejects.toThrow("policy backend failed")
+
+    expect(accountService.getDriveUsage).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "failed",
+      resource: "synapse-drive",
+      metadata: expect.objectContaining({
+        driveAction: "drive.usage.get",
+        reason: "permission-check-error",
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("token=secret")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("/Users/example")
+  })
+
   it("audits failed Drive read tools", async () => {
     const accountService = createAccountService({
       getDriveUsage: vi.fn(async () => {
@@ -178,6 +209,47 @@ describe("createDriveCapabilityDispatcher", () => {
       resource: "synapse-drive:drive.file.upload",
       metadata: expect.objectContaining({ driveAction: "drive.file.upload", itemId: "item-1" }),
     }))
+  })
+
+  it("audits failed Drive file read permission checks without raw error text", async () => {
+    const accountService = createAccountService()
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn()
+        .mockResolvedValueOnce({ allowed: true as const })
+        .mockRejectedValueOnce(new Error("policy backend failed token=secret at /Users/example/report.md")),
+    }
+    const fileSystem: NonNullable<DriveDispatcherDeps["fileSystem"]> = {
+      stat: vi.fn(),
+      createReadStream: vi.fn(),
+      readdir: vi.fn(),
+    } as unknown as NonNullable<DriveDispatcherDeps["fileSystem"]>
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      permissionGuard,
+      auditSink,
+      fileSystem,
+      fetch: vi.fn(),
+    })
+
+    await expect(dispatcher.dispatch("drive.file.upload", {
+      filePath: "/tmp/report.md",
+    }, { source: "mcp-stdio" })).rejects.toThrow("policy backend failed")
+
+    expect(fileSystem.stat).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "failed",
+      resource: "/tmp/report.md",
+      metadata: expect.objectContaining({
+        driveAction: "drive.upload",
+        reason: "permission-check-error",
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("token=secret")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("/Users/example")
   })
 
   it("streams MCP file uploads instead of reading the full file into memory", async () => {

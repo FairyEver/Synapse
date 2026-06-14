@@ -252,6 +252,32 @@ describe("variable capability dispatcher", () => {
     }))
   })
 
+  it("audits failed variable permission checks without raw error text", async () => {
+    const { auditEvents, dispatcher, permissionGuard, updateConfig } = createHarness(baseConfig)
+    vi.mocked(permissionGuard.check).mockRejectedValueOnce(
+      new Error("policy backend failed token=secret at /Users/example/secrets.json"),
+    )
+
+    await expect(
+      dispatcher.dispatch("variable.item.get", { name: "TOKEN", includeValue: true }, { source: "mcp-http" }),
+    ).rejects.toThrow("policy backend failed")
+
+    expect(updateConfig).not.toHaveBeenCalled()
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.read",
+      outcome: "failed",
+      resource: "variable:user:TOKEN",
+      metadata: expect.objectContaining({
+        variableAction: "variable.item.get",
+        variableName: "TOKEN",
+        reason: "permission-check-error",
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(auditEvents)).not.toContain("token=secret")
+    expect(JSON.stringify(auditEvents)).not.toContain("/Users/example")
+  })
+
   it("authorizes and audits variable renames against the old and new variable names", async () => {
     const { auditEvents, dispatcher, permissionGuard } = createHarness(baseConfig)
 

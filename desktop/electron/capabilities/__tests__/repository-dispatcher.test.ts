@@ -71,6 +71,36 @@ describe("repository capability dispatcher", () => {
     }))
   })
 
+  it("audits failed repository permission checks without raw error text", async () => {
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    vi.mocked(permissionGuard.check).mockRejectedValueOnce(
+      new Error("policy backend failed token=secret at /Users/example/repo"),
+    )
+    const loadConfig = vi.fn(async () => configFixture())
+    const dispatcher = createRepositoryCapabilityDispatcher({
+      loadConfig,
+      permissionGuard,
+      auditSink,
+    })
+
+    await expect(dispatcher.dispatch("repository.item.list", {}, { source: "api" }))
+      .rejects.toThrow("policy backend failed")
+
+    expect(loadConfig).not.toHaveBeenCalled()
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "failed",
+      resource: "repository:list",
+      metadata: expect.objectContaining({
+        repositoryAction: "repository.item.list",
+        reason: "permission-check-error",
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(auditEvents)).not.toContain("token=secret")
+    expect(JSON.stringify(auditEvents)).not.toContain("/Users/example")
+  })
+
   it("lists configured repositories and marks the active repository", async () => {
     const dispatcher = createRepositoryCapabilityDispatcher({
       loadConfig: async () =>

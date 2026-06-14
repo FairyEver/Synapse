@@ -11,6 +11,7 @@ import {
   type ModelPriceRuleInput,
   type ModelPriceRulePatch,
 } from "../services/model-price"
+import { checkCapabilityPermission } from "./permission-audit"
 
 type ModelPriceDispatcherDeps = {
   readonly db: DatabaseSync
@@ -176,7 +177,9 @@ async function authorizeModelPriceMutation(
   deps: ModelPriceDispatcherDeps,
   security: ModelPriceMutationSecurity,
 ): Promise<void> {
-  const permission = await deps.permissionGuard?.check({
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
     action: "database.mutate",
     actor: security.actor,
     resource: security.resource,

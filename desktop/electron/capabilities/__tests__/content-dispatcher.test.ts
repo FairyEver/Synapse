@@ -386,6 +386,47 @@ describe("content capability dispatcher", () => {
     }))
   })
 
+  it("audits failed content permission checks without raw error text", async () => {
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const permissionGuard = {
+      check: vi.fn(async () => {
+        throw new Error("policy backend failed token=secret at /Users/example/content.md")
+      }),
+      registerPolicy: vi.fn(),
+    }
+    const actor = { kind: "user" as const, id: "synapse-mcp", display: "Synapse MCP" }
+    const deps = {
+      ...createDeps(),
+      security: { actor, auditSink, permissionGuard },
+    }
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch("content.rule.delete", {
+      id: "rule-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+    }, { source: "mcp-stdio" })).rejects.toThrow("policy backend failed")
+
+    expect(deps.contentReader.getDetail).not.toHaveBeenCalled()
+    expect(deps.contentWriter.deleteContent).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      actor,
+      resource: "content:rule:rule-1",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        contentAction: "content.rule.delete",
+        reason: "permission-check-error",
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("token=secret")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/example")
+  })
+
   it.each([
     ["rule", "create"],
     ["rule", "update"],

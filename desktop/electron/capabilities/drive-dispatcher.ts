@@ -13,6 +13,7 @@ import type {
 } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import { checkCapabilityPermission } from "./permission-audit"
 
 type DriveAccountServicePort = {
   readonly listDriveItems: (parentId: string | null) => Promise<DriveItemDto[]>
@@ -450,7 +451,9 @@ async function authorizeDriveMutation(
   deps: DriveCapabilityDispatcherDeps,
   security: DriveMutationSecurity,
 ): Promise<void> {
-  const permission = await deps.permissionGuard?.check({
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
     action: "network.connect",
     actor: security.actor,
     resource: "synapse-drive",
@@ -475,7 +478,9 @@ async function authorizeFileRead(
 ): Promise<void> {
   const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
   const metadata = { source: context.source ?? "api", driveAction: "drive.upload" }
-  const permission = await deps.permissionGuard?.check({
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
     action: "fs.read.outside-userdata",
     actor,
     resource: filePath,

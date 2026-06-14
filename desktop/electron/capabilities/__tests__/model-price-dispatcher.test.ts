@@ -121,6 +121,38 @@ describe("model price capability dispatcher", () => {
     db.close()
   })
 
+  it("audits failed model price permission checks without raw error text", async () => {
+    const db = createTestDb()
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    vi.mocked(permissionGuard.check).mockRejectedValueOnce(
+      new Error("policy backend failed token=secret at /Users/example/config.json"),
+    )
+    const dispatcher = createModelPriceCapabilityDispatcher({
+      db,
+      permissionGuard,
+      auditSink,
+    })
+
+    await expect(dispatcher.dispatch("model_price.rule.create", {
+      modelPattern: "secure-model",
+      inputPer1M: 1,
+    }, { source: "api" })).rejects.toThrow("policy backend failed")
+
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.mutate",
+      outcome: "failed",
+      resource: "model-price-rule:model_price.rule.create",
+      metadata: expect.objectContaining({
+        modelPriceAction: "model_price.rule.create",
+        reason: "permission-check-error",
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(auditEvents)).not.toContain("token=secret")
+    expect(JSON.stringify(auditEvents)).not.toContain("/Users/example")
+    db.close()
+  })
+
   it("logs model price dispatch success and failures with sanitized error details", async () => {
     const db = createTestDb()
     const logger = createLoggerHarness()

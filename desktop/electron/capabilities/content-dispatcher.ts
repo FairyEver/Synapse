@@ -19,6 +19,7 @@ import type { DispatchContext, DispatchResult } from "../../synapse-capabilities
 import { ContentCapabilityError } from "../services/content-capability-errors"
 import { sanitizeError } from "../services/error-sanitize"
 import { createMainLogger } from "../services/log-store"
+import { checkCapabilityPermission } from "./permission-audit"
 import {
   describeContentTypes,
   normalizeCreateContentParams,
@@ -496,13 +497,15 @@ async function authorizeContentMutation(input: {
   readonly metadata: Record<string, unknown>
   readonly resource: string
 }): Promise<void> {
-  const permission = await input.deps.permissionGuard.check({
+  const permission = await checkCapabilityPermission({
+    permissionGuard: input.deps.permissionGuard,
+    auditSink: input.deps.auditSink,
     action: "content.mutate",
     actor: input.deps.actor,
     resource: input.resource,
     context: input.metadata,
   })
-  if (permission.allowed) return
+  if (!permission || permission.allowed) return
 
   input.deps.auditSink.record({
     action: "content.mutate",

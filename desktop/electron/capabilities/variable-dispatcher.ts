@@ -2,6 +2,7 @@ import type { EventBus } from "../runtime/event-bus"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 import type { SynapseConfig, SynapseConfigPatch, SynapseVariable } from "../../src/types/config"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
+import { checkCapabilityPermission } from "./permission-audit"
 
 type VariableCapabilityDispatcherDeps = {
   readonly loadConfig: () => Promise<SynapseConfig>
@@ -168,13 +169,15 @@ async function authorizeSecret(
     includeValue,
   }
 
-  const permission = await deps.permissionGuard.check({
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
     action,
     actor,
     resource,
     context: metadata,
   })
-  if (!permission.allowed) {
+  if (permission && !permission.allowed) {
     deps.auditSink.record({
       action,
       actor,
