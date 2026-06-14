@@ -25,6 +25,14 @@ import { getCleanupResultMessage } from './cleanup-result'
 import { getLogsQueryErrorMessage } from './logs-error'
 
 const allLogLevelsValue = 'all'
+export const logLevelOptions = [
+  { value: allLogLevelsValue, label: '全部' },
+  { value: 'fatal', label: 'fatal' },
+  { value: 'error', label: 'error' },
+  { value: 'warn', label: 'warn' },
+  { value: 'info', label: 'info' },
+  { value: 'debug', label: 'debug' },
+] as const
 
 export default function LogsPage() {
   const [level, setLevel] = useState(allLogLevelsValue)
@@ -60,6 +68,7 @@ export default function LogsPage() {
 
   function levelColor(lvl: string) {
     switch (lvl) {
+      case 'fatal':
       case 'error': return 'destructive' as const
       case 'warn': return 'secondary' as const
       default: return 'outline' as const
@@ -78,11 +87,9 @@ export default function LogsPage() {
               <SelectValue placeholder='级别' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={allLogLevelsValue}>全部</SelectItem>
-              <SelectItem value='error'>error</SelectItem>
-              <SelectItem value='warn'>warn</SelectItem>
-              <SelectItem value='info'>info</SelectItem>
-              <SelectItem value='debug'>debug</SelectItem>
+              {logLevelOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Input
