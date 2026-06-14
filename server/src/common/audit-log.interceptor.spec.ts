@@ -134,8 +134,19 @@ describe("AuditLogInterceptor", () => {
         path: "/api/admin/backup",
         body: {
           email: "admin@example.com",
+          apiKey: "plain-api-key",
+          "api-key": "plain-api-key-kebab",
+          authorization: "Bearer plain-authorization",
+          cookie: "sid=plain-cookie",
           password: "plain-password",
-          nested: { refreshToken: "refresh-token" },
+          nested: {
+            refreshToken: "refresh-token",
+            headers: {
+              Authorization: "Bearer nested-authorization",
+              "x-api-key": "nested-api-key",
+              value: "visible",
+            },
+          },
         },
       }),
       { handle: () => of({ id: "session-1" }) },
@@ -147,11 +158,26 @@ describe("AuditLogInterceptor", () => {
     const detail = auditLog.record.mock.calls[0]?.[0].detail
     expect(detail.body).toEqual({
       email: "admin@example.com",
+      apiKey: "[REDACTED]",
+      "api-key": "[REDACTED]",
+      authorization: "[REDACTED]",
+      cookie: "[REDACTED]",
       password: "[REDACTED]",
-      nested: { refreshToken: "[REDACTED]" },
+      nested: {
+        refreshToken: "[REDACTED]",
+        headers: {
+          Authorization: "[REDACTED]",
+          "x-api-key": "[REDACTED]",
+          value: "visible",
+        },
+      },
     })
     expect(JSON.stringify(detail)).not.toContain("plain-password")
     expect(JSON.stringify(detail)).not.toContain("refresh-token")
+    expect(JSON.stringify(detail)).not.toContain("plain-api-key")
+    expect(JSON.stringify(detail)).not.toContain("plain-authorization")
+    expect(JSON.stringify(detail)).not.toContain("plain-cookie")
+    expect(JSON.stringify(detail)).not.toContain("nested-authorization")
   })
 
   it("does not audit non-admin write endpoints", async () => {

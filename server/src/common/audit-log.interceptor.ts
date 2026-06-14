@@ -13,7 +13,7 @@ import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { formatAuditError } from "./audit-error"
 import { AuditLogService } from "./audit-log.service"
 
-const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
+const SENSITIVE_BODY_KEY_PATTERN = /authorization|bearer|cookie|password|token|secret|credential|api[-_]?key|access[-_]?key/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
 const TEAM_ROLE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/access-roles\/[^/]+\/permissions$/
