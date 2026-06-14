@@ -103,13 +103,6 @@ function uniqueStrings(values: readonly unknown[]): string[] {
   return result
 }
 
-const SYSTEM_TABLES = [
-  "_meta_tables",
-  "_meta_columns",
-  "_operation_log",
-  "_table_folders",
-  "_table_folder_members",
-]
 const READ_ONLY_PRAGMA_NAMES = new Set([
   "application_id",
   "collation_list",
@@ -148,21 +141,35 @@ const READ_ONLY_PRAGMA_ARGUMENT_NAMES = new Set([
 ])
 
 function referencesSystemTable(sql: string): boolean {
-  const normalized = sql.toLowerCase()
-  for (const table of SYSTEM_TABLES) {
-    let searchFrom = 0
-    while (true) {
-      const idx = normalized.indexOf(table, searchFrom)
-      if (idx === -1) break
-      const before = idx > 0 ? normalized[idx - 1] : " "
-      const after = normalized[idx + table.length] ?? " "
-      if (!/[a-zA-Z0-9_]/.test(before) && !/[a-zA-Z0-9_]/.test(after)) {
-        return true
-      }
-      searchFrom = idx + 1
-    }
+  const normalized = stripSqlLiteralsAndComments(sql).toLowerCase()
+  return referencedSqlTableNames(normalized).some((table) => table.startsWith("_"))
+}
+
+function stripSqlLiteralsAndComments(sql: string): string {
+  return sql
+    .replace(/'([^']|'')*'/gu, "''")
+    .replace(/--[^\r\n]*/gu, " ")
+    .replace(/\/\*[\s\S]*?\*\//gu, " ")
+}
+
+function referencedSqlTableNames(normalizedSql: string): string[] {
+  const names: string[] = []
+  const tableReferencePattern =
+    /\b(?:from|join|into|update|table)\s+(?:if\s+(?:not\s+)?exists\s+)?(?:(?:main|temp)\.)?(?:"((?:[^"]|"")*)"|`([^`]*)`|\[([^\]]*)\]|([a-z_][a-z0-9_]*))/giu
+  let match: RegExpExecArray | null
+  while ((match = tableReferencePattern.exec(normalizedSql))) {
+    const name = match[1]?.replace(/""/gu, "\"") ?? match[2] ?? match[3] ?? match[4]
+    if (name) names.push(name)
   }
-  return false
+
+  const pragmaTablePattern =
+    /\bpragma\s+(?:(?:main|temp)\.)?(?:table_info|table_xinfo|foreign_key_list|index_list)\s*\(\s*(?:"((?:[^"]|"")*)"|`([^`]*)`|\[([^\]]*)\]|([a-z_][a-z0-9_]*))/giu
+  while ((match = pragmaTablePattern.exec(normalizedSql))) {
+    const name = match[1]?.replace(/""/gu, "\"") ?? match[2] ?? match[3] ?? match[4]
+    if (name) names.push(name)
+  }
+
+  return names
 }
 
 function isReadOnlyPragma(normalizedSql: string): boolean {

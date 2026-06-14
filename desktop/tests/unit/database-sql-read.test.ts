@@ -62,4 +62,13 @@ describe("DatabaseService databaseSqlRead", () => {
     expect(() => service.databaseSqlRead(`SELECT * FROM "_table_folders"`))
       .toThrow(/system tables/i)
   })
+
+  it("blocks raw SQL access to any underscore-prefixed table", () => {
+    expect(() => service.databaseSqlExecute(`CREATE TABLE "_shadow" ("id" INTEGER PRIMARY KEY)`))
+      .toThrow(/system tables/i)
+    expect(() => service.databaseSqlExecute(`INSERT INTO "_shadow" ("id") VALUES (1)`))
+      .toThrow(/system tables/i)
+    expect(() => service.databaseSqlRead(`PRAGMA table_info("_shadow")`))
+      .toThrow(/system tables/i)
+  })
 })
