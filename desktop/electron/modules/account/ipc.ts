@@ -4,6 +4,7 @@ import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import { accountService } from "../../services/account-service"
 import { sanitizeError } from "../../services/error-sanitize"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 const accountUserSchema = z.object({
   id: z.string(),
@@ -248,6 +249,7 @@ function isArrayBufferLike(value: unknown): value is ArrayBuffer {
 }
 
 type DriveLocalUploadRequestForIpc = z.infer<typeof driveLocalUploadRequestSchema>
+type DrivePreparedFileUploadRequestForIpc = z.infer<typeof drivePreparedFileUploadSchema>
 
 function driveLocalUploadPaths(request: DriveLocalUploadRequestForIpc): string[] {
   return request.items.flatMap((item) => (
@@ -331,6 +333,41 @@ async function runGuardedDriveLocalUpload<T>(options: {
   }
 }
 
+async function runGuardedDrivePreparedUpload<T>(options: {
+  ctx: IpcHandlerContext
+  request: DrivePreparedFileUploadRequestForIpc
+  run(): Promise<T>
+}): Promise<T> {
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const actor = { kind: "user" } as const
+  const resource = sanitizeUrl(options.request.url)
+  await checkAccountPermission({
+    ctx: options.ctx,
+    action: "network.connect",
+    resource,
+    source: "account.drivePreparedUpload.put",
+  })
+  try {
+    return await options.run()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    const safeMessage = sanitizeError(message)
+    auditSink.record({
+      action: "network.connect",
+      actor,
+      resource,
+      outcome: "failed",
+      metadata: {
+        source: "account.drivePreparedUpload.put",
+        errorName: error instanceof Error ? error.name : typeof error,
+        error: safeMessage,
+        errorLength: message.length,
+      },
+    })
+    throw new Error(safeMessage)
+  }
+}
+
 export const accountIpcModule: IpcModule = {
   id: "account",
   methods: {
@@ -405,7 +442,14 @@ export const accountIpcModule: IpcModule = {
       channel: "synapse:account:drive:uploads:put",
       request: drivePreparedFileUploadSchema,
       response: okSchema,
-      handler: async (_ctx, input) => accountService.uploadDrivePreparedFile(drivePreparedFileUploadSchema.parse(input)),
+      handler: async (ctx, input) => {
+        const request = drivePreparedFileUploadSchema.parse(input)
+        return runGuardedDrivePreparedUpload({
+          ctx,
+          request,
+          run: () => accountService.uploadDrivePreparedFile(request),
+        })
+      },
     },
     uploadDriveLocalItems: {
       kind: "invoke",

@@ -34,7 +34,7 @@ vi.mock("../../../services/account-service", () => ({
     prepareDriveUpload: async () => ({}),
     prepareDriveFolderUpload: async () => ({}),
     completeDriveUpload: async () => ({}),
-    uploadDrivePreparedFile: async () => ({ ok: true }),
+    uploadDrivePreparedFile: vi.fn(async () => ({ ok: true })),
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 0, failed: 0, skipped: 0 })),
     cancelDriveUpload: async () => ({ ok: true }),
     createDriveFolder: async () => ({}),
@@ -276,6 +276,96 @@ describe("accountIpcModule", () => {
       context: { source: "account.driveLocalUpload.write" },
     }))
     expect(uploadDriveLocalItems).toHaveBeenCalledTimes(1)
+  })
+
+  it("guards prepared drive upload network requests and audits failures", async () => {
+    const body = new ArrayBuffer(3)
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const ctx: IpcHandlerContext = {
+      moduleId: "account",
+      resolve: ((id: string) => {
+        if (id === "core.permission-guard") return permissionGuard
+        if (id === "core.audit-sink") return auditSink
+        throw new Error(`unexpected service ${id}`)
+      }) as IpcHandlerContext["resolve"],
+    }
+    const uploadDrivePreparedFile = vi.fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockRejectedValueOnce(new Error("upload failed token=sk-secret"))
+    vi.mocked(accountService.uploadDrivePreparedFile).mockImplementation(uploadDrivePreparedFile)
+
+    const request = {
+      body,
+      headers: {},
+      method: "PUT" as const,
+      url: "https://upload.example.test/object?token=sk-secret",
+    }
+    await expect(accountIpcModule.methods.uploadDrivePreparedFile.handler(ctx, request)).resolves.toEqual({ ok: true })
+    await expect(accountIpcModule.methods.uploadDrivePreparedFile.handler(ctx, request)).rejects.toThrow("upload failed")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: "https://upload.example.test/object?token=%5Bredacted%5D",
+      context: { source: "account.drivePreparedUpload.put" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "https://upload.example.test/object?token=%5Bredacted%5D",
+      metadata: { source: "account.drivePreparedUpload.put" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "failed",
+      resource: "https://upload.example.test/object?token=%5Bredacted%5D",
+      metadata: expect.objectContaining({
+        source: "account.drivePreparedUpload.put",
+        error: "upload failed token=[redacted]",
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
+  })
+
+  it("stops prepared drive uploads when network permission is denied", async () => {
+    const permissionGuard = {
+      check: vi.fn(async () => ({
+        allowed: false,
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      })),
+    }
+    const auditSink = { record: vi.fn() }
+    const ctx: IpcHandlerContext = {
+      moduleId: "account",
+      resolve: ((id: string) => {
+        if (id === "core.permission-guard") return permissionGuard
+        if (id === "core.audit-sink") return auditSink
+        throw new Error(`unexpected service ${id}`)
+      }) as IpcHandlerContext["resolve"],
+    }
+    const uploadDrivePreparedFile = vi.fn().mockResolvedValue({ ok: true })
+    vi.mocked(accountService.uploadDrivePreparedFile).mockImplementation(uploadDrivePreparedFile)
+
+    await expect(accountIpcModule.methods.uploadDrivePreparedFile.handler(ctx, {
+      body: new ArrayBuffer(1),
+      headers: {},
+      method: "PUT",
+      url: "https://upload.example.test/object",
+    })).rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      resource: "https://upload.example.test/object",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "account.drivePreparedUpload.put",
+        reason: "denied by test-policy",
+        policyId: "test-policy",
+      }),
+    }))
+    expect(uploadDrivePreparedFile).not.toHaveBeenCalled()
   })
 
   it("stops local drive upload when file read permission is denied", async () => {
