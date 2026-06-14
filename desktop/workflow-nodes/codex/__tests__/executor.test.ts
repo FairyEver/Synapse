@@ -512,6 +512,41 @@ describe("codexNodeExecutor", () => {
     expect(result.error).not.toContain("Codex 退出码 1")
   })
 
+  it("returns a stable error when codex is missing from process result errors", async () => {
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockResolvedValue({
+          exitCode: null,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          durationMs: 25,
+          error: "spawn codex ENOENT",
+        }),
+      },
+    })
+
+    const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toBe("未找到 Codex CLI")
+  })
+
+  it("returns a stable error when spawning codex throws ENOENT", async () => {
+    const spawnError = Object.assign(new Error("spawn codex ENOENT"), { code: "ENOENT" })
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockRejectedValue(spawnError),
+      },
+    })
+
+    const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toBe("未找到 Codex CLI")
+  })
+
   it("falls back to stdout when last-message.txt is missing", async () => {
     const runtimeDeps = makeRuntimeDeps()
 

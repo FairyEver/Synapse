@@ -25,6 +25,7 @@ const logger = createMainLogger("workflow.node.codex-executor")
 const CODEX_STREAM_PREVIEW_MAX_CHARS = 64 * 1024
 const CODEX_STREAM_ARTIFACT_MAX_BYTES = 5 * 1024 * 1024
 const CODEX_STREAM_TRUNCATED_NOTICE = "\n[truncated: codex output exceeded artifact limit]\n"
+const MISSING_CODEX_CLI_ERROR = "未找到 Codex CLI"
 
 export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
   async execute(input: NodeExecutionInput<CodexNodeConfig>): Promise<NodeExecutionResult> {
@@ -373,18 +374,21 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
 
       const rawMessage = error instanceof Error ? error.message : String(error)
       const sanitized = truncateWithEllipsis(sanitizeError(rawMessage), 120)
+      const visibleError = isMissingCodexCliError(error)
+        ? MISSING_CODEX_CLI_ERROR
+        : `Codex 执行异常：${sanitized}`
       logger.warn("codex node threw exception", {
         ...logContext,
         projectId,
         cwd,
-        errorMessage: sanitized,
+        errorMessage: visibleError,
         durationMs,
       })
       return {
         status: "failed",
         output: "",
         outputs,
-        error: `Codex 执行异常：${sanitized}`,
+        error: visibleError,
         durationMs,
       }
     } finally {
@@ -532,6 +536,10 @@ function failureMessageFromResult(result: {
   readonly stderr?: string
   readonly error?: string
 }): string {
+  if (isMissingCodexCliError(result.error)) {
+    return MISSING_CODEX_CLI_ERROR
+  }
+
   const candidate = result.error?.trim()
     || result.stderr?.trim()
     || result.stdout?.trim()
@@ -539,6 +547,27 @@ function failureMessageFromResult(result: {
     || (result.exitCode !== null ? `Codex 退出码 ${String(result.exitCode)}` : "Codex 执行失败")
 
   return `Codex 执行失败：${truncateWithEllipsis(sanitizeError(candidate), 120)}`
+}
+
+function isMissingCodexCliError(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code).toUpperCase()
+    : undefined
+  if (code === "ENOENT") {
+    return true
+  }
+
+  const message = error instanceof Error
+    ? error.message
+    : (typeof error === "string" ? error : undefined)
+  if (!message) {
+    return false
+  }
+
+  return /\bENOENT\b/iu.test(message)
+    || /spawn\s+codex/iu.test(message)
+    || /codex.*(?:command not found|not found|not recognized|no such file)/iu.test(message)
+    || /(?:command not found|not found|not recognized|no such file).*codex/iu.test(message)
 }
 
 class CodexStreamCapture {
