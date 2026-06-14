@@ -115,6 +115,12 @@ interface ContentStoreItemRow {
   readonly updatedAt: Date
 }
 
+type ContentStoreItemWithInstallCountRow = ContentStoreItemRow & {
+  readonly _count: {
+    readonly installEvents: number
+  }
+}
+
 interface ContentStoreDraftRow {
   readonly id: string
   readonly itemId: string
@@ -852,24 +858,26 @@ export class ContentStoreService {
     where: Prisma.ContentStoreItemWhereInput,
     pagination: PaginationQuery,
   ): Promise<PaginatedResponse<ContentStoreItemDto>> {
-    const items = await this.prisma.contentStoreItem.findMany({
-      where,
-      include: { owner: { select: { id: true, displayName: true } } },
-    }) as ContentStoreItemRow[]
-    const counts = await Promise.all(items.map((item) => this.prisma.contentStoreInstallEvent.count({ where: { itemId: item.id } })))
-    const rows = items.map((item, index) => ({ item, installCount: counts[index] ?? 0 }))
-    const direction = pagination.sortOrder === "asc" ? 1 : -1
-    rows.sort((left, right) => {
-      if (left.item.featured !== right.item.featured) return left.item.featured ? -1 : 1
-      const installDiff = (left.installCount - right.installCount) * direction
-      if (installDiff !== 0) return installDiff
-      return right.item.updatedAt.getTime() - left.item.updatedAt.getTime()
-    })
-    const start = (pagination.page - 1) * pagination.pageSize
-    const pageRows = rows.slice(start, start + pagination.pageSize)
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.contentStoreItem.findMany({
+        where,
+        include: {
+          owner: { select: { id: true, displayName: true } },
+          _count: { select: { installEvents: true } },
+        },
+        skip: (pagination.page - 1) * pagination.pageSize,
+        take: pagination.pageSize,
+        orderBy: [
+          { featured: "desc" },
+          { installEvents: { _count: pagination.sortOrder } },
+          { updatedAt: "desc" },
+        ],
+      }),
+      this.prisma.contentStoreItem.count({ where }),
+    ]) as [ContentStoreItemWithInstallCountRow[], number]
     return {
-      data: await Promise.all(pageRows.map((row) => this.itemDto(this.prisma, row.item, row.installCount))),
-      total: items.length,
+      data: await Promise.all(items.map((item) => this.itemDto(this.prisma, item, item._count.installEvents))),
+      total,
       page: pagination.page,
       pageSize: pagination.pageSize,
     }

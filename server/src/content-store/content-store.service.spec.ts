@@ -421,16 +421,27 @@ describe("ContentStoreService", () => {
   })
 
   it("sorts list results by install count", async () => {
+    prisma.contentStoreItem.count.mockResolvedValue(2)
     prisma.contentStoreItem.findMany.mockResolvedValue([
-      item({ id: "item-low", title: "Low", updatedAt: new Date("2026-06-08T00:00:00.000Z") }),
-      item({ id: "item-high", title: "High", updatedAt: new Date("2026-06-09T00:00:00.000Z") }),
+      item({ id: "item-high", title: "High", updatedAt: new Date("2026-06-09T00:00:00.000Z"), _count: { installEvents: 3 } }),
+      item({ id: "item-low", title: "Low", updatedAt: new Date("2026-06-08T00:00:00.000Z"), _count: { installEvents: 1 } }),
     ])
-    prisma.contentStoreInstallEvent.count
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce(3)
 
     const result = await service.listStore("user-1", { sortBy: "installCount" })
 
+    expect(prisma.contentStoreItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      skip: 0,
+      take: 20,
+      include: expect.objectContaining({
+        _count: { select: { installEvents: true } },
+      }),
+      orderBy: [
+        { featured: "desc" },
+        { installEvents: { _count: "desc" } },
+        { updatedAt: "desc" },
+      ],
+    }))
+    expect(prisma.contentStoreInstallEvent.count).not.toHaveBeenCalled()
     expect(result.data.map((row) => row.id)).toEqual(["item-high", "item-low"])
     expect(result.data.map((row) => row.installCount)).toEqual([3, 1])
   })
