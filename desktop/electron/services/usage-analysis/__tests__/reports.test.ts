@@ -1016,4 +1016,38 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     })
     db.close()
   })
+
+  it("rebuilds stale legacy aggregate costs from migrated events", () => {
+    const db = new DatabaseSync(":memory:")
+    initUsageAnalysisSchema(db)
+    db.exec(`
+      DELETE FROM model_price_meta WHERE key = 'cost_currency_migrated_to_cny_v1';
+      INSERT INTO cc_usage_events (id, session_id, timestamp_ms, date, hour, model, input_tokens, output_tokens, cost_input, cost_output, total_cost, price_known)
+      VALUES ('event-1', 'session-1', 1770000000000, '2026-05-01', '2026-05-01 10', 'legacy-model', 100, 50, 1, 2, 3, 1);
+      INSERT INTO cc_daily_usage (date, model, workspace_key, input_tokens, output_tokens, cost_input, cost_output, total_cost, price_known, requests, conversations)
+      VALUES ('2026-05-01', 'legacy-model', '', 999, 999, 9, 9, 18, 1, 99, 99);
+      INSERT INTO cc_hourly_usage (hour, model, workspace_key, input_tokens, output_tokens, cost_input, cost_output, total_cost, price_known, requests, conversations)
+      VALUES ('2026-05-01 10', 'legacy-model', '', 999, 999, 9, 9, 18, 1, 99, 99);
+    `)
+
+    initUsageAnalysisSchema(db)
+
+    expect(db.prepare("SELECT input_tokens, output_tokens, total_cost, cost_currency, requests, conversations FROM cc_daily_usage WHERE model = 'legacy-model'").get()).toEqual({
+      input_tokens: 100,
+      output_tokens: 50,
+      total_cost: 21.6,
+      cost_currency: "CNY",
+      requests: 1,
+      conversations: 1,
+    })
+    expect(db.prepare("SELECT input_tokens, output_tokens, total_cost, cost_currency, requests, conversations FROM cc_hourly_usage WHERE model = 'legacy-model'").get()).toEqual({
+      input_tokens: 100,
+      output_tokens: 50,
+      total_cost: 21.6,
+      cost_currency: "CNY",
+      requests: 1,
+      conversations: 1,
+    })
+    db.close()
+  })
 })
