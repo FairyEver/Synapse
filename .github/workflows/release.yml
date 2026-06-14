@@ -270,8 +270,13 @@ jobs:
         continue-on-error: true
         timeout-minutes: 1
         env:
-          BARK_PUSH_URL: https://api.day.app/B3H8T6rF2p5Mj6z6oha82K
+          BARK_PUSH_URL: ${{ secrets.BARK_PUSH_URL }}
         run: |
+          if [ -z "$BARK_PUSH_URL" ]; then
+            echo "BARK_PUSH_URL secret is not configured; skip notification."
+            exit 0
+          fi
+
           PRODUCT_NAME="$(node -p "require('./desktop/package.json').productName || require('./desktop/package.json').name")"
           TIMESTAMP="$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S %Z')"
 
