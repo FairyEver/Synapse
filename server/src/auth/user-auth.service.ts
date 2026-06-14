@@ -224,6 +224,9 @@ export class UserAuthService {
         })
         throw new BadRequestException("邮箱已注册。")
       }
+      if (error instanceof BadRequestException) {
+        throw error
+      }
       await this.recordUserRegistrationFailure({
         adminEmail: email,
         reason: "infrastructure_error",

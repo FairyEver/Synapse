@@ -639,6 +639,7 @@ describe("UserAuthService", () => {
       detail: { reason: "duplicate_email" },
       ipAddress: "203.0.113.26",
     })
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
     expect(prisma.__tx.user.create).not.toHaveBeenCalled()
     expect(prisma.__tx.userSession.create).not.toHaveBeenCalled()
   })
@@ -664,6 +665,7 @@ describe("UserAuthService", () => {
       detail: { reason: "duplicate_email" },
       ipAddress: "203.0.113.26",
     })
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
   })
 
   it("records infrastructure registration failures without replacing the original error", async () => {
@@ -692,6 +694,7 @@ describe("UserAuthService", () => {
       },
       ipAddress: "203.0.113.27",
     })
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("secret-value")
   })
 
