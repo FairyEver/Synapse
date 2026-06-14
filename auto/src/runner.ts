@@ -3,6 +3,8 @@ import type { ClaudeCodeConfig, CodexConfig, UiConfig } from './config.js'
 import { BatchLogger, pruneOldBatchLogs, type WorkerLogger, type SummaryWorker } from './logger.js'
 import { redactSensitiveText } from './redact.js'
 
+const WORKER_TIMEOUT_KILL_GRACE_MS = 1_000
+
 export type WorkerStatus = 'pending' | 'running' | 'success' | 'error' | 'timeout'
 export type BatchStatus = 'running' | 'success' | 'partial' | 'error'
 
@@ -325,6 +327,26 @@ function publishOutputText(
   }
 }
 
+function signalWorkerProcess(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): boolean {
+  if (child.pid && process.platform !== 'win32') {
+    try {
+      process.kill(-child.pid, signal)
+      return true
+    } catch (error) {
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ESRCH') {
+        try {
+          return child.kill(signal)
+        } catch {
+          return false
+        }
+      }
+      return false
+    }
+  }
+
+  return child.kill(signal)
+}
+
 export async function runWorker(
   config: UiConfig,
   workerId: number,
@@ -343,10 +365,13 @@ export async function runWorker(
 
   const child = spawn(command, args, {
     cwd: config.workingDirectory,
+    detached: process.platform !== 'win32',
     stdio: ['pipe', 'pipe', 'pipe'],
   })
 
   let timedOut = false
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  let forceKillTimeout: ReturnType<typeof setTimeout> | undefined
   let lastMessage = ''
   let stdoutBuffer = ''
   let stderrBuffer = ''
@@ -357,11 +382,6 @@ export async function runWorker(
   const emitProgress = (): void => {
     onUpdate?.(runningWorker(workerId, logger, startedAt, lastMessage))
   }
-
-  const timeout = setTimeout(() => {
-    timedOut = true
-    child.kill('SIGTERM')
-  }, config.timeoutMinutes * 60_000)
 
   if (!isClaudeCode) {
     child.stdin.write(workerPrompt)
@@ -410,17 +430,47 @@ export async function runWorker(
   })
 
   const exitCode = await new Promise<number | null>(resolve => {
+    let settled = false
+    const settle = (code: number | null, detachStreams = false): void => {
+      if (settled) return
+      settled = true
+      if (timeout) clearTimeout(timeout)
+      if (forceKillTimeout) clearTimeout(forceKillTimeout)
+      if (detachStreams) {
+        child.stdout.removeAllListeners('data')
+        child.stderr.removeAllListeners('data')
+      }
+      resolve(code)
+    }
+
+    timeout = setTimeout(() => {
+      timedOut = true
+      lastMessage = `Worker timed out after ${config.timeoutMinutes} minute(s); sent SIGTERM.`
+      logger.writeStderr(`${lastMessage}\n`)
+      emitProgress()
+      signalWorkerProcess(child, 'SIGTERM')
+
+      forceKillTimeout = setTimeout(() => {
+        lastMessage = 'Worker did not exit after timeout grace period; sent SIGKILL.'
+        logger.writeStderr(`${lastMessage}\n`)
+        emitProgress()
+        signalWorkerProcess(child, 'SIGKILL')
+        settle(null, true)
+      }, WORKER_TIMEOUT_KILL_GRACE_MS)
+    }, config.timeoutMinutes * 60_000)
+
     child.on('error', err => {
       const message = redactSensitiveText(err instanceof Error ? err.message : String(err))
       lastMessage = message
       emitProgress()
       logger.writeStderr(message)
-      resolve(1)
+      settle(1)
     })
-    child.on('close', code => resolve(code))
+    child.on('close', code => settle(code))
   })
 
-  clearTimeout(timeout)
+  if (timeout) clearTimeout(timeout)
+  if (forceKillTimeout) clearTimeout(forceKillTimeout)
   if (!lastMessage && stderrBuffer.trim()) lastMessage = redactSensitiveText(stderrBuffer.trim())
   const durationMs = Date.now() - startedAt
   const status: WorkerStatus = timedOut ? 'timeout' : exitCode === 0 ? 'success' : 'error'

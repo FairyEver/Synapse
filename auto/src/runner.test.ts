@@ -414,6 +414,49 @@ echo 'Cookie: sid=stderr-secret' >&2
   }
 })
 
+test('runWorker force kills timed out workers that ignore SIGTERM', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-timeout-'))
+  try {
+    const command = join(dir, 'ignore-term.js')
+    await writeFile(command, `#!/usr/bin/env node
+process.on('SIGTERM', () => {})
+console.log('started')
+setInterval(() => {}, 1000)
+`, 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      provider: 'codex',
+      timeoutMinutes: 0.01,
+      codex: {
+        command,
+        model: '',
+        sandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+        json: true,
+        disableMcp: true,
+      },
+    }
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const startedAt = Date.now()
+    const result = await runWorker(config, 1, logger.createWorkerLogger(1))
+    const elapsedMs = Date.now() - startedAt
+    const logContent = await readFile(result.logPath, 'utf-8')
+
+    assert.equal(result.status, 'timeout')
+    assert.equal(result.exitCode, null)
+    assert.match(result.lastMessage, /SIGKILL/)
+    assert.match(logContent, /SIGTERM/)
+    assert.match(logContent, /SIGKILL/)
+    assert.ok(elapsedMs < 5_000)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('runBatch still runs one worker per configured concurrency for once mode', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'auto-runner-once-'))
   try {
