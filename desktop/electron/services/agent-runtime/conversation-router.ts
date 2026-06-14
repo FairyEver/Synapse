@@ -1489,7 +1489,7 @@ export class ConversationRouter {
       },
       scope: { sessionId: conversationId },
       timestamp: this.isoNow(),
-    })
+    }, { backpressure: "block" })
   }
 
   private assertProject(message: AgentMessage): void {

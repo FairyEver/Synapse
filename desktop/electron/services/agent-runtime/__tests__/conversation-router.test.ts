@@ -9,6 +9,8 @@ import type {
   DataNamespace,
 } from "../../../runtime/data-repo"
 import type { EventBusEmitOptions } from "../../../runtime/event-bus/types"
+import { createEventBus } from "../../../runtime/event-bus"
+import { ScopedEventBusImpl } from "../../../runtime/project-container"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { ProviderService } from "../../provider"
 import type { ModelPriceRule } from "../../model-price"
@@ -1521,6 +1523,37 @@ describe("ConversationRouter", () => {
         payload: expect.objectContaining({ conversationId: result.conversationId }),
         scope: { sessionId: result.conversationId },
       }),
+    ]))
+  })
+
+  it("dispatches every background phase transition through the default EventBus coalesce window", async () => {
+    const eventBus = createEventBus()
+    const scopedEventBus = new ScopedEventBusImpl("project-1", eventBus)
+    const events: RecordedAgentEvent[] = []
+    eventBus.on("agent", (event) => {
+      events.push(event as RecordedAgentEvent)
+    })
+    const { router } = createRouter({
+      eventBus: scopedEventBus,
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    await router.send({
+      ...baseMessage("hello"),
+      platform: "external",
+      sessionKey: "external:chat:user",
+    })
+    eventBus.flushAllForTests()
+    const phases = events
+      .filter((event) => event.type === "phase.update")
+      .map((event) => event.payload)
+
+    expect(phases).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: "received", status: "in-progress" }),
+      expect.objectContaining({ phase: "received", status: "done" }),
+      expect.objectContaining({ phase: "completed", status: "done" }),
     ]))
   })
 
