@@ -60,6 +60,7 @@ export interface ProviderServiceDeps {
   readonly now?: () => Date
   readonly localClaudeSettingsPath?: string
   readonly readTextFile?: (filePath: string) => Promise<string>
+  readonly statFile?: (filePath: string) => Promise<{ readonly size: number }>
   readonly writeTextFile?: (filePath: string, contents: string) => Promise<void>
   readonly ccSwitchImportSources?: () => readonly CcSwitchImportSource[]
   readonly readCcSwitchClaudeProviders?: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
@@ -72,6 +73,7 @@ export interface BuildProviderEnvContext {
 }
 
 const PROVIDER_KIND = "cc-provider"
+const PROVIDER_PACKAGE_MAX_BYTES = 1024 * 1024
 const MAPPED_PROVIDER_ENV_KEYS = new Set([
   "ANTHROPIC_BASE_URL",
   "ANTHROPIC_AUTH_TOKEN",
@@ -97,6 +99,7 @@ export class ProviderService {
   private readonly now?: () => Date
   private readonly localClaudeSettingsPath: string
   private readonly readTextFile: (filePath: string) => Promise<string>
+  private readonly statFile?: (filePath: string) => Promise<{ readonly size: number }>
   private readonly writeTextFile: (filePath: string, contents: string) => Promise<void>
   private readonly ccSwitchImportSources: () => readonly CcSwitchImportSource[]
   private readonly readCcSwitchClaudeProviders: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
@@ -110,6 +113,7 @@ export class ProviderService {
     this.now = deps.now
     this.localClaudeSettingsPath = deps.localClaudeSettingsPath ?? path.join(os.homedir(), ".claude", "settings.json")
     this.readTextFile = deps.readTextFile ?? ((filePath) => fs.readFile(filePath, "utf8"))
+    this.statFile = deps.statFile ?? (deps.readTextFile ? undefined : fs.stat)
     this.writeTextFile = deps.writeTextFile ?? ((filePath, contents) => fs.writeFile(filePath, contents, "utf8"))
     this.ccSwitchImportSources = deps.ccSwitchImportSources ?? resolveCcSwitchCandidateSources
     this.readCcSwitchClaudeProviders = deps.readCcSwitchClaudeProviders ?? readCcSwitchClaudeProvidersFromSourceAsync
@@ -817,7 +821,11 @@ export class ProviderService {
 
   private async readProviderPackage(sourcePath: string, context: BuildProviderEnvContext) {
     try {
+      await this.assertProviderPackageSize(sourcePath)
       const text = await this.readTextFile(sourcePath)
+      if (Buffer.byteLength(text, "utf8") > PROVIDER_PACKAGE_MAX_BYTES) {
+        throw new Error("Provider 包文件过大。")
+      }
       return parseProviderPackage(JSON.parse(text))
     } catch (error) {
       this.recordProviderPackageFileAudit("fs.read.outside-userdata", sourcePath, undefined, "failed", context, error)
@@ -825,6 +833,13 @@ export class ProviderService {
         throw new Error("无法识别该文件")
       }
       throw error
+    }
+  }
+
+  private async assertProviderPackageSize(sourcePath: string): Promise<void> {
+    const fileStat = await this.statFile?.(sourcePath)
+    if (fileStat && fileStat.size > PROVIDER_PACKAGE_MAX_BYTES) {
+      throw new Error("Provider 包文件过大。")
     }
   }
 

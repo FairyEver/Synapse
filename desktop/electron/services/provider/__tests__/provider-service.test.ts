@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import type {
   DataChangeEvent,
@@ -1061,6 +1061,51 @@ describe("ProviderService", () => {
     await expect(secrets.get("provider:deepseek-2:api-key")).resolves.toBeNull()
   })
 
+  it("rejects oversized provider packages before reading them", async () => {
+    const readTextFile = vi.fn(async () => "{}")
+    const auditSink = new InMemoryAuditSink()
+    const { service } = makeProviderService({
+      auditSink,
+      readTextFile,
+      statFile: async () => ({ size: 1024 * 1024 + 1 }),
+    })
+
+    await expect(service.previewProviderPackageImport(
+      "/Users/test/huge.synapse-provider.json",
+      { actor: { kind: "user", id: "renderer" }, projectId: "project-1" },
+    )).rejects.toThrow("Provider 包文件过大。")
+
+    expect(readTextFile).not.toHaveBeenCalled()
+    expect(auditSink.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "allowed",
+        resource: "/Users/test/huge.synapse-provider.json",
+      }),
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: "/Users/test/huge.synapse-provider.json",
+        metadata: expect.objectContaining({
+          packageKind: "synapse.provider.package",
+          projectId: "project-1",
+          errorName: "Error",
+        }),
+      }),
+    ]))
+  })
+
+  it("rejects provider package text that exceeds the read size limit", async () => {
+    const { service } = makeProviderService({
+      readTextFile: async () => " ".repeat(1024 * 1024 + 1),
+      statFile: async () => ({ size: 1 }),
+    })
+
+    await expect(service.previewProviderPackageImport("/Users/test/huge.synapse-provider.json"))
+      .rejects
+      .toThrow("Provider 包文件过大。")
+  })
+
   it("imports provider package as inactive provider with a derived id", async () => {
     const packageText = JSON.stringify({
       kind: "synapse.provider.package",
@@ -1130,6 +1175,7 @@ function makeProviderService(deps: {
   readonly auditSink?: AuditSink
   readonly localClaudeSettingsPath?: string
   readonly readTextFile?: (filePath: string) => Promise<string>
+  readonly statFile?: (filePath: string) => Promise<{ readonly size: number }>
   readonly writeTextFile?: (filePath: string, contents: string) => Promise<void>
   readonly ccSwitchImportSources?: () => readonly CcSwitchImportSource[]
   readonly readCcSwitchClaudeProviders?: (source: CcSwitchImportSource) => Promise<{
@@ -1146,6 +1192,7 @@ function makeProviderService(deps: {
     auditSink: deps.auditSink,
     localClaudeSettingsPath: deps.localClaudeSettingsPath,
     readTextFile: deps.readTextFile,
+    statFile: deps.statFile,
     writeTextFile: deps.writeTextFile,
     ccSwitchImportSources: deps.ccSwitchImportSources,
     readCcSwitchClaudeProviders: deps.readCcSwitchClaudeProviders,
