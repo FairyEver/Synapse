@@ -10,6 +10,7 @@ import {
   getUsageAnalysisDbPath,
   CcUsageAnalysisService,
   CodexUsageAnalysisService,
+  getCcConversationChunkInWorker,
   getCcConversationInWorker,
   listCcRecordDetailsInWorker,
   listCcConversationsInWorker,
@@ -21,6 +22,7 @@ import {
 import type { UsageDetailInput, UsageModelPriceRuleInput, UsageRangeInput, UsageRefreshInput } from "../services/usage-analysis"
 import { ccConversationWindowService } from "../services/usage-analysis/cc-conversation-window-service"
 import type {
+  CcConversationChunkInput,
   CcConversationFocus,
   CcConversationListInput,
   CcConversationWindowRequest,
@@ -112,6 +114,17 @@ export function normalizeRecordDetailsInput(input: CcRecordDetailsInput | undefi
     sessionId,
     limit: Number.isFinite(limit) ? limit : 200,
     offset: Number.isFinite(offset) ? offset : 0,
+  }
+}
+
+export function normalizeConversationChunkInput(input: Partial<CcConversationChunkInput> | undefined): CcConversationChunkInput {
+  const sessionId = optionalString(input?.sessionId)
+  if (!sessionId) throw new Error("sessionId is required")
+  const limit = Number(input?.limit)
+  return {
+    sessionId,
+    limit: Number.isFinite(limit) ? limit : 200,
+    ...(optionalString(input?.cursor) ? { cursor: optionalString(input?.cursor) } : {}),
   }
 }
 
@@ -313,6 +326,15 @@ export function registerUsageAnalysisHandlers(): void {
       hasFocus: Boolean(normalizeConversationFocus(payload?.focus)),
     })
     return getCcConversationInWorker(dbPath, sessionId)
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationChunkGet, async (_event, input?: CcConversationChunkInput) => {
+    const normalized = normalizeConversationChunkInput(input)
+    logger.info("Usage Analysis CC conversation chunk get requested.", {
+      sessionId: normalized.sessionId,
+      hasCursor: Boolean(normalized.cursor),
+      limit: normalized.limit,
+    })
+    return getCcConversationChunkInWorker(dbPath, normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationSearchText, async (_event, input?: CcConversationListInput) => {
     const normalized = { ...normalizeConversationListInput(input), rawText: true }

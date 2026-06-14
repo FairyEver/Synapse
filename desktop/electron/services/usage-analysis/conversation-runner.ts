@@ -1,6 +1,8 @@
 import path from "node:path"
 import { Worker } from "node:worker_threads"
 import type {
+  CcConversationChunk,
+  CcConversationChunkInput,
   CcConversationDetail,
   CcConversationListInput,
   CcConversationListResult,
@@ -41,10 +43,16 @@ export type CcConversationWorkerInput =
     readonly operation: "get"
     readonly payload: { readonly sessionId: string }
   }
+  | {
+    readonly dbPath: string
+    readonly operation: "get-chunk"
+    readonly payload: CcConversationChunkInput
+  }
 
 export type CcConversationWorkerResult =
   | CcConversationListResult
   | CcConversationDetail
+  | CcConversationChunk
   | CcRecordListResult
   | CcRecordDetailsResult
 
@@ -115,6 +123,17 @@ export function getCcConversationInWorker(dbPath: string, sessionId: string): Pr
     operation: "get",
     payload: { sessionId },
   }, startCcConversationWorker) as Promise<CcConversationDetail>
+}
+
+export function getCcConversationChunkInWorker(
+  dbPath: string,
+  input: CcConversationChunkInput,
+): Promise<CcConversationChunk> {
+  return runCcConversationQueryWithRunner({
+    dbPath,
+    operation: "get-chunk",
+    payload: input,
+  }, startCcConversationWorker) as Promise<CcConversationChunk>
 }
 
 export function runCcConversationQueryWithRunner(

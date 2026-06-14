@@ -301,6 +301,7 @@ export const IPC_CHANNELS = {
     "ccRecordsSearchText": "synapse:usage-analysis:cc:records:search-text",
     "ccConversationsList": "synapse:usage-analysis:cc:conversations:list",
     "ccConversationGet": "synapse:usage-analysis:cc:conversation:get",
+    "ccConversationChunkGet": "synapse:usage-analysis:cc:conversation:chunk:get",
     "ccConversationSearchText": "synapse:usage-analysis:cc:conversation:search-text",
     "ccConversationWindowOpen": "synapse:usage-analysis:cc:conversation-window:open",
     "codexRefresh": "synapse:usage-analysis:codex:refresh",

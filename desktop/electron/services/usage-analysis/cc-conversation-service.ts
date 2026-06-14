@@ -1,6 +1,7 @@
 import fs from "node:fs"
 import type { DatabaseSync } from "node:sqlite"
 import type {
+  CcConversationChunk,
   CcConversationDetail,
   CcConversationListInput,
   CcConversationListItem,
@@ -15,7 +16,7 @@ import type {
 } from "../../../src/types/usage-analysis-conversations"
 import { errorLogMeta as baseErrorLogMeta } from "../../../src/lib/error-sanitize"
 import { roundModelUsageCost } from "../model-price"
-import { parseCcConversationFile } from "./cc-conversation-parser"
+import { parseCcConversationFile, parseCcConversationFileChunk } from "./cc-conversation-parser"
 import { createUsageRangeFilter } from "./range"
 
 type ServiceOptions = {
@@ -52,6 +53,8 @@ type RecordAggregateRow = AggregateRow & {
 }
 
 const MAX_QUERY_LIMIT = 5000
+const DETAIL_CHUNK_FILE_SIZE_BYTES = 2 * 1024 * 1024
+const DETAIL_CHUNK_LIMIT = 200
 const noopCcConversationLogger: CcConversationLogger = {
   info: () => undefined,
   warn: () => undefined,
@@ -230,6 +233,26 @@ export class CcConversationService {
     let fileSizeBytes = 0
     try {
       fileSizeBytes = fs.statSync(row.file_path).size
+      if (fileSizeBytes > DETAIL_CHUNK_FILE_SIZE_BYTES) {
+        const chunk = await parseCcConversationFileChunk(row.file_path, { limit: DETAIL_CHUNK_LIMIT })
+        this.logger.info("CC conversation loaded.", {
+          sessionId,
+          filePath: row.file_path,
+          fileSizeBytes,
+          eventCount: chunk.events.length,
+          parseErrorCount: chunk.parseErrors.length,
+          chunked: true,
+          hasMore: chunk.hasMore,
+        })
+        return {
+          session: this.toListItem(row, chunk.events.length),
+          events: chunk.events,
+          parseErrors: chunk.parseErrors,
+          hasMore: chunk.hasMore,
+          ...(chunk.nextCursor ? { nextCursor: chunk.nextCursor } : {}),
+        }
+      }
+
       const parsed = await parseCcConversationFile(row.file_path)
       this.logger.info("CC conversation loaded.", {
         sessionId,
@@ -249,6 +272,45 @@ export class CcConversationService {
         sessionId,
         filePath: row.file_path,
         fileSizeBytes,
+        ...errorLogMeta(error),
+      })
+      throw error
+    }
+  }
+
+  async getConversationChunk(sessionId: string, cursor?: string, limit = DETAIL_CHUNK_LIMIT): Promise<CcConversationChunk> {
+    const row = this.getSessionRow(sessionId)
+    if (!row) {
+      this.logger.error("CC conversation session row missing.", { sessionId })
+      throw new Error(`Claude Code session not found: ${sessionId}`)
+    }
+    if (!fs.existsSync(row.file_path)) {
+      this.logger.error("CC conversation source file missing.", {
+        sessionId,
+        filePath: row.file_path,
+      })
+      throw new Error(`Claude Code transcript file is missing: ${row.file_path}`)
+    }
+
+    let fileSizeBytes = 0
+    try {
+      fileSizeBytes = fs.statSync(row.file_path).size
+      const chunk = await parseCcConversationFileChunk(row.file_path, { cursor, limit })
+      this.logger.info("CC conversation chunk loaded.", {
+        sessionId,
+        filePath: row.file_path,
+        fileSizeBytes,
+        eventCount: chunk.events.length,
+        parseErrorCount: chunk.parseErrors.length,
+        hasMore: chunk.hasMore,
+      })
+      return chunk
+    } catch (error) {
+      this.logger.error("CC conversation chunk load failed.", {
+        sessionId,
+        filePath: row.file_path,
+        fileSizeBytes,
+        hasCursor: Boolean(cursor),
         ...errorLogMeta(error),
       })
       throw error

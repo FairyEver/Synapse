@@ -134,6 +134,19 @@ export type CcConversationDetail = {
   readonly nextCursor?: string
 }
 
+export type CcConversationChunkInput = {
+  readonly sessionId: string
+  readonly cursor?: string
+  readonly limit?: number
+}
+
+export type CcConversationChunk = {
+  readonly events: readonly CcRawConversationEvent[]
+  readonly parseErrors: readonly CcConversationParseError[]
+  readonly hasMore: boolean
+  readonly nextCursor?: string
+}
+
 export type CcConversationWindowRequest = {
   readonly sessionId: string
   readonly title?: string

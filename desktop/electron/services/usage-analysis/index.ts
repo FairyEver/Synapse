@@ -4,6 +4,7 @@ export { CodexUsageAnalysisService } from "./codex-service"
 export { CcConversationService } from "./cc-conversation-service"
 export { parseCcConversationFile } from "./cc-conversation-parser"
 export {
+  getCcConversationChunkInWorker,
   getCcConversationInWorker,
   listCcRecordDetailsInWorker,
   listCcConversationsInWorker,

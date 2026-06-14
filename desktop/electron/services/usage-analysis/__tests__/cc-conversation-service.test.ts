@@ -4,6 +4,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { CcConversationService } from "../cc-conversation-service"
+import { parseCcConversationFileChunk } from "../cc-conversation-parser"
 import { initUsageAnalysisSchema } from "../db-schema"
 
 const logger = vi.hoisted(() => ({
@@ -323,6 +324,53 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
       eventCount: 3,
       parseErrorCount: 0,
     })
+  })
+
+  it("opens large conversations as chunks", async () => {
+    const { db, filePath } = setupFixture()
+    const largeText = "x".repeat(11_000)
+    const lines = Array.from({ length: 205 }, (_, index) => JSON.stringify({
+      type: "user",
+      sessionId: "session-1",
+      uuid: `u${index + 1}`,
+      timestamp: "2026-05-27T01:00:00.000Z",
+      message: { role: "user", content: `${index + 1}:${largeText}` },
+    }))
+    fs.writeFileSync(filePath, lines.join("\n"), "utf8")
+    const service = new CcConversationService({ db, logger })
+
+    const detail = await service.getConversation("session-1")
+
+    expect(detail.events).toHaveLength(200)
+    expect(detail.hasMore).toBe(true)
+    expect(detail.nextCursor).toBeTruthy()
+    expect(logger.info).toHaveBeenCalledWith("CC conversation loaded.", {
+      sessionId: "session-1",
+      filePath,
+      fileSizeBytes: fs.statSync(filePath).size,
+      eventCount: 200,
+      parseErrorCount: 0,
+      chunked: true,
+      hasMore: true,
+    })
+
+    if (!detail.nextCursor) throw new Error("Expected a next cursor")
+    const next = await service.getConversationChunk("session-1", detail.nextCursor)
+    expect(next.events.map((event) => event.uuid)).toEqual(["u201", "u202", "u203", "u204", "u205"])
+    expect(next.hasMore).toBe(false)
+  })
+
+  it("reads conversation chunks from byte cursors", async () => {
+    const { filePath } = setupFixture()
+
+    const first = await parseCcConversationFileChunk(filePath, { limit: 1 })
+    if (!first.nextCursor) throw new Error("Expected a next cursor")
+    const second = await parseCcConversationFileChunk(filePath, { cursor: first.nextCursor, limit: 2 })
+
+    expect(first.events.map((event) => event.type)).toEqual(["ai-title"])
+    expect(first.hasMore).toBe(true)
+    expect(second.events.map((event) => event.type)).toEqual(["user", "assistant"])
+    expect(second.hasMore).toBe(false)
   })
 
   it("searches raw text only when requested", async () => {

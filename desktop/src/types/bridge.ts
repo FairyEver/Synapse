@@ -101,6 +101,8 @@ import type {
   WorkflowModelMapping,
 } from "./workflow-package"
 import type {
+  CcConversationChunk,
+  CcConversationChunkInput,
   CcConversationDetail,
   CcConversationFocus,
   CcConversationListInput,
@@ -710,6 +712,7 @@ export type ClaudeCodeUsageAnalysisBridgeDomain = UsageAnalysisBridgeDomain & {
   listRecordDetails: (input: CcRecordDetailsInput) => Promise<CcRecordDetailsResult>
   listConversations: (input: CcConversationListInput) => Promise<CcConversationListResult>
   getConversation: (sessionId: string, focus?: CcConversationFocus) => Promise<CcConversationDetail>
+  getConversationChunk: (input: CcConversationChunkInput) => Promise<CcConversationChunk>
   searchRecordsText: (input: CcRecordListInput) => Promise<CcRecordListResult>
   searchConversationText: (input: CcConversationListInput) => Promise<CcConversationListResult>
   openConversationWindow: (request: CcConversationWindowRequest) => Promise<void>

@@ -35,6 +35,7 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
   const [detail, setDetail] = useState<CcConversationDetail | null>(null)
   const [selected, setSelected] = useState<CcRawConversationEvent | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const events = detail?.events ?? []
   const parseErrors = detail?.parseErrors ?? []
   const title = detail?.session.title || request.title || request.sessionId
@@ -49,6 +50,7 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
         setDetail(next)
         setSelected(selectFocusedEvent(next.events, request))
         setError(null)
+        setLoadingMore(false)
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(loadErrorMessage(err))
@@ -64,6 +66,29 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
     request.focus?.timestampMs,
   ])
 
+  const loadMore = async () => {
+    if (!detail?.hasMore || !detail.nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const chunk = await requireSynapseBridge().usageAnalysis.cc.getConversationChunk({
+        sessionId: detail.session.sessionId,
+        cursor: detail.nextCursor,
+      })
+      setDetail({
+        session: detail.session,
+        events: [...detail.events, ...chunk.events],
+        parseErrors: [...detail.parseErrors, ...chunk.parseErrors],
+        hasMore: chunk.hasMore,
+        ...(chunk.nextCursor ? { nextCursor: chunk.nextCursor } : {}),
+      })
+      setError(null)
+    } catch (err) {
+      setError(loadErrorMessage(err))
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2">
@@ -71,7 +96,7 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
           <h1 className="truncate text-sm font-medium">{title}</h1>
           <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
         </div>
-        <div className="text-xs text-muted-foreground">{events.length} 事件</div>
+        <div className="text-xs text-muted-foreground">{detail?.hasMore ? `已加载 ${events.length} 事件` : `${events.length} 事件`}</div>
       </header>
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 lg:grid-cols-12">
         {parseErrors.length > 0 ? (
@@ -107,6 +132,16 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
             ))}
             {!detail && !error ? <div className="text-xs text-muted-foreground">加载中</div> : null}
             {error ? <div className="text-xs text-destructive">{error}</div> : null}
+            {detail?.hasMore ? (
+              <button
+                type="button"
+                className="rounded-md border px-2 py-1 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore ? "加载中" : "加载更多"}
+              </button>
+            ) : null}
           </div>
         </aside>
         <section className="min-h-0 overflow-auto lg:col-span-7">

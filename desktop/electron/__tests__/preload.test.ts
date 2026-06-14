@@ -513,6 +513,7 @@ describe("preload bridge", () => {
     await bridge.usageAnalysis.cc.listRecordDetails({ sessionId: "session-1", limit: 200 })
     await bridge.usageAnalysis.cc.listConversations({ preset: "all", limit: 5 })
     await bridge.usageAnalysis.cc.getConversation("session-1", { eventId: "event-1" })
+    await bridge.usageAnalysis.cc.getConversationChunk({ sessionId: "session-1", cursor: "128:1" })
     await bridge.usageAnalysis.cc.searchRecordsText({ preset: "all", query: "登录", rawText: true })
     await bridge.usageAnalysis.cc.searchConversationText({ preset: "all", query: "登录", rawText: true })
     await bridge.usageAnalysis.cc.openConversationWindow({ sessionId: "session-1", title: "对话" })
@@ -532,6 +533,10 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:usage-analysis:cc:conversation:get",
       { sessionId: "session-1", focus: { eventId: "event-1" } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:conversation:chunk:get",
+      { sessionId: "session-1", cursor: "128:1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:usage-analysis:cc:records:search-text",

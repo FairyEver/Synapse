@@ -9,6 +9,7 @@ import type { CcConversationDetail } from "@/types/usage-analysis-conversations"
 
 const mocks = vi.hoisted(() => ({
   getConversation: vi.fn<() => Promise<CcConversationDetail>>(),
+  getConversationChunk: vi.fn(),
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/lib/electron-bridge", () => ({
     usageAnalysis: {
       cc: {
         getConversation: mocks.getConversation,
+        getConversationChunk: mocks.getConversationChunk,
       },
     },
   }),
@@ -27,6 +29,11 @@ let roots: Root[] = []
 
 beforeEach(() => {
   mocks.getConversation.mockResolvedValue(createDetail())
+  mocks.getConversationChunk.mockResolvedValue({
+    events: [],
+    parseErrors: [],
+    hasMore: false,
+  })
 })
 
 afterEach(() => {
@@ -108,6 +115,46 @@ describe("CcConversationDetailWindowPage", () => {
     expect(document.body.textContent).not.toContain("sk-window-secret")
     expect(document.body.textContent).not.toContain("sk-window-bearer")
     expect(document.body.textContent).not.toContain("data-server-token")
+  })
+
+  it("loads additional conversation chunks on demand", async () => {
+    mocks.getConversation.mockResolvedValue(createDetail({
+      hasMore: true,
+      nextCursor: "128:1",
+    }))
+    mocks.getConversationChunk.mockResolvedValue({
+      events: [{
+        id: "a1",
+        type: "assistant",
+        timestamp: "2026-05-27T01:00:01.000Z",
+        timestampMs: 1779843601000,
+        lineNumber: 2,
+        byteOffset: 128,
+        role: "assistant",
+        contentBlocks: [{ type: "string", text: "已处理" }],
+        raw: { type: "assistant", message: { content: "已处理" } },
+      }],
+      parseErrors: [],
+      hasMore: false,
+    })
+
+    await renderWindow()
+
+    const loadMoreButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.textContent === "加载更多")
+    expect(loadMoreButton).toBeTruthy()
+
+    await act(async () => {
+      loadMoreButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.getConversationChunk).toHaveBeenCalledWith({
+      sessionId: "s1",
+      cursor: "128:1",
+    })
+    expect(document.body.textContent).toContain("已处理")
+    expect(document.body.textContent).not.toContain("加载更多")
   })
 })
 

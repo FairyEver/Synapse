@@ -291,6 +291,7 @@ const IPC_CHANNELS = {
     "ccRecordsSearchText": "synapse:usage-analysis:cc:records:search-text",
     "ccConversationsList": "synapse:usage-analysis:cc:conversations:list",
     "ccConversationGet": "synapse:usage-analysis:cc:conversation:get",
+    "ccConversationChunkGet": "synapse:usage-analysis:cc:conversation:chunk:get",
     "ccConversationSearchText": "synapse:usage-analysis:cc:conversation:search-text",
     "ccConversationWindowOpen": "synapse:usage-analysis:cc:conversation-window:open",
     "codexRefresh": "synapse:usage-analysis:codex:refresh",
@@ -1085,6 +1086,7 @@ const synapseBridge: SynapseBridge = {
       listConversations: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationsList)(input),
       getConversation: (sessionId, focus) =>
         invoke(IPC_CHANNELS["usage-analysis"].ccConversationGet)({ sessionId, focus }),
+      getConversationChunk: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationChunkGet)(input),
       searchRecordsText: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccRecordsSearchText)(input),
       searchConversationText: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationSearchText)(input),
       openConversationWindow: (request) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationWindowOpen)(request),

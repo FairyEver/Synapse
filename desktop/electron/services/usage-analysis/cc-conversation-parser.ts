@@ -1,6 +1,7 @@
 import fs from "node:fs"
 import readline from "node:readline"
 import type {
+  CcConversationChunk,
   CcConversationParseError,
   CcRawConversationEvent,
 } from "../../../src/types/usage-analysis-conversations"
@@ -12,6 +13,40 @@ import {
 export type ParsedCcConversationFile = {
   readonly events: readonly CcRawConversationEvent[]
   readonly parseErrors: readonly CcConversationParseError[]
+}
+
+type ConversationChunkCursor = {
+  readonly byteOffset: number
+  readonly lineNumber: number
+}
+
+export type ParseCcConversationChunkOptions = {
+  readonly cursor?: string
+  readonly limit?: number
+}
+
+const DEFAULT_CHUNK_LIMIT = 200
+const MAX_CHUNK_LIMIT = 1000
+
+function normalizeChunkLimit(value: unknown): number {
+  const limit = Math.trunc(Number(value))
+  if (!Number.isFinite(limit)) return DEFAULT_CHUNK_LIMIT
+  return Math.min(Math.max(limit, 1), MAX_CHUNK_LIMIT)
+}
+
+function encodeChunkCursor(cursor: ConversationChunkCursor): string {
+  return `${cursor.byteOffset}:${cursor.lineNumber}`
+}
+
+function decodeChunkCursor(value: string | undefined): ConversationChunkCursor {
+  if (!value) return { byteOffset: 0, lineNumber: 0 }
+  const [byteOffsetRaw, lineNumberRaw] = value.split(":")
+  const byteOffset = Math.trunc(Number(byteOffsetRaw))
+  const lineNumber = Math.trunc(Number(lineNumberRaw))
+  if (!Number.isFinite(byteOffset) || !Number.isFinite(lineNumber) || byteOffset < 0 || lineNumber < 0) {
+    throw new Error("Invalid CC conversation cursor")
+  }
+  return { byteOffset, lineNumber }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -146,4 +181,79 @@ export async function parseCcConversationFile(filePath: string): Promise<ParsedC
   }
 
   return { events, parseErrors }
+}
+
+export async function parseCcConversationFileChunk(
+  filePath: string,
+  options: ParseCcConversationChunkOptions = {},
+): Promise<CcConversationChunk> {
+  const events: CcRawConversationEvent[] = []
+  const parseErrors: CcConversationParseError[] = []
+  const limit = normalizeChunkLimit(options.limit)
+  const cursor = decodeChunkCursor(options.cursor)
+  const reader = readline.createInterface({
+    input: fs.createReadStream(filePath, { encoding: "utf8", start: cursor.byteOffset }),
+    crlfDelay: Infinity,
+  })
+  let lineNumber = cursor.lineNumber
+  let byteOffset = cursor.byteOffset
+  let emittedCount = 0
+  let hasMore = false
+  let nextCursor: string | undefined
+
+  try {
+    for await (const line of reader) {
+      lineNumber += 1
+      const currentOffset = byteOffset
+      byteOffset += Buffer.byteLength(line, "utf8") + 1
+
+      if (!line.trim()) continue
+      if (emittedCount >= limit) {
+        hasMore = true
+        nextCursor = encodeChunkCursor({ byteOffset: currentOffset, lineNumber: lineNumber - 1 })
+        reader.close()
+        break
+      }
+
+      emittedCount += 1
+      try {
+        const raw = asRecord(JSON.parse(line) as unknown)
+        if (!raw) {
+          parseErrors.push({
+            id: `parse-error:${lineNumber}`,
+            lineNumber,
+            byteOffset: currentOffset,
+            message: "JSONL line is not an object.",
+            rawLine: line,
+          })
+          continue
+        }
+
+        events.push(toConversationEvent(raw, lineNumber, currentOffset))
+      } catch (error) {
+        parseErrors.push({
+          id: `parse-error:${lineNumber}`,
+          lineNumber,
+          byteOffset: currentOffset,
+          message: error instanceof Error ? error.message : "Invalid JSONL line.",
+          rawLine: redactSensitiveText(line),
+        })
+      }
+    }
+  } catch (error) {
+    parseErrors.push({
+      id: `stream-error:${lineNumber + 1}`,
+      lineNumber: lineNumber + 1,
+      byteOffset,
+      message: redactSensitiveText(error instanceof Error ? error.message : String(error)),
+      rawLine: "",
+    })
+  }
+
+  return {
+    events,
+    parseErrors,
+    hasMore,
+    ...(nextCursor ? { nextCursor } : {}),
+  }
 }

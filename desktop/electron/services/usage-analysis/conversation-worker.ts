@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite"
 import { parentPort, workerData } from "node:worker_threads"
 import type {
+  CcConversationChunkInput,
   CcConversationListInput,
   CcRecordDetailsInput,
 } from "../../../src/types/usage-analysis-conversations"
@@ -29,6 +30,17 @@ function asRecordDetailsInput(value: unknown): CcRecordDetailsInput {
     throw new Error("Invalid CC record details payload")
   }
   return value as CcRecordDetailsInput
+}
+
+function asConversationChunkInput(value: unknown): CcConversationChunkInput {
+  if (!isRecord(value) || typeof value.sessionId !== "string") {
+    throw new Error("Invalid CC conversation chunk payload")
+  }
+  return {
+    sessionId: value.sessionId,
+    ...(typeof value.cursor === "string" ? { cursor: value.cursor } : {}),
+    ...(typeof value.limit === "number" ? { limit: value.limit } : {}),
+  }
 }
 
 function asConversationWorkerInput(value: unknown): CcConversationWorkerInput {
@@ -61,6 +73,13 @@ function asConversationWorkerInput(value: unknown): CcConversationWorkerInput {
       payload: { sessionId: value.payload.sessionId },
     }
   }
+  if (value.operation === "get-chunk") {
+    return {
+      dbPath: value.dbPath,
+      operation: "get-chunk",
+      payload: asConversationChunkInput(value.payload),
+    }
+  }
   throw new Error("Invalid CC conversation worker operation")
 }
 
@@ -76,6 +95,9 @@ async function runConversationQuery(): Promise<CcConversationWorkerResult> {
 
     if (input.operation === "get") {
       return await service.getConversation(input.payload.sessionId)
+    }
+    if (input.operation === "get-chunk") {
+      return await service.getConversationChunk(input.payload.sessionId, input.payload.cursor, input.payload.limit)
     }
     if (input.operation === "search") {
       return await service.searchConversationText(input.payload)
