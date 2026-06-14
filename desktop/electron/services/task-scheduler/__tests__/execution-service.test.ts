@@ -192,7 +192,25 @@ describe("TaskSchedulerExecutionService", () => {
         errorLength: "permission backend leaked secret prompt".length,
       }),
     )
+    expect(harness.auditEvents).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          source: "task-scheduler",
+          taskId: "task:1",
+          runId: "run:1",
+          actionType: "builtin.test",
+          triggeredBy: "schedule",
+          boundary: "task-scheduler-pre-execution",
+          status: "failed",
+          errorName: "Error",
+          errorLength: "permission backend leaked secret prompt".length,
+        }),
+      }),
+    ])
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(harness.auditEvents)).not.toContain("secret prompt")
     expect(JSON.stringify(run)).not.toContain("secret prompt")
   })
 

@@ -198,6 +198,25 @@ export class TaskSchedulerExecutionService {
         })
         this.logger.warn("Scheduled task action threw.", metadata)
       } else {
+        if (permissionRequest && !permissionAllowed && !permissionDenied) {
+          this.deps.auditSink.record({
+            action: permissionRequest.action,
+            actor: permissionRequest.actor,
+            resource: permissionRequest.resource,
+            outcome: "failed",
+            metadata: {
+              source: "task-scheduler",
+              taskSource: task.provenance?.source,
+              taskId: task.id,
+              runId: run.id,
+              actionType: task.action.type,
+              triggeredBy,
+              boundary: "task-scheduler-pre-execution",
+              status,
+              ...diagnostic,
+            },
+          })
+        }
         this.logger.warn("Scheduled task preparation failed.", {
           source: "task-scheduler",
           boundary: "task-scheduler-pre-execution",
