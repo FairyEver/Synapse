@@ -1,6 +1,6 @@
 import { BadRequestException, HttpStatus } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { AllExceptionsFilter } from "./all-exceptions.filter"
 
 function createMockHost(statusFn: ReturnType<typeof vi.fn>, jsonFn: ReturnType<typeof vi.fn>) {
@@ -14,11 +14,15 @@ function createMockHost(statusFn: ReturnType<typeof vi.fn>, jsonFn: ReturnType<t
   } as never
 }
 
-const mockLogger = { error: vi.fn() } as never
+const mockLogger = { error: vi.fn() }
 
 describe("AllExceptionsFilter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it("maps HttpException to its status code", () => {
-    const filter = new AllExceptionsFilter(mockLogger)
+    const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
     const host = createMockHost(statusFn, jsonFn)
@@ -35,7 +39,7 @@ describe("AllExceptionsFilter", () => {
   })
 
   it("maps Prisma P2002 to 409 Conflict", () => {
-    const filter = new AllExceptionsFilter(mockLogger)
+    const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
     const host = createMockHost(statusFn, jsonFn)
@@ -50,7 +54,7 @@ describe("AllExceptionsFilter", () => {
   })
 
   it("maps Prisma P2025 to 404 Not Found", () => {
-    const filter = new AllExceptionsFilter(mockLogger)
+    const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
     const host = createMockHost(statusFn, jsonFn)
@@ -65,7 +69,7 @@ describe("AllExceptionsFilter", () => {
   })
 
   it("maps Prisma P2003 to 400 Bad Request", () => {
-    const filter = new AllExceptionsFilter(mockLogger)
+    const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
     const host = createMockHost(statusFn, jsonFn)
@@ -83,7 +87,7 @@ describe("AllExceptionsFilter", () => {
   })
 
   it("maps unknown errors to 500", () => {
-    const filter = new AllExceptionsFilter(mockLogger)
+    const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
     const host = createMockHost(statusFn, jsonFn)
@@ -94,7 +98,7 @@ describe("AllExceptionsFilter", () => {
   })
 
   it("maps exposed http-errors style payload too large errors to 413", () => {
-    const filter = new AllExceptionsFilter(mockLogger)
+    const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
     const host = createMockHost(statusFn, jsonFn)
@@ -118,7 +122,7 @@ describe("AllExceptionsFilter", () => {
   it("does not expose arbitrary 500 object messages in production", () => {
     const previousNodeEnv = process.env.NODE_ENV
     process.env.NODE_ENV = "production"
-    const filter = new AllExceptionsFilter(mockLogger)
+    const filter = new AllExceptionsFilter(mockLogger as never)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
     const host = createMockHost(statusFn, jsonFn)
@@ -136,5 +140,30 @@ describe("AllExceptionsFilter", () => {
       message: "服务器内部错误。",
     })
     expect(JSON.stringify(jsonFn.mock.calls)).not.toContain("secret")
+  })
+
+  it("redacts 500 exception logs without passing the raw exception object", () => {
+    const filter = new AllExceptionsFilter(mockLogger as never)
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const host = createMockHost(statusFn, jsonFn)
+    const error = new Error("Authorization: Bearer secret-bearer token=plain-token https://user:password@example.com/private /Users/liyang/private")
+
+    filter.catch(error, host)
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorName: "Error",
+        error: expect.stringContaining("[REDACTED]"),
+        stackLength: expect.any(Number),
+      }),
+      "Unhandled server exception",
+    )
+    expect(mockLogger.error).not.toHaveBeenCalledWith(expect.objectContaining({ err: error }), expect.anything())
+    const raw = JSON.stringify(mockLogger.error.mock.calls)
+    expect(raw).not.toContain("secret-bearer")
+    expect(raw).not.toContain("plain-token")
+    expect(raw).not.toContain("user:password")
+    expect(raw).not.toContain("/Users/liyang/private")
   })
 })

@@ -8,6 +8,7 @@ import {
 import { Prisma } from "@prisma/client"
 import type { Response } from "express"
 import { PinoLogger } from "nestjs-pino"
+import { formatAuditError } from "./audit-error"
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -18,7 +19,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { statusCode, error, message } = this.resolve(exception)
 
     if (statusCode >= 500) {
-      this.logger.error({ err: exception }, message)
+      this.logger.error(createExceptionLogMetadata(exception), "Unhandled server exception")
     }
 
     response.status(statusCode).json({ error, message, statusCode })
@@ -76,6 +77,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
         }
     }
   }
+}
+
+function createExceptionLogMetadata(exception: unknown): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {
+    errorName: exception instanceof Error ? exception.name : typeof exception,
+    error: formatAuditError(exception),
+  }
+  if (exception instanceof Error && exception.stack) {
+    metadata.stackLength = exception.stack.length
+  }
+  return metadata
 }
 
 function readMessage(body: unknown): string {
