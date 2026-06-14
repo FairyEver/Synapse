@@ -162,6 +162,7 @@ export type BuiltinToolErrorCode =
   | "conversion_failed"
   | "write_failed"
   | "worker_failed"
+  | "cancelled"
   | "timeout"
 
 export type BuiltinToolRunResult<Output = unknown> =

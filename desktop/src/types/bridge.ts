@@ -240,6 +240,8 @@ import type {
 } from "./automation"
 import type {
   SynapseToolDefinition,
+  SynapseToolCancelRunPayload,
+  SynapseToolCancelRunResult,
   SynapseToolDirectorySelectionPayload,
   SynapseToolDirectorySelectionResult,
   SynapseToolFileSelectionPayload,
@@ -1053,6 +1055,7 @@ export type SynapseBridge = {
     openTool: (toolId: SynapseToolId) => Promise<void>
     getToolDescriptor: (toolId: SynapseToolId | string) => Promise<SynapseToolDefinition>
     runTool: (payload: SynapseToolRunPayload) => Promise<SynapseToolRunResult>
+    cancelRun: (payload: SynapseToolCancelRunPayload) => Promise<SynapseToolCancelRunResult>
     selectFile: (payload: SynapseToolFileSelectionPayload) => Promise<SynapseToolFileSelectionResult>
     selectDirectory: (payload: SynapseToolDirectorySelectionPayload) => Promise<SynapseToolDirectorySelectionResult>
     filePathForDroppedFile: (file: File) => string | null

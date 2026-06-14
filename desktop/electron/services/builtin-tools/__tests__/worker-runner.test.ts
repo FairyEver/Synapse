@@ -25,6 +25,24 @@ describe("builtin tool worker runner", () => {
     worker.emitMessage({ type: "success", output: { markdown: "# OK", warnings: [] } })
     await expect(resultPromise).resolves.toEqual({ markdown: "# OK", warnings: [] })
   })
+
+  it("terminates the worker when the run is aborted", async () => {
+    const worker = fakeWorker()
+    const abortController = new AbortController()
+    const resultPromise = executeBuiltinToolInWorker(
+      {
+        toolId: "docx-to-markdown",
+        input: { inputPath: "/tmp/a.docx", outputMode: "return" },
+        abortSignal: abortController.signal,
+      },
+      { workerFactory: () => worker as never, timeoutMs: 1000 },
+    )
+
+    abortController.abort()
+
+    await expect(resultPromise).rejects.toMatchObject({ code: "cancelled" })
+    expect(worker.terminate).toHaveBeenCalledTimes(1)
+  })
 })
 
 function fakeWorker() {
@@ -40,4 +58,3 @@ function fakeWorker() {
     },
   }
 }
-

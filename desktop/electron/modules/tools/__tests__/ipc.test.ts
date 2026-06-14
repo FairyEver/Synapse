@@ -167,7 +167,48 @@ describe("toolsIpcModule", () => {
     expect(runTool).toHaveBeenCalledWith(expect.objectContaining({
       toolId: "docx-to-markdown",
       input: { inputPath: "/tmp/a.docx", outputMode: "return" },
+      context: expect.objectContaining({
+        abortSignal: expect.any(AbortSignal),
+      }),
     }))
+  })
+
+  it("cancels an active builtin tool run by run id", async () => {
+    const runTool = vi.fn(async (payload: unknown) => {
+      const signal = (payload as { context: { abortSignal: AbortSignal } }).context.abortSignal
+      await new Promise<void>((resolve) => {
+        signal.addEventListener("abort", () => resolve(), { once: true })
+      })
+      return {
+        ok: false,
+        toolId: "docx-to-markdown",
+        error: { code: "cancelled", message: "cancelled" },
+        metadata: {},
+      }
+    })
+    const { harness } = createHarness({ runTool })
+
+    const runPromise = harness.invoke("synapse:tools:run", {
+      toolId: "docx-to-markdown",
+      input: { inputPath: "/tmp/a.docx", outputMode: "return" },
+      runId: "run-1",
+    })
+    await waitForExpectation(() => {
+      expect(runTool).toHaveBeenCalled()
+    })
+
+    await expect(harness.invoke("synapse:tools:cancel-run", { runId: "run-1" }))
+      .resolves
+      .toEqual({ cancelled: true })
+    expect((runTool.mock.calls[0]?.[0] as { context: { abortSignal: AbortSignal } }).context.abortSignal.aborted)
+      .toBe(true)
+    await expect(runPromise).resolves.toMatchObject({
+      ok: false,
+      error: { code: "cancelled" },
+    })
+    await expect(harness.invoke("synapse:tools:cancel-run", { runId: "run-1" }))
+      .resolves
+      .toEqual({ cancelled: false })
   })
 })
 
@@ -200,4 +241,18 @@ function createHarness(options: {
   })
 
   return { auditSink, harness, permissionGuard, runTool, windowService }
+}
+
+async function waitForExpectation(assertion: () => void): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  }
+  throw lastError
 }

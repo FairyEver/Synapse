@@ -48,6 +48,15 @@ export interface SynapseToolOpenPayload {
 export interface SynapseToolRunPayload {
   readonly toolId: SynapseToolId
   readonly input: Record<string, unknown>
+  readonly runId?: string
+}
+
+export interface SynapseToolCancelRunPayload {
+  readonly runId: string
+}
+
+export interface SynapseToolCancelRunResult {
+  readonly cancelled: boolean
 }
 
 export type SynapseToolRunResult =

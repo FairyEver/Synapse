@@ -101,6 +101,11 @@ const listToolsResultSchema = z.object({
 const runToolRequestSchema = z.object({
   toolId: toolIdSchema,
   input: z.record(z.string(), z.unknown()),
+  runId: z.string().min(1).max(120).optional(),
+})
+
+const cancelToolRunRequestSchema = z.object({
+  runId: z.string().min(1).max(120),
 })
 
 const runToolResultSchema = z.discriminatedUnion("ok", [
@@ -139,6 +144,8 @@ function requireTool(toolId: string) {
   }
   return descriptor
 }
+
+const activeToolRuns = new Map<string, AbortController>()
 
 function errorDiagnostic(rawError: unknown): Record<string, unknown> {
   const message = rawError instanceof Error ? rawError.message : String(rawError)
@@ -232,19 +239,52 @@ export const toolsIpcModule: IpcModule = {
       channel: "synapse:tools:run",
       request: runToolRequestSchema,
       response: runToolResultSchema,
-      handler: (ctx, request: { toolId: string; input: Record<string, unknown> }) => loggedToolsIpc(
+      handler: (ctx, request: { toolId: string; input: Record<string, unknown>; runId?: string }) => loggedToolsIpc(
         "synapse:tools:run",
         "tools.run",
-        { inputKeys: Object.keys(request.input), toolId: request.toolId },
+        { inputKeys: Object.keys(request.input), runId: request.runId, toolId: request.toolId },
         async () => {
+          if (request.runId && activeToolRuns.has(request.runId)) {
+            throw new Error("Tool run is already active.")
+          }
+          const abortController = new AbortController()
+          if (request.runId) activeToolRuns.set(request.runId, abortController)
           const runTool = ctx.resolve<typeof runBuiltinTool>("tools.builtin-tool-runner")
-          return runTool({
-            toolId: request.toolId,
-            input: request.input,
-            context: { entryPoint: "tools", actor: { kind: "user" } },
-            permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
-            auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-          })
+          try {
+            return await runTool({
+              toolId: request.toolId,
+              input: request.input,
+              context: {
+                entryPoint: "tools",
+                actor: { kind: "user" },
+                runId: request.runId,
+                abortSignal: abortController.signal,
+              },
+              permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+              auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+            })
+          } finally {
+            if (request.runId && activeToolRuns.get(request.runId) === abortController) {
+              activeToolRuns.delete(request.runId)
+            }
+          }
+        },
+      ),
+    },
+    cancelRun: {
+      kind: "invoke",
+      channel: "synapse:tools:cancel-run",
+      request: cancelToolRunRequestSchema,
+      response: z.object({ cancelled: z.boolean() }),
+      handler: (_ctx, request: { runId: string }) => loggedToolsIpc(
+        "synapse:tools:cancel-run",
+        "tools.cancel-run",
+        { runId: request.runId },
+        async () => {
+          const activeRun = activeToolRuns.get(request.runId)
+          if (!activeRun) return { cancelled: false }
+          activeRun.abort()
+          return { cancelled: true }
         },
       ),
     },

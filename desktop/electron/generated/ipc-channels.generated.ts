@@ -286,6 +286,7 @@ export const IPC_CHANNELS = {
     "openTool": "synapse:tools:open",
     "getToolDescriptor": "synapse:tools:descriptor",
     "runTool": "synapse:tools:run",
+    "cancelRun": "synapse:tools:cancel-run",
     "selectFile": "synapse:tools:select-file",
     "selectDirectory": "synapse:tools:select-directory",
   },

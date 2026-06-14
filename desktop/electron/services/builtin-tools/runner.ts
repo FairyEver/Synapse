@@ -12,7 +12,7 @@ export interface BuiltinToolRunRequest {
   readonly registry?: BuiltinToolRegistry
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
-  readonly executeInWorker?: (payload: { readonly toolId: string; readonly input: unknown }) => Promise<unknown>
+  readonly executeInWorker?: (payload: { readonly toolId: string; readonly input: unknown; readonly abortSignal?: AbortSignal }) => Promise<unknown>
 }
 
 export async function runBuiltinTool(request: BuiltinToolRunRequest): Promise<BuiltinToolRunResult> {
@@ -60,7 +60,10 @@ export async function runBuiltinTool(request: BuiltinToolRunRequest): Promise<Bu
     }
 
     const execute = request.executeInWorker ?? executeBuiltinToolInWorker
-    const rawOutput = await execute({ toolId: descriptor.id, input: parsedInput.data })
+    const workerPayload = request.context.abortSignal
+      ? { toolId: descriptor.id, input: parsedInput.data, abortSignal: request.context.abortSignal }
+      : { toolId: descriptor.id, input: parsedInput.data }
+    const rawOutput = await execute(workerPayload)
     const parsedOutput = descriptor.outputSchema.safeParse(rawOutput)
     if (!parsedOutput.success) {
       throw new BuiltinToolError("conversion_failed", parsedOutput.error.message)
@@ -97,4 +100,3 @@ function warningsFromOutput(output: unknown): readonly { readonly code: string; 
     typeof (warning as { readonly message?: unknown }).message === "string",
   )
 }
-

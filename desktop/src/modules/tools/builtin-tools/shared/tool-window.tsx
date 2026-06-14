@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -14,11 +14,20 @@ import { GeneratedToolResult } from "./generated-tool-result"
 
 const logger = createRendererLogger("tools.builtin-tool-window")
 
+type ActiveToolRun = {
+  runId: string
+  cancelled: boolean
+  cancelNotified: boolean
+}
+
 export function BuiltinToolWindow(props: { readonly toolId: string }) {
   const [tool, setTool] = useState<SynapseToolDefinition | null>(null)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [running, setRunning] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [result, setResult] = useState<unknown>(null)
+  const activeRunRef = useRef<ActiveToolRun | null>(null)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     let canceled = false
@@ -40,6 +49,23 @@ export function BuiltinToolWindow(props: { readonly toolId: string }) {
     void loadTool()
     return () => {
       canceled = true
+    }
+  }, [props.toolId])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      const activeRun = activeRunRef.current
+      if (!activeRun) return
+      activeRun.cancelled = true
+      void requireBridgeDomain("tools").cancelRun({ runId: activeRun.runId }).catch((error) => {
+        logger.warn("Tool run cancellation failed during unmount.", {
+          boundary: "renderer.tools.cancel-unmount",
+          toolId: props.toolId,
+          ...errorDiagnostic(error),
+        })
+      })
     }
   }, [props.toolId])
 
@@ -92,20 +118,70 @@ export function BuiltinToolWindow(props: { readonly toolId: string }) {
 
   async function run(): Promise<void> {
     if (!tool || !canRun) return
+    const runId = createToolRunId(tool.id)
+    const activeRun: ActiveToolRun = { runId, cancelled: false, cancelNotified: false }
+    activeRunRef.current = activeRun
     setRunning(true)
+    setStopping(false)
     try {
-      const nextResult = await requireBridgeDomain("tools").runTool({ toolId: tool.id, input: values })
+      const nextResult = await requireBridgeDomain("tools").runTool({ toolId: tool.id, input: values, runId })
+      if (activeRun.cancelled || (!nextResult.ok && nextResult.error.code === "cancelled")) {
+        if (mountedRef.current && !activeRun.cancelNotified) {
+          toast.success("已停止")
+        }
+        if (mountedRef.current) setResult(null)
+        return
+      }
+      if (!mountedRef.current) return
       setResult(nextResult)
       toast.success(nextResult.ok ? "运行完成" : "运行失败")
     } catch (error) {
+      if (activeRun.cancelled) {
+        if (mountedRef.current && !activeRun.cancelNotified) toast.success("已停止")
+        return
+      }
       logger.warn("Tool run failed.", {
         boundary: "renderer.tools.run",
         toolId: tool.id,
         ...errorDiagnostic(error),
       })
-      toast.error("运行失败")
+      if (mountedRef.current) toast.error("运行失败")
     } finally {
-      setRunning(false)
+      if (activeRunRef.current?.runId === runId) {
+        activeRunRef.current = null
+      }
+      if (mountedRef.current) {
+        setRunning(false)
+        setStopping(false)
+      }
+    }
+  }
+
+  async function stopRun(): Promise<void> {
+    const activeRun = activeRunRef.current
+    if (!activeRun || stopping) return
+    activeRun.cancelled = true
+    activeRun.cancelNotified = true
+    setStopping(true)
+    try {
+      const cancelResult = await requireBridgeDomain("tools").cancelRun({ runId: activeRun.runId })
+      if (cancelResult.cancelled) {
+        toast.success("已停止")
+      } else {
+        activeRun.cancelled = false
+        activeRun.cancelNotified = false
+        setStopping(false)
+      }
+    } catch (error) {
+      activeRun.cancelled = false
+      activeRun.cancelNotified = false
+      setStopping(false)
+      logger.warn("Tool run cancellation failed.", {
+        boundary: "renderer.tools.cancel",
+        toolId: tool?.id ?? props.toolId,
+        ...errorDiagnostic(error),
+      })
+      toast.error("停止失败")
     }
   }
 
@@ -133,10 +209,16 @@ export function BuiltinToolWindow(props: { readonly toolId: string }) {
                 onSelectFile={(fieldId) => void selectFile(fieldId)}
                 onSelectDirectory={(fieldId) => void selectDirectory(fieldId)}
               />
-              <Button type="button" disabled={!canRun} onClick={() => void run()}>
-                {running ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
-                运行
-              </Button>
+              {running ? (
+                <Button type="button" variant="outline" disabled={stopping} onClick={() => void stopRun()}>
+                  {stopping ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
+                  {stopping ? "正在停止" : "停止"}
+                </Button>
+              ) : (
+                <Button type="button" disabled={!canRun} onClick={() => void run()}>
+                  运行
+                </Button>
+              )}
             </CardContent>
           </Card>
           {result ? <GeneratedToolResult result={result} /> : null}
@@ -144,6 +226,11 @@ export function BuiltinToolWindow(props: { readonly toolId: string }) {
       </ScrollArea>
     </div>
   )
+}
+
+function createToolRunId(toolId: string): string {
+  const randomId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return `${toolId}:${randomId}`
 }
 
 function defaultValues(tool: SynapseToolDefinition): Record<string, unknown> {
@@ -155,4 +242,3 @@ function defaultValues(tool: SynapseToolDefinition): Record<string, unknown> {
   }
   return values
 }
-
