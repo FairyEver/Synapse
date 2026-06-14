@@ -1670,6 +1670,31 @@ describe("DriveService", () => {
     })
   })
 
+  it("limits owner browser folder children and exposes the next offset", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+    await createCompletedUpload(service, "user-1", { parentId: folder.id, name: "a.txt", mimeType: "text/plain" })
+    await createCompletedUpload(service, "user-1", { parentId: folder.id, name: "b.txt", mimeType: "text/plain" })
+    await createCompletedUpload(service, "user-1", { parentId: folder.id, name: "c.txt", mimeType: "text/plain" })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      rootItemId: folder.id,
+      surface: "standalone",
+      childrenPage: { limit: 2 },
+    })
+
+    expect(snapshot.children).toHaveLength(2)
+    expect(snapshot.childrenPage).toEqual({
+      offset: 0,
+      limit: 2,
+      hasMore: true,
+      nextOffset: 2,
+    })
+  })
+
   it("builds owner browser snapshots with rendered markdown previews", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
@@ -1762,6 +1787,25 @@ describe("DriveService", () => {
       browserUrl: `/drive/items/${folder.id}`,
       downloadUrl: `/drive/items/${folder.id}/zip`,
     })])
+  })
+
+  it("limits console root browser children", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await service.createFolder("user-1", { parentId: null, name: "资料 A" })
+    await service.createFolder("user-1", { parentId: null, name: "资料 B" })
+    await service.createFolder("user-1", { parentId: null, name: "资料 C" })
+
+    const snapshot = await service.getOwnerConsoleRootBrowserSnapshot("user-1", { limit: 2 })
+
+    expect(snapshot.children).toHaveLength(2)
+    expect(snapshot.childrenPage).toEqual({
+      offset: 0,
+      limit: 2,
+      hasMore: true,
+      nextOffset: 2,
+    })
   })
 
   it("builds share browser html source previews without visit urls", async () => {
@@ -2246,8 +2290,12 @@ function createPrismaMemory() {
         if (select) return selectFields(found, select)
         return include ? withShares(found) : found
       },
-      findMany: async ({ where, select, include }: any = {}) => {
-        const found = [...items.values()].filter((item) => matchesWhere(item, where ?? {}))
+      findMany: async (args: any = {}) => {
+        const { where, select, include, orderBy, skip, take } = args
+        const found = paginateRows(
+          orderRows([...items.values()].filter((item) => matchesWhere(item, where ?? {})), orderBy),
+          { skip, take },
+        )
         if (select) return found.map((item) => selectFields(item, select))
         return include ? found.map(withShares) : found
       },
@@ -2500,6 +2548,12 @@ function orderRows(rows: any[], orderBy: any): any[] {
     }
     return 0
   })
+}
+
+function paginateRows(rows: any[], options: { readonly skip?: number; readonly take?: number }): any[] {
+  const start = options.skip ?? 0
+  const end = options.take === undefined ? undefined : start + options.take
+  return rows.slice(start, end)
 }
 
 async function readTestStream(stream: NodeJS.ReadableStream): Promise<string> {

@@ -146,21 +146,23 @@ describe("DriveController", () => {
       drive.getOwnerConsoleRootBrowserSnapshot.mockResolvedValue(snapshot)
       drive.getOwnerBrowserSnapshot.mockResolvedValue(snapshot)
 
-      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/root").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/root?childrenOffset=100&childrenLimit=50").expect(200)
       await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/root-1?surface=console").expect(200)
       await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/root-1/items/child-1").expect(200)
 
-      expect(drive.getOwnerConsoleRootBrowserSnapshot).toHaveBeenCalledWith("user-1")
+      expect(drive.getOwnerConsoleRootBrowserSnapshot).toHaveBeenCalledWith("user-1", { offset: 100, limit: 50 })
       expect(drive.getOwnerBrowserSnapshot).toHaveBeenCalledWith({
         userId: "user-1",
         rootItemId: "root-1",
         surface: "console",
+        childrenPage: undefined,
       })
       expect(drive.getOwnerBrowserSnapshot).toHaveBeenCalledWith({
         userId: "user-1",
         rootItemId: "root-1",
         currentItemId: "child-1",
         surface: "standalone",
+        childrenPage: undefined,
       })
     } finally {
       await userApp.close()
@@ -909,7 +911,7 @@ describe("DriveController", () => {
     drive.getShareBrowserSnapshot.mockResolvedValue(snapshot)
 
     const response = await request(app!.getHttpServer())
-      .post("/api/drive/browser/shares/shr_file/access")
+      .post("/api/drive/browser/shares/shr_file/access?childrenOffset=20&childrenLimit=10")
       .send({ password: "letmein" })
       .expect(201)
     const setCookie = response.headers["set-cookie"]
@@ -926,6 +928,7 @@ describe("DriveController", () => {
       shareId: "shr_file",
       password: "letmein",
       cookie: "access-cookie",
+      childrenPage: { offset: 20, limit: 10 },
     })
   })
 

@@ -227,6 +227,30 @@ describe('drive browser view model', () => {
     expect(getDriveBrowserChildUrls(owner)).toEqual(['/drive/items/root/items/child'])
     expect(getDriveBrowserChildUrls(share)).toEqual(['/files/shr_public/items/child'])
   })
+
+  it('shows a load more action when folder children have another page', () => {
+    const snapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'root', type: 'folder', browserUrl: '/drive/items/root', downloadUrl: '/drive/items/root/zip' },
+      children: [
+        { ...baseCurrent(), id: 'child', browserUrl: '/drive/items/root/items/child' },
+      ],
+      childrenPage: {
+        offset: 0,
+        limit: 1,
+        hasMore: true,
+        nextOffset: 1,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveBrowserView, {
+      snapshot,
+      onLoadMoreChildren: () => undefined,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+    }))
+
+    expect(html).toContain('加载更多')
+  })
 })
 
 function createSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {

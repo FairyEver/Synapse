@@ -3,6 +3,7 @@ import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import {
+  type DriveBrowserChildrenPageDto,
   type DriveBrowserSnapshotDto,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
@@ -125,6 +126,16 @@ type DriveBrowserDownloadResult = {
   readonly contentType?: string | null
 }
 
+type DriveBrowserChildrenPageInput = {
+  readonly offset?: number
+  readonly limit?: number
+}
+
+type DriveBrowserChildrenResult = {
+  readonly items: readonly DriveItemRecordWithStorage[]
+  readonly page: DriveBrowserChildrenPageDto
+}
+
 type DriveItemRecordWithStorage = DriveItemRecord & {
   readonly userId: string
   readonly storageKey: string | null
@@ -143,6 +154,8 @@ const driveItemWithShares = {
 
 const DRIVE_MARKDOWN_RENDER_MAX_BYTES = 10 * 1024 * 1024
 const DRIVE_MARKDOWN_RENDER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
+const DRIVE_BROWSER_CHILDREN_DEFAULT_LIMIT = 100
+const DRIVE_BROWSER_CHILDREN_MAX_LIMIT = 200
 
 @Injectable()
 export class DriveService implements OnApplicationBootstrap {
@@ -822,41 +835,49 @@ export class DriveService implements OnApplicationBootstrap {
     readonly rootItemId: string
     readonly currentItemId?: string | null
     readonly surface: "standalone" | "console"
+    readonly childrenPage?: DriveBrowserChildrenPageInput
   }): Promise<DriveBrowserSnapshotDto> {
     const { root, current } = await this.resolveOwnedBrowserCurrent(input)
     const route: DriveBrowserRouteContext = { context: "owner", surface: input.surface, rootItemId: root.id }
     const children = current.type === DRIVE_ITEM_TYPE.folder
-      ? await this.listActiveChildren(root.userId, current.id)
-      : []
+      ? await this.listActiveChildrenPage(root.userId, current.id, input.childrenPage)
+      : emptyDriveBrowserChildrenPage(input.childrenPage)
 
     return {
       context: "owner",
       surface: input.surface,
       current: buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(current), route }),
       breadcrumbs: await this.buildOwnedBrowserBreadcrumbs(root.userId, root, current, route),
-      children: children.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
+      children: children.items.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
+      childrenPage: children.page,
       preview: await this.buildBrowserPreview(current, route),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
   }
 
-  async getOwnerConsoleRootBrowserSnapshot(userId: string): Promise<DriveBrowserSnapshotDto> {
+  async getOwnerConsoleRootBrowserSnapshot(userId: string, childrenPage?: DriveBrowserChildrenPageInput): Promise<DriveBrowserSnapshotDto> {
+    const pageInput = normalizeDriveBrowserChildrenPage(childrenPage)
     const children = await this.prisma.driveItem.findMany({
       where: { userId, parentId: null, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+      skip: pageInput.offset,
+      take: pageInput.limit + 1,
     })
+    const page = buildDriveBrowserChildrenPage(pageInput, children.length)
+    const pageItems = children.slice(0, pageInput.limit)
 
     return {
       context: "owner",
       surface: "console",
       current: buildConsoleDriveRootItemDto(),
       breadcrumbs: [buildConsoleDriveRootBreadcrumb()],
-      children: children.map((item) => buildDriveBrowserItemDto({
+      children: pageItems.map((item) => buildDriveBrowserItemDto({
         item: toDriveBrowserSourceItem(item),
         route: { context: "owner", surface: "console", rootItemId: item.id },
       })),
+      childrenPage: page,
       preview: null,
       canDownload: false,
       canZip: false,
@@ -934,6 +955,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly password?: string
     readonly cookie?: string
     readonly accessCookie?: string
+    readonly childrenPage?: DriveBrowserChildrenPageInput
   }): Promise<DriveBrowserSnapshotDto> {
     const share = await this.resolvePublicShare({
       shareId: input.shareId,
@@ -948,15 +970,16 @@ export class DriveService implements OnApplicationBootstrap {
       rootItemId: root.id,
     }
     const children = current.type === DRIVE_ITEM_TYPE.folder
-      ? await this.listActiveChildren(share.ownerId, current.id)
-      : []
+      ? await this.listActiveChildrenPage(share.ownerId, current.id, input.childrenPage)
+      : emptyDriveBrowserChildrenPage(input.childrenPage)
 
     return {
       context: "share",
       surface: "standalone",
       current: buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(current), route }),
       breadcrumbs: await this.buildShareBrowserBreadcrumbs(share.ownerId, root, current, route),
-      children: children.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
+      children: children.items.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
+      childrenPage: children.page,
       preview: await this.buildBrowserPreview(current, route),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
@@ -1098,11 +1121,7 @@ export class DriveService implements OnApplicationBootstrap {
   }): Promise<{ readonly item: DriveItemDto; readonly children: DriveItemDto[] }> {
     const share = await this.resolvePublicShare(input)
     if (share.type !== "folder") throw new NotFoundException("文件未找到")
-    const children = await this.prisma.driveItem.findMany({
-      where: { userId: share.ownerId, parentId: share.item.id, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
-      include: driveItemWithShares,
-      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
-    })
+    const { items: children } = await this.listActiveChildrenPage(share.ownerId, share.item.id)
     return { item: share.item, children: children.map(toDriveItemDto) }
   }
 
@@ -1284,6 +1303,25 @@ export class DriveService implements OnApplicationBootstrap {
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     }) as Promise<DriveItemRecordWithStorage[]>
+  }
+
+  private async listActiveChildrenPage(
+    userId: string,
+    parentId: string,
+    input?: DriveBrowserChildrenPageInput,
+  ): Promise<DriveBrowserChildrenResult> {
+    const pageInput = normalizeDriveBrowserChildrenPage(input)
+    const children = await this.prisma.driveItem.findMany({
+      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      include: driveItemWithShares,
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+      skip: pageInput.offset,
+      take: pageInput.limit + 1,
+    }) as DriveItemRecordWithStorage[]
+    return {
+      items: children.slice(0, pageInput.limit),
+      page: buildDriveBrowserChildrenPage(pageInput, children.length),
+    }
   }
 
   private async buildOwnedBrowserBreadcrumbs(
@@ -2173,6 +2211,42 @@ function createUniqueDriveZipEntryPath(path: string, usedPaths: Set<string>): st
 
 function driveZipEntryPathKey(path: string): string {
   return path.toLowerCase()
+}
+
+function normalizeDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput): { readonly offset: number; readonly limit: number } {
+  const requestedOffset = input?.offset
+  const requestedLimit = input?.limit
+  const offset = typeof requestedOffset === "number" && Number.isFinite(requestedOffset) && requestedOffset > 0
+    ? Math.floor(requestedOffset)
+    : 0
+  const rawLimit = typeof requestedLimit === "number" && Number.isFinite(requestedLimit) && requestedLimit > 0
+    ? Math.floor(requestedLimit)
+    : DRIVE_BROWSER_CHILDREN_DEFAULT_LIMIT
+  return {
+    offset,
+    limit: Math.min(rawLimit, DRIVE_BROWSER_CHILDREN_MAX_LIMIT),
+  }
+}
+
+function buildDriveBrowserChildrenPage(
+  input: { readonly offset: number; readonly limit: number },
+  fetchedCount: number,
+): DriveBrowserChildrenPageDto {
+  const hasMore = fetchedCount > input.limit
+  return {
+    offset: input.offset,
+    limit: input.limit,
+    hasMore,
+    nextOffset: hasMore ? input.offset + input.limit : null,
+  }
+}
+
+function emptyDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput): DriveBrowserChildrenResult {
+  const pageInput = normalizeDriveBrowserChildrenPage(input)
+  return {
+    items: [],
+    page: buildDriveBrowserChildrenPage(pageInput, 0),
+  }
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

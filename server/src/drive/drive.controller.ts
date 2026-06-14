@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
 import { Buffer } from "node:buffer"
@@ -184,20 +184,30 @@ export class DriveUserController {
   }
 
   @Get("/browser/owner/root")
-  getOwnerConsoleRootSnapshot(@Req() request: AuthenticatedUserRequest) {
-    return this.drive.getOwnerConsoleRootBrowserSnapshot(request.user!.id)
+  getOwnerConsoleRootSnapshot(
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Query("childrenLimit") childrenLimit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.getOwnerConsoleRootBrowserSnapshot(
+      request.user!.id,
+      parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
+    )
   }
 
   @Get("/browser/owner/items/:rootItemId")
   getOwnerRootSnapshot(
     @Param("rootItemId") rootItemId: string,
     @Query("surface") surface: string | undefined,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Query("childrenLimit") childrenLimit: string | undefined,
     @Req() request: AuthenticatedUserRequest,
   ) {
     return this.drive.getOwnerBrowserSnapshot({
       userId: request.user!.id,
       rootItemId,
       surface: parseBrowserSurface(surface),
+      childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
     })
   }
 
@@ -206,6 +216,8 @@ export class DriveUserController {
     @Param("rootItemId") rootItemId: string,
     @Param("itemId") itemId: string,
     @Query("surface") surface: string | undefined,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Query("childrenLimit") childrenLimit: string | undefined,
     @Req() request: AuthenticatedUserRequest,
   ) {
     return this.drive.getOwnerBrowserSnapshot({
@@ -213,6 +225,7 @@ export class DriveUserController {
       rootItemId,
       currentItemId: itemId,
       surface: parseBrowserSurface(surface),
+      childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
     })
   }
 }
@@ -289,46 +302,79 @@ export class DrivePublicController {
   @Get("/api/drive/browser/shares/:shareId")
   async getShareRootSnapshot(
     @Param("shareId") shareId: string,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Query("childrenLimit") childrenLimit: string | undefined,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    return this.getShareSnapshotResponse({ shareId, request, response })
+    return this.getShareSnapshotResponse({
+      shareId,
+      childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
+      request,
+      response,
+    })
   }
 
   @Get("/api/drive/browser/shares/:shareId/items/:itemId")
   async getShareItemSnapshot(
     @Param("shareId") shareId: string,
     @Param("itemId") itemId: string,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Query("childrenLimit") childrenLimit: string | undefined,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    return this.getShareSnapshotResponse({ shareId, itemId, request, response })
+    return this.getShareSnapshotResponse({
+      shareId,
+      itemId,
+      childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
+      request,
+      response,
+    })
   }
 
   @Post("/api/drive/browser/shares/:shareId/access")
   async unlockShareBrowser(
     @Param("shareId") shareId: string,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Query("childrenLimit") childrenLimit: string | undefined,
     @Body() body: unknown,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    return this.unlockShareBrowserResponse({ shareId, body, request, response })
+    return this.unlockShareBrowserResponse({
+      shareId,
+      childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
+      body,
+      request,
+      response,
+    })
   }
 
   @Post("/api/drive/browser/shares/:shareId/items/:itemId/access")
   async unlockShareBrowserItem(
     @Param("shareId") shareId: string,
     @Param("itemId") itemId: string,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Query("childrenLimit") childrenLimit: string | undefined,
     @Body() body: unknown,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    return this.unlockShareBrowserResponse({ shareId, itemId, body, request, response })
+    return this.unlockShareBrowserResponse({
+      shareId,
+      itemId,
+      childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
+      body,
+      request,
+      response,
+    })
   }
 
   private async unlockShareBrowserResponse(input: {
     readonly shareId: string
     readonly itemId?: string
+    readonly childrenPage?: { readonly offset?: number; readonly limit?: number }
     readonly body: unknown
     readonly request: Request
     readonly response: Response
@@ -346,6 +392,7 @@ export class DrivePublicController {
       itemId: input.itemId,
       password,
       cookie: access.cookie,
+      childrenPage: input.childrenPage,
     })
   }
 
@@ -511,6 +558,7 @@ export class DrivePublicController {
   private async getShareSnapshotResponse(input: {
     readonly shareId: string
     readonly itemId?: string
+    readonly childrenPage?: { readonly offset?: number; readonly limit?: number }
     readonly request: Request
     readonly response: Response
   }): Promise<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto> {
@@ -527,6 +575,7 @@ export class DrivePublicController {
       itemId: input.itemId,
       password: undefined,
       cookie: access.cookie ?? readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
+      childrenPage: input.childrenPage,
     })
   }
 
@@ -786,6 +835,27 @@ function driveAuditContext(request: AuthenticatedUserRequest) {
 
 function parseBrowserSurface(value: string | undefined): "standalone" | "console" {
   return value === "console" ? "console" : "standalone"
+}
+
+function parseDriveBrowserChildrenPageQuery(
+  offset: string | undefined,
+  limit: string | undefined,
+): { readonly offset?: number; readonly limit?: number } | undefined {
+  const parsedOffset = parseOptionalNonNegativeInteger(offset, "childrenOffset")
+  const parsedLimit = parseOptionalNonNegativeInteger(limit, "childrenLimit")
+  if (parsedOffset === undefined && parsedLimit === undefined) return undefined
+  return {
+    ...(parsedOffset === undefined ? {} : { offset: parsedOffset }),
+    ...(parsedLimit === undefined ? {} : { limit: parsedLimit }),
+  }
+}
+
+function parseOptionalNonNegativeInteger(value: string | undefined, name: string): number | undefined {
+  if (value === undefined || value === "") return undefined
+  if (!/^\d+$/u.test(value)) throw new BadRequestException(`${name} 必须是非负整数。`)
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) throw new BadRequestException(`${name} 必须是安全整数。`)
+  return parsed
 }
 
 function driveBrowserPasswordRequired(): DriveBrowserPasswordRequiredDto {

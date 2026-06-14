@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
   DriveBrowserPasswordRequiredDto,
@@ -34,11 +34,31 @@ export type DriveBrowserState =
       unlocking: boolean
       unlockError: string | null
     }
-  | { status: 'ready'; snapshot: DriveBrowserSnapshotDto }
+  | {
+      status: 'ready'
+      snapshot: DriveBrowserSnapshotDto
+      loadMoreChildren?: () => void
+      loadingMoreChildren: boolean
+      loadMoreChildrenError: string | null
+    }
+
+type DriveBrowserLoadOptions = {
+  childrenOffset?: number
+  childrenLimit?: number
+}
 
 export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const [unlockedSnapshot, setUnlockedSnapshot] = useState<DriveBrowserSnapshotDto | null>(null)
-  const queryKey = useMemo(() => ['drive-browser', toDriveBrowserQueryKey(input)], [input])
+  const [pagedSnapshot, setPagedSnapshot] = useState<DriveBrowserSnapshotDto | null>(null)
+  const queryKeyPayload = useMemo(() => toDriveBrowserQueryKey(input), [input])
+  const queryKeySignature = useMemo(() => JSON.stringify(queryKeyPayload), [queryKeyPayload])
+  const queryKey = useMemo(() => ['drive-browser', queryKeyPayload], [queryKeyPayload])
+
+  useEffect(() => {
+    setUnlockedSnapshot(null)
+    setPagedSnapshot(null)
+  }, [queryKeySignature])
+
   const query = useQuery({
     queryKey,
     queryFn: () => loadDriveBrowser(input),
@@ -53,10 +73,45 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     },
     onSuccess: (snapshot) => {
       setUnlockedSnapshot(snapshot)
+      setPagedSnapshot(null)
+    },
+  })
+  const loadMoreMutation = useMutation({
+    mutationFn: async (snapshot: DriveBrowserSnapshotDto) => {
+      const nextOffset = snapshot.childrenPage?.nextOffset
+      if (nextOffset === null || nextOffset === undefined) throw new Error('没有更多文件。')
+      const result = await loadDriveBrowser(input, {
+        childrenOffset: nextOffset,
+        childrenLimit: snapshot.childrenPage?.limit,
+      })
+      if (isDriveBrowserPasswordRequired(result)) throw new Error(result.message)
+      return result
+    },
+    onSuccess: (nextSnapshot) => {
+      if (unlockedSnapshot) {
+        setUnlockedSnapshot((current) => current ? mergeDriveBrowserSnapshots(current, nextSnapshot) : nextSnapshot)
+        return
+      }
+      setPagedSnapshot((current) => {
+        const baseSnapshot = current ?? (isDriveBrowserPasswordRequired(query.data) ? null : query.data) ?? nextSnapshot
+        return mergeDriveBrowserSnapshots(baseSnapshot, nextSnapshot)
+      })
     },
   })
 
-  if (unlockedSnapshot) return { status: 'ready', snapshot: unlockedSnapshot }
+  const querySnapshot = isDriveBrowserPasswordRequired(query.data) ? null : query.data
+  const snapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
+  if (snapshot) {
+    return {
+      status: 'ready',
+      snapshot,
+      loadMoreChildren: snapshot.childrenPage?.hasMore
+        ? () => loadMoreMutation.mutate(snapshot)
+        : undefined,
+      loadingMoreChildren: loadMoreMutation.isPending,
+      loadMoreChildrenError: loadMoreMutation.error ? getErrorMessage(loadMoreMutation.error) : null,
+    }
+  }
   if (query.isLoading) return { status: 'loading' }
   if (query.isError) return { status: 'error', message: getErrorMessage(query.error) }
   if (isDriveBrowserPasswordRequired(query.data)) {
@@ -68,7 +123,6 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       unlockError: unlockMutation.error ? getErrorMessage(unlockMutation.error) : null,
     }
   }
-  if (query.data) return { status: 'ready', snapshot: query.data }
   return { status: 'loading' }
 }
 
@@ -92,19 +146,19 @@ function fingerprintInitialPassword(value: string | undefined) {
   return hash.toString(36)
 }
 
-export async function loadDriveBrowser(input: DriveBrowserInput) {
-  if (input.context === 'console-root') return driveBrowserApi.getConsoleRoot()
+export async function loadDriveBrowser(input: DriveBrowserInput, options: DriveBrowserLoadOptions = {}) {
+  if (input.context === 'console-root') return driveBrowserApi.getConsoleRoot(options)
   if (input.context === 'owner') {
     return input.itemId
-      ? driveBrowserApi.getOwnerChild(input.rootItemId, input.itemId, input.surface)
-      : driveBrowserApi.getOwnerRoot(input.rootItemId, input.surface)
+      ? driveBrowserApi.getOwnerChild(input.rootItemId, input.itemId, input.surface, options)
+      : driveBrowserApi.getOwnerRoot(input.rootItemId, input.surface, options)
   }
   if (input.initialPassword) {
-    return driveBrowserApi.unlockShare(input.shareId, input.initialPassword, input.itemId)
+    return driveBrowserApi.unlockShare(input.shareId, input.initialPassword, input.itemId, options)
   }
   return input.itemId
-    ? driveBrowserApi.getShareItem(input.shareId, input.itemId)
-    : driveBrowserApi.getShareRoot(input.shareId)
+    ? driveBrowserApi.getShareItem(input.shareId, input.itemId, options)
+    : driveBrowserApi.getShareRoot(input.shareId, options)
 }
 
 export function isDriveBrowserPasswordRequired(
@@ -115,4 +169,14 @@ export function isDriveBrowserPasswordRequired(
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : '加载失败'
+}
+
+function mergeDriveBrowserSnapshots(
+  current: DriveBrowserSnapshotDto,
+  next: DriveBrowserSnapshotDto
+): DriveBrowserSnapshotDto {
+  return {
+    ...next,
+    children: [...current.children, ...next.children],
+  }
 }

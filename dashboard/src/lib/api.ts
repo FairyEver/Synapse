@@ -700,41 +700,66 @@ export const dashboardApi = {
 
 type DriveBrowserSurface = 'standalone' | 'console'
 
-function driveBrowserSurfaceSuffix(surface: DriveBrowserSurface = 'standalone') {
-  return surface === 'console' ? '?surface=console' : ''
+type DriveBrowserChildrenOptions = {
+  childrenOffset?: number
+  childrenLimit?: number
+}
+
+type DriveBrowserShareOptions = DriveBrowserChildrenOptions | string
+
+function normalizeDriveBrowserShareOptions(options: DriveBrowserShareOptions = {}) {
+  return typeof options === 'string' ? {} : options
+}
+
+function driveBrowserQuerySuffix(
+  surface: DriveBrowserSurface = 'standalone',
+  options: DriveBrowserChildrenOptions = {}
+) {
+  const params = new URLSearchParams()
+  if (surface === 'console') params.set('surface', 'console')
+  if (typeof options.childrenOffset === 'number') {
+    params.set('childrenOffset', String(options.childrenOffset))
+  }
+  if (typeof options.childrenLimit === 'number') {
+    params.set('childrenLimit', String(options.childrenLimit))
+  }
+  const query = params.toString()
+  return query ? `?${query}` : ''
 }
 
 export const driveBrowserApi = {
   getOwnerRoot: (
     rootItemId: string,
-    surface: DriveBrowserSurface = 'standalone'
+    surface: DriveBrowserSurface = 'standalone',
+    options: DriveBrowserChildrenOptions = {}
   ) =>
     request<DriveBrowserSnapshotDto>(
-      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}${driveBrowserSurfaceSuffix(surface)}`
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}${driveBrowserQuerySuffix(surface, options)}`
     ),
   getOwnerChild: (
     rootItemId: string,
     itemId: string,
-    surface: DriveBrowserSurface = 'standalone'
+    surface: DriveBrowserSurface = 'standalone',
+    options: DriveBrowserChildrenOptions = {}
   ) =>
     request<DriveBrowserSnapshotDto>(
-      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}/items/${encodeURIComponent(itemId)}${driveBrowserSurfaceSuffix(surface)}`
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix(surface, options)}`
     ),
-  getConsoleRoot: () =>
-    request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root`),
-  getShareRoot: (shareId: string, _password?: string) =>
+  getConsoleRoot: (options: DriveBrowserChildrenOptions = {}) =>
+    request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root${driveBrowserQuerySuffix('standalone', options)}`),
+  getShareRoot: (shareId: string, options: DriveBrowserShareOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}`
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`
     ),
-  getShareItem: (shareId: string, itemId: string, _password?: string) =>
+  getShareItem: (shareId: string, itemId: string, options: DriveBrowserShareOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}`
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`
     ),
-  unlockShare: (shareId: string, password: string, itemId?: string) =>
+  unlockShare: (shareId: string, password: string, itemId?: string, options: DriveBrowserChildrenOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
-      itemId
+      `${itemId
         ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/access`
-        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/access`,
+        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/access`}${driveBrowserQuerySuffix('standalone', options)}`,
       {
         method: 'POST',
         body: JSON.stringify({ password }),

@@ -150,12 +150,20 @@ export interface DriveBrowserPreviewDto {
   readonly visitUrl: string | null
 }
 
+export interface DriveBrowserChildrenPageDto {
+  readonly offset: number
+  readonly limit: number
+  readonly hasMore: boolean
+  readonly nextOffset: number | null
+}
+
 export interface DriveBrowserSnapshotDto {
   readonly context: DriveBrowserAccessContext
   readonly surface: DriveBrowserSurface
   readonly current: DriveBrowserItemDto
   readonly breadcrumbs: readonly DriveBrowserBreadcrumbDto[]
   readonly children: readonly DriveBrowserItemDto[]
+  readonly childrenPage?: DriveBrowserChildrenPageDto
   readonly preview: DriveBrowserPreviewDto | null
   readonly canDownload: boolean
   readonly canZip: boolean

@@ -258,6 +258,27 @@ describe('driveBrowserApi', () => {
     )
   })
 
+  it('passes browser child pagination query parameters', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveBrowserApi.getOwnerChild('root/id', 'child/id', 'console', {
+      childrenOffset: 100,
+      childrenLimit: 50,
+    })
+    await driveBrowserApi.getShareRoot('shr/id', { childrenOffset: 50 })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/drive/browser/owner/items/root%2Fid/items/child%2Fid?surface=console&childrenOffset=100&childrenLimit=50',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/drive/browser/shares/shr%2Fid?childrenOffset=50',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+
   it('uses share browser endpoints and unlocks with POST JSON', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 

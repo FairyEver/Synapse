@@ -98,7 +98,13 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
         />
       ) : null}
       {state.status === 'ready' ? (
-        <DriveBrowserView snapshot={state.snapshot} layoutMode={layoutMode} />
+        <DriveBrowserView
+          snapshot={state.snapshot}
+          layoutMode={layoutMode}
+          onLoadMoreChildren={state.loadMoreChildren}
+          loadingMoreChildren={state.loadingMoreChildren}
+          loadMoreChildrenError={state.loadMoreChildrenError}
+        />
       ) : null}
     </div>
   )
@@ -116,15 +122,29 @@ export function DriveConsoleRootBrowser() {
   if (state.status === 'loading') return <DriveBrowserLoading />
   if (state.status === 'error') return <DriveBrowserError message={state.message} />
   if (state.status !== 'ready') return null
-  return <DriveBrowserView snapshot={state.snapshot} layoutMode='fixed' />
+  return (
+    <DriveBrowserView
+      snapshot={state.snapshot}
+      layoutMode='fixed'
+      onLoadMoreChildren={state.loadMoreChildren}
+      loadingMoreChildren={state.loadingMoreChildren}
+      loadMoreChildrenError={state.loadMoreChildrenError}
+    />
+  )
 }
 
 export function DriveBrowserView({
   snapshot,
   layoutMode = 'auto',
+  onLoadMoreChildren,
+  loadingMoreChildren = false,
+  loadMoreChildrenError = null,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly layoutMode?: DriveBrowserLayoutMode
+  readonly onLoadMoreChildren?: () => void
+  readonly loadingMoreChildren?: boolean
+  readonly loadMoreChildrenError?: string | null
 }) {
   const actions = getDriveBrowserActions(snapshot)
   const fixed = layoutMode === 'fixed'
@@ -157,9 +177,19 @@ export function DriveBrowserView({
         </div>
       </div>
       {fixed ? (
-        <DriveBrowserFixedLayout snapshot={snapshot} />
+        <DriveBrowserFixedLayout
+          snapshot={snapshot}
+          onLoadMoreChildren={onLoadMoreChildren}
+          loadingMoreChildren={loadingMoreChildren}
+          loadMoreChildrenError={loadMoreChildrenError}
+        />
       ) : (
-        <DriveBrowserAutoLayout snapshot={snapshot} />
+        <DriveBrowserAutoLayout
+          snapshot={snapshot}
+          onLoadMoreChildren={onLoadMoreChildren}
+          loadingMoreChildren={loadingMoreChildren}
+          loadMoreChildrenError={loadMoreChildrenError}
+        />
       )}
     </section>
   )
@@ -209,23 +239,54 @@ export function DriveSingleFileReaderView({ snapshot }: { readonly snapshot: Dri
   )
 }
 
-function DriveBrowserAutoLayout({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+function DriveBrowserAutoLayout({
+  snapshot,
+  onLoadMoreChildren,
+  loadingMoreChildren,
+  loadMoreChildrenError,
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly onLoadMoreChildren?: () => void
+  readonly loadingMoreChildren: boolean
+  readonly loadMoreChildrenError: string | null
+}) {
   return (
     <div className='grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]'>
       <div className='min-h-0 border-b md:border-r md:border-b-0'>
-        <DriveBrowserList snapshot={snapshot} />
+        <DriveBrowserList
+          snapshot={snapshot}
+          onLoadMoreChildren={onLoadMoreChildren}
+          loadingMoreChildren={loadingMoreChildren}
+          loadMoreChildrenError={loadMoreChildrenError}
+        />
       </div>
       <DriveBrowserPreview preview={snapshot.preview} current={snapshot.current} />
     </div>
   )
 }
 
-function DriveBrowserFixedLayout({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+function DriveBrowserFixedLayout({
+  snapshot,
+  onLoadMoreChildren,
+  loadingMoreChildren,
+  loadMoreChildrenError,
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly onLoadMoreChildren?: () => void
+  readonly loadingMoreChildren: boolean
+  readonly loadMoreChildrenError: string | null
+}) {
   return (
     <div className='min-h-0 flex-1 overflow-hidden'>
       <div className='grid h-full min-h-0 grid-rows-2 md:hidden'>
         <div className='min-h-0 border-b'>
-          <DriveBrowserList snapshot={snapshot} layoutMode='fixed' />
+          <DriveBrowserList
+            snapshot={snapshot}
+            layoutMode='fixed'
+            onLoadMoreChildren={onLoadMoreChildren}
+            loadingMoreChildren={loadingMoreChildren}
+            loadMoreChildrenError={loadMoreChildrenError}
+          />
         </div>
         <DriveBrowserPreview
           preview={snapshot.preview}
@@ -237,7 +298,13 @@ function DriveBrowserFixedLayout({ snapshot }: { readonly snapshot: DriveBrowser
         <ResizablePanelGroup orientation='horizontal' className='min-h-0'>
           <ResizablePanel defaultSize='52%' minSize='28%' maxSize='72%'>
             <div className='h-full min-h-0'>
-              <DriveBrowserList snapshot={snapshot} layoutMode='fixed' />
+              <DriveBrowserList
+                snapshot={snapshot}
+                layoutMode='fixed'
+                onLoadMoreChildren={onLoadMoreChildren}
+                loadingMoreChildren={loadingMoreChildren}
+                loadMoreChildrenError={loadMoreChildrenError}
+              />
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
@@ -278,9 +345,15 @@ function DriveBrowserBreadcrumbs({ snapshot }: { readonly snapshot: DriveBrowser
 function DriveBrowserList({
   snapshot,
   layoutMode = 'auto',
+  onLoadMoreChildren,
+  loadingMoreChildren = false,
+  loadMoreChildrenError = null,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly layoutMode?: DriveBrowserLayoutMode
+  readonly onLoadMoreChildren?: () => void
+  readonly loadingMoreChildren?: boolean
+  readonly loadMoreChildrenError?: string | null
 }) {
   const fixed = layoutMode === 'fixed'
 
@@ -316,6 +389,8 @@ function DriveBrowserList({
       </div>
     )
   }
+
+  const canLoadMoreChildren = Boolean(snapshot.childrenPage?.hasMore && onLoadMoreChildren)
 
   return (
     <ScrollArea className={cn('min-h-0', fixed && 'h-full')}>
@@ -357,6 +432,25 @@ function DriveBrowserList({
           ))}
         </TableBody>
       </Table>
+      {canLoadMoreChildren || loadMoreChildrenError ? (
+        <div className='flex flex-col items-center gap-2 border-t px-3 py-3'>
+          {canLoadMoreChildren ? (
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={onLoadMoreChildren}
+              disabled={loadingMoreChildren}
+            >
+              {loadingMoreChildren ? <Loader2 data-icon='inline-start' className='animate-spin' /> : null}
+              加载更多
+            </Button>
+          ) : null}
+          {loadMoreChildrenError ? (
+            <div className='text-sm text-destructive'>{loadMoreChildrenError}</div>
+          ) : null}
+        </div>
+      ) : null}
     </ScrollArea>
   )
 }
