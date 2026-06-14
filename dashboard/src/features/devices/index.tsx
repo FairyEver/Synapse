@@ -5,6 +5,7 @@ import { adminApi, type DashboardDeviceRow } from '@/lib/api'
 import {
   deviceStatusLabels,
   deviceStatusVariants,
+  sortDevicesByTableSorting,
   upsertDeviceLiveEvent,
 } from '@/lib/device-utils'
 import {
@@ -43,14 +44,15 @@ export default function DevicesPage() {
       (event) => {
         if (!event.client.userId) return
         setDevices((current) => {
-          return upsertDeviceLiveEvent(current, event, { scope: 'admin' })
+          const nextDevices = upsertDeviceLiveEvent(current, event, { scope: 'admin' })
+          return sortDevicesByTableSorting(nextDevices, sorting)
         })
       },
       () => {
         void queryClient.invalidateQueries({ queryKey: ['admin-devices'] })
       }
     )
-  }, [queryClient])
+  }, [queryClient, sorting])
 
   const columns = useMemo<ColumnDef<DashboardDeviceRow>[]>(
     () => [

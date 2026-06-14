@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { DashboardDeviceRow, LiveClientChangedEvent } from './api'
 import {
   mergeDeviceSnapshot,
+  sortDevicesByTableSorting,
   upsertDeviceLiveEvent,
 } from './device-utils'
 
@@ -136,5 +137,34 @@ describe('device utilities', () => {
         status: 'online',
       }),
     ])
+  })
+
+  it('keeps live-updated admin rows aligned with the active table sorting', () => {
+    const current = [
+      device('user-1', 'client-a', {
+        deviceName: 'Alpha',
+        platform: 'darwin-arm64',
+        lastSeenAt: '2026-06-06T10:00:00.000Z',
+      }),
+      device('user-1', 'client-b', {
+        deviceName: 'Beta',
+        platform: 'win32-x64',
+        lastSeenAt: '2026-06-06T09:00:00.000Z',
+      }),
+    ]
+
+    const liveUpdated = upsertDeviceLiveEvent(
+      current,
+      event('client-b', {
+        userId: 'user-1',
+        platform: 'win32-x64',
+        lastSeenAt: '2026-06-06T11:00:00.000Z',
+      }),
+      { scope: 'admin' }
+    )
+    const sorted = sortDevicesByTableSorting(liveUpdated, [{ id: 'platform', desc: false }])
+
+    expect(liveUpdated.map((item) => item.clientInstanceId)).toEqual(['client-b', 'client-a'])
+    expect(sorted.map((item) => item.clientInstanceId)).toEqual(['client-a', 'client-b'])
   })
 })

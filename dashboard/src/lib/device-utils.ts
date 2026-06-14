@@ -19,6 +19,16 @@ type DeviceScope = {
   scope: 'admin' | 'user'
 }
 
+export type DeviceTableSorting = readonly {
+  readonly id: string
+  readonly desc: boolean
+}[]
+
+const deviceTextCollator = new Intl.Collator('zh-CN', {
+  numeric: true,
+  sensitivity: 'base',
+})
+
 export function upsertDeviceLiveEvent(
   devices: readonly DashboardDeviceRow[],
   event: LiveClientChangedEvent,
@@ -65,6 +75,28 @@ export function mergeDeviceSnapshot(
   }
 
   return sortDevicesByObservedAt(Array.from(byDevice.values()))
+}
+
+export function sortDevicesByTableSorting(
+  devices: readonly DashboardDeviceRow[],
+  sorting: DeviceTableSorting
+): DashboardDeviceRow[] {
+  const activeSorting = sorting.filter((sort) => isSupportedDeviceSortId(sort.id))
+  if (activeSorting.length === 0) return [...devices]
+
+  return devices
+    .map((device, index) => ({ device, index }))
+    .sort((left, right) => {
+      for (const sort of activeSorting) {
+        const comparison = compareDeviceSortValues(
+          getDeviceSortValue(left.device, sort.id),
+          getDeviceSortValue(right.device, sort.id)
+        )
+        if (comparison !== 0) return sort.desc ? -comparison : comparison
+      }
+      return left.index - right.index
+    })
+    .map((item) => item.device)
 }
 
 export function getDeviceObservedAt(device: DashboardDeviceRow) {
@@ -119,6 +151,43 @@ function deviceFromLiveEvent(
 
 function sortDevicesByObservedAt(devices: DashboardDeviceRow[]) {
   return [...devices].sort((left, right) => getDeviceObservedAt(right) - getDeviceObservedAt(left))
+}
+
+function isSupportedDeviceSortId(id: string): boolean {
+  return id === 'deviceName'
+    || id === 'platform'
+    || id === 'appVersion'
+    || id === 'lastSeenAt'
+    || id === 'firstSeenAt'
+}
+
+function getDeviceSortValue(device: DashboardDeviceRow | undefined, id: string): string | number | null | undefined {
+  if (!device) return undefined
+  switch (id) {
+    case 'deviceName':
+      return device.deviceName
+    case 'platform':
+      return device.platform
+    case 'appVersion':
+      return device.appVersion
+    case 'lastSeenAt':
+      return parseDeviceTime(device.lastSeenAt)
+    case 'firstSeenAt':
+      return parseDeviceTime(device.firstSeenAt)
+    default:
+      return undefined
+  }
+}
+
+function compareDeviceSortValues(
+  left: string | number | null | undefined,
+  right: string | number | null | undefined
+): number {
+  if (left === right) return 0
+  if (left === null || left === undefined || left === '') return 1
+  if (right === null || right === undefined || right === '') return -1
+  if (typeof left === 'number' && typeof right === 'number') return left - right
+  return deviceTextCollator.compare(String(left), String(right))
 }
 
 function getLiveEventKey(event: LiveClientChangedEvent, options: DeviceScope) {
