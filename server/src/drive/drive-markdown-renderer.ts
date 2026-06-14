@@ -9,6 +9,13 @@ type MarkdownAstNode = {
   children?: MarkdownAstNode[]
 }
 
+type HtmlAstNode = {
+  type?: string
+  tagName?: string
+  properties?: Record<string, unknown>
+  children?: HtmlAstNode[]
+}
+
 type MarkdownRenderInput = {
   readonly title: string
   readonly markdown: string
@@ -68,6 +75,7 @@ async function renderMarkdownBody(markdown: string): Promise<string> {
     .use(remarkGfm)
     .use(escapeRawHtmlPlugin)
     .use(remarkRehype)
+    .use(stripRelativeResourceUrlsPlugin)
     .use(rehypeSanitize)
     .use(rehypeStringify)
     .process(markdown)
@@ -87,6 +95,41 @@ function visitMarkdownAst(node: MarkdownAstNode): void {
     return
   }
   for (const child of node.children ?? []) visitMarkdownAst(child)
+}
+
+function stripRelativeResourceUrlsPlugin() {
+  return (tree: HtmlAstNode) => {
+    visitHtmlAst(tree)
+  }
+}
+
+function visitHtmlAst(node: HtmlAstNode): void {
+  const properties = node.properties
+  if (properties) {
+    removeRelativeUrlProperty(properties, "href")
+    removeRelativeUrlProperty(properties, "src")
+    removeRelativeUrlProperty(properties, "poster")
+    removeRelativeUrlProperty(properties, "cite")
+    if (typeof properties.srcSet === "string" || Array.isArray(properties.srcSet)) {
+      delete properties.srcSet
+    }
+  }
+  for (const child of node.children ?? []) visitHtmlAst(child)
+}
+
+function removeRelativeUrlProperty(properties: Record<string, unknown>, key: string): void {
+  const value = properties[key]
+  if (typeof value === "string" && isRelativeMarkdownUrl(value)) {
+    delete properties[key]
+  }
+}
+
+function isRelativeMarkdownUrl(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  if (trimmed.startsWith("#")) return false
+  if (trimmed.startsWith("//")) return false
+  return !/^[a-z][a-z\d+.-]*:/iu.test(trimmed)
 }
 
 function stripInlineEventAttributes(value: string): string {

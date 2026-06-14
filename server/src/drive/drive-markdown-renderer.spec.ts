@@ -69,4 +69,20 @@ describe("drive markdown renderer", () => {
     expect(html).not.toContain("<!doctype html>")
     expect(html).not.toContain("<script>")
   })
+
+  it("removes relative resource urls from markdown previews", async () => {
+    const html = await renderDriveMarkdownFragment([
+      "# Notes",
+      "",
+      "![diagram](./diagram.png)",
+      "",
+      "[local doc](../guide.md)",
+      "",
+      "[external](https://example.com/guide)",
+    ].join("\n"))
+
+    expect(html).not.toContain("./diagram.png")
+    expect(html).not.toContain("../guide.md")
+    expect(html).toContain('<a href="https://example.com/guide">external</a>')
+  })
 })
