@@ -563,3 +563,39 @@ describe('adminApi.contentStore', () => {
     )
   })
 })
+
+describe('adminApi.drive', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('serializes admin drive filters', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [], total: 0, page: 2, pageSize: 10 }),
+        {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      )
+    )
+
+    await adminApi.listDriveItems({
+      page: 2,
+      pageSize: 10,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      userId: 'user-1',
+      type: 'file',
+      storageStatus: 'active',
+      shared: 'true',
+      search: 'report',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/drive/items?page=2&pageSize=10&sortBy=createdAt&sortOrder=desc&userId=user-1&type=file&storageStatus=active&shared=true&search=report',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+})

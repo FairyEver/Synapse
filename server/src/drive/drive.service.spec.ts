@@ -1730,6 +1730,36 @@ describe("DriveService", () => {
       warnSpy.mockRestore()
     }
   })
+
+  it("keeps admin list search scoped to visible drive items", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const active = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report-active.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", active.sessionId)
+    const deleted = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report-deleted.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", deleted.sessionId)
+    await service.deleteItemAsAdmin(deleted.item.id, "admin@example.com", "127.0.0.1")
+
+    const list = await service.listAdminItems({
+      pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+      filters: { search: "report" },
+    })
+
+    expect(list.data.map((item) => item.id)).toEqual([active.item.id])
+  })
 })
 
 async function createCompletedUpload(
@@ -2080,6 +2110,7 @@ function createPrismaMemory() {
 
 function matchesWhere(row: any, where: any): boolean {
   return Object.entries(where).every(([key, value]: [string, any]) => {
+    if (key === "AND") return value.every((entry: any) => matchesWhere(row, entry))
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not

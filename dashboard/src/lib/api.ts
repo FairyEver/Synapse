@@ -359,6 +359,14 @@ type PaginationOptions = {
   sortOrder?: 'asc' | 'desc'
 }
 
+export type AdminDriveListQuery = PaginationOptions & {
+  userId?: string
+  type?: AdminDriveItemRow['type']
+  storageStatus?: AdminDriveItemRow['storageStatus']
+  shared?: 'true' | 'false'
+  search?: string
+}
+
 export type WebhookDeliveryHistoryQuery = PaginationOptions & {
   webhookId?: string
   status?: string
@@ -451,6 +459,20 @@ function contentStoreQuerySuffix(options: AdminContentStoreListQuery = {}) {
     query: options.query,
     visibility: options.visibility,
     moderationStatus: options.moderationStatus,
+  })
+}
+
+function adminDriveQuerySuffix(options: AdminDriveListQuery = {}) {
+  return querySuffix({
+    page: options.page,
+    pageSize: options.pageSize,
+    sortBy: options.sortBy,
+    sortOrder: options.sortOrder,
+    userId: options.userId,
+    type: options.type,
+    storageStatus: options.storageStatus,
+    shared: options.shared,
+    search: options.search,
   })
 }
 
@@ -825,9 +847,9 @@ export const adminApi = {
       `${adminApiBasePath}/logs/cleanup?${new URLSearchParams({ before: dateQueryValue(before) }).toString()}`,
       { method: 'DELETE' }
     ),
-  listDriveItems: (options: PaginationOptions = {}) =>
+  listDriveItems: (options: AdminDriveListQuery = {}) =>
     request<PaginatedResponse<AdminDriveItemRow>>(
-      `${adminApiBasePath}/drive/items${paginationSuffix(options)}`
+      `${adminApiBasePath}/drive/items${adminDriveQuerySuffix(options)}`
     ),
   deleteDriveItem: (id: string) =>
     request<{ ok: true }>(

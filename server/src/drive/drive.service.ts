@@ -1938,9 +1938,13 @@ function buildAdminWhere(filters: DriveAdminFilters): Prisma.DriveItemWhereInput
   if (filters.shared === "true") where.shares = { some: { enabled: true } }
   if (filters.shared === "false") where.shares = { none: { enabled: true } }
   if (filters.search) {
-    where.OR = [
-      { id: { contains: filters.search, mode: "insensitive" } },
-      { name: { contains: filters.search, mode: "insensitive" } },
+    where.AND = [
+      {
+        OR: [
+          { id: { contains: filters.search, mode: "insensitive" } },
+          { name: { contains: filters.search, mode: "insensitive" } },
+        ],
+      },
     ]
   }
   return where
