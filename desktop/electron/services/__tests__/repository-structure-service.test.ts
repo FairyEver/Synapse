@@ -155,6 +155,41 @@ describe("RepositoryStructureService", () => {
     expect(mocks.contentIndexService.clearIndex).toHaveBeenCalledTimes(1)
   })
 
+  it("restores backed up contents when initialization fails after scaffolding", async () => {
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const localPath = await makeTempRepositoryPath()
+    const filePath = path.join(localPath, "notes.md")
+    await writeFile(filePath, "# Notes", "utf8")
+    const preview = await repositoryStructureService.checkInitializationPreview({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    })
+    mocks.contentIndexService.rebuildIndex.mockRejectedValueOnce(new Error("index failed"))
+
+    await expect(repositoryStructureService.initializeStructure({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    }, {
+      confirmedOperationToken: preview.operationToken,
+    })).rejects.toThrow("index failed")
+
+    await expect(access(filePath)).resolves.toBeUndefined()
+    await expect(access(path.join(localPath, "rules"))).rejects.toThrow()
+    const entries = await readdir(localPath)
+    expect(entries.some((entry) => entry.startsWith(".synapse-init-backup-"))).toBe(false)
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Rolled back repository initialization backup after failure.",
+      expect.objectContaining({
+        backupName: expect.stringMatching(/^\.synapse-init-backup-/),
+        repositoryUuid: "repo-1",
+      }),
+    )
+  })
+
   it("rejects initialization when the confirmed token no longer matches current contents", async () => {
     const { repositoryStructureService } = await import("../repository-structure-service")
     const localPath = await makeTempRepositoryPath()

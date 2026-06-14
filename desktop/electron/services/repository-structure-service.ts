@@ -135,6 +135,88 @@ async function moveExistingEntriesToInitializationBackup(
   }
 }
 
+function getTopLevelSkeletonDirectories(repository: SynapseRepositoryConfig): string[] {
+  return Array.from(new Set(
+    getRepositorySkeletonDirectories(repository)
+      .map((directoryName) => directoryName.split(path.sep).filter(Boolean)[0])
+      .filter((directoryName): directoryName is string => Boolean(directoryName)),
+  ))
+}
+
+async function containsOnlyInitializationScaffold(directoryPath: string): Promise<boolean> {
+  const entries = await readdir(directoryPath, { withFileTypes: true }).catch((error: unknown) => {
+    if (isFileNotFoundError(error)) return []
+    throw error
+  })
+
+  for (const entry of entries) {
+    if (entry.name === ".gitkeep" && entry.isFile()) {
+      continue
+    }
+
+    if (entry.isDirectory() && await containsOnlyInitializationScaffold(path.join(directoryPath, entry.name))) {
+      continue
+    }
+
+    return false
+  }
+
+  return true
+}
+
+async function removeInitializationScaffold(repositoryPath: string, repository: SynapseRepositoryConfig): Promise<void> {
+  for (const directoryName of getTopLevelSkeletonDirectories(repository)) {
+    const directoryPath = path.join(repositoryPath, directoryName)
+    if (!await containsOnlyInitializationScaffold(directoryPath)) {
+      continue
+    }
+
+    await rm(directoryPath, { recursive: true, force: true })
+  }
+}
+
+async function restoreInitializationBackup(repositoryPath: string, backupPath: string): Promise<void> {
+  const backupEntries = await readdir(backupPath, { withFileTypes: true })
+
+  for (const entry of backupEntries) {
+    const restoreTargetPath = path.join(repositoryPath, entry.name)
+    if (await pathExists(restoreTargetPath)) {
+      throw new Error(`无法恢复 "${entry.name}"，目标位置已存在。`)
+    }
+
+    await rename(path.join(backupPath, entry.name), restoreTargetPath)
+  }
+
+  await rm(backupPath, { recursive: true, force: true })
+}
+
+async function rollbackInitializationBackup(
+  repository: SynapseRepositoryConfig,
+  backupPath: string,
+  cause: unknown,
+): Promise<void> {
+  try {
+    await removeInitializationScaffold(repository.localPath, repository)
+    await restoreInitializationBackup(repository.localPath, backupPath)
+    logger.warn("Rolled back repository initialization backup after failure.", {
+      backupName: path.basename(backupPath),
+      repositoryUuid: repository.uuid,
+      cause,
+    })
+  } catch (rollbackError) {
+    logger.error("Failed to roll back repository initialization backup.", {
+      backupName: path.basename(backupPath),
+      repositoryUuid: repository.uuid,
+      error: rollbackError,
+      cause,
+    })
+    throw new Error(
+      `初始化失败，且自动恢复旧目录内容失败。请从 ${path.basename(backupPath)} 手动恢复。`,
+      { cause: rollbackError },
+    )
+  }
+}
+
 function assertConfirmedInitializationToken(
   preview: SynapseRepositoryInitializationPreview,
   options: SynapseRepositoryInitializationOptions,
@@ -344,53 +426,61 @@ class RepositoryStructureService {
     assertConfirmedInitializationToken(preview, options)
 
     const backupPath = await moveExistingEntriesToInitializationBackup(repository.localPath, entries)
-    if (backupPath) {
-      logger.info("Moved repository contents into initialization backup.", {
-        backupName: path.basename(backupPath),
-        repositoryUuid: repository.uuid,
-      })
-    }
 
-    for (const directoryName of getRepositorySkeletonDirectories(repository)) {
-      await writeGitkeep(path.join(repository.localPath, directoryName))
-    }
-
-    let pendingPushCount = 0
-
-    if (repositoryState.isGitRepository) {
-      const gitRootPath = repositoryState.gitRootPath ?? repository.localPath
-
-      await ensureBotIdentity(gitRootPath)
-      await stageRepositoryScope(gitRootPath, repository)
-      const commitHash = await commitInitialization(gitRootPath)
-
-      try {
-        await pushRepository(repository)
-      } catch {
-        const pendingState = await pendingPushesService.enqueue(repository, {
-          action: "initialize",
-          commitHash,
-          targetId: repository.uuid,
-          title: repository.name,
-        })
-
-        pendingPushCount = pendingState.count
-        logger.warn("Repository initialization queued for later push.", {
-          pendingPushCount,
+    try {
+      if (backupPath) {
+        logger.info("Moved repository contents into initialization backup.", {
+          backupName: path.basename(backupPath),
           repositoryUuid: repository.uuid,
         })
       }
-    }
 
-    await contentIndexService.clearIndex(repository)
-    userProfileService.clearRepoProfiles(repository.uuid)
-    await contentIndexService.rebuildIndex(repository)
+      for (const directoryName of getRepositorySkeletonDirectories(repository)) {
+        await writeGitkeep(path.join(repository.localPath, directoryName))
+      }
 
-    return {
-      initializedAt: new Date().toISOString(),
-      message: pendingPushCount > 0 ? "初始化完成，等待同步。" : "初始化完成。",
-      pendingPushCount,
-      repository: await repositoryStore.getRepositoryState(repository),
+      let pendingPushCount = 0
+
+      if (repositoryState.isGitRepository) {
+        const gitRootPath = repositoryState.gitRootPath ?? repository.localPath
+
+        await ensureBotIdentity(gitRootPath)
+        await stageRepositoryScope(gitRootPath, repository)
+        const commitHash = await commitInitialization(gitRootPath)
+
+        try {
+          await pushRepository(repository)
+        } catch {
+          const pendingState = await pendingPushesService.enqueue(repository, {
+            action: "initialize",
+            commitHash,
+            targetId: repository.uuid,
+            title: repository.name,
+          })
+
+          pendingPushCount = pendingState.count
+          logger.warn("Repository initialization queued for later push.", {
+            pendingPushCount,
+            repositoryUuid: repository.uuid,
+          })
+        }
+      }
+
+      await contentIndexService.clearIndex(repository)
+      userProfileService.clearRepoProfiles(repository.uuid)
+      await contentIndexService.rebuildIndex(repository)
+
+      return {
+        initializedAt: new Date().toISOString(),
+        message: pendingPushCount > 0 ? "初始化完成，等待同步。" : "初始化完成。",
+        pendingPushCount,
+        repository: await repositoryStore.getRepositoryState(repository),
+      }
+    } catch (error) {
+      if (backupPath) {
+        await rollbackInitializationBackup(repository, backupPath, error)
+      }
+      throw error
     }
   }
 }
