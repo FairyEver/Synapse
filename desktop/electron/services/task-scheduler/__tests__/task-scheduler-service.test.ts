@@ -200,6 +200,25 @@ describe("TaskSchedulerService", () => {
     await runPromise
   })
 
+  it("deletes stored run history when deleting a task", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ logger })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+    await harness.service.runNow("task:1")
+    expect(await harness.runs.listByTask("task:1")).toHaveLength(1)
+
+    await expect(harness.service.deleteTask("task:1")).resolves.toEqual({ deleted: true })
+
+    expect(await harness.tasks.get("task:1")).toBeNull()
+    expect(await harness.runs.listByTask("task:1")).toEqual([])
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task deleted.", expect.objectContaining({
+      boundary: "task-scheduler.task-delete",
+      taskId: "task:1",
+      deleted: true,
+      deletedRunCount: 1,
+    }))
+  })
+
   it("settles runtime state before reporting a stop as complete", async () => {
     const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))

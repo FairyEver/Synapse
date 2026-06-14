@@ -82,6 +82,24 @@ describe("ScheduledTaskRunRepository", () => {
       status: "success",
     }))
   })
+
+  it("deletes all runs for a task without touching other task histories", async () => {
+    const repo = new ScheduledTaskRunRepository({
+      runs: new MemoryNamespace<ScheduledTaskRunEntry>("task-scheduler.runs"),
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: (taskId, index) => `run:${taskId}:${index}`,
+    })
+    await repo.start("task:1", "manual")
+    await repo.finish("run:task:1:1", { status: "success", result: { status: "success", summary: "ok" } })
+    await repo.start("task:1", "schedule")
+    await repo.finish("run:task:1:2", { status: "failed", error: "failed" })
+    await repo.start("task:2", "manual")
+
+    await expect(repo.deleteByTask("task:1")).resolves.toBe(2)
+
+    expect(await repo.listByTask("task:1")).toEqual([])
+    expect(await repo.listByTask("task:2")).toHaveLength(1)
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

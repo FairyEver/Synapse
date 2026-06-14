@@ -224,11 +224,13 @@ export class TaskSchedulerService {
     this.cancel(id)
     try {
       const deleted = await this.deps.tasks.delete(id)
+      const deletedRunCount = deleted ? await this.deleteRunsAfterTaskDelete(id) : 0
       if (deleted) this.emitTaskChanged({ taskId: id, reason: "deleted" })
       this.deps.logger?.info("Scheduled task deleted.", {
         boundary: "task-scheduler.task-delete",
         taskId: id,
         deleted,
+        deletedRunCount,
         durationMs: Date.now() - startedAt,
       })
       return { deleted }
@@ -243,6 +245,19 @@ export class TaskSchedulerService {
         ...errorMetadata(err),
       })
       throw err
+    }
+  }
+
+  private async deleteRunsAfterTaskDelete(id: string): Promise<number> {
+    try {
+      return await this.deps.runs.deleteByTask(id)
+    } catch (error) {
+      this.deps.logger?.warn("Scheduled task run cleanup after delete failed.", {
+        boundary: "task-scheduler.run-delete",
+        taskId: id,
+        ...errorMetadata(error),
+      })
+      return 0
     }
   }
 
