@@ -348,6 +348,14 @@ describe("DriveModule", () => {
     const failedBadge = Array.from(document.querySelectorAll<HTMLElement>("[data-slot='badge']"))
       .find((element) => element.textContent === "上传失败")
     expect(failedBadge?.dataset.variant).toBe("destructive")
+    for (const name of ["pending.txt", "failed.txt", "deleting.txt"]) {
+      const shareButton = Array.from(getTableRow(name).querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent?.trim() === "分享")
+      expect(shareButton?.disabled).toBe(true)
+    }
+    const activeShareButton = Array.from(getTableRow("shared.txt").querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.trim() === "分享")
+    expect(activeShareButton?.disabled).toBe(false)
   })
 
   it("shows share and publication states together in one compact status cell", async () => {

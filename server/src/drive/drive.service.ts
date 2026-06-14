@@ -466,6 +466,9 @@ export class DriveService implements OnApplicationBootstrap {
     settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
   ): Promise<DriveShareDto> {
     const item = await this.requireOwnedItem(userId, itemId)
+    if (item.storageStatus !== DRIVE_STORAGE_STATUS.active) {
+      throw new BadRequestException("文件尚不可分享。")
+    }
     const material = await createDrivePasswordMaterial(settings, this.accessSecret)
     const existing = await this.prisma.driveShare.findFirst({
       where: { itemId: item.id, userId, enabled: true },

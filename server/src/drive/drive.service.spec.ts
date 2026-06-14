@@ -289,6 +289,24 @@ describe("DriveService", () => {
     expect(stored.accessSettingsAppliedAt).toBeInstanceOf(Date)
   })
 
+  it("rejects share creation for non-active items", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "pending.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await expect(service.createShare("user-1", prepared.item.id, "https://synapse.test"))
+      .rejects
+      .toBeInstanceOf(BadRequestException)
+    expect(await prisma.driveShare.findMany()).toEqual([])
+  })
+
   it("overwrites active share settings without changing the share id", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

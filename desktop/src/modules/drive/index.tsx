@@ -1334,6 +1334,7 @@ function DriveFileListRow({
 }) {
   const isFolder = item.type === "folder"
   const statusBadges = getDriveStatusBadges(item, publicationActions)
+  const canShare = canShareDriveItem(item)
 
   return (
     <TableRow
@@ -1400,7 +1401,7 @@ function DriveFileListRow({
           <Button type="button" variant="ghost" size="xs" onClick={() => onOpenItem(item)}>
             打开
           </Button>
-          <Button type="button" variant="ghost" size="xs" onClick={() => onShare(item)}>
+          <Button type="button" variant="ghost" size="xs" disabled={!canShare} onClick={() => onShare(item)}>
             分享
           </Button>
           <DriveItemMenu
@@ -2594,6 +2595,10 @@ function getDriveStorageStatusBadge(storageStatus: DriveItemDto["storageStatus"]
   if (storageStatus === "failed") return { key: "failed", label: "上传失败", variant: "destructive" }
   if (storageStatus === "delete_pending") return { key: "delete-pending", label: "删除中", variant: "outline" }
   return null
+}
+
+function canShareDriveItem(item: DriveItemDto): boolean {
+  return item.storageStatus === "active"
 }
 
 function getActiveDrivePublication(item: DriveItemDto, publicationActions: DriveItemPublicationActions): DrivePublicationDto | null {
