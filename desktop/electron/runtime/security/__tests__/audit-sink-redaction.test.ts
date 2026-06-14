@@ -249,6 +249,37 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(JSON.stringify(namespace.items)).not.toContain("C:\\Users\\Ada")
   })
 
+  it("redacts persistence failure error messages before logging", async () => {
+    const namespace = new FakeAuditNamespace(
+      new Error("write failed Authorization: Bearer audit-secret token=raw-token at /Users/alice/private/audit.jsonl"),
+    )
+    const warnings: unknown[] = []
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      logger: { warn: (_message, meta) => warnings.push(meta) },
+      idFactory: () => "audit-persist-failure",
+      now: () => new Date("2026-06-05T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/Users/alice/private/target.json",
+      outcome: "failed",
+    })
+    await sink.flushForTests()
+
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        action: "fs.write",
+        error: "write failed Authorization: [redacted] token=[redacted] at [path]",
+      }),
+    ])
+    expect(JSON.stringify(warnings)).not.toContain("audit-secret")
+    expect(JSON.stringify(warnings)).not.toContain("raw-token")
+    expect(JSON.stringify(warnings)).not.toContain("/Users/alice")
+  })
+
   it("keeps request and prompt body metadata redacted", async () => {
     const namespace = new FakeAuditNamespace()
     const sink = new DataRepositoryAuditSink({
@@ -287,6 +318,11 @@ class FakeAuditNamespace implements DataNamespace<AuditEntryV1> {
   readonly schemaVersion = 1
   readonly backend = "jsonl"
   readonly items: AuditEntryV1[] = []
+  private readonly error?: unknown
+
+  constructor(error?: unknown) {
+    this.error = error
+  }
 
   async getSingleton(): Promise<AuditEntryV1 | null> {
     return null
@@ -303,6 +339,7 @@ class FakeAuditNamespace implements DataNamespace<AuditEntryV1> {
   }
 
   async upsert(item: AuditEntryV1): Promise<void> {
+    if (this.error) throw this.error
     this.items.push(item)
   }
 

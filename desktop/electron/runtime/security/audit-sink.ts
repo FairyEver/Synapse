@@ -90,10 +90,11 @@ export class DataRepositoryAuditSink implements AuditSink {
       .catch((error) => {
         this.consecutiveFailures++
         this.healthy = false
+        const errorSummary = summarizePersistenceError(error)
         this.logger?.warn("Audit event persistence failed.", {
           action: entry.action,
           consecutiveFailures: this.consecutiveFailures,
-          error: error instanceof Error ? error.message : String(error),
+          ...errorSummary,
         })
       })
   }
@@ -157,6 +158,24 @@ function sanitizeText(value: string): string {
         .replace(BEARER_TEXT_VALUE_PATTERN, "Bearer [redacted]"),
     ),
   )
+}
+
+function summarizePersistenceError(error: unknown): {
+  error: string
+  errorName?: string
+  errorCode?: string
+  errorLength: number
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code)
+    : undefined
+  return {
+    error: sanitizeText(message),
+    ...(error instanceof Error && error.name ? { errorName: sanitizeText(error.name) } : {}),
+    ...(code ? { errorCode: sanitizeText(code) } : {}),
+    errorLength: message.length,
+  }
 }
 
 function sanitizePathText(value: string): string {
