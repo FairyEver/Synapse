@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { DATABASE_ROW_LIST_MAX_LIMIT } from "../../database/shared/limits"
 import { buildTools, MCP_TOOL_ACTIONS } from "../../database/shared/mcp-tools"
 
 function getTool(name: string) {
@@ -50,6 +51,27 @@ describe("Database MCP tool descriptions", () => {
   it("exposes only canonical Database tool names", () => {
     const names = buildTools().map((tool) => tool.name)
     expect(names.every((name) => name.startsWith("database_"))).toBe(true)
+  })
+
+  it("bounds row list pagination in the MCP schema", () => {
+    const properties = getTool("database_row_list").inputSchema.properties
+    const limit = properties.limit as {
+      type?: string
+      minimum?: number
+      maximum?: number
+      description?: string
+    }
+    const offset = properties.offset as {
+      type?: string
+      minimum?: number
+    }
+
+    expect(limit.type).toBe("integer")
+    expect(limit.minimum).toBe(0)
+    expect(limit.maximum).toBe(DATABASE_ROW_LIST_MAX_LIMIT)
+    expect(limit.description).toContain("Defaults to 100")
+    expect(offset.type).toBe("integer")
+    expect(offset.minimum).toBe(0)
   })
 
   it("requires grouped where conditions for bulk mutations", () => {

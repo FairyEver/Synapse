@@ -10,6 +10,10 @@
 // allowed values client-side, even after DDL operations.
 
 import { buildMcpToolActions } from "./capability-registry"
+import {
+  DATABASE_ROW_LIST_DEFAULT_LIMIT,
+  DATABASE_ROW_LIST_MAX_LIMIT,
+} from "./limits"
 
 type McpTool = {
   name: string
@@ -275,7 +279,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_row_list",
-      description: "Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts an equality object { column: value }, an ANDed expression array [{ field, op, value }], or a group { combinator: 'all'|'any', conditions }; op is =, !=, >, <, >=, <=, LIKE, or CONTAINS, and CONTAINS only works on multi_choice columns with one scalar item. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to 100, offset defaults to 0, json and multi_choice values are parsed on read, and boolean values are returned as true or false.",
+      description: `Query rows with optional where, orderBy, limit, and offset, and return { rows, total }. where accepts an equality object { column: value }, an ANDed expression array [{ field, op, value }], or a group { combinator: 'all'|'any', conditions }; op is =, !=, >, <, >=, <=, LIKE, or CONTAINS, and CONTAINS only works on multi_choice columns with one scalar item. orderBy is either a column name for ascending sort or { field, dir: 'asc'|'desc' }, limit defaults to ${DATABASE_ROW_LIST_DEFAULT_LIMIT} and must be between 0 and ${DATABASE_ROW_LIST_MAX_LIMIT}, offset defaults to 0, json and multi_choice values are parsed on read, and boolean values are returned as true or false.`,
       inputSchema: {
         type: "object",
         properties: {
@@ -298,8 +302,17 @@ function buildTools(): McpTool[] {
               },
             ],
           },
-          limit: { type: "number", description: "Maximum rows to return. Defaults to 100." },
-          offset: { type: "number", description: "Rows to skip before returning results. Defaults to 0." },
+          limit: {
+            type: "integer",
+            minimum: 0,
+            maximum: DATABASE_ROW_LIST_MAX_LIMIT,
+            description: `Maximum rows to return. Defaults to ${DATABASE_ROW_LIST_DEFAULT_LIMIT}.`,
+          },
+          offset: {
+            type: "integer",
+            minimum: 0,
+            description: "Rows to skip before returning results. Defaults to 0.",
+          },
         },
         required: ["tableName"],
       },

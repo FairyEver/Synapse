@@ -9,6 +9,7 @@
 
 import { databaseService } from "./service"
 import { getMutatingActions } from "../../database/shared/capability-registry"
+import { DATABASE_ROW_LIST_MAX_LIMIT } from "../../database/shared/limits"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type { Column, DatabaseOperationSource, DatabaseQueryParams, DatabaseWhereClause } from "./types"
 
@@ -51,9 +52,21 @@ function requireNumber(params: Record<string, unknown>, key: string): number {
   return v
 }
 
-function optionalNumber(params: Record<string, unknown>, key: string): number | undefined {
+function optionalNonNegativeInteger(params: Record<string, unknown>, key: string): number | undefined {
   if (params[key] === undefined) return undefined
-  return requireNumber(params, key)
+  const value = requireNumber(params, key)
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid '${key}': expected non-negative integer`)
+  }
+  return value
+}
+
+function optionalRowListLimit(params: Record<string, unknown>): number | undefined {
+  const limit = optionalNonNegativeInteger(params, "limit")
+  if (limit !== undefined && limit > DATABASE_ROW_LIST_MAX_LIMIT) {
+    throw new Error(`Invalid 'limit': expected integer between 0 and ${DATABASE_ROW_LIST_MAX_LIMIT}`)
+  }
+  return limit
 }
 
 function requireObject(params: Record<string, unknown>, key: string): Record<string, unknown> {
@@ -168,8 +181,8 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       table: requireString(params, "tableName"),
       where: params.where as DatabaseWhereClause | undefined,
       orderBy: params.orderBy as DatabaseQueryParams["orderBy"],
-      limit: optionalNumber(params, "limit"),
-      offset: optionalNumber(params, "offset"),
+      limit: optionalRowListLimit(params),
+      offset: optionalNonNegativeInteger(params, "offset"),
     })
     return { ok: true, data: result.rows, total: result.total }
   },
