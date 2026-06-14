@@ -186,6 +186,7 @@ test('mutable API rejects missing CSRF token, cross-origin requests, and non-JSO
       startCount += 1
     },
     getSnapshot: () => ({ running: false }),
+    subscribe: () => () => {},
   } as unknown as AutoScheduler
   const server = createServer(createHandler(scheduler, new OutputBuffer(), {
     configPath: join(dir, 'ui-config.json'),
@@ -247,6 +248,7 @@ test('start API rejects concurrency above the local worker limit', async () => {
       startCount += 1
     },
     getSnapshot: () => ({ running: false }),
+    subscribe: () => () => {},
   } as unknown as AutoScheduler
   const server = createServer(createHandler(scheduler, new OutputBuffer(), {
     configPath: join(dir, 'ui-config.json'),
@@ -320,4 +322,33 @@ test('output buffer separates repeated slot runs by sequence', () => {
   const all = outputBuffer.getAll()
   assert.equal(all['1:1'][0].text, 'old')
   assert.equal(all['1:2'][0].text, 'new')
+})
+
+test('output buffer resets when scheduler session changes', () => {
+  type Snapshot = { session: { id: string } | null }
+  let emitSnapshot: (snapshot: Snapshot) => void = () => {
+    throw new Error('snapshot listener not registered')
+  }
+  const scheduler = {
+    subscribe: (next: (snapshot: Snapshot) => void) => {
+      emitSnapshot = next
+      next({ session: null })
+      return () => {
+        emitSnapshot = () => undefined
+      }
+    },
+  } as unknown as AutoScheduler
+  const outputBuffer = new OutputBuffer()
+
+  createHandler(scheduler, outputBuffer)
+  outputBuffer.append({ workerId: 1, sequence: 1, stream: 'stdout', text: 'old', ts: 1000 })
+  emitSnapshot({ session: { id: 'session-a' } })
+  assert.deepEqual(outputBuffer.getAll(), {})
+
+  outputBuffer.append({ workerId: 1, sequence: 1, stream: 'stdout', text: 'new', ts: 2000 })
+  emitSnapshot({ session: { id: 'session-a' } })
+  assert.equal(outputBuffer.getAll()['1:1'][0].text, 'new')
+
+  emitSnapshot({ session: { id: 'session-b' } })
+  assert.deepEqual(outputBuffer.getAll(), {})
 })

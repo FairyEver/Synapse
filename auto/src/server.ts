@@ -223,6 +223,19 @@ function isClientInputError(error: unknown): error is Error {
 
 export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuffer, paths: HandlerPaths = {}) {
   const csrfToken = randomBytes(32).toString('base64url')
+  let observedSessionId: string | null | undefined
+
+  scheduler.subscribe(snapshot => {
+    const sessionId = snapshot.session?.id ?? null
+    if (observedSessionId === undefined) {
+      observedSessionId = sessionId
+      return
+    }
+    if (sessionId && sessionId !== observedSessionId) {
+      outputBuffer.reset()
+    }
+    observedSessionId = sessionId
+  })
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
@@ -384,10 +397,11 @@ export async function startServer(options: { port?: number; open?: boolean } = {
   scheduler.subscribeOutput(line => outputBuffer.append(line))
 
   let port = options.port ?? DEFAULT_PORT
+  const handler = createHandler(scheduler, outputBuffer)
 
   while (true) {
     const server = createServer((req, res) => {
-      void createHandler(scheduler, outputBuffer)(req, res)
+      void handler(req, res)
     })
     try {
       const actualPort = await listen(server, port)
