@@ -10,6 +10,7 @@ import {
   ServerDataTable,
   getServerTableSortQuery,
 } from '@/components/data-table'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +39,9 @@ export default function DriveAdminPage() {
   const [storageStatus, setStorageStatus] = useState<
     AdminDriveItemRow['storageStatus'] | ''
   >('')
+  const [deleteTarget, setDeleteTarget] = useState<AdminDriveItemRow | null>(
+    null
+  )
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
@@ -63,6 +67,7 @@ export default function DriveAdminPage() {
     mutationFn: adminApi.deleteDriveItem,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-drive-items'] })
+      setDeleteTarget(null)
       toast.success('已删除')
     },
     onError: (err: Error) => toast.error(err.message),
@@ -145,11 +150,7 @@ export default function DriveAdminPage() {
               variant='ghost'
               className='h-8 w-8 p-0'
               disabled={deleteMutation.isPending}
-              onClick={() => {
-                if (window.confirm(`删除「${row.original.name}」？`)) {
-                  deleteMutation.mutate(row.original.id)
-                }
-              }}
+              onClick={() => setDeleteTarget(row.original)}
             >
               <Trash2 data-icon='inline-start' />
               <span className='sr-only'>删除</span>
@@ -160,7 +161,7 @@ export default function DriveAdminPage() {
         enableHiding: false,
       },
     ],
-    [deleteMutation]
+    [deleteMutation.isPending, deleteMutation.mutate]
   )
 
   return (
@@ -276,6 +277,21 @@ export default function DriveAdminPage() {
             }
           />
         )}
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          onOpenChange={(open) => {
+            if (!open && !deleteMutation.isPending) setDeleteTarget(null)
+          }}
+          title='删除云盘项目'
+          desc={deleteTarget ? `删除「${deleteTarget.name}」？` : ''}
+          cancelBtnText='取消'
+          confirmText='删除'
+          destructive
+          isLoading={deleteMutation.isPending}
+          handleConfirm={() => {
+            if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
+          }}
+        />
       </Main>
     </>
   )
