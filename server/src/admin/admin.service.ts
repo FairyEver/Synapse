@@ -323,7 +323,6 @@ export class AdminService {
       data: {
         type: "team_join",
         tokenHash: hashToken(token),
-        inviteUrl,
         expiresAt: addDays(new Date(), invitationDays),
         createdByAdminId: admin.id,
         teamId: input.teamId,
@@ -353,7 +352,6 @@ export class AdminService {
         select: {
           id: true,
           type: true,
-          inviteUrl: true,
           expiresAt: true,
           usedAt: true,
           acceptedByUser: { select: { email: true } },

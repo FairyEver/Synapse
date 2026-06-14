@@ -205,19 +205,8 @@ export default function InvitationsPage() {
     {
       id: 'actions',
       cell: ({ row }) => {
-        const inviteUrl = row.original.inviteUrl
         return (
           <div className='flex justify-end gap-1'>
-            {inviteUrl ? (
-              <Button
-                variant='ghost'
-                className='h-8 w-8 p-0'
-                onClick={() => void copyInviteUrl(inviteUrl)}
-              >
-                <Copy data-icon='inline-start' />
-                <span className='sr-only'>复制</span>
-              </Button>
-            ) : null}
             <Button
               variant='ghost'
               className='h-8 w-8 p-0'

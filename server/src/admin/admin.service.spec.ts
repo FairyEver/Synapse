@@ -276,7 +276,7 @@ describe("AdminService", () => {
     expect(prisma.team.findMany.mock.calls[0]?.[0]).not.toHaveProperty("include")
   })
 
-  it("loads invitations without exposing token hashes", async () => {
+  it("loads invitations without exposing token hashes or invite URLs", async () => {
     const prisma = {
       $transaction: vi.fn().mockResolvedValue([[], 0]),
       invitation: {
@@ -292,7 +292,6 @@ describe("AdminService", () => {
       select: {
         id: true,
         type: true,
-        inviteUrl: true,
         expiresAt: true,
         usedAt: true,
         acceptedByUser: { select: { email: true } },
@@ -303,6 +302,7 @@ describe("AdminService", () => {
       },
     }))
     expect(prisma.invitation.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("tokenHash")
+    expect(prisma.invitation.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("inviteUrl")
     expect(prisma.invitation.count).toHaveBeenCalledWith()
   })
 
@@ -310,7 +310,6 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.create.mockResolvedValue({
       id: "invite-1",
-      inviteUrl: "https://app.example.com/console/team-invite?token=token-1",
       expiresAt: new Date("2026-06-08T00:00:00.000Z"),
     })
     const auditLog = { record: vi.fn() }
@@ -336,6 +335,7 @@ describe("AdminService", () => {
         teamId: "team-1",
       }),
     })
+    expect(prisma.invitation.create.mock.calls[0]?.[0].data).not.toHaveProperty("inviteUrl")
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
       action: "admin.invitation.create",
@@ -404,7 +404,6 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.create.mockResolvedValue({
       id: "invite-1",
-      inviteUrl: "https://app.example.com/console/team-invite?token=token-1",
       expiresAt: new Date("2026-06-08T00:00:00.000Z"),
     })
     prisma.invitation.delete.mockResolvedValue({ id: "invite-1" })

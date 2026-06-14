@@ -31,9 +31,9 @@ describe("InvitationsService", () => {
     expect(prisma.invitation.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         type: "team_join",
-        inviteUrl: `https://app.example.com/console/team-invite?token=${result.token}`,
       }),
     })
+    expect(prisma.invitation.create.mock.calls[0]?.[0].data).not.toHaveProperty("inviteUrl")
   })
 
   it("rejects invalid invitation tokens", async () => {

@@ -23,7 +23,6 @@ export class InvitationsService {
       data: {
         type: "team_join",
         tokenHash: hashToken(token),
-        inviteUrl,
         expiresAt: addDays(new Date(), invitationDays),
         createdByUserId: input.userId,
         teamId: input.teamId,

@@ -148,7 +148,6 @@ export type DashboardMe = {
 export type AdminInvitationRow = {
   id: string
   type: 'team_join'
-  inviteUrl: string | null
   expiresAt: string
   usedAt: string | null
   createdByAdmin: { email: string } | null
