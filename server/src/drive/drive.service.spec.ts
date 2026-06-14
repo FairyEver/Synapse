@@ -56,6 +56,24 @@ describe("DriveService", () => {
     expect(usage.usedBytes).toBe(0n)
   })
 
+  it("rejects Windows-unsafe upload names", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    for (const name of ["CON.txt", "report.", "report ", "bad:name.txt"]) {
+      await expect(service.prepareUpload("user-1", {
+        parentId: null,
+        name,
+        size: "11",
+        mimeType: "text/plain",
+        publicAppUrl: "https://synapse.test",
+      })).rejects.toBeInstanceOf(BadRequestException)
+    }
+
+    expect(await prisma.driveItem.findMany()).toEqual([])
+  })
+
   it("rejects uploads over the single file limit", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -399,6 +417,24 @@ describe("DriveService", () => {
       targetId: completed.id,
       detail: expect.objectContaining({ previousParentId: null, nextParentId: null }),
     }))
+  })
+
+  it("rejects Windows-unsafe rename targets", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+
+    for (const name of ["NUL", "report.", "report ", "bad:name.txt"]) {
+      await expect(service.renameItem("user-1", file.id, name)).rejects.toBeInstanceOf(BadRequestException)
+    }
+
+    const unchanged = await service.getItem("user-1", file.id)
+    expect(unchanged.name).toBe("report.txt")
   })
 
   it("audits share and publication changes without secrets", async () => {
@@ -1347,6 +1383,27 @@ describe("DriveService", () => {
     expect(result.entries.every((entry) => entry.upload.method === "PUT")).toBe(true)
     const rootChildren = await service.listItems("user-1", result.root.id)
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
+  })
+
+  it("rejects Windows-unsafe folder upload path segments and rolls back", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    await expect(service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "交接材料",
+      files: [
+        { relativePath: "docs/CON.txt", size: "11", mimeType: "text/plain" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    expect(await service.listItems("user-1", null)).toEqual([])
+    expect(await prisma.driveUploadSession.findMany()).toEqual([])
+    const items = await prisma.driveItem.findMany()
+    expect(items).toHaveLength(1)
+    expect(items[0]?.deletedAt).toBeInstanceOf(Date)
   })
 
   it("rolls back folder upload prepare artifacts when a later file fails", async () => {

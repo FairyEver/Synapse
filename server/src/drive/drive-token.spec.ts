@@ -45,4 +45,20 @@ describe("drive token helpers", () => {
     expect(isValidDriveItemName("../secret")).toBe(false)
     expect(isValidDriveItemName("a/b.txt")).toBe(false)
   })
+
+  it("rejects Windows-unsafe item names", () => {
+    for (const name of [
+      "CON",
+      "NUL.txt",
+      "COM1",
+      "LPT9.log",
+      "report.",
+      "report ",
+      "bad:name.txt",
+      "bad|name.txt",
+      "bad\u0001name.txt",
+    ]) {
+      expect(isValidDriveItemName(name)).toBe(false)
+    }
+  })
 })

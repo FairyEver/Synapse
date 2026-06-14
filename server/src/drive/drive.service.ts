@@ -1961,7 +1961,7 @@ async function ensureUsage(client: DrivePrismaClient, userId: string) {
 }
 
 function normalizeDriveName(value: string): string {
-  const name = value.trim()
+  const name = value.normalize("NFC")
   if (!isValidDriveItemName(name)) throw new BadRequestException("文件名无效。")
   return name
 }

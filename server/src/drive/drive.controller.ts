@@ -26,16 +26,16 @@ type DriveAccessCookieKind = "share" | "page" | "site"
 
 const prepareUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
-  name: z.string().trim().min(1).max(255),
+  name: z.string().min(1).max(255),
   size: z.string().regex(/^\d+$/u),
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
 
 const prepareFolderUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
-  folderName: z.string().trim().min(1).max(255),
+  folderName: z.string().min(1).max(255),
   files: z.array(z.object({
-    relativePath: z.string().trim().min(1).max(1024),
+    relativePath: z.string().min(1).max(1024),
     size: z.string().regex(/^\d+$/u),
     mimeType: z.string().trim().max(255).nullable().optional(),
   }).strict()).min(1).max(1000),
@@ -43,10 +43,10 @@ const prepareFolderUploadSchema = z.object({
 
 const folderSchema = z.object({
   parentId: z.string().nullable().optional(),
-  name: z.string().trim().min(1).max(255),
+  name: z.string().min(1).max(255),
 }).strict()
 
-const renameSchema = z.object({ name: z.string().trim().min(1).max(255) }).strict()
+const renameSchema = z.object({ name: z.string().min(1).max(255) }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
 const deleteItemSchema = z.object({ disablePublications: z.boolean().optional() }).strict()
 const driveAccessSettingsSchema = z.object({

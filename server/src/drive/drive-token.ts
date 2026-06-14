@@ -31,9 +31,13 @@ export function normalizePublicationRelativePath(value: string): string {
 }
 
 export function isValidDriveItemName(value: string): boolean {
-  const name = value.trim()
+  const name = value.normalize("NFC")
   if (!name) return false
+  if (name !== name.trim()) return false
   if (name.length > 255) return false
   if (name === "." || name === "..") return false
-  return !/[\\/]/u.test(name)
+  if (/[<>:"/\\|?*\x00-\x1f]/u.test(name)) return false
+  if (/[. ]$/u.test(name)) return false
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(name)) return false
+  return true
 }
