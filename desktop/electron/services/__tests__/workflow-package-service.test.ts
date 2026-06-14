@@ -255,6 +255,38 @@ describe("WorkflowPackageService", () => {
     expect(imported.nodes.find((node) => node.id === "n2")?.config.modelTier).toBe("opus")
   })
 
+  it("clears Code X node project ids when importing mixed workflows", async () => {
+    const { service, saved } = createService()
+    const pkg = await service.buildExportPackage("workflow-source")
+    const mixedPkg: SynapseWorkflowPackageV1 = {
+      ...pkg,
+      workflow: {
+        ...pkg.workflow,
+        nodes: [
+          ...pkg.workflow.nodes,
+          {
+            id: "codex-1",
+            name: "Code X",
+            type: "codex",
+            position: { x: 600, y: 0 },
+            config: { prompt: "Run codex", projectId: "exporter-codex-project" },
+          },
+        ],
+      },
+    }
+    const mappings: WorkflowModelMapping[] = mixedPkg.modelReferences.map((ref) => ({
+      sourceRefId: ref.id,
+      targetProviderId: "local-openai",
+      targetModelTier: ref.sourceModelTier,
+    }))
+
+    const result = await service.importPackage(mixedPkg, mappings, { targetProjectId: "local-project" })
+
+    expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v_imported" })
+    expect(saved[0]?.defaultProjectId).toBe("local-project")
+    expect(saved[0]?.nodes.find((node) => node.id === "codex-1")?.config.projectId).toBeUndefined()
+  })
+
   it("blocks importing model workflows without a local project mapping", async () => {
     const { service, saved } = createService()
     const pkg = await service.buildExportPackage("workflow-source")
