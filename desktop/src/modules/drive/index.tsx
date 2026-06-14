@@ -1901,14 +1901,16 @@ function DriveShareActions({
   const password = item.password
   return (
     <div className="flex items-center justify-end gap-0.5">
-      <DriveIconAction
-        label={`复制 ${item.itemName}`}
-        tooltip="复制链接"
-        onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
-      >
-        <Copy />
-      </DriveIconAction>
-      {password ? (
+      {!item.sourceDeleted ? (
+        <DriveIconAction
+          label={`复制 ${item.itemName}`}
+          tooltip="复制链接"
+          onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
+        >
+          <Copy />
+        </DriveIconAction>
+      ) : null}
+      {!item.sourceDeleted && password ? (
         <DriveIconAction
           label={`复制 ${item.itemName} 密码`}
           tooltip="复制密码"

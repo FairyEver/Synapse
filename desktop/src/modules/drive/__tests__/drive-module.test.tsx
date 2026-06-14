@@ -1557,7 +1557,10 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("folder")
     expect(document.body.textContent).toContain("文件夹")
     expect(document.body.textContent).toContain("来源已删除")
+    expect(queryButtonByLabel("复制 folder")).toBeNull()
+    expect(queryButtonByLabel("复制 folder 密码")).toBeNull()
     expect(queryButtonByLabel("打开 folder")).toBeNull()
+    expect(queryButtonByLabel("取消分享 folder")).not.toBeNull()
 
     await clickButtonByLabel("复制 report.txt")
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/files/shr_test?password=AbC234xy")
