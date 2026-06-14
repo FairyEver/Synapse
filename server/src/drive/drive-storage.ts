@@ -60,6 +60,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   async createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction> {
+    this.cleanupExpiredTokens()
     const expiresAt = new Date(Date.now() + driveUploadUrlTtlSeconds * 1000)
     const token = randomUUID()
     this.uploadTokens.set(token, { key: input.key, contentType: input.contentType ?? null, expiresAt })
@@ -72,6 +73,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   async createDownloadUrl(input: { readonly key: string; readonly filename: string }): Promise<{ readonly url: string; readonly expiresAt: Date }> {
+    this.cleanupExpiredTokens()
     const expiresAt = new Date(Date.now() + driveDownloadUrlTtlSeconds * 1000)
     const token = randomUUID()
     this.downloadTokens.set(token, { key: input.key, filename: input.filename, expiresAt })
@@ -135,6 +137,7 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   private consumeToken(tokens: Map<string, LocalStorageToken>, token: string): LocalStorageToken {
+    this.cleanupExpiredTokenMap(tokens)
     const entry = tokens.get(token)
     tokens.delete(token)
     if (!entry || entry.expiresAt.getTime() <= Date.now()) throw new Error("Drive storage token expired.")
@@ -142,12 +145,25 @@ export class LocalDriveStorage implements DriveStoragePort {
   }
 
   private readToken(tokens: Map<string, LocalStorageToken>, token: string): LocalStorageToken {
+    this.cleanupExpiredTokenMap(tokens)
     const entry = tokens.get(token)
     if (!entry || entry.expiresAt.getTime() <= Date.now()) {
       tokens.delete(token)
       throw new Error("Drive storage token expired.")
     }
     return entry
+  }
+
+  private cleanupExpiredTokens(): void {
+    this.cleanupExpiredTokenMap(this.uploadTokens)
+    this.cleanupExpiredTokenMap(this.downloadTokens)
+  }
+
+  private cleanupExpiredTokenMap(tokens: Map<string, LocalStorageToken>): void {
+    const now = Date.now()
+    for (const [token, entry] of tokens) {
+      if (entry.expiresAt.getTime() <= now) tokens.delete(token)
+    }
   }
 
   private pathForKey(key: string): string {

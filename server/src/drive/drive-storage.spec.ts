@@ -94,6 +94,33 @@ describe("LocalDriveStorage", () => {
     await expect(streamToText(first.stream)).resolves.toBe("hello")
     await expect(streamToText(second.stream)).resolves.toBe("hello")
   })
+
+  it("cleans expired unused local tokens before creating new tokens", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-14T00:00:00.000Z"))
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const tokenState = storage as unknown as {
+      readonly uploadTokens: Map<string, unknown>
+      readonly downloadTokens: Map<string, unknown>
+    }
+
+    try {
+      await storage.createUploadInstruction({ key: "drive/unused-upload", contentType: "text/plain" })
+      await storage.createDownloadUrl({ key: "drive/unused-download", filename: "unused.txt" })
+      expect(tokenState.uploadTokens.size).toBe(1)
+      expect(tokenState.downloadTokens.size).toBe(1)
+
+      vi.setSystemTime(new Date("2026-06-14T00:16:00.000Z"))
+      await storage.createUploadInstruction({ key: "drive/new-upload", contentType: "text/plain" })
+
+      expect(tokenState.uploadTokens.size).toBe(1)
+      expect(tokenState.downloadTokens.size).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 async function streamToText(stream: NodeJS.ReadableStream): Promise<string> {
