@@ -1,5 +1,6 @@
 import "reflect-metadata"
 import { describe, expect, it, vi } from "vitest"
+import { Logger } from "@nestjs/common"
 import { PATH_METADATA } from "@nestjs/common/constants"
 import { hashToken } from "../auth/token"
 import { AdminAuthController } from "./admin-auth.controller"
@@ -146,6 +147,41 @@ describe("AdminAuthController", () => {
       targetId: "admin-1",
       ipAddress: "203.0.113.10",
     })
+  })
+
+  it("clears dashboard cookies and revokes sessions when logout audit fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const auth = {
+      verifyDashboardSession: vi.fn().mockResolvedValue({ id: "admin-1", email: "admin@example.com", role: "admin" }),
+      revokeDashboardSession: vi.fn().mockResolvedValue(undefined),
+    }
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const response = { clearCookie: vi.fn() }
+    const controller = new AdminAuthController(auth as never, auditLog as never)
+
+    try {
+      await expect(controller.logout(response as never, {
+        ip: "203.0.113.10",
+        cookies: { synapse_admin: "admin-token" },
+      } as unknown as AdminRequest)).resolves.toEqual({ ok: true })
+
+      expect(auth.revokeDashboardSession).toHaveBeenCalledWith("admin-token")
+      expect(response.clearCookie).toHaveBeenCalledWith("synapse_admin", {
+        httpOnly: true,
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "admin.logout",
+        targetType: "admin",
+        targetId: "admin-1",
+        error: "audit unavailable token=[REDACTED]",
+      }, "Failed to record dashboard logout audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it("records dashboard user logout in audit logs", async () => {

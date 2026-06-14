@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Optional, Post, Req, Res, UnauthorizedException, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Logger, Optional, Post, Req, Res, UnauthorizedException, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
 import { hashToken } from "../auth/token"
 import { AuditLogService } from "../common/audit-log.service"
+import { formatAuditError } from "../common/audit-error"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { AdminAuthGuard, type AdminRequest } from "./admin-auth.guard"
 import { AdminAuthService } from "./admin-auth.service"
@@ -37,6 +38,8 @@ function adminCookieClearOptions() {
 
 @Controller(["/api/console", "/api/dashboard"])
 export class AdminAuthController {
+  private readonly logger = new Logger(AdminAuthController.name)
+
   constructor(
     private readonly auth: AdminAuthService,
     @Optional() private readonly auditLog?: AuditLogService,
@@ -66,7 +69,7 @@ export class AdminAuthController {
     const token = request.cookies?.[adminCookieName]
     const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
     if (session) {
-      await this.auditLog?.record({
+      await this.recordLogoutAuditSafely({
         adminEmail: session.email,
         action: session.role === "admin" ? "admin.logout" : "user.dashboard_logout",
         targetType: session.role === "admin" ? "admin" : "user",
@@ -82,6 +85,19 @@ export class AdminAuthController {
       response.clearCookie(adminCookieName, adminCookieClearOptions())
     }
     return { ok: true }
+  }
+
+  private async recordLogoutAuditSafely(input: Parameters<AuditLogService["record"]>[0]): Promise<void> {
+    try {
+      await this.auditLog?.record(input)
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        error: formatAuditError(error),
+      }, "Failed to record dashboard logout audit log")
+    }
   }
 
   @Get("/session")
