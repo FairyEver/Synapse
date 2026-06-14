@@ -278,7 +278,7 @@ describe("CodexNodePanel", () => {
     expect(getByRole("button", { name: "审批策略" }).textContent).not.toContain("不请求人工审批")
     expect(getByRole("button", { name: "沙箱" }).textContent).toContain("workspace-write")
     expect(getByRole("button", { name: "沙箱" }).textContent).not.toContain("可写工作区")
-    expect(getByRole("button", { name: "模型" }).textContent).toContain("继承当前 Codex 配置")
+    expect((getByLabelText("模型") as HTMLInputElement).placeholder).toBe("继承当前 Codex 配置")
     expect(getByRole("button", { name: "Goals" }).textContent).toContain("启用")
     expect(getByRole("checkbox", { name: "跳过 Git 仓库检查" }).getAttribute("aria-checked")).toBe("true")
     expect(getByRole("checkbox", { name: "保存调试文件" }).getAttribute("aria-checked")).toBe("true")
@@ -308,7 +308,58 @@ describe("CodexNodePanel", () => {
     ))).toBe(false)
   })
 
-  it("commits fixed model selections and can return to inherited config", () => {
+  it("commits known model values and can return to inherited config", () => {
+    const onChange = vi.fn()
+
+    const view = render(
+      <CodexNodePanel
+        config={defaultCodexNodeConfig}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    const modelInput = getByLabelText("模型") as HTMLInputElement
+    change(modelInput, "gpt-5.4-mini")
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      model: "gpt-5.4-mini",
+    }))
+
+    view.rerender(
+      <CodexNodePanel
+        config={{ ...defaultCodexNodeConfig, model: "gpt-5.4-mini" }}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    change(getByLabelText("模型") as HTMLInputElement, "")
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      model: undefined,
+    }))
+  })
+
+  it("shows legacy custom model values in the model field", () => {
+    render(
+      <CodexNodePanel
+        config={{ ...defaultCodexNodeConfig, model: "custom-codex-model" }}
+        onChange={vi.fn()}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+      />,
+    )
+
+    expect(getByDisplayValue("custom-codex-model")).toBeTruthy()
+  })
+
+  it("commits a new custom model value from the model field", () => {
     const onChange = vi.fn()
 
     render(
@@ -321,32 +372,11 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    click(getByRole("option", { name: "GPT-5.4 mini" }))
+    change(getByLabelText("模型") as HTMLInputElement, "gpt-5.6-codex")
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
-      model: "gpt-5.4-mini",
+      model: "gpt-5.6-codex",
     }))
-
-    click(getByRole("option", { name: "继承当前 Codex 配置" }))
-
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
-      model: undefined,
-    }))
-  })
-
-  it("shows legacy custom model values as compact selected values", () => {
-    render(
-      <CodexNodePanel
-        config={{ ...defaultCodexNodeConfig, model: "custom-codex-model" }}
-        onChange={vi.fn()}
-        upstreamNodes={[]}
-        workflowParams={[]}
-        projects={[]}
-      />,
-    )
-
-    expect(getByRole("button", { name: "模型" }).textContent).toContain("custom-codex-model")
-    expect(getByRole("button", { name: "模型" }).textContent).not.toContain("当前自定义模型：")
   })
 
   it("shows Chinese summaries for approval and sandbox options", () => {

@@ -33,7 +33,6 @@ import type {
   CodexSandbox,
 } from "./schema"
 
-const MODEL_INHERIT_VALUE = "__inherit_codex_config__"
 const MODEL_INHERIT_LABEL = "继承当前 Codex 配置"
 
 type HelpTopic = {
@@ -138,7 +137,6 @@ type SelectOptionHelp = {
 }
 
 const CODEX_MODEL_OPTIONS: ReadonlyArray<{ value: string; label: string; description: string }> = [
-  { value: MODEL_INHERIT_VALUE, label: MODEL_INHERIT_LABEL, description: "不传 --model" },
   { value: "gpt-5.5", label: "GPT-5.5", description: "最高能力模型" },
   { value: "gpt-5.4", label: "GPT-5.4", description: "通用高质量模型" },
   { value: "gpt-5.4-mini", label: "GPT-5.4 mini", description: "轻量模型" },
@@ -348,7 +346,7 @@ export function CodexNodePanel({
             {CODEX_SANDBOX_OPTIONS.map(renderHelpSelectItem)}
           </LabeledSelect>
 
-          <ModelSelect
+          <ModelInput
             id="codex-model"
             label="模型"
             help={CODEX_FIELD_HELP.model}
@@ -698,7 +696,7 @@ function ConfigOverrideEditor({
   )
 }
 
-function ModelSelect({
+function ModelInput({
   id,
   label,
   help,
@@ -711,34 +709,31 @@ function ModelSelect({
   value?: string
   onValueChange: (value: string | undefined) => void
 }) {
-  const knownOption = CODEX_MODEL_OPTIONS.some((option) => option.value === value)
-  const selectValue = value && knownOption ? value : value ? value : MODEL_INHERIT_VALUE
-  const displayValue = value
-    ? CODEX_MODEL_OPTIONS.find((option) => option.value === value)?.label ?? value
-    : MODEL_INHERIT_LABEL
+  const listId = `${id}-options`
 
   return (
-    <LabeledSelect
-      id={id}
-      label={label}
-      help={help}
-      value={selectValue}
-      displayValue={displayValue}
-      onValueChange={(nextValue) => {
-        onValueChange(nextValue === MODEL_INHERIT_VALUE ? undefined : nextValue)
-      }}
-    >
-      {CODEX_MODEL_OPTIONS.map((option) => (
-        <SelectItem key={option.value} value={option.value} textValue={option.label} className="text-xs">
-          {option.label}
-        </SelectItem>
-      ))}
-      {value && !knownOption ? (
-        <SelectItem value={value} textValue={value} className="text-xs">
-          当前自定义模型：{value}
-        </SelectItem>
-      ) : null}
-    </LabeledSelect>
+    <div className="grid gap-1">
+      <LabelRow id={id} label={label} help={help} />
+      <Input
+        id={id}
+        aria-label={label}
+        className="h-7 text-xs"
+        value={value ?? ""}
+        list={listId}
+        placeholder={MODEL_INHERIT_LABEL}
+        onChange={(event) => {
+          const nextValue = event.target.value.trim()
+          onValueChange(nextValue === "" ? undefined : nextValue)
+        }}
+      />
+      <datalist id={listId}>
+        {CODEX_MODEL_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </datalist>
+    </div>
   )
 }
 
