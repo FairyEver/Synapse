@@ -445,6 +445,47 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("returns success when registration success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const service = createService(prisma, auditLog)
+
+    try {
+      await expect(service.register({
+        email: "U@example.com",
+        password: "StrongPassword123!",
+      }, "203.0.113.25")).resolves.toEqual({ ok: true })
+
+      expect(prisma.__tx.user.create).toHaveBeenCalledWith({
+        data: {
+          email: "u@example.com",
+          passwordHash: expect.any(String),
+        },
+      })
+      expect(auditLog.record).toHaveBeenCalledTimes(1)
+      expect(auditLog.record).toHaveBeenCalledWith({
+        adminEmail: "u@example.com",
+        action: "user.register.success",
+        targetType: "user",
+        targetId: "user-1",
+        ipAddress: "203.0.113.25",
+      })
+      expect(auditLog.record).not.toHaveBeenCalledWith(expect.objectContaining({
+        action: "user.register.failure",
+      }))
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.register.success",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user registration success audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("rejects admin emails during registration and records duplicate email audits", async () => {
     const prisma = createPrismaMock()
     prisma.__tx.adminUser.findUnique.mockResolvedValue({ id: "admin-1" })

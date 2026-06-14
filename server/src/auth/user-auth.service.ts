@@ -209,10 +209,8 @@ export class UserAuthService {
         })
         throw new BadRequestException("邮箱已注册。")
       }
-      await this.auditLog?.record({
+      await this.recordUserRegistrationSuccessAuditSafely({
         adminEmail: result.user.email,
-        action: "user.register.success",
-        targetType: "user",
         targetId: result.user.id,
         ipAddress,
       })
@@ -750,6 +748,29 @@ export class UserAuthService {
         targetId: input.targetId,
         ...safeAuditErrorDetail(error),
       }, "Failed to record user profile update audit log")
+    }
+  }
+
+  private async recordUserRegistrationSuccessAuditSafely(input: {
+    readonly adminEmail: string
+    readonly targetId: string
+    readonly ipAddress: string
+  }): Promise<void> {
+    try {
+      await this.auditLog?.record({
+        adminEmail: input.adminEmail,
+        action: "user.register.success",
+        targetType: "user",
+        targetId: input.targetId,
+        ipAddress: input.ipAddress,
+      })
+    } catch (error) {
+      this.logger.warn({
+        action: "user.register.success",
+        targetType: "user",
+        targetId: input.targetId,
+        ...safeAuditErrorDetail(error),
+      }, "Failed to record user registration success audit log")
     }
   }
 
