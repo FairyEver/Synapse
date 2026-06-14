@@ -3,9 +3,12 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { Readable } from "node:stream"
-import { parseCcConversationFile } from "../cc-conversation-parser"
+import { parseCcConversationFile, parseCcConversationFileChunk } from "../cc-conversation-parser"
 
 const tempDirs: string[] = []
+const SENSITIVE_NON_OBJECT_LINE =
+  "ANTHROPIC_AUTH_TOKEN=sk-live-secret Authorization: Bearer sk-live-bearer " +
+  '{"token":"data-server-token"} /Users/liyang/project/file.ts'
 
 function writeJsonl(lines: readonly string[]): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-conversation-parser-"))
@@ -113,6 +116,26 @@ describe("parseCcConversationFile", () => {
     })])
   })
 
+  it("redacts non-object JSON parse error raw lines", async () => {
+    const file = writeJsonl([JSON.stringify(SENSITIVE_NON_OBJECT_LINE)])
+
+    const result = await parseCcConversationFile(file)
+
+    expect(result.events).toEqual([])
+    expect(result.parseErrors).toEqual([
+      expect.objectContaining({
+        id: "parse-error:1",
+        lineNumber: 1,
+        message: "JSONL line is not an object.",
+        rawLine: expect.stringContaining("/Users/liyang/project/file.ts"),
+      }),
+    ])
+    expect(result.parseErrors[0]?.rawLine).toContain("[redacted]")
+    expect(result.parseErrors[0]?.rawLine).not.toContain("sk-live-secret")
+    expect(result.parseErrors[0]?.rawLine).not.toContain("sk-live-bearer")
+    expect(result.parseErrors[0]?.rawLine).not.toContain("data-server-token")
+  })
+
   it("records stream read failures as parse errors instead of rejecting", async () => {
     vi.spyOn(fs, "createReadStream").mockReturnValue(createFailingReadStream() as ReturnType<typeof fs.createReadStream>)
 
@@ -127,6 +150,28 @@ describe("parseCcConversationFile", () => {
         message: "stream read failed token=[redacted]",
       }),
     ])
+  })
+})
+
+describe("parseCcConversationFileChunk", () => {
+  it("redacts non-object JSON parse error raw lines", async () => {
+    const file = writeJsonl([JSON.stringify(SENSITIVE_NON_OBJECT_LINE)])
+
+    const result = await parseCcConversationFileChunk(file)
+
+    expect(result.events).toEqual([])
+    expect(result.parseErrors).toEqual([
+      expect.objectContaining({
+        id: "parse-error:1",
+        lineNumber: 1,
+        message: "JSONL line is not an object.",
+        rawLine: expect.stringContaining("/Users/liyang/project/file.ts"),
+      }),
+    ])
+    expect(result.parseErrors[0]?.rawLine).toContain("[redacted]")
+    expect(result.parseErrors[0]?.rawLine).not.toContain("sk-live-secret")
+    expect(result.parseErrors[0]?.rawLine).not.toContain("sk-live-bearer")
+    expect(result.parseErrors[0]?.rawLine).not.toContain("data-server-token")
   })
 })
 

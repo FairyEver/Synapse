@@ -147,14 +147,15 @@ export async function parseCcConversationFile(filePath: string): Promise<ParsedC
       if (!line.trim()) continue
 
       try {
-        const raw = asRecord(JSON.parse(line) as unknown)
+        const parsed = JSON.parse(line) as unknown
+        const raw = asRecord(parsed)
         if (!raw) {
           parseErrors.push({
             id: `parse-error:${lineNumber}`,
             lineNumber,
             byteOffset: currentOffset,
             message: "JSONL line is not an object.",
-            rawLine: line,
+            rawLine: redactNonObjectRawLine(line, parsed),
           })
           continue
         }
@@ -217,14 +218,15 @@ export async function parseCcConversationFileChunk(
 
       emittedCount += 1
       try {
-        const raw = asRecord(JSON.parse(line) as unknown)
+        const parsed = JSON.parse(line) as unknown
+        const raw = asRecord(parsed)
         if (!raw) {
           parseErrors.push({
             id: `parse-error:${lineNumber}`,
             lineNumber,
             byteOffset: currentOffset,
             message: "JSONL line is not an object.",
-            rawLine: line,
+            rawLine: redactNonObjectRawLine(line, parsed),
           })
           continue
         }
@@ -256,4 +258,8 @@ export async function parseCcConversationFileChunk(
     hasMore,
     ...(nextCursor ? { nextCursor } : {}),
   }
+}
+
+function redactNonObjectRawLine(line: string, parsed: unknown): string {
+  return typeof parsed === "string" ? redactSensitiveText(parsed) : redactSensitiveText(line)
 }
