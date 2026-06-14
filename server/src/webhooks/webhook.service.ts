@@ -376,6 +376,7 @@ export class WebhookService implements OnModuleInit {
       where: {
         deliveryId: input.deliveryId,
         clientInstanceId: input.clientInstanceId,
+        status: WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sent,
         delivery: { userId: input.userId },
       },
       data: {
@@ -384,33 +385,7 @@ export class WebhookService implements OnModuleInit {
       },
     })
     if (result.count === 0) {
-      const delivery = await this.prisma.webhookDelivery.findFirst({
-        where: { id: input.deliveryId, userId: input.userId },
-        select: { id: true },
-      })
-      if (!delivery) return
-      await this.prisma.webhookDeliveryReceipt.upsert({
-        where: {
-          deliveryId_clientInstanceId: {
-            deliveryId: input.deliveryId,
-            clientInstanceId: input.clientInstanceId,
-          },
-        },
-        update: {
-          acknowledgedAt: input.acknowledgedAt,
-          status: WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged,
-        },
-        create: {
-          deliveryId: input.deliveryId,
-          clientInstanceId: input.clientInstanceId,
-          deviceName: input.deviceName,
-          platform: input.platform,
-          appVersion: input.appVersion,
-          sentAt: input.acknowledgedAt,
-          acknowledgedAt: input.acknowledgedAt,
-          status: WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.acknowledged,
-        },
-      })
+      return
     }
     await this.prisma.webhookDelivery.updateMany({
       where: { id: input.deliveryId, userId: input.userId },

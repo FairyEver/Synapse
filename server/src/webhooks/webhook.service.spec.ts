@@ -984,7 +984,7 @@ describe("WebhookService", () => {
     ])
   })
 
-  it("records acknowledgements that arrive before receipt insertion completes", async () => {
+  it("ignores acknowledgements that arrive without a sent receipt", async () => {
     const harness = createWebhookReceiveHarness({
       broadcastResult: { onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0 },
     })
@@ -1000,15 +1000,50 @@ describe("WebhookService", () => {
       acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
     })
 
+    expect(harness.receipts).toEqual([])
+    expect(harness.deliveries).toEqual([
+      expect.objectContaining({ id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.sent }),
+    ])
+  })
+
+  it("rejects acknowledgements from another client that did not receive the delivery", async () => {
+    const harness = createWebhookReceiveHarness({
+      broadcastResult: {
+        onlineClientCount: 1,
+        sentClientCount: 1,
+        failedClientCount: 0,
+        clientResults: [{
+          clientInstanceId: "client-a",
+          deviceName: "MacBook",
+          platform: "darwin-arm64",
+          appVersion: "0.2.253",
+          sentAt: "2026-06-06T12:00:00.000Z",
+          status: "sent",
+        }],
+      },
+    })
+    await harness.receive()
+
+    await harness.service.recordDeliveryAck({
+      userId: "user-1",
+      deliveryId: "delivery-1",
+      clientInstanceId: "client-b",
+      deviceName: "Workstation",
+      platform: "win32-x64",
+      appVersion: "0.2.253",
+      acknowledgedAt: new Date("2026-06-06T12:00:02.000Z"),
+    })
+
     expect(harness.receipts).toEqual([
       expect.objectContaining({
         deliveryId: "delivery-1",
         clientInstanceId: "client-a",
-        status: "acknowledged",
+        status: "sent",
+        acknowledgedAt: null,
       }),
     ])
     expect(harness.deliveries).toEqual([
-      expect.objectContaining({ id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.delivered }),
+      expect.objectContaining({ id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.sent }),
     ])
   })
 
@@ -1302,6 +1337,7 @@ function createWebhookReceiveHarness(input: {
       if (
         receipt?.deliveryId === where.deliveryId &&
         receipt.clientInstanceId === where.clientInstanceId &&
+        (where.status === undefined || receipt.status === where.status) &&
         delivery?.userId === where.delivery?.userId
       ) {
         receipts[index] = { ...receipt, ...data }
