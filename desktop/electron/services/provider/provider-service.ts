@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { promises as fs } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -26,6 +27,7 @@ import type {
   ProviderApiKeyField,
   ProviderCategory,
   ProviderPackageExportResult,
+  ProviderPackageImportInput,
   ProviderPackageImportPreview,
   ProviderPackageImportResult,
   UpdateProviderInput,
@@ -262,20 +264,21 @@ export class ProviderService {
     context: BuildProviderEnvContext = {},
   ): Promise<ProviderPackageImportPreview> {
     await this.assertCanReadProviderPackage(sourcePath, context)
-    const pkg = await this.readProviderPackage(sourcePath, context)
+    const { pkg, contentSha256 } = await this.readProviderPackage(sourcePath, context)
     const existingIds = new Set((await this.listProviders()).map((provider) => provider.id))
-    return providerPackagePreview(pkg, sourcePath, existingIds)
+    return providerPackagePreview(pkg, sourcePath, existingIds, contentSha256)
   }
 
   async importProviderPackage(
     sourcePath: string,
+    input: ProviderPackageImportInput = {},
     context: BuildProviderEnvContext = {},
   ): Promise<ProviderPackageImportResult> {
     await this.assertCanReadProviderPackage(sourcePath, context)
-    const pkg = await this.readProviderPackage(sourcePath, context)
+    const { pkg, contentSha256 } = await this.readProviderPackage(sourcePath, context, input.contentSha256)
     const providers = await this.listProviders()
     const existingIds = new Set(providers.map((provider) => provider.id))
-    const preview = providerPackagePreview(pkg, sourcePath, existingIds)
+    const preview = providerPackagePreview(pkg, sourcePath, existingIds, contentSha256)
     const sortIndex = this.nextUserProviderSortIndex(providers)
     const provider = await this.createProvider(createProviderInputFromPackage(pkg, preview.targetProviderId, sortIndex))
     return { provider }
@@ -812,14 +815,22 @@ export class ProviderService {
     })
   }
 
-  private async readProviderPackage(sourcePath: string, context: BuildProviderEnvContext) {
+  private async readProviderPackage(
+    sourcePath: string,
+    context: BuildProviderEnvContext,
+    expectedContentSha256?: string,
+  ) {
     try {
       await this.assertProviderPackageSize(sourcePath)
       const text = await this.readTextFile(sourcePath)
       if (Buffer.byteLength(text, "utf8") > PROVIDER_PACKAGE_MAX_BYTES) {
         throw new Error("Provider 包文件过大。")
       }
-      return parseProviderPackage(JSON.parse(text))
+      const contentSha256 = createHash("sha256").update(text, "utf8").digest("hex")
+      if (expectedContentSha256 && contentSha256 !== expectedContentSha256) {
+        throw new Error("Provider 包已变更，请重新预览后再导入。")
+      }
+      return { pkg: parseProviderPackage(JSON.parse(text)), contentSha256 }
     } catch (error) {
       this.recordProviderPackageFileAudit("fs.read.outside-userdata", sourcePath, undefined, "failed", context, error)
       if (error instanceof SyntaxError) {

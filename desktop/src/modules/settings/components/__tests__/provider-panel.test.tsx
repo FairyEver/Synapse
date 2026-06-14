@@ -926,6 +926,7 @@ describe("ProviderPanel dialog editor", () => {
     })
     const previewProviderPackageImport = vi.fn().mockResolvedValue({
       sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      contentSha256: "a".repeat(64),
       packageVersion: 1,
       sourceProviderId: "deepseek",
       targetProviderId: "deepseek-2",
@@ -978,6 +979,7 @@ describe("ProviderPanel dialog editor", () => {
 
     expect(importProviderPackage).toHaveBeenCalledWith({
       sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      contentSha256: "a".repeat(64),
     })
     expect(toast).toHaveBeenCalledWith("已导入供应商配置")
     expect(listProviders).toHaveBeenCalledTimes(2)

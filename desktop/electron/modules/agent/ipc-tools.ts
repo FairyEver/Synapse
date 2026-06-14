@@ -149,6 +149,10 @@ const providerPackagePathRequestSchema = z.object({
   sourcePath: z.string().min(1),
 })
 
+const providerPackageImportRequestSchema = providerPackagePathRequestSchema.extend({
+  contentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+})
+
 const exportProviderPackageRequestSchema = z.object({
   providerId: z.string().min(1),
   targetPath: z.string().min(1),
@@ -275,6 +279,7 @@ const ccSwitchImportResultSchema = z.object({
 
 const providerPackageImportPreviewSchema = z.object({
   sourcePath: z.string(),
+  contentSha256: z.string().regex(/^[a-f0-9]{64}$/),
   packageVersion: z.literal(1),
   sourceProviderId: z.string(),
   targetProviderId: z.string(),
@@ -583,13 +588,15 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   importProviderPackage: {
     kind: "invoke",
     channel: "synapse:agent:import-provider-package",
-    request: providerPackagePathRequestSchema,
+    request: providerPackageImportRequestSchema,
     response: providerPackageImportResultSchema,
-    handler: async (ctx, request: ProviderPackagePathRequest) => {
+    handler: async (ctx, request: ProviderPackagePathRequest & { readonly contentSha256: string }) => {
       const providerService = resolveGlobalProviderService(ctx.resolve)
-      const result = await providerService.importProviderPackage(request.sourcePath, {
-        actor: { kind: "user", id: "renderer" },
-      })
+      const result = await providerService.importProviderPackage(
+        request.sourcePath,
+        { contentSha256: request.contentSha256 },
+        { actor: { kind: "user", id: "renderer" } },
+      )
       return { provider: publicProvider(result.provider) }
     },
   },

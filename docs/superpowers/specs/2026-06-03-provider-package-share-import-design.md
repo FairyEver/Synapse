@@ -213,9 +213,12 @@ Preview does not write data.
 6. Require `secrets.apiKey`, because this version is direct-import only.
 7. Reject packages that identify the provider as built-in/local.
 8. Resolve a target ID. If the source ID exists, derive `id-2`, then `id-3`, and so on.
-9. Return preview data including the original ID and target ID.
+9. Return preview data including the original ID, target ID, and SHA-256 digest for
+   the exact file content that was previewed.
 
-Import repeats validation from the selected file, then calls `createProvider` with:
+Import repeats validation from the selected file, verifies the current file digest
+matches the preview digest submitted by the renderer, then calls `createProvider`
+with:
 
 - the resolved target ID;
 - `active: false`;
@@ -258,6 +261,7 @@ secret-bearing package.
 ```ts
 type SynapseProviderPackageImportPreview = {
   sourcePath: string
+  contentSha256: string
   packageVersion: 1
   sourceProviderId: string
   targetProviderId: string

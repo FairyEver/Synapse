@@ -130,9 +130,11 @@ function providerPackagePreview(
   pkg: SynapseProviderPackageV1,
   sourcePath: string,
   existingIds: ReadonlySet<string>,
+  contentSha256: string,
 ): ProviderPackageImportPreview {
   return {
     sourcePath,
+    contentSha256,
     packageVersion: 1,
     sourceProviderId: pkg.provider.id,
     targetProviderId: resolveProviderPackageTargetId(pkg.provider.id, existingIds),

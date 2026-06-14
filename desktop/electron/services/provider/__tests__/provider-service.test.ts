@@ -1111,6 +1111,7 @@ describe("ProviderService", () => {
 
     await expect(service.previewProviderPackageImport("/Users/test/deepseek.synapse-provider.json")).resolves.toEqual({
       sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      contentSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       packageVersion: 1,
       sourceProviderId: "deepseek",
       targetProviderId: "deepseek-2",
@@ -1167,6 +1168,50 @@ describe("ProviderService", () => {
     await expect(service.previewProviderPackageImport("/Users/test/huge.synapse-provider.json"))
       .rejects
       .toThrow("Provider 包文件过大。")
+  })
+
+  it("rejects provider package import when the file changed after preview", async () => {
+    const originalPackageText = JSON.stringify({
+      kind: "synapse.provider.package",
+      version: 1,
+      exportedAt: "2026-06-03T00:00:00.000Z",
+      provider: {
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+      },
+      secrets: { apiKey: "sk-deepseek", env: {} },
+    })
+    const replacedPackageText = JSON.stringify({
+      kind: "synapse.provider.package",
+      version: 1,
+      exportedAt: "2026-06-03T00:00:00.000Z",
+      provider: {
+        id: "other",
+        name: "Other Provider",
+        category: "custom",
+        baseUrl: "https://example.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "other-model",
+      },
+      secrets: { apiKey: "sk-other", env: {} },
+    })
+    let packageText = originalPackageText
+    const { service, providers } = makeProviderService({
+      readTextFile: async () => packageText,
+    })
+
+    const preview = await service.previewProviderPackageImport("/Users/test/deepseek.synapse-provider.json")
+    packageText = replacedPackageText
+
+    await expect(service.importProviderPackage(
+      "/Users/test/deepseek.synapse-provider.json",
+      { contentSha256: preview.contentSha256 },
+    )).rejects.toThrow("Provider 包已变更，请重新预览后再导入。")
+    await expect(providers.get("other")).resolves.toBeNull()
   })
 
   it("imports provider package as inactive provider with a derived id", async () => {

@@ -981,6 +981,7 @@ describe("agentIpcModule", () => {
   it("previews, imports, and exports provider packages through IPC without returning secrets", async () => {
     const previewProviderPackageImport = vi.fn().mockResolvedValue({
       sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      contentSha256: "a".repeat(64),
       packageVersion: 1,
       sourceProviderId: "deepseek",
       targetProviderId: "deepseek-2",
@@ -1019,6 +1020,7 @@ describe("agentIpcModule", () => {
     })
     const imported = await harness.invoke("synapse:agent:import-provider-package", {
       sourcePath: "/Users/test/deepseek.synapse-provider.json",
+      contentSha256: "a".repeat(64),
     })
     const exported = await harness.invoke("synapse:agent:export-provider-package", {
       providerId: "deepseek",
@@ -1028,9 +1030,11 @@ describe("agentIpcModule", () => {
     expect(previewProviderPackageImport).toHaveBeenCalledWith("/Users/test/deepseek.synapse-provider.json", {
       actor: { kind: "user", id: "renderer" },
     })
-    expect(importProviderPackage).toHaveBeenCalledWith("/Users/test/deepseek.synapse-provider.json", {
-      actor: { kind: "user", id: "renderer" },
-    })
+    expect(importProviderPackage).toHaveBeenCalledWith(
+      "/Users/test/deepseek.synapse-provider.json",
+      { contentSha256: "a".repeat(64) },
+      { actor: { kind: "user", id: "renderer" } },
+    )
     expect(exportProviderPackage).toHaveBeenCalledWith("deepseek", "/Users/test/deepseek.synapse-provider.json", {
       actor: { kind: "user", id: "renderer" },
     })

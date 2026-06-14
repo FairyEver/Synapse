@@ -290,6 +290,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     try {
       await requireSynapseBridge().agent.importProviderPackage({
         sourcePath: packagePreview.sourcePath,
+        contentSha256: packagePreview.contentSha256,
       })
       setPackagePreview(null)
       await refresh({ showLoading: false })

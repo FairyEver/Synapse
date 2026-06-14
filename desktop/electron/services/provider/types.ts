@@ -167,6 +167,7 @@ export interface ImportCcSwitchClaudeProvidersResult {
 
 export interface ProviderPackageImportPreview {
   readonly sourcePath: string
+  readonly contentSha256: string
   readonly packageVersion: 1
   readonly sourceProviderId: string
   readonly targetProviderId: string
@@ -178,6 +179,10 @@ export interface ProviderPackageImportPreview {
   readonly haikuModel?: string
   readonly sonnetModel?: string
   readonly opusModel?: string
+}
+
+export interface ProviderPackageImportInput {
+  readonly contentSha256?: string
 }
 
 export interface ProviderPackageImportResult {

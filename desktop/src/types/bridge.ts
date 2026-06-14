@@ -466,6 +466,7 @@ export type SynapseImportCcSwitchClaudeProvidersResult = {
 
 export type SynapseProviderPackageImportPreview = {
   readonly sourcePath: string
+  readonly contentSha256: string
   readonly packageVersion: 1
   readonly sourceProviderId: string
   readonly targetProviderId: string
@@ -1148,7 +1149,7 @@ export type SynapseBridge = {
       args: { sourcePath: string },
     ) => Promise<SynapseProviderPackageImportPreview>
     importProviderPackage: (
-      args: { sourcePath: string },
+      args: { sourcePath: string; contentSha256: string },
     ) => Promise<SynapseProviderPackageImportResult>
     exportProviderPackage: (
       args: { providerId: string; targetPath: string },
