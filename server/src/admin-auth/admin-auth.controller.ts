@@ -20,6 +20,7 @@ function adminCookieOptions() {
   return {
     httpOnly: true,
     maxAge: dashboardSessionMaxAgeMs,
+    path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
   }
@@ -28,6 +29,7 @@ function adminCookieOptions() {
 function adminCookieClearOptions() {
   return {
     httpOnly: true,
+    path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
   }

@@ -50,6 +50,7 @@ describe("AdminAuthController", () => {
     expect(response.cookie).toHaveBeenCalledWith("synapse_admin", "dashboard-token", {
       httpOnly: true,
       maxAge: 30 * 24 * 60 * 60 * 1000,
+      path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     })
@@ -103,6 +104,7 @@ describe("AdminAuthController", () => {
 
     expect(response.clearCookie).toHaveBeenCalledWith("synapse_admin", {
       httpOnly: true,
+      path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     })
@@ -133,6 +135,7 @@ describe("AdminAuthController", () => {
 
     expect(response.clearCookie).toHaveBeenCalledWith("synapse_admin", {
       httpOnly: true,
+      path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     })
