@@ -4,6 +4,7 @@ import {
   IpcChannelNotFoundError,
   IpcModuleAlreadyRegisteredError,
   IpcValidationError,
+  IpcRegistryImpl,
   createInMemoryHarness,
   type IpcModule,
 } from "../index"
@@ -228,5 +229,71 @@ describe("IpcRegistryImpl (T3.2)", () => {
     // First install survives, second module never registered, channel "okay"
     // freed by the rollback.
     expect(harness.registry.list().map((m) => m.moduleId)).toEqual(["demo"])
+  })
+
+  it("rolls back partial installs when the transport install throws", () => {
+    const handlers = new Map<string, (request: unknown) => Promise<unknown>>()
+    const disposedChannels: string[] = []
+    const registry = new IpcRegistryImpl({
+      install(channel, invoker) {
+        if (channel === "synapse:partial:fail") {
+          throw new Error("transport install failed")
+        }
+        handlers.set(channel, invoker)
+        return () => {
+          disposedChannels.push(channel)
+          handlers.delete(channel)
+        }
+      },
+    })
+
+    expect(() =>
+      registry.register(
+        {
+          id: "partial",
+          methods: {
+            first: {
+              kind: "invoke",
+              channel: "synapse:partial:first",
+              request: z.object({}),
+              response: z.string(),
+              handler: () => "first",
+            },
+            fail: {
+              kind: "invoke",
+              channel: "synapse:partial:fail",
+              request: z.object({}),
+              response: z.string(),
+              handler: () => "fail",
+            },
+          },
+          events: {},
+        },
+        { ...ctx, moduleId: "partial" },
+      ),
+    ).toThrow("transport install failed")
+
+    expect(disposedChannels).toEqual(["synapse:partial:first"])
+    expect(handlers.has("synapse:partial:first")).toBe(false)
+    expect(registry.list()).toEqual([])
+
+    expect(() =>
+      registry.register(
+        demoModule({
+          id: "retry",
+          methods: {
+            first: {
+              kind: "invoke",
+              channel: "synapse:partial:first",
+              request: z.object({}),
+              response: z.string(),
+              handler: () => "retry",
+            },
+          },
+          events: {},
+        }),
+        { ...ctx, moduleId: "retry" },
+      ),
+    ).not.toThrow()
   })
 })

@@ -63,34 +63,38 @@ export class IpcRegistryImpl implements IpcRegistry {
       disposers: [],
     }
 
-    for (const [methodName, descriptor] of Object.entries(module.methods)) {
-      const channel = descriptor.channel
-      if (this.channelOwner.has(channel)) {
-        // Roll back partial install before rethrowing. The error's details
-        // record how many handlers were rolled back so consumers can
-        // distinguish "first method conflicted" from "later method
-        // conflicted, several already installed".
-        const rolledBack = entry.disposers.length
-        for (const dispose of entry.disposers) dispose()
-        throw new IpcRuntimeError(
-          "ipc/channel-collision",
-          `Channel "${channel}" is already owned by module "${this.channelOwner.get(channel)}" — cannot register for "${module.id}.${methodName}"`,
-          {
-            details: {
-              channel,
-              ownerModuleId: this.channelOwner.get(channel),
-              rolledBackCount: rolledBack,
+    try {
+      for (const [methodName, descriptor] of Object.entries(module.methods)) {
+        const channel = descriptor.channel
+        if (this.channelOwner.has(channel)) {
+          // Roll back partial install before rethrowing. The error's details
+          // record how many handlers were rolled back so consumers can
+          // distinguish "first method conflicted" from "later method
+          // conflicted, several already installed".
+          const rolledBack = entry.disposers.length
+          throw new IpcRuntimeError(
+            "ipc/channel-collision",
+            `Channel "${channel}" is already owned by module "${this.channelOwner.get(channel)}" — cannot register for "${module.id}.${methodName}"`,
+            {
+              details: {
+                channel,
+                ownerModuleId: this.channelOwner.get(channel),
+                rolledBackCount: rolledBack,
+              },
             },
-          },
-        )
+          )
+        }
+        const dispose = this.installMethod(channel, descriptor, ctx)
+        this.channelOwner.set(channel, module.id)
+        entry.channels.push(channel)
+        entry.disposers.push(() => {
+          dispose()
+          this.channelOwner.delete(channel)
+        })
       }
-      const dispose = this.installMethod(channel, descriptor, ctx)
-      this.channelOwner.set(channel, module.id)
-      entry.channels.push(channel)
-      entry.disposers.push(() => {
-        dispose()
-        this.channelOwner.delete(channel)
-      })
+    } catch (error) {
+      for (const dispose of entry.disposers) dispose()
+      throw error
     }
 
     // Events are not "installed" on a transport — they're emitted via EventBus
