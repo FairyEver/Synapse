@@ -788,6 +788,79 @@ describe("workflowIpcModule", () => {
     }
   })
 
+  it("rejects oversized workflow package files during inspect before preview", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-inspect-huge-test-"))
+    const packagePath = path.join(tempRoot, "huge.synapse-workflow.json")
+    await writeFile(packagePath, " ".repeat(1024 * 1024 + 1), "utf8")
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [packagePath] })
+    const packageService = { buildImportPreview: vi.fn() }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      await expect(harness.invoke("synapse:workflow:inspect-import-package", undefined))
+        .rejects
+        .toThrow("工作流包文件过大。")
+
+      expect(packageService.buildImportPreview).not.toHaveBeenCalled()
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: packagePath,
+        metadata: expect.objectContaining({
+          source: "workflow.inspectImportPackage",
+          errorName: "Error",
+        }),
+      }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects oversized workflow package files during import before package import", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-import-huge-test-"))
+    const packagePath = path.join(tempRoot, "huge.synapse-workflow.json")
+    await writeFile(packagePath, " ".repeat(1024 * 1024 + 1), "utf8")
+    const packageService = { importPackage: vi.fn() }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      await expect(harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] }))
+        .rejects
+        .toThrow("工作流包文件过大。")
+
+      expect(packageService.importPackage).not.toHaveBeenCalled()
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: packagePath,
+        metadata: expect.objectContaining({
+          source: "workflow.importPackage",
+          errorName: "Error",
+        }),
+      }))
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
   it("records audit after workflow package export writes the selected file", async () => {
     const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-export-test-"))
     const targetPath = path.join(tempRoot, "workflow.synapse-workflow.json")

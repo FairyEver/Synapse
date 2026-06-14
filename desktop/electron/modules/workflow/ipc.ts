@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { readFile, writeFile } from "node:fs/promises"
+import { readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
@@ -27,6 +27,7 @@ const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
 const ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE = "旧运行仍在后台执行，请等待取消完成后再重新运行"
 const DELETE_ACTIVE_RUN_ABORT_TIMEOUT_MESSAGE = "旧运行仍在后台执行，请等待取消完成后再删除工作流"
+const WORKFLOW_PACKAGE_MAX_BYTES = 1024 * 1024
 const runCompletions = new Map<string, Promise<unknown>>()
 const deletedWorkflows = new Set<string>()
 
@@ -239,6 +240,18 @@ function parseWorkflowPackageOrFail(options: {
     })
     throw new Error("工作流包格式无效。", { cause: error })
   }
+}
+
+async function readWorkflowPackageFile(packagePath: string): Promise<unknown> {
+  const fileStat = await stat(packagePath)
+  if (fileStat.size > WORKFLOW_PACKAGE_MAX_BYTES) {
+    throw new Error("工作流包文件过大。")
+  }
+  const text = await readFile(packagePath, "utf-8")
+  if (Buffer.byteLength(text, "utf8") > WORKFLOW_PACKAGE_MAX_BYTES) {
+    throw new Error("工作流包文件过大。")
+  }
+  return JSON.parse(text)
 }
 
 function saveRunSnapshot(
@@ -723,7 +736,7 @@ export const workflowIpcModule: IpcModule = {
         const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
         let raw: unknown
         try {
-          raw = JSON.parse(await readFile(packagePath, "utf-8"))
+          raw = await readWorkflowPackageFile(packagePath)
         } catch (error) {
           recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
           logger.warn("workflow:inspectImportPackage read failed", {
@@ -768,7 +781,7 @@ export const workflowIpcModule: IpcModule = {
         const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
         let raw: unknown
         try {
-          raw = JSON.parse(await readFile(packagePath, "utf-8"))
+          raw = await readWorkflowPackageFile(packagePath)
         } catch (error) {
           recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
           logger.warn("workflow:importPackage read failed", {
