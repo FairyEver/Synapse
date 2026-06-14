@@ -1,17 +1,36 @@
-import { describe, expect, it, vi } from "vitest"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createEditorWriteErrorLogMeta,
   formatEditorWriteFailure,
+  replaceFileAtomically,
 } from "../editor-file-write-utils"
 
-vi.mock("../log-store", () => ({
-  createMainLogger: () => ({
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
     info: vi.fn(),
     warn: vi.fn(),
-  }),
+  },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => logStoreMock.logger,
 }))
 
 describe("editor file write utils", () => {
+  const tempDirs: string[] = []
+
+  beforeEach(() => {
+    logStoreMock.logger.info.mockClear()
+    logStoreMock.logger.warn.mockClear()
+  })
+
+  afterEach(async () => {
+    await Promise.all(tempDirs.splice(0).map((tempDir) => rm(tempDir, { recursive: true, force: true })))
+  })
+
   it("projects write errors without raw filesystem messages", () => {
     const error = Object.assign(
       new Error("rename /Users/alice/private/token-dir accessToken=secret Authorization: Bearer raw-token"),
@@ -39,5 +58,21 @@ describe("editor file write utils", () => {
     expect(formatted.message).toBe("写入失败，请稍后重试。")
     expect(formatted.message).not.toContain("/Users/alice")
     expect(formatted.message).not.toContain("secret")
+  })
+
+  it("logs atomic write success without the full target path", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-write-"))
+    tempDirs.push(tempDir)
+    const targetPath = path.join(tempDir, "rules", "private-rule.md")
+
+    await replaceFileAtomically(targetPath, "# Rule")
+
+    await expect(readFile(targetPath, "utf8")).resolves.toBe("# Rule\n")
+    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Wrote file atomically.", {
+      targetName: "private-rule.md",
+    })
+    const serializedLogs = JSON.stringify(logStoreMock.logger.info.mock.calls)
+    expect(serializedLogs).not.toContain(tempDir)
+    expect(serializedLogs).not.toContain(targetPath)
   })
 })

@@ -89,7 +89,7 @@ async function replaceFileAtomically(targetPath: string, content: string): Promi
   try {
     await writeFile(tempFilePath, normalizeMarkdownContent(content), "utf8")
     await swapPathAtomically(tempFilePath, targetPath)
-    logger.info("Wrote file atomically.", { targetPath })
+    logger.info("Wrote file atomically.", { targetName: path.basename(targetPath) })
   } finally {
     await rm(tempDirectoryPath, { recursive: true, force: true })
       .catch((err) => logger.warn("Failed to clean up temp directory", createEditorWriteErrorLogMeta(err)))
