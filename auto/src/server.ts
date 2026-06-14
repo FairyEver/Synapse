@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { execFile } from 'child_process'
 import { readFile } from 'fs/promises'
-import { extname, join, normalize, resolve, dirname } from 'path'
+import { extname, isAbsolute, join, normalize, relative, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { loadUiConfig, saveUiConfig, type UiConfig } from './config.js'
 import { createPrompt, deletePrompt, readPrompt, renamePrompt, type PromptLibraryPaths } from './prompt-library.js'
@@ -130,10 +130,15 @@ async function serveFile(res: ServerResponse, path: string): Promise<void> {
   res.end(body)
 }
 
-async function serveStatic(res: ServerResponse, pathname: string): Promise<void> {
-  const relative = normalize(decodeURIComponent(pathname.slice(1)))
-  const path = resolve(WEB_DIR, relative)
-  if (!path.startsWith(WEB_DIR)) {
+function isPathInsideRoot(root: string, path: string): boolean {
+  const pathFromRoot = relative(root, path)
+  return pathFromRoot === '' || (!pathFromRoot.startsWith('..') && !isAbsolute(pathFromRoot))
+}
+
+async function serveStatic(res: ServerResponse, pathname: string, webDir = WEB_DIR): Promise<void> {
+  const requestedPath = normalize(decodeURIComponent(pathname.slice(1)))
+  const path = resolve(webDir, requestedPath)
+  if (!isPathInsideRoot(webDir, path)) {
     sendError(res, 400, 'Invalid path')
     return
   }
@@ -156,6 +161,7 @@ interface HandlerPaths extends PromptLibraryPaths {
   configPath?: string
   guidePath?: string
   promptPath?: string
+  webDir?: string
 }
 
 export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuffer, paths: HandlerPaths = {}) {
@@ -164,12 +170,12 @@ export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuff
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
 
       if (req.method === 'GET' && url.pathname === '/') {
-        await serveFile(res, join(WEB_DIR, 'index.html'))
+        await serveFile(res, join(paths.webDir ?? WEB_DIR, 'index.html'))
         return
       }
 
       if (req.method === 'GET' && url.pathname.startsWith('/assets/')) {
-        await serveStatic(res, url.pathname)
+        await serveStatic(res, url.pathname, paths.webDir)
         return
       }
 

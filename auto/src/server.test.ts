@@ -163,6 +163,36 @@ test('JSON endpoints reject oversized request bodies', async () => {
   }
 })
 
+test('static assets reject same-prefix directory traversal', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
+  const webDir = join(dir, 'dist', 'web')
+  const siblingDir = join(dir, 'dist', 'web-secret')
+  const server = createServer(createHandler(new AutoScheduler(), new OutputBuffer(), {
+    configPath: join(dir, 'ui-config.json'),
+    promptPath: join(dir, 'prompt.md'),
+    promptsDir: join(dir, 'prompts'),
+    webDir,
+  }))
+  try {
+    await mkdir(join(webDir, 'assets'), { recursive: true })
+    await mkdir(siblingDir, { recursive: true })
+    await writeFile(join(webDir, 'assets', 'app.js'), 'console.log("ok")', 'utf-8')
+    await writeFile(join(siblingDir, 'secret.txt'), 'secret-value', 'utf-8')
+    const baseUrl = await listen(server)
+
+    const assetResponse = await fetch(`${baseUrl}/assets/app.js`)
+    assert.equal(assetResponse.status, 200)
+    assert.equal(await assetResponse.text(), 'console.log("ok")')
+
+    const traversalResponse = await fetch(`${baseUrl}/assets/%2e%2e%2f%2e%2e%2fweb-secret%2fsecret.txt`)
+    assert.equal(traversalResponse.status, 400)
+    assert.doesNotMatch(await traversalResponse.text(), /secret-value/)
+  } finally {
+    server.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('output buffer separates repeated slot runs by sequence', () => {
   const outputBuffer = new OutputBuffer()
 
