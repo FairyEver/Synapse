@@ -641,12 +641,33 @@ async function authorizeWorkflowMutation(
   deps: WorkflowDispatchDeps,
   security: NonNullable<ReturnType<typeof workflowMutationSecurity>>,
 ): Promise<void> {
-  const permission = await deps.permissionGuard?.check({
-    action: "workflow.mutate",
-    actor: security.actor,
-    resource: security.resource,
-    context: security.metadata,
-  })
+  let permission: Awaited<ReturnType<NonNullable<WorkflowDispatchDeps["permissionGuard"]>["check"]>> | undefined
+  try {
+    permission = await deps.permissionGuard?.check({
+      action: "workflow.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      context: security.metadata,
+    })
+  } catch (error) {
+    deps.auditSink?.record({
+      action: "workflow.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "denied",
+      metadata: {
+        ...security.metadata,
+        reason: "permission-check-error",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    logger.warn("workflow mutation permission check failed", {
+      ...security.metadata,
+      ...dispatchErrorDiagnostic(error),
+    })
+    throw error
+  }
   if (permission && !permission.allowed) {
     deps.auditSink?.record({
       action: "workflow.mutate",

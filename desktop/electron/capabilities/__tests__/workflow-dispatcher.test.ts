@@ -386,6 +386,52 @@ describe("createWorkflowDispatcher", () => {
     }))
   })
 
+  it("audits permission guard failures before calling the workflow service", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => {
+        throw new Error("guard failed with token=secret-prompt at /Users/liyang/private-workflow")
+      }),
+    }
+    const deps = makeDeps({ permissionGuard, auditSink })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "mcp-http" }))
+      .rejects
+      .toThrow("guard failed with token=secret-prompt at /Users/liyang/private-workflow")
+
+    expect(deps.workflowService.delete).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      resource: "workflow:wf-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.definition.delete",
+        workflowId: "wf-1",
+        reason: "permission-check-error",
+        errorName: "Error",
+        errorLength: "Error: guard failed with token=secret-prompt at /Users/liyang/private-workflow".length,
+      }),
+    }))
+    expect(auditSink.record).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-prompt")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/liyang/private-workflow")
+
+    const failedLog = logStoreMock.logger.warn.mock.calls.find(
+      ([message]) => message === "workflow mutation permission check failed",
+    )
+    expect(failedLog).toBeDefined()
+    const serializedLog = JSON.stringify(failedLog)
+    expect(serializedLog).not.toContain("secret-prompt")
+    expect(serializedLog).not.toContain("/Users/liyang/private-workflow")
+  })
+
   it("records failed audit when an authorized workflow mutation throws", async () => {
     const auditSink = {
       record: vi.fn(),
