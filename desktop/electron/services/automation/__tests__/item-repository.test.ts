@@ -36,6 +36,27 @@ describe("AutomationItemRepository", () => {
     expect(item.nextRunAt).toBeDefined()
   })
 
+  it("persists builtin cron next run on the next active day", async () => {
+    const repo = new AutomationItemRepository({
+      items: new MemoryNamespace<AutomationItem>("automation.items"),
+      triggers: createBuiltinAutomationTriggerRegistry(),
+      now: () => new Date("2026-06-02T10:00:00.000Z"),
+      idFactory: () => "automation:1",
+    })
+
+    const item = await repo.create({
+      name: "Weekday Cron",
+      scope: { type: "global" },
+      trigger: {
+        type: "builtin.cron",
+        config: { expr: "0 9 * * *", timezone: "UTC", activeDays: [1] },
+      },
+      executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
+    })
+
+    expect(item.nextRunAt).toBe("2026-06-08T09:00:00.000Z")
+  })
+
   it("increments configVersion on update but not enable toggles", async () => {
     const repo = newRepo()
     const item = await repo.create(validCreateInput())

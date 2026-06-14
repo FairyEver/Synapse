@@ -1,4 +1,4 @@
-import { nextCronRun } from "../../../electron/services/task-scheduler/cron-expression"
+import { computeNextRunAt as computeAutomationNextRunAt } from "../../../electron/services/automation/schedule-calculator"
 import type {
   AutomationScheduleGuardInput,
   AutomationScheduleInput,
@@ -8,7 +8,11 @@ import type { CronTriggerConfig } from "./schema"
 
 export const cronTriggerRuntime: AutomationTriggerRuntime<CronTriggerConfig> = {
   computeNextRunAt(input: AutomationScheduleInput<CronTriggerConfig>): Date {
-    return nextCronRun(input.config.expr, input.from, input.config.timezone)
+    return computeAutomationNextRunAt({
+      trigger: { type: "builtin.cron", config: input.config },
+      from: input.from,
+      createdAt: input.createdAt,
+    })
   },
   shouldRunNow(input: AutomationScheduleGuardInput<CronTriggerConfig>): boolean {
     return isActiveDay(input.now, input.config)

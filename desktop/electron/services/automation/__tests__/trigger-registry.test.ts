@@ -94,6 +94,37 @@ describe("AutomationTriggerRegistry", () => {
     expect(webhookTriggerDefinition.runtime.shouldAcceptEvent).toBeTypeOf("function")
   })
 
+  it("computes builtin cron next run on the next active day", () => {
+    const nextRunAt = cronTriggerDefinition.runtime.computeNextRunAt?.({
+      config: {
+        expr: "0 9 * * *",
+        timezone: "UTC",
+        activeDays: [1],
+      },
+      from: new Date("2026-06-02T10:00:00.000Z"),
+      createdAt: "2026-06-01T00:00:00.000Z",
+    })
+
+    expect(nextRunAt?.toISOString()).toBe("2026-06-08T09:00:00.000Z")
+  })
+
+  it("computes builtin interval next run on the next active day", () => {
+    const from = new Date("2026-06-03T12:40:00.000Z")
+    const activeDay = (from.getDay() + 1) % 7
+    const nextRunAt = intervalTriggerDefinition.runtime.computeNextRunAt?.({
+      config: {
+        everyMinutes: 30,
+        anchor: "created_at",
+        activeDays: [activeDay],
+      },
+      from,
+      createdAt: "2026-06-03T12:00:00.000Z",
+    })
+
+    expect(nextRunAt?.getDay()).toBe(activeDay)
+    expect(nextRunAt?.getTime()).toBeGreaterThan(from.getTime())
+  })
+
   it("matches webhook events by selected public id", async () => {
     const event = {
       source: "webhook",
