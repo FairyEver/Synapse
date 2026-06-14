@@ -6,8 +6,9 @@ const MAX_AUDIT_ERROR_LENGTH = 300
 const AUTHORIZATION_PATTERN = /\bAuthorization\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/gi
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
 const COOKIE_PATTERN = /\bCookie\s*[:=]\s*[^\r\n]+/gi
-const SENSITIVE_ASSIGNMENT_PATTERN = /\b(token|api[_-]?key|secret|password|credential)\s*=\s*[^&\s,;]+/gi
-const SENSITIVE_JSON_FIELD_PATTERN = /(["']?(?:token|api[_-]?key|secret|password|credential)["']?\s*:\s*)["'][^"']*["']/gi
+const SENSITIVE_KEY_PATTERN = String.raw`[A-Za-z0-9_-]*token|api[_-]?key|secret|password|credential`
+const SENSITIVE_ASSIGNMENT_PATTERN = new RegExp(String.raw`\b(${SENSITIVE_KEY_PATTERN})\s*=\s*[^&\s,;]+`, "gi")
+const SENSITIVE_JSON_FIELD_PATTERN = new RegExp(String.raw`(["']?(?:${SENSITIVE_KEY_PATTERN})["']?\s*:\s*)["'][^"']*["']`, "gi")
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"']+/gi
 const POSIX_PATH_PATTERN = /(?:\/(?:Users|home|private|tmp|var|opt)\/[^\s,;)]*)/g
 const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\[^\s,;)]+/g

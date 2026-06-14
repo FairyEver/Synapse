@@ -45,6 +45,7 @@
 - Webhook 请求日志会脱敏自定义密钥、token 和签名类 header，不再只依赖全局 cookie/authorization 遮蔽。
 - 导入 Provider 配置包时，外部包里误放在普通 env 的 token、API key 等敏感变量会自动进入密钥存储，不再作为普通配置落库。
 - Server 请求日志会脱敏 URL query 里的密码、token、secret 和 API key，网盘公开链接带密码访问时不会把密码写进访问日志。
+- Server 审计失败摘要会脱敏 `accessToken=`、`refreshToken=` 等 token key 变体，避免失败审计落库真实凭据。
 - Drive 本地存储会主动清理过期的上传和下载临时 token，减少长时间运行后的无效内存占用。
 - Drive 公开分享下载会在当前请求内完成校验并直接流式返回文件，取消分享或链接过期后不再保留短时可用的存储直链。
 - 工作流运行快照会在保存前脱敏运行参数，历史记录不再保留参数里的 token、密码或 API key 明文。
