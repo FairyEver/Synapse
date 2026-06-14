@@ -45,8 +45,14 @@ describe("recordAuthGuardFailure", () => {
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("user-victim")
   })
 
-  it("does not propagate audit write failures to auth guards", async () => {
-    const auditError = new Error("audit database unavailable")
+  it("does not propagate or log raw audit write failures to auth guards", async () => {
+    const auditError = Object.assign(new Error([
+      "audit database unavailable",
+      "Authorization: Bearer raw-bearer",
+      "token=raw-token",
+      "postgresql://user:db-password@db.local:5432/synapse",
+      "/Users/liyang/project/.env",
+    ].join(" ")), { code: "ECONNRESET" })
     const auditLog = { record: vi.fn().mockRejectedValue(auditError) }
     const logger = { warn: vi.fn() }
 
@@ -63,11 +69,18 @@ describe("recordAuthGuardFailure", () => {
     })).resolves.toBeUndefined()
 
     expect(logger.warn).toHaveBeenCalledWith({
-      err: auditError,
       action: "admin.auth.verify.failed",
+      error: "audit database unavailable Authorization: [REDACTED] token=[REDACTED] [URL] [PATH]",
+      errorName: "Error",
+      errorCode: "ECONNRESET",
       method: "GET",
       path: "/api/admin/system",
       tokenPresent: true,
     }, "Failed to record auth guard audit log")
+    const serializedWarning = JSON.stringify(logger.warn.mock.calls)
+    expect(serializedWarning).not.toContain("raw-bearer")
+    expect(serializedWarning).not.toContain("raw-token")
+    expect(serializedWarning).not.toContain("db-password")
+    expect(serializedWarning).not.toContain("/Users/liyang/project/.env")
   })
 })

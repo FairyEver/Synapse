@@ -1,5 +1,6 @@
 import type { Request } from "express"
 import type { PinoLogger } from "nestjs-pino"
+import { formatAuditError } from "./audit-error"
 import type { AuditLogService } from "./audit-log.service"
 
 interface AuthGuardFailureAuditInput {
@@ -26,8 +27,12 @@ export async function recordAuthGuardFailure(input: AuthGuardFailureAuditInput):
     })
   } catch (auditError) {
     input.logger?.warn({
-      err: auditError,
       action: input.action,
+      error: formatAuditError(auditError),
+      errorName: auditError instanceof Error ? auditError.name : typeof auditError,
+      ...(auditError instanceof Error && "code" in auditError && typeof auditError.code === "string"
+        ? { errorCode: auditError.code }
+        : {}),
       method: input.request.method,
       path: input.request.path,
       tokenPresent: Boolean(input.token),
