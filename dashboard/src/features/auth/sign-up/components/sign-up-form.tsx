@@ -17,6 +17,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { buildAuthRedirectSearch } from '../../auth-redirect-search'
 import { zodResolver } from '../../zod-resolver'
 
 const formSchema = z
@@ -32,8 +33,9 @@ const formSchema = z
 
 export function SignUpForm({
   className,
+  redirectTo,
   ...props
-}: React.HTMLAttributes<HTMLFormElement>) {
+}: React.HTMLAttributes<HTMLFormElement> & { redirectTo?: string }) {
   const [isLoading, setIsLoading] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null)
 
@@ -71,7 +73,7 @@ export function SignUpForm({
           {registeredEmail} 已创建，可以登录 Synapse。
         </p>
         <Button asChild>
-          <Link to='/sign-in'>去登录</Link>
+          <Link to='/sign-in' search={buildAuthRedirectSearch(redirectTo)}>去登录</Link>
         </Button>
       </div>
     )

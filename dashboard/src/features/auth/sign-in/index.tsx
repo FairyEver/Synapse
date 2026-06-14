@@ -7,13 +7,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { normalizeDashboardRedirect } from '@/lib/dashboard-redirect'
+import { buildAuthRedirectSearch, normalizeAuthRedirect } from '../auth-redirect-search'
 import { AuthLayout } from '../auth-layout'
 import { UserAuthForm } from './components/user-auth-form'
 
 export function SignIn() {
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
-  const redirectTo = normalizeDashboardRedirect(redirect)
+  const redirectTo = normalizeAuthRedirect(redirect)
 
   return (
     <AuthLayout>
@@ -30,6 +30,7 @@ export function SignIn() {
             没有账号？{' '}
             <Link
               to='/sign-up'
+              search={buildAuthRedirectSearch(redirectTo)}
               className='underline underline-offset-4 hover:text-primary'
             >
               创建账号
