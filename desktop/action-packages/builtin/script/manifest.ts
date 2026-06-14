@@ -54,7 +54,7 @@ export const scriptActionManifest = {
       name: "timeoutMins",
       kind: "number",
       required: false,
-      description: "Timeout in minutes. Null disables the timeout.",
+      description: "Timeout in minutes, from 1 to 120. Null disables the timeout.",
       defaultValue: 30,
     },
   ],

@@ -7,7 +7,7 @@ export const httpRequestActionConfigSchema = z.object({
   query: z.record(z.string(), z.string()).optional(),
   bodyType: z.enum(["none", "json", "text"]).default("none"),
   body: z.string().optional(),
-  timeoutMins: z.number().int().positive().nullable().optional(),
+  timeoutMins: z.number().int().min(1).max(120).nullable().optional(),
   auth: z.object({
     type: z.enum(["none", "bearer", "basic"]),
     bearerToken: z.string().optional(),

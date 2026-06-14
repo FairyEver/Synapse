@@ -137,6 +137,7 @@ export function ScriptConfigForm({
             id={`${idPrefix}-timeout`}
             type="number"
             min={1}
+            max={120}
             value={value.timeoutMins ?? ""}
             onChange={(event) =>
               onChange({

@@ -131,6 +131,7 @@ export function CommandConfigForm({
             id="task-action-command-timeout"
             type="number"
             min={1}
+            max={120}
             value={value.timeoutMins ?? ""}
             onChange={(event) =>
               onChange({

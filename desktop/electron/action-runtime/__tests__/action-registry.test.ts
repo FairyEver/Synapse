@@ -92,6 +92,47 @@ describe("MainActionRegistry", () => {
     ]))
   })
 
+  it("marks built-in timeout configs above 120 minutes as needing updates", () => {
+    const registry = createBuiltinMainActionRegistry({
+      processRunner: {
+        run: async () => ({
+          exitCode: 0,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          durationMs: 0,
+        }),
+      },
+    })
+
+    expect(registry.validateStoredConfig("builtin.command", {
+      command: "echo ok",
+      shell: "posix",
+      timeoutMins: 121,
+    })).toEqual({
+      status: "needs_update",
+      issues: [{ field: "action.config", message: "检查执行内容" }],
+    })
+    expect(registry.validateStoredConfig("builtin.script", {
+      script: "echo ok",
+      shell: "posix",
+      timeoutMins: 121,
+    })).toEqual({
+      status: "needs_update",
+      issues: [{ field: "action.config", message: "检查执行内容" }],
+    })
+    expect(registry.validateStoredConfig("builtin.http-request", {
+      method: "GET",
+      url: "https://example.com",
+      bodyType: "none",
+      timeoutMins: 121,
+    })).toEqual({
+      status: "needs_update",
+      issues: [{ field: "action.config", message: "检查执行内容" }],
+    })
+  })
+
   it("registers workflow action when workflow runtime is supplied", () => {
     const registry = createBuiltinMainActionRegistry({
       processRunner: { run: vi.fn() },

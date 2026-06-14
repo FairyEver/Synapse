@@ -171,6 +171,7 @@ export function HttpRequestConfigForm({
           id={`${idPrefix}-timeout`}
           type="number"
           min={1}
+          max={120}
           className="h-8 w-20 text-xs"
           value={value.timeoutMins ?? ""}
           onChange={(e) =>
