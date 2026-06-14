@@ -35,6 +35,7 @@ describe('content store Skill file model', () => {
     const files = await createInitialSkillFiles()
 
     await expect(addSkillTextFile(files, 'SKILL.md')).rejects.toThrow('文件已存在')
+    await expect(addSkillTextFile(files, 'skill.md')).rejects.toThrow('文件已存在')
     expect(() => deleteSkillFile(files, 'SKILL.md')).toThrow('不能删除 SKILL.md')
   })
 
@@ -60,6 +61,20 @@ describe('content store Skill file model', () => {
       text: 'hello',
     })
     expect(() => renameSkillFile(renamed, 'SKILL.md', 'README.md')).toThrow('不能重命名 SKILL.md')
+  })
+
+  it('rejects case-only duplicate paths before saving', async () => {
+    const files = await addSkillTextFile(await createInitialSkillFiles(), 'docs/Readme.md')
+
+    await expect(addSkillTextFile(files, 'docs/readme.md')).rejects.toThrow('文件已存在')
+    expect(() => renameSkillFile(files, 'docs/Readme.md', 'skill.md')).toThrow('文件已存在')
+    await expect(
+      replaceSkillFileFromUpload(
+        files,
+        new File(['next'], 'readme.md', { type: 'text/markdown' }),
+        'docs/readme.md'
+      )
+    ).rejects.toThrow('文件已存在')
   })
 
   it('uploads and replaces binary files without text preview', async () => {

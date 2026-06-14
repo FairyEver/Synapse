@@ -112,6 +112,7 @@ export async function replaceSkillFileFromUpload(
   const path = normalizeSkillFilePath(pathInput)
   const uploaded = await fileToSkillEditorFile(upload, path)
   const withoutExisting = files.filter((file) => file.path !== path)
+  assertUniquePath(withoutExisting, path)
   return sortSkillFiles([...withoutExisting, uploaded])
 }
 
@@ -156,7 +157,12 @@ export async function createTextFile(
 }
 
 function assertUniquePath(files: readonly SkillEditorFile[], path: string) {
-  if (files.some((file) => file.path === path)) throw new Error('文件已存在')
+  const key = pathKey(path)
+  if (files.some((file) => pathKey(file.path) === key)) throw new Error('文件已存在')
+}
+
+function pathKey(path: string): string {
+  return path.toLowerCase()
 }
 
 async function fileToSkillEditorFile(upload: File, path: string): Promise<SkillEditorFile> {
