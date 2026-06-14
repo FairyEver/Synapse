@@ -119,8 +119,13 @@ vi 基本操作：按 `i` 进入编辑模式，改完后按 `Esc`，输入 `:wq`
 把文件内容改成下面这样（替换所有中文提示部分）：
 
 ```env
-# 数据库密码（compose.yml 会读取这个值作为 Postgres 和连接字符串的密码）
+# 数据库身份；已有数据卷不要随意改用户和库名
+POSTGRES_USER=synapse
+POSTGRES_DB=synapse
+
+# 数据库密码
 POSTGRES_PASSWORD=Abc123456789
+DATABASE_URL=postgresql://synapse:Abc123456789@postgres:5432/synapse
 
 # 管理员账号（密码至少 12 位）
 ADMIN_EMAIL=你的邮箱@example.com
@@ -304,11 +309,13 @@ cd /www/wwwroot/synapse/server
 mkdir -p ../backups
 mkdir -p ../backups/globals
 MANUAL_IMAGE_TAG=manual-$(date +%Y%m%d_%H%M%S)
-docker compose --env-file .env exec -T postgres pg_dumpall -U synapse --globals-only > ../backups/globals/synapse-globals-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
-docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres pg_dumpall -U "$POSTGRES_USER" --globals-only > ../backups/globals/synapse-globals-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
+docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-before-manual-deploy_$(date +%Y%m%d_%H%M%S).sql
 SYNAPSE_SERVER_IMAGE_TAG=$MANUAL_IMAGE_TAG docker compose --env-file .env build server
 docker compose --env-file .env stop server
-docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-final-before-manual-switch_$(date +%Y%m%d_%H%M%S).sql
+docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-final-before-manual-switch_$(date +%Y%m%d_%H%M%S).sql
 SYNAPSE_SERVER_IMAGE_TAG=$MANUAL_IMAGE_TAG docker compose --env-file .env up -d --no-build server
 ```
 
@@ -345,7 +352,9 @@ docker compose down -v
 cd /www/wwwroot/synapse/server
 
 mkdir -p ../backups
-docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-manual_$(date +%Y%m%d_%H%M%S).sql
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-manual_$(date +%Y%m%d_%H%M%S).sql
 
 # 查看备份文件
 ls -la ../backups/*.sql
@@ -358,9 +367,11 @@ ls -la ../backups/*.sql
 ```bash
 cd /www/wwwroot/synapse/server
 
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
 docker compose --env-file .env stop server
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../backups/synapse-final-before-switch-20260606_121500.sql
+docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < ../backups/synapse-final-before-switch-20260606_121500.sql
 SYNAPSE_SERVER_IMAGE_TAG=rollback-20260606_121500 docker compose --env-file .env up -d --no-build server
 ```
 
@@ -385,7 +396,9 @@ docker image prune -f
 ssh root@你的服务器IP
 cd /www/wwwroot/synapse/server
 mkdir -p ../backups
-docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > ../backups/synapse-server_$(date +%Y%m%d_%H%M%S).sql
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > ../backups/synapse-server_$(date +%Y%m%d_%H%M%S).sql
 exit
 
 # 2. 拉回本地
@@ -393,8 +406,10 @@ scp root@你的服务器IP:/www/wwwroot/synapse/backups/synapse-server_YYYYmmdd_
 
 # 3. 覆盖本地开发数据库
 cd /Users/liyang/.codex/worktrees/f240/Synapse/server
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../synapse-server.sql
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < ../synapse-server.sql
 ```
 
 #### 本地 → 服务器（只在明确要覆盖生产时使用）
@@ -402,7 +417,9 @@ docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../
 ```bash
 # 1. 在本地导出完整备份
 cd /Users/liyang/.codex/worktrees/f240/Synapse/server
-docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > synapse-local.sql
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose --env-file .env exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > synapse-local.sql
 
 # 2. 上传到服务器备份目录
 scp synapse-local.sql root@你的服务器IP:/www/wwwroot/synapse/backups/synapse-local.sql
@@ -410,9 +427,11 @@ scp synapse-local.sql root@你的服务器IP:/www/wwwroot/synapse/backups/synaps
 # 3. SSH 登录服务器，覆盖生产数据库
 ssh root@你的服务器IP
 cd /www/wwwroot/synapse/server
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
 docker compose --env-file .env stop server
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < ../backups/synapse-local.sql
+docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+docker compose --env-file .env exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < ../backups/synapse-local.sql
 docker compose --env-file .env up -d server
 ```
 
@@ -476,7 +495,9 @@ docker compose logs server
 docker compose exec server sh
 
 # 进入数据库容器
-docker compose exec postgres psql -U synapse synapse
+POSTGRES_USER=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+POSTGRES_DB=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+docker compose exec postgres psql -U "$POSTGRES_USER" "$POSTGRES_DB"
 ```
 
 ---

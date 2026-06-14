@@ -166,7 +166,10 @@ echo ""
 
 # 写入 .env 文件
 cat > .env << EOF
+POSTGRES_USER=synapse
+POSTGRES_DB=synapse
 POSTGRES_PASSWORD=$DB_PASSWORD
+DATABASE_URL=postgresql://synapse:$DB_PASSWORD@postgres:5432/synapse
 POSTGRES_HOST_PORT=5432
 
 ADMIN_EMAIL=$ADMIN_EMAIL

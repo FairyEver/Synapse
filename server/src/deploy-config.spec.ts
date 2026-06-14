@@ -15,7 +15,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("backup_remote_database")
     expect(deployScript).toContain("synapse-online-before-deploy-${DEPLOY_ID}.sql")
     expect(deployScript).toContain("synapse-final-before-switch-${DEPLOY_ID}.sql")
-    expect(deployScript).toContain("docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse")
+    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres pg_dump -U "$postgres_user" "$postgres_db"')
     expect(deployScript).toContain("chmod 600 \"$BACKUP_FILE\"")
     expect(deployScript).not.toContain("docker compose --env-file .env down")
     expect(deployScript).not.toContain("docker compose down")
@@ -27,7 +27,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain('ENV_BACKUP_FILE="$BACKUP_DIR/env/synapse-env-before-sync-${DEPLOY_ID}.env"')
     expect(deployScript).toContain('GLOBALS_BACKUP_FILE="$BACKUP_DIR/globals/synapse-globals-before-deploy-${DEPLOY_ID}.sql"')
     expect(deployScript).toContain("backup_remote_postgres_globals")
-    expect(deployScript).toContain("pg_dumpall -U synapse --globals-only")
+    expect(deployScript).toContain('pg_dumpall -U "$postgres_user" --globals-only')
     expect(deployScript).toContain("chmod 600 \"$backup_file\"")
     expect(deployScript).toContain("chmod 600 \"$GLOBALS_BACKUP_FILE\"")
     expect(deployScript).not.toContain("backup_file=\"$(dirname \"$REMOTE_ENV_FILE\")/.env.backup-${DEPLOY_ID}\"")
@@ -53,7 +53,7 @@ describe("server deployment configuration", () => {
 
     expect(deployScript).toContain("verify_final_backup_restore")
     expect(deployScript).toContain("synapse_final_verify_${DEPLOY_ID}")
-    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres psql -U synapse -d "$verify_db" < "$FINAL_BACKUP_FILE"')
+    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$verify_db" < "$FINAL_BACKUP_FILE"')
 
     const finalBackupStep = deployScript.indexOf('"最终备份远程数据库"')
     const finalVerifyStep = deployScript.indexOf('"恢复验证最终数据库备份"')
@@ -99,14 +99,21 @@ describe("server deployment configuration", () => {
     expect(compose).not.toContain("http://127.0.0.1:3000/healthz")
   })
 
-  it("requires an explicit postgres password in compose", () => {
+  it("uses the configured postgres identity in compose", () => {
     const compose = readRepoFile("server/compose.yml")
     const envExample = readRepoFile("server/.env.example")
 
+    expect(compose).toContain("POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}")
+    expect(compose).toContain("POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}")
     expect(compose).toContain("POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}")
-    expect(compose).toContain("DATABASE_URL: postgresql://synapse:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/synapse")
+    expect(compose).toContain("DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}")
+    expect(compose).toContain("pg_isready -U ${POSTGRES_USER:?POSTGRES_USER is required} -d ${POSTGRES_DB:?POSTGRES_DB is required}")
     expect(compose).not.toContain("POSTGRES_PASSWORD:-synapse")
+    expect(compose).not.toContain("POSTGRES_USER: synapse")
+    expect(compose).not.toContain("POSTGRES_DB: synapse")
     expect(compose).not.toContain("postgresql://synapse:${POSTGRES_PASSWORD:-synapse}")
+    expect(envExample).toContain("POSTGRES_USER=synapse")
+    expect(envExample).toContain("POSTGRES_DB=synapse")
     expect(envExample).toContain("POSTGRES_PASSWORD=")
     expect(envExample).not.toContain("POSTGRES_PASSWORD=synapse")
   })
@@ -135,7 +142,7 @@ describe("server deployment configuration", () => {
 
     expect(deployScript).toContain("backup_remote_database")
     expect(deployScript).toContain('mkdir -p "$(dirname "$BACKUP_FILE")"')
-    expect(deployScript).toContain("docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse")
+    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres pg_dump -U "$postgres_user" "$postgres_db"')
 
     const backupStep = deployScript.indexOf('"在线备份远程数据库"')
     const syncStep = deployScript.indexOf('"同步代码到服务器"')
@@ -158,6 +165,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("chmod 600 \"$remote_tmp\"")
     expect(deployScript).toContain("synapse-env-before-sync-${DEPLOY_ID}.env")
     expect(deployScript).toContain("protected env keys kept from remote")
+    expect(deployScript).toContain("if (!(key in protected_line))")
     expect(deployScript).toContain("docker compose --env-file .env config >/dev/null")
     expect(deployScript).toContain("--exclude='server/.env'")
     expect(deployScript).toContain("--exclude='server/.env.backup-*'")
@@ -175,12 +183,15 @@ describe("server deployment configuration", () => {
     const restartScript = readRepoFile("restart.sh")
 
     expect(deployScript).toContain("verify_remote_database_auth")
-    expect(deployScript).toContain("psql -h postgres -p 5432 -U synapse -d synapse")
+    expect(deployScript).toContain('psql -h postgres -p 5432 -U "$postgres_user" -d "$postgres_db"')
     expect(deployScript.indexOf("verify_remote_database_auth")).toBeLessThan(deployScript.indexOf("stop_remote_server"))
+    expect(deployScript).not.toContain("psql -h postgres -p 5432 -U synapse -d synapse")
+    expect(deployScript).not.toContain("pg_dump -U synapse synapse")
 
     expect(restartScript).toContain("verify_remote_database_auth")
-    expect(restartScript).toContain("psql -h postgres -p 5432 -U synapse -d synapse")
+    expect(restartScript).toContain('psql -h postgres -p 5432 -U "$postgres_user" -d "$postgres_db"')
     expect(restartScript.indexOf("verify_remote_database_auth")).toBeLessThan(restartScript.indexOf("docker compose --env-file .env restart server"))
+    expect(restartScript).not.toContain("psql -h postgres -p 5432 -U synapse -d synapse")
   })
 
   it("persists server file logs outside the rebuilt container", () => {

@@ -140,6 +140,10 @@ FNR == NR {
 {
   key = env_key($0)
   if (key != "" && protected_key[key]) {
+    if (!(key in protected_line)) {
+      protected_line[key] = $0
+      protected_order[++protected_count] = key
+    }
     next
   }
   print
@@ -167,14 +171,24 @@ verify_remote_database_auth() {
   ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
+read_env_value() {
+  sed -n "s/^${1}=//p" .env | tail -n 1
+}
+
+postgres_user=$(read_env_value POSTGRES_USER)
+postgres_db=$(read_env_value POSTGRES_DB)
 postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
-postgres_password=${postgres_password:-synapse}
+
+if [ -z "$postgres_user" ] || [ -z "$postgres_db" ] || [ -z "$postgres_password" ]; then
+  echo "database tcp auth failed: POSTGRES_USER, POSTGRES_DB and POSTGRES_PASSWORD must be set"
+  exit 1
+fi
 
 if docker compose --env-file .env exec -T -e PGPASSWORD="$postgres_password" postgres \
-  psql -h postgres -p 5432 -U synapse -d synapse -Atc 'select 1' >/dev/null; then
+  psql -h postgres -p 5432 -U "$postgres_user" -d "$postgres_db" -Atc 'select 1' >/dev/null; then
   echo "database tcp auth ok"
 else
-  echo "database tcp auth failed: .env POSTGRES_PASSWORD does not match the existing Postgres role password"
+  echo "database tcp auth failed: .env Postgres identity does not match the existing database"
   exit 1
 fi
 REMOTE_SCRIPT
@@ -184,7 +198,10 @@ fetch_applied_migrations() {
   ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" > "$APPLIED_MIGRATIONS_FILE" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -At <<'SQL'
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$postgres_db" -At <<'SQL'
 SELECT to_regclass('public._prisma_migrations');
 SQL
 REMOTE_SCRIPT
@@ -198,7 +215,10 @@ REMOTE_SCRIPT
   ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" > "$APPLIED_MIGRATIONS_FILE" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -At <<'SQL'
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$postgres_db" -At <<'SQL'
 SELECT migration_name
 FROM public._prisma_migrations
 WHERE finished_at IS NOT NULL
@@ -228,7 +248,10 @@ set -euo pipefail
 mkdir -p "$(dirname "$BACKUP_FILE")"
 cd "$REMOTE_DIR/server"
 
-docker compose --env-file .env exec -T postgres pg_dump -U synapse synapse > "$BACKUP_FILE"
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
+
+docker compose --env-file .env exec -T postgres pg_dump -U "$postgres_user" "$postgres_db" > "$BACKUP_FILE"
 test -s "$BACKUP_FILE"
 chmod 600 "$BACKUP_FILE"
 
@@ -243,7 +266,9 @@ set -euo pipefail
 mkdir -p "$(dirname "$GLOBALS_BACKUP_FILE")"
 cd "$REMOTE_DIR/server"
 
-docker compose --env-file .env exec -T postgres pg_dumpall -U synapse --globals-only > "$GLOBALS_BACKUP_FILE"
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+
+docker compose --env-file .env exec -T postgres pg_dumpall -U "$postgres_user" --globals-only > "$GLOBALS_BACKUP_FILE"
 test -s "$GLOBALS_BACKUP_FILE"
 chmod 600 "$GLOBALS_BACKUP_FILE"
 
@@ -305,21 +330,21 @@ preflight_remote_migrations() {
 set -euo pipefail
 
 preflight_db="synapse_preflight_${DEPLOY_ID}"
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
-postgres_password=${postgres_password:-synapse}
 
 cleanup_preflight_database() {
-  docker compose --env-file .env exec -T postgres psql -U synapse -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${preflight_db}';" >/dev/null 2>&1 || true
-  docker compose --env-file .env exec -T postgres dropdb -U synapse --if-exists "$preflight_db" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${preflight_db}';" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres dropdb -U "$postgres_user" --if-exists "$preflight_db" >/dev/null 2>&1 || true
 }
 
 trap cleanup_preflight_database EXIT
 
 cleanup_preflight_database
-docker compose --env-file .env exec -T postgres createdb -U synapse "$preflight_db"
-docker compose --env-file .env exec -T postgres psql -U synapse -d "$preflight_db" < "$ONLINE_BACKUP_FILE"
+docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$preflight_db"
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$preflight_db" < "$ONLINE_BACKUP_FILE"
 
-database_url="postgresql://synapse:${postgres_password}@postgres:5432/${preflight_db}"
+database_url="postgresql://${postgres_user}:${postgres_password}@postgres:5432/${preflight_db}"
 SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps -e DATABASE_URL="$database_url" server sh -c "cd server && npx prisma migrate deploy"
 
 printf "preflight migration ok: %s\n" "$preflight_db"
@@ -331,18 +356,19 @@ verify_final_backup_restore() {
 set -euo pipefail
 
 verify_db="synapse_final_verify_${DEPLOY_ID}"
+postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 
 cleanup_verify_database() {
-  docker compose --env-file .env exec -T postgres psql -U synapse -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${verify_db}';" >/dev/null 2>&1 || true
-  docker compose --env-file .env exec -T postgres dropdb -U synapse --if-exists "$verify_db" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${verify_db}';" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres dropdb -U "$postgres_user" --if-exists "$verify_db" >/dev/null 2>&1 || true
 }
 
 trap cleanup_verify_database EXIT
 
 cleanup_verify_database
-docker compose --env-file .env exec -T postgres createdb -U synapse "$verify_db"
-docker compose --env-file .env exec -T postgres psql -U synapse -d "$verify_db" < "$FINAL_BACKUP_FILE"
-docker compose --env-file .env exec -T postgres psql -U synapse -d "$verify_db" -Atc 'select 1' >/dev/null
+docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$verify_db"
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$verify_db" < "$FINAL_BACKUP_FILE"
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$verify_db" -Atc 'select 1' >/dev/null
 
 printf "final backup restore verified: %s\n" "$verify_db"
 REMOTE_SCRIPT
@@ -399,9 +425,11 @@ print_manual_database_restore_instructions() {
 
   ssh $SERVER
   cd $REMOTE_DIR/server
+  postgres_user=\$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
+  postgres_db=\$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
   docker compose --env-file .env stop server
-  docker compose --env-file .env exec -T postgres psql -U synapse -d synapse -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-  docker compose --env-file .env exec -T postgres psql -U synapse -d synapse < $FINAL_BACKUP_FILE
+  docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+  docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" < $FINAL_BACKUP_FILE
   SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build server
 
 最终切换前备份：$FINAL_BACKUP_FILE

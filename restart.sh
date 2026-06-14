@@ -9,14 +9,24 @@ verify_remote_database_auth() {
   ssh "$SERVER" "cd $REMOTE_DIR && bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
+read_env_value() {
+  sed -n "s/^${1}=//p" .env | tail -n 1
+}
+
+postgres_user=$(read_env_value POSTGRES_USER)
+postgres_db=$(read_env_value POSTGRES_DB)
 postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
-postgres_password=${postgres_password:-synapse}
+
+if [ -z "$postgres_user" ] || [ -z "$postgres_db" ] || [ -z "$postgres_password" ]; then
+  echo "database tcp auth failed: POSTGRES_USER, POSTGRES_DB and POSTGRES_PASSWORD must be set; restart stopped before touching the server container"
+  exit 1
+fi
 
 if docker compose --env-file .env exec -T -e PGPASSWORD="$postgres_password" postgres \
-  psql -h postgres -p 5432 -U synapse -d synapse -Atc 'select 1' >/dev/null; then
+  psql -h postgres -p 5432 -U "$postgres_user" -d "$postgres_db" -Atc 'select 1' >/dev/null; then
   echo "database tcp auth ok"
 else
-  echo "database tcp auth failed: .env POSTGRES_PASSWORD does not match the existing Postgres role password; restart stopped before touching the server container"
+  echo "database tcp auth failed: .env Postgres identity does not match the existing database; restart stopped before touching the server container"
   exit 1
 fi
 REMOTE_SCRIPT
