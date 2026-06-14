@@ -78,6 +78,7 @@
 - Automation MCP 新增 Webhook 列表发现工具，Agent 创建 Webhook 触发的自动化时可以直接选择正确的 publicId，不再需要用户手工复制或猜测。
 - Webhook 投递 ACK 只能确认已经实际发送给当前客户端的记录，同账号其它设备不能再伪造 delivered 状态。
 - Automation 的命令和脚本执行器会在 Windows 上默认使用 cmd，编辑器新建和 MCP 发现结果不再默认写入 POSIX shell。
+- 团队创建、邀请、加入、移除成员和退出团队时，如果成功审计日志短暂写入失败，业务结果仍会正常返回，不再出现提示失败但团队数据已改变。
 - Automation MCP 内置 skill 补充了工作流执行器说明，Agent 创建自动化时能直接选择已保存工作流并配置参数模板。
 - Scheduler MCP 内置 skill 补充了工作流动作说明，Agent 创建定时任务时能识别 `builtin.workflow` 及其 `workflowId`、`paramTemplates` 配置。
 - Webhook `exec` 请求通过认证后会进入默认 shell 执行权限策略，不再被 PermissionGuard 默认拒绝。

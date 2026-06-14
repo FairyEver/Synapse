@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Logger } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
 import { TeamsService } from "./teams.service"
@@ -152,6 +152,29 @@ describe("TeamsService", () => {
     }))
   })
 
+  it("returns created teams when success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit token=secret failed")) }
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      auditLog as never,
+    )
+
+    try {
+      await expect(service.createTeam("user-1", { name: "Team" }, "203.0.113.10"))
+        .resolves
+        .toMatchObject({ id: "team-1", name: "Team" })
+    } finally {
+      warnSpy.mockRestore()
+    }
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({ action: "team.create" }))
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret")
+  })
+
   it("rejects team invitation creation for non-owners", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-1" })
@@ -195,6 +218,31 @@ describe("TeamsService", () => {
     })
   })
 
+  it("returns team invitations when success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1" })
+    const invitations = {
+      createTeamInvitation: vi.fn().mockResolvedValue({ id: "invite-1" }),
+    }
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
+    const service = new TeamsService(
+      prisma as never,
+      invitations as never,
+      auditLog as never,
+    )
+
+    try {
+      await expect(service.createInvitation("user-1", "https://app.example.com"))
+        .resolves
+        .toEqual({ id: "invite-1" })
+    } finally {
+      warnSpy.mockRestore()
+    }
+    expect(invitations.createTeamInvitation).toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({ action: "team.invitation.create" }))
+  })
+
   it("returns the joined member with user fields", async () => {
     const prisma = createPrismaMock()
     const member = {
@@ -223,6 +271,36 @@ describe("TeamsService", () => {
         user: { select: { id: true, email: true, status: true } },
       },
     })
+  })
+
+  it("returns joined members when success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    const member = {
+      id: "membership-2",
+      teamId: "team-1",
+      userId: "user-2",
+      role: "member",
+      user: { id: "user-2", email: "member@example.com", status: "active" },
+    }
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.$transaction.mockImplementationOnce((callback) => callback({
+      teamMembership: {
+        create: vi.fn().mockResolvedValue(member),
+      },
+    }))
+    const invitations = {
+      consumeInvitation: vi.fn().mockResolvedValue({ teamId: "team-1" }),
+    }
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
+    const service = new TeamsService(prisma as never, invitations as never, auditLog as never)
+
+    try {
+      await expect(service.joinTeam("user-2", { token: "team-token" })).resolves.toEqual(member)
+    } finally {
+      warnSpy.mockRestore()
+    }
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({ action: "team.join" }))
   })
 
   it("records invalid team invitation attempts", async () => {
@@ -290,6 +368,27 @@ describe("TeamsService", () => {
       targetId: "team-1",
       detail: { teamId: "team-1", dissolved: false },
     }))
+  })
+
+  it("returns leave success when success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-2" })
+    prisma.teamMembership.deleteMany.mockResolvedValue({ count: 1 })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      auditLog as never,
+    )
+
+    try {
+      await expect(service.leaveTeam("user-2")).resolves.toEqual({ ok: true })
+    } finally {
+      warnSpy.mockRestore()
+    }
+    expect(prisma.teamMembership.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-2", teamId: "team-1" } })
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({ action: "team.leave" }))
   })
 
   it("returns a business error when a member leave races with another deletion", async () => {
@@ -464,6 +563,29 @@ describe("TeamsService", () => {
       targetId: "user-2",
       ipAddress: "203.0.113.20",
     }))
+  })
+
+  it("returns member removal success when success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique
+      .mockResolvedValueOnce({ role: "owner", teamId: "team-1", userId: "owner-1" })
+      .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "user-2" })
+    prisma.teamMembership.deleteMany.mockResolvedValue({ count: 1 })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable")) }
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      auditLog as never,
+    )
+
+    try {
+      await expect(service.removeMember("owner-1", "user-2", "203.0.113.20")).resolves.toEqual({ ok: true })
+    } finally {
+      warnSpy.mockRestore()
+    }
+    expect(prisma.teamMembership.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-2", teamId: "team-1" } })
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({ action: "team.member.remove" }))
   })
 
   it("returns a specific error when removing the team owner", async () => {

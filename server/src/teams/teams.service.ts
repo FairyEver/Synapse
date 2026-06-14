@@ -1,11 +1,16 @@
-import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Injectable, Logger, Optional } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
+import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { PrismaService } from "../prisma/prisma.service"
 
+type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
+
 @Injectable()
 export class TeamsService {
+  private readonly logger = new Logger(TeamsService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
@@ -49,7 +54,7 @@ export class TeamsService {
       throw error
     })
     const actorEmail = await this.getAuditActorEmail(userId)
-    await this.auditLog?.record({
+    await this.recordTeamAuditSafely({
       adminEmail: actorEmail,
       action: "team.create",
       targetType: "team",
@@ -96,7 +101,7 @@ export class TeamsService {
     }
     const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId, publicAppUrl })
     const actorEmail = await this.getAuditActorEmail(userId)
-    await this.auditLog?.record({
+    await this.recordTeamAuditSafely({
       adminEmail: actorEmail,
       action: "team.invitation.create",
       targetType: "invitation",
@@ -159,7 +164,7 @@ export class TeamsService {
       throw error
     })
     const actorEmail = await this.getAuditActorEmail(userId)
-    await this.auditLog?.record({
+    await this.recordTeamAuditSafely({
       adminEmail: actorEmail,
       action: "team.join",
       targetType: "team",
@@ -253,7 +258,7 @@ export class TeamsService {
       throw new BadRequestException("成员不存在。")
     }
     const actorEmail = await this.getAuditActorEmail(actorUserId)
-    await this.auditLog?.record({
+    await this.recordTeamAuditSafely({
       adminEmail: actorEmail,
       action: "team.member.remove",
       targetType: "user",
@@ -328,7 +333,7 @@ export class TeamsService {
     }
 
     const actorEmail = await this.getAuditActorEmail(userId)
-    await this.auditLog?.record({
+    await this.recordTeamAuditSafely({
       adminEmail: actorEmail,
       action: dissolved ? "team.dissolve" : "team.leave",
       targetType: "team",
@@ -371,6 +376,19 @@ export class TeamsService {
       select: { email: true },
     })
     return user?.email ?? userId
+  }
+
+  private async recordTeamAuditSafely(input: AuditRecordInput): Promise<void> {
+    try {
+      await this.auditLog?.record(input)
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        error: formatAuditError(error),
+      }, "Failed to record team audit log")
+    }
   }
 
   private async recordTeamFailure(input: {
