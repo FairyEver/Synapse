@@ -17,6 +17,7 @@ import {
   isLocalOllamaUrl,
   resolveDragonScaleOllamaUrl,
 } from "../index"
+import { DRAGONSCALE_TILING_MAX_RESPONSE_BYTES } from "../dragonscale/tiling-types"
 
 const servers: Array<{ close: () => Promise<void> }> = []
 
@@ -34,6 +35,7 @@ async function withServer(handler: (request: IncomingMessage, response: ServerRe
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()))
+  vi.unstubAllGlobals()
   dragonScaleLogger.info.mockClear()
   dragonScaleLogger.warn.mockClear()
   dragonScaleLogger.error.mockClear()
@@ -128,6 +130,35 @@ describe("DragonScaleOllamaEmbeddingProvider", () => {
     })).rejects.toThrow("non-numeric")
   })
 
+  it("reads Ollama JSON responses through the response stream", async () => {
+    const { response, arrayBuffer } = streamResponse([
+      new TextEncoder().encode(JSON.stringify({ embedding: [1, 2, 3] })),
+    ])
+    vi.stubGlobal("fetch", vi.fn(async () => response))
+
+    await expect(new DragonScaleOllamaEmbeddingProvider().embed({
+      url: "http://127.0.0.1:11434",
+      model: "nomic-embed-text",
+      text: "hello",
+    })).resolves.toEqual([1, 2, 3])
+    expect(arrayBuffer).not.toHaveBeenCalled()
+  })
+
+  it("rejects oversized streamed responses without reading them through arrayBuffer", async () => {
+    const { response, arrayBuffer } = streamResponse([
+      new Uint8Array(DRAGONSCALE_TILING_MAX_RESPONSE_BYTES),
+      new Uint8Array([123]),
+    ])
+    vi.stubGlobal("fetch", vi.fn(async () => response))
+
+    await expect(new DragonScaleOllamaEmbeddingProvider().embed({
+      url: "http://127.0.0.1:11434",
+      model: "nomic-embed-text",
+      text: "hello",
+    })).rejects.toThrow("size limit")
+    expect(arrayBuffer).not.toHaveBeenCalled()
+  })
+
   it("rejects oversized JSON responses", async () => {
     const baseUrl = await withServer((_request, response) => {
       response.setHeader("Content-Type", "application/json")
@@ -141,3 +172,20 @@ describe("DragonScaleOllamaEmbeddingProvider", () => {
     })).rejects.toThrow("size limit")
   })
 })
+
+function streamResponse(chunks: readonly Uint8Array[]) {
+  const arrayBuffer = vi.fn(async () => {
+    throw new Error("arrayBuffer should not be used")
+  })
+  const response = new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk)
+      controller.close()
+    },
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  })
+  Object.defineProperty(response, "arrayBuffer", { value: arrayBuffer })
+  return { response, arrayBuffer }
+}

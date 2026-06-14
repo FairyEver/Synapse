@@ -114,14 +114,46 @@ async function requestJson(
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
     }
-    const bytes = Buffer.from(await response.arrayBuffer())
-    if (bytes.byteLength > DRAGONSCALE_TILING_MAX_RESPONSE_BYTES) {
-      throw new Error("Ollama response exceeded size limit.")
-    }
+    const bytes = await readLimitedResponseBody(response, controller)
     return JSON.parse(bytes.toString("utf8")) as unknown
   } finally {
     clearTimeout(timeout)
   }
+}
+
+async function readLimitedResponseBody(response: Response, controller: AbortController): Promise<Buffer> {
+  const contentLength = response.headers.get("content-length")
+  if (contentLength) {
+    const parsedLength = Number(contentLength)
+    if (Number.isFinite(parsedLength) && parsedLength > DRAGONSCALE_TILING_MAX_RESPONSE_BYTES) {
+      controller.abort()
+      throw new Error("Ollama response exceeded size limit.")
+    }
+  }
+
+  if (!response.body) return Buffer.alloc(0)
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      totalBytes += value.byteLength
+      if (totalBytes > DRAGONSCALE_TILING_MAX_RESPONSE_BYTES) {
+        controller.abort()
+        throw new Error("Ollama response exceeded size limit.")
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  return Buffer.concat(chunks, totalBytes)
 }
 
 function joinUrl(base: string, suffix: string): string {
