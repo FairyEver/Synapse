@@ -152,6 +152,7 @@ function createProviderInputFromPackage(
   targetProviderId: string,
   sortIndex: number,
 ): CreateProviderInput {
+  const splitProviderEnv = splitProviderPackageEnv(pkg.provider.env ?? {})
   return {
     id: targetProviderId,
     name: pkg.provider.name,
@@ -166,11 +167,46 @@ function createProviderInputFromPackage(
     haikuModel: pkg.provider.haikuModel,
     sonnetModel: pkg.provider.sonnetModel,
     opusModel: pkg.provider.opusModel,
-    env: pkg.provider.env ?? {},
-    settingsConfig: pkg.provider.settingsConfig,
-    secretEnv: pkg.secrets.env ?? {},
+    env: splitProviderEnv.publicEnv,
+    settingsConfig: sanitizeProviderPackageSettingsConfig(pkg.provider.settingsConfig),
+    secretEnv: {
+      ...splitProviderEnv.secretEnv,
+      ...(pkg.secrets.env ?? {}),
+    },
     sortIndex,
   }
+}
+
+function splitProviderPackageEnv(env: Record<string, string>): {
+  readonly publicEnv: Record<string, string>
+  readonly secretEnv: Record<string, string>
+} {
+  const publicEnv: Record<string, string> = {}
+  const secretEnv: Record<string, string> = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (isSensitiveEnvName(key)) {
+      secretEnv[key] = value
+    } else {
+      publicEnv[key] = value
+    }
+  }
+  return { publicEnv, secretEnv }
+}
+
+function sanitizeProviderPackageSettingsConfig(
+  settingsConfig: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!settingsConfig || !isRecord(settingsConfig.env)) return settingsConfig
+  return {
+    ...settingsConfig,
+    env: Object.fromEntries(
+      Object.entries(settingsConfig.env).filter(([key]) => !isSensitiveEnvName(key)),
+    ),
+  }
+}
+
+function isSensitiveEnvName(key: string): boolean {
+  return /(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|API_KEY|ACCESS_KEY)/i.test(key)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1073,7 +1073,17 @@ describe("ProviderService", () => {
         baseUrl: "https://api.deepseek.com/anthropic",
         apiKeyField: "ANTHROPIC_AUTH_TOKEN",
         model: "deepseek-chat",
-        env: { EXTRA_FLAG: "1" },
+        env: {
+          EXTRA_FLAG: "1",
+          OPENAI_API_KEY: "sk-plain",
+          GITHUB_TOKEN: "ghp_plain",
+        },
+        settingsConfig: {
+          env: {
+            SAFE_FLAG: "1",
+            CUSTOM_SECRET: "plain-secret",
+          },
+        },
       },
       secrets: {
         apiKey: "sk-deepseek",
@@ -1099,9 +1109,18 @@ describe("ProviderService", () => {
       name: "DeepSeek",
       active: false,
       env: { EXTRA_FLAG: "1" },
+      settingsConfig: { env: { SAFE_FLAG: "1" } },
     }))
     await expect(secrets.get("provider:deepseek-2:api-key")).resolves.toMatchObject({ value: "sk-deepseek" })
+    await expect(secrets.get("provider:deepseek-2:env:OPENAI_API_KEY")).resolves.toMatchObject({ value: "sk-plain" })
+    await expect(secrets.get("provider:deepseek-2:env:GITHUB_TOKEN")).resolves.toMatchObject({ value: "ghp_plain" })
     await expect(secrets.get("provider:deepseek-2:env:AWS_SECRET_ACCESS_KEY")).resolves.toMatchObject({ value: "secret-access-key" })
+    await expect(service.buildEnv("deepseek-2")).resolves.toMatchObject({
+      EXTRA_FLAG: "1",
+      OPENAI_API_KEY: "sk-plain",
+      GITHUB_TOKEN: "ghp_plain",
+      AWS_SECRET_ACCESS_KEY: "secret-access-key",
+    })
     await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "deepseek" })
   })
 })
