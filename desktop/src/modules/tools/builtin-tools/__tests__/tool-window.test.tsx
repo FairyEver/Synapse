@@ -20,6 +20,12 @@ beforeEach(() => {
     configurable: true,
     value: bridgeMocks,
   })
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: {
+      writeText: vi.fn(async () => undefined),
+    },
+  })
 })
 
 afterEach(() => {
@@ -57,7 +63,14 @@ describe("BuiltinToolWindow", () => {
     })
     await waitForExpectation(() => {
       expect(document.body.textContent).toContain("完成")
+      expect(document.body.textContent).toContain("# OK")
+      expect(document.body.textContent).toContain("复制结果")
     })
+    await act(async () => {
+      buttonByText("复制结果").click()
+      await Promise.resolve()
+    })
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("# OK")
   })
 
   it("cancels a running tool from the stop button", async () => {
