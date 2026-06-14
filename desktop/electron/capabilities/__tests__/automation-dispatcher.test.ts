@@ -494,6 +494,45 @@ describe("automation capability dispatcher", () => {
     }))
   })
 
+  it("audits permission guard failures before automation mutations", async () => {
+    const { actions, triggers } = registries()
+    const service = serviceMock()
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => {
+        throw new Error("guard failed token=secret-value at /Users/liyang/private")
+      }),
+    }
+    const auditSink = auditSinkMock()
+    const dispatcher = createAutomationCapabilityDispatcher({
+      service,
+      accountService: accountServiceMock(),
+      triggers,
+      actions,
+      permissionGuard,
+      auditSink,
+    })
+
+    await expect(dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
+      .rejects.toThrow("guard failed token=secret-value at /Users/liyang/private")
+
+    expect(service.automationEnable).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.mutate",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        automationAction: "automation.item.enable",
+        automationId: "automation:1",
+        reason: "permission-check-error",
+        errorName: "Error",
+        errorLength: "Error: guard failed token=secret-value at /Users/liyang/private".length,
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-value")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("/Users/liyang/private")
+  })
+
   it("audits failed mutations without raw error text", async () => {
     const { auditSink, dispatcher, service } = createHarness()
     vi.mocked(service.automationEnable).mockRejectedValueOnce(new Error("failed with private prompt"))

@@ -601,12 +601,29 @@ async function authorizeAutomationMutation(
   deps: Pick<AutomationCapabilityDispatcherDeps, "permissionGuard" | "auditSink">,
   security: AutomationMutationSecurity,
 ): Promise<void> {
-  const permission = await deps.permissionGuard?.check({
-    action: "automation.mutate",
-    actor: security.actor,
-    resource: security.resource,
-    context: security.metadata,
-  })
+  let permission: Awaited<ReturnType<NonNullable<AutomationCapabilityDispatcherDeps["permissionGuard"]>["check"]>> | undefined
+  try {
+    permission = await deps.permissionGuard?.check({
+      action: "automation.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      context: security.metadata,
+    })
+  } catch (error) {
+    deps.auditSink?.record({
+      action: "automation.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "failed",
+      metadata: {
+        ...security.metadata,
+        reason: "permission-check-error",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    throw error
+  }
   if (permission && !permission.allowed) {
     deps.auditSink?.record({
       action: "automation.mutate",

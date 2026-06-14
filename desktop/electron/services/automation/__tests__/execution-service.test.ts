@@ -124,6 +124,42 @@ describe("AutomationExecutionService", () => {
     ])
   })
 
+  it("audits permission guard exceptions before the executor starts", async () => {
+    const harness = await createExecutionHarness({
+      permissionGuard: {
+        registerPolicy: () => () => {},
+        check: async () => {
+          throw new Error("permission backend failed token=secret-value at /Users/liyang/private")
+        },
+      },
+    })
+
+    const run = await harness.service.runItem(harness.item, "trigger")
+
+    expect(run.status).toBe("failed")
+    expect(run.error).toBe("执行失败（Error）")
+    expect(harness.auditEvents).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          source: "automation",
+          automationId: "automation:1",
+          runId: "automation-run:1",
+          triggerType: "builtin.cron",
+          executorType: "builtin.test",
+          triggeredBy: "trigger",
+          boundary: "automation-pre-execution",
+          status: "failed",
+          errorName: "Error",
+          errorLength: "permission backend failed token=secret-value at /Users/liyang/private".length,
+        }),
+      }),
+    ])
+    expect(JSON.stringify(harness.auditEvents)).not.toContain("secret-value")
+    expect(JSON.stringify(harness.auditEvents)).not.toContain("/Users/liyang/private")
+  })
+
   it("sanitizes persisted executor logs and outputs while preserving regular paths", async () => {
     const harness = await createExecutionHarness({
       action: {

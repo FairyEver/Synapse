@@ -221,6 +221,25 @@ export class AutomationExecutionService {
         })
         this.logger.warn("Automation executor threw.", metadata)
       } else {
+        if (permissionRequest && !permissionAllowed && !permissionDenied) {
+          this.deps.auditSink.record({
+            action: permissionRequest.action,
+            actor: permissionRequest.actor,
+            resource: permissionRequest.resource,
+            outcome: "failed",
+            metadata: {
+              source: "automation",
+              automationId: item.id,
+              runId: run.id,
+              triggerType: item.trigger.type,
+              executorType: item.executor.type,
+              triggeredBy,
+              boundary: "automation-pre-execution",
+              status,
+              ...diagnostic,
+            },
+          })
+        }
         this.logger.warn("Automation preparation failed.", {
           source: "automation",
           automationId: item.id,
