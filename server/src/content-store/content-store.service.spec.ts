@@ -657,6 +657,21 @@ describe("ContentStoreService", () => {
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
+  it("marks expired pending install sessions during cleanup", async () => {
+    const now = new Date("2026-06-09T01:00:00.000Z")
+    prisma.contentStoreInstallSession.updateMany.mockResolvedValue({ count: 2 })
+
+    await expect(service.cleanupExpiredInstallSessions(now)).resolves.toBe(2)
+
+    expect(prisma.contentStoreInstallSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        status: "pending",
+        expiresAt: { lte: now },
+      },
+      data: { status: "expired" },
+    })
+  })
+
   it("rejects prompt sessions when opening an install package", async () => {
     prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession({ type: "prompt" }))
 

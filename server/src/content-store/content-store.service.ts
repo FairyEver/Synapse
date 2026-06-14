@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common"
+import { Cron } from "@nestjs/schedule"
 import type { Prisma } from "@prisma/client"
 import type {
   ContentStoreDetailDto,
@@ -596,6 +597,25 @@ export class ContentStoreService {
       expiresAt: session.expiresAt.toISOString(),
       deepLinkUrl: appendSessionToDeepLink(normalizedDeepLinkBase, session.id),
     }
+  }
+
+  @Cron("0 * * * *")
+  async scheduledInstallSessionCleanup(): Promise<void> {
+    await this.cleanupExpiredInstallSessions()
+  }
+
+  async cleanupExpiredInstallSessions(now = new Date()): Promise<number> {
+    const result = await this.prisma.contentStoreInstallSession.updateMany({
+      where: {
+        status: "pending",
+        expiresAt: { lte: now },
+      },
+      data: { status: "expired" },
+    })
+    if (result.count > 0) {
+      this.logger.log(`Marked ${result.count} expired content store install sessions`)
+    }
+    return result.count
   }
 
   async resolveInstallSession(userId: string, sessionId: string): Promise<ResolvedContentStoreInstallSession> {
