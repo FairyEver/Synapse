@@ -672,12 +672,9 @@ export class UserAuthService {
       },
     })
 
-    await this.auditLog?.record({
+    await this.recordUserProfileUpdateAuditSafely({
       adminEmail: user.email,
-      action: "user.profile.update",
-      targetType: "user",
       targetId: user.id,
-      detail: { fields: ["displayName"] },
       ipAddress,
     })
 
@@ -730,6 +727,30 @@ export class UserAuthService {
       targetId: input.targetId,
       ipAddress: input.ipAddress,
     })
+  }
+
+  private async recordUserProfileUpdateAuditSafely(input: {
+    readonly adminEmail: string
+    readonly targetId: string
+    readonly ipAddress: string
+  }): Promise<void> {
+    try {
+      await this.auditLog?.record({
+        adminEmail: input.adminEmail,
+        action: "user.profile.update",
+        targetType: "user",
+        targetId: input.targetId,
+        detail: { fields: ["displayName"] },
+        ipAddress: input.ipAddress,
+      })
+    } catch (error) {
+      this.logger.warn({
+        action: "user.profile.update",
+        targetType: "user",
+        targetId: input.targetId,
+        ...safeAuditErrorDetail(error),
+      }, "Failed to record user profile update audit log")
+    }
   }
 
   private async recordUserRegistrationFailure(input: {

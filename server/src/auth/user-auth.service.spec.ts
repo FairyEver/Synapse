@@ -986,6 +986,52 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("returns the updated profile when profile audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Grace Hopper",
+      memberships: [],
+    })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const service = createService(prisma, auditLog)
+
+    try {
+      await expect(service.updateMyProfile("user-1", {
+        displayName: "Grace Hopper",
+      }, "203.0.113.80")).resolves.toEqual({
+        user: {
+          id: "user-1",
+          email: "u@example.com",
+          status: "active",
+          displayName: "Grace Hopper",
+        },
+        teams: [],
+      })
+
+      expect(auditLog.record).toHaveBeenCalledWith({
+        adminEmail: "u@example.com",
+        action: "user.profile.update",
+        targetType: "user",
+        targetId: "user-1",
+        detail: { fields: ["displayName"] },
+        ipAddress: "203.0.113.80",
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.profile.update",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user profile update audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("rejects empty current user display names", async () => {
     const prisma = createPrismaMock()
     const service = createService(prisma)
