@@ -204,6 +204,32 @@ describe("builtin tool runner", () => {
     expect(result.ok).toBe(false)
     expect(result.ok ? "" : result.error).toEqual({ code: "conversion_failed", message: "Parse failed." })
   })
+
+  it("redacts sensitive worker error details before returning tool results", async () => {
+    const result = await runBuiltinTool({
+      toolId: "docx-to-markdown",
+      input: { inputPath: "/tmp/a.docx", outputMode: "return" },
+      context: { entryPoint: "tools", actor: { kind: "user" } },
+      registry: createBuiltinToolRegistryForTests([makeTool()]),
+      permissionGuard: makePermissionGuard(),
+      auditSink: makeAuditSink(),
+      executeInWorker: vi.fn(async () => {
+        throw new BuiltinToolError(
+          "conversion_failed",
+          "Failed at /Users/ada/private/report.docx with Authorization: Bearer sk-secret123456 and https://api.example.test/import?token=sk-secret123456&state=opaque",
+        )
+      }),
+    })
+
+    expect(result.ok).toBe(false)
+    const message = result.ok ? "" : result.error.message
+    expect(message).not.toContain("/Users/ada/private/report.docx")
+    expect(message).not.toContain("sk-secret123456")
+    expect(message).not.toContain("state=opaque")
+    expect(message).toContain("[path]")
+    expect(message).toContain("Authorization=[redacted]")
+    expect(message).toContain("token=[redacted]")
+  })
 })
 
 function makePermissionGuard(result: PermissionResult = { allowed: true }): PermissionGuard {

@@ -1,4 +1,6 @@
 import type { BuiltinToolErrorCode, BuiltinToolErrorPayload } from "./types"
+import { sanitizeError } from "../../../src/lib/error-sanitize"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 export class BuiltinToolError extends Error {
   readonly code: BuiltinToolErrorCode
@@ -15,11 +17,14 @@ export class BuiltinToolError extends Error {
 
 export function toBuiltinToolErrorPayload(error: unknown): BuiltinToolErrorPayload {
   if (error instanceof BuiltinToolError) {
-    return { code: error.code, message: error.message }
+    return { code: error.code, message: sanitizeBuiltinToolErrorMessage(error.message) }
   }
   if (error instanceof Error) {
-    return { code: "worker_failed", message: error.message }
+    return { code: "worker_failed", message: sanitizeBuiltinToolErrorMessage(error.message) }
   }
-  return { code: "worker_failed", message: String(error) }
+  return { code: "worker_failed", message: sanitizeBuiltinToolErrorMessage(String(error)) }
 }
 
+function sanitizeBuiltinToolErrorMessage(message: string): string {
+  return sanitizeError(message.replace(/https?:\/\/[^\s"'<>]+/gi, (url) => sanitizeUrl(url)))
+}
