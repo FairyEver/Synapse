@@ -112,13 +112,34 @@ describe("LiveController", () => {
   })
 
   it("returns only current user's devices for dashboard users", async () => {
-    const listUserDevices = vi.fn().mockResolvedValue([{ clientInstanceId: "client-a", displayName: "工作电脑" }])
+    const result = { data: [{ clientInstanceId: "client-a", displayName: "工作电脑" }], total: 1, page: 2, pageSize: 10 }
+    const listUserDevices = vi.fn().mockResolvedValue(result)
     const controller = createController({}, {}, { listUserDevices })
 
-    await expect(controller.listDashboardDevices({ user: { id: "user-1" } } as never)).resolves.toEqual([
-      { clientInstanceId: "client-a", displayName: "工作电脑" },
-    ])
-    expect(listUserDevices).toHaveBeenCalledWith("user-1")
+    await expect(controller.listDashboardDevices(
+      { page: "2", pageSize: "10", sortBy: "lastSeenAt", sortOrder: "desc" },
+      { user: { id: "user-1" } } as never,
+    )).resolves.toEqual(result)
+    expect(listUserDevices).toHaveBeenCalledWith("user-1", {
+      page: 2,
+      pageSize: 10,
+      sortBy: "lastSeenAt",
+      sortOrder: "desc",
+    })
+  })
+
+  it("uses lastSeenAt as the default dashboard device sort field", async () => {
+    const listUserDevices = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const controller = createController({}, {}, { listUserDevices })
+
+    await controller.listDashboardDevices({}, { user: { id: "user-1" } } as never)
+
+    expect(listUserDevices).toHaveBeenCalledWith("user-1", {
+      page: 1,
+      pageSize: 20,
+      sortBy: "lastSeenAt",
+      sortOrder: "desc",
+    })
   })
 
   it("renames only the current user's device", async () => {

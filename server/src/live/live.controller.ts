@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Logger, Optional, Param, Patch, Req, Sse, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Logger, Optional, Param, Patch, Query, Req, Sse, UseGuards } from "@nestjs/common"
 import { map } from "rxjs"
 import { z } from "zod"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { UserAuthGuard, type AuthenticatedUserRequest } from "../auth/user-auth.guard"
 import { AuditLogService } from "../common/audit-log.service"
+import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { LiveDeviceService } from "./live-device.service"
 import { LiveQueryService } from "./live-query.service"
@@ -13,6 +14,7 @@ import { LiveStreamService } from "./live-stream.service"
 const renameDeviceSchema = z.object({
   displayName: z.string().trim().min(1).max(120),
 }).strict()
+const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @Controller()
@@ -78,8 +80,9 @@ export class LiveController {
 
   @UseGuards(UserAuthGuard)
   @Get(["/api/console/devices", "/api/dashboard/devices"])
-  listDashboardDevices(@Req() request: AuthenticatedUserRequest) {
-    return this.devices.listUserDevices(request.user!.id)
+  listDashboardDevices(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {
+    const pagination = parsePagination({ sortBy: "lastSeenAt", ...query }, { allowedSortFields: deviceSortFields })
+    return this.devices.listUserDevices(request.user!.id, pagination)
   }
 
   @UseGuards(UserAuthGuard)

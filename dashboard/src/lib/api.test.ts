@@ -195,14 +195,19 @@ describe('dashboardApi.devices', () => {
   }
 
   it('uses console device endpoints', async () => {
-    const fetchMock = mockJsonResponse({ ok: true })
+    const fetchMock = mockJsonResponse({ data: [], total: 0, page: 2, pageSize: 10 })
 
-    await dashboardApi.listDevices()
+    await dashboardApi.listDevices({
+      page: 2,
+      pageSize: 10,
+      sortBy: 'lastSeenAt',
+      sortOrder: 'desc',
+    })
     await dashboardApi.renameDevice('client/id', { displayName: 'Studio Mac' })
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/console/devices',
+      '/api/console/devices?page=2&pageSize=10&sortBy=lastSeenAt&sortOrder=desc',
       expect.objectContaining({ credentials: 'include' })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(

@@ -58,19 +58,24 @@ function prismaNotFound() {
 describe("LiveDeviceService", () => {
   it("merges a user's persisted devices with current live state", async () => {
     const prisma = createPrismaMock()
-    prisma.userDevice.findMany.mockResolvedValue([
-      device({
-        id: "device-b",
-        clientInstanceId: "client-b",
-        displayName: "Windows 台式机",
-        deviceName: "Workstation",
-        platform: "win32-x64",
-        appVersion: "0.2.250",
-        firstSeenAt: new Date("2026-06-06T08:00:00.000Z"),
-        lastSeenAt: new Date("2026-06-06T10:03:00.000Z"),
-      }),
-      device({ displayName: "工作电脑" }),
-    ])
+    prisma.userDevice.findMany
+      .mockResolvedValueOnce([
+        device({
+          id: "device-b",
+          clientInstanceId: "client-b",
+          displayName: "Windows 台式机",
+          deviceName: "Workstation",
+          platform: "win32-x64",
+          appVersion: "0.2.250",
+          firstSeenAt: new Date("2026-06-06T08:00:00.000Z"),
+          lastSeenAt: new Date("2026-06-06T10:03:00.000Z"),
+        }),
+        device({ displayName: "工作电脑" }),
+      ])
+      .mockResolvedValueOnce([
+        { userId: "user-1", clientInstanceId: "client-a" },
+      ])
+    prisma.userDevice.count.mockResolvedValue(2)
     const registry = new LiveClientRegistry()
     registerClient(registry)
     registerClient(registry, {
@@ -81,31 +86,43 @@ describe("LiveDeviceService", () => {
     })
     const service = new LiveDeviceService(prisma as unknown as PrismaService, registry)
 
-    const devices = await service.listUserDevices("user-1")
+    const result = await service.listUserDevices("user-1", {
+      page: 1,
+      pageSize: 20,
+      sortBy: "lastSeenAt",
+      sortOrder: "desc",
+    })
 
-    expect(prisma.userDevice.findMany).toHaveBeenCalledWith({
+    expect(prisma.userDevice.findMany).toHaveBeenNthCalledWith(1, {
+      skip: 0,
+      take: 20,
       where: { userId: "user-1" },
       orderBy: { lastSeenAt: "desc" },
     })
-    expect(devices).toEqual([
-      expect.objectContaining({
-        clientInstanceId: "client-a",
-        displayName: "工作电脑",
-        deviceName: "MacBook Pro",
-        status: "online",
-        firstSeenAt: "2026-06-06T09:00:00.000Z",
-        lastSeenAt: "2026-06-06T10:05:00.000Z",
-      }),
-      expect.objectContaining({
-        clientInstanceId: "client-b",
-        displayName: "Windows 台式机",
-        deviceName: "Workstation",
-        status: "offline",
-        connectedAt: null,
-        lastSeenAt: "2026-06-06T10:03:00.000Z",
-      }),
-    ])
-    expect(devices[0]).not.toHaveProperty("userId")
+    expect(result).toEqual({
+      data: [
+        expect.objectContaining({
+          clientInstanceId: "client-a",
+          displayName: "工作电脑",
+          deviceName: "MacBook Pro",
+          status: "online",
+          firstSeenAt: "2026-06-06T09:00:00.000Z",
+          lastSeenAt: "2026-06-06T10:05:00.000Z",
+        }),
+        expect.objectContaining({
+          clientInstanceId: "client-b",
+          displayName: "Windows 台式机",
+          deviceName: "Workstation",
+          status: "offline",
+          connectedAt: null,
+          lastSeenAt: "2026-06-06T10:03:00.000Z",
+        }),
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+    })
+    expect(result.data[0]).not.toHaveProperty("userId")
   })
 
   it("upserts hello metadata without overwriting the user display name", async () => {

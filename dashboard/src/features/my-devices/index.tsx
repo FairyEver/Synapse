@@ -6,13 +6,14 @@ import { dashboardApi, type DashboardDeviceRow } from '@/lib/api'
 import {
   deviceStatusLabels,
   deviceStatusVariants,
-  mergeDeviceSnapshot,
+  sortDevicesByTableSorting,
   upsertDeviceLiveEvent,
 } from '@/lib/device-utils'
 import {
   DataTableColumnHeader,
   DEFAULT_DASHBOARD_PAGE_SIZE,
   ServerDataTable,
+  getServerTableSortQuery,
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
@@ -43,11 +44,11 @@ export default function MyDevicesPage() {
   ])
   const [editingDevice, setEditingDevice] = useState<DashboardDeviceRow | null>(null)
   const [displayName, setDisplayName] = useState('')
-  const sortQuery = sorting[0]
+  const sortQuery = getServerTableSortQuery(sorting)
 
   const { data, error, isError, isLoading, refetch } = useQuery({
-    queryKey: ['dashboard-devices', sessionId],
-    queryFn: dashboardApi.listDevices,
+    queryKey: ['dashboard-devices', sessionId, page, pageSize, sortQuery],
+    queryFn: () => dashboardApi.listDevices({ page, pageSize, ...sortQuery }),
   })
 
   useEffect(() => {
@@ -56,10 +57,8 @@ export default function MyDevicesPage() {
   }, [sessionId])
 
   useEffect(() => {
-    if (data) {
-      setDevices((current) =>
-        mergeDeviceSnapshot(current, data, { scope: 'user' })
-      )
+    if (data?.data) {
+      setDevices(data.data)
     }
   }, [data])
 
@@ -67,23 +66,17 @@ export default function MyDevicesPage() {
     return dashboardApi.subscribeLiveClients(
       (event) => {
         setDevices((current) =>
-          upsertDeviceLiveEvent(current, event, { scope: 'user' })
+          sortDevicesByTableSorting(
+            upsertDeviceLiveEvent(current, event, { scope: 'user' }),
+            sorting
+          )
         )
       },
       () => {
         void queryClient.invalidateQueries({ queryKey: ['dashboard-devices'] })
       }
     )
-  }, [queryClient])
-
-  const sortedDevices = useMemo(
-    () => sortDevices(devices, sortQuery),
-    [devices, sortQuery]
-  )
-  const pagedDevices = useMemo(() => {
-    const start = (page - 1) * pageSize
-    return sortedDevices.slice(start, start + pageSize)
-  }, [page, pageSize, sortedDevices])
+  }, [queryClient, sorting])
 
   const renameDevice = useMutation({
     mutationFn: (input: { clientInstanceId: string; displayName: string }) =>
@@ -126,7 +119,7 @@ export default function MyDevicesPage() {
   const columns = useMemo<ColumnDef<DashboardDeviceRow>[]>(
     () => [
       {
-        id: 'displayName',
+        accessorKey: 'deviceName',
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title='设备' />
         ),
@@ -208,10 +201,10 @@ export default function MyDevicesPage() {
         ) : (
           <ServerDataTable
             columns={columns}
-            data={pagedDevices}
+            data={devices}
             page={page}
             pageSize={pageSize}
-            total={sortedDevices.length}
+            total={data?.total ?? 0}
             error={isError ? error : null}
             onRetry={() => void refetch()}
             onPageChange={setPage}
@@ -271,40 +264,6 @@ function DeviceName({ device }: { device: DashboardDeviceRow }) {
       ) : null}
     </div>
   )
-}
-
-function sortDevices(
-  devices: readonly DashboardDeviceRow[],
-  sort: SortingState[number] | undefined
-) {
-  if (!sort) return [...devices]
-  return [...devices].sort((left, right) => {
-    const result = compareDeviceValue(left, right, sort.id)
-    return sort.desc ? -result : result
-  })
-}
-
-function compareDeviceValue(
-  left: DashboardDeviceRow,
-  right: DashboardDeviceRow,
-  key: string
-) {
-  if (key === 'lastSeenAt' || key === 'firstSeenAt') {
-    return parseTime(left[key]) - parseTime(right[key])
-  }
-  return getComparableValue(left, key).localeCompare(getComparableValue(right, key))
-}
-
-function getComparableValue(device: DashboardDeviceRow, key: string) {
-  if (key === 'displayName') return device.displayName ?? device.deviceName
-  const value = device[key as keyof DashboardDeviceRow]
-  return typeof value === 'string' ? value : ''
-}
-
-function parseTime(value: string | null | undefined) {
-  if (!value) return 0
-  const time = Date.parse(value)
-  return Number.isNaN(time) ? 0 : time
 }
 
 function formatOptionalDateTime(value: string | null | undefined) {

@@ -554,8 +554,10 @@ export const dashboardApi = {
     }),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${consoleApiBasePath}/live-clients`),
-  listDevices: () =>
-    request<DashboardDeviceRow[]>(`${consoleApiBasePath}/devices`),
+  listDevices: (options: PaginationOptions = {}) =>
+    request<PaginatedResponse<DashboardDeviceRow>>(
+      `${consoleApiBasePath}/devices${paginationSuffix(options)}`
+    ),
   renameDevice: (clientInstanceId: string, input: { displayName: string }) =>
     request<DashboardDeviceRow>(
       `${consoleApiBasePath}/devices/${encodeURIComponent(clientInstanceId)}`,

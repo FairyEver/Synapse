@@ -85,13 +85,18 @@ export class LiveDeviceService {
     })
   }
 
-  async listUserDevices(userId: string): Promise<DashboardDeviceRow[]> {
-    const rows = await this.prisma.userDevice.findMany({
-      where: { userId },
-      orderBy: { lastSeenAt: "desc" },
-    })
+  async listUserDevices(userId: string, pagination: PaginationQuery): Promise<PaginatedResponse<DashboardDeviceRow>> {
+    const liveClients = this.registry.listByUser(userId)
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.userDevice.findMany({
+        ...toPrismaArgs(pagination),
+        where: { userId },
+      }),
+      this.prisma.userDevice.count({ where: { userId } }),
+    ])
+    const liveKeysWithRows = await this.findPersistedLiveDeviceKeys(liveClients)
     const liveByClient = new Map(
-      this.registry.listByUser(userId).map((client) => [client.clientInstanceId, client]),
+      liveClients.map((client) => [client.clientInstanceId, client]),
     )
     const devices = rows.map((row) => {
       const live = liveByClient.get(row.clientInstanceId)
@@ -99,11 +104,19 @@ export class LiveDeviceService {
       return toDeviceRow(row, live, { includeUser: false })
     })
 
-    for (const live of liveByClient.values()) {
-      devices.push(toLiveOnlyDeviceRow(live, { includeUser: false }))
-    }
+    const liveOnlyDevices = Array.from(liveByClient.values())
+      .filter((live) => !liveKeysWithRows.has(deviceKey(live.userId, live.clientInstanceId)))
+      .map((live) => toLiveOnlyDeviceRow(live, { includeUser: false }))
 
-    return devices.sort(compareDevicesByObservedAt)
+    return {
+      data: [
+        ...devices,
+        ...(pagination.page === 1 ? liveOnlyDevices : []),
+      ].sort(compareDevicesByObservedAt),
+      total: total + liveOnlyDevices.length,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    }
   }
 
   async listAdminDevices(pagination: PaginationQuery): Promise<PaginatedResponse<DashboardDeviceRow>> {
