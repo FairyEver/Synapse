@@ -26,7 +26,7 @@ export function ScriptNodeCard({ config, name, selected, status, progressLabel, 
       ) : (
         <>
           <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-[11px] font-mono text-muted-foreground">{config.shell}</span>
+            <span className="text-[11px] font-mono text-muted-foreground">{config.shell ?? "default"}</span>
           </div>
           <p className="text-[11px] text-muted-foreground truncate opacity-70">
             {config.script ? config.script.slice(0, 60) : "未编写脚本"}

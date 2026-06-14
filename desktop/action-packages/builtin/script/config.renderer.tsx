@@ -12,7 +12,9 @@ import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-
 import { RecordTextarea } from "../../record-textarea.renderer"
 import type { ScriptActionConfig } from "./schema"
 
-const SHELL_OPTIONS: Array<{ label: string; value: ScriptActionConfig["shell"] }> = [
+type ScriptShell = NonNullable<ScriptActionConfig["shell"]>
+
+const SHELL_OPTIONS: Array<{ label: string; value: ScriptShell }> = [
   { label: "POSIX", value: "posix" },
   { label: "cmd", value: "cmd" },
   { label: "PowerShell", value: "powershell" },
@@ -45,7 +47,7 @@ export function ScriptConfigForm({
             value={value.shell}
             variant="outline"
             onValueChange={(shell) => {
-              if (shell) onChange({ ...value, shell: shell as ScriptActionConfig["shell"] })
+              if (shell) onChange({ ...value, shell: shell as ScriptShell })
             }}
           >
             {SHELL_OPTIONS.map((option) => (

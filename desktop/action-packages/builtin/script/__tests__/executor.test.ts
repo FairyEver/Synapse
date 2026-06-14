@@ -39,6 +39,41 @@ describe("builtin.script executor", () => {
     expect(result.outputs).toEqual({ stdout: "", stderr: "bad", exitCode: 1 })
   })
 
+  it("uses the Windows default shell when script shell is omitted", async () => {
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: "ok",
+      stderr: "",
+      timedOut: false,
+      durationMs: 7,
+    }))
+    const action = createScriptAction({
+      processRunner: { run },
+      platform: "win32",
+    })
+
+    await action.execute({
+      config: {
+        script: "echo ok",
+        timeoutMins: 1,
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "manual",
+        cwd: "C:\\work",
+        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "echo ok"],
+    }))
+  })
+
   it("passes pathStrategy through to processRunner.run", async () => {
     const run = vi.fn(async () => ({
       exitCode: 0,

@@ -8,10 +8,10 @@ export const scriptNodeManifest: NodeManifest<ScriptNodeConfig> = {
   title: "脚本",
   icon: Terminal,
   color: "bg-primary/10",
-  defaultConfig: { shell: "posix", variables: [] } as unknown as ScriptNodeConfig,
+  defaultConfig: { variables: [] } as unknown as ScriptNodeConfig,
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
   cardSummary: (c) => ({
-    title: `${c.shell} 脚本`,
+    title: `${c.shell ?? "默认"} 脚本`,
     subtitle: c.script ? c.script.slice(0, 60) : "未编写脚本",
   }),
   configFields: [

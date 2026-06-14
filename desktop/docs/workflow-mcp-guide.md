@@ -102,7 +102,7 @@ script 节点输出是原样 stdout。下游用 `node_output` 绑定路径、ID�
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `script` | string | 脚本内容 |
-| `shell` | `"posix"` \| `"cmd"` \| `"powershell"` | Shell 类型 |
+| `shell` | `"posix"` \| `"cmd"` \| `"powershell"`? | Shell 类型；留空时按运行平台选择默认 shell |
 | `env` | object? | 环境变量键值对 |
 | `pathStrategy` | `"merge"` \| `"replace"`? | PATH 处理方式 |
 | `posixLogin` | boolean? | posix shell 是否按 login shell 执行 |

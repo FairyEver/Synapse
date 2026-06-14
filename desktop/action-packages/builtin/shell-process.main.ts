@@ -8,7 +8,7 @@ import type { ActionRunResult } from "../types"
 import type { ActionRuntimeContext } from "../../electron/action-runtime/action-registry"
 
 export type ShellActionConfig = {
-  readonly shell: "posix" | "cmd" | "powershell"
+  readonly shell?: "posix" | "cmd" | "powershell"
   readonly env?: Record<string, string>
   readonly pathStrategy?: PathStrategy
   readonly posixLogin?: boolean
