@@ -11,6 +11,7 @@ export function App() {
   const { config, loading, error, save, setConfig } = useConfig()
   const [snapshot, setSnapshot] = useState<SchedulerSnapshot | null>(null)
   const [showConfig, setShowConfig] = useState(true)
+  const [outputLoadError, setOutputLoadError] = useState<string | null>(null)
   const outputBuffer = useOutputBuffer()
 
   useSSE({
@@ -25,11 +26,33 @@ export function App() {
 
   useEffect(() => {
     if (!snapshot?.session) return
+    let cancelled = false
+    setOutputLoadError(null)
     api.fetchWorkerOutput()
-      .then(res => outputBuffer.load(res.workers))
-      .catch(() => {})
+      .then((res) => {
+        if (cancelled) return
+        outputBuffer.load(res.workers)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setOutputLoadError('历史输出加载失败')
+      })
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load on session change
   }, [snapshot?.session?.id])
+
+  const handleReloadOutput = useCallback(async () => {
+    if (!snapshot?.session) return
+    setOutputLoadError(null)
+    try {
+      const res = await api.fetchWorkerOutput()
+      outputBuffer.load(res.workers)
+    } catch {
+      setOutputLoadError('历史输出加载失败')
+    }
+  }, [snapshot?.session?.id, outputBuffer])
 
   const handleSave = useCallback(async () => {
     if (!config) return
@@ -43,6 +66,7 @@ export function App() {
       const s = await api.startScheduler(saved)
       setSnapshot(s)
       setShowConfig(false)
+      setOutputLoadError(null)
       outputBuffer.reset()
     } catch (err) {
       console.error('Start failed:', err)
@@ -94,6 +118,8 @@ export function App() {
             snapshot={snapshot}
             outputLines={outputBuffer.lines}
             trimmed={outputBuffer.trimmed}
+            outputLoadError={outputLoadError}
+            onReloadOutput={handleReloadOutput}
             onStop={handleStop}
             onBack={() => setShowConfig(true)}
           />

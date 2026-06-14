@@ -6,6 +6,8 @@ interface RunViewProps {
   snapshot: SchedulerSnapshot
   outputLines: ReadonlyMap<string, OutputLine[]>
   trimmed: ReadonlyMap<string, number>
+  outputLoadError: string | null
+  onReloadOutput: () => void
   onStop: () => void
   onBack: () => void
 }
@@ -25,7 +27,15 @@ function formatDuration(ms: number): string {
   return `${m}m ${s % 60}s`
 }
 
-export function RunView({ snapshot, outputLines, trimmed, onStop, onBack }: RunViewProps) {
+export function RunView({
+  snapshot,
+  outputLines,
+  trimmed,
+  outputLoadError,
+  onReloadOutput,
+  onStop,
+  onBack,
+}: RunViewProps) {
   const session = snapshot.session
   const canStop = snapshot.status === 'running'
   const isFinished = snapshot.status === 'stopped' || snapshot.status === 'error'
@@ -81,6 +91,20 @@ export function RunView({ snapshot, outputLines, trimmed, onStop, onBack }: RunV
         <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 rounded-md p-3">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {snapshot.error}
+        </div>
+      )}
+
+      {outputLoadError && (
+        <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 rounded-md p-3">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{outputLoadError}</span>
+          <button
+            type="button"
+            onClick={onReloadOutput}
+            className="ml-auto rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-background transition-colors"
+          >
+            重试
+          </button>
         </div>
       )}
 
