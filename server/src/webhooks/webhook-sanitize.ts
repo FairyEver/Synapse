@@ -1,6 +1,6 @@
 import { BadRequestException, UnsupportedMediaTypeException } from "@nestjs/common"
 
-const sensitiveKeyPattern = /authorization|cookie|token|secret|password|credential|api[-_]?key/i
+const sensitiveKeyPattern = /authorization|cookie|token|secret|password|credential|signature|api[-_]?key/i
 const sensitiveTextLinePattern = /^([^=\s:]+)\s*[:=]\s*(.+)$/u
 const bearerPattern = /\bbearer\s+[^,\s;]+/giu
 const cookieFragmentPattern = /\bcookie\s*[:=]\s*.+?(?=(?:\s+(?:and|plus|with)\s+\b(?:authorization|bearer|token|secret|password|credential|api[-_]?key)\b)|[,\n]|$)/giu
@@ -71,7 +71,7 @@ export function sanitizeWebhookLogRequest(request: WebhookLogRequestLike): Recor
     url: sanitizeWebhookLogUrl(resolveRequestLogUrl(request)),
     query: sanitizeWebhookLogParams(request.query),
     params: sanitizeWebhookLogParams(request.params),
-    headers: request.headers,
+    headers: sanitizeWebhookLogHeaders(request.headers),
     remoteAddress: connection?.remoteAddress,
     remotePort: connection?.remotePort,
   })
@@ -161,6 +161,11 @@ function sanitizeWebhookLogParams(params: unknown): unknown {
     result[key] = sanitizeWebhookLogParams(value)
   }
   return result
+}
+
+function sanitizeWebhookLogHeaders(headers: unknown): Record<string, string> | undefined {
+  const value = recordValue(headers)
+  return value ? sanitizeWebhookHeaders(value) : undefined
 }
 
 function isWebhookPathParams(value: unknown): value is readonly string[] {

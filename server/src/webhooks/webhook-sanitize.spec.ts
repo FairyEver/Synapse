@@ -63,7 +63,12 @@ describe("webhook sanitize", () => {
       id: "req-1",
       query: { run: "abc" },
       params: { path: ["webhooks", "wh_public_id", "whsec_secret_value"] },
-      headers: { "x-test": "ok" },
+      headers: {
+        "x-test": "ok",
+        "x-api-key": "api-key-secret",
+        "x-gitlab-token": "gitlab-token-secret",
+        "x-hub-signature-256": "sha256=signature-secret",
+      },
       socket: { remoteAddress: "127.0.0.1", remotePort: 3001 },
     }
     Object.defineProperties(requestLike, {
@@ -79,11 +84,19 @@ describe("webhook sanitize", () => {
       url: "/webhooks/wh_public_id/***?run=abc",
       query: { run: "abc" },
       params: { path: ["webhooks", "wh_public_id", "[redacted]"] },
-      headers: { "x-test": "ok" },
+      headers: {
+        "x-test": "ok",
+        "x-api-key": "[redacted]",
+        "x-gitlab-token": "[redacted]",
+        "x-hub-signature-256": "[redacted]",
+      },
       remoteAddress: "127.0.0.1",
       remotePort: 3001,
     })
     expect(JSON.stringify(request)).not.toContain("whsec_secret_value")
+    expect(JSON.stringify(request)).not.toContain("api-key-secret")
+    expect(JSON.stringify(request)).not.toContain("gitlab-token-secret")
+    expect(JSON.stringify(request)).not.toContain("signature-secret")
   })
 
   it("summarizes JSON bodies without leaking token-like fields", () => {
