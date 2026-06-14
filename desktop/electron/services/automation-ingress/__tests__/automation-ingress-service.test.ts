@@ -322,6 +322,46 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("uses the configured project workspace for webhook prompt agent messages", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const send = vi.fn(async () => ({ resultText: "ok" }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        project: "project-1",
+        sessionKey: "local:automation",
+        workspacePath: "/tmp/other-project",
+        prompt: "run",
+        replyMode: "wait",
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      workspacePath: "/repo",
+    }))
+
+    await service.stop()
+  })
+
   it("uses webhook run id as AgentMessage messageId when no messageId is provided", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

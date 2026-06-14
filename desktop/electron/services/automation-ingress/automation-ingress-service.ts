@@ -484,7 +484,7 @@ export class AutomationIngressService {
       userName: "webhook",
       content,
       workspaceKey: stringValue(body.workspaceKey),
-      workspacePath: stringValue(body.workspacePath),
+      workspacePath: project.workspacePath,
       createdAt: this.isoNow(),
     }
     const result = await agent.send(message)
