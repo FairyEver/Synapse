@@ -40,4 +40,28 @@ describe("createZipArchive", () => {
       }),
     }))
   })
+
+  it("redacts process output before including it in archive failure errors", async () => {
+    const processRunner = createProcessRunner({
+      exitCode: 1,
+      stdout: "zip failed token=sk-secret Authorization: Bearer sk-bearer https://example.com/callback?token=query-secret /Users/liyang/private/archive.zip",
+      stderr: "ignored",
+    })
+
+    await createZipArchive("/source", "/target.zip", {
+      actor: { kind: "user" },
+      processRunner,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).toContain("创建压缩包失败，请稍后重试。")
+      expect(message).toContain("token=[redacted]")
+      expect(message).toContain("Authorization=[redacted]")
+      expect(message).toContain("https://example.com/callback?token=[redacted]")
+      expect(message).toContain("[path]")
+      expect(message).not.toContain("sk-secret")
+      expect(message).not.toContain("sk-bearer")
+      expect(message).not.toContain("query-secret")
+      expect(message).not.toContain("/Users/liyang/private/archive.zip")
+    })
+  })
 })

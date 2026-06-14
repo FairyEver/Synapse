@@ -1,4 +1,6 @@
 import path from "node:path"
+import { sanitizeError } from "../../../src/lib/error-sanitize"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import {
   ControlledProcessPermissionError,
   type ControlledProcessResult,
@@ -41,7 +43,7 @@ function formatArchiveSpawnError(error: unknown, messages: Required<ZipArchiveMe
     return messages.missingTool
   }
 
-  return error instanceof Error ? error.message : messages.startFailed
+  return error instanceof Error ? sanitizeArchiveFailureDetail(error.message) || messages.startFailed : messages.startFailed
 }
 
 function formatArchiveProcessError(result: ControlledProcessResult, messages: Required<ZipArchiveMessages>): string {
@@ -66,7 +68,12 @@ function formatArchiveFailureMessage(output: string, messages: Required<ZipArchi
     .map((line) => line.trim())
     .find((line) => line.length > 0)
 
-  return firstLine ? `${messages.failed}\n${firstLine}` : messages.failed
+  const detail = firstLine ? sanitizeArchiveFailureDetail(firstLine) : ""
+  return detail ? `${messages.failed}\n${detail}` : messages.failed
+}
+
+function sanitizeArchiveFailureDetail(value: string): string {
+  return sanitizeError(value.replace(/https?:\/\/[^\s"'<>]+/gi, (url) => sanitizeUrl(url)))
 }
 
 const ARCHIVE_DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
