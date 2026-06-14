@@ -51,6 +51,32 @@ test('BatchLogger writes sequence-aware slot run logs', async () => {
   }
 })
 
+test('BatchLogger redacts sensitive values in worker logs', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-log-redact-'))
+  try {
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const worker = logger.createWorkerLogger(1)
+    worker.writeStdout('Authorization: Bearer stdout-secret\n')
+    worker.writeStderr('Cookie: sid=cookie-secret\n')
+    worker.writeEvent({
+      type: 'tool_result',
+      content: '{"accessToken":"json-secret","file_path":"/Users/test/project/file.ts"}',
+    })
+    await worker.close({ status: 'error', durationMs: 12, exitCode: 1 })
+
+    const content = await readFile(worker.path, 'utf-8')
+    assert.match(content, /Authorization: \[redacted\]/)
+    assert.match(content, /Cookie: \[redacted\]/)
+    assert.match(content, /\\"accessToken\\":\\"\[redacted\]\\"/)
+    assert.match(content, /\/Users\/test\/project\/file.ts/)
+    assert.doesNotMatch(content, /stdout-secret/)
+    assert.doesNotMatch(content, /cookie-secret/)
+    assert.doesNotMatch(content, /json-secret/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('pruneOldBatchLogs removes oldest batch directories', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'auto-prune-'))
   try {

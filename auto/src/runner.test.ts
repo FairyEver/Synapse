@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chmod, mkdtemp, rm, writeFile } from 'fs/promises'
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { BatchLogger } from './logger.js'
@@ -365,6 +365,50 @@ printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"text","text":
 
     assert.deepEqual(outputLines.map(line => line.text), ['first line', 'second line'])
     assert.ok(outputLines.every(line => line.stream === 'event'))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runWorker redacts sensitive values in output and last message', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-redact-'))
+  try {
+    const command = join(dir, 'secrets.sh')
+    await writeFile(command, `#!/bin/sh
+echo 'Authorization: Bearer stdout-secret'
+echo '{"type":"tool_result","content":"{\\"apiKey\\":\\"event-secret\\",\\"file_path\\":\\"/Users/test/project/file.ts\\"}"}'
+echo 'Cookie: sid=stderr-secret' >&2
+`, 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      provider: 'claude-code',
+      claudeCode: {
+        command,
+        model: 'sonnet',
+        dangerouslySkipPermissions: true,
+        outputFormat: 'stream-json',
+        maxTurns: 10,
+        systemPrompt: '',
+      },
+    }
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const outputLines: OutputLine[] = []
+    const result = await runWorker(config, 1, logger.createWorkerLogger(1), undefined, line => {
+      outputLines.push(line)
+    })
+    const logContent = await readFile(result.logPath, 'utf-8')
+    const renderedOutput = JSON.stringify(outputLines)
+
+    assert.match(renderedOutput, /\[redacted\]/)
+    assert.match(logContent, /\[redacted\]/)
+    assert.match(logContent, /\/Users\/test\/project\/file.ts/)
+    assert.doesNotMatch(renderedOutput, /stdout-secret|event-secret|stderr-secret/)
+    assert.doesNotMatch(logContent, /stdout-secret|event-secret|stderr-secret/)
+    assert.doesNotMatch(result.lastMessage, /stdout-secret|event-secret|stderr-secret/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

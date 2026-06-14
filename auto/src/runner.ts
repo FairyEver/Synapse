@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import type { ClaudeCodeConfig, CodexConfig, UiConfig } from './config.js'
 import { BatchLogger, pruneOldBatchLogs, type WorkerLogger, type SummaryWorker } from './logger.js'
+import { redactSensitiveText } from './redact.js'
 
 export type WorkerStatus = 'pending' | 'running' | 'success' | 'error' | 'timeout'
 export type BatchStatus = 'running' | 'success' | 'partial' | 'error'
@@ -297,7 +298,7 @@ function runningWorker(workerId: number, logger: WorkerLogger, startedAt: number
     durationMs: Date.now() - startedAt,
     exitCode: null,
     logPath: logger.path,
-    lastMessage,
+    lastMessage: redactSensitiveText(lastMessage),
   }
 }
 
@@ -319,7 +320,7 @@ function publishOutputText(
   stream: OutputLine['stream'],
   text: string
 ): void {
-  for (const line of splitOutputText(text)) {
+  for (const line of splitOutputText(redactSensitiveText(text))) {
     onOutput?.({ workerId, stream, text: line, ts: Date.now() })
   }
 }
@@ -378,14 +379,15 @@ export async function runWorker(
       const event = parseJsonLine(line)
       if (event) {
         logger.writeEvent(event)
-        const readable = eventAccumulator.read(event)
+        const readable = redactSensitiveText(eventAccumulator.read(event))
         lastMessage = readable ? lastNonEmptyOutputLine(readable) : lastMessage
         if (readable) {
           publishOutputText(onOutput, workerId, 'event', readable)
         }
       } else {
-        lastMessage = line
-        onOutput?.({ workerId, stream: 'stdout', text: line, ts: Date.now() })
+        const safeLine = redactSensitiveText(line)
+        lastMessage = safeLine
+        onOutput?.({ workerId, stream: 'stdout', text: safeLine, ts: Date.now() })
       }
       emitProgress()
     }
@@ -399,8 +401,9 @@ export async function runWorker(
     stderrBuffer = lines.pop() ?? ''
     for (const line of lines) {
       if (line.trim()) {
-        lastMessage = line
-        onOutput?.({ workerId, stream: 'stderr', text: line, ts: Date.now() })
+        const safeLine = redactSensitiveText(line)
+        lastMessage = safeLine
+        onOutput?.({ workerId, stream: 'stderr', text: safeLine, ts: Date.now() })
       }
       emitProgress()
     }
@@ -408,7 +411,7 @@ export async function runWorker(
 
   const exitCode = await new Promise<number | null>(resolve => {
     child.on('error', err => {
-      const message = err instanceof Error ? err.message : String(err)
+      const message = redactSensitiveText(err instanceof Error ? err.message : String(err))
       lastMessage = message
       emitProgress()
       logger.writeStderr(message)
@@ -418,7 +421,7 @@ export async function runWorker(
   })
 
   clearTimeout(timeout)
-  if (!lastMessage && stderrBuffer.trim()) lastMessage = stderrBuffer.trim()
+  if (!lastMessage && stderrBuffer.trim()) lastMessage = redactSensitiveText(stderrBuffer.trim())
   const durationMs = Date.now() - startedAt
   const status: WorkerStatus = timedOut ? 'timeout' : exitCode === 0 ? 'success' : 'error'
   await logger.close({ status, durationMs, exitCode })
@@ -429,7 +432,7 @@ export async function runWorker(
     durationMs,
     exitCode,
     logPath: logger.path,
-    lastMessage,
+    lastMessage: redactSensitiveText(lastMessage),
   }
 }
 

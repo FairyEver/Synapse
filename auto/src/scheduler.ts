@@ -1,6 +1,7 @@
 import type { UiConfig } from './config.js'
 import { BatchLogger, type WorkerLogger } from './logger.js'
 import { runWorker, type WorkerResult, type WorkerUpdate, type WorkerOutputCallback } from './runner.js'
+import { redactSensitiveText } from './redact.js'
 
 export type SchedulerStatus = 'idle' | 'running' | 'draining' | 'stopped' | 'error'
 
@@ -73,7 +74,7 @@ function failedWorker(slotId: number, sequence: number, logPath: string, err: un
     durationMs: 0,
     exitCode: 1,
     logPath,
-    lastMessage: err instanceof Error ? err.message : String(err),
+    lastMessage: redactSensitiveText(err instanceof Error ? err.message : String(err)),
   }
 }
 
@@ -181,7 +182,7 @@ export class AutoScheduler {
       await Promise.all(this.session.slots.map(slot => this.runSlot(config, batchLogger, slot.slotId)))
     } catch (err) {
       this.status = 'error'
-      this.error = err instanceof Error ? err.message : String(err)
+      this.error = redactSensitiveText(err instanceof Error ? err.message : String(err))
       this.emit()
     }
   }

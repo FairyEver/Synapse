@@ -4,6 +4,7 @@ import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import type { WriteStream } from 'fs'
 import { stripAnsi, c } from './ui.js'
+import { redactSensitiveText } from './redact.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const LOGS_DIR = resolve(__dirname, '../logs')
@@ -51,15 +52,15 @@ export class WorkerLogger {
   }
 
   writeStdout(text: string): void {
-    this.stream.write(stripAnsi(text))
+    this.stream.write(redactSensitiveText(stripAnsi(text)))
   }
 
   writeStderr(text: string): void {
-    this.stream.write(`\n\n**stderr**\n\n${stripAnsi(text)}\n`)
+    this.stream.write(`\n\n**stderr**\n\n${redactSensitiveText(stripAnsi(text))}\n`)
   }
 
   writeEvent(event: unknown): void {
-    this.stream.write(`\n\n\`\`\`json\n${JSON.stringify(event, null, 2)}\n\`\`\`\n`)
+    this.stream.write(`\n\n\`\`\`json\n${redactSensitiveText(JSON.stringify(event, null, 2))}\n\`\`\`\n`)
   }
 
   async close(result: WorkerLogResult): Promise<void> {

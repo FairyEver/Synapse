@@ -219,6 +219,7 @@
 - Webhook 文本请求体里的 JSON 风格 token、API key 和 refresh token 会在投递记录与实时事件中脱敏。
 - 工作流包预览和导入会在读取前拦截超大文件，避免误选异常 JSON 文件拖慢桌面端主进程。
 - 团队邀请链接只在创建时返回，数据库和后台邀请列表不再保留可用的明文邀请 token。
+- auto 运行日志和实时输出会脱敏 token、Authorization、Cookie 等敏感值，同时保留普通文件路径用于排查。
 
 ## 技术调整
 
