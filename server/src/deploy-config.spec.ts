@@ -99,6 +99,18 @@ describe("server deployment configuration", () => {
     expect(compose).not.toContain("http://127.0.0.1:3000/healthz")
   })
 
+  it("requires an explicit postgres password in compose", () => {
+    const compose = readRepoFile("server/compose.yml")
+    const envExample = readRepoFile("server/.env.example")
+
+    expect(compose).toContain("POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}")
+    expect(compose).toContain("DATABASE_URL: postgresql://synapse:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/synapse")
+    expect(compose).not.toContain("POSTGRES_PASSWORD:-synapse")
+    expect(compose).not.toContain("postgresql://synapse:${POSTGRES_PASSWORD:-synapse}")
+    expect(envExample).toContain("POSTGRES_PASSWORD=")
+    expect(envExample).not.toContain("POSTGRES_PASSWORD=synapse")
+  })
+
   it("includes the shared workspace package in the server Docker image", () => {
     const dockerfile = readRepoFile("server/Dockerfile")
 

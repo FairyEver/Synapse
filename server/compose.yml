@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: synapse
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synapse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: synapse
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
@@ -23,7 +23,7 @@ services:
       context: ..
       dockerfile: server/Dockerfile
     environment:
-      DATABASE_URL: postgresql://synapse:${POSTGRES_PASSWORD:-synapse}@postgres:5432/synapse
+      DATABASE_URL: postgresql://synapse:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/synapse
       ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?ADMIN_JWT_SECRET is required}
