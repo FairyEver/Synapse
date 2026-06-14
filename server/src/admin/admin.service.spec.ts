@@ -3,6 +3,13 @@ import { Prisma } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
 import { AdminService } from "./admin.service"
 
+type DailyTrendCountMock = {
+  readonly users?: number
+  readonly teams?: number
+  readonly invitations?: number
+  readonly auditLogs?: number
+}
+
 function createNotFoundError() {
   return new Prisma.PrismaClientKnownRequestError("Record not found", {
     code: "P2025",
@@ -20,11 +27,16 @@ function createPrismaMock(counts: {
   readonly pendingInvitations?: number
   readonly usedInvitations?: number
   readonly expiredInvitations?: number
-  readonly recentUsers?: Array<{ createdAt: Date }>
-  readonly recentTeams?: Array<{ createdAt: Date }>
-  readonly recentInvitations?: Array<{ createdAt: Date }>
-  readonly recentAuditLogs?: Array<{ createdAt: Date }>
+  readonly dailyTrendCounts?: DailyTrendCountMock[]
 } = {}) {
+  const emptyDailyTrendCounts: DailyTrendCountMock[] = Array.from({ length: 7 }, () => ({}))
+  const dailyTrendCounts = (counts.dailyTrendCounts ?? emptyDailyTrendCounts)
+    .flatMap((item: DailyTrendCountMock) => [
+      item.users ?? 0,
+      item.teams ?? 0,
+      item.invitations ?? 0,
+      item.auditLogs ?? 0,
+    ])
   const prisma = {
     $executeRaw: vi.fn(),
     $transaction: vi.fn((input: unknown) => {
@@ -39,10 +51,7 @@ function createPrismaMock(counts: {
         counts.pendingInvitations ?? 0,
         counts.usedInvitations ?? 0,
         counts.expiredInvitations ?? 0,
-        counts.recentUsers ?? [],
-        counts.recentTeams ?? [],
-        counts.recentInvitations ?? [],
-        counts.recentAuditLogs ?? [],
+        ...dailyTrendCounts,
       ])
     }),
     auditLog: { count: vi.fn(), findMany: vi.fn() },
@@ -84,10 +93,15 @@ describe("AdminService", () => {
       pendingInvitations: 1,
       usedInvitations: 2,
       expiredInvitations: 1,
-      recentUsers: [{ createdAt: new Date("2026-05-21T08:00:00.000Z") }],
-      recentTeams: [{ createdAt: new Date("2026-05-20T08:00:00.000Z") }],
-      recentInvitations: [{ createdAt: new Date("2026-05-19T08:00:00.000Z") }],
-      recentAuditLogs: [{ createdAt: new Date("2026-05-21T08:00:00.000Z") }],
+      dailyTrendCounts: [
+        {},
+        {},
+        {},
+        {},
+        { invitations: 1 },
+        { teams: 1 },
+        { users: 1, auditLogs: 1 },
+      ],
     })
     const service = new AdminService(prisma as unknown as PrismaService)
 
@@ -107,7 +121,33 @@ describe("AdminService", () => {
       users: 1,
       auditLogs: 1,
     })
+    expect(result.dailyTrend.at(-2)).toMatchObject({
+      date: "2026-05-20",
+      teams: 1,
+    })
+    expect(result.dailyTrend.at(-3)).toMatchObject({
+      date: "2026-05-19",
+      invitations: 1,
+    })
     expect(prisma.invitation.count).toHaveBeenCalledWith()
+    expect(prisma.user.findMany).not.toHaveBeenCalledWith(expect.objectContaining({
+      select: { createdAt: true },
+    }))
+    expect(prisma.team.findMany).not.toHaveBeenCalledWith(expect.objectContaining({
+      select: { createdAt: true },
+    }))
+    expect(prisma.invitation.findMany).not.toHaveBeenCalledWith(expect.objectContaining({
+      select: { createdAt: true },
+    }))
+    expect(prisma.auditLog.findMany).not.toHaveBeenCalled()
+    expect(prisma.auditLog.count).toHaveBeenCalledWith({
+      where: {
+        createdAt: {
+          gte: new Date("2026-05-20T16:00:00.000Z"),
+          lt: new Date("2026-05-21T16:00:00.000Z"),
+        },
+      },
+    })
   })
 
   it("loads users without exposing password hashes", async () => {

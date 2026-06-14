@@ -60,30 +60,26 @@ function formatDateKey(value: Date): string {
   return `${year}-${month}-${date}`
 }
 
-function buildDailyTrend(
-  now: Date,
-  values: ReadonlyArray<{ readonly createdAt: Date }>,
-): Array<{ date: string; label: string; count: number }> {
+type DailyTrendBucket = {
+  readonly date: string
+  readonly label: string
+  readonly start: Date
+  readonly end: Date
+}
+
+function buildDailyTrendBuckets(now: Date): DailyTrendBucket[] {
   const today = startOfDay(now)
-  const buckets = Array.from({ length: 7 }, (_, index) => {
+  return Array.from({ length: 7 }, (_, index) => {
     const date = addDays(today, index - 6)
+    const nextDate = addDays(date, 1)
     const key = formatDateKey(date)
     return {
-      key,
       date: key,
       label: `${date.getMonth() + 1}/${date.getDate()}`,
-      count: 0,
+      start: date,
+      end: nextDate,
     }
   })
-  const bucketByKey = new Map(buckets.map((bucket) => [bucket.key, bucket]))
-
-  for (const value of values) {
-    const key = formatDateKey(startOfDay(value.createdAt))
-    const bucket = bucketByKey.get(key)
-    if (bucket) bucket.count += 1
-  }
-
-  return buckets.map(({ key: _key, ...bucket }) => bucket)
 }
 
 @Injectable()
@@ -97,7 +93,7 @@ export class AdminService {
 
   async getSystemOverview() {
     const now = new Date()
-    const windowStart = startOfDay(addDays(now, -6))
+    const trendBuckets = buildDailyTrendBuckets(now)
     const [
       auditLogs,
       users,
@@ -108,10 +104,7 @@ export class AdminService {
       pendingInvitations,
       usedInvitations,
       expiredInvitations,
-      recentUsers,
-      recentTeams,
-      recentInvitations,
-      recentAuditLogs,
+      ...dailyTrendCounts
     ] = await this.prisma.$transaction([
       this.prisma.auditLog.count(),
       this.prisma.user.count(),
@@ -122,28 +115,13 @@ export class AdminService {
       this.prisma.invitation.count({ where: { usedAt: null, expiresAt: { gt: now } } }),
       this.prisma.invitation.count({ where: { usedAt: { not: null } } }),
       this.prisma.invitation.count({ where: { usedAt: null, expiresAt: { lte: now } } }),
-      this.prisma.user.findMany({
-        where: { createdAt: { gte: windowStart } },
-        select: { createdAt: true },
-      }),
-      this.prisma.team.findMany({
-        where: { createdAt: { gte: windowStart } },
-        select: { createdAt: true },
-      }),
-      this.prisma.invitation.findMany({
-        where: { createdAt: { gte: windowStart } },
-        select: { createdAt: true },
-      }),
-      this.prisma.auditLog.findMany({
-        where: { createdAt: { gte: windowStart } },
-        select: { createdAt: true },
-      }),
+      ...trendBuckets.flatMap((bucket) => [
+        this.prisma.user.count({ where: { createdAt: { gte: bucket.start, lt: bucket.end } } }),
+        this.prisma.team.count({ where: { createdAt: { gte: bucket.start, lt: bucket.end } } }),
+        this.prisma.invitation.count({ where: { createdAt: { gte: bucket.start, lt: bucket.end } } }),
+        this.prisma.auditLog.count({ where: { createdAt: { gte: bucket.start, lt: bucket.end } } }),
+      ]),
     ])
-
-    const userTrend = buildDailyTrend(now, recentUsers)
-    const teamTrend = buildDailyTrend(now, recentTeams)
-    const invitationTrend = buildDailyTrend(now, recentInvitations)
-    const auditLogTrend = buildDailyTrend(now, recentAuditLogs)
 
     return {
       serverTime: now.toISOString(),
@@ -162,13 +140,13 @@ export class AdminService {
         used: usedInvitations,
         expired: expiredInvitations,
       },
-      dailyTrend: userTrend.map((item, index) => ({
-        date: item.date,
-        label: item.label,
-        users: item.count,
-        teams: teamTrend[index]?.count ?? 0,
-        invitations: invitationTrend[index]?.count ?? 0,
-        auditLogs: auditLogTrend[index]?.count ?? 0,
+      dailyTrend: trendBuckets.map((bucket, index) => ({
+        date: bucket.date,
+        label: bucket.label,
+        users: dailyTrendCounts[index * 4] ?? 0,
+        teams: dailyTrendCounts[index * 4 + 1] ?? 0,
+        invitations: dailyTrendCounts[index * 4 + 2] ?? 0,
+        auditLogs: dailyTrendCounts[index * 4 + 3] ?? 0,
       })),
     }
   }
