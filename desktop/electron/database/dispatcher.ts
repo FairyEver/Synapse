@@ -10,8 +10,12 @@
 import { databaseService } from "./service"
 import { getMutatingActions } from "../../database/shared/capability-registry"
 import { DATABASE_ROW_LIST_MAX_LIMIT } from "../../database/shared/limits"
+import { sanitizeError } from "../services/error-sanitize"
+import { createMainLogger } from "../services/log-store"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type { Column, DatabaseOperationSource, DatabaseQueryParams, DatabaseWhereClause } from "./types"
+
+const logger = createMainLogger("database.dispatcher")
 
 type DispatchResult = {
   ok: true
@@ -331,6 +335,25 @@ function extractTableName(action: string, params: Record<string, unknown>): stri
   return undefined
 }
 
+function databaseSideEffectErrorMeta(
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+  error: unknown,
+): Record<string, unknown> {
+  const rawMessage = error instanceof Error ? error.message : String(error)
+  const sanitizedMessage = sanitizeError(rawMessage)
+  return {
+    action,
+    dryRun: params.dryRun === true,
+    errorLength: rawMessage.length,
+    errorName: error instanceof Error ? error.name : typeof error,
+    ...(sanitizedMessage ? { error: sanitizedMessage } : {}),
+    source: context.source ?? "api",
+    table: extractTableName(action, params),
+  }
+}
+
 async function dispatchDatabaseAction(
   action: string,
   params: Record<string, unknown>,
@@ -353,14 +376,26 @@ async function dispatchDatabaseAction(
           affected: result.affected,
           dryRun: params.dryRun === true,
         })
-      } catch {
+      } catch (error) {
+        logger.warn("Database mutation operation log write failed.", databaseSideEffectErrorMeta(
+          action,
+          params,
+          context,
+          error,
+        ))
         // Never let an operation log failure break the dispatch result.
       }
     }
     if (MUTATING_ACTIONS.has(action) && params.dryRun !== true && changeListener) {
       try {
         changeListener({ action, table: extractTableName(action, params) })
-      } catch {
+      } catch (error) {
+        logger.warn("Database mutation change notification failed.", databaseSideEffectErrorMeta(
+          action,
+          params,
+          context,
+          error,
+        ))
         // Never let a broadcast failure break the dispatch result.
       }
     }
