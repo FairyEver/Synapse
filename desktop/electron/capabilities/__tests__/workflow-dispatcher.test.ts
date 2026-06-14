@@ -1018,6 +1018,11 @@ describe("createWorkflowDispatcher", () => {
       expect.objectContaining({ name: "workingDirectory" }),
       expect.objectContaining({ name: "approvalPolicy" }),
       expect.objectContaining({ name: "sandbox" }),
+      expect.objectContaining({ name: "enableSearch" }),
+      expect.objectContaining({ name: "additionalWritableDirs" }),
+      expect.objectContaining({ name: "images" }),
+      expect.objectContaining({ name: "configOverrides" }),
+      expect.objectContaining({ name: "captureDebugArtifacts" }),
       expect.objectContaining({ name: "prompt" }),
     ]))
   })
