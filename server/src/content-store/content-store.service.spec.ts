@@ -608,9 +608,21 @@ describe("ContentStoreService", () => {
       }),
     })
     prisma.contentStoreInstallEvent.upsert.mockResolvedValue({ id: "event-1" })
-    prisma.contentStoreInstallSession.update.mockResolvedValue({ id: "session-1", status: "consumed" })
+    prisma.contentStoreInstallSession.updateMany.mockResolvedValue({ count: 1 })
 
     await expect(service.recordInstall("user-1", "session-1", "client-1")).resolves.toEqual({ ok: true })
+    expect(prisma.contentStoreInstallSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "session-1",
+        userId: "user-1",
+        status: "pending",
+        expiresAt: { gt: expect.any(Date) },
+      },
+      data: {
+        status: "consumed",
+        consumedAt: expect.any(Date),
+      },
+    })
     expect(prisma.contentStoreInstallEvent.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         userId_itemId_versionId_clientInstanceId: {
@@ -621,6 +633,31 @@ describe("ContentStoreService", () => {
         },
       },
     }))
+  })
+
+  it("does not count installs when session consumption loses the pending race", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      itemId: "item-1",
+      versionId: "version-1",
+      type: "skill",
+      status: "pending",
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
+      createdAt: new Date("2026-06-09T00:00:00.000Z"),
+      item: item({ id: "item-1", type: "skill" }),
+      version: version({
+        id: "version-1",
+        itemId: "item-1",
+        packageKey: "content-store/packages/item-1/version-1.zip",
+        packageSha256: "a".repeat(64),
+      }),
+    })
+    prisma.contentStoreInstallSession.updateMany.mockResolvedValue({ count: 0 })
+
+    await expect(service.recordInstall("user-1", "session-1", "client-1")).rejects.toThrow(BadRequestException)
+    expect(prisma.contentStoreInstallEvent.upsert).not.toHaveBeenCalled()
   })
 
   it("writes audit actions when admin featured and removed state changes", async () => {
@@ -685,6 +722,7 @@ interface PrismaMock {
     create: MockFn
     findFirst: MockFn
     update: MockFn
+    updateMany: MockFn
   }
   contentStoreInstallEvent: {
     upsert: MockFn
@@ -709,7 +747,7 @@ function createPrismaMock(): PrismaMock {
     contentStoreDraft: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), upsert: vi.fn() },
     contentStoreVersion: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     contentStoreFile: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
-    contentStoreInstallSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    contentStoreInstallSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     contentStoreInstallEvent: { upsert: vi.fn(), count: vi.fn() },
     auditLog: { create: vi.fn() },
   }

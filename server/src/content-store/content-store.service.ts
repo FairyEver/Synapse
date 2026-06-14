@@ -653,26 +653,36 @@ export class ContentStoreService {
 
   async recordInstall(userId: string, sessionId: string, clientInstanceId: string): Promise<{ ok: true }> {
     const resolved = await this.resolveInstallSession(userId, sessionId)
-    await this.prisma.contentStoreInstallEvent.upsert({
-      where: {
-        userId_itemId_versionId_clientInstanceId: {
+    const consumedAt = new Date()
+    await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.contentStoreInstallSession.updateMany({
+        where: {
+          id: sessionId,
+          userId,
+          status: "pending",
+          expiresAt: { gt: consumedAt },
+        },
+        data: { status: "consumed", consumedAt },
+      })
+      if (consumed.count !== 1) throw new BadRequestException("安装会话已失效。")
+
+      await tx.contentStoreInstallEvent.upsert({
+        where: {
+          userId_itemId_versionId_clientInstanceId: {
+            userId,
+            itemId: resolved.contentId,
+            versionId: resolved.versionId,
+            clientInstanceId,
+          },
+        },
+        update: {},
+        create: {
           userId,
           itemId: resolved.contentId,
           versionId: resolved.versionId,
           clientInstanceId,
         },
-      },
-      update: {},
-      create: {
-        userId,
-        itemId: resolved.contentId,
-        versionId: resolved.versionId,
-        clientInstanceId,
-      },
-    })
-    await this.prisma.contentStoreInstallSession.update({
-      where: { id: sessionId },
-      data: { status: "consumed", consumedAt: new Date() },
+      })
     })
     return { ok: true }
   }
