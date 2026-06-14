@@ -1686,6 +1686,43 @@ describe("DriveService", () => {
     await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it("admin delete releases reserved quota for pending uploads", async () => {
+    const prisma = createPrismaMemory()
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "pending.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    expect(session?.status).toBe("cancelled")
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    expect(item.deletedAt).toBeInstanceOf(Date)
+    expect(item.uploadStatus).toBe("cancelled")
+    expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.drive.delete",
+      detail: expect.objectContaining({
+        count: 1,
+        cancelledUploadSessions: 1,
+        releasedReservedBytes: "11",
+      }),
+    }))
+  })
+
   it("keeps admin delete pending storage cleanup visible in the admin list", async () => {
     const prisma = createPrismaMemory()
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)

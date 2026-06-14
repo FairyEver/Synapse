@@ -1691,14 +1691,31 @@ export class DriveService implements OnApplicationBootstrap {
     const itemIds = items.map((item) => item.id)
     const activeFiles = items.filter((item) => item.type === DRIVE_ITEM_TYPE.file && item.storageKey && item.storageStatus === DRIVE_STORAGE_STATUS.active)
     const deletedAt = new Date()
+    let cancelledUploadSessions = 0
+    let releasedReservedBytes = 0n
+    let pendingUploadCleanup: Array<{ readonly itemId: string; readonly storageKey: string }> = []
     const impactedPublications = input.disablePublications
       ? await this.findActivePublicationsReferencingItems(root.userId, itemIds)
       : []
     await this.prisma.$transaction(async (tx) => {
+      const pendingUploadSessions = await tx.driveUploadSession.findMany({
+        where: { userId: root.userId, itemId: { in: itemIds }, status: DRIVE_UPLOAD_STATUS.pending },
+        select: { id: true, itemId: true, storageKey: true, expectedSize: true },
+      })
+      const pendingSessionIds = pendingUploadSessions.map((session) => session.id)
+      const pendingItemIds = pendingUploadSessions.map((session) => session.itemId)
+      const pendingReservedBytes = pendingUploadSessions.reduce((sum, session) => sum + session.expectedSize, 0n)
+
       await tx.driveShare.updateMany({
         where: { itemId: { in: itemIds } },
         data: { enabled: false, disabledAt: deletedAt },
       })
+      if (pendingSessionIds.length > 0) {
+        await tx.driveUploadSession.updateMany({
+          where: { id: { in: pendingSessionIds }, userId: root.userId, status: DRIVE_UPLOAD_STATUS.pending },
+          data: { status: DRIVE_UPLOAD_STATUS.cancelled, failedAt: deletedAt },
+        })
+      }
       if (impactedPublications.length > 0) {
         await tx.drivePublication.updateMany({
           where: { id: { in: impactedPublications.map((publication) => publication.id) } },
@@ -1713,6 +1730,12 @@ export class DriveService implements OnApplicationBootstrap {
           uploadStatus: DRIVE_UPLOAD_STATUS.completed,
         },
       })
+      if (pendingItemIds.length > 0) {
+        await tx.driveItem.updateMany({
+          where: { id: { in: pendingItemIds } },
+          data: { uploadStatus: DRIVE_UPLOAD_STATUS.cancelled },
+        })
+      }
       const usageDelta = activeFiles.reduce((sum, item) => sum + item.size, 0n)
       if (usageDelta > 0n) {
         await tx.driveUsage.update({
@@ -1720,17 +1743,36 @@ export class DriveService implements OnApplicationBootstrap {
           data: { usedBytes: { decrement: usageDelta } },
         })
       }
+      if (pendingReservedBytes > 0n) {
+        await tx.driveUsage.update({
+          where: { userId: root.userId },
+          data: { reservedBytes: { decrement: pendingReservedBytes } },
+        })
+      }
+      cancelledUploadSessions = pendingUploadSessions.length
+      releasedReservedBytes = pendingReservedBytes
+      pendingUploadCleanup = pendingUploadSessions.map((session) => ({
+        itemId: session.itemId,
+        storageKey: session.storageKey,
+      }))
     })
     await this.auditLog?.record({
       adminEmail: input.actorEmail,
       action: input.admin ? "admin.drive.delete" : "drive.delete",
       targetType: "drive_item",
       targetId: root.id,
-      detail: { count: itemIds.length },
+      detail: {
+        count: itemIds.length,
+        cancelledUploadSessions,
+        releasedReservedBytes: releasedReservedBytes.toString(),
+      },
       ipAddress: input.ipAddress,
     })
     for (const file of activeFiles) {
       await this.deleteStorageObject(file.id, file.storageKey!)
+    }
+    for (const session of pendingUploadCleanup) {
+      await this.deleteStorageObject(session.itemId, session.storageKey)
     }
   }
 
