@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from "@nes
 import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
+import { contentStoreSkillMaxFileBytes } from "./content-store.constants"
 import { ContentStoreService } from "./content-store.service"
 import type { ContentStoreStoragePort } from "./content-store-storage"
 
@@ -80,6 +81,18 @@ describe("ContentStoreService", () => {
       where: { itemId: "item-1" },
       data: expect.objectContaining({ revision: { increment: 1 } }),
     }))
+  })
+
+  it("rejects oversized skill file base64 before decoding and writing", async () => {
+    const encodedLength = Math.ceil((contentStoreSkillMaxFileBytes + 1) / 3) * 4
+
+    await expect(service.createDraft("user-1", {
+      type: "skill",
+      title: "Huge Skill",
+      files: [{ path: "SKILL.md", contentBase64: "A".repeat(encodedLength) }],
+    })).rejects.toThrow("Skill 单文件超过 20MB。")
+
+    expect(prisma.contentStoreItem.create).not.toHaveBeenCalled()
   })
 
   it("rejects a stale draft save when the revision changed during the write", async () => {

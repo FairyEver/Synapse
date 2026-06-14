@@ -15,7 +15,12 @@ import type {
 } from "@synapse/shared"
 import { PrismaService } from "../prisma/prisma.service"
 import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
-import { CONTENT_STORE_STORAGE_PORT, contentStoreInstallSessionTtlSeconds } from "./content-store.constants"
+import {
+  CONTENT_STORE_STORAGE_PORT,
+  contentStoreInstallSessionTtlSeconds,
+  contentStoreSkillMaxFileBytes,
+  contentStoreSkillMaxTotalBytes,
+} from "./content-store.constants"
 import { normalizePromptBody, normalizeRuleBody, normalizeSkillFiles } from "./content-store-file-rules"
 import { buildContentStorePackage } from "./content-store-package"
 import type { ContentStoreStoragePort } from "./content-store-storage"
@@ -939,11 +944,28 @@ export class ContentStoreService {
 }
 
 function decodeFiles(files: readonly ContentStoreDraftFileInput[]): ContentStoreFileInput[] {
+  let totalBytes = 0
   return files.map((file) => ({
     path: file.path,
-    bytes: Buffer.from(file.contentBase64, "base64"),
+    bytes: decodeFileContent(file.contentBase64, (decodedBytes) => {
+      if (decodedBytes > contentStoreSkillMaxFileBytes) throw new BadRequestException("Skill 单文件超过 20MB。")
+      totalBytes += decodedBytes
+      if (totalBytes > contentStoreSkillMaxTotalBytes) throw new BadRequestException("Skill 文件总大小超过 50MB。")
+    }),
     mimeType: file.mimeType ?? null,
   }))
+}
+
+function decodeFileContent(contentBase64: string, beforeDecode: (decodedBytes: number) => void): Buffer {
+  const decodedBytes = decodedBase64ByteLength(contentBase64)
+  beforeDecode(decodedBytes)
+  return Buffer.from(contentBase64, "base64")
+}
+
+function decodedBase64ByteLength(contentBase64: string): number {
+  if (!contentBase64) return 0
+  const padding = contentBase64.endsWith("==") ? 2 : contentBase64.endsWith("=") ? 1 : 0
+  return (contentBase64.length / 4) * 3 - padding
 }
 
 function normalizeDescription(description: string | null | undefined): string | null {
