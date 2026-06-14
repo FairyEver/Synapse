@@ -1109,7 +1109,12 @@ class DatabaseService {
     }
 
     const db = this.getDb()
-    const isRead = /^(select|pragma|explain)\b/.test(normalized)
+    const isPragma = /^pragma\b/.test(normalized)
+    if (isPragma && !isReadOnlyPragma(normalized)) {
+      throw new Error("Mutating PRAGMA statements are not allowed")
+    }
+
+    const isRead = /^(select|explain)\b/.test(normalized) || isPragma
     const isDDL = /^(create\s+table|drop\s+table|alter\s+table)\b/.test(normalized)
     const sqlParams = (params ?? []).map(toSqlValue)
 

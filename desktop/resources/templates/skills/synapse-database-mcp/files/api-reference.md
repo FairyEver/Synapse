@@ -162,7 +162,7 @@ Execute read-only SQL. Allows `SELECT`, `PRAGMA`, and `EXPLAIN`.
 
 ### database_sql_execute
 
-Execute raw SQL. System tables prefixed with `_` and `ATTACH` / `DETACH` are blocked.
+Execute raw SQL. System tables prefixed with `_`, `ATTACH` / `DETACH`, and mutating `PRAGMA` statements are blocked.
 
 **Params:** `sql`, `params?`
 

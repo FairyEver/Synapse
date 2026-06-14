@@ -48,10 +48,21 @@ describe("DatabaseService databaseSqlRead", () => {
     })
   })
 
+  it("rejects mutating PRAGMA statements from raw execute", () => {
+    expect(() => service.databaseSqlExecute("PRAGMA writable_schema=ON")).toThrow(/pragma/i)
+    expect(() => service.databaseSqlExecute("PRAGMA journal_mode=OFF")).toThrow(/pragma/i)
+  })
+
   it("allows read-only PRAGMA statements", () => {
     const result = service.databaseSqlRead(`PRAGMA table_info("tasks")`)
 
     expect(result.rows.map((row) => row.name)).toContain("title")
+  })
+
+  it("allows read-only PRAGMA statements from raw execute", () => {
+    const result = service.databaseSqlExecute(`PRAGMA table_info("tasks")`)
+
+    expect(result.rows?.map((row) => row.name)).toContain("title")
   })
 
   it("blocks raw SQL access to folder system tables", () => {
