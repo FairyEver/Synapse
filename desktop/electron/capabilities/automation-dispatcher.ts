@@ -1,4 +1,5 @@
 import { zodToJsonSchema } from "zod-to-json-schema"
+import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
@@ -29,8 +30,13 @@ type AutomationServicePort = Pick<
   | "automationRuntimeInspect"
 >
 
+type AutomationAccountServicePort = {
+  readonly listWebhooks: () => Promise<DashboardWebhookDto[]>
+}
+
 export type AutomationCapabilityDispatcherDeps = {
   readonly service: AutomationServicePort
+  readonly accountService: AutomationAccountServicePort
   readonly triggers: AutomationTriggerRegistry
   readonly actions: MainActionRegistry
   readonly permissionGuard?: PermissionGuard
@@ -176,6 +182,12 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
             break
           }
 
+          case "automation.webhook.list": {
+            const webhooks = await deps.accountService.listWebhooks()
+            result = { ok: true, data: webhooks.map(toPublicAutomationWebhookSummary), total: webhooks.length }
+            break
+          }
+
           default:
             throw new Error(`Unknown automation action: ${action}`)
         }
@@ -238,6 +250,18 @@ function sanitizeAutomationRunMetrics(metrics: ActionRunMetrics | undefined): Ac
   }
 
   return Object.keys(safeMetrics).length > 0 ? safeMetrics : undefined
+}
+
+function toPublicAutomationWebhookSummary(webhook: DashboardWebhookDto) {
+  return {
+    publicId: webhook.publicId,
+    name: webhook.name,
+    enabled: webhook.enabled,
+    createdAt: webhook.createdAt,
+    updatedAt: webhook.updatedAt,
+    ...(webhook.lastDeliveryAt === undefined ? {} : { lastDeliveryAt: webhook.lastDeliveryAt }),
+    ...(webhook.lastDeliveryStatus === undefined ? {} : { lastDeliveryStatus: webhook.lastDeliveryStatus }),
+  }
 }
 
 export function toPublicAutomationItemSummary(

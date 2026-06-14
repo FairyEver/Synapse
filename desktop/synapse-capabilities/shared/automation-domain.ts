@@ -84,6 +84,7 @@ const automationCapabilities: readonly CapabilityDefinition[] = [
   { id: "automation.run.disable" as CapabilityId, title: "Stop automation run", description: "Stop one active Synapse Automation run.", mutates: true },
   { id: "automation.run.list" as CapabilityId, title: "List automation runs", description: "List recent runs for one Synapse Automation item.", mutates: false },
   { id: "automation.runtime.inspect" as CapabilityId, title: "Inspect automation runtime", description: "Inspect Automation timers, running item ids, and compact runtime state.", mutates: false },
+  { id: "automation.webhook.list" as CapabilityId, title: "List Automation Webhooks", description: "List account Webhooks that can be used by builtin.webhook triggers.", mutates: false },
   { id: "automation.trigger_type.list" as CapabilityId, title: "List automation trigger types", description: "List registered Automation trigger type descriptors.", mutates: false },
   { id: "automation.executor_type.list" as CapabilityId, title: "List automation executor types", description: "List registered Automation executor type descriptors.", mutates: false },
 ]
@@ -246,6 +247,11 @@ export function buildAutomationTools(): McpToolDefinition[] {
       name: "automation_runtime_inspect",
       description: "Inspect Automation runtime state. Pass automationId for one item or omit it for all items.",
       inputSchema: { type: "object", properties: { automationId: { type: "string" } } },
+    },
+    {
+      name: "automation_webhook_list",
+      description: "List current account Webhooks for builtin.webhook trigger configs. Use publicId as trigger.config.webhookPublicId.",
+      inputSchema: { type: "object", properties: {} },
     },
     {
       name: "automation_trigger_type_list",

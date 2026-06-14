@@ -32,8 +32,9 @@ Read responses intentionally omit raw `trigger.config` and `executor.config`. Do
 5. Call `automation_item_create` or `automation_item_update`.
 6. Use `automation_item_enable` or `automation_item_disable` for enabled state changes.
 7. Use `automation_run_execute` for a manual run.
-8. Use `automation_runtime_inspect` and `automation_run_list` to troubleshoot execution state.
-9. Use `automation_run_disable` only when stopping an active run by run id.
+8. Use `automation_webhook_list` before creating a `builtin.webhook` trigger unless the user already gave a Webhook public id.
+9. Use `automation_runtime_inspect` and `automation_run_list` to troubleshoot execution state.
+10. Use `automation_run_disable` only when stopping an active run by run id.
 
 ## Trigger Rules
 
@@ -46,6 +47,8 @@ Known built-in trigger types include:
 - `builtin.webhook` - run when a matching Webhook delivery arrives.
 
 Use the returned `configSchema`, `defaultConfig`, and `variables` from `automation_trigger_type_list`. Do not guess fields that are not in the schema.
+
+For `builtin.webhook`, call `automation_webhook_list` and set `trigger.config.webhookPublicId` from the returned `publicId`. You may also set `trigger.config.webhookName` from the returned name.
 
 ## Executor Rules
 
@@ -74,6 +77,7 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 - `automation_run_disable` stops an active run by run id.
 - `automation_run_list` returns recent run summaries without raw logs or outputs.
 - `automation_runtime_inspect` shows which items are scheduled or running.
+- `automation_webhook_list` returns Webhook `publicId`, name, enabled state, and delivery status for `builtin.webhook` trigger configuration.
 
 ## API Reference
 

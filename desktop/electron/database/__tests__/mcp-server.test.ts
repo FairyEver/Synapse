@@ -168,6 +168,7 @@ describe("MCP HTTP server", () => {
       "automation_item_list",
       "automation_item_create",
       "automation_run_execute",
+      "automation_webhook_list",
       "automation_trigger_type_list",
       "automation_executor_type_list",
     ]))

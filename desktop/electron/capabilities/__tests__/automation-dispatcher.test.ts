@@ -11,6 +11,7 @@ import type { AutomationItem, AutomationRun } from "../../services/automation/ty
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createAutomationCapabilityDispatcher, toPublicAutomationItemSummary } from "../automation-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
+import { buildAutomationTools } from "../../../synapse-capabilities/shared/automation-domain"
 
 const baseItem: AutomationItem = {
   id: "automation:1",
@@ -151,6 +152,23 @@ function serviceMock() {
   }
 }
 
+function accountServiceMock() {
+  return {
+    listWebhooks: vi.fn(async () => [{
+      id: "webhook-row:1",
+      publicId: "wh_public",
+      name: "Deploy hook",
+      enabled: true,
+      url: "https://synapse.test/webhooks/wh_public/whsec_secret",
+      maskedUrl: "https://synapse.test/webhooks/wh_public/[secret]",
+      createdAt: "2026-06-07T00:00:00.000Z",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+      lastDeliveryAt: "2026-06-07T00:05:00.000Z",
+      lastDeliveryStatus: "delivered" as const,
+    }]),
+  }
+}
+
 function permissionGuardMock(result: Awaited<ReturnType<PermissionGuard["check"]>> = { allowed: true }) {
   return {
     registerPolicy: vi.fn(),
@@ -169,19 +187,29 @@ function auditSinkMock() {
 function createHarness() {
   const { triggers, actions } = registries()
   const service = serviceMock()
+  const accountService = accountServiceMock()
   const permissionGuard = permissionGuardMock()
   const auditSink = auditSinkMock()
   const dispatcher = createAutomationCapabilityDispatcher({
     service,
+    accountService,
     triggers,
     actions,
     permissionGuard,
     auditSink,
   })
-  return { actions, auditSink, dispatcher, permissionGuard, service, triggers }
+  return { accountService, actions, auditSink, dispatcher, permissionGuard, service, triggers }
 }
 
 describe("automation capability dispatcher", () => {
+  it("exposes webhook discovery in Automation MCP tools", () => {
+    const tools = buildAutomationTools()
+
+    expect(tools.map((tool) => tool.name)).toContain("automation_webhook_list")
+    expect(tools.find((tool) => tool.name === "automation_webhook_list")?.description)
+      .toContain("webhookPublicId")
+  })
+
   it("lists trigger and executor descriptors from registries", async () => {
     const { dispatcher } = createHarness()
 
@@ -208,6 +236,29 @@ describe("automation capability dispatcher", () => {
       ],
     })
     expect(JSON.stringify(result)).not.toContain("private prompt")
+  })
+
+  it("lists Webhooks for builtin webhook trigger configuration", async () => {
+    const { accountService, dispatcher } = createHarness()
+
+    const result = await dispatcher.dispatch("automation.webhook.list", {}, { source: "mcp-http" })
+
+    expect(accountService.listWebhooks).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      ok: true,
+      total: 1,
+      data: [{
+        publicId: "wh_public",
+        name: "Deploy hook",
+        enabled: true,
+        createdAt: "2026-06-07T00:00:00.000Z",
+        updatedAt: "2026-06-07T00:00:00.000Z",
+        lastDeliveryAt: "2026-06-07T00:05:00.000Z",
+        lastDeliveryStatus: "delivered",
+      }],
+    })
+    expect(JSON.stringify(result)).not.toContain("whsec_secret")
+    expect(JSON.stringify(result)).not.toContain("maskedUrl")
   })
 
   it("lists and gets public item summaries without raw configs", async () => {
@@ -378,7 +429,14 @@ describe("automation capability dispatcher", () => {
     const service = serviceMock()
     const permissionGuard = permissionGuardMock({ allowed: false, reason: "blocked", policyId: "test-policy" })
     const auditSink = auditSinkMock()
-    const dispatcher = createAutomationCapabilityDispatcher({ service, triggers, actions, permissionGuard, auditSink })
+    const dispatcher = createAutomationCapabilityDispatcher({
+      service,
+      accountService: accountServiceMock(),
+      triggers,
+      actions,
+      permissionGuard,
+      auditSink,
+    })
 
     await expect(dispatcher.dispatch("automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" }))
       .rejects.toThrow("blocked")

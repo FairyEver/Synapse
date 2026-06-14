@@ -170,6 +170,32 @@ Input:
 
 Returns recent safe run summaries. `limit` defaults to 20 and caps at 100.
 
+### automation_webhook_list
+
+Input:
+
+```json
+{}
+```
+
+Returns current account Webhooks for `builtin.webhook` trigger configs:
+
+```json
+[
+  {
+    "publicId": "wh_...",
+    "name": "Deploy hook",
+    "enabled": true,
+    "createdAt": "2026-06-14T00:00:00.000Z",
+    "updatedAt": "2026-06-14T00:00:00.000Z",
+    "lastDeliveryAt": "2026-06-14T00:05:00.000Z",
+    "lastDeliveryStatus": "delivered"
+  }
+]
+```
+
+Use `publicId` as `trigger.config.webhookPublicId`. This result does not include the Webhook secret URL.
+
 ## Runtime
 
 ### automation_runtime_inspect

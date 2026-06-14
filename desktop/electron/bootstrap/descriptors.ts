@@ -756,6 +756,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     })
     const automationDispatcher = createAutomationCapabilityDispatcher({
       service: automation,
+      accountService,
       triggers: createBuiltinAutomationTriggerRegistry(),
       actions: actionRuntime,
       permissionGuard,

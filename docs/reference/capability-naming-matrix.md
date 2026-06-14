@@ -61,6 +61,7 @@ Canonical capability ids use `<domain>.<resource>.<action>`. The local HTTP API 
 | `automation.run.disable` | `automation_run_disable` | `automation.run.disable` | `automationRunDisable` |
 | `automation.run.list` | `automation_run_list` | `automation.run.list` | `automationRunList` |
 | `automation.runtime.inspect` | `automation_runtime_inspect` | `automation.runtime.inspect` | `automationRuntimeInspect` |
+| `automation.webhook.list` | `automation_webhook_list` | `automation.webhook.list` | `automationWebhookList` |
 | `automation.trigger_type.list` | `automation_trigger_type_list` | `automation.trigger_type.list` | `automationTriggerTypeList` |
 | `automation.executor_type.list` | `automation_executor_type_list` | `automation.executor_type.list` | `automationExecutorTypeList` |
 | `workflow.node_type.list` | `workflow_node_type_list` | `workflow.node_type.list` | `workflowNodeTypeList` |

@@ -28,6 +28,7 @@ describe("Automation capability domain", () => {
       "automation.run.disable",
       "automation.run.list",
       "automation.runtime.inspect",
+      "automation.webhook.list",
       "automation.trigger_type.list",
       "automation.executor_type.list",
     ])
@@ -37,6 +38,7 @@ describe("Automation capability domain", () => {
     expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_list).toBe("automation.item.list")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_item_create).toBe("automation.item.create")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_run_execute).toBe("automation.run.execute")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_webhook_list).toBe("automation.webhook.list")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_trigger_type_list).toBe("automation.trigger_type.list")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.automation_executor_type_list).toBe("automation.executor_type.list")
   })
@@ -45,6 +47,7 @@ describe("Automation capability domain", () => {
     expect(CAPABILITY_DOMAINS.map((domain) => domain.id)).toContain("automation")
     expect(MCP_TOOL_ACTIONS.automation_item_delete).toBe("automation.item.delete")
     expect(MCP_TOOL_ACTIONS.automation_run_disable).toBe("automation.run.disable")
+    expect(MCP_TOOL_ACTIONS.automation_webhook_list).toBe("automation.webhook.list")
     expect(getActionDomainId("automation.item.list")).toBe("automation")
     expect(getMcpToolDomainId("automation_runtime_inspect")).toBe("automation")
 
@@ -56,6 +59,7 @@ describe("Automation capability domain", () => {
       "automation_item_delete",
       "automation_run_execute",
       "automation_runtime_inspect",
+      "automation_webhook_list",
       "automation_trigger_type_list",
       "automation_executor_type_list",
     ]))
