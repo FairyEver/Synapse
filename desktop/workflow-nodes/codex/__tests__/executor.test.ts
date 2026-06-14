@@ -219,14 +219,15 @@ describe("codex artifacts", () => {
     ])
   })
 
-  it("writes sanitized artifact content", async () => {
+  it("writes sanitized artifact content while keeping normal paths", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-codex-artifacts-"))
     const filePath = path.join(tempDir, "stdout.log")
 
-    await writeCodexArtifact(filePath, "result\nAuthorization: Bearer secret-token")
+    await writeCodexArtifact(filePath, "result /Users/liyang/project/out.txt\nAuthorization: Bearer secret-token")
 
     const content = await readCodexArtifact(filePath)
     expect(content).toContain("result")
+    expect(content).toContain("/Users/liyang/project/out.txt")
     expect(content).not.toContain("secret-token")
   })
 })

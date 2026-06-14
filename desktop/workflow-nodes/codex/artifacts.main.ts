@@ -68,7 +68,7 @@ export async function ensureCodexArtifactDirectory(paths: CodexArtifactPaths): P
 
 export async function writeCodexArtifact(filePath: string, content: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, sanitizeError(content), "utf8")
+  await writeFile(filePath, sanitizeForDebug(content), "utf8")
 }
 
 export async function readCodexArtifact(filePath: string): Promise<string> {
