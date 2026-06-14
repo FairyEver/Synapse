@@ -32,11 +32,13 @@ function ContentImageField({
   onIconImageRemove,
 }: ContentImageFieldProps) {
   const cropDialogRef = useRef<ImageCropDialogRef>(null)
+  const fieldRef = useRef<HTMLDivElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
   // Ctrl+V paste listener (hidden feature)
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
+      if (!isContentImagePasteTarget(e.target, fieldRef.current)) return
       const items = e.clipboardData?.items
       if (!items) return
       for (let i = 0; i < items.length; i++) {
@@ -108,7 +110,7 @@ function ContentImageField({
   // --- Empty state ---
   if (!iconImagePreview) {
     return (
-      <div className="flex flex-col gap-2">
+      <div ref={fieldRef} className="flex flex-col gap-2">
         <div
           className={cn(
             "flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 transition-colors",
@@ -150,7 +152,7 @@ function ContentImageField({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={fieldRef} className="flex flex-col gap-2">
       <div className="flex items-center gap-2 rounded-lg border p-3">
         <img
           src={iconImagePreview}
@@ -279,3 +281,7 @@ function ContentAppearanceFields({
 }
 
 export { ContentAppearanceFields }
+
+export function isContentImagePasteTarget(target: EventTarget | null, root: HTMLElement | null): boolean {
+  return target instanceof Node && Boolean(root?.contains(target))
+}
