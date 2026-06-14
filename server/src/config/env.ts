@@ -24,6 +24,34 @@ function parseTrustProxySetting(value: string | undefined): TrustProxySetting {
   return normalized
 }
 
+const optionalEnvString = z.preprocess((value) => {
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined
+  }
+
+  return value
+}, z.string().optional())
+
+const cosConfigGroups = [
+  {
+    name: "DRIVE_COS",
+    fields: ["DRIVE_COS_SECRET_ID", "DRIVE_COS_SECRET_KEY", "DRIVE_COS_BUCKET", "DRIVE_COS_REGION"],
+  },
+  {
+    name: "CONTENT_STORE_COS",
+    fields: [
+      "CONTENT_STORE_COS_SECRET_ID",
+      "CONTENT_STORE_COS_SECRET_KEY",
+      "CONTENT_STORE_COS_BUCKET",
+      "CONTENT_STORE_COS_REGION",
+    ],
+  },
+  {
+    name: "BACKUP_COS",
+    fields: ["BACKUP_COS_SECRET_ID", "BACKUP_COS_SECRET_KEY", "BACKUP_COS_BUCKET", "BACKUP_COS_REGION"],
+  },
+] as const
+
 const envSchema = z
   .object({
     DATABASE_URL: z.string().min(1),
@@ -38,18 +66,33 @@ const envSchema = z
     TRUST_PROXY: z.string().optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
     PORT: z.coerce.number().int().positive().default(3000),
-    DRIVE_COS_SECRET_ID: z.string().optional(),
-    DRIVE_COS_SECRET_KEY: z.string().optional(),
-    DRIVE_COS_BUCKET: z.string().optional(),
-    DRIVE_COS_REGION: z.string().optional(),
-    CONTENT_STORE_COS_SECRET_ID: z.string().optional(),
-    CONTENT_STORE_COS_SECRET_KEY: z.string().optional(),
-    CONTENT_STORE_COS_BUCKET: z.string().optional(),
-    CONTENT_STORE_COS_REGION: z.string().optional(),
-    BACKUP_COS_SECRET_ID: z.string().optional(),
-    BACKUP_COS_SECRET_KEY: z.string().optional(),
-    BACKUP_COS_BUCKET: z.string().optional(),
-    BACKUP_COS_REGION: z.string().optional(),
+    DRIVE_COS_SECRET_ID: optionalEnvString,
+    DRIVE_COS_SECRET_KEY: optionalEnvString,
+    DRIVE_COS_BUCKET: optionalEnvString,
+    DRIVE_COS_REGION: optionalEnvString,
+    CONTENT_STORE_COS_SECRET_ID: optionalEnvString,
+    CONTENT_STORE_COS_SECRET_KEY: optionalEnvString,
+    CONTENT_STORE_COS_BUCKET: optionalEnvString,
+    CONTENT_STORE_COS_REGION: optionalEnvString,
+    BACKUP_COS_SECRET_ID: optionalEnvString,
+    BACKUP_COS_SECRET_KEY: optionalEnvString,
+    BACKUP_COS_BUCKET: optionalEnvString,
+    BACKUP_COS_REGION: optionalEnvString,
+  })
+  .superRefine((env, ctx) => {
+    for (const group of cosConfigGroups) {
+      const configuredFields = group.fields.filter((field) => !!env[field])
+      if (configuredFields.length === 0 || configuredFields.length === group.fields.length) {
+        continue
+      }
+
+      const missingFields = group.fields.filter((field) => !env[field])
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [missingFields[0]],
+        message: `${group.name} configuration is incomplete; missing ${missingFields.join(", ")}`,
+      })
+    }
   })
   .refine((env) => env.USER_ACCESS_JWT_SECRET !== env.ADMIN_JWT_SECRET, {
     path: ["USER_ACCESS_JWT_SECRET"],
@@ -94,7 +137,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
   const result = envSchema.safeParse(source)
   if (!result.success) {
     const first = result.error.issues[0]
-    throw new Error(`服务端环境变量无效：${first?.path.join(".")}`)
+    throw new Error(`服务端环境变量无效：${first?.path.join(".")} ${first?.message ?? ""}`.trim())
   }
 
   return {

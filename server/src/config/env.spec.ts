@@ -138,6 +138,56 @@ describe("loadEnv", () => {
     expect(isDriveCosConfigured(env)).toBe(true)
   })
 
+  it.each([
+    {
+      name: "Drive",
+      values: {
+        DRIVE_COS_SECRET_ID: "drive-secret-id",
+        DRIVE_COS_SECRET_KEY: "drive-secret-key",
+        DRIVE_COS_BUCKET: "drive-bucket",
+      },
+      missing: "DRIVE_COS_REGION",
+    },
+    {
+      name: "Content Store",
+      values: {
+        CONTENT_STORE_COS_SECRET_ID: "content-store-secret-id",
+        CONTENT_STORE_COS_SECRET_KEY: "content-store-secret-key",
+        CONTENT_STORE_COS_REGION: "ap-beijing",
+      },
+      missing: "CONTENT_STORE_COS_BUCKET",
+    },
+    {
+      name: "Backup",
+      values: {
+        BACKUP_COS_SECRET_KEY: "backup-secret-key",
+        BACKUP_COS_BUCKET: "backup-bucket",
+        BACKUP_COS_REGION: "ap-guangzhou",
+      },
+      missing: "BACKUP_COS_SECRET_ID",
+    },
+  ])("rejects partial $name COS settings", ({ values, missing }) => {
+    expect(() =>
+      loadEnv({
+        ...baseEnv,
+        ...values,
+      }),
+    ).toThrow(missing)
+  })
+
+  it("treats blank COS settings as missing", () => {
+    const env = loadEnv({
+      ...baseEnv,
+      DRIVE_COS_SECRET_ID: "",
+      DRIVE_COS_SECRET_KEY: "  ",
+      DRIVE_COS_BUCKET: "",
+      DRIVE_COS_REGION: "",
+    })
+
+    expect(env.driveCosSecretId).toBeUndefined()
+    expect(isDriveCosConfigured(env)).toBe(false)
+  })
+
   it("ignores legacy COS settings", () => {
     const env = loadEnv({
       ...baseEnv,
