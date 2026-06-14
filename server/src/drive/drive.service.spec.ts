@@ -1909,7 +1909,7 @@ describe("DriveService", () => {
     const storage: DriveStoragePort = {
       ...storageMock,
       deleteObject: vi.fn(async () => {
-        throw new Error("delete failed")
+        throw new Error("delete failed Authorization: Bearer plain-token apiKey=plain-key https://user:pass@example.test/private /Users/example/file.txt")
       }),
     }
     const service = new DriveService(prisma as unknown as PrismaService, storage)
@@ -1939,10 +1939,19 @@ describe("DriveService", () => {
       ])
       expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
         itemId: prepared.item.id,
-        storageKey: `drive/${prepared.item.id}`,
+        storageKeyLength: `drive/${prepared.item.id}`.length,
         errorName: "Error",
-        errorMessage: "delete failed",
+        errorMessage: expect.stringContaining("Authorization: [REDACTED]"),
       }), "Drive storage object delete failed")
+      const serializedWarns = JSON.stringify(warnSpy.mock.calls)
+      expect(serializedWarns).toContain("apiKey=[REDACTED]")
+      expect(serializedWarns).toContain("[URL]")
+      expect(serializedWarns).toContain("[PATH]")
+      expect(serializedWarns).not.toContain(`drive/${prepared.item.id}`)
+      expect(serializedWarns).not.toContain("plain-token")
+      expect(serializedWarns).not.toContain("plain-key")
+      expect(serializedWarns).not.toContain("user:pass")
+      expect(serializedWarns).not.toContain("/Users/example/file.txt")
     } finally {
       warnSpy.mockRestore()
     }

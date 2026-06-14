@@ -1923,9 +1923,9 @@ export class DriveService implements OnApplicationBootstrap {
     } catch (error) {
       this.logger.warn({
         itemId,
-        storageKey,
+        storageKeyLength: storageKey.length,
         errorName: error instanceof Error ? error.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : undefined,
+        errorMessage: formatAuditError(error),
       }, "Drive storage object delete failed")
       await this.prisma.driveItem.update({
         where: { id: itemId },
