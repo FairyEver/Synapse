@@ -40,8 +40,8 @@ function parseCleanupBeforeDate(before: string | undefined): string {
   }
   const retentionFloor = new Date();
   retentionFloor.setUTCDate(retentionFloor.getUTCDate() - MIN_CLEANUP_RETENTION_DAYS);
-  if (parsed < retentionFloor.toISOString().slice(0, 10)) {
-    throw new BadRequestException("before 不能早于最近 30 天。");
+  if (parsed > retentionFloor.toISOString().slice(0, 10)) {
+    throw new BadRequestException("before 不能晚于最近 30 天。");
   }
   return parsed;
 }

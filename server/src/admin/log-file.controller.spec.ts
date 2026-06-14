@@ -23,6 +23,12 @@ function createController() {
   };
 }
 
+function cleanupRetentionCutoff(): string {
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - 30);
+  return cutoff.toISOString().slice(0, 10);
+}
+
 describe("LogFileController", () => {
   it("records audit logs for file list reads", async () => {
     const { controller, auditLog, service } = createController();
@@ -128,18 +134,27 @@ describe("LogFileController", () => {
     expect(service.cleanup).not.toHaveBeenCalled();
   });
 
-  it("rejects cleanup dates beyond the retention floor before deleting log files", async () => {
+  it("rejects cleanup dates newer than the retention floor before deleting log files", async () => {
     const { controller, service } = createController();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    await expect(controller.cleanup("1970-01-01"))
+    await expect(controller.cleanup(yesterday))
       .rejects
-      .toThrow("before 不能早于最近 30 天。");
+      .toThrow("before 不能晚于最近 30 天。");
     expect(service.cleanup).not.toHaveBeenCalled();
+  });
+
+  it("allows cleanup dates at or older than the retention floor", async () => {
+    const { controller, service } = createController();
+    const cutoff = cleanupRetentionCutoff();
+
+    await expect(controller.cleanup(cutoff)).resolves.toEqual({ deleted: 2 });
+    expect(service.cleanup).toHaveBeenCalledWith(cutoff);
   });
 
   it("records audit logs for cleanup", async () => {
     const { controller, auditLog, service } = createController();
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const cutoff = cleanupRetentionCutoff();
 
     await expect(controller.cleanup(cutoff, {
       admin: { email: "admin@example.com" },
@@ -159,7 +174,7 @@ describe("LogFileController", () => {
 
   it("keeps cleanup responses when audit writes fail", async () => {
     const { controller, auditLog, service } = createController();
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const cutoff = cleanupRetentionCutoff();
     auditLog.record.mockRejectedValueOnce(new Error("audit database unavailable"));
 
     await expect(controller.cleanup(cutoff, {
@@ -177,7 +192,7 @@ describe("LogFileController", () => {
 
   it("returns partial cleanup results and records failed cleanup audits", async () => {
     const { controller, auditLog, service } = createController();
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const cutoff = cleanupRetentionCutoff();
     service.cleanup.mockResolvedValueOnce({
       deleted: 1,
       failures: [{ name: "server.2026-05-01.log", errorName: "Error" }],
