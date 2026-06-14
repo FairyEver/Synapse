@@ -24,6 +24,8 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 2. For a single local file, call `drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
 3. For a local folder, call `drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve the relative paths returned by the tool.
 4. If the user wants to hand the file to someone else, call `drive_share_create` for the uploaded item and return the public URL.
+   - Pass `passwordEnabled: false` only when the user asks for a no-password link. Omit it to keep the default password requirement.
+   - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; omitting it uses `3d`.
 5. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
 6. Report the final item name, item id, and share URL when a share was created.
 

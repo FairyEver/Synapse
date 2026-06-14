@@ -2,7 +2,7 @@
   "id": "synapse-drive-mcp",
   "name": "synapse-drive-mcp",
   "title": "Synapse 云盘 MCP",
-  "usage": "让 AI 使用 Synapse 云盘完成文件上传、文件夹上传、分享链接和同事交接。\n\n- **适合**：上传本地文件或文件夹；创建目录；移动、删除、分享云盘条目；查看云盘用量。\n- **会做**：未指定目录时上传到根目录；上传后按需调用分享工具并返回链接；避免暴露 COS 凭证和预签名 URL。\n- **限制**：不处理密码分享；不把 Dashboard 当作上传入口。",
+  "usage": "让 AI 使用 Synapse 云盘完成文件上传、文件夹上传、分享链接和同事交接。\n\n- **适合**：上传本地文件或文件夹；创建目录；移动、删除、分享云盘条目；查看云盘用量。\n- **会做**：未指定目录时上传到根目录；上传后按需调用分享工具并返回链接；按用户要求设置分享密码和有效期；避免暴露 COS 凭证和预签名 URL。\n- **限制**：不把 Dashboard 当作上传入口。",
   "description": "Use when uploading, sharing, or managing Synapse Drive files through MCP tools.",
   "category": "data",
   "icon": "folder-tree",

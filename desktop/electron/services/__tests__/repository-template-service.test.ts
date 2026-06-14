@@ -32,4 +32,14 @@ describe("RepositoryTemplateService", () => {
       { id: "synapse-workflow-mcp", icon: "terminal", iconBg: "teal" },
     ])
   })
+
+  it("documents Drive share access settings in the built-in MCP skill", async () => {
+    const seeds = await readRepositorySeedContents()
+    const driveSkill = seeds.find((seed) => seed.id === "synapse-drive-mcp")
+
+    expect(driveSkill?.usage).not.toContain("不处理密码分享")
+    expect(driveSkill?.usage).toContain("设置分享密码和有效期")
+    expect(driveSkill?.content).toContain("passwordEnabled")
+    expect(driveSkill?.content).toContain("expiresIn")
+  })
 })
