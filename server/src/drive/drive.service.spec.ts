@@ -1866,6 +1866,56 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("scheduled cleanup expires pending sessions", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "stale.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await prisma.driveUploadSession.update({
+      where: { id: prepared.sessionId },
+      data: { expiresAt: new Date("2020-01-01T00:00:00.000Z") },
+    })
+
+    await expect(service.scheduledPendingUploadSessionExpiry()).resolves.toBeUndefined()
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
+  it("scheduled cleanup logs redacted failures without throwing", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    const warn = vi.spyOn((service as unknown as { readonly logger: Logger }).logger, "warn").mockImplementation(() => undefined)
+    vi.spyOn(prisma.driveUploadSession, "findMany").mockRejectedValue(Object.assign(new Error([
+      "cleanup failed",
+      "Authorization: Bearer raw-bearer",
+      "postgresql://user:db-password@db.local:5432/synapse",
+      "/Users/liyang/project/.env",
+    ].join(" ")), { code: "ECONNRESET" }) as never)
+
+    await expect(service.scheduledPendingUploadSessionExpiry()).resolves.toBeUndefined()
+
+    expect(warn).toHaveBeenCalledWith({
+      errorName: "Error",
+      errorMessage: "cleanup failed Authorization: [REDACTED] [URL] [PATH]",
+      errorCode: "ECONNRESET",
+    }, "Drive pending upload session cleanup failed")
+    const serialized = JSON.stringify(warn.mock.calls)
+    expect(serialized).not.toContain("raw-bearer")
+    expect(serialized).not.toContain("db-password")
+    expect(serialized).not.toContain("/Users/liyang/project/.env")
+  })
+
   it("admin delete disables shares and hides the file", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
+import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import {
@@ -1165,6 +1166,21 @@ export class DriveService implements OnApplicationBootstrap {
   async deleteItemAsAdmin(itemId: string, actorEmail: string, ipAddress: string): Promise<{ readonly ok: true }> {
     await this.deleteItemInternal({ itemId, actorEmail, ipAddress, admin: true })
     return { ok: true }
+  }
+
+  @Cron("*/15 * * * *")
+  async scheduledPendingUploadSessionExpiry(): Promise<void> {
+    try {
+      await this.expirePendingUploadSessions()
+    } catch (error) {
+      this.logger.warn({
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+        ...(error instanceof Error && "code" in error && typeof error.code === "string"
+          ? { errorCode: error.code }
+          : {}),
+      }, "Drive pending upload session cleanup failed")
+    }
   }
 
   async expirePendingUploadSessions(now = new Date()): Promise<{ readonly expired: number }> {
