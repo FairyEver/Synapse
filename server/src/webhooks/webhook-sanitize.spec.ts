@@ -33,6 +33,16 @@ describe("webhook sanitize", () => {
     expect(sanitized).not.toContain("whsec_secret_value")
   })
 
+  it("redacts sensitive query values before request logs are serialized", () => {
+    const sanitized = sanitizeWebhookLogUrl(
+      "/drive/pages/page-1?password=plain-password&page=2&apiKey=plain-api-key#section",
+    )
+
+    expect(sanitized).toBe("/drive/pages/page-1?password=[redacted]&page=2&apiKey=[redacted]#section")
+    expect(sanitized).not.toContain("plain-password")
+    expect(sanitized).not.toContain("plain-api-key")
+  })
+
   it("keeps non-webhook request log URLs unchanged", () => {
     expect(sanitizeWebhookLogUrl("/api/webhooks?status=active")).toBe("/api/webhooks?status=active")
   })

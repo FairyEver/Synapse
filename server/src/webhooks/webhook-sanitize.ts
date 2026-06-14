@@ -60,7 +60,7 @@ export function sanitizeWebhookLogUrl(url: string | undefined): string | undefin
   const path = queryIndex >= 0 ? urlWithoutFragment.slice(0, queryIndex) : urlWithoutFragment
   const query = queryIndex >= 0 ? urlWithoutFragment.slice(queryIndex) : ""
 
-  return `${sanitizeWebhookLogPath(path)}${query}${fragment}`
+  return `${sanitizeWebhookLogPath(path)}${sanitizeWebhookLogQueryString(query)}${fragment}`
 }
 
 export function sanitizeWebhookLogRequest(request: WebhookLogRequestLike): Record<string, unknown> {
@@ -140,6 +140,14 @@ function sanitizeWebhookLogPath(path: string): string {
     /^((?:https?:\/\/[^/?#]+)?\/webhooks\/[^/?#]+)\/[^/?#]+(.*)$/iu,
     "$1/***$2",
   )
+}
+
+function sanitizeWebhookLogQueryString(query: string): string {
+  if (!query) return query
+  return query.replace(/([?&])([^=&?#]+)(?:=([^&#]*))?/gu, (match, separator: string, key: string) => {
+    const decodedKey = decodeQueryKey(key)
+    return decodedKey && isSensitiveKey(decodedKey) ? `${separator}${key}=[redacted]` : match
+  })
 }
 
 function sanitizeWebhookLogParams(params: unknown): unknown {
@@ -233,6 +241,14 @@ function preview(value: string): string {
 
 function isSensitiveKey(key: string): boolean {
   return sensitiveKeyPattern.test(key)
+}
+
+function decodeQueryKey(key: string): string {
+  try {
+    return decodeURIComponent(key.replace(/\+/gu, " "))
+  } catch {
+    return key
+  }
 }
 
 function parseJsonBody(body: Buffer): unknown {
