@@ -1,5 +1,10 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { buildDiagnosticsSummary } from "@/lib/diagnostics-summary"
 import {
@@ -9,26 +14,90 @@ import {
 } from "@/modules/settings/components/diagnostics-panel"
 import type { SynapseDiagnosticsReport } from "@/types/diagnostics"
 
-vi.mock("@/lib/electron-bridge", () => ({
-  requireSynapseBridge: () => ({
-    ops: {
+const { bridgeOps, notificationState, rendererLogger, shell } = vi.hoisted(() => {
+  const notificationState = {
+    error: vi.fn(),
+    success: vi.fn(),
+    promiseErrors: [] as Array<string | null>,
+    promise: vi.fn(async <T,>(
+      task: () => Promise<T>,
+      messages: {
+        readonly error?: string | ((error: unknown) => string | null)
+      },
+    ) => {
+      try {
+        return await task()
+      } catch (error) {
+        const message = typeof messages.error === "function" ? messages.error(error) : messages.error ?? null
+        notificationState.promiseErrors.push(message)
+        throw error
+      }
+    }),
+  }
+  return {
+    bridgeOps: {
       runDiagnostics: vi.fn(),
       exportDiagnosticsBundle: vi.fn(),
       ping: vi.fn(),
     },
-    shell: {
-      showItemInFolder: vi.fn().mockResolvedValue(undefined),
+    notificationState,
+    rendererLogger: {
+      info: vi.fn(),
+      error: vi.fn(),
     },
+    shell: {
+      showItemInFolder: vi.fn(),
+    },
+  }
+})
+
+vi.mock("@/lib/electron-bridge", () => ({
+  requireSynapseBridge: () => ({
+    ops: bridgeOps,
+    shell,
   }),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
 }))
 
 vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
-    error: vi.fn(),
-    promise: async <T,>(task: () => Promise<T>) => task(),
-    success: vi.fn(),
+    error: notificationState.error,
+    promise: notificationState.promise,
+    success: notificationState.success,
   }),
 }))
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let roots: Root[] = []
+
+beforeEach(() => {
+  Object.defineProperty(window.navigator, "clipboard", {
+    configurable: true,
+    value: {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    },
+  })
+  bridgeOps.runDiagnostics.mockResolvedValue(createReport())
+  bridgeOps.exportDiagnosticsBundle.mockResolvedValue({ success: true, filePath: "/tmp/diagnostics.zip" })
+  bridgeOps.ping.mockResolvedValue({ receivedAt: "2026-04-29T03:31:21.000Z" })
+  shell.showItemInFolder.mockResolvedValue(undefined)
+})
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  notificationState.promiseErrors.length = 0
+  vi.clearAllMocks()
+})
 
 describe("DiagnosticsPanel", () => {
   it("starts with export disabled and no raw JSON action", () => {
@@ -99,7 +168,81 @@ describe("DiagnosticsPanel", () => {
     expect(buildDiagnosticsSummary(createReport())).toContain("Synapse 0.2.49")
     expect(buildDiagnosticsSummary(createReport())).toContain("## 异常项\n无")
   })
+
+  it("uses a fixed diagnostics run failure message and sanitized renderer log metadata", async () => {
+    bridgeOps.runDiagnostics.mockRejectedValue(new Error("diagnostics failed token=sk-secret at /Users/example/private/report.zip"))
+    const container = renderPanel()
+
+    await clickButton(container, "运行诊断")
+
+    expect(notificationState.promiseErrors).toEqual(["诊断失败"])
+    expect(rendererLogger.error).toHaveBeenCalledWith("Diagnostics run failed.", {
+      errorName: "Error",
+      errorLength: expect.any(Number),
+    })
+    expect(JSON.stringify(notificationState.promiseErrors)).not.toContain("sk-secret")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example/private/report.zip")
+    expect(container.textContent).not.toContain("sk-secret")
+  })
+
+  it("sanitizes renderer-main roundtrip errors before adding them to the diagnostics report", async () => {
+    bridgeOps.ping.mockRejectedValue(new Error("ping failed token=sk-secret at /Users/example/private/report.zip"))
+    const container = renderPanel()
+
+    await clickButton(container, "运行诊断")
+    await clickButton(container, "复制摘要")
+
+    const copied = vi.mocked(window.navigator.clipboard.writeText).mock.calls[0]?.[0] ?? ""
+    expect(copied).toContain("token=[redacted]")
+    expect(copied).toContain("[path]")
+    expect(copied).not.toContain("sk-secret")
+    expect(copied).not.toContain("/Users/example/private/report.zip")
+    expect(container.textContent).not.toContain("sk-secret")
+    expect(container.textContent).not.toContain("/Users/example/private/report.zip")
+  })
+
+  it("uses a fixed diagnostics export failure message and sanitized renderer log metadata", async () => {
+    bridgeOps.exportDiagnosticsBundle.mockRejectedValue(
+      new Error("zip failed token=sk-secret at /Users/example/private/report.zip"),
+    )
+    const container = renderPanel()
+
+    await clickButton(container, "运行诊断")
+    await clickButton(container, "导出诊断包")
+
+    expect(notificationState.promiseErrors).toEqual(["导出诊断包失败"])
+    expect(rendererLogger.error).toHaveBeenCalledWith("Diagnostics bundle export failed.", {
+      errorName: "Error",
+      errorLength: expect.any(Number),
+    })
+    expect(JSON.stringify(notificationState.promiseErrors)).not.toContain("sk-secret")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example/private/report.zip")
+    expect(container.textContent).not.toContain("sk-secret")
+  })
 })
+
+function renderPanel(): HTMLElement {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  act(() => {
+    root.render(<DiagnosticsPanel />)
+  })
+  return container
+}
+
+async function clickButton(container: HTMLElement, label: string): Promise<void> {
+  const button = Array.from(container.querySelectorAll("button"))
+    .find((element) => element.textContent?.includes(label))
+  expect(button).toBeDefined()
+  await act(async () => {
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    await Promise.resolve()
+  })
+}
 
 function createReport(): SynapseDiagnosticsReport {
   return {

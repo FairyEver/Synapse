@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { errorLogMessage, errorLogMeta, sanitizeError } from "@/lib/error-sanitize"
 import {
   appendDiagnosticsCheck,
   buildDiagnosticsSummary,
@@ -55,7 +56,7 @@ async function runDiagnosticsWithIpcCheck(): Promise<SynapseDiagnosticsReport> {
         durationMs,
         requestedAt,
         completedAt: new Date().toISOString(),
-        error: error instanceof Error ? error.message : String(error),
+        error: sanitizeError(errorLogMessage(error, "IPC 往返失败")),
       }),
     )
   }
@@ -80,12 +81,12 @@ function DiagnosticsPanel() {
         {
           loading: "正在运行诊断...",
           success: () => "诊断完成",
-          error: (error) => error instanceof Error ? error.message : "诊断失败",
+          error: () => "诊断失败",
         },
       )
       setReport(nextReport)
     } catch (error) {
-      logger.error("Diagnostics run failed.", error)
+      logger.error("Diagnostics run failed.", errorLogMeta(error))
     } finally {
       setIsRunning(false)
     }
@@ -101,14 +102,14 @@ function DiagnosticsPanel() {
         {
           loading: "正在导出诊断包...",
           success: (exportResult) => exportResult.success ? "诊断包已导出" : null,
-          error: (error) => error instanceof Error ? error.message : "导出诊断包失败",
+          error: () => "导出诊断包失败",
         },
       )
       if (result.success && result.filePath) {
         requireSynapseBridge().shell.showItemInFolder(result.filePath).catch(() => {})
       }
     } catch (error) {
-      logger.error("Diagnostics bundle export failed.", error)
+      logger.error("Diagnostics bundle export failed.", errorLogMeta(error))
     } finally {
       setIsExporting(false)
     }
