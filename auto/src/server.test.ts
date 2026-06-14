@@ -134,6 +134,35 @@ test('output buffer endpoint returns buffered lines', async () => {
   }
 })
 
+test('JSON endpoints reject oversized request bodies', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
+  const server = createServer(createHandler(new AutoScheduler(), new OutputBuffer(), {
+    configPath: join(dir, 'ui-config.json'),
+    promptPath: join(dir, 'prompt.md'),
+    promptsDir: join(dir, 'prompts'),
+  }))
+  try {
+    await mkdir(join(dir, 'prompts'), { recursive: true })
+    const baseUrl = await listen(server)
+    const oversizedPrompt = 'x'.repeat(1024 * 1024 + 1)
+    const response = await fetch(`${baseUrl}/api/config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: oversizedPrompt }),
+    })
+
+    assert.equal(response.status, 413)
+    const body = record(await response.json())
+    assert.equal(body.error, 'Request body too large')
+
+    const config = record(await requestJson(baseUrl, '/api/config'))
+    assert.notEqual(config.prompt, oversizedPrompt)
+  } finally {
+    server.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('output buffer separates repeated slot runs by sequence', () => {
   const outputBuffer = new OutputBuffer()
 

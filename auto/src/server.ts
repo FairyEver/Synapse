@@ -13,6 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const WEB_DIR = resolve(__dirname, '../dist/web')
 const GUIDE_PATH = resolve(__dirname, '../GUIDE.md')
 const DEFAULT_PORT = 47831
+const MAX_JSON_BODY_BYTES = 1024 * 1024
 
 export class OutputBuffer {
   private lines = new Map<string, OutputLine[]>()
@@ -65,6 +66,15 @@ function sendError(res: ServerResponse, statusCode: number, message: string): vo
   sendJson(res, statusCode, { error: message })
 }
 
+class HttpError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
 function contentType(path: string): string {
   switch (extname(path)) {
     case '.css':
@@ -79,9 +89,20 @@ function contentType(path: string): string {
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
+  const contentLength = Number(req.headers['content-length'])
+  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
+    throw new HttpError(413, 'Request body too large')
+  }
+
   const chunks: Buffer[] = []
+  let totalBytes = 0
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalBytes += buffer.byteLength
+    if (totalBytes > MAX_JSON_BODY_BYTES) {
+      throw new HttpError(413, 'Request body too large')
+    }
+    chunks.push(buffer)
   }
   const raw = Buffer.concat(chunks).toString('utf-8').trim()
   return raw ? JSON.parse(raw) : {}
@@ -251,6 +272,10 @@ export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuff
 
       sendError(res, 404, 'Not found')
     } catch (err) {
+      if (err instanceof HttpError) {
+        sendError(res, err.statusCode, err.message)
+        return
+      }
       sendError(res, 500, err instanceof Error ? err.message : String(err))
     }
   }
