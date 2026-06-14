@@ -859,6 +859,45 @@ describe("DriveService", () => {
     ])
   })
 
+  it("rejects oversized site redeploys before copying and keeps the active deployment", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    const index = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
+    const currentDeploymentId = publication.currentDeploymentId
+    const indexRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: index.id } })
+    const oversizedChildren = [
+      indexRecord,
+      ...Array.from({ length: 1000 }, (_, index) => ({
+        ...indexRecord,
+        id: `oversized-${index}`,
+        name: `asset-${index}.txt`,
+        storageKey: `drive/oversized-${index}`,
+        mimeType: "text/plain",
+      })),
+    ]
+    const findMany = prisma.driveItem.findMany
+    prisma.driveItem.findMany = vi.fn(async (args: any) => {
+      if (args?.where?.parentId === folder.id) return oversizedChildren
+      return findMany(args)
+    })
+    vi.mocked(storageMock.copyObject).mockClear()
+
+    await expect(service.redeployPublication("user-1", publication.id, "https://synapse.test"))
+      .rejects.toThrow("站点文件数量过多，最多发布 1000 个文件。")
+
+    expect(prisma.driveItem.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1201 }))
+    expect(storageMock.copyObject).not.toHaveBeenCalled()
+    const stored = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
+    expect(stored.currentDeploymentId).toBe(currentDeploymentId)
+  })
+
   it("requires root index html for site publication", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

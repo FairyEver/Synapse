@@ -156,6 +156,10 @@ const DRIVE_MARKDOWN_RENDER_MAX_BYTES = 10 * 1024 * 1024
 const DRIVE_MARKDOWN_RENDER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
 const DRIVE_BROWSER_CHILDREN_DEFAULT_LIMIT = 100
 const DRIVE_BROWSER_CHILDREN_MAX_LIMIT = 200
+const DRIVE_SITE_PUBLICATION_MAX_FILES = 1000
+const DRIVE_SITE_PUBLICATION_MAX_PATHS = 1200
+const DRIVE_SITE_PUBLICATION_MAX_DEPTH = 12
+const DRIVE_SITE_PUBLICATION_MAX_TOTAL_BYTES = 512n * 1024n * 1024n
 
 @Injectable()
 export class DriveService implements OnApplicationBootstrap {
@@ -1773,23 +1777,42 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async collectPublicationSiteFiles(userId: string, rootId: string): Promise<PublicationSourceAsset[]> {
     const result: PublicationSourceAsset[] = []
-    const queue: Array<{ readonly parentId: string; readonly prefix: string }> = [{ parentId: rootId, prefix: "" }]
+    const queue: Array<{ readonly parentId: string; readonly prefix: string; readonly depth: number }> = [{ parentId: rootId, prefix: "", depth: 0 }]
     const seenPaths = new Set<string>()
+    let pathCount = 0
+    let totalBytes = 0n
 
     while (queue.length > 0) {
       const current = queue.shift()!
+      if (current.depth > DRIVE_SITE_PUBLICATION_MAX_DEPTH) {
+        throw new BadRequestException(`站点文件夹层级最多 ${DRIVE_SITE_PUBLICATION_MAX_DEPTH} 层。`)
+      }
+      const remainingPaths = DRIVE_SITE_PUBLICATION_MAX_PATHS - pathCount
+      if (remainingPaths <= 0) throw new BadRequestException(`站点路径数量过多，最多发布 ${DRIVE_SITE_PUBLICATION_MAX_PATHS} 个文件或文件夹。`)
       const children = await this.prisma.driveItem.findMany({
         where: { userId, parentId: current.parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
         orderBy: [{ type: "asc" }, { name: "asc" }],
+        take: remainingPaths + 1,
       })
+      if (children.length > remainingPaths) {
+        throw new BadRequestException(`站点路径数量过多，最多发布 ${DRIVE_SITE_PUBLICATION_MAX_PATHS} 个文件或文件夹。`)
+      }
+      pathCount += children.length
       for (const child of children) {
         const relativePath = current.prefix ? `${current.prefix}/${child.name}` : child.name
         const normalized = normalizePublicationRelativePath(relativePath)
         if (child.type === DRIVE_ITEM_TYPE.folder) {
-          queue.push({ parentId: child.id, prefix: normalized })
+          queue.push({ parentId: child.id, prefix: normalized, depth: current.depth + 1 })
           continue
         }
         if (!child.storageKey) continue
+        if (result.length >= DRIVE_SITE_PUBLICATION_MAX_FILES) {
+          throw new BadRequestException(`站点文件数量过多，最多发布 ${DRIVE_SITE_PUBLICATION_MAX_FILES} 个文件。`)
+        }
+        totalBytes += child.size
+        if (totalBytes > DRIVE_SITE_PUBLICATION_MAX_TOTAL_BYTES) {
+          throw new BadRequestException("站点文件总大小超过 512MB。")
+        }
         const pathKey = normalized.toLowerCase()
         if (seenPaths.has(pathKey)) throw new BadRequestException("站点文件路径重复。")
         seenPaths.add(pathKey)
