@@ -1,5 +1,6 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
+import type { ActionRunMetrics } from "../../../action-packages/types"
 import type {
   SchedulerSchedule,
   SchedulerTaskCreateParams,
@@ -10,6 +11,7 @@ import type {
   SchedulerTaskUpdateParams,
 } from "../../../synapse-capabilities/shared/scheduler-domain"
 import type { DispatchContext, DispatchResult } from "../../../synapse-capabilities/shared/types"
+import { sanitizeError } from "../error-sanitize"
 import type { TaskSchedulerService } from "./task-scheduler-service"
 import type {
   ScheduledTaskCreateInput,
@@ -287,6 +289,8 @@ function toPublicTaskValidation(
 }
 
 function toRunSummary(run: ScheduledTaskRunEntry) {
+  const metrics = sanitizeRunMetrics(run.result?.metrics)
+
   return {
     id: run.id,
     taskId: run.taskId,
@@ -294,10 +298,22 @@ function toRunSummary(run: ScheduledTaskRunEntry) {
     triggeredBy: run.triggeredBy,
     startedAt: run.startedAt,
     ...(run.finishedAt === undefined ? {} : { finishedAt: run.finishedAt }),
-    ...(run.error === undefined ? {} : { error: run.error }),
-    ...(run.result?.summary === undefined ? {} : { summary: run.result.summary }),
-    ...(run.result?.metrics === undefined ? {} : { metrics: run.result.metrics }),
+    ...(run.error === undefined ? {} : { error: sanitizeError(run.error) }),
+    ...(run.result?.summary === undefined ? {} : { summary: sanitizeError(run.result.summary) }),
+    ...(metrics === undefined ? {} : { metrics }),
   }
+}
+
+function sanitizeRunMetrics(metrics: ActionRunMetrics | undefined): ActionRunMetrics | undefined {
+  if (!metrics) return undefined
+
+  const safeMetrics: ActionRunMetrics = {
+    ...(typeof metrics.durationMs === "number" ? { durationMs: metrics.durationMs } : {}),
+    ...(typeof metrics.exitCode === "number" || metrics.exitCode === null ? { exitCode: metrics.exitCode } : {}),
+    ...(typeof metrics.httpStatus === "number" ? { httpStatus: metrics.httpStatus } : {}),
+  }
+
+  return Object.keys(safeMetrics).length > 0 ? safeMetrics : undefined
 }
 
 async function buildRuntimeStatus(

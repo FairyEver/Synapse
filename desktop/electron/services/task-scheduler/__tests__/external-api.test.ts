@@ -267,6 +267,21 @@ describe("task scheduler external api", () => {
 
   it("lists run summaries without log payloads", async () => {
     const service = serviceMock()
+    vi.mocked(service.schedulerRunList).mockResolvedValueOnce([{
+      ...baseRun,
+      error: "Authorization: Bearer sk-error",
+      result: {
+        status: "success",
+        summary: "Agent reply included Authorization: Bearer sk-summary token=secret",
+        logs: [{ label: "stdout", value: "large output" }],
+        metrics: {
+          durationMs: 2000,
+          exitCode: 0,
+          httpStatus: 200,
+          token: "secret",
+        } as unknown as NonNullable<ScheduledTaskRunEntry["result"]>["metrics"],
+      },
+    }])
     const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.run.list", {
       taskId: "task:1",
     })
@@ -281,12 +296,16 @@ describe("task scheduler external api", () => {
         triggeredBy: "schedule",
         startedAt: "2026-05-02T00:10:00.000Z",
         finishedAt: "2026-05-02T00:10:02.000Z",
-        summary: "ok",
-        metrics: { durationMs: 2000, exitCode: 0 },
+        error: "Authorization=[redacted] [redacted]",
+        summary: "Agent reply included Authorization=[redacted] [redacted] token=[redacted]",
+        metrics: { durationMs: 2000, exitCode: 0, httpStatus: 200 },
       }],
       total: 1,
     })
     expect(JSON.stringify(result)).not.toContain("large output")
+    expect(JSON.stringify(result)).not.toContain("sk-error")
+    expect(JSON.stringify(result)).not.toContain("sk-summary")
+    expect(JSON.stringify(result)).not.toContain("secret")
   })
 
   it("returns runtime status for all tasks and one task", async () => {

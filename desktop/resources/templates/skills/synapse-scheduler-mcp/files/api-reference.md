@@ -99,7 +99,7 @@ List recent runs for one scheduled task.
 
 **Params:** `taskId`, `limit?`
 
-This is read-only and does not start or stop runs.
+This is read-only and does not start or stop runs. Run summaries include id, task id, status, trigger source, timestamps, sanitized error/summary text, and whitelisted non-secret metrics such as `durationMs`, `exitCode`, and `httpStatus`. They do not include logs, raw outputs, command text, scripts, Agent prompts, HTTP bodies, Authorization values, Bearer tokens, cookies, API keys, environment variable values, or raw event payloads.
 
 ### scheduler_runtime_inspect
 
