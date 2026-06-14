@@ -1,8 +1,11 @@
 export type DashboardRole = 'admin' | 'user'
 
 const adminPaths = new Set([
+  '/admin-drive',
   '/audit-logs',
   '/backup',
+  '/content-store-admin',
+  '/devices',
   '/invitations',
   '/logs',
   '/system',
