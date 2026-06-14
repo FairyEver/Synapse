@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import {
@@ -21,6 +21,7 @@ import { builtinContentService } from "./builtin-content-service"
 import { contentHistoryService, resolveContentDirectoryPath } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { configStore } from "./config-store"
+import { CONTENT_ICON_IMAGE_MAX_BYTES } from "./content-capability-validator"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.content")
@@ -210,6 +211,20 @@ class ContentService {
     const iconPath = path.join(contentDir, "icon.png")
 
     try {
+      const info = await stat(iconPath)
+      if (!info.isFile()) {
+        logger.warn("Skipped content icon image because icon.png is not a file.", { contentType, contentId })
+        return null
+      }
+      if (info.size > CONTENT_ICON_IMAGE_MAX_BYTES) {
+        logger.warn("Skipped oversized content icon image.", {
+          contentType,
+          contentId,
+          maxBytes: CONTENT_ICON_IMAGE_MAX_BYTES,
+          size: info.size,
+        })
+        return null
+      }
       const buffer = await readFile(iconPath)
       return `data:image/png;base64,${buffer.toString("base64")}`
     } catch {

@@ -26,10 +26,17 @@ const mocks = vi.hoisted(() => ({
     listDeletedContent: vi.fn(),
     syncIndex: vi.fn(),
   },
+  fsPromises: {
+    readFile: vi.fn(),
+    stat: vi.fn(),
+  },
   logger: {
     warn: vi.fn(),
   },
+  resolveContentDirectoryPath: vi.fn(),
 }))
+
+vi.mock("node:fs/promises", () => mocks.fsPromises)
 
 vi.mock("../attachments-pool-service", () => ({
   attachmentsPoolService: mocks.attachmentsPoolService,
@@ -45,7 +52,7 @@ vi.mock("../config-store", () => ({
 
 vi.mock("../content-history-service", () => ({
   contentHistoryService: mocks.contentHistoryService,
-  resolveContentDirectoryPath: vi.fn(),
+  resolveContentDirectoryPath: mocks.resolveContentDirectoryPath,
 }))
 
 vi.mock("../content-index-service", () => ({
@@ -57,6 +64,7 @@ vi.mock("../log-store", () => ({
 }))
 
 import { contentService } from "../content-service"
+import { CONTENT_ICON_IMAGE_MAX_BYTES } from "../content-capability-validator"
 
 const repository: SynapseRepositoryConfig = {
   uuid: "repo-1",
@@ -145,6 +153,61 @@ describe("contentService.listDeletedContent", () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       "Failed to load deleted repository content, returning empty list.",
       { contentType: "rule", error },
+    )
+  })
+})
+
+describe("contentService.readIconImage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.builtinContentService.isBuiltinContentId.mockReturnValue(false)
+    mocks.configStore.load.mockResolvedValue(createConfig())
+    mocks.resolveContentDirectoryPath.mockReturnValue("/repo/rules/rule-1")
+    mocks.fsPromises.stat.mockResolvedValue({
+      isFile: () => true,
+      size: 4,
+    })
+    mocks.fsPromises.readFile.mockResolvedValue(Buffer.from("icon"))
+  })
+
+  it("reads a bounded content icon image", async () => {
+    await expect(contentService.readIconImage("rule", "rule-1")).resolves.toBe(
+      `data:image/png;base64,${Buffer.from("icon").toString("base64")}`,
+    )
+
+    expect(mocks.fsPromises.stat).toHaveBeenCalledWith("/repo/rules/rule-1/icon.png")
+    expect(mocks.fsPromises.readFile).toHaveBeenCalledWith("/repo/rules/rule-1/icon.png")
+  })
+
+  it("skips oversized content icon images before reading the file", async () => {
+    mocks.fsPromises.stat.mockResolvedValueOnce({
+      isFile: () => true,
+      size: CONTENT_ICON_IMAGE_MAX_BYTES + 1,
+    })
+
+    await expect(contentService.readIconImage("rule", "rule-1")).resolves.toBeNull()
+
+    expect(mocks.fsPromises.readFile).not.toHaveBeenCalled()
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Skipped oversized content icon image.", {
+      contentType: "rule",
+      contentId: "rule-1",
+      maxBytes: CONTENT_ICON_IMAGE_MAX_BYTES,
+      size: CONTENT_ICON_IMAGE_MAX_BYTES + 1,
+    })
+  })
+
+  it("skips content icon paths that are not files", async () => {
+    mocks.fsPromises.stat.mockResolvedValueOnce({
+      isFile: () => false,
+      size: 0,
+    })
+
+    await expect(contentService.readIconImage("rule", "rule-1")).resolves.toBeNull()
+
+    expect(mocks.fsPromises.readFile).not.toHaveBeenCalled()
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Skipped content icon image because icon.png is not a file.",
+      { contentType: "rule", contentId: "rule-1" },
     )
   })
 })
