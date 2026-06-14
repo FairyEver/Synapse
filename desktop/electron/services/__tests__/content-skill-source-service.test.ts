@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto"
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+const logger = vi.hoisted(() => ({
+  warn: vi.fn(),
+  info: vi.fn(),
+  error: vi.fn(),
+}))
 
 vi.mock("electron", () => ({
   app: {
@@ -14,8 +20,12 @@ vi.mock("electron", () => ({
   },
 }))
 
+vi.mock("../log-store", () => ({
+  createMainLogger: () => logger,
+}))
+
 import { ContentCapabilityError } from "../content-capability-errors"
-import { readSkillDraftFromDirectory } from "../content-skill-source-service"
+import { readSkillDraftFromDirectory, resolveSkillMainFile } from "../content-skill-source-service"
 
 const tempRoots: string[] = []
 const itCanCreateBackslashFile = path.sep === "/" ? it : it.skip
@@ -32,9 +42,51 @@ async function writeText(filePath: string, content: string): Promise<void> {
 }
 
 describe("content skill source service", () => {
+  beforeEach(() => {
+    logger.warn.mockClear()
+    logger.info.mockClear()
+    logger.error.mockClear()
+  })
+
   afterEach(async () => {
     vi.restoreAllMocks()
     await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  it("redacts source directory read failure logs", async () => {
+    const missingPath = path.join(os.tmpdir(), "synapse-token=sk-secret-source", "private-skill")
+
+    await expect(resolveSkillMainFile(missingPath)).resolves.toBeNull()
+
+    const serializedLogs = JSON.stringify(logger.warn.mock.calls)
+    expect(serializedLogs).toContain("sourcePathLength")
+    expect(serializedLogs).toContain("[path]")
+    expect(serializedLogs).not.toContain(missingPath)
+    expect(serializedLogs).not.toContain("sk-secret")
+    expect(serializedLogs).not.toContain("dirPath")
+  })
+
+  it.skipIf(process.platform === "win32")("redacts attachment directory traversal failure logs", async () => {
+    const root = await createTempRoot()
+    const blockedDir = path.join(root, "refs-token=sk-secret")
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await mkdir(blockedDir)
+    await chmod(blockedDir, 0)
+
+    try {
+      await expect(readSkillDraftFromDirectory(root)).rejects.toThrow("无法读取 Skill 附件目录")
+    } finally {
+      await chmod(blockedDir, 0o700)
+    }
+
+    const serializedLogs = JSON.stringify(logger.warn.mock.calls)
+    expect(serializedLogs).toContain("relativePathHash")
+    expect(serializedLogs).toContain("relativePathLength")
+    expect(serializedLogs).not.toContain(root)
+    expect(serializedLogs).not.toContain(blockedDir)
+    expect(serializedLogs).not.toContain("refs-token=sk-secret")
+    expect(serializedLogs).not.toContain("sk-secret")
+    expect(serializedLogs).not.toContain("dirPath")
   })
 
   it("reads a skill directory with metadata and normalized attachments", async () => {

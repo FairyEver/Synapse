@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
@@ -13,6 +14,7 @@ import {
   CONTENT_SKILL_ATTACHMENT_MAX_SIZE,
   CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE,
 } from "./content-skill-attachment-constraints"
+import { sanitizeError } from "./error-sanitize"
 import { createMainLogger } from "./log-store"
 
 const logger = createMainLogger("service.content-skill-source")
@@ -63,8 +65,8 @@ async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
     children = await readdir(dirPath)
   } catch (error) {
     logger.warn("Failed to read skill source directory.", {
-      dirPath,
-      error: getErrorMessage(error),
+      ...sourcePathDiagnostic(dirPath),
+      error: sanitizeSkillSourceError(error),
     })
     return null
   }
@@ -167,8 +169,8 @@ async function collectSkillFiles(
     children = await readdir(currentDir)
   } catch (error) {
     logger.warn("Failed to list skill source files.", {
-      dirPath: currentDir,
-      error: getErrorMessage(error),
+      ...sourcePathDiagnostic(currentDir, baseDir),
+      error: sanitizeSkillSourceError(error),
     })
     throwInvalid("files", `无法读取 Skill 附件目录：${formatSkillSourceRelativePath(baseDir, currentDir)}`)
   }
@@ -183,8 +185,8 @@ async function collectSkillFiles(
       fileStat = await lstat(fullPath)
     } catch (error) {
       logger.warn("Failed to inspect skill source file.", {
-        filePath: fullPath,
-        error: getErrorMessage(error),
+        ...sourcePathDiagnostic(fullPath, baseDir),
+        error: sanitizeSkillSourceError(error),
       })
       throwInvalid("files", `无法检查 Skill 附件：${formatSkillSourceRelativePath(baseDir, fullPath)}`)
     }
@@ -237,8 +239,8 @@ async function collectSkillFile(
     })
   } catch (error) {
     logger.warn("Failed to read skill source attachment.", {
-      filePath: fullPath,
-      error: getErrorMessage(error),
+      ...sourcePathDiagnostic(fullPath, baseDir),
+      error: sanitizeSkillSourceError(error),
     })
     throwInvalid("files", `无法读取 Skill 附件：${relativeName}`)
   }
@@ -330,6 +332,28 @@ function toPortableRelativePath(relativeName: string): string {
 
 function formatSkillSourceRelativePath(baseDir: string, targetPath: string): string {
   return normalizeContentAttachmentPath(toPortableRelativePath(path.relative(baseDir, targetPath))) || "."
+}
+
+function sourcePathDiagnostic(targetPath: string, baseDir?: string): Record<string, unknown> {
+  if (!baseDir) {
+    return {
+      sourcePathLength: targetPath.length,
+    }
+  }
+  const relativePath = formatSkillSourceRelativePath(baseDir, targetPath)
+  return {
+    relativePathHash: hashLogPath(relativePath),
+    relativePathLength: relativePath.length,
+    sourcePathLength: targetPath.length,
+  }
+}
+
+function hashLogPath(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12)
+}
+
+function sanitizeSkillSourceError(error: unknown): string {
+  return sanitizeError(getErrorMessage(error))
 }
 
 function isPathInside(rootPath: string, targetPath: string): boolean {
