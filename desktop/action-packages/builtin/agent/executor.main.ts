@@ -84,7 +84,6 @@ export function createAgentAction(deps: {
             conversationId: result.conversationId,
             projectId: input.config.projectId,
             platform: "scheduled",
-            ...(result.sessionKey ? { sessionKey: result.sessionKey } : {}),
             configVersion: currentConfigVersion,
           },
           metrics: { durationMs: result.durationMs },

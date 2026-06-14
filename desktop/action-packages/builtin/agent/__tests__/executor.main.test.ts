@@ -86,9 +86,9 @@ describe("builtin agent action executor", () => {
       conversationId: "conversation-1",
       projectId: "project-1",
       platform: "scheduled",
-      sessionKey: "scheduled:project-1:123",
       configVersion: 2,
     })
+    expect(result.outputs).not.toHaveProperty("sessionKey")
   })
 
   it("passes null scheduled timeout as disabled", async () => {
@@ -359,9 +359,9 @@ describe("builtin agent action executor", () => {
       conversationId: "new-conversation",
       projectId: "project-1",
       platform: "scheduled",
-      sessionKey: "scheduled:project-1:new",
       configVersion: 3,
     })
+    expect(result.outputs).not.toHaveProperty("sessionKey")
   })
 
   it("allows resume when configVersion matches last run", async () => {
