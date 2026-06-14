@@ -367,19 +367,22 @@ describe("DriveController", () => {
     const userApp = moduleRef.createNestApplication()
     await userApp.init()
     try {
-      drive.listPublications.mockResolvedValue([publication])
+      drive.listPublications.mockResolvedValue({
+        items: [publication],
+        page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+      })
       drive.publishPage.mockResolvedValue(publication)
       drive.publishSite.mockResolvedValue({ ...publication, type: "site" })
       drive.redeployPublication.mockResolvedValue(publication)
       drive.disablePublication.mockResolvedValue({ ok: true })
 
-      await request(userApp.getHttpServer()).get("/api/drive/publications").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/publications?offset=20&limit=10").expect(200)
       await request(userApp.getHttpServer()).post("/api/drive/items/file-1/publications/page").expect(201)
       await request(userApp.getHttpServer()).post("/api/drive/items/folder-1/publications/site").expect(201)
       await request(userApp.getHttpServer()).post("/api/drive/publications/pub-row-1/redeploy").expect(201)
       await request(userApp.getHttpServer()).delete("/api/drive/publications/pub-row-1").expect(200)
 
-      expect(drive.listPublications).toHaveBeenCalledWith("user-1", "https://pages.example")
+      expect(drive.listPublications).toHaveBeenCalledWith("user-1", "https://pages.example", { offset: 20, limit: 10 })
       expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example", {
         passwordEnabled: true,
         expiresIn: "3d",
@@ -543,13 +546,16 @@ describe("DriveController", () => {
     await userApp.init()
     try {
       drive.getDeleteImpact.mockResolvedValue({ publications: [publication] })
-      drive.listShares.mockResolvedValue([share])
+      drive.listShares.mockResolvedValue({
+        items: [share],
+        page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+      })
 
       await request(userApp.getHttpServer()).get("/api/drive/items/file-1/delete-impact").expect(200)
-      await request(userApp.getHttpServer()).get("/api/drive/shares").expect(200)
+      await request(userApp.getHttpServer()).get("/api/drive/shares?offset=5&limit=10").expect(200)
 
       expect(drive.getDeleteImpact).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example")
-      expect(drive.listShares).toHaveBeenCalledWith("user-1", "https://app.example")
+      expect(drive.listShares).toHaveBeenCalledWith("user-1", "https://app.example", { offset: 5, limit: 10 })
     } finally {
       await userApp.close()
     }

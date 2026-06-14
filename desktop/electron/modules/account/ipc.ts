@@ -146,6 +146,21 @@ const driveShareListItemSchema = z.object({
   createdAt: z.string(),
 })
 
+const drivePublicLinksPageInputSchema = z.object({
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+}).optional()
+
+const drivePublicLinksPageSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
+  items: z.array(itemSchema),
+  page: z.object({
+    offset: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    hasMore: z.boolean(),
+    nextOffset: z.number().int().nonnegative().nullable(),
+  }),
+})
+
 const driveUsageSchema = z.object({
   usedBytes: z.string(),
   reservedBytes: z.string(),
@@ -576,9 +591,9 @@ export const accountIpcModule: IpcModule = {
     listDrivePublications: {
       kind: "invoke",
       channel: "synapse:account:drive:publications:list",
-      request: z.void(),
-      response: z.array(drivePublicationSchema),
-      handler: async () => accountService.listDrivePublications(),
+      request: drivePublicLinksPageInputSchema,
+      response: drivePublicLinksPageSchema(drivePublicationSchema),
+      handler: async (_ctx, input) => accountService.listDrivePublications(drivePublicLinksPageInputSchema.parse(input)),
     },
     publishDrivePage: {
       kind: "invoke",
@@ -634,9 +649,9 @@ export const accountIpcModule: IpcModule = {
     listDriveShares: {
       kind: "invoke",
       channel: "synapse:account:drive:shares:list",
-      request: z.void(),
-      response: z.array(driveShareListItemSchema),
-      handler: async () => accountService.listDriveShares(),
+      request: drivePublicLinksPageInputSchema,
+      response: drivePublicLinksPageSchema(driveShareListItemSchema),
+      handler: async (_ctx, input) => accountService.listDriveShares(drivePublicLinksPageInputSchema.parse(input)),
     },
   },
   events: {

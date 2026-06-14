@@ -21,8 +21,11 @@ import type {
   DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DrivePublicationListPageDto,
   DrivePublicationDto,
+  DrivePublicLinksPageInput,
   DriveShareDto,
+  DriveShareListPageDto,
   DriveShareListItemDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
@@ -110,6 +113,14 @@ function apiBaseUrl(): string {
 
 function publicAppUrl(): string {
   return SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl
+}
+
+function drivePublicLinksPageQuery(input?: DrivePublicLinksPageInput): string {
+  const params = new URLSearchParams()
+  if (input?.offset !== undefined) params.set("offset", String(input.offset))
+  if (input?.limit !== undefined) params.set("limit", String(input.limit))
+  const query = params.toString()
+  return query ? `?${query}` : ""
 }
 
 export function getAccountApiBaseUrl(): string {
@@ -583,9 +594,15 @@ export class AccountService {
     })
   }
 
-  async listDrivePublications(): Promise<DrivePublicationDto[]> {
-    const publications = await this.getAuthenticatedJson<DrivePublicationDto[]>(`${apiBaseUrl()}/drive/publications`, "发布列表加载失败。")
-    return Promise.all(publications.map(withCurrentDrivePublicationUrl))
+  async listDrivePublications(input?: DrivePublicLinksPageInput): Promise<DrivePublicationListPageDto> {
+    const result = await this.getAuthenticatedJson<DrivePublicationListPageDto>(
+      `${apiBaseUrl()}/drive/publications${drivePublicLinksPageQuery(input)}`,
+      "发布列表加载失败。",
+    )
+    return {
+      ...result,
+      items: await Promise.all(result.items.map(withCurrentDrivePublicationUrl)),
+    }
   }
 
   async publishDrivePage(itemId: string, settings: DriveAccessSettingsInput): Promise<DrivePublicationDto> {
@@ -614,9 +631,15 @@ export class AccountService {
     }
   }
 
-  async listDriveShares(): Promise<DriveShareListItemDto[]> {
-    const shares = await this.getAuthenticatedJson<DriveShareListItemDto[]>(`${apiBaseUrl()}/drive/shares`, "分享列表加载失败。")
-    return Promise.all(shares.map(withCurrentDriveShareUrl))
+  async listDriveShares(input?: DrivePublicLinksPageInput): Promise<DriveShareListPageDto> {
+    const result = await this.getAuthenticatedJson<DriveShareListPageDto>(
+      `${apiBaseUrl()}/drive/shares${drivePublicLinksPageQuery(input)}`,
+      "分享列表加载失败。",
+    )
+    return {
+      ...result,
+      items: await Promise.all(result.items.map(withCurrentDriveShareUrl)),
+    }
   }
 
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {

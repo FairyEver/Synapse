@@ -9,6 +9,7 @@ import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveItemDto,
   type DrivePublicationDto,
+  type DrivePublicLinksPageDto,
   type DriveShareListItemDto,
 } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
@@ -140,9 +141,9 @@ beforeEach(() => {
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
   mocks.getDriveDeleteImpact.mockResolvedValue({ publications: [] })
-  mocks.listDrivePublications.mockResolvedValue([])
+  mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([]))
   mocks.listDriveItems.mockResolvedValue([])
-  mocks.listDriveShares.mockResolvedValue([])
+  mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([]))
   mocks.moveDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file" }))
   mocks.prepareDriveFolderUpload.mockResolvedValue({
     root: createDriveItem({ id: "folder-root", name: "folder", type: "folder", size: "0" }),
@@ -387,10 +388,10 @@ describe("DriveModule", () => {
       }),
       createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
     ])
-    mocks.listDrivePublications.mockResolvedValue([
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([
       createDrivePublication({ id: "pub-page-1", sourceItemId: "html-1", name: "report.html", type: "page" }),
       createDrivePublication({ id: "pub-site-1", sourceItemId: "folder-1", name: "site", type: "site" }),
-    ])
+    ]))
 
     await render(<DriveModule />)
     await flushAct()
@@ -1061,9 +1062,9 @@ describe("DriveModule", () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "html-1", name: "report.html", type: "file", mimeType: "text/html" }),
     ])
-    mocks.listDrivePublications.mockResolvedValue([
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([
       createDrivePublication({ id: "pub-row-1", sourceItemId: "html-1", name: "report.html", type: "page" }),
-    ])
+    ]))
     await render(<DriveModule />)
     await flushAct()
 
@@ -1091,9 +1092,9 @@ describe("DriveModule", () => {
         activeShareId: "share-row-1",
       }),
     ])
-    mocks.listDrivePublications.mockResolvedValue([
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([
       createDrivePublication({ id: "pub-row-1", sourceItemId: "html-1", name: "report.html", type: "page" }),
-    ])
+    ]))
     await render(<DriveModule />)
     await flushAct()
 
@@ -1117,9 +1118,9 @@ describe("DriveModule", () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "folder-1", name: "site", type: "folder" }),
     ])
-    mocks.listDrivePublications.mockResolvedValue([
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([
       createDrivePublication({ id: "pub-site-1", sourceItemId: "folder-1", name: "site", type: "site" }),
-    ])
+    ]))
     await render(<DriveModule />)
     await flushAct()
 
@@ -1364,7 +1365,7 @@ describe("DriveModule", () => {
   })
 
   it("manages publications from the public links dialog", async () => {
-    mocks.listDrivePublications.mockResolvedValue([
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([
       createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
       createDrivePublication({ id: "pub-row-2", name: "site", type: "site", publishId: "pub_site", url: "https://synapse.test/sites/pub_site/" }),
       createDrivePublication({ id: "pub-row-3", name: "deleted.html", sourceDeleted: true }),
@@ -1374,7 +1375,7 @@ describe("DriveModule", () => {
         name: "cancelled.html",
         status: "disabled",
       }),
-    ])
+    ]))
     await render(<DriveModule />)
     await flushAct()
 
@@ -1433,12 +1434,12 @@ describe("DriveModule", () => {
   })
 
   it("defaults public link management to a narrower share tab with header tabs", async () => {
-    mocks.listDrivePublications.mockResolvedValue([
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([
       createDrivePublication({ id: "pub-row-1", name: "index.html", type: "page" }),
-    ])
-    mocks.listDriveShares.mockResolvedValue([
+    ]))
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
-    ])
+    ]))
     await render(<DriveModule />)
     await flushAct()
 
@@ -1459,12 +1460,12 @@ describe("DriveModule", () => {
   })
 
   it("loads share and publication data in the public links dialog", async () => {
-    mocks.listDriveShares.mockResolvedValue([
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-1", itemName: "notes.md", itemType: "file" }),
-    ])
-    mocks.listDrivePublications.mockResolvedValue([
+    ]))
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([
       createDrivePublication({ id: "pub-1", name: "index.html", type: "page" }),
-    ])
+    ]))
 
     await render(<DriveModule />)
     await flushAct()
@@ -1473,7 +1474,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(1)
-    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(2)
+    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(1)
     expect(document.body.textContent).toContain("notes.md")
     expect(document.body.textContent).not.toContain("index.html")
 
@@ -1485,23 +1486,24 @@ describe("DriveModule", () => {
   })
 
   it("shows publication loading state in the public links dialog", async () => {
-    const publications = createDeferred<DrivePublicationDto[]>()
+    const publications = createDeferred<DrivePublicLinksPageDto<DrivePublicationDto>>()
     await render(<DriveModule />)
     await flushAct()
 
     mocks.listDrivePublications.mockReturnValueOnce(publications.promise)
     await clickButtonText("公开链接")
+    await clickTabText("发布")
 
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
 
     await act(async () => {
-      publications.resolve([])
+      publications.resolve(createDrivePublicLinksPage([]))
       await flushPromises()
     })
   })
 
   it("shows publication empty state in the public links dialog", async () => {
-    mocks.listDrivePublications.mockResolvedValue([])
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([]))
     await render(<DriveModule />)
     await flushAct()
 
@@ -1519,13 +1521,14 @@ describe("DriveModule", () => {
 
     mocks.listDrivePublications.mockRejectedValueOnce(new Error("发布列表加载失败。"))
     await clickButtonText("公开链接")
+    await clickTabText("发布")
     await flushAct()
 
     expect(document.body.textContent).toContain("读取失败")
     expect(document.body.textContent).toContain("发布列表加载失败。")
 
     mocks.listDrivePublications.mockReset()
-    mocks.listDrivePublications.mockResolvedValue([])
+    mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([]))
 
     await clickButtonText("重试")
     await flushAct()
@@ -1535,10 +1538,10 @@ describe("DriveModule", () => {
   })
 
   it("manages shares from the public links dialog", async () => {
-    mocks.listDriveShares.mockResolvedValue([
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
       createDriveShare({ id: "share-row-2", shareId: "shr_folder", itemName: "folder", itemType: "folder", sourceDeleted: true, url: "https://synapse.test/files/shr_folder" }),
-    ])
+    ]))
     await render(<DriveModule />)
     await flushAct()
 
@@ -1585,9 +1588,9 @@ describe("DriveModule", () => {
       createDriveItem({ id: "file-1", name: "report.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
     ]
     mocks.listDriveItems.mockImplementation(() => Promise.resolve(driveItems))
-    mocks.listDriveShares.mockResolvedValue([
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
       createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
-    ])
+    ]))
     mocks.disableDriveShare.mockImplementation(async () => {
       driveItems = [createDriveItem({ id: "file-1", name: "report.txt", type: "file", shared: false, activeShareId: null })]
       return { ok: true }
@@ -1610,7 +1613,7 @@ describe("DriveModule", () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "report.html", type: "file", mimeType: "text/html" }),
     ])
-    mocks.listDrivePublications.mockImplementation(() => Promise.resolve(publications))
+    mocks.listDrivePublications.mockImplementation(() => Promise.resolve(createDrivePublicLinksPage(publications)))
     mocks.disableDrivePublication.mockImplementation(async () => {
       publications = []
       return { ok: true }
@@ -1631,7 +1634,7 @@ describe("DriveModule", () => {
   })
 
   it("shows share loading, empty, and retry states in the public links dialog", async () => {
-    const shares = createDeferred<DriveShareListItemDto[]>()
+    const shares = createDeferred<DrivePublicLinksPageDto<DriveShareListItemDto>>()
     await render(<DriveModule />)
     await flushAct()
 
@@ -1641,7 +1644,7 @@ describe("DriveModule", () => {
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
 
     await act(async () => {
-      shares.resolve([])
+      shares.resolve(createDrivePublicLinksPage([]))
       await flushPromises()
     })
     await flushAct()
@@ -1651,7 +1654,7 @@ describe("DriveModule", () => {
 
     mocks.listDriveShares
       .mockRejectedValueOnce(new Error("分享列表加载失败。"))
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(createDrivePublicLinksPage([]))
 
     await clickButtonText("关闭")
     await clickButtonText("公开链接")
@@ -2067,6 +2070,22 @@ function createDriveShare(overrides: Partial<DriveShareListItemDto> = {}): Drive
     password: "AbC234xy",
     expiresAt: "2026-06-14T00:00:00.000Z",
     ...overrides,
+  }
+}
+
+function createDrivePublicLinksPage<TItem>(
+  items: readonly TItem[],
+  page: Partial<DrivePublicLinksPageDto<TItem>["page"]> = {},
+): DrivePublicLinksPageDto<TItem> {
+  return {
+    items,
+    page: {
+      offset: 0,
+      limit: 20,
+      hasMore: false,
+      nextOffset: null,
+      ...page,
+    },
   }
 }
 

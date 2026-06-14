@@ -144,8 +144,16 @@ export class DriveUserController {
   }
 
   @Get("/publications")
-  listPublications(@Req() request: AuthenticatedUserRequest) {
-    return this.drive.listPublications(request.user!.id, resolveRequestPagesPublicUrl(request))
+  listPublications(
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.listPublications(
+      request.user!.id,
+      resolveRequestPagesPublicUrl(request),
+      parseDrivePublicLinksPageQuery(offset, limit),
+    )
   }
 
   @Post("/items/:id/publications/page")
@@ -174,8 +182,16 @@ export class DriveUserController {
   }
 
   @Get("/shares")
-  listShares(@Req() request: AuthenticatedUserRequest) {
-    return this.drive.listShares(request.user!.id, resolveRequestPublicAppUrl(request))
+  listShares(
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.listShares(
+      request.user!.id,
+      resolveRequestPublicAppUrl(request),
+      parseDrivePublicLinksPageQuery(offset, limit),
+    )
   }
 
   @Get("/usage")
@@ -867,6 +883,19 @@ function parseDriveBrowserChildrenPageQuery(
 ): { readonly offset?: number; readonly limit?: number } | undefined {
   const parsedOffset = parseOptionalNonNegativeInteger(offset, "childrenOffset")
   const parsedLimit = parseOptionalNonNegativeInteger(limit, "childrenLimit")
+  if (parsedOffset === undefined && parsedLimit === undefined) return undefined
+  return {
+    ...(parsedOffset === undefined ? {} : { offset: parsedOffset }),
+    ...(parsedLimit === undefined ? {} : { limit: parsedLimit }),
+  }
+}
+
+function parseDrivePublicLinksPageQuery(
+  offset: string | undefined,
+  limit: string | undefined,
+): { readonly offset?: number; readonly limit?: number } | undefined {
+  const parsedOffset = parseOptionalNonNegativeInteger(offset, "offset")
+  const parsedLimit = parseOptionalNonNegativeInteger(limit, "limit")
   if (parsedOffset === undefined && parsedLimit === undefined) return undefined
   return {
     ...(parsedOffset === undefined ? {} : { offset: parsedOffset }),

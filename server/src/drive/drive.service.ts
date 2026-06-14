@@ -5,6 +5,7 @@ import { Readable } from "node:stream"
 import {
   type DriveBrowserChildrenPageDto,
   type DriveBrowserSnapshotDto,
+  type DrivePublicationListPageDto,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
@@ -14,6 +15,7 @@ import {
   type DriveItemDto,
   type DrivePublicationDto,
   type DriveShareDto,
+  type DriveShareListPageDto,
   type DriveShareListItemDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
@@ -127,6 +129,11 @@ type DriveBrowserDownloadResult = {
 }
 
 type DriveBrowserChildrenPageInput = {
+  readonly offset?: number
+  readonly limit?: number
+}
+
+type DrivePublicLinksPageInput = {
   readonly offset?: number
   readonly limit?: number
 }
@@ -562,13 +569,16 @@ export class DriveService implements OnApplicationBootstrap {
     return { ok: true }
   }
 
-  async listShares(userId: string, publicAppUrl: string): Promise<DriveShareListItemDto[]> {
+  async listShares(userId: string, publicAppUrl: string, page?: DrivePublicLinksPageInput): Promise<DriveShareListPageDto> {
+    const pageInput = normalizeDrivePublicLinksPage(page)
     const shares = await this.prisma.driveShare.findMany({
       where: { userId, enabled: true },
       include: { item: { select: { id: true, name: true, type: true, deletedAt: true } } },
       orderBy: { createdAt: "desc" },
+      skip: pageInput.offset,
+      take: pageInput.limit + 1,
     })
-    return shares.map((share) => {
+    const items: DriveShareListItemDto[] = shares.slice(0, pageInput.limit).map((share) => {
       const url = buildDriveShareUrl({ publicAppUrl, shareId: share.shareId })
       const password = share.passwordEnabled ? this.decryptStoredPassword(share.passwordEncrypted) : null
       return {
@@ -586,19 +596,29 @@ export class DriveService implements OnApplicationBootstrap {
         createdAt: share.createdAt.toISOString(),
       }
     })
+    return {
+      items,
+      page: buildDrivePublicLinksPage(pageInput, shares.length),
+    }
   }
 
-  async listPublications(userId: string, publicAppUrl: string): Promise<DrivePublicationDto[]> {
+  async listPublications(userId: string, publicAppUrl: string, page?: DrivePublicLinksPageInput): Promise<DrivePublicationListPageDto> {
+    const pageInput = normalizeDrivePublicLinksPage(page)
     const publications = await this.prisma.drivePublication.findMany({
       where: { userId },
       include: { sourceItem: { select: { deletedAt: true } } },
       orderBy: { updatedAt: "desc" },
+      skip: pageInput.offset,
+      take: pageInput.limit + 1,
     })
-    return publications.map((publication) => toDrivePublicationDto(
-      publication,
-      publicAppUrl,
-      this.decryptStoredPassword(publication.passwordEncrypted),
-    ))
+    return {
+      items: publications.slice(0, pageInput.limit).map((publication) => toDrivePublicationDto(
+        publication,
+        publicAppUrl,
+        this.decryptStoredPassword(publication.passwordEncrypted),
+      )),
+      page: buildDrivePublicLinksPage(pageInput, publications.length),
+    }
   }
 
   async getDeleteImpact(userId: string, itemId: string, publicAppUrl: string): Promise<DriveDeleteImpactDto> {
@@ -2251,6 +2271,21 @@ function normalizeDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput
   }
 }
 
+function normalizeDrivePublicLinksPage(input?: DrivePublicLinksPageInput): { readonly offset: number; readonly limit: number } {
+  const requestedOffset = input?.offset
+  const requestedLimit = input?.limit
+  const offset = typeof requestedOffset === "number" && Number.isFinite(requestedOffset) && requestedOffset > 0
+    ? Math.floor(requestedOffset)
+    : 0
+  const rawLimit = typeof requestedLimit === "number" && Number.isFinite(requestedLimit) && requestedLimit > 0
+    ? Math.floor(requestedLimit)
+    : 20
+  return {
+    offset,
+    limit: Math.min(rawLimit, 100),
+  }
+}
+
 function buildDriveBrowserChildrenPage(
   input: { readonly offset: number; readonly limit: number },
   fetchedCount: number,
@@ -2262,6 +2297,13 @@ function buildDriveBrowserChildrenPage(
     hasMore,
     nextOffset: hasMore ? input.offset + input.limit : null,
   }
+}
+
+function buildDrivePublicLinksPage(
+  input: { readonly offset: number; readonly limit: number },
+  fetchedCount: number,
+): DriveBrowserChildrenPageDto {
+  return buildDriveBrowserChildrenPage(input, fetchedCount)
 }
 
 function emptyDriveBrowserChildrenPage(input?: DriveBrowserChildrenPageInput): DriveBrowserChildrenResult {

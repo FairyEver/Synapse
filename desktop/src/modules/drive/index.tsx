@@ -21,9 +21,11 @@ import {
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveAccessSettingsInput,
+  type DriveBrowserChildrenPageDto,
   type DriveDeleteImpactDto,
   type DriveItemDto,
   type DrivePublicationDto,
+  type DrivePublicLinksPageInput,
   type DriveShareDto,
   type DriveShareListItemDto,
   type DriveUploadPrepareResult,
@@ -144,6 +146,8 @@ type DriveStatusBadge = {
 
 const DRIVE_ROOT_PARENT_VALUE = "root"
 const DRIVE_SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
+const DRIVE_PUBLIC_LINKS_PAGE_SIZE = 20
+const DRIVE_PUBLIC_LINKS_FULL_LOAD_PAGE_SIZE = 100
 const DRIVE_BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const
 const DRIVE_BYTE_NUMBER_FORMAT = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 })
 const DRIVE_ACCESS_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; readonly value: DriveAccessExpiresInOption }> = [
@@ -156,6 +160,18 @@ const DRIVE_ACCESS_EXPIRES_OPTIONS: ReadonlyArray<{ readonly label: string; read
 
 function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
+}
+
+async function listAllDrivePublications(): Promise<DrivePublicationDto[]> {
+  const bridge = requireSynapseBridge()
+  const publications: DrivePublicationDto[] = []
+  let pageInput: DrivePublicLinksPageInput = { offset: 0, limit: DRIVE_PUBLIC_LINKS_FULL_LOAD_PAGE_SIZE }
+  while (true) {
+    const page = await bridge.account.listDrivePublications(pageInput)
+    publications.push(...page.items)
+    if (!page.page.hasMore || page.page.nextOffset === null) return publications
+    pageInput = { offset: page.page.nextOffset, limit: DRIVE_PUBLIC_LINKS_FULL_LOAD_PAGE_SIZE }
+  }
 }
 
 function DriveModule() {
@@ -200,7 +216,7 @@ function DriveModule() {
       const nextItems = await bridge.account.listDriveItems({ parentId })
       setItems(nextItems)
       try {
-        setPublications(await bridge.account.listDrivePublications())
+        setPublications(await listAllDrivePublications())
       } catch {
         setPublications([])
         toast("发布状态加载失败")
@@ -1592,6 +1608,25 @@ function DriveAccessSettingsDialog({
 }
 
 type DrivePublicLinkTab = "shares" | "publications"
+type DrivePublicLinksPageState<TItem> = {
+  readonly items: TItem[]
+  readonly page: DriveBrowserChildrenPageDto | null
+  readonly loading: boolean
+  readonly loadingMore: boolean
+  readonly error: string | null
+  readonly loaded: boolean
+}
+
+function createEmptyDrivePublicLinksPageState<TItem>(): DrivePublicLinksPageState<TItem> {
+  return {
+    items: [],
+    page: null,
+    loading: false,
+    loadingMore: false,
+    error: null,
+    loaded: false,
+  }
+}
 
 function DrivePublicLinksDialog({
   open,
@@ -1605,41 +1640,99 @@ function DrivePublicLinksDialog({
   readonly onDriveItemsChanged: () => Promise<void>
 }) {
   const [tab, setTab] = useState<DrivePublicLinkTab>("shares")
-  const [shares, setShares] = useState<DriveShareListItemDto[]>([])
-  const [publications, setPublications] = useState<DrivePublicationDto[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [shareState, setShareState] = useState<DrivePublicLinksPageState<DriveShareListItemDto>>(() => createEmptyDrivePublicLinksPageState())
+  const [publicationState, setPublicationState] = useState<DrivePublicLinksPageState<DrivePublicationDto>>(() => createEmptyDrivePublicLinksPageState())
 
-  const loadPublicLinks = useCallback(async () => {
-    setLoading(true)
-    setLoadError(null)
+  const loadShares = useCallback(async (input: { readonly offset?: number; readonly append?: boolean } = {}) => {
+    const append = input.append ?? false
+    setShareState((current) => ({ ...current, loading: !append, loadingMore: append, error: null }))
     try {
-      const [nextShares, nextPublications] = await Promise.all([
-        requireSynapseBridge().account.listDriveShares(),
-        requireSynapseBridge().account.listDrivePublications(),
-      ])
-      setShares(nextShares)
-      setPublications(nextPublications)
+      const result = await requireSynapseBridge().account.listDriveShares({
+        offset: input.offset ?? 0,
+        limit: DRIVE_PUBLIC_LINKS_PAGE_SIZE,
+      })
+      setShareState((current) => ({
+        items: append ? [...current.items, ...result.items] : [...result.items],
+        page: result.page,
+        loading: false,
+        loadingMore: false,
+        error: null,
+        loaded: true,
+      }))
     } catch (rawError) {
       const message = errorMessage(rawError, "公开链接加载失败")
-      setLoadError(message)
+      setShareState((current) => ({
+        ...current,
+        loading: false,
+        loadingMore: false,
+        error: message,
+        loaded: true,
+      }))
       toast(message)
-    } finally {
-      setLoading(false)
+    }
+  }, [])
+
+  const loadPublications = useCallback(async (input: { readonly offset?: number; readonly append?: boolean } = {}) => {
+    const append = input.append ?? false
+    setPublicationState((current) => ({ ...current, loading: !append, loadingMore: append, error: null }))
+    try {
+      const result = await requireSynapseBridge().account.listDrivePublications({
+        offset: input.offset ?? 0,
+        limit: DRIVE_PUBLIC_LINKS_PAGE_SIZE,
+      })
+      setPublicationState((current) => ({
+        items: append ? [...current.items, ...result.items] : [...result.items],
+        page: result.page,
+        loading: false,
+        loadingMore: false,
+        error: null,
+        loaded: true,
+      }))
+    } catch (rawError) {
+      const message = errorMessage(rawError, "公开链接加载失败")
+      setPublicationState((current) => ({
+        ...current,
+        loading: false,
+        loadingMore: false,
+        error: message,
+        loaded: true,
+      }))
+      toast(message)
     }
   }, [])
 
   useEffect(() => {
     if (open) {
       setTab("shares")
-      void loadPublicLinks()
+      setShareState(createEmptyDrivePublicLinksPageState<DriveShareListItemDto>())
+      setPublicationState(createEmptyDrivePublicLinksPageState<DrivePublicationDto>())
+      void loadShares()
     }
-  }, [loadPublicLinks, open])
+  }, [loadShares, open])
+
+  const handleTabChange = useCallback((value: string) => {
+    const nextTab = value as DrivePublicLinkTab
+    setTab(nextTab)
+    if (nextTab === "publications" && !publicationState.loaded && !publicationState.loading) {
+      void loadPublications()
+    }
+    if (nextTab === "shares" && !shareState.loaded && !shareState.loading) {
+      void loadShares()
+    }
+  }, [loadPublications, loadShares, publicationState.loaded, publicationState.loading, shareState.loaded, shareState.loading])
+
+  const reloadActiveTab = useCallback(async () => {
+    if (tab === "shares") {
+      await loadShares()
+      return
+    }
+    await loadPublications()
+  }, [loadPublications, loadShares, tab])
 
   const reloadAfterPublicLinkChange = useCallback(async () => {
-    await loadPublicLinks()
+    await reloadActiveTab()
     await onDriveItemsChanged()
-  }, [loadPublicLinks, onDriveItemsChanged])
+  }, [onDriveItemsChanged, reloadActiveTab])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1649,7 +1742,7 @@ function DrivePublicLinksDialog({
       >
         <Tabs
           value={tab}
-          onValueChange={(value) => setTab(value as DrivePublicLinkTab)}
+          onValueChange={handleTabChange}
           className="h-full min-h-0 max-h-[calc(100vh-2rem)] overflow-hidden"
         >
           <form
@@ -1663,8 +1756,8 @@ function DrivePublicLinksDialog({
               <DialogTitle className="pr-10 sm:pr-0">公开链接</DialogTitle>
               <div className="mt-3 sm:mt-0 sm:justify-self-center" data-testid="drive-public-links-tabs-header">
                 <TabsList>
-                  <TabsTrigger type="button" value="shares" onClick={() => setTab("shares")}>分享</TabsTrigger>
-                  <TabsTrigger type="button" value="publications" onClick={() => setTab("publications")}>发布</TabsTrigger>
+                  <TabsTrigger type="button" value="shares" onClick={() => handleTabChange("shares")}>分享</TabsTrigger>
+                  <TabsTrigger type="button" value="publications" onClick={() => handleTabChange("publications")}>发布</TabsTrigger>
                 </TabsList>
               </div>
             </DialogHeader>
@@ -1673,24 +1766,36 @@ function DrivePublicLinksDialog({
                 <TabsContent value="shares">
                   <DrivePublicLinkList
                     emptyTitle="暂无分享"
-                    error={loadError}
-                    loading={loading}
+                    error={shareState.error}
+                    loading={shareState.loading}
+                    loadingMore={shareState.loadingMore}
+                    page={shareState.page}
                     publications={[]}
-                    shares={shares}
+                    shares={shareState.items}
                     onPublicationDeployed={onPublicationDeployed}
-                    onRetry={loadPublicLinks}
+                    onLoadMore={async () => {
+                      if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
+                      await loadShares({ offset: shareState.page.nextOffset, append: true })
+                    }}
+                    onRetry={reloadActiveTab}
                     onReload={reloadAfterPublicLinkChange}
                   />
                 </TabsContent>
                 <TabsContent value="publications">
                   <DrivePublicLinkList
                     emptyTitle="暂无发布"
-                    error={loadError}
-                    loading={loading}
-                    publications={publications}
+                    error={publicationState.error}
+                    loading={publicationState.loading}
+                    loadingMore={publicationState.loadingMore}
+                    page={publicationState.page}
+                    publications={publicationState.items}
                     shares={[]}
                     onPublicationDeployed={onPublicationDeployed}
-                    onRetry={loadPublicLinks}
+                    onLoadMore={async () => {
+                      if (publicationState.page?.nextOffset === null || publicationState.page?.nextOffset === undefined) return
+                      await loadPublications({ offset: publicationState.page.nextOffset, append: true })
+                    }}
+                    onRetry={reloadActiveTab}
                     onReload={reloadAfterPublicLinkChange}
                   />
                 </TabsContent>
@@ -1710,8 +1815,11 @@ function DrivePublicLinkList({
   emptyTitle,
   error,
   loading,
+  loadingMore,
+  page,
   publications,
   shares,
+  onLoadMore,
   onPublicationDeployed,
   onRetry,
   onReload,
@@ -1719,8 +1827,11 @@ function DrivePublicLinkList({
   readonly emptyTitle: string
   readonly error: string | null
   readonly loading: boolean
+  readonly loadingMore: boolean
+  readonly page: DriveBrowserChildrenPageDto | null
   readonly publications: readonly DrivePublicationDto[]
   readonly shares: readonly DriveShareListItemDto[]
+  readonly onLoadMore: () => Promise<void>
   readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
   readonly onRetry: () => Promise<void>
   readonly onReload: () => Promise<void>
@@ -1748,6 +1859,14 @@ function DrivePublicLinkList({
             onReload={onReload}
           />
         </section>
+      ) : null}
+      {page?.hasMore ? (
+        <div className="flex justify-center pt-1">
+          <Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={() => { void onLoadMore() }}>
+            {loadingMore ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+            加载更多
+          </Button>
+        </div>
       ) : null}
     </div>
   )

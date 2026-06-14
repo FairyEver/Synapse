@@ -1201,14 +1201,24 @@ describe("AccountService", () => {
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-        if (String(url).endsWith("/drive/publications")) return jsonResponse([publication])
+        if (String(url).endsWith("/drive/publications")) {
+          return jsonResponse({
+            items: [publication],
+            page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+          })
+        }
         if (String(url).endsWith("/drive/items/item-1/share")) return jsonResponse(shareResult)
         if (String(url).endsWith("/drive/items/item-1/publications/page")) return jsonResponse(publication)
         if (String(url).endsWith("/drive/items/folder-1/publications/site")) return jsonResponse({ ...publication, type: "site" })
         if (String(url).endsWith("/drive/publications/pub-row-1/redeploy")) return jsonResponse(publication)
         if (String(url).endsWith("/drive/publications/pub-row-1")) return jsonResponse({ ok: true })
         if (String(url).endsWith("/drive/items/item-1/delete-impact")) return jsonResponse({ publications: [publication] })
-        if (String(url).endsWith("/drive/shares")) return jsonResponse([share])
+        if (String(url).endsWith("/drive/shares")) {
+          return jsonResponse({
+            items: [share],
+            page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+          })
+        }
         if (String(url).endsWith("/drive/items/item-1")) return jsonResponse({ ok: true })
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -1218,14 +1228,20 @@ describe("AccountService", () => {
     expect(attempt).toBeTruthy()
     await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
 
-    await expect(service.listDrivePublications()).resolves.toEqual([expectedPagePublication])
+    await expect(service.listDrivePublications()).resolves.toEqual({
+      items: [expectedPagePublication],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })
     await expect(service.shareDriveItem("item-1", shareSettings)).resolves.toEqual(expectedShareResult)
     await expect(service.publishDrivePage("item-1", pageSettings)).resolves.toEqual(expectedPagePublication)
     await expect(service.publishDriveSite("folder-1", siteSettings)).resolves.toEqual(expectedSitePublication)
     await expect(service.redeployDrivePublication("pub-row-1")).resolves.toEqual(expectedPagePublication)
     await expect(service.disableDrivePublication("pub-row-1")).resolves.toEqual({ ok: true })
     await expect(service.getDriveDeleteImpact("item-1")).resolves.toEqual({ publications: [expectedPagePublication] })
-    await expect(service.listDriveShares()).resolves.toEqual([expectedShare])
+    await expect(service.listDriveShares()).resolves.toEqual({
+      items: [expectedShare],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })
     await expect(service.deleteDriveItem("item-1", { disablePublications: true })).resolves.toEqual({ ok: true })
 
     expect(calls).toEqual([

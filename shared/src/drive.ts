@@ -157,6 +157,19 @@ export interface DriveBrowserChildrenPageDto {
   readonly nextOffset: number | null
 }
 
+export interface DrivePublicLinksPageInput {
+  readonly offset?: number
+  readonly limit?: number
+}
+
+export interface DrivePublicLinksPageDto<TItem> {
+  readonly items: readonly TItem[]
+  readonly page: DriveBrowserChildrenPageDto
+}
+
+export type DrivePublicationListPageDto = DrivePublicLinksPageDto<DrivePublicationDto>
+export type DriveShareListPageDto = DrivePublicLinksPageDto<DriveShareListItemDto>
+
 export interface DriveBrowserSnapshotDto {
   readonly context: DriveBrowserAccessContext
   readonly surface: DriveBrowserSurface

@@ -562,11 +562,19 @@ describe("accountIpcModule", () => {
       createdAt: "2026-06-09T00:00:00.000Z",
       updatedAt: "2026-06-09T00:00:00.000Z",
     }
-    expect(listDrivePublicationsResponse.parse([publication]))
-      .toEqual([publication])
+    expect(accountIpcModule.methods.listDrivePublications.request?.parse({ offset: 20, limit: 20 }))
+      .toEqual({ offset: 20, limit: 20 })
+    expect(listDrivePublicationsResponse.parse({
+      items: [publication],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })).toEqual({
+      items: [publication],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })
     expect(getDriveDeleteImpactResponse.parse({ publications: [publication] }))
       .toEqual({ publications: [publication] })
-    expect(listDriveSharesResponse.parse([{
+    expect(listDriveSharesResponse.parse({
+      items: [{
       id: "share-row-1",
       shareId: "share_public",
       itemId: "item-1",
@@ -579,13 +587,18 @@ describe("accountIpcModule", () => {
       password: "AbC234xy",
       expiresAt: "2026-06-16T00:00:00.000Z",
       createdAt: "2026-06-09T00:00:00.000Z",
-    }])).toEqual([
-      expect.objectContaining({
-        itemName: "report.html",
-        itemType: "file",
-        shareId: "share_public",
-      }),
-    ])
+      }],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })).toEqual({
+      items: [
+        expect.objectContaining({
+          itemName: "report.html",
+          itemType: "file",
+          shareId: "share_public",
+        }),
+      ],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })
   })
 
   it("validates offline authenticated account events", () => {

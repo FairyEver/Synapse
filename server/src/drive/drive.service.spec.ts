@@ -592,8 +592,9 @@ describe("DriveService", () => {
 
     const publications = await service.listPublications("user-1", "https://synapse.test")
 
-    expect(publications).toHaveLength(1)
-    expect(publications[0]).toMatchObject({
+    expect(publications.items).toHaveLength(1)
+    expect(publications.page).toEqual({ offset: 0, limit: 20, hasMore: false, nextOffset: null })
+    expect(publications.items[0]).toMatchObject({
       id: publication.id,
       password: publication.password,
       urlWithPassword: publication.urlWithPassword,
@@ -982,8 +983,8 @@ describe("DriveService", () => {
     expect(deployments[0]?.error).not.toContain("user:pass")
     expect(deployments[0]?.error).not.toContain("/Users/example/site")
     const publications = await service.listPublications("user-1", "https://synapse.test")
-    expect(publications).toHaveLength(1)
-    expect(publications[0]).toMatchObject({ id: publication.id, status: "disabled", currentDeploymentId: null })
+    expect(publications.items).toHaveLength(1)
+    expect(publications.items[0]).toMatchObject({ id: publication.id, status: "disabled", currentDeploymentId: null })
   })
 
   it("deletes copied publication objects when a later site copy fails", async () => {
@@ -1218,7 +1219,8 @@ describe("DriveService", () => {
 
     const shares = await service.listShares("user-1", "https://synapse.test")
 
-    expect(shares).toEqual([{
+    expect(shares).toEqual({
+      items: [{
       id: share.id,
       shareId: share.shareId,
       itemId: file.id,
@@ -1231,7 +1233,37 @@ describe("DriveService", () => {
       password: share.password,
       expiresAt: share.expiresAt,
       createdAt: share.createdAt,
-    }])
+      }],
+      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
+    })
+  })
+
+  it("paginates public link share and publication lists", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const firstFile = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "first.html",
+      mimeType: "text/html",
+    })
+    const secondFile = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "second.html",
+      mimeType: "text/html",
+    })
+    await service.createShare("user-1", firstFile.id, "https://synapse.test")
+    await service.publishPage("user-1", firstFile.id, "https://synapse.test")
+    await service.createShare("user-1", secondFile.id, "https://synapse.test")
+    await service.publishPage("user-1", secondFile.id, "https://synapse.test")
+
+    const shares = await service.listShares("user-1", "https://synapse.test", { offset: 0, limit: 1 })
+    const publications = await service.listPublications("user-1", "https://synapse.test", { offset: 0, limit: 1 })
+
+    expect(shares.items).toHaveLength(1)
+    expect(shares.page).toEqual({ offset: 0, limit: 1, hasMore: true, nextOffset: 1 })
+    expect(publications.items).toHaveLength(1)
+    expect(publications.page).toEqual({ offset: 0, limit: 1, hasMore: true, nextOffset: 1 })
   })
 
   it("backfills legacy active shares and publications on application bootstrap", async () => {

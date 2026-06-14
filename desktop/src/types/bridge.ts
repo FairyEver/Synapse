@@ -30,7 +30,10 @@ import type {
   DriveFolderUploadPrepareResult,
   DriveItemDto,
   DrivePublicationDto,
+  DrivePublicationListPageDto,
+  DrivePublicLinksPageInput,
   DriveShareDto,
+  DriveShareListPageDto,
   DriveShareListItemDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
@@ -751,13 +754,13 @@ export type SynapseBridge = {
     shareDriveItem: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
     disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
     getDriveUsage: () => Promise<DriveUsageDto>
-    listDrivePublications: () => Promise<DrivePublicationDto[]>
+    listDrivePublications: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicationListPageDto>
     publishDrivePage: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DrivePublicationDto>
     publishDriveSite: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DrivePublicationDto>
     redeployDrivePublication: (input: { publicationId: string }) => Promise<DrivePublicationDto>
     disableDrivePublication: (input: { publicationId: string }) => Promise<{ ok: true }>
     getDriveDeleteImpact: (input: { itemId: string }) => Promise<DriveDeleteImpactDto>
-    listDriveShares: () => Promise<DriveShareListItemDto[]>
+    listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
   }
   live: {
