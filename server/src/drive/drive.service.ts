@@ -227,6 +227,7 @@ export class DriveService implements OnApplicationBootstrap {
       upload = await this.storage.createUploadInstruction({
         key: result.session.storageKey,
         contentType: input.mimeType ?? undefined,
+        expectedSize: result.session.expectedSize,
       })
     } catch (error) {
       await this.failUploadSession(userId, result.session.id, result.session.itemId, result.session.expectedSize, DRIVE_UPLOAD_STATUS.failed)

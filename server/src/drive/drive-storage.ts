@@ -4,6 +4,7 @@ import { createReadStream, createWriteStream, statSync } from "node:fs"
 import { copyFile, mkdir, rm, stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import COS from "cos-nodejs-sdk-v5"
 import { isDriveCosConfigured, loadEnv } from "../config/env"
@@ -23,7 +24,7 @@ export interface DriveUploadInstruction {
 }
 
 export interface DriveStoragePort {
-  createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction>
+  createUploadInstruction(input: { readonly key: string; readonly contentType?: string; readonly expectedSize: bigint }): Promise<DriveUploadInstruction>
   createDownloadUrl(input: { readonly key: string; readonly filename: string }): Promise<{ readonly url: string; readonly expiresAt: Date }>
   headObject(key: string): Promise<DriveStorageObjectInfo | null>
   copyObject(input: { readonly fromKey: string; readonly toKey: string; readonly contentType?: string | null }): Promise<void>
@@ -34,8 +35,18 @@ export interface DriveStoragePort {
 type LocalStorageToken = {
   readonly key: string
   readonly contentType?: string | null
+  readonly expectedSize?: bigint
   readonly filename?: string
   readonly expiresAt: Date
+}
+
+export class DriveUploadTooLargeError extends Error {
+  readonly code = "DRIVE_UPLOAD_TOO_LARGE"
+
+  constructor() {
+    super("Drive upload exceeds expected size.")
+    this.name = "DriveUploadTooLargeError"
+  }
 }
 
 export const LOCAL_DRIVE_STORAGE_OPTIONS = Symbol("LOCAL_DRIVE_STORAGE_OPTIONS")
@@ -59,11 +70,11 @@ export class LocalDriveStorage implements DriveStoragePort {
     this.root = options?.root ?? process.env.SYNAPSE_DRIVE_LOCAL_ROOT ?? path.join(os.tmpdir(), "synapse-drive-storage")
   }
 
-  async createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction> {
+  async createUploadInstruction(input: { readonly key: string; readonly contentType?: string; readonly expectedSize: bigint }): Promise<DriveUploadInstruction> {
     this.cleanupExpiredTokens()
     const expiresAt = new Date(Date.now() + driveUploadUrlTtlSeconds * 1000)
     const token = randomUUID()
-    this.uploadTokens.set(token, { key: input.key, contentType: input.contentType ?? null, expiresAt })
+    this.uploadTokens.set(token, { key: input.key, contentType: input.contentType ?? null, expectedSize: input.expectedSize, expiresAt })
     return {
       method: "PUT",
       url: `${this.publicAppUrl.replace(/\/+$/u, "")}/api/drive/local-upload/${encodeURIComponent(token)}`,
@@ -118,9 +129,22 @@ export class LocalDriveStorage implements DriveStoragePort {
 
   async acceptUpload(token: string, stream: NodeJS.ReadableStream): Promise<void> {
     const entry = this.consumeToken(this.uploadTokens, token)
+    const contentLength = readContentLength(stream)
+    if (entry.expectedSize !== undefined && contentLength !== undefined && contentLength > entry.expectedSize) {
+      throw new DriveUploadTooLargeError()
+    }
     const objectPath = this.pathForKey(entry.key)
     await mkdir(path.dirname(objectPath), { recursive: true })
-    await pipeline(stream, createWriteStream(objectPath))
+    try {
+      if (entry.expectedSize === undefined) {
+        await pipeline(stream, createWriteStream(objectPath))
+      } else {
+        await pipeline(stream, createUploadSizeLimitStream(entry.expectedSize), createWriteStream(objectPath))
+      }
+    } catch (error) {
+      await rm(objectPath, { force: true })
+      throw error
+    }
     this.contentTypes.set(entry.key, entry.contentType ?? null)
   }
 
@@ -185,6 +209,28 @@ function attachLocalDriveStorageKey(error: unknown, key: string): void {
   })
 }
 
+function readContentLength(stream: NodeJS.ReadableStream): bigint | undefined {
+  const headers = (stream as { readonly headers?: Record<string, string | readonly string[] | undefined> }).headers
+  const value = headers?.["content-length"] ?? headers?.["Content-Length"]
+  const raw = Array.isArray(value) ? value[0] : value
+  if (!raw || !/^\d+$/u.test(raw)) return undefined
+  return BigInt(raw)
+}
+
+function createUploadSizeLimitStream(expectedSize: bigint): Transform {
+  let bytes = 0n
+  return new Transform({
+    transform(chunk: Buffer | string, _encoding, callback) {
+      bytes += BigInt(Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk))
+      if (bytes > expectedSize) {
+        callback(new DriveUploadTooLargeError())
+        return
+      }
+      callback(null, chunk)
+    },
+  })
+}
+
 @Injectable()
 export class CosDriveStorage implements DriveStoragePort {
   private client: {
@@ -193,7 +239,7 @@ export class CosDriveStorage implements DriveStoragePort {
     readonly region: string
   } | null = null
 
-  async createUploadInstruction(input: { readonly key: string; readonly contentType?: string }): Promise<DriveUploadInstruction> {
+  async createUploadInstruction(input: { readonly key: string; readonly contentType?: string; readonly expectedSize: bigint }): Promise<DriveUploadInstruction> {
     const expiresAt = new Date(Date.now() + driveUploadUrlTtlSeconds * 1000)
     const url = await this.getSignedUrl({ key: input.key, method: "put", expires: driveUploadUrlTtlSeconds })
     return {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Logger, NotFoundException, Optional, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
 import { Buffer } from "node:buffer"
@@ -18,7 +18,7 @@ import {
   type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
-import { driveContentDisposition, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
+import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
@@ -711,7 +711,12 @@ export class DriveLocalStorageController {
 
   @Put("/local-upload/:token")
   async upload(@Param("token") token: string, @Req() request: Request) {
-    await this.storage.acceptUpload(token, request)
+    try {
+      await this.storage.acceptUpload(token, request)
+    } catch (error) {
+      if (error instanceof DriveUploadTooLargeError) throw new PayloadTooLargeException("上传文件超过声明大小。")
+      throw error
+    }
     return { ok: true }
   }
 

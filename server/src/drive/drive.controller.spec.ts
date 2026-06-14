@@ -21,6 +21,7 @@ type SupertestRequest = {
 const request = require("supertest") as (server: unknown) => {
   readonly get: (path: string) => SupertestRequest
   readonly post: (path: string) => SupertestRequest
+  readonly put: (path: string) => SupertestRequest
   readonly delete: (path: string) => SupertestRequest
 }
 
@@ -260,6 +261,31 @@ describe("DriveController", () => {
     }
   })
 
+  it("rejects oversized local uploads before accepting the request body", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-upload-"))
+    const localStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveLocalStorageController],
+      providers: [{ provide: LocalDriveStorage, useValue: localStorage }],
+    }).compile()
+    const localApp = moduleRef.createNestApplication()
+    await localApp.init()
+    try {
+      const upload = await localStorage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
+      const uploadToken = upload.url.split("/").at(-1)
+      if (!uploadToken) throw new Error("missing upload token")
+
+      await request(localApp.getHttpServer())
+        .put(`/api/drive/local-upload/${uploadToken}`)
+        .set("Content-Type", "text/plain")
+        .send("too-large")
+        .expect(413)
+    } finally {
+      await localApp.close()
+      await rm(root, { force: true, recursive: true })
+    }
+  })
+
   it("returns a controlled error when a local download object is missing", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-download-"))
     const localStorage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
@@ -270,7 +296,7 @@ describe("DriveController", () => {
     const localApp = moduleRef.createNestApplication()
     await localApp.init()
     try {
-      const upload = await localStorage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain" })
+      const upload = await localStorage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
       const uploadToken = upload.url.split("/").at(-1)
       if (!uploadToken) throw new Error("missing upload token")
       await localStorage.acceptUpload(uploadToken, Readable.from("brief"))

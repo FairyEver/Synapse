@@ -14,7 +14,7 @@ vi.mock("cos-nodejs-sdk-v5", () => ({
   default: cosConstructorMock,
 }))
 
-import { CosDriveStorage, LOCAL_DRIVE_STORAGE_OPTIONS, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
+import { CosDriveStorage, DriveUploadTooLargeError, LOCAL_DRIVE_STORAGE_OPTIONS, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
 
 const roots: string[] = []
 
@@ -47,7 +47,7 @@ describe("LocalDriveStorage", () => {
     roots.push(root)
     const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
 
-    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain" })
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
     const token = upload.url.split("/").pop()
     if (!token) throw new Error("missing upload token")
 
@@ -57,11 +57,39 @@ describe("LocalDriveStorage", () => {
     await expect(storage.headObject("drive/item-1")).resolves.toMatchObject({ key: "drive/item-1", size: 5n })
   })
 
+  it("rejects local uploads when content length exceeds the expected size", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
+    const token = upload.url.split("/").pop()
+    if (!token) throw new Error("missing upload token")
+    const stream = Readable.from(["too-large"]) as Readable & { headers: Record<string, string> }
+    stream.headers = { "content-length": "9" }
+
+    await expect(storage.acceptUpload(token, stream)).rejects.toBeInstanceOf(DriveUploadTooLargeError)
+    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).rejects.toThrow()
+  })
+
+  it("stops chunked local uploads after they exceed the expected size", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
+    roots.push(root)
+    const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
+
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
+    const token = upload.url.split("/").pop()
+    if (!token) throw new Error("missing upload token")
+
+    await expect(storage.acceptUpload(token, Readable.from(["hello", "world"]))).rejects.toBeInstanceOf(DriveUploadTooLargeError)
+    await expect(readFile(path.join(root, "drive/item-1"), "utf8")).rejects.toThrow()
+  })
+
   it("copies and streams local drive objects", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)
     const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
-    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/html" })
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/html", expectedSize: 14n })
     const token = upload.url.split("/").at(-1)
     if (!token) throw new Error("missing upload token")
 
@@ -78,7 +106,7 @@ describe("LocalDriveStorage", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-"))
     roots.push(root)
     const storage = new LocalDriveStorage({ publicAppUrl: "http://localhost:3000", root })
-    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain" })
+    const upload = await storage.createUploadInstruction({ key: "drive/item-1", contentType: "text/plain", expectedSize: 5n })
     const uploadToken = upload.url.split("/").at(-1)
     if (!uploadToken) throw new Error("missing upload token")
     await storage.acceptUpload(uploadToken, Readable.from("hello"))
@@ -107,13 +135,13 @@ describe("LocalDriveStorage", () => {
     }
 
     try {
-      await storage.createUploadInstruction({ key: "drive/unused-upload", contentType: "text/plain" })
+      await storage.createUploadInstruction({ key: "drive/unused-upload", contentType: "text/plain", expectedSize: 1n })
       await storage.createDownloadUrl({ key: "drive/unused-download", filename: "unused.txt" })
       expect(tokenState.uploadTokens.size).toBe(1)
       expect(tokenState.downloadTokens.size).toBe(1)
 
       vi.setSystemTime(new Date("2026-06-14T00:16:00.000Z"))
-      await storage.createUploadInstruction({ key: "drive/new-upload", contentType: "text/plain" })
+      await storage.createUploadInstruction({ key: "drive/new-upload", contentType: "text/plain", expectedSize: 1n })
 
       expect(tokenState.uploadTokens.size).toBe(1)
       expect(tokenState.downloadTokens.size).toBe(0)
