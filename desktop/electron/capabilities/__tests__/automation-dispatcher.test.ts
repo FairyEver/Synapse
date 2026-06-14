@@ -312,6 +312,40 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify([run, runs, runtime])).not.toContain("private output")
   })
 
+  it("redacts sensitive run summaries and whitelists public metrics", async () => {
+    const { dispatcher, service } = createHarness()
+    const sensitiveRun: AutomationRun = {
+      ...baseRun,
+      error: "failed Authorization: Bearer sk-error-token",
+      result: {
+        ...baseRun.result,
+        status: "success",
+        summary: "Authorization: Bearer sk-live-token token=secret-token apiKey=sk-api-private at /Users/liyang/private/file.txt",
+        metrics: {
+          durationMs: 2000,
+          exitCode: null,
+          httpStatus: 200,
+          token: "secret-metric",
+        } as unknown as NonNullable<AutomationRun["result"]>["metrics"],
+      },
+    }
+    vi.mocked(service.runAutomationNow).mockResolvedValueOnce(sensitiveRun)
+    vi.mocked(service.automationRunList).mockResolvedValueOnce([sensitiveRun])
+
+    const run = await dispatcher.dispatch("automation.run.execute", { automationId: "automation:1" }, { source: "mcp-http" })
+    const runs = await dispatcher.dispatch("automation.run.list", { automationId: "automation:1" }, { source: "mcp-http" })
+    const serialized = JSON.stringify([run, runs])
+
+    expect(serialized).not.toContain("sk-live-token")
+    expect(serialized).not.toContain("secret-token")
+    expect(serialized).not.toContain("sk-api-private")
+    expect(serialized).not.toContain("sk-error-token")
+    expect(serialized).not.toContain("secret-metric")
+    expect(serialized).not.toContain("/Users/liyang/private/file.txt")
+    expect(serialized).toContain("durationMs")
+    expect(serialized).toContain("httpStatus")
+  })
+
   it("checks permission and audits allowed automation mutations", async () => {
     const { auditSink, dispatcher, permissionGuard, service } = createHarness()
     vi.mocked(service.automationDisable).mockResolvedValueOnce({ ...baseItem, enabled: false })

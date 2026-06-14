@@ -4,12 +4,14 @@ import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type { AutomationService } from "../services/automation"
 import type { AutomationTriggerRegistry } from "../services/automation/trigger-registry"
+import { sanitizeError } from "../services/error-sanitize"
 import type {
   AutomationCreateInput,
   AutomationItem,
   AutomationRun,
   AutomationUpdateInput,
 } from "../services/automation/types"
+import type { ActionRunMetrics } from "../../action-packages/types"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 
 type AutomationServicePort = Pick<
@@ -209,6 +211,8 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
 }
 
 export function toPublicAutomationRunSummary(run: AutomationRun) {
+  const metrics = sanitizeAutomationRunMetrics(run.result?.metrics)
+
   return {
     id: run.id,
     automationId: run.automationId,
@@ -218,10 +222,22 @@ export function toPublicAutomationRunSummary(run: AutomationRun) {
     executorType: run.executorType,
     startedAt: run.startedAt,
     ...(run.finishedAt === undefined ? {} : { finishedAt: run.finishedAt }),
-    ...(run.error === undefined ? {} : { error: run.error }),
-    ...(run.result?.summary === undefined ? {} : { summary: run.result.summary }),
-    ...(run.result?.metrics === undefined ? {} : { metrics: run.result.metrics }),
+    ...(run.error === undefined ? {} : { error: sanitizeError(run.error) }),
+    ...(run.result?.summary === undefined ? {} : { summary: sanitizeError(run.result.summary) }),
+    ...(metrics === undefined ? {} : { metrics }),
   }
+}
+
+function sanitizeAutomationRunMetrics(metrics: ActionRunMetrics | undefined): ActionRunMetrics | undefined {
+  if (!metrics) return undefined
+
+  const safeMetrics: ActionRunMetrics = {
+    ...(typeof metrics.durationMs === "number" ? { durationMs: metrics.durationMs } : {}),
+    ...(typeof metrics.exitCode === "number" || metrics.exitCode === null ? { exitCode: metrics.exitCode } : {}),
+    ...(typeof metrics.httpStatus === "number" ? { httpStatus: metrics.httpStatus } : {}),
+  }
+
+  return Object.keys(safeMetrics).length > 0 ? safeMetrics : undefined
 }
 
 export function toPublicAutomationItemSummary(

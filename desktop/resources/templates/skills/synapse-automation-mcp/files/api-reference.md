@@ -188,6 +188,6 @@ Item summaries include trigger type, trigger summary, executor type, executor ti
 
 Item summaries do not include `trigger.config` or `executor.config`.
 
-Run summaries include id, status, trigger/executor type, timestamps, result summary, and non-secret metrics.
+Run summaries include id, status, trigger/executor type, timestamps, sanitized result summary, and whitelisted non-secret metrics.
 
 Run summaries do not include logs, raw outputs, Agent prompts, shell command text, scripts, HTTP bodies, Authorization values, Bearer tokens, Basic passwords, cookies, API keys, environment variable values, or raw event payloads.
