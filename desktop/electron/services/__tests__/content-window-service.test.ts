@@ -166,4 +166,65 @@ describe("createContentWindowService", () => {
     expect(createWindow).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
+
+  it("reloads an existing edit window when a new init payload is provided", async () => {
+    const webContents = {
+      on: vi.fn(),
+      loadURL: vi.fn(),
+    }
+    const window = {
+      webContents,
+      focus: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+      isMinimized: vi.fn(() => false),
+      once: vi.fn(),
+      on: vi.fn(),
+      show: vi.fn(),
+    }
+    const createWindow = vi.fn(() => window as never)
+    const loadWindow = vi.fn(async () => undefined)
+    const service = createContentWindowService({
+      createWindow,
+      createHealthService: vi.fn(() => ({ attach: vi.fn(), detach: vi.fn() })),
+      getAppPath: () => "/app",
+      getIconPath: () => null,
+      getPreloadPath: () => "/preload.js",
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      loadWindow,
+    })
+
+    await service.openEditWindow({
+      contentType: "rule",
+      id: "rule-1",
+      origin: "detail",
+      title: "编辑 Rule",
+    })
+    await service.openEditWindow({
+      contentType: "rule",
+      id: "rule-1",
+      origin: "external",
+      prefill: {
+        contentType: "rule",
+        content: "# Updated",
+      },
+      requestId: "overwrite-1",
+      title: "编辑 Rule",
+    })
+
+    expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(loadWindow).toHaveBeenCalledTimes(2)
+    expect(loadWindow).toHaveBeenLastCalledWith(window, expect.objectContaining({
+      requestId: "overwrite-1",
+      prefill: expect.objectContaining({
+        content: "# Updated",
+      }),
+    }))
+    expect(window.focus).toHaveBeenCalledTimes(1)
+    expect(service.readPendingEditorPayload("overwrite-1")).toEqual(expect.objectContaining({
+      requestId: "overwrite-1",
+      prefill: expect.objectContaining({
+        content: "# Updated",
+      }),
+    }))
+  })
 })

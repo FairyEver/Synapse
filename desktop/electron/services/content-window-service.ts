@@ -69,6 +69,10 @@ function isDetailWindowPayload(payload: AnyContentWindowPayload): payload is Syn
   return "viewMode" in payload
 }
 
+function isEditorWindowPayload(payload: AnyContentWindowPayload): payload is ContentEditorInitPayload {
+  return !isDetailWindowPayload(payload)
+}
+
 function buildSearchParams(payload: AnyContentWindowPayload): URLSearchParams {
   if (isEditWindowPayload(payload)) {
     return buildContentEditWindowSearchParams(payload)
@@ -149,6 +153,10 @@ function createContentWindowService(deps: ContentWindowServiceDeps) {
     if (existingWindow && !existingWindow.isDestroyed()) {
       if (existingWindow.isMinimized()) {
         existingWindow.restore()
+      }
+      if (isEditorWindowPayload(payload) && payload.requestId) {
+        await (deps.loadWindow ?? loadContentWindow)(existingWindow, payload)
+        deps.logger.info("Reloaded existing content editor window.", createWindowLogMetadata(payload))
       }
       existingWindow.focus()
       deps.logger.info("Focused existing content window.", createWindowLogMetadata(payload))
