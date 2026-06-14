@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { ContentStoreType } from '@synapse/shared'
+import { useRef, useState } from 'react'
+import type { ContentStoreDraftDto, ContentStoreType } from '@synapse/shared'
 import { useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -12,51 +12,69 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
+type ContentStoreCreateForm = {
+  type: ContentStoreType
+  title: string
+  description: string
+  body: string
+}
+
+type CreateDraft = typeof dashboardApi.createContentStoreDraft
+
+export async function createContentStoreDraftFromForm(
+  form: ContentStoreCreateForm,
+  createDraft: CreateDraft = dashboardApi.createContentStoreDraft
+): Promise<ContentStoreDraftDto> {
+  const trimmedTitle = form.title.trim()
+  const trimmedBody = form.body.trim()
+  if (!trimmedTitle) throw new Error('标题不能为空')
+  if (form.type !== 'skill' && !trimmedBody) throw new Error('正文不能为空')
+  if (form.type === 'skill') {
+    return createDraft({
+      type: form.type,
+      title: trimmedTitle,
+      description: form.description.trim() || null,
+      files: [
+        {
+          path: 'SKILL.md',
+          contentBase64: 'IyBTa2lsbA==',
+          mimeType: 'text/markdown',
+        },
+      ],
+    })
+  }
+  return createDraft({
+    type: form.type,
+    title: trimmedTitle,
+    description: form.description.trim() || null,
+    body: trimmedBody,
+  })
+}
+
 export function ContentStoreCreatePage() {
   const navigate = useNavigate()
   const [type, setType] = useState<ContentStoreType>('skill')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [body, setBody] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
+  const creatingRef = useRef(false)
 
   async function handleCreate() {
-    const trimmedTitle = title.trim()
-    const trimmedBody = body.trim()
-    if (!trimmedTitle) {
-      toast.error('标题不能为空')
-      return
-    }
-    if (type !== 'skill' && !trimmedBody) {
-      toast.error('正文不能为空')
-      return
-    }
+    if (creatingRef.current) return
+    creatingRef.current = true
+    setIsCreating(true)
     try {
-      const draft =
-        type === 'skill'
-          ? await dashboardApi.createContentStoreDraft({
-              type,
-              title: trimmedTitle,
-              description: description.trim() || null,
-              files: [
-                {
-                  path: 'SKILL.md',
-                  contentBase64: 'IyBTa2lsbA==',
-                  mimeType: 'text/markdown',
-                },
-              ],
-            })
-          : await dashboardApi.createContentStoreDraft({
-              type,
-              title: trimmedTitle,
-              description: description.trim() || null,
-              body: trimmedBody,
-            })
+      const draft = await createContentStoreDraftFromForm({ type, title, description, body })
       void navigate({
         to: '/my-content/$contentId/edit',
         params: { contentId: draft.itemId },
       })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '创建失败')
+    } finally {
+      creatingRef.current = false
+      setIsCreating(false)
     }
   }
 
@@ -101,7 +119,7 @@ export function ContentStoreCreatePage() {
             </div>
           )}
           <div className='flex justify-end'>
-            <Button onClick={() => void handleCreate()}>
+            <Button disabled={isCreating} onClick={() => void handleCreate()}>
               <Plus data-icon='inline-start' />
               创建草稿
             </Button>
