@@ -75,6 +75,10 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
   const pushString = (value: unknown) => {
     if (typeof value === "string") texts.push(value)
   }
+  const pushStringArray = (value: unknown) => {
+    if (!Array.isArray(value)) return
+    for (const item of value) pushString(item)
+  }
   const pushRecordValues = (value: unknown) => {
     if (value && typeof value === "object" && !Array.isArray(value)) {
       for (const recordValue of Object.values(value as Record<string, unknown>)) {
@@ -85,7 +89,11 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
 
   if (node.type === "prompt" || node.type === "switch" || node.type === "codex") {
     pushString(cfg.prompt)
-    if (node.type === "codex") pushString(cfg.workingDirectory)
+    if (node.type === "codex") {
+      pushString(cfg.workingDirectory)
+      pushStringArray(cfg.additionalWritableDirs)
+      pushStringArray(cfg.images)
+    }
   } else if (node.type === "end") {
     pushString(cfg.template)
   } else if (node.type === "http_request") {

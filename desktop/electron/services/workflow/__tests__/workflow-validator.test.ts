@@ -146,6 +146,34 @@ describe("validateWorkflow", () => {
       message: expect.stringContaining("missingDir"),
     }))
   })
+
+  it("checks template placeholders inside codex advanced paths", () => {
+    const result = validateWorkflow(definitionWithCodexNode({
+      defaultProjectId: "project-1",
+      nodes: [
+        codexNode({
+          prompt: "Run codex",
+          additionalWritableDirs: ["/Users/liyang/worktrees/{{missingWritableDir}}"],
+          images: ["/Users/liyang/screenshots/{{missingImage}}.png"],
+        }),
+        endNode(),
+      ],
+    }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "codex-1",
+        type: "invalid_config",
+        message: expect.stringContaining("模板变量「missingWritableDir」未绑定"),
+      }),
+      expect.objectContaining({
+        nodeId: "codex-1",
+        type: "invalid_config",
+        message: expect.stringContaining("模板变量「missingImage」未绑定"),
+      }),
+    ]))
+  })
 })
 
 function definitionWithDisconnectedNode(): WorkflowDefinition {
