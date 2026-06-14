@@ -12,22 +12,59 @@ import type { MainWindowState } from "./main-window"
 
 const logger = createMainLogger("bootstrap.app-events")
 const WINDOWS_APP_USER_MODEL_ID = "com.fairyever.synapse"
+const FATAL_CLEANUP_TIMEOUT_MS = 3_000
 
 export function configureWindowsAppIdentity(platform: NodeJS.Platform = process.platform): void {
   if (platform !== "win32") return
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID)
 }
 
-export function attachProcessLevelLogging(): void {
+export interface ProcessLevelLoggingDeps {
+  readonly cleanupBeforeExit?: () => Promise<void> | void
+  readonly cleanupTimeoutMs?: number
+}
+
+export function attachProcessLevelLogging(deps: ProcessLevelLoggingDeps = {}): void {
+  let fatalExitRequested = false
+
+  const exitAfterCleanup = (message: string, reason: unknown) => {
+    logger.error(message, reason)
+    if (fatalExitRequested) {
+      app.exit(1)
+      return
+    }
+
+    fatalExitRequested = true
+    void runFatalCleanup(deps).finally(() => {
+      app.exit(1)
+    })
+  }
+
   process.on("uncaughtException", (error) => {
-    logger.error("Uncaught exception in main process.", error)
-    app.exit(1)
+    exitAfterCleanup("Uncaught exception in main process.", error)
   })
 
   process.on("unhandledRejection", (reason) => {
-    logger.error("Unhandled rejection in main process.", reason)
-    app.exit(1)
+    exitAfterCleanup("Unhandled rejection in main process.", reason)
   })
+}
+
+async function runFatalCleanup(deps: ProcessLevelLoggingDeps): Promise<void> {
+  if (!deps.cleanupBeforeExit) return
+
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  try {
+    await Promise.race([
+      Promise.resolve(deps.cleanupBeforeExit()),
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, deps.cleanupTimeoutMs ?? FATAL_CLEANUP_TIMEOUT_MS)
+      }),
+    ])
+  } catch (error) {
+    logger.warn("Fatal-exit cleanup failed.", { error })
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
 }
 
 export function attachSecondInstanceFocus(

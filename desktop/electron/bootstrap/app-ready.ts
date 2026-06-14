@@ -5,7 +5,7 @@ import { accountService } from "../services/account-service"
 import { installStatusCacheService } from "../services/install-status-cache-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { LiveWebhookDeliveryHandler } from "../services/live-webhook-delivery-handler"
-import { createMainLogger } from "../services/log-store"
+import { createMainLogger, logStore } from "../services/log-store"
 import type { EventBus } from "../runtime/event-bus"
 import type { IpcHandlerContext } from "../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
@@ -25,6 +25,7 @@ type InitializeReadyAppDeps = {
   isAppQuitting: () => boolean
   mainWindowState: MainWindowState
   setAllowAppQuit: (value: boolean) => void
+  setProcessLevelCleanup?: (cleanup: (() => Promise<void>) | undefined) => void
   setWindowManager: (windowManager: WindowManager) => void
   startProtocolHandling: (
     prepareBeforeNonAuthRoutes: (handledAuthCallbacks: number) => Promise<void>,
@@ -34,6 +35,18 @@ type InitializeReadyAppDeps = {
 async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
   logger.info("Electron app is ready. Initializing IPC registry.")
   const registry = buildServiceRegistry({ trayShowOrCreate: deps.focusOrCreateMainWindow })
+  deps.setProcessLevelCleanup?.(async () => {
+    try {
+      await registry.stopAll(3_000)
+    } catch (error) {
+      logger.error("Service registry stopAll() reported an error during fatal cleanup.", { error })
+    }
+    try {
+      await logStore.dispose()
+    } catch (error) {
+      logger.error("logStore dispose failed during fatal cleanup.", { error })
+    }
+  })
   const ipcCtx: IpcHandlerContext = {
     moduleId: "main",
     logger,

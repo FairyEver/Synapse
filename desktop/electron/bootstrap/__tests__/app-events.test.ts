@@ -24,6 +24,7 @@ vi.mock("../../services/log-store", () => ({
 }))
 
 import {
+  attachProcessLevelLogging,
   attachSecondInstanceFocus,
   attachSecondInstanceProtocolHandler,
   registerAuthProtocol,
@@ -71,6 +72,46 @@ describe("app event bootstrap", () => {
       hasDevEntrypoint: true,
       hint: "scripts/manual/fix-dev-protocol.sh",
     })
+  })
+
+  it("runs fatal cleanup before exiting on uncaught exceptions", async () => {
+    const cleanup = vi.fn(async () => {})
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process)
+
+    attachProcessLevelLogging({ cleanupBeforeExit: cleanup })
+    const handler = onSpy.mock.calls.find(([event]) => event === "uncaughtException")?.[1] as (
+      error: Error,
+    ) => void
+
+    handler(new Error("boom"))
+    await vi.waitFor(() => {
+      expect(electronMock.app.exit).toHaveBeenCalledWith(1)
+    })
+
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    onSpy.mockRestore()
+  })
+
+  it("exits after the fatal cleanup timeout", async () => {
+    vi.useFakeTimers()
+    const cleanup = vi.fn(() => new Promise<void>(() => {}))
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process)
+
+    attachProcessLevelLogging({
+      cleanupBeforeExit: cleanup,
+      cleanupTimeoutMs: 10,
+    })
+    const handler = onSpy.mock.calls.find(([event]) => event === "unhandledRejection")?.[1] as (
+      reason: unknown,
+    ) => void
+
+    handler(new Error("boom"))
+    await vi.advanceTimersByTimeAsync(10)
+
+    expect(cleanup).toHaveBeenCalledTimes(1)
+    expect(electronMock.app.exit).toHaveBeenCalledWith(1)
+    onSpy.mockRestore()
+    vi.useRealTimers()
   })
 
   it("focuses the main window for a generic second-instance launch", () => {

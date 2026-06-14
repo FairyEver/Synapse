@@ -28,6 +28,7 @@ import { createMainLogger } from "./services/log-store"
 const logger = createMainLogger("main")
 const mainWindowState = createMainWindowState()
 let allowAppQuit = false
+let processLevelCleanup: (() => Promise<void>) | undefined
 let windowManager: WindowManager | undefined
 
 function focusOrCreateMainWindow(): void {
@@ -45,7 +46,9 @@ const protocolRouter = createProtocolUrlRouter({
   openInstallWindow: (request) => contentStoreInstallWindowService.open(request),
 }, process.argv.filter((item) => item.startsWith("synapse://")))
 
-attachProcessLevelLogging()
+attachProcessLevelLogging({
+  cleanupBeforeExit: () => processLevelCleanup?.(),
+})
 configureWindowsAppIdentity()
 registerAuthProtocol()
 
@@ -70,6 +73,9 @@ if (!gotSingleInstanceLock) {
       mainWindowState,
       setAllowAppQuit: (value) => {
         allowAppQuit = value
+      },
+      setProcessLevelCleanup: (cleanup) => {
+        processLevelCleanup = cleanup
       },
       setWindowManager: (manager) => {
         windowManager = manager
