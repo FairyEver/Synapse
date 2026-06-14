@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import { adminApi } from '@/lib/api'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   DataTableColumnHeader,
   ServerDataTable,
@@ -74,6 +75,7 @@ export default function ContentStoreAdminPage({
   )
   const [query, setQuery] = useState(parsedSearch.query)
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<ContentStoreItemDto | null>(null)
   const [sorting, setSorting] = useState<SortingState>(
     parsedSearch.sortBy
       ? [{ id: parsedSearch.sortBy, desc: parsedSearch.sortOrder !== 'asc' }]
@@ -116,6 +118,7 @@ export default function ContentStoreAdminPage({
     mutationFn: ({ id, value }: { id: string; value: boolean }) =>
       adminApi.setContentStoreRemoved(id, value),
     onSuccess: () => {
+      setRemoveTarget(null)
       void queryClient.invalidateQueries({ queryKey: ['admin-content-store-items'] })
       void queryClient.invalidateQueries({ queryKey: ['admin-content-store-detail'] })
       toast.success('已更新')
@@ -236,10 +239,11 @@ export default function ContentStoreAdminPage({
               disabled={removedMutation.isPending}
               onClick={(event) => {
                 event.stopPropagation()
-                removedMutation.mutate({
-                  id: row.original.id,
-                  value: row.original.moderationStatus !== 'removed',
-                })
+                if (row.original.moderationStatus === 'removed') {
+                  removedMutation.mutate({ id: row.original.id, value: false })
+                  return
+                }
+                setRemoveTarget(row.original)
               }}
             >
               {row.original.moderationStatus === 'removed' ? '恢复' : '下架'}
@@ -381,6 +385,23 @@ export default function ContentStoreAdminPage({
             </div>
           </SheetContent>
         </Sheet>
+        <ConfirmDialog
+          open={Boolean(removeTarget)}
+          onOpenChange={(open) => {
+            if (!open) setRemoveTarget(null)
+          }}
+          title='下架内容'
+          desc={removeTarget ? `${removeTarget.title} 将从公开内容商店移除。` : ''}
+          cancelBtnText='取消'
+          confirmText='下架'
+          destructive
+          isLoading={removedMutation.isPending}
+          handleConfirm={() => {
+            if (removeTarget) {
+              removedMutation.mutate({ id: removeTarget.id, value: true })
+            }
+          }}
+        />
       </Main>
     </>
   )
