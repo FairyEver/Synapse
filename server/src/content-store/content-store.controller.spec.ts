@@ -5,6 +5,7 @@ import { Readable, Writable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { UserAuthGuard } from "../auth/user-auth.guard"
+import { contentStoreTextMaxBytes } from "./content-store.constants"
 import { ContentStoreAdminController, ContentStoreUserController } from "./content-store.controller"
 import { ContentStoreService } from "./content-store.service"
 
@@ -147,6 +148,31 @@ describe("ContentStoreUserController", () => {
     expect(service.createDraft).not.toHaveBeenCalled()
     expect(service.setVisibility).not.toHaveBeenCalled()
     expect(service.recordInstall).not.toHaveBeenCalled()
+  })
+
+  it("rejects oversized rule and prompt bodies before calling the service", () => {
+    const service = {
+      createDraft: vi.fn(),
+      saveDraft: vi.fn(),
+    }
+    const controller = new ContentStoreUserController(service as never)
+    const request = userRequest("user-1")
+    const oversizedBody = "a".repeat(contentStoreTextMaxBytes + 1)
+
+    expect(() => controller.createDraft({
+      type: "rule",
+      title: "Rule",
+      body: oversizedBody,
+    }, request)).toThrow(BadRequestException)
+    expect(() => controller.saveDraft("item-1", {
+      type: "prompt",
+      baseRevision: 1,
+      title: "Prompt",
+      body: oversizedBody,
+    }, request)).toThrow(BadRequestException)
+
+    expect(service.createDraft).not.toHaveBeenCalled()
+    expect(service.saveDraft).not.toHaveBeenCalled()
   })
 
   it("uses a default install deep link and completes install sessions", async () => {

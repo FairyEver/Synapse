@@ -6,6 +6,7 @@ import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guar
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
+import { contentStoreTextMaxBytes } from "./content-store.constants"
 import { ContentStoreService } from "./content-store.service"
 
 const defaultInstallDeepLinkBase = "synapse://content-install"
@@ -31,6 +32,11 @@ const fileSchema = z.object({
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
 
+const textBodySchema = z.string().min(1).refine(
+  (body) => Buffer.byteLength(body, "utf8") <= contentStoreTextMaxBytes,
+  "正文超过 1MB。",
+)
+
 const createDraftSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("skill"),
@@ -43,13 +49,13 @@ const createDraftSchema = z.discriminatedUnion("type", [
     type: z.literal("rule"),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
-    body: z.string().min(1),
+    body: textBodySchema,
   }).strict(),
   z.object({
     type: z.literal("prompt"),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
-    body: z.string().min(1),
+    body: textBodySchema,
   }).strict(),
 ])
 
@@ -66,14 +72,14 @@ const saveDraftSchema = z.discriminatedUnion("type", [
     baseRevision: z.number().int().nonnegative(),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
-    body: z.string().min(1),
+    body: textBodySchema,
   }).strict(),
   z.object({
     type: z.literal("prompt"),
     baseRevision: z.number().int().nonnegative(),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
-    body: z.string().min(1),
+    body: textBodySchema,
   }).strict(),
 ])
 
