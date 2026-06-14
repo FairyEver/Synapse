@@ -139,7 +139,7 @@ describe("AdminController", () => {
     await controller.getSystemOverview(request)
     await controller.listInvitations({}, request)
     await controller.listUsers({}, request)
-    await controller.listTeams({}, request)
+    await controller.listTeams({ search: "  研发  " }, request)
 
     expect(record).toHaveBeenCalledWith(expect.objectContaining({
       adminEmail: "admin@example.com",
@@ -162,7 +162,12 @@ describe("AdminController", () => {
       action: "admin.teams.list",
       targetType: "team",
       targetId: "list",
+      detail: expect.objectContaining({ search: "研发" }),
     }))
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, pageSize: 20 }),
+      { search: "研发" },
+    )
   })
 
   it("lists devices for administrators and records audit metadata", async () => {

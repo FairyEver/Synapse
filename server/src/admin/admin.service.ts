@@ -10,6 +10,9 @@ import { PrismaService } from "../prisma/prisma.service"
 
 type AdminPrismaClient = PrismaService | Prisma.TransactionClient
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
+type TeamListFilters = {
+  readonly search?: string
+}
 const invitationDays = 7
 
 const adminUserSelect = {
@@ -265,14 +268,27 @@ export class AdminService {
     }
   }
 
-  async listTeams(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
+  async listTeams(
+    pagination?: PaginationQuery,
+    filters: TeamListFilters = {},
+  ): Promise<PaginatedResponse<unknown>> {
     const page = pagination ?? parsePagination({})
+    const search = filters.search?.trim()
+    const where = search
+      ? {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        } satisfies Prisma.TeamWhereInput
+      : undefined
     const [data, total] = await this.prisma.$transaction([
       this.prisma.team.findMany({
         ...toPrismaArgs(page),
+        ...(where ? { where } : {}),
         select: adminTeamSelect,
       }),
-      this.prisma.team.count(),
+      this.prisma.team.count(where ? { where } : undefined),
     ])
     return {
       data: data.map(toAdminTeamListRow),

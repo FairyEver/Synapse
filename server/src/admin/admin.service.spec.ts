@@ -324,6 +324,33 @@ describe("AdminService", () => {
     expect(JSON.stringify(result.data)).not.toContain("_count")
   })
 
+  it("filters teams by name search when listing teams", async () => {
+    const prisma = createPrismaMock()
+    prisma.$transaction.mockImplementationOnce((input: unknown) => Promise.all(input as Array<Promise<unknown>>))
+    prisma.team.findMany.mockResolvedValue([])
+    prisma.team.count.mockResolvedValue(0)
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await service.listTeams(undefined, { search: "  研发  " })
+
+    expect(prisma.team.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        name: {
+          contains: "研发",
+          mode: "insensitive",
+        },
+      },
+    }))
+    expect(prisma.team.count).toHaveBeenCalledWith({
+      where: {
+        name: {
+          contains: "研发",
+          mode: "insensitive",
+        },
+      },
+    })
+  })
+
   it("loads invitations without exposing token hashes or invite URLs", async () => {
     const prisma = {
       $transaction: vi.fn().mockResolvedValue([[], 0]),

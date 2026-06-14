@@ -170,12 +170,13 @@ export class AdminController {
   @Get("/teams")
   async listTeams(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
     const pagination = parsePagination(query, { allowedSortFields: teamSortFields })
-    const result = await this.admin.listTeams(pagination)
+    const search = typeof query.search === "string" ? query.search.trim() : ""
+    const result = await this.admin.listTeams(pagination, search ? { search } : undefined)
     await this.recordAdminRead(request, {
       action: "admin.teams.list",
       targetType: "team",
       targetId: "list",
-      detail: { page: pagination.page, pageSize: pagination.pageSize },
+      detail: { page: pagination.page, pageSize: pagination.pageSize, search: search || undefined },
     })
     return result
   }

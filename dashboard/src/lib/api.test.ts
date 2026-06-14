@@ -578,6 +578,35 @@ describe('adminApi.devices', () => {
   })
 })
 
+describe('adminApi.teams', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('serializes team search pagination options', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.listTeams({
+      page: 1,
+      pageSize: 20,
+      sortBy: 'name',
+      sortOrder: 'asc',
+      search: '研发',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/teams?page=1&pageSize=20&sortBy=name&sortOrder=asc&search=%E7%A0%94%E5%8F%91',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+})
+
 describe('adminApi.contentStore', () => {
   afterEach(() => {
     vi.restoreAllMocks()

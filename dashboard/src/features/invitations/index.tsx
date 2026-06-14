@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Copy, Loader2, Plus, Trash2 } from 'lucide-react'
-import { adminApi, type AdminInvitationRow, type AdminTeamRow } from '@/lib/api'
+import { Check, Copy, Loader2, Plus, Trash2 } from 'lucide-react'
+import { adminApi, type AdminInvitationRow, type AdminTeamListQuery, type AdminTeamRow } from '@/lib/api'
 import {
   DataTableColumnHeader,
   DEFAULT_DASHBOARD_PAGE_SIZE,
@@ -24,24 +24,23 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { getInvitationTeamsErrorMessage } from './invitation-teams-error'
 
-const INVITATION_TEAM_PAGE_SIZE = 100
+const INVITATION_TEAM_PAGE_SIZE = 20
 
 type CreatedInvite = {
   teamId: string
   inviteUrl: string
 }
 
-type InvitationTeamListFn = (options: {
-  page: number
-  pageSize: number
+type InvitationTeamListFn = (options: AdminTeamListQuery & {
   sortBy: 'name'
   sortOrder: 'asc'
 }) => Promise<{
@@ -50,34 +49,18 @@ type InvitationTeamListFn = (options: {
 }>
 
 export async function listInvitationCreateTeams(
-  listTeams: InvitationTeamListFn = adminApi.listTeams
+  listTeams: InvitationTeamListFn = adminApi.listTeams,
+  search = ''
 ) {
-  const firstPage = await listTeams({
+  const searchQuery = search.trim()
+  const result = await listTeams({
     page: 1,
     pageSize: INVITATION_TEAM_PAGE_SIZE,
     sortBy: 'name',
     sortOrder: 'asc',
+    ...(searchQuery ? { search: searchQuery } : {}),
   })
-  const teams = [...firstPage.data]
-  const seenIds = new Set(teams.map((team) => team.id))
-  const total = Math.max(firstPage.total, teams.length)
-
-  for (let page = 2; teams.length < total; page += 1) {
-    const nextPage = await listTeams({
-      page,
-      pageSize: INVITATION_TEAM_PAGE_SIZE,
-      sortBy: 'name',
-      sortOrder: 'asc',
-    })
-    if (nextPage.data.length === 0) break
-    for (const team of nextPage.data) {
-      if (seenIds.has(team.id)) continue
-      seenIds.add(team.id)
-      teams.push(team)
-    }
-  }
-
-  return teams
+  return result.data
 }
 
 export default function InvitationsPage() {
@@ -85,6 +68,7 @@ export default function InvitationsPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [selectedTeamId, setSelectedTeamId] = useState('')
+  const [teamSearch, setTeamSearch] = useState('')
   const [createdInvite, setCreatedInvite] = useState<CreatedInvite | null>(null)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
@@ -102,10 +86,12 @@ export default function InvitationsPage() {
     error: teamsError,
     isError: isTeamsError,
     isLoading: isTeamsLoading,
+    isFetching: isTeamsFetching,
     refetch: refetchTeams,
   } = useQuery({
-    queryKey: ['admin-teams', 'invitation-create'],
-    queryFn: () => listInvitationCreateTeams(),
+    queryKey: ['admin-teams', 'invitation-create', teamSearch.trim()],
+    queryFn: () => listInvitationCreateTeams(adminApi.listTeams, teamSearch),
+    enabled: isCreateOpen,
   })
 
   const createMutation = useMutation({
@@ -140,13 +126,22 @@ export default function InvitationsPage() {
     setIsCreateOpen(open)
     if (!open) {
       setSelectedTeamId('')
+      setTeamSearch('')
       setCreatedInvite(null)
       createMutation.reset()
     }
   }
 
-  function handleSelectedTeamChange(teamId: string) {
-    setSelectedTeamId(teamId)
+  function handleTeamSearchChange(value: string) {
+    setTeamSearch(value)
+    setSelectedTeamId('')
+    setCreatedInvite(null)
+    createMutation.reset()
+  }
+
+  function handleSelectedTeamChange(team: AdminTeamRow) {
+    setSelectedTeamId(team.id)
+    setTeamSearch(team.name)
     setCreatedInvite(null)
     createMutation.reset()
   }
@@ -261,22 +256,33 @@ export default function InvitationsPage() {
           <div className='space-y-4'>
             <div className='space-y-2'>
               <Label htmlFor='team-id'>团队</Label>
-              <Select
-                value={selectedTeamId}
-                onValueChange={handleSelectedTeamChange}
-                disabled={isTeamsLoading || isTeamsError}
-              >
-                <SelectTrigger id='team-id' className='w-full'>
-                  <SelectValue placeholder={isTeamsLoading ? '加载中' : '选择团队'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(teams ?? []).map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Command shouldFilter={false} className='rounded-md border'>
+                <CommandInput
+                  id='team-id'
+                  value={teamSearch}
+                  onValueChange={handleTeamSearchChange}
+                  placeholder={isTeamsLoading ? '加载中' : '搜索团队'}
+                  disabled={isTeamsError}
+                />
+                <CommandList>
+                  <CommandEmpty>
+                    {isTeamsLoading || isTeamsFetching ? '加载中' : '没有匹配团队'}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {(teams ?? []).map((team) => (
+                      <CommandItem
+                        key={team.id}
+                        value={team.id}
+                        onSelect={() => handleSelectedTeamChange(team)}
+                        className='justify-between'
+                      >
+                        <span>{team.name}</span>
+                        <Check className={team.id === selectedTeamId ? 'opacity-100' : 'opacity-0'} />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
               {isTeamsError ? (
                 <div className='flex items-center justify-between gap-2 text-sm'>
                   <span className='text-destructive'>

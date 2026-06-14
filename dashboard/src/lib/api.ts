@@ -353,6 +353,10 @@ type PaginationOptions = {
   sortOrder?: 'asc' | 'desc'
 }
 
+export type AdminTeamListQuery = PaginationOptions & {
+  search?: string
+}
+
 export type AdminDriveListQuery = PaginationOptions & {
   userId?: string
   type?: AdminDriveItemRow['type']
@@ -808,9 +812,15 @@ export const adminApi = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
-  listTeams: (options: PaginationOptions = {}) =>
+  listTeams: (options: AdminTeamListQuery = {}) =>
     request<PaginatedResponse<AdminTeamRow>>(
-      `${adminApiBasePath}/teams${paginationSuffix(options)}`
+      `${adminApiBasePath}/teams${querySuffix({
+        page: options.page,
+        pageSize: options.pageSize,
+        sortBy: options.sortBy,
+        sortOrder: options.sortOrder,
+        search: options.search,
+      })}`
     ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
