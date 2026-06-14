@@ -28,6 +28,7 @@ import type { ContentStoreFileInput, NormalizedContentStoreFile } from "./conten
 
 const revisionMismatchMessage = "草稿已在其它页面更新，请刷新后继续。"
 const listSortFields = ["createdAt", "updatedAt", "installCount"] as const
+export const defaultContentStoreInstallDeepLinkBase = "synapse://content-install"
 
 export type ContentStoreDraftFileInput = {
   readonly path: string
@@ -551,6 +552,9 @@ export class ContentStoreService {
   }
 
   async createInstallSession(userId: string, itemId: string, deepLinkBase: string): Promise<ContentStoreInstallSessionDto> {
+    const normalizedDeepLinkBase = normalizeContentStoreInstallDeepLinkBase(deepLinkBase)
+    if (!normalizedDeepLinkBase) throw new BadRequestException("安装入口无效。")
+
     const item = await this.prisma.contentStoreItem.findFirst({
       where: {
         id: itemId,
@@ -590,7 +594,7 @@ export class ContentStoreService {
       title: version.title,
       packageSha256: version.packageSha256,
       expiresAt: session.expiresAt.toISOString(),
-      deepLinkUrl: appendSessionToDeepLink(deepLinkBase, session.id),
+      deepLinkUrl: appendSessionToDeepLink(normalizedDeepLinkBase, session.id),
     }
   }
 
@@ -1095,9 +1099,27 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
+export function normalizeContentStoreInstallDeepLinkBase(value: string): string | null {
+  const trimmed = value.trim()
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol !== "synapse:") return null
+    if (url.hostname !== "content-install") return null
+    if (url.username || url.password || url.port) return null
+    if (url.pathname && url.pathname !== "/") return null
+    if (url.search || url.hash) return null
+    return defaultContentStoreInstallDeepLinkBase
+  } catch {
+    return null
+  }
+}
+
 function appendSessionToDeepLink(base: string, sessionId: string): string {
-  const separator = base.includes("?") ? "&" : "?"
-  return `${base}${separator}session=${encodeURIComponent(sessionId)}`
+  const normalizedBase = normalizeContentStoreInstallDeepLinkBase(base)
+  if (!normalizedBase) throw new BadRequestException("安装入口无效。")
+  const url = new URL(normalizedBase)
+  url.searchParams.set("session", sessionId)
+  return url.toString()
 }
 
 function formatOptionalBigInt(value: bigint | number | string | null): string | null {

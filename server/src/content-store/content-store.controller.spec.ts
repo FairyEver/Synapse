@@ -185,14 +185,34 @@ describe("ContentStoreUserController", () => {
     const request = userRequest("user-1")
 
     await controller.createInstallSession("item-1", {}, request)
-    await controller.createInstallSession("item-2", { deepLinkBase: "synapse://custom-install" }, request)
+    await controller.createInstallSession("item-2", { deepLinkBase: "synapse://content-install/" }, request)
     await controller.resolveInstallSession("session-1", request)
     await controller.recordInstall("session-1", { clientInstanceId: "desktop-1" }, request)
 
     expect(service.createInstallSession).toHaveBeenNthCalledWith(1, "user-1", "item-1", "synapse://content-install")
-    expect(service.createInstallSession).toHaveBeenNthCalledWith(2, "user-1", "item-2", "synapse://custom-install")
+    expect(service.createInstallSession).toHaveBeenNthCalledWith(2, "user-1", "item-2", "synapse://content-install")
     expect(service.resolveInstallSession).toHaveBeenCalledWith("user-1", "session-1")
     expect(service.recordInstall).toHaveBeenCalledWith("user-1", "session-1", "desktop-1")
+  })
+
+  it("rejects non-Synapse install deep links", async () => {
+    const service = {
+      createInstallSession: vi.fn(),
+    }
+    const controller = new ContentStoreUserController(service as never)
+    const request = userRequest("user-1")
+
+    for (const deepLinkBase of [
+      "https://evil.example/install",
+      "javascript:alert(1)",
+      "data:text/html,install",
+      "synapse://custom-install",
+      "synapse://content-install?next=https://evil.example",
+    ]) {
+      expect(() => controller.createInstallSession("item-1", { deepLinkBase }, request)).toThrow(BadRequestException)
+    }
+
+    expect(service.createInstallSession).not.toHaveBeenCalled()
   })
 
   it("destroys the response without rethrowing when package streaming fails after writing", async () => {
@@ -318,9 +338,14 @@ describe("ContentStore HTTP routes", () => {
         .post("/api/content-store/drafts")
         .send({ type: "skill", title: "Skill", files: [{ path: "SKILL.md", contentBase64: "not-base64" }] })
         .expect(400)
+      await request(app.getHttpServer())
+        .post("/api/content-store/items/item-1/install-sessions")
+        .send({ deepLinkBase: "https://evil.example/install" })
+        .expect(400)
 
       expect(response.text).toContain("草稿请求无效")
       expect(service.createDraft).not.toHaveBeenCalled()
+      expect(service.createInstallSession).not.toHaveBeenCalled()
     } finally {
       await app.close()
     }

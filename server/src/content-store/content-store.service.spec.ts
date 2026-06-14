@@ -3,7 +3,7 @@ import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { contentStoreSkillMaxFileBytes } from "./content-store.constants"
-import { ContentStoreService } from "./content-store.service"
+import { ContentStoreService, normalizeContentStoreInstallDeepLinkBase } from "./content-store.service"
 import type { ContentStoreStoragePort } from "./content-store-storage"
 
 describe("ContentStoreService", () => {
@@ -488,6 +488,49 @@ describe("ContentStoreService", () => {
     expect(prisma.contentStoreInstallEvent.count).not.toHaveBeenCalled()
     expect(result.data.map((row) => row.id)).toEqual(["item-high", "item-low"])
     expect(result.data.map((row) => row.installCount)).toEqual([3, 1])
+  })
+
+  it("normalizes only supported content install deep links", () => {
+    expect(normalizeContentStoreInstallDeepLinkBase("synapse://content-install")).toBe("synapse://content-install")
+    expect(normalizeContentStoreInstallDeepLinkBase(" synapse://content-install/ ")).toBe("synapse://content-install")
+    expect(normalizeContentStoreInstallDeepLinkBase("https://evil.example/install")).toBeNull()
+    expect(normalizeContentStoreInstallDeepLinkBase("javascript:alert(1)")).toBeNull()
+    expect(normalizeContentStoreInstallDeepLinkBase("data:text/html,install")).toBeNull()
+    expect(normalizeContentStoreInstallDeepLinkBase("synapse://custom-install")).toBeNull()
+    expect(normalizeContentStoreInstallDeepLinkBase("synapse://content-install?next=https://evil.example")).toBeNull()
+  })
+
+  it("creates install sessions with a fixed Synapse install deep link", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      type: "skill",
+      visibility: "public",
+      latestVersionId: "version-1",
+    }))
+    prisma.contentStoreVersion.findFirst.mockResolvedValue(version({
+      id: "version-1",
+      itemId: "item-1",
+      packageKey: "content-store/packages/item-1/version-1.zip",
+      packageSha256: "a".repeat(64),
+      packageSize: 128n,
+    }))
+    prisma.contentStoreInstallSession.create.mockResolvedValue({
+      id: "session-1",
+      expiresAt: new Date("2026-06-09T00:00:00.000Z"),
+    })
+
+    const result = await service.createInstallSession("user-1", "item-1", "synapse://content-install/")
+
+    expect(result.deepLinkUrl).toBe("synapse://content-install?session=session-1")
+  })
+
+  it("rejects unsafe install deep links before creating sessions", async () => {
+    await expect(service.createInstallSession("user-1", "item-1", "https://evil.example/install"))
+      .rejects
+      .toThrow(BadRequestException)
+
+    expect(prisma.contentStoreItem.findFirst).not.toHaveBeenCalled()
+    expect(prisma.contentStoreInstallSession.create).not.toHaveBeenCalled()
   })
 
   it("rejects install sessions for prompt content", async () => {

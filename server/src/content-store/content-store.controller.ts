@@ -7,9 +7,8 @@ import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard
 import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { contentStoreTextMaxBytes } from "./content-store.constants"
-import { ContentStoreService } from "./content-store.service"
+import { ContentStoreService, defaultContentStoreInstallDeepLinkBase, normalizeContentStoreInstallDeepLinkBase } from "./content-store.service"
 
-const defaultInstallDeepLinkBase = "synapse://content-install"
 const listSortFields = ["createdAt", "updatedAt", "installCount"] as const
 
 const contentTypeSchema = z.enum(["skill", "rule", "prompt"])
@@ -86,7 +85,9 @@ const saveDraftSchema = z.discriminatedUnion("type", [
 const publishDraftSchema = z.object({ baseRevision: z.number().int().positive() }).strict()
 const visibilitySchema = z.object({ visibility: visibilityValueSchema }).strict()
 const installSessionSchema = z.object({
-  deepLinkBase: z.string().trim().min(1).max(255).optional(),
+  deepLinkBase: z.string().trim().min(1).max(255)
+    .refine((value) => normalizeContentStoreInstallDeepLinkBase(value) !== null, "安装入口无效。")
+    .optional(),
 }).strict()
 const installCompleteSchema = z.object({ clientInstanceId: z.string().trim().min(1).max(120) }).strict()
 const booleanValueSchema = z.object({ value: z.boolean() }).strict()
@@ -165,7 +166,11 @@ export class ContentStoreUserController {
   @Post("/items/:id/install-sessions")
   createInstallSession(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(installSessionSchema, body ?? {}, "安装请求无效。")
-    return this.service.createInstallSession(request.user!.id, id, parsed.deepLinkBase ?? defaultInstallDeepLinkBase)
+    return this.service.createInstallSession(
+      request.user!.id,
+      id,
+      parsed.deepLinkBase ? normalizeContentStoreInstallDeepLinkBase(parsed.deepLinkBase)! : defaultContentStoreInstallDeepLinkBase,
+    )
   }
 
   @Get("/install-sessions/:id")
