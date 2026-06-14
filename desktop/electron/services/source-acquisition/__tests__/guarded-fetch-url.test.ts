@@ -3,8 +3,13 @@ import { once } from "node:events"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const lookup = vi.hoisted(() => vi.fn())
 const logger = vi.hoisted(() => ({
   warn: vi.fn(),
+}))
+
+vi.mock("node:dns/promises", () => ({
+  lookup,
 }))
 
 vi.mock("../../log-store", () => ({
@@ -15,10 +20,12 @@ import { createGuardedFetchUrl } from "../guarded-fetch-url"
 
 describe("createGuardedFetchUrl", () => {
   beforeEach(() => {
+    lookup.mockReset()
     logger.warn.mockClear()
   })
 
   it("rejects private literal hosts before opening a request", async () => {
+    lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }])
     const fetchUrl = createGuardedFetchUrl()
 
     await expect(fetchUrl("http://127.0.0.1/source", {
@@ -31,7 +38,22 @@ describe("createGuardedFetchUrl", () => {
     })
   })
 
+  it("rejects DNS results in the shared address space", async () => {
+    lookup.mockResolvedValue([{ address: "100.64.0.1", family: 4 }])
+    const fetchUrl = createGuardedFetchUrl()
+
+    await expect(fetchUrl("https://source.example/source", {
+      signal: new AbortController().signal,
+    })).rejects.toThrow("Local and private network URLs are not allowed.")
+    expect(logger.warn).toHaveBeenCalledWith("Guarded URL fetch blocked local or private host.", {
+      url: "https://source.example/source",
+      hostname: "source.example",
+      addresses: ["100.64.0.1"],
+    })
+  })
+
   it("rejects and closes oversized response streams without content-length", async () => {
+    lookup.mockImplementation(async (hostname: string) => [{ address: hostname, family: 4 }])
     let chunksSent = 0
     let responseClosed = false
     const server = http.createServer((_, response) => {

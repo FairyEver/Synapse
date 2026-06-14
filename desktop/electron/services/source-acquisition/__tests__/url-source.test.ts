@@ -106,17 +106,18 @@ describe("acquireUrlSource", () => {
   it("rejects localhost and private URL hosts by default", async () => {
     const fetchUrl = vi.fn<FetchUrl>()
 
-    await expect(acquireUrlSource({
-      url: "http://localhost:3000/a",
-      fetchUrl,
-      now: () => new Date("2026-05-24T00:00:00.000Z"),
-    })).resolves.toMatchObject({ ok: false, code: "local_or_private_host" })
-
-    await expect(acquireUrlSource({
-      url: "https://192.168.0.4/a",
-      fetchUrl,
-      now: () => new Date("2026-05-24T00:00:00.000Z"),
-    })).resolves.toMatchObject({ ok: false, code: "local_or_private_host" })
+    for (const url of [
+      "http://localhost:3000/a",
+      "https://100.64.0.1/a",
+      "https://100.127.255.255/a",
+      "https://192.168.0.4/a",
+    ]) {
+      await expect(acquireUrlSource({
+        url,
+        fetchUrl,
+        now: () => new Date("2026-05-24T00:00:00.000Z"),
+      })).resolves.toMatchObject({ ok: false, code: "local_or_private_host" })
+    }
 
     expect(fetchUrl).not.toHaveBeenCalled()
   })
@@ -127,6 +128,8 @@ describe("acquireUrlSource", () => {
     for (const url of [
       "http://[::ffff:127.0.0.1]/",
       "http://[::ffff:10.0.0.1]/",
+      "http://[::ffff:100.64.0.1]/",
+      "http://[::ffff:100.127.255.255]/",
       "http://[::ffff:172.16.0.1]/",
       "http://[::ffff:172.31.255.255]/",
       "http://[::ffff:192.168.0.1]/",

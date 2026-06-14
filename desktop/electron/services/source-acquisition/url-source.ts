@@ -269,6 +269,7 @@ function isPrivateIpv4(host: string): boolean {
   if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true
   const [first, second] = octets
   if (first === 0 || first === 10 || first === 127) return true
+  if (first === 100 && second >= 64 && second <= 127) return true
   if (first === 169 && second === 254) return true
   if (first === 172 && second >= 16 && second <= 31) return true
   if (first === 192 && second === 168) return true
