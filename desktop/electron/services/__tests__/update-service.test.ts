@@ -179,14 +179,14 @@ describe("UpdateService", () => {
     })
   })
 
-  it("does not handle a stale auto-check result as a manual update", async () => {
+  it("does not start a manual update check while an automatic check is pending", async () => {
     vi.useFakeTimers()
     const { updateService } = await importUpdateService()
-    const staleAutoCheckResolvers: Array<() => void> = []
+    let resolveAutoCheck: (() => void) | undefined
 
     updaterMock.autoUpdater.checkForUpdates
       .mockImplementationOnce(() => new Promise((resolve) => {
-        staleAutoCheckResolvers.push(() => {
+        resolveAutoCheck = () => {
           updaterMock.autoUpdater.emit("update-available", {
             version: "0.2.50",
             files: [{ url: "Synapse-0.2.50-mac-arm64.zip" }],
@@ -196,30 +196,22 @@ describe("UpdateService", () => {
             updateInfo: { version: "0.2.50" },
             versionInfo: { version: "0.2.50" },
           })
-        })
-      }))
-      .mockImplementationOnce(async () => {
-        updaterMock.autoUpdater.emit("checking-for-update")
-        updaterMock.autoUpdater.emit("update-not-available", { version: "0.2.28" })
-        return {
-          isUpdateAvailable: false,
-          updateInfo: { version: "0.2.28" },
-          versionInfo: { version: "0.2.28" },
         }
-      })
+      }))
 
     updateService.startAutoCheck()
     await vi.advanceTimersByTimeAsync(60_000)
-    expect(staleAutoCheckResolvers.length).toBeGreaterThan(0)
+    expect(resolveAutoCheck).toBeTypeOf("function")
 
     const manualState = await updateService.checkForUpdates()
-    expect(manualState.status).toBe("not-available")
+    expect(manualState.status).toBe("idle")
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
 
-    staleAutoCheckResolvers[0]?.()
+    resolveAutoCheck?.()
     await Promise.resolve()
 
     expect(updaterMock.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
-    expect(updateService.getState().status).toBe("not-available")
+    expect(updateService.getState().status).toBe("idle")
   })
 
   it("keeps automatic update check failures out of visible update state", async () => {

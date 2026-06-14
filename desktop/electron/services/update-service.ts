@@ -292,6 +292,7 @@ class UpdateService {
       || this.state.status === "available"
       || this.state.status === "downloading"
       || this.state.status === "downloaded"
+      || this.activeUpdateMode !== null
     ) {
       return this.getState()
     }
