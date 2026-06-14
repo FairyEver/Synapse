@@ -111,6 +111,7 @@ export class ContentStoreInstallService {
   private readonly prepareBySession = new Map<string, Promise<SynapseContentStoreInstallPrepareResult>>()
   private readonly installedSourceIds = new Set<string>()
   private readonly installingSourceIds = new Set<string>()
+  private readonly releaseAfterInstallSourceIds = new Set<string>()
 
   constructor(deps: ContentStoreInstallServiceDeps = {}) {
     this.account = deps.accountService ?? accountService
@@ -193,6 +194,7 @@ export class ContentStoreInstallService {
     this.preparedById.delete(sourceId)
     this.installedSourceIds.delete(sourceId)
     this.installingSourceIds.delete(sourceId)
+    this.releaseAfterInstallSourceIds.delete(sourceId)
     if (!prepared) return
     await rm(prepared.directoryPath, { force: true, recursive: true }).catch((error) => {
       logger.warn("Failed to clean content store install temporary directory.", {
@@ -208,7 +210,11 @@ export class ContentStoreInstallService {
       await pending.catch(() => undefined)
     }
     const sourceId = this.sourceIdBySession.get(sessionId)
-    if (!sourceId || this.installingSourceIds.has(sourceId)) return
+    if (!sourceId) return
+    if (this.installingSourceIds.has(sourceId)) {
+      this.releaseAfterInstallSourceIds.add(sourceId)
+      return
+    }
     await this.release(sessionId)
   }
 
@@ -305,8 +311,11 @@ export class ContentStoreInstallService {
   }
 
   async endPreparedInstall(sourceId: string, contentId: string): Promise<void> {
-    this.requirePrepared(sourceId, contentId)
+    const prepared = this.requirePrepared(sourceId, contentId)
     this.installingSourceIds.delete(sourceId)
+    if (this.releaseAfterInstallSourceIds.has(sourceId)) {
+      await this.release(prepared.sessionId)
+    }
   }
 
   private async prepareNew(sessionId: string): Promise<SynapseContentStoreInstallPrepareResult> {

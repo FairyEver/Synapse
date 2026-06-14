@@ -332,6 +332,43 @@ describe("ContentStoreInstallService", () => {
       "prepared source is unavailable",
     )
   })
+
+  it("releases a prepared package after an in-flight install window is closed", async () => {
+    const packageBytes = createPackage()
+    const tempRoot = await createTempRoot()
+    const service = new ContentStoreInstallService({
+      accountService: createAccount({
+        responses: [
+          jsonResponse(createResolvedSession(packageBytes)),
+          chunkedResponse(packageBytes),
+        ],
+      }),
+      clientIdStore: { getOrCreate: vi.fn() },
+      createId: () => "prepared-1",
+      tempRoot,
+    })
+
+    await expect(service.prepare("session-1")).resolves.toMatchObject({
+      status: "prepared",
+      source: { id: "prepared-1" },
+    })
+    await expect(readdir(tempRoot)).resolves.toHaveLength(1)
+
+    await service.beginPreparedInstall("prepared-1", "content-1")
+    await service.cleanupIfIdle("session-1")
+
+    await expect(readdir(tempRoot)).resolves.toHaveLength(1)
+    await expect(service.readPreparedSkill("prepared-1", "content-1")).resolves.toMatchObject({
+      id: "content-1",
+    })
+
+    await service.endPreparedInstall("prepared-1", "content-1")
+
+    await expect(readdir(tempRoot)).resolves.toEqual([])
+    await expect(service.readPreparedSkill("prepared-1", "content-1")).rejects.toThrow(
+      "prepared source is unavailable",
+    )
+  })
 })
 
 function createAccount(input: {
