@@ -116,7 +116,7 @@ vi .env
 
 vi 基本操作：按 `i` 进入编辑模式，改完后按 `Esc`，输入 `:wq` 回车保存退出。
 
-把文件内容改成下面这样（替换所有中文提示部分）：
+把文件内容改成下面这样（替换所有中文提示部分）。数据库密码可用 `openssl rand -base64 32` 生成，不要使用文档里的占位文字：
 
 ```env
 # 数据库身份；已有数据卷不要随意改用户和库名
@@ -124,8 +124,8 @@ POSTGRES_USER=synapse
 POSTGRES_DB=synapse
 
 # 数据库密码
-POSTGRES_PASSWORD=Abc123456789
-DATABASE_URL=postgresql://synapse:Abc123456789@postgres:5432/synapse
+POSTGRES_PASSWORD=粘贴随机生成的数据库密码
+DATABASE_URL=postgresql://synapse:同一个数据库密码@postgres:5432/synapse
 
 # 管理员账号（密码至少 12 位）
 ADMIN_EMAIL=你的邮箱@example.com
