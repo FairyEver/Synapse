@@ -9,6 +9,7 @@ import {
   coreConfigSchema,
   createDataRepository,
   type CoreConfigV1,
+  type DataNamespace,
 } from "../index"
 
 const tempDir = () => mkdtemp(path.join(tmpdir(), "synapse-repo-"))
@@ -362,6 +363,45 @@ describe("DataRepositoryImpl (T2.13)", () => {
     }
   })
 
+  it("importAll() restores removed items when replace deletion fails midway", async () => {
+    type TestItem = { id: string; name: string }
+    const repo = createDataRepository()
+    const fakeSchema = {
+      name: "replace-test",
+      backend: "json" as const,
+      currentVersion: 1,
+      migrations: [],
+      validate: (v: unknown): v is TestItem =>
+        typeof v === "object"
+        && v !== null
+        && typeof (v as { id?: string }).id === "string"
+        && typeof (v as { name?: string }).name === "string",
+    }
+    const handle = createMidwayRemoveFailureHandle<TestItem>([
+      { id: "old-1", name: "Old 1" },
+      { id: "old-2", name: "Old 2" },
+    ], "old-2")
+    repo.register(fakeSchema, handle)
+
+    await expect(repo.importAll({
+      format: "synapse-backup-v1",
+      exportedAt: "2026-04-25T00:00:00Z",
+      namespaces: [{
+        name: "replace-test",
+        schemaVersion: 1,
+        encrypted: false,
+        data: {
+          items: [{ id: "new-1", name: "New 1" }],
+        },
+      }],
+    })).rejects.toThrow("remove failed")
+
+    expect((await handle.list()).sort((left, right) => left.id.localeCompare(right.id))).toEqual([
+      { id: "old-1", name: "Old 1" },
+      { id: "old-2", name: "Old 2" },
+    ])
+  })
+
   it("register() rejects duplicates", () => {
     const repo = createDataRepository()
     const fakeSchema = {
@@ -447,3 +487,28 @@ describe("DataRepositoryImpl (T2.13)", () => {
     }
   })
 })
+
+function createMidwayRemoveFailureHandle<T extends { id: string }>(
+  initialItems: T[],
+  failRemoveId: string,
+): DataNamespace<T> {
+  let items = [...initialItems]
+  return {
+    name: "replace-test",
+    schemaVersion: 1,
+    backend: "json",
+    getSingleton: async () => null,
+    setSingleton: async () => {},
+    list: async () => [...items],
+    get: async (id) => items.find((item) => item.id === id) ?? null,
+    upsert: async (item) => {
+      items = items.filter((existing) => existing.id !== item.id)
+      items.push(item)
+    },
+    remove: async (id) => {
+      if (id === failRemoveId) throw new Error("remove failed")
+      items = items.filter((item) => item.id !== id)
+    },
+    onChange: () => () => {},
+  }
+}

@@ -111,24 +111,28 @@ export class DataRepositoryImpl implements DataRepository {
           || data.singleton === null
 
         const existing = snapshot
-        for (const item of existing) {
-          const id = (item as { id?: string }).id
-          if (typeof id === "string") {
-            await entry.handle.remove(id)
-          }
-        }
+        const removedItems: unknown[] = []
 
         try {
+          for (const item of existing) {
+            const id = (item as { id?: string }).id
+            if (typeof id === "string") {
+              await entry.handle.remove(id)
+              removedItems.push(item)
+            }
+          }
           if (shouldClearSingleton) {
             await this.clearNamespaceSingleton(entry)
           }
           await this.importNamespaceData(entry, data)
         } catch (err) {
           // Restore from snapshot to prevent data loss.
-          for (const item of snapshot) {
-            const id = (item as { id?: string }).id
-            if (typeof id === "string") {
-              await entry.handle.upsert(item as never)
+          if (removedItems.length > 0) {
+            for (const item of snapshot) {
+              const id = (item as { id?: string }).id
+              if (typeof id === "string") {
+                await entry.handle.upsert(item as never)
+              }
             }
           }
           if (singletonSnapshot !== null) {
