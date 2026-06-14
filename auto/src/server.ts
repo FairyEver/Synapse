@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { execFile } from 'child_process'
+import { randomBytes } from 'crypto'
 import { readFile } from 'fs/promises'
 import { extname, isAbsolute, join, normalize, relative, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -14,6 +15,7 @@ const WEB_DIR = resolve(__dirname, '../dist/web')
 const GUIDE_PATH = resolve(__dirname, '../GUIDE.md')
 const DEFAULT_PORT = 47831
 const MAX_JSON_BODY_BYTES = 1024 * 1024
+const CSRF_HEADER = 'x-auto-csrf-token'
 
 export class OutputBuffer {
   private lines = new Map<string, OutputLine[]>()
@@ -158,16 +160,74 @@ function openBrowser(url: string): void {
 }
 
 interface HandlerPaths extends PromptLibraryPaths {
+  allowedOrigins?: string[]
   configPath?: string
   guidePath?: string
   promptPath?: string
   webDir?: string
 }
 
+function isApiMutation(method: string | undefined, pathname: string): boolean {
+  return pathname.startsWith('/api/') && method !== 'GET' && method !== 'HEAD'
+}
+
+function assertJsonContentType(req: IncomingMessage): void {
+  const header = req.headers['content-type']
+  const value = Array.isArray(header) ? header[0] : header
+  const mediaType = value?.split(';', 1)[0]?.trim().toLowerCase()
+  if (mediaType !== 'application/json') {
+    throw new HttpError(415, 'Content-Type must be application/json')
+  }
+}
+
+function assertSameOrigin(req: IncomingMessage, allowedOrigins: string[] = []): void {
+  const host = req.headers.host
+  const expectedOrigin = host ? `http://${host}` : null
+  const allowed = new Set([
+    ...(expectedOrigin ? [expectedOrigin] : []),
+    ...allowedOrigins,
+  ])
+  const origin = req.headers.origin
+  const originValue = Array.isArray(origin) ? origin[0] : origin
+  if (originValue && !allowed.has(originValue)) {
+    throw new HttpError(403, 'Cross-origin request rejected')
+  }
+
+  const referer = req.headers.referer
+  const refererValue = Array.isArray(referer) ? referer[0] : referer
+  if (!originValue && refererValue) {
+    try {
+      const refererOrigin = new URL(refererValue).origin
+      if (!allowed.has(refererOrigin)) {
+        throw new HttpError(403, 'Cross-origin request rejected')
+      }
+    } catch (error) {
+      if (error instanceof HttpError) throw error
+      throw new HttpError(403, 'Cross-origin request rejected')
+    }
+  }
+}
+
+function assertCsrfToken(req: IncomingMessage, csrfToken: string): void {
+  const header = req.headers[CSRF_HEADER]
+  const value = Array.isArray(header) ? header[0] : header
+  if (value !== csrfToken) {
+    throw new HttpError(403, 'CSRF token required')
+  }
+}
+
 export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuffer, paths: HandlerPaths = {}) {
+  const csrfToken = randomBytes(32).toString('base64url')
+
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+
+      if (isApiMutation(req.method, url.pathname)) {
+        assertJsonContentType(req)
+        assertSameOrigin(req, paths.allowedOrigins)
+        assertCsrfToken(req, csrfToken)
+      }
 
       if (req.method === 'GET' && url.pathname === '/') {
         await serveFile(res, join(paths.webDir ?? WEB_DIR, 'index.html'))
@@ -186,6 +246,11 @@ export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuff
 
       if (req.method === 'GET' && url.pathname === '/api/guide') {
         sendJson(res, 200, { content: await readFile(paths.guidePath ?? GUIDE_PATH, 'utf-8') })
+        return
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/csrf-token') {
+        sendJson(res, 200, { token: csrfToken })
         return
       }
 

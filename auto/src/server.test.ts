@@ -17,9 +17,21 @@ async function listen(server: Server): Promise<string> {
 }
 
 async function requestJson(baseUrl: string, path: string, options: RequestInit = {}): Promise<unknown> {
+  const method = (options.method ?? 'GET').toUpperCase()
+  const headers = new Headers({ 'content-type': 'application/json' })
+  if (method !== 'GET' && method !== 'HEAD') {
+    const tokenResponse = await fetch(`${baseUrl}/api/csrf-token`)
+    assert.equal(tokenResponse.status, 200)
+    const tokenBody = record(await tokenResponse.json())
+    assert.equal(typeof tokenBody.token, 'string')
+    headers.set('x-auto-csrf-token', tokenBody.token as string)
+  }
+  for (const [key, value] of new Headers(options.headers).entries()) {
+    headers.set(key, value)
+  }
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: { 'content-type': 'application/json' },
     ...options,
+    headers,
   })
   const body = await response.json()
   if (!response.ok) throw new Error(JSON.stringify(body))
@@ -144,10 +156,12 @@ test('JSON endpoints reject oversized request bodies', async () => {
   try {
     await mkdir(join(dir, 'prompts'), { recursive: true })
     const baseUrl = await listen(server)
+    const token = record(await requestJson(baseUrl, '/api/csrf-token')).token
+    assert.equal(typeof token, 'string')
     const oversizedPrompt = 'x'.repeat(1024 * 1024 + 1)
     const response = await fetch(`${baseUrl}/api/config`, {
       method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-auto-csrf-token': token as string },
       body: JSON.stringify({ prompt: oversizedPrompt }),
     })
 
@@ -157,6 +171,67 @@ test('JSON endpoints reject oversized request bodies', async () => {
 
     const config = record(await requestJson(baseUrl, '/api/config'))
     assert.notEqual(config.prompt, oversizedPrompt)
+  } finally {
+    server.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('mutable API rejects missing CSRF token, cross-origin requests, and non-JSON bodies', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
+  let startCount = 0
+  const scheduler = {
+    start: async () => {
+      startCount += 1
+    },
+    getSnapshot: () => ({ running: false }),
+  } as unknown as AutoScheduler
+  const server = createServer(createHandler(scheduler, new OutputBuffer(), {
+    configPath: join(dir, 'ui-config.json'),
+    promptPath: join(dir, 'prompt.md'),
+    promptsDir: join(dir, 'prompts'),
+  }))
+  try {
+    await mkdir(join(dir, 'prompts'), { recursive: true })
+    const baseUrl = await listen(server)
+    const config = record(await requestJson(baseUrl, '/api/config'))
+    const token = record(await requestJson(baseUrl, '/api/csrf-token')).token
+    assert.equal(typeof token, 'string')
+
+    const missingToken = await fetch(`${baseUrl}/api/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(config),
+    })
+    assert.equal(missingToken.status, 403)
+
+    const crossOrigin = await fetch(`${baseUrl}/api/start`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'https://example.test',
+        'x-auto-csrf-token': token as string,
+      },
+      body: JSON.stringify(config),
+    })
+    assert.equal(crossOrigin.status, 403)
+
+    const textPlain = await fetch(`${baseUrl}/api/start`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain',
+        'x-auto-csrf-token': token as string,
+      },
+      body: JSON.stringify(config),
+    })
+    assert.equal(textPlain.status, 415)
+
+    await requestJson(baseUrl, '/api/start', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    })
+
+    assert.equal(startCount, 1)
   } finally {
     server.close()
     await rm(dir, { recursive: true, force: true })
