@@ -183,7 +183,7 @@ export class BackupService {
 
       return result
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = formatAuditError(error)
       this.logger.error({ error: message }, "Backup failed")
       return {
         filename,

@@ -575,6 +575,32 @@ describe("BackupService", () => {
     expect(result.error).toBe("drive manifest failed")
   })
 
+  it("redacts sensitive failed backup errors before returning the result", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({
+      putObject: vi.fn((_options, callback) => callback(null)),
+      getBucket: vi.fn((_options, callback) => callback(null, { Contents: [] })),
+    }, logger)
+    vi.spyOn(service as unknown as { dumpDatabase(): Promise<string> }, "dumpDatabase")
+      .mockImplementation(async () => {
+        const dumpPath = path.join(os.tmpdir(), `database-${Date.now()}.sql.gz`)
+        fs.writeFileSync(dumpPath, "database", "utf8")
+        return dumpPath
+      })
+    vi.spyOn(service as unknown as { dumpPostgresGlobals(filePath: string): Promise<void> }, "dumpPostgresGlobals")
+      .mockRejectedValue(new Error("backup failed token=plain-token https://user:password@internal.example.com/bucket/key /Users/liyang/private/backup.sql"))
+
+    const result = await service.performBackup()
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("token=[REDACTED]")
+    expect(result.error).toContain("[URL]")
+    expect(result.error).toContain("[PATH]")
+    expect(result.error).not.toContain("plain-token")
+    expect(result.error).not.toContain("user:password")
+    expect(logger.error).toHaveBeenCalledWith({ error: result.error }, "Backup failed")
+  })
+
   it("returns a COS object stream for backup downloads", () => {
     const stream = Readable.from(["backup"])
     const getObjectStream = vi.fn().mockReturnValue(stream)

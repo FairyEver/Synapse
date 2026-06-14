@@ -20,7 +20,7 @@ export class BackupController {
     const result = await this.backupService.performBackup()
     if (result.status === "failed") {
       throw Object.assign(
-        new InternalServerErrorException(result.error ? `备份失败：${result.error}` : "备份失败。"),
+        new InternalServerErrorException("备份失败，请检查服务器日志或备份配置。"),
         { filename: result.filename },
       )
     }

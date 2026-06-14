@@ -26,15 +26,19 @@ describe("BackupController", () => {
         size: 0,
         uploadedAt: "2026-05-22T00:00:00.000Z",
         status: "failed",
-        error: "COS 未配置",
+        error: "COS failed token=plain-token https://user:password@internal.example.com/bucket/key",
       }),
     }
     const controller = new BackupController(service as unknown as BackupService)
 
-    await expect(controller.triggerBackup()).rejects.toMatchObject({
-      message: "备份失败：COS 未配置",
+    const error = await controller.triggerBackup().catch((caught: unknown) => caught)
+
+    expect(error).toMatchObject({
+      message: "备份失败，请检查服务器日志或备份配置。",
       filename: "synapse-backup.tar.gz",
     })
+    expect(JSON.stringify(error)).not.toContain("plain-token")
+    expect(JSON.stringify(error)).not.toContain("user:password")
   })
 
   it("sends backup downloads as attachments", async () => {
