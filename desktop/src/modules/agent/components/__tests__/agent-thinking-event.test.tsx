@@ -40,6 +40,9 @@ const profile: SynapseAgentDisplayProfile = {
     denied: "Denied",
   },
 }
+const sensitiveThinkingContent =
+  "Authorization: Bearer sk-live-bearer ANTHROPIC_AUTH_TOKEN=sk-live-secret " +
+  '{"token":"data-server-token"} Cookie: session=secret-cookie /Users/liyang/project/file.ts'
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -119,6 +122,61 @@ describe("AgentThinkingEvent", () => {
 
     expect(viewport).toBeNull()
     expect(html).not.toContain("max-h-60")
+  })
+
+  it("redacts sensitive thinking content before rendering", () => {
+    const html = renderToStaticMarkup(<AgentThinkingEvent
+      item={{
+        id: "thinking-redacted",
+        kind: "thinking",
+        timestamp: "2026-05-13T00:00:00.000Z",
+        content: sensitiveThinkingContent,
+      }}
+      profile={{ ...profile, thinkingDefaultCollapsed: false }}
+    />)
+
+    expect(html).toContain("[redacted]")
+    expect(html).toContain("/Users/liyang/project/file.ts")
+    expect(html).not.toContain("sk-live-bearer")
+    expect(html).not.toContain("sk-live-secret")
+    expect(html).not.toContain("data-server-token")
+    expect(html).not.toContain("secret-cookie")
+  })
+
+  it("copies redacted thinking content", async () => {
+    vi.mocked(window.navigator.clipboard.writeText).mockResolvedValue(undefined)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentThinkingEvent
+        item={{
+          id: "thinking-copy-redacted",
+          kind: "thinking",
+          timestamp: "2026-05-13T00:00:00.000Z",
+          content: sensitiveThinkingContent,
+        }}
+        profile={{ ...profile, thinkingDefaultCollapsed: false }}
+      />)
+    })
+
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="复制思考过程"]')
+    expect(button).not.toBeNull()
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const copied = vi.mocked(window.navigator.clipboard.writeText).mock.calls[0]?.[0] ?? ""
+    expect(copied).toContain("[redacted]")
+    expect(copied).toContain("/Users/liyang/project/file.ts")
+    expect(copied).not.toContain("sk-live-bearer")
+    expect(copied).not.toContain("sk-live-secret")
+    expect(copied).not.toContain("data-server-token")
+    expect(copied).not.toContain("secret-cookie")
   })
 
   it("logs thinking copy failures without recording thinking content", async () => {

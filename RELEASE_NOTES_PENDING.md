@@ -67,6 +67,7 @@
 - 工作流 HTTP 节点、定时 HTTP 请求和 HTTP 测试现在统一处理无协议 URL，默认按 `https://` 发送。
 - 工作流 HTTP 请求节点保存时会正确拦截空 URL，不再等到运行时才报 URL 解析失败。
 - Usage Analysis 读取 Claude Code 对话时，非对象 JSON 行的解析错误也会先脱敏再展示，避免 token、Authorization 等敏感内容出现在详情里。
+- Agent 思考过程面板和复制内容会先脱敏，避免 token、Authorization、Cookie 等敏感值进入界面或剪贴板。
 - 自动化和工作流编辑器关闭未保存内容时，只显示 Synapse 自定义确认框，不再叠加系统原生离开页面提示。
 - 工作流 Script 节点会在所选项目目录中执行，缺少项目或项目不可用时会明确停止，不再默认跑到用户 Home 目录。
 - 工作流 Script 节点新建后不再强制默认 POSIX shell；Windows 上未手动选择 shell 时会使用系统默认的 cmd，避免默认运行就找不到 `sh`。

@@ -3,6 +3,7 @@ import { Check, ChevronDown, Clipboard, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { redactSensitiveText } from "@/lib/agent-redaction"
 import { track } from "@/lib/ui-tracking"
 import {
   Collapsible,
@@ -25,6 +26,7 @@ function AgentThinkingEvent({
   readonly item: SynapseAgentThinkingTimelineItem
   readonly profile: SynapseAgentDisplayProfile
 }) {
+  const redactedContent = redactSensitiveText(item.content)
   const handleCopy = () => {
     track({
       component: "agent",
@@ -36,7 +38,7 @@ function AgentThinkingEvent({
         contentLength: item.content.length,
       },
     })
-    void navigator.clipboard.writeText(item.content).then(() => {
+    void navigator.clipboard.writeText(redactedContent).then(() => {
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
       setCopyState("success")
       copyTimerRef.current = setTimeout(() => {
@@ -91,7 +93,7 @@ function AgentThinkingEvent({
           <div className="group relative pb-2 pt-1">
             <div className="rounded bg-muted/50 px-2 py-1.5">
               <pre data-allow-select="true" className="whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">
-                {item.content}
+                {redactedContent}
               </pre>
             </div>
             <Button
