@@ -1368,6 +1368,12 @@ describe("DriveModule", () => {
       createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" }),
       createDrivePublication({ id: "pub-row-2", name: "site", type: "site", publishId: "pub_site", url: "https://synapse.test/sites/pub_site/" }),
       createDrivePublication({ id: "pub-row-3", name: "deleted.html", sourceDeleted: true }),
+      createDrivePublication({
+        currentDeploymentId: null,
+        id: "pub-row-4",
+        name: "cancelled.html",
+        status: "disabled",
+      }),
     ])
     await render(<DriveModule />)
     await flushAct()
@@ -1391,8 +1397,16 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("来源正常")
     expect(document.body.textContent).toContain("deleted.html")
     expect(document.body.textContent).toContain("来源已删除")
+    expect(document.body.textContent).toContain("cancelled.html")
+    expect(document.body.textContent).toContain("已取消")
+    expect(queryButtonByLabel("复制 deleted.html")).not.toBeNull()
     expect(queryButtonByLabel("重新发布 deleted.html")).toBeNull()
     expect(queryButtonByLabel("打开 deleted.html")).toBeNull()
+    expect(queryButtonByLabel("复制 cancelled.html")).toBeNull()
+    expect(queryButtonByLabel("复制 cancelled.html 密码")).toBeNull()
+    expect(queryButtonByLabel("打开 cancelled.html")).toBeNull()
+    expect(queryButtonByLabel("重新发布 cancelled.html")).toBeNull()
+    expect(queryButtonByLabel("取消发布 cancelled.html")).toBeNull()
 
     await clickButtonByLabel("复制 report.html")
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/pages/pub_test?password=AbC234xy")

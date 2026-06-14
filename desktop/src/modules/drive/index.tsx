@@ -1839,16 +1839,19 @@ function DrivePublicationActions({
   readonly onReload: () => Promise<void>
 }) {
   const password = item.password
+  const active = item.status === "active"
   return (
     <div className="flex items-center justify-end gap-0.5">
-      <DriveIconAction
-        label={`复制 ${item.name}`}
-        tooltip="复制链接"
-        onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
-      >
-        <Copy />
-      </DriveIconAction>
-      {password ? (
+      {active ? (
+        <DriveIconAction
+          label={`复制 ${item.name}`}
+          tooltip="复制链接"
+          onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
+        >
+          <Copy />
+        </DriveIconAction>
+      ) : null}
+      {active && password ? (
         <DriveIconAction
           label={`复制 ${item.name} 密码`}
           tooltip="复制密码"
@@ -1857,7 +1860,7 @@ function DrivePublicationActions({
           <KeyRound />
         </DriveIconAction>
       ) : null}
-      {item.status === "active" && !item.sourceDeleted ? (
+      {active && !item.sourceDeleted ? (
         <DriveIconAction
           label={`打开 ${item.name}`}
           tooltip="打开"
@@ -1866,7 +1869,7 @@ function DrivePublicationActions({
           <ExternalLink />
         </DriveIconAction>
       ) : null}
-      {item.status === "active" && !item.sourceDeleted ? (
+      {active && !item.sourceDeleted ? (
         <DriveIconAction
           label={`重新发布 ${item.name}`}
           tooltip="重新发布"
@@ -1875,7 +1878,7 @@ function DrivePublicationActions({
           <RotateCw />
         </DriveIconAction>
       ) : null}
-      {item.status === "active" ? (
+      {active ? (
         <DriveIconAction
           label={`取消发布 ${item.name}`}
           tooltip="取消发布"
