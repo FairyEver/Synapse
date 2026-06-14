@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -666,6 +666,78 @@ describe("KnowledgeBaseService", () => {
     }
     expect(manifest.sources).toEqual({
       ".raw/keep.md": { hash: "hash-keep" },
+    })
+  })
+
+  it("rolls back moved raw entries when manifest sync fails", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    const rawRoot = path.join(projectPath, ".raw")
+    await mkdir(path.join(rawRoot, "client-a"), { recursive: true })
+    await mkdir(path.join(rawRoot, "archive"), { recursive: true })
+    await writeFile(path.join(rawRoot, "client-a", "brief.md"), "alpha\n")
+    await writeFile(path.join(rawRoot, ".manifest.json"), JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/client-a/brief.md": { hash: "hash-brief" },
+      },
+      address_map: {},
+    }, null, 2) + "\n")
+
+    await chmod(rawRoot, 0o555)
+    try {
+      await expect(service.moveRawEntries({
+        projectId,
+        relativePaths: ["client-a/brief.md"],
+        targetDirectoryPath: "archive",
+      })).rejects.toBeDefined()
+    } finally {
+      await chmod(rawRoot, 0o755)
+    }
+
+    await expect(readFile(path.join(rawRoot, "client-a", "brief.md"), "utf8")).resolves.toBe("alpha\n")
+    await expect(readFile(path.join(rawRoot, "archive", "brief.md"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" })
+    const manifest = JSON.parse(await readFile(path.join(rawRoot, ".manifest.json"), "utf8")) as {
+      sources: Record<string, unknown>
+    }
+    expect(manifest.sources).toEqual({
+      ".raw/client-a/brief.md": { hash: "hash-brief" },
+    })
+  })
+
+  it("blocks trashing manifest-tracked raw entries when manifest cannot be written", async () => {
+    const trashItem = vi.fn(async () => undefined)
+    const { projectId, projectPath, service } = await managedFixture({
+      rawFileManager: new KnowledgeBaseRawFileManager({ trashItem }),
+    })
+    const rawRoot = path.join(projectPath, ".raw")
+    await mkdir(path.join(rawRoot, "folder"), { recursive: true })
+    await writeFile(path.join(rawRoot, "folder", "brief.md"), "alpha\n")
+    await writeFile(path.join(rawRoot, ".manifest.json"), JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/folder/brief.md": { hash: "hash-brief" },
+      },
+      address_map: {},
+    }, null, 2) + "\n")
+
+    await chmod(rawRoot, 0o555)
+    try {
+      await expect(service.trashRawEntries({
+        projectId,
+        relativePaths: ["folder/brief.md"],
+      })).rejects.toBeDefined()
+    } finally {
+      await chmod(rawRoot, 0o755)
+    }
+
+    expect(trashItem).not.toHaveBeenCalled()
+    await expect(readFile(path.join(rawRoot, "folder", "brief.md"), "utf8")).resolves.toBe("alpha\n")
+    const manifest = JSON.parse(await readFile(path.join(rawRoot, ".manifest.json"), "utf8")) as {
+      sources: Record<string, unknown>
+    }
+    expect(manifest.sources).toEqual({
+      ".raw/folder/brief.md": { hash: "hash-brief" },
     })
   })
 

@@ -1,7 +1,7 @@
 import { app, shell } from "electron"
 import { constants, existsSync } from "node:fs"
 import type { Dirent } from "node:fs"
-import { access, copyFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
@@ -308,13 +308,20 @@ export class KnowledgeBaseService {
   async renameRawEntry(payload: SynapseKnowledgeBaseRenameRawEntryPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
+    const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "renameRawEntry")
     const entry = await this.rawFileManager.renameEntry(rawRoot, payload.relativePath, payload.newName)
     const result = { entries: [entry], skipped: [] }
-    await this.syncManifestAfterRawMutation(projectPath, payload.projectId, "renameRawEntry", [{
+    const changes = [{
       from: payload.relativePath,
       to: entry.relativePath,
       kind: entry.kind,
-    }])
+    }]
+    try {
+      await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "renameRawEntry", changes)
+    } catch (error) {
+      await this.rollbackRawPathChanges(projectPath, payload.projectId, "renameRawEntry", changes, error)
+      throw error
+    }
     this.recordRawMutation("renameRawEntry", payload.projectId, result, {
       rawNewName: payload.newName,
       rawRelativePaths: [payload.relativePath],
@@ -325,6 +332,7 @@ export class KnowledgeBaseService {
   async moveRawEntries(payload: SynapseKnowledgeBaseMoveRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
+    const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "moveRawEntries")
     const result = await this.rawFileManager.moveEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
     const movedEntriesByPath = new Map(result.entries.map((entry) => [entry.relativePath, entry]))
     const changes = payload.relativePaths.flatMap((relativePath) => {
@@ -332,7 +340,12 @@ export class KnowledgeBaseService {
       const entry = movedEntriesByPath.get(targetRelativePath)
       return entry ? [{ from: relativePath, to: entry.relativePath, kind: entry.kind }] : []
     })
-    await this.syncManifestAfterRawMutation(projectPath, payload.projectId, "moveRawEntries", changes)
+    try {
+      await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "moveRawEntries", changes)
+    } catch (error) {
+      await this.rollbackRawPathChanges(projectPath, payload.projectId, "moveRawEntries", changes, error)
+      throw error
+    }
     this.recordRawMutation("moveRawEntries", payload.projectId, result, {
       rawRelativePaths: payload.relativePaths,
       rawTargetDirectoryPath: payload.targetDirectoryPath,
@@ -343,8 +356,10 @@ export class KnowledgeBaseService {
   async trashRawEntries(payload: SynapseKnowledgeBaseTrashRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
+    const manifestSync = await this.prepareRawManifestSync(projectPath, payload.projectId, "trashRawEntries")
+    await this.preflightRawManifestWrite(manifestSync, projectPath, payload.projectId, "trashRawEntries", payload.relativePaths)
     const result = await this.rawFileManager.trashEntries(rawRoot, payload.relativePaths)
-    await this.syncManifestAfterRawMutation(projectPath, payload.projectId, "trashRawEntries", result.entries.map((entry) => ({
+    await this.syncPreparedRawManifestMutation(manifestSync, projectPath, payload.projectId, "trashRawEntries", result.entries.map((entry) => ({
       from: entry.relativePath,
       kind: entry.kind,
     })))
@@ -380,31 +395,91 @@ export class KnowledgeBaseService {
     })
   }
 
-  private async syncManifestAfterRawMutation(
+  private async prepareRawManifestSync(
+    projectPath: string,
+    projectId: string,
+    operation: string,
+  ): Promise<KnowledgeBaseManifest | null> {
+    const manifestResult = await readKnowledgeBaseManifest(projectPath)
+    if (manifestResult.status === "missing") return null
+    if (manifestResult.status === "invalid") {
+      logger.warn("Knowledge Base raw mutation blocked because manifest is invalid.", {
+        operation,
+        projectId,
+        ...knowledgeBaseErrorMeta(manifestResult.error),
+      })
+      throw new Error("知识库资料清单无效，请修复 .raw/.manifest.json 后重试。")
+    }
+    return manifestResult.manifest
+  }
+
+  private async syncPreparedRawManifestMutation(
+    manifest: KnowledgeBaseManifest | null,
     projectPath: string,
     projectId: string,
     operation: string,
     changes: readonly RawManifestChange[],
   ): Promise<void> {
     if (changes.length === 0) return
-    const manifestResult = await readKnowledgeBaseManifest(projectPath)
-    if (manifestResult.status === "missing") return
-    if (manifestResult.status === "invalid") {
-      logger.warn("Knowledge Base raw mutation skipped manifest sync because manifest is invalid.", {
-        operation,
-        projectId,
-        ...knowledgeBaseErrorMeta(manifestResult.error),
-      })
-      return
-    }
+    if (!manifest) return
 
-    const updated = applyRawManifestChanges(manifestResult.manifest, changes)
+    const updated = applyRawManifestChanges(manifest, changes)
     if (!updated.changed) return
     await writeKnowledgeBaseManifest(projectPath, updated.manifest)
     logger.info("Knowledge Base raw mutation synced manifest sources.", {
       changedSourceCount: updated.changedSourceCount,
       operation,
       projectId,
+    })
+  }
+
+  private async preflightRawManifestWrite(
+    manifest: KnowledgeBaseManifest | null,
+    projectPath: string,
+    projectId: string,
+    operation: string,
+    relativePaths: readonly string[],
+  ): Promise<void> {
+    if (!manifest) return
+    if (!rawManifestHasAffectedSources(manifest, relativePaths)) return
+    await writeKnowledgeBaseManifest(projectPath, manifest)
+    logger.info("Knowledge Base raw mutation verified manifest writability.", {
+      operation,
+      projectId,
+    })
+  }
+
+  private async rollbackRawPathChanges(
+    projectPath: string,
+    projectId: string,
+    operation: string,
+    changes: readonly RawManifestChange[],
+    cause: unknown,
+  ): Promise<void> {
+    const rawRoot = path.join(projectPath, ".raw")
+    for (const change of [...changes].reverse()) {
+      if (!change.to) continue
+      try {
+        assertRawRelativePathInside(projectPath, change.from)
+        assertRawRelativePathInside(projectPath, change.to)
+        await rename(
+          path.join(rawRoot, normalizeRawRelativePath(change.to)),
+          path.join(rawRoot, normalizeRawRelativePath(change.from)),
+        )
+      } catch (error) {
+        logger.warn("Knowledge Base raw mutation rollback failed.", {
+          operation,
+          projectId,
+          rawRelativePath: normalizeRawRelativePath(change.from),
+          rawRolledBackPath: normalizeRawRelativePath(change.to),
+          ...knowledgeBaseErrorMeta(error),
+        })
+      }
+    }
+    logger.warn("Knowledge Base raw mutation rolled back after manifest sync failed.", {
+      operation,
+      projectId,
+      ...knowledgeBaseErrorMeta(cause),
     })
   }
 
@@ -636,6 +711,17 @@ function applyRawManifestChanges(
 function rawManifestKey(rawRelativePath: string): string {
   const normalized = normalizeRawRelativePath(rawRelativePath)
   return normalized ? `.raw/${normalized}` : ".raw"
+}
+
+function rawManifestHasAffectedSources(
+  manifest: KnowledgeBaseManifest,
+  rawRelativePaths: readonly string[],
+): boolean {
+  const sourcePaths = Object.keys(manifest.sources)
+  return rawRelativePaths.some((rawRelativePath) => {
+    const fromKey = rawManifestKey(rawRelativePath)
+    return sourcePaths.some((sourcePath) => sourcePath === fromKey || sourcePath.startsWith(`${fromKey}/`))
+  })
 }
 
 function normalizeRawRelativePath(value: string): string {
