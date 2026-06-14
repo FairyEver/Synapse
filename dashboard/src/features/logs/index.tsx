@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Download, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi } from '@/lib/api'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import {
@@ -37,6 +38,8 @@ export const logLevelOptions = [
 export default function LogsPage() {
   const [level, setLevel] = useState(allLogLevelsValue)
   const [limit, setLimit] = useState(100)
+  const [cleanupOpen, setCleanupOpen] = useState(false)
+  const [isCleaning, setIsCleaning] = useState(false)
 
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-logs-recent', level, limit],
@@ -58,11 +61,15 @@ export default function LogsPage() {
 
   async function handleCleanup() {
     const before = getCleanupBeforeDate()
+    setIsCleaning(true)
     try {
       const result = await adminApi.cleanupLogs(before)
+      setCleanupOpen(false)
       toast.success(getCleanupResultMessage(result))
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : '清理失败')
+    } finally {
+      setIsCleaning(false)
     }
   }
 
@@ -103,7 +110,12 @@ export default function LogsPage() {
             <Download className='mr-1 h-4 w-4' />
             下载
           </Button>
-          <Button variant='outline' size='sm' onClick={handleCleanup}>
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={isCleaning}
+            onClick={() => setCleanupOpen(true)}
+          >
             <Trash2 className='mr-1 h-4 w-4' />
             清理7天前
           </Button>
@@ -143,6 +155,17 @@ export default function LogsPage() {
             )}
           </div>
         )}
+        <ConfirmDialog
+          open={cleanupOpen}
+          onOpenChange={setCleanupOpen}
+          title='清理日志'
+          desc='将删除 7 天前的系统日志。'
+          cancelBtnText='取消'
+          confirmText='清理'
+          destructive
+          isLoading={isCleaning}
+          handleConfirm={() => void handleCleanup()}
+        />
       </Main>
     </>
   )
