@@ -216,14 +216,25 @@ async function uploadFolder(
     }
   }
 
+  const data = {
+    root: prepared.root,
+    completed,
+    failed: failures.length,
+    failures,
+  }
+  if (failures.length > 0) {
+    return {
+      ok: false,
+      error: "Folder upload completed with failed files.",
+      code: "DRIVE_FOLDER_UPLOAD_PARTIAL_FAILURE",
+      errors: failures,
+      data,
+    }
+  }
+
   return {
     ok: true,
-    data: {
-      root: prepared.root,
-      completed,
-      failed: failures.length,
-      failures,
-    },
+    data,
   }
 }
 
@@ -363,7 +374,6 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   const metadata: Record<string, unknown> = {}
   if (!result.ok) {
     if (result.error) metadata.error = result.error
-    return metadata
   }
   const data = result.data
   if (!data || typeof data !== "object" || Array.isArray(data)) return metadata

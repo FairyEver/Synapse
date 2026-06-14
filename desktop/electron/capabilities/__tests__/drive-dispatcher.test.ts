@@ -132,6 +132,90 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
   })
 
+  it("returns a failed result when folder uploads only partially complete", async () => {
+    const root = driveItem({ id: "folder-root", type: "folder", name: "project" })
+    const accountService = createAccountService({
+      prepareDriveFolderUpload: vi.fn(async () => ({
+        root,
+        entries: [
+          {
+            relativePath: "a.txt",
+            sessionId: "session-a",
+            item: driveItem({ id: "file-a", name: "a.txt" }),
+            upload: {
+              method: "PUT" as const,
+              url: "https://cos.example/upload/a",
+              expiresAt: "2026-06-07T00:00:00.000Z",
+              headers: {},
+            },
+          },
+          {
+            relativePath: "b.txt",
+            sessionId: "session-b",
+            item: driveItem({ id: "file-b", name: "b.txt" }),
+            upload: {
+              method: "PUT" as const,
+              url: "https://cos.example/upload/b",
+              expiresAt: "2026-06-07T00:00:00.000Z",
+              headers: {},
+            },
+          },
+        ],
+      })),
+    })
+    const auditSink = createAuditSink()
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => ({ ok: !String(url).endsWith("/b") }) as Response)
+    const dispatcher = createDriveCapabilityDispatcher({
+      accountService,
+      auditSink,
+      fileSystem: {
+        stat: vi.fn(async (target: string) => ({
+          isFile: () => target !== "/tmp/project",
+          isDirectory: () => target === "/tmp/project",
+          size: target.endsWith("b.txt") ? 2 : 1,
+        })),
+        createReadStream: vi.fn((target: string) => Readable.from([pathBasenameForTest(target)])),
+        readdir: vi.fn(async () => [
+          { name: "a.txt", isDirectory: () => false, isFile: () => true },
+          { name: "b.txt", isDirectory: () => false, isFile: () => true },
+        ]),
+      } as unknown as DriveDispatcherDeps["fileSystem"],
+      fetch: fetchImpl,
+    })
+
+    const result = await dispatcher.dispatch("drive.folder.upload", {
+      folderPath: "/tmp/project",
+    }, { source: "mcp-stdio" })
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Folder upload completed with failed files.",
+      code: "DRIVE_FOLDER_UPLOAD_PARTIAL_FAILURE",
+      data: {
+        root,
+        completed: 1,
+        failed: 1,
+        failures: [{ relativePath: "b.txt", error: "Drive upload failed." }],
+      },
+      errors: [{ relativePath: "b.txt", error: "Drive upload failed." }],
+    })
+    expect(accountService.completeDriveUpload).toHaveBeenCalledWith("session-a")
+    expect(accountService.completeDriveUpload).not.toHaveBeenCalledWith("session-b")
+    expect(accountService.cancelDriveUpload).toHaveBeenCalledWith("session-b")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "failed",
+      resource: "synapse-drive:drive.folder.upload",
+      metadata: expect.objectContaining({
+        driveAction: "drive.folder.upload",
+        completed: 1,
+        failed: 1,
+        rootItemId: "folder-root",
+        error: "Folder upload completed with failed files.",
+      }),
+    }))
+  })
+
   it("creates shares with the default access settings when omitted", async () => {
     const accountService = createAccountService({
       shareDriveItem: vi.fn(async () => driveShare({ id: "share-1" })),
@@ -306,6 +390,11 @@ function createAuditSink(): DriveAuditSink {
     list: vi.fn(() => []),
     clearForTests: vi.fn(),
   }
+}
+
+function pathBasenameForTest(value: string): string {
+  const index = value.lastIndexOf("/")
+  return index >= 0 ? value.slice(index + 1) : value
 }
 
 function driveItem(overrides: Partial<DriveItem>): DriveItem {
