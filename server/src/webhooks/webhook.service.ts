@@ -487,7 +487,6 @@ export class WebhookService implements OnModuleInit {
       broadcastResult,
       status,
     })
-    await this.pruneOldDeliveries(webhook.id)
 
     return {
       response: {
@@ -678,27 +677,6 @@ export class WebhookService implements OnModuleInit {
       throw new NotFoundException("Webhook not found")
     }
     return webhook
-  }
-
-  private async pruneOldDeliveries(webhookId: string): Promise<void> {
-    try {
-      const staleDeliveries = await this.prisma.webhookDelivery.findMany({
-        where: { webhookId },
-        orderBy: { receivedAt: "desc" },
-        skip: 100,
-        select: { id: true },
-      })
-      const staleIds = staleDeliveries.map((delivery) => delivery.id)
-      if (staleIds.length === 0) return
-      await this.prisma.webhookDelivery.deleteMany({
-        where: { id: { in: staleIds } },
-      })
-    } catch (error) {
-      this.logger.warn({
-        errorName: error instanceof Error ? error.name : typeof error,
-        webhookId,
-      }, "Webhook delivery retention cleanup failed")
-    }
   }
 
   private async requireOwnedWebhook(userId: string, id: string): Promise<void> {

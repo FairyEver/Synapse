@@ -842,7 +842,7 @@ describe("WebhookService", () => {
     expect(harness.receipts).toHaveLength(0)
   })
 
-  it("keeps only the most recent 100 deliveries for each webhook", async () => {
+  it("keeps delivery history when receiving high-frequency webhook requests", async () => {
     const harness = createWebhookReceiveHarness()
 
     for (let index = 0; index < 105; index += 1) {
@@ -851,10 +851,10 @@ describe("WebhookService", () => {
       })
     }
 
-    expect(harness.deliveries).toHaveLength(100)
-    expect(harness.deliveries[0]?.bodyPreview).toContain("\"marker\":5")
-    const deletedIds = harness.prisma.webhookDelivery.deleteMany.mock.calls.flatMap((call) => call[0].where.id.in)
-    expect(deletedIds).toEqual(["delivery-1", "delivery-2", "delivery-3", "delivery-4", "delivery-5"])
+    expect(harness.deliveries).toHaveLength(105)
+    expect(harness.deliveries[0]?.bodyPreview).toContain("\"marker\":0")
+    expect(harness.deliveries.at(-1)?.bodyPreview).toContain("\"marker\":104")
+    expect(harness.prisma.webhookDelivery.deleteMany).not.toHaveBeenCalled()
   })
 
   it("rejects invalid secrets without broadcasting", async () => {
