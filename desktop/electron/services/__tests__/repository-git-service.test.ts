@@ -82,4 +82,31 @@ describe("repositoryGitService", () => {
       expect.anything(),
     )
   })
+
+  it("uses raw git output to retry diverged pulls after failure formatting", async () => {
+    const formattedDivergedError = Object.assign(
+      new Error("仓库分支需要手动处理后再同步。"),
+      { output: "fatal: Not possible to fast-forward, aborting." },
+    )
+    mocks.runGitCommand.mockImplementation(async (input: { args: string[] }) => {
+      if (input.args[0] === "pull" && input.args.includes("--ff-only")) throw formattedDivergedError
+      if (input.args[0] === "pull" && input.args.includes("--rebase")) return { stdout: "", stderr: "" }
+      if (input.args[0] === "push") return { stdout: "", stderr: "" }
+      throw new Error(`unexpected git command: ${input.args.join(" ")}`)
+    })
+
+    await expect(repositoryGitService.syncRepository(repository, vi.fn()))
+      .resolves
+      .toEqual(expect.objectContaining({
+        operation: "sync",
+        repository: readyGitState,
+      }))
+
+    expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["pull", "--rebase", "-X", "theirs", "--progress"],
+    }))
+    expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["push", "--progress"],
+    }))
+  })
 })

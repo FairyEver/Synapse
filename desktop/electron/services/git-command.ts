@@ -11,6 +11,22 @@ type GitCommandResult = {
   stdout: string
 }
 
+class GitCommandError extends Error {
+  declare readonly output: string
+  declare readonly stderr: string
+  declare readonly stdout: string
+
+  constructor(message: string, result: GitCommandResult & { readonly output: string }) {
+    super(message)
+    this.name = "GitCommandError"
+    Object.defineProperties(this, {
+      output: { enumerable: false, value: result.output },
+      stderr: { enumerable: false, value: result.stderr },
+      stdout: { enumerable: false, value: result.stdout },
+    })
+  }
+}
+
 type GitCommandOptions = {
   args: string[]
   cwd: string
@@ -179,7 +195,7 @@ function runGitCommand({
         ? formatFailureMessage(combinedOutput, fallbackMessage)
         : stderr.trim() || stdout.trim() || fallbackMessage
 
-      reject(new Error(message))
+      reject(new GitCommandError(message, { output: combinedOutput, stderr, stdout }))
     })
   })
 }
@@ -229,7 +245,7 @@ async function runControlledGitCommand({
     const message = formatFailureMessage
       ? formatFailureMessage(combinedOutput, fallbackMessage)
       : stderr.trim() || stdout.trim() || fallbackMessage
-    throw new Error(message)
+    throw new GitCommandError(message, { output: combinedOutput, stderr, stdout })
   } catch (error) {
     if (error instanceof Error && error.message) {
       throw error
@@ -282,5 +298,6 @@ export {
   runGitTextCommand,
 }
 export type {
+  GitCommandError,
   GitCommandResult,
 }

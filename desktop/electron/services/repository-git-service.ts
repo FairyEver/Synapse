@@ -131,6 +131,14 @@ function parseGitProgressLine(
   }
 }
 
+function gitFailureOutput(error: unknown): string {
+  if (error && typeof error === "object" && "output" in error) {
+    const output = (error as { readonly output?: unknown }).output
+    if (typeof output === "string" && output.trim()) return output
+  }
+
+  return error instanceof Error ? error.message : ""
+}
 
 async function runRepositoryGitCommand(
   repositoryUuid: string,
@@ -239,7 +247,7 @@ class RepositoryGitService {
         })
         pullSucceeded = true
       } catch (pullError) {
-        const message = pullError instanceof Error ? pullError.message : ""
+        const message = gitFailureOutput(pullError)
 
         if (!isNonFastForwardError(message)) {
           throw pullError
