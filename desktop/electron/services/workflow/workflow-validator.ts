@@ -129,10 +129,6 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
   return texts
 }
 
-function hasTemplatePlaceholder(value: string): boolean {
-  return /\{\{\s*\$?[\p{L}\p{N}_.-]+\s*\}\}/u.test(value)
-}
-
 function normalizeProjectId(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
 }
@@ -285,7 +281,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
     }
 
     // HTTP request node: validate URL is not empty
-    if (node.type === "http-request") {
+    if (node.type === "http_request") {
       const cfg = node.config as Record<string, unknown>
       const url = typeof cfg.url === "string" ? cfg.url.trim() : ""
       if (!url) {

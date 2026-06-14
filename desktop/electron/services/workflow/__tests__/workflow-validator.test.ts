@@ -211,6 +211,19 @@ describe("validateWorkflow", () => {
       }),
     ]))
   })
+
+  it("rejects http request nodes with empty URLs before save", () => {
+    const result = validateWorkflow(definitionWithHttpRequestNode({ url: "   " }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "http-1",
+        message: "节点「HTTP」的 URL 不能为空",
+      }),
+    ]))
+  })
 })
 
 function definitionWithDisconnectedNode(): WorkflowDefinition {
@@ -285,6 +298,28 @@ function definitionWithCodexNode(overrides: Partial<WorkflowDefinition> = {}): W
     ],
     edges: [{ id: "edge-1", from: "codex-1", to: "end" }],
     ...overrides,
+  }
+}
+
+function definitionWithHttpRequestNode(config: { readonly url: string }): WorkflowDefinition {
+  return {
+    id: "workflow-http",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      {
+        id: "http-1",
+        name: "HTTP",
+        type: "http_request",
+        position: { x: 0, y: 0 },
+        config: { method: "GET", url: config.url, bodyType: "none", variables: [] },
+      },
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "http-1", to: "end" }],
   }
 }
 
