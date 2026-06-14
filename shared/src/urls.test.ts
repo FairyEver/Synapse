@@ -54,7 +54,7 @@ describe("shared URL helpers", () => {
     expect(buildPasswordResetUrl({
       publicAppUrl: "https://synapse.test/",
       token: "reset token",
-    })).toBe("https://synapse.test/reset-password?token=reset+token")
+    })).toBe("https://synapse.test/console/reset-password?token=reset+token")
     expect(buildWebhookUrl({
       publicAppUrl: "https://synapse.test/",
       publicId: "wh/id",
