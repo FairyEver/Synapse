@@ -180,6 +180,31 @@ describe("mcp-installer", () => {
     expect(JSON.stringify(auditEvents)).not.toContain("test-token")
   })
 
+  it("rejects MCP registration when the HTTP server port is not available", async () => {
+    const { registerMcp } = await import("../mcp-installer")
+    const { auditEvents, permissionGuard, security } = createSecurity({ allowed: true })
+    const settingsPath = path.join(state.home, ".cursor", "mcp.json")
+
+    const result = await registerMcp("cursor", 0, security)
+
+    expect(result).toEqual({ success: false, error: "MCP HTTP 未运行" })
+    expect(existsSync(settingsPath)).toBe(false)
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        resource: settingsPath,
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          error: "MCP HTTP 未运行",
+          operation: "register",
+          target: "cursor",
+        }),
+      }),
+    ])
+  })
+
   it("uses system actor for automatic MCP registration", async () => {
     const { autoRegisterMcp } = await import("../mcp-installer")
     const { permissionGuard } = createSecurity({ allowed: true })

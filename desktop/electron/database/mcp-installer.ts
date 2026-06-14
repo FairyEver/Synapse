@@ -202,6 +202,10 @@ function getMcpUrl(port: number): string {
   return `http://127.0.0.1:${port}/mcp`
 }
 
+function isValidMcpPort(port: number): boolean {
+  return Number.isInteger(port) && port > 0 && port <= 65535
+}
+
 function detectJsonRegistration(settings: Record<string, unknown>): { registered: boolean; mode: McpRegistrationMode; url: string | null } {
   const servers = settings.mcpServers
   if (!isRecord(servers)) return { registered: false, mode: null, url: null }
@@ -450,8 +454,11 @@ async function registerMcp(
     const definition = requireMcpDefinition(target)
     assertSupportedSettingsFormat(definition)
     const settingsPath = getSettingsPath(definition)
-    const mcpUrl = getMcpUrl(mcpPort)
     audit = buildMcpWriteAudit(target, settingsPath, security, "register")
+    if (!isValidMcpPort(mcpPort)) {
+      throw new Error("MCP HTTP 未运行")
+    }
+    const mcpUrl = getMcpUrl(mcpPort)
     const permission = await authorizeMcpWrite(security, audit)
     if (!permission.allowed) {
       return { success: false, error: permission.reason }

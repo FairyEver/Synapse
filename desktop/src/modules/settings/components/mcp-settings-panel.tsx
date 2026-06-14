@@ -150,6 +150,7 @@ function McpSettingsPanel() {
       readError: state?.readError,
     }
   })
+  const mcpRegisterDisabled = !mcpHttpStatus?.running || !mcpHttpStatus?.url
 
   const handleCopyMcpUrl = useCallback(async () => {
     if (!mcpHttpStatus?.url) return
@@ -231,7 +232,7 @@ function McpSettingsPanel() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={Boolean(server.readError)}
+                disabled={Boolean(server.readError) || mcpRegisterDisabled}
                 onClick={() => handleRegisterMCP(server.id)}
               >
                 {server.registered ? "重新注册" : "注册"}

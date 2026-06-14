@@ -52,6 +52,10 @@ beforeEach(() => {
   mocks.databaseMcpServersGet.mockResolvedValue([])
   mocks.databaseMcpSettingsOpen.mockResolvedValue({ success: true })
   mocks.databaseMcpRegister.mockResolvedValue({ success: true })
+  mocks.databaseMcpHttpStatusGet.mockClear()
+  mocks.databaseMcpServersGet.mockClear()
+  mocks.databaseMcpSettingsOpen.mockClear()
+  mocks.databaseMcpRegister.mockClear()
   mocks.loggerError.mockClear()
   mocks.promise.mockClear()
   mocks.notify.mockClear()
@@ -111,6 +115,31 @@ describe("McpSettingsPanel", () => {
     const registerButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
       .find((button) => button.textContent === "注册")
     expect(registerButton?.disabled).toBe(true)
+  })
+
+  it("disables MCP registration while the HTTP server is not running", async () => {
+    mocks.databaseMcpHttpStatusGet.mockResolvedValue({
+      running: false,
+      port: 0,
+      url: null,
+    })
+    mocks.databaseMcpServersGet.mockResolvedValue([{
+      target: "claude" as DatabaseMcpTarget,
+      settingsPath: "/Users/test/.claude.json",
+      settingsFileExists: true,
+      registered: false,
+      mode: null,
+      url: null,
+    }])
+
+    renderPanel()
+    await flush()
+
+    const registerButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .filter((button) => button.textContent === "注册")
+    expect(registerButtons.length).toBeGreaterThan(0)
+    expect(registerButtons.every((button) => button.disabled)).toBe(true)
+    expect(mocks.databaseMcpRegister).not.toHaveBeenCalled()
   })
 })
 
