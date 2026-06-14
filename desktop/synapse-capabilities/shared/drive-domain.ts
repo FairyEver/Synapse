@@ -92,11 +92,15 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_item_delete",
-      description: "Delete a Synapse Drive file or folder.",
+      description: "Delete a Synapse Drive file or folder. Set disablePublications to true to disable affected page/site publications during deletion.",
       inputSchema: {
         type: "object",
         properties: {
           itemId: stringField("Drive item id."),
+          disablePublications: {
+            type: "boolean",
+            description: "Whether to disable affected page/site publications while deleting. Defaults to false.",
+          },
         },
         required: ["itemId"],
       },

@@ -32,6 +32,7 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 Never reveal COS AK, SK, Authorization headers, local secrets, or presigned upload URLs. Drive upload tools should return item and share results only; if an error includes a signed query string, summarize the failure without copying the sensitive URL.
 
 Before deleting or disabling a share, make sure the user asked for that operation clearly.
+When deleting a file or folder that may have active page/site publications, pass `disablePublications: true` only when the user asked to disable related publications as part of the delete operation. If omitted or false, related publications can remain accessible from their published snapshots.
 
 ## Common Requests
 
@@ -39,4 +40,5 @@ Before deleting or disabling a share, make sure the user asked for that operatio
 - "把这个目录传到云盘": call `drive_folder_upload`.
 - "新建一个资料文件夹": call `drive_folder_create`.
 - "移动到某个文件夹": call `drive_item_move` with the target folder id.
+- "删除并下线相关发布": call `drive_item_delete` with `disablePublications: true`.
 - "看看云盘空间": call `drive_usage_get`.

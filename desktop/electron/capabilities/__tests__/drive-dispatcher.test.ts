@@ -18,6 +18,14 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("exposes publication disable option on item deletion", () => {
+    const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_item_delete")
+    expect(deleteTool?.inputSchema.properties).toMatchObject({
+      itemId: { type: "string" },
+      disablePublications: { type: "boolean" },
+    })
+  })
+
   it("lists Drive items under root by default", async () => {
     const accountService = createAccountService({
       listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
@@ -138,6 +146,46 @@ describe("createDriveCapabilityDispatcher", () => {
       passwordEnabled: true,
       expiresIn: "3d",
     })
+  })
+
+  it("deletes Drive items without disabling publications by default", async () => {
+    const accountService = createAccountService({
+      deleteDriveItem: vi.fn(async () => ({ ok: true as const })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.item.delete", {
+      itemId: "item-1",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
+
+    expect(accountService.deleteDriveItem).toHaveBeenCalledWith("item-1", {})
+  })
+
+  it("passes publication disable option when deleting Drive items", async () => {
+    const accountService = createAccountService({
+      deleteDriveItem: vi.fn(async () => ({ ok: true as const })),
+    })
+    const auditSink = createAuditSink()
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
+
+    await expect(dispatcher.dispatch("drive.item.delete", {
+      itemId: "item-1",
+      disablePublications: true,
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
+
+    expect(accountService.deleteDriveItem).toHaveBeenCalledWith("item-1", {
+      disablePublications: true,
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "synapse-drive:item-1",
+      metadata: expect.objectContaining({
+        driveAction: "drive.item.delete",
+        itemId: "item-1",
+        disablePublications: true,
+      }),
+    }))
   })
 
   it("creates shares with custom no-password access settings", async () => {

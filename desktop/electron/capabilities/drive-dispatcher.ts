@@ -31,7 +31,10 @@ type DriveAccountServicePort = {
   readonly cancelDriveUpload: (sessionId: string) => Promise<{ ok: true }>
   readonly createDriveFolder: (input: { readonly parentId?: string | null; readonly name: string }) => Promise<DriveItemDto>
   readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<DriveItemDto>
-  readonly deleteDriveItem: (itemId: string) => Promise<{ ok: true }>
+  readonly deleteDriveItem: (
+    itemId: string,
+    input?: { readonly disablePublications?: boolean },
+  ) => Promise<{ ok: true }>
   readonly shareDriveItem: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DriveShareDto>
   readonly disableDriveShare: (shareId: string) => Promise<{ ok: true }>
   readonly getDriveUsage: () => Promise<DriveUsageDto>
@@ -104,10 +107,16 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             return { ok: true, data: item }
           })
         case "drive.item.delete":
-          return dispatchDriveMutation(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.deleteDriveItem(requireString(params, "itemId")),
-          }))
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const disablePublications = optionalBoolean(params.disablePublications)
+            return {
+              ok: true,
+              data: await deps.accountService.deleteDriveItem(
+                requireString(params, "itemId"),
+                disablePublications === undefined ? {} : { disablePublications },
+              ),
+            }
+          })
         case "drive.share.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
@@ -333,7 +342,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn"]) {
+  for (const key of ["itemId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "disablePublications"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
   }
