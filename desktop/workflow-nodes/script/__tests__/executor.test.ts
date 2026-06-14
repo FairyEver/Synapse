@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
 const logger = vi.hoisted(() => ({
@@ -60,6 +60,11 @@ function fakeRuntimeDeps(exitCode = 0, stdout = "hello\n", stderr = ""): NodeRun
 }
 
 describe("scriptNodeExecutor", () => {
+  beforeEach(() => {
+    logger.info.mockClear()
+    logger.warn.mockClear()
+  })
+
   it("returns success with stdout as output", async () => {
     const deps = fakeRuntimeDeps(0, "hello world\n")
     const result = await scriptNodeExecutor.execute(makeInput({}, deps))
@@ -79,6 +84,37 @@ describe("scriptNodeExecutor", () => {
     const result = await scriptNodeExecutor.execute(makeInput({}, deps))
     expect(result.status).toBe("failed")
     expect(result.error).toContain("脚本执行失败")
+  })
+
+  it("sanitizes runner errors returned by failed runs", async () => {
+    const rawError = "token=sk-secret Authorization: Bearer abc123 at /Users/liyang/project --env API_KEY=plain-secret"
+    const deps: NodeRuntimeDeps = {
+      processRunner: {
+        run: vi.fn().mockResolvedValue({
+          exitCode: 1,
+          stdout: "",
+          stderr: "error output",
+          signal: null,
+          timedOut: false,
+          durationMs: 10,
+          error: rawError,
+          diagnostics: undefined,
+        }),
+      },
+      resolveProjectWorkspacePath: vi.fn().mockResolvedValue("/Users/liyang/project"),
+      sendHttpRequest: vi.fn(),
+    }
+
+    const result = await scriptNodeExecutor.execute(makeInput({}, deps))
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("脚本执行失败")
+    const payload = `${result.error}${JSON.stringify(logger.warn.mock.calls)}`
+    expect(payload).not.toContain("sk-secret")
+    expect(payload).not.toContain("Bearer abc123")
+    expect(payload).not.toContain("/Users/liyang/project")
+    expect(payload).not.toContain("plain-secret")
+    expect(payload).toContain("[redacted]")
   })
 
   it("returns failed when processRunner.run throws", async () => {

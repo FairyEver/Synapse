@@ -84,12 +84,13 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
         }
       }
 
+      const safeResultError = sanitizeError(result.error ?? "")
       logger.warn("script node failed", {
         ...logContext, shell: config.shell,
-        exitCode, errorMessage: truncateWithEllipsis(result.error ?? "", 200), durationMs,
+        exitCode, errorMessage: truncateWithEllipsis(safeResultError, 200), durationMs,
       })
       const errorMsg = result.error
-        ? `脚本执行失败：${truncateWithEllipsis(result.error, 120)}`
+        ? `脚本执行失败：${truncateWithEllipsis(safeResultError, 120)}`
         : `脚本退出码 ${String(exitCode)}`
       return {
         status: "failed",
