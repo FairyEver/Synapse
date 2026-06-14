@@ -52,9 +52,19 @@ export async function addSkillTextFile(
   files: readonly SkillEditorFile[],
   pathInput: string
 ): Promise<SkillEditorFile[]> {
+  return (await addSkillTextFileWithPath(files, pathInput)).files
+}
+
+export async function addSkillTextFileWithPath(
+  files: readonly SkillEditorFile[],
+  pathInput: string
+): Promise<{ files: SkillEditorFile[]; path: string }> {
   const path = normalizeSkillFilePath(pathInput)
   assertUniquePath(files, path)
-  return sortSkillFiles([...files, await createTextFile(path, '')])
+  return {
+    files: sortSkillFiles([...files, await createTextFile(path, '')]),
+    path,
+  }
 }
 
 export async function updateSkillTextFile(

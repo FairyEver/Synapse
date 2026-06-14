@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addSkillTextFile,
+  addSkillTextFileWithPath,
   createInitialSkillFiles,
   deleteSkillFile,
   normalizeSkillFilePath,
@@ -35,6 +36,18 @@ describe('content store Skill file model', () => {
 
     await expect(addSkillTextFile(files, 'SKILL.md')).rejects.toThrow('文件已存在')
     expect(() => deleteSkillFile(files, 'SKILL.md')).toThrow('不能删除 SKILL.md')
+  })
+
+  it('returns the newly added Skill file path after sorting files', async () => {
+    const withGuide = await addSkillTextFile(await createInitialSkillFiles(), 'docs/a.md')
+    const result = await addSkillTextFileWithPath(withGuide, ' docs/b.md ')
+
+    expect(result.path).toBe('docs/b.md')
+    expect(result.files.map((file) => file.path)).toEqual([
+      'SKILL.md',
+      'docs/a.md',
+      'docs/b.md',
+    ])
   })
 
   it('updates and renames text files except SKILL.md', async () => {

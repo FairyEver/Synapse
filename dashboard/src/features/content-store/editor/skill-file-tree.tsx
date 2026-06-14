@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { formatContentStoreSize } from '../content-store-display'
 import type { SkillEditorFile } from './content-store-editor-types'
 import {
-  addSkillTextFile,
+  addSkillTextFileWithPath,
   deleteSkillFile,
   renameSkillFile,
   replaceSkillFileFromUpload,
@@ -39,9 +39,9 @@ export function SkillFileTree({
 
   async function handleAddTextFile() {
     try {
-      const next = await addSkillTextFile(files, pathInput)
-      onFilesChange(next)
-      onSelect(next.find((file) => file.path !== 'SKILL.md')?.path ?? 'SKILL.md')
+      const result = await addSkillTextFileWithPath(files, pathInput)
+      onFilesChange(result.files)
+      onSelect(result.path)
       setPathInput('')
     } catch (error) {
       toast.error(getMessage(error, '新增失败'))
