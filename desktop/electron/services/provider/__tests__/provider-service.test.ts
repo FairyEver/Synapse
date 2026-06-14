@@ -374,6 +374,48 @@ describe("ProviderService", () => {
     ])
   })
 
+  it("removes newly written provider secrets when metadata creation fails", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const { service, providers, secrets } = makeProviderService({ auditSink })
+    const originalUpsert = providers.upsert.bind(providers)
+    vi.spyOn(providers, "upsert").mockImplementation(async (item) => {
+      if (item.id === "orphaned") {
+        throw new Error("provider metadata write failed")
+      }
+      await originalUpsert(item)
+    })
+
+    await expect(service.createProvider({
+      id: "orphaned",
+      name: "Orphaned Provider",
+      category: "custom",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-orphaned",
+      secretEnv: {
+        CUSTOM_TOKEN: "orphaned-token",
+      },
+      env: {},
+    })).rejects.toThrow("provider metadata write failed")
+
+    await expect(providers.get("orphaned")).resolves.toBeNull()
+    await expect(secrets.get("provider:orphaned:api-key")).resolves.toBeNull()
+    await expect(secrets.get("provider:orphaned:env:CUSTOM_TOKEN")).resolves.toBeNull()
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "failed",
+        resource: "provider:orphaned",
+        metadata: expect.objectContaining({
+          operation: "create",
+          providerId: "orphaned",
+          errorName: "Error",
+        }),
+      }),
+    ])
+    expect(JSON.stringify(auditSink.list())).not.toContain("sk-orphaned")
+    expect(JSON.stringify(auditSink.list())).not.toContain("orphaned-token")
+  })
+
   it("denies provider secret updates through PermissionGuard and records audit", async () => {
     const permissionGuard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()

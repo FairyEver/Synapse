@@ -331,14 +331,36 @@ export class ProviderService {
       createdAt: now,
       updatedAt: now,
     })
-    await this.providers.upsert(provider)
+    try {
+      await this.providers.upsert(provider)
+      if (input.active) {
+        await this.setActiveProvider(input.id)
+        const active = await this.getProvider(input.id)
+        if (hasSecretWrite) {
+          this.recordSecretWriteAudit(input.id, "create", "allowed", { secretRef, secretEnvRefs })
+        }
+        return active
+      }
+    } catch (error) {
+      try {
+        await this.rollbackCreatedProvider(input.id, secretRef, secretEnvRefs)
+      } catch (rollbackError) {
+        if (hasSecretWrite) {
+          this.recordSecretWriteAudit(input.id, "create", "failed", {
+            ...errorAuditMetadata(error),
+            rollbackErrorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
+            rollbackErrorLength: String(rollbackError).length,
+          })
+        }
+        throw rollbackError
+      }
+      if (hasSecretWrite) {
+        this.recordSecretWriteAudit(input.id, "create", "failed", errorAuditMetadata(error))
+      }
+      throw error
+    }
     if (hasSecretWrite) {
       this.recordSecretWriteAudit(input.id, "create", "allowed", { secretRef, secretEnvRefs })
-    }
-    if (input.active) {
-      await this.setActiveProvider(input.id)
-      const active = await this.getProvider(input.id)
-      return active
     }
     return toProvider(provider)
   }
@@ -688,6 +710,20 @@ export class ProviderService {
       } else {
         await this.secretStore.setEnvSecret(providerId, envName, value, `${providerName} ${envName}`)
       }
+    }
+  }
+
+  private async rollbackCreatedProvider(
+    providerId: string,
+    secretRef: string | undefined,
+    secretEnvRefs: Record<string, string> | undefined,
+  ): Promise<void> {
+    await this.providers.remove(providerId)
+    if (secretRef) {
+      await this.secretStore.deleteSecret(secretRef)
+    }
+    for (const ref of Object.values(secretEnvRefs ?? {})) {
+      await this.secretStore.deleteSecret(ref)
     }
   }
 
