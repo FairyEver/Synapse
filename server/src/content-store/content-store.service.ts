@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import type {
   ContentStoreDetailDto,
@@ -153,6 +153,14 @@ interface ContentStoreFileRow {
   readonly text: string | null
 }
 
+interface ContentStorePackageKeyRow {
+  readonly packageKey: string | null
+}
+
+interface ContentStoreStorageKeyRow {
+  readonly storageKey: string | null
+}
+
 interface ContentStoreInstallSessionRow {
   readonly id: string
   readonly userId: string
@@ -167,6 +175,8 @@ interface ContentStoreInstallSessionRow {
 
 @Injectable()
 export class ContentStoreService {
+  private readonly logger = new Logger(ContentStoreService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CONTENT_STORE_STORAGE_PORT) private readonly storage: ContentStoreStoragePort,
@@ -177,8 +187,9 @@ export class ContentStoreService {
     const normalized = this.normalizeDraftPayload(input.type, input)
     const draftId = randomUUID()
     const localSourceFingerprint = input.type === "skill" ? normalizeLocalSourceFingerprint(input.localSourceFingerprint) : null
+    const staleObjectKeys: string[] = []
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       if (localSourceFingerprint) {
         const existingItem = await tx.contentStoreItem.findFirst({
           where: {
@@ -210,7 +221,7 @@ export class ContentStoreService {
                 revision: { increment: 1 },
               },
             })
-            await this.replaceDraftFiles(tx, userId, existingDraft.id, normalized.files)
+            staleObjectKeys.push(...await this.replaceDraftFiles(tx, userId, existingDraft.id, normalized.files))
             return this.getDraftDto(tx, userId, existingItem.id)
           }
         }
@@ -239,14 +250,17 @@ export class ContentStoreService {
           body: normalized.body,
         },
       }) as ContentStoreDraftRow
-      await this.replaceDraftFiles(tx, userId, draft.id, normalized.files)
+      staleObjectKeys.push(...await this.replaceDraftFiles(tx, userId, draft.id, normalized.files))
       return this.getDraftDto(tx, userId, item.id)
     })
+    await this.cleanupUnreferencedContentStoreObjects(staleObjectKeys)
+    return result
   }
 
   async saveDraft(userId: string, itemId: string, baseRevision: number, input: SaveContentStoreDraftInput): Promise<ContentStoreDraftDto> {
     this.assertTitle(input.title)
-    return this.prisma.$transaction(async (tx) => {
+    const staleObjectKeys: string[] = []
+    const result = await this.prisma.$transaction(async (tx) => {
       const draft = await tx.contentStoreDraft.findFirst({
         where: { itemId, ownerUserId: userId },
         include: { item: true, files: true },
@@ -270,7 +284,7 @@ export class ContentStoreService {
             body: normalized.body,
           },
         }) as ContentStoreDraftRow
-        await this.replaceDraftFiles(tx, userId, created.id, normalized.files)
+        staleObjectKeys.push(...await this.replaceDraftFiles(tx, userId, created.id, normalized.files))
         return this.getDraftDto(tx, userId, itemId)
       }
       if (draft.revision !== baseRevision) throw new BadRequestException(revisionMismatchMessage)
@@ -286,50 +300,67 @@ export class ContentStoreService {
         },
       })
       if (updated.count !== 1) throw new BadRequestException(revisionMismatchMessage)
-      await this.replaceDraftFiles(tx, userId, draft.id, normalized.files)
+      staleObjectKeys.push(...await this.replaceDraftFiles(tx, userId, draft.id, normalized.files))
       return this.getDraftDto(tx, userId, itemId)
     })
+    await this.cleanupUnreferencedContentStoreObjects(staleObjectKeys)
+    return result
   }
 
   async publishDraft(userId: string, itemId: string, baseRevision: number): Promise<ContentStoreVersionDto> {
-    return this.prisma.$transaction(async (tx) => {
-      const draft = await tx.contentStoreDraft.findFirst({
-        where: { itemId, ownerUserId: userId },
-        include: { item: true, files: true },
-      }) as ContentStoreDraftRow | null
-      if (!draft?.item) throw new NotFoundException("草稿不存在。")
-      if (draft.revision !== baseRevision) throw new BadRequestException(revisionMismatchMessage)
+    let packageKeyForRollback: string | null = null
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const draft = await tx.contentStoreDraft.findFirst({
+          where: { itemId, ownerUserId: userId },
+          include: { item: true, files: true },
+        }) as ContentStoreDraftRow | null
+        if (!draft?.item) throw new NotFoundException("草稿不存在。")
+        if (draft.revision !== baseRevision) throw new BadRequestException(revisionMismatchMessage)
 
-      const type = toContentStoreType(draft.item.type)
-      const versionNumber = await tx.contentStoreVersion.count({ where: { itemId } }) + 1
-      const version = await tx.contentStoreVersion.create({
-        data: {
-          itemId,
-          versionNumber,
-          title: draft.title,
-          description: draft.description,
-          body: type === "prompt" ? draft.body : null,
-          packageKey: null,
-          packageSha256: null,
-          packageSize: null,
-          searchText: buildSearchText(type, draft.title, draft.description, draft.body, draft.files ?? []),
-        },
-      }) as ContentStoreVersionRow
-
-      if (type === "skill" || type === "rule") {
-        const files = await this.filesWithBytes(draft.files ?? [])
-        const packageResult = await buildContentStorePackage({ contentId: itemId, versionId: version.id, type, title: draft.title, files })
-        const packageKey = `content-store/packages/${itemId}/${version.id}.zip`
-        await this.storage.putObject({ key: packageKey, body: packageResult.bytes, contentType: "application/zip" })
-        const packagedVersion = await tx.contentStoreVersion.update({
-          where: { id: version.id },
+        const type = toContentStoreType(draft.item.type)
+        const versionNumber = await tx.contentStoreVersion.count({ where: { itemId } }) + 1
+        const version = await tx.contentStoreVersion.create({
           data: {
-            packageKey,
-            packageSha256: packageResult.sha256,
-            packageSize: BigInt(packageResult.bytes.length),
+            itemId,
+            versionNumber,
+            title: draft.title,
+            description: draft.description,
+            body: type === "prompt" ? draft.body : null,
+            packageKey: null,
+            packageSha256: null,
+            packageSize: null,
+            searchText: buildSearchText(type, draft.title, draft.description, draft.body, draft.files ?? []),
           },
         }) as ContentStoreVersionRow
-        await this.createVersionFiles(tx, version.id, draft.files ?? [])
+
+        if (type === "skill" || type === "rule") {
+          const files = await this.filesWithBytes(draft.files ?? [])
+          const packageResult = await buildContentStorePackage({ contentId: itemId, versionId: version.id, type, title: draft.title, files })
+          const packageKey = `content-store/packages/${itemId}/${version.id}.zip`
+          await this.storage.putObject({ key: packageKey, body: packageResult.bytes, contentType: "application/zip" })
+          packageKeyForRollback = packageKey
+          const packagedVersion = await tx.contentStoreVersion.update({
+            where: { id: version.id },
+            data: {
+              packageKey,
+              packageSha256: packageResult.sha256,
+              packageSize: BigInt(packageResult.bytes.length),
+            },
+          }) as ContentStoreVersionRow
+          await this.createVersionFiles(tx, version.id, draft.files ?? [])
+          await tx.contentStoreItem.update({
+            where: { id: itemId },
+            data: {
+              title: draft.title,
+              description: draft.description,
+              latestVersionId: version.id,
+            },
+          })
+          await tx.contentStoreDraft.delete({ where: { itemId } })
+          return versionDto(packagedVersion)
+        }
+
         await tx.contentStoreItem.update({
           where: { id: itemId },
           data: {
@@ -339,20 +370,12 @@ export class ContentStoreService {
           },
         })
         await tx.contentStoreDraft.delete({ where: { itemId } })
-        return versionDto(packagedVersion)
-      }
-
-      await tx.contentStoreItem.update({
-        where: { id: itemId },
-        data: {
-          title: draft.title,
-          description: draft.description,
-          latestVersionId: version.id,
-        },
+        return versionDto(version)
       })
-      await tx.contentStoreDraft.delete({ where: { itemId } })
-      return versionDto(version)
-    })
+    } catch (error) {
+      await this.cleanupUnreferencedContentStoreObjects([packageKeyForRollback])
+      throw error
+    }
   }
 
   async getDraft(userId: string, itemId: string): Promise<ContentStoreDraftDto> {
@@ -396,71 +419,78 @@ export class ContentStoreService {
   }
 
   async copyToMine(userId: string, itemId: string): Promise<ContentStoreItemDto> {
-    return this.prisma.$transaction(async (tx) => {
-      const source = await tx.contentStoreItem.findFirst({
-        where: {
-          id: itemId,
-          moderationStatus: "normal",
-          OR: [
-            { visibility: "public" },
-            { ownerUserId: userId },
-          ],
-        },
-        include: { owner: { select: { id: true, displayName: true } } },
-      }) as ContentStoreItemRow | null
-      if (!source?.latestVersionId) throw new NotFoundException("内容不存在。")
-      const sourceVersion = await tx.contentStoreVersion.findFirst({
-        where: { id: source.latestVersionId, itemId: source.id },
-        include: { files: true },
-      }) as ContentStoreVersionRow | null
-      if (!sourceVersion) throw new NotFoundException("内容版本不存在。")
+    let packageKeyForRollback: string | null = null
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const source = await tx.contentStoreItem.findFirst({
+          where: {
+            id: itemId,
+            moderationStatus: "normal",
+            OR: [
+              { visibility: "public" },
+              { ownerUserId: userId },
+            ],
+          },
+          include: { owner: { select: { id: true, displayName: true } } },
+        }) as ContentStoreItemRow | null
+        if (!source?.latestVersionId) throw new NotFoundException("内容不存在。")
+        const sourceVersion = await tx.contentStoreVersion.findFirst({
+          where: { id: source.latestVersionId, itemId: source.id },
+          include: { files: true },
+        }) as ContentStoreVersionRow | null
+        if (!sourceVersion) throw new NotFoundException("内容版本不存在。")
 
-      const type = toContentStoreType(source.type)
-      const newItem = await tx.contentStoreItem.create({
-        data: {
-          type: source.type,
-          title: source.title,
-          description: source.description,
-          ownerUserId: userId,
-          visibility: "private",
-          moderationStatus: "normal",
-          copiedFromContentId: source.id,
-          copiedFromVersionId: sourceVersion.id,
-        },
-      }) as ContentStoreItemRow
-      const newVersion = await tx.contentStoreVersion.create({
-        data: {
-          itemId: newItem.id,
-          versionNumber: 1,
-          title: sourceVersion.title,
-          description: sourceVersion.description,
-          body: sourceVersion.body,
-          packageKey: null,
-          packageSha256: null,
-          packageSize: null,
-          searchText: buildSearchText(type, sourceVersion.title, sourceVersion.description, sourceVersion.body, sourceVersion.files ?? []),
-        },
-      }) as ContentStoreVersionRow
-      await this.createVersionFiles(tx, newVersion.id, sourceVersion.files ?? [])
+        const type = toContentStoreType(source.type)
+        const newItem = await tx.contentStoreItem.create({
+          data: {
+            type: source.type,
+            title: source.title,
+            description: source.description,
+            ownerUserId: userId,
+            visibility: "private",
+            moderationStatus: "normal",
+            copiedFromContentId: source.id,
+            copiedFromVersionId: sourceVersion.id,
+          },
+        }) as ContentStoreItemRow
+        const newVersion = await tx.contentStoreVersion.create({
+          data: {
+            itemId: newItem.id,
+            versionNumber: 1,
+            title: sourceVersion.title,
+            description: sourceVersion.description,
+            body: sourceVersion.body,
+            packageKey: null,
+            packageSha256: null,
+            packageSize: null,
+            searchText: buildSearchText(type, sourceVersion.title, sourceVersion.description, sourceVersion.body, sourceVersion.files ?? []),
+          },
+        }) as ContentStoreVersionRow
+        await this.createVersionFiles(tx, newVersion.id, sourceVersion.files ?? [])
 
-      if (type === "skill" || type === "rule") {
-        const packageFiles = await this.filesWithBytes(sourceVersion.files ?? [])
-        const packageResult = await buildContentStorePackage({ contentId: newItem.id, versionId: newVersion.id, type, title: newVersion.title, files: packageFiles })
-        const packageKey = `content-store/packages/${newItem.id}/${newVersion.id}.zip`
-        await this.storage.putObject({ key: packageKey, body: packageResult.bytes, contentType: "application/zip" })
-        await tx.contentStoreVersion.update({
-          where: { id: newVersion.id },
-          data: { packageKey, packageSha256: packageResult.sha256, packageSize: BigInt(packageResult.bytes.length) },
-        })
-      }
+        if (type === "skill" || type === "rule") {
+          const packageFiles = await this.filesWithBytes(sourceVersion.files ?? [])
+          const packageResult = await buildContentStorePackage({ contentId: newItem.id, versionId: newVersion.id, type, title: newVersion.title, files: packageFiles })
+          const packageKey = `content-store/packages/${newItem.id}/${newVersion.id}.zip`
+          await this.storage.putObject({ key: packageKey, body: packageResult.bytes, contentType: "application/zip" })
+          packageKeyForRollback = packageKey
+          await tx.contentStoreVersion.update({
+            where: { id: newVersion.id },
+            data: { packageKey, packageSha256: packageResult.sha256, packageSize: BigInt(packageResult.bytes.length) },
+          })
+        }
 
-      const updated = await tx.contentStoreItem.update({
-        where: { id: newItem.id },
-        data: { latestVersionId: newVersion.id },
-        include: { owner: { select: { id: true, displayName: true } } },
-      }) as ContentStoreItemRow
-      return this.itemDto(tx, updated)
-    })
+        const updated = await tx.contentStoreItem.update({
+          where: { id: newItem.id },
+          data: { latestVersionId: newVersion.id },
+          include: { owner: { select: { id: true, displayName: true } } },
+        }) as ContentStoreItemRow
+        return this.itemDto(tx, updated)
+      })
+    } catch (error) {
+      await this.cleanupUnreferencedContentStoreObjects([packageKeyForRollback])
+      throw error
+    }
   }
 
   async setVisibility(userId: string, itemId: string, visibility: ContentStoreVisibility): Promise<ContentStoreItemDto> {
@@ -478,10 +508,30 @@ export class ContentStoreService {
   }
 
   async deletePrivateItem(userId: string, itemId: string): Promise<{ ok: true }> {
-    const item = await this.prisma.contentStoreItem.findFirst({ where: { id: itemId, ownerUserId: userId } }) as ContentStoreItemRow | null
-    if (!item) throw new NotFoundException("内容不存在。")
-    if (item.visibility !== "private") throw new BadRequestException("公开内容不能直接删除。")
-    await this.prisma.contentStoreItem.delete({ where: { id: itemId } })
+    const objectKeys = await this.prisma.$transaction(async (tx) => {
+      const item = await tx.contentStoreItem.findFirst({ where: { id: itemId, ownerUserId: userId } }) as ContentStoreItemRow | null
+      if (!item) throw new NotFoundException("内容不存在。")
+      if (item.visibility !== "private") throw new BadRequestException("公开内容不能直接删除。")
+      const packages = await tx.contentStoreVersion.findMany({
+        where: { itemId },
+        select: { packageKey: true },
+      }) as ContentStorePackageKeyRow[]
+      const files = await tx.contentStoreFile.findMany({
+        where: {
+          OR: [
+            { draft: { itemId } },
+            { version: { itemId } },
+          ],
+        },
+        select: { storageKey: true },
+      }) as ContentStoreStorageKeyRow[]
+      await tx.contentStoreItem.delete({ where: { id: itemId } })
+      return [
+        ...packages.map((version) => version.packageKey),
+        ...files.map((file) => file.storageKey),
+      ]
+    })
+    await this.cleanupUnreferencedContentStoreObjects(objectKeys)
     return { ok: true }
   }
 
@@ -691,7 +741,11 @@ export class ContentStoreService {
     userId: string,
     draftId: string,
     files: readonly NormalizedContentStoreFile[],
-  ): Promise<void> {
+  ): Promise<string[]> {
+    const existingFiles = await tx.contentStoreFile.findMany({
+      where: { draftId },
+      select: { storageKey: true },
+    }) as ContentStoreStorageKeyRow[]
     await tx.contentStoreFile.deleteMany({ where: { draftId } })
     const rows = []
     for (const file of files) {
@@ -709,6 +763,7 @@ export class ContentStoreService {
       })
     }
     if (rows.length > 0) await tx.contentStoreFile.createMany({ data: rows })
+    return uniqueContentStoreObjectKeys(existingFiles.map((file) => file.storageKey))
   }
 
   private async createVersionFiles(tx: ContentStoreDb, versionId: string, files: readonly ContentStoreFileRow[]): Promise<void> {
@@ -744,6 +799,21 @@ export class ContentStoreService {
       })
     }
     return result
+  }
+
+  private async cleanupUnreferencedContentStoreObjects(keys: readonly (string | null | undefined)[]): Promise<void> {
+    for (const key of uniqueContentStoreObjectKeys(keys)) {
+      try {
+        const [fileCount, packageCount] = await Promise.all([
+          this.prisma.contentStoreFile.count({ where: { storageKey: key } }),
+          this.prisma.contentStoreVersion.count({ where: { packageKey: key } }),
+        ])
+        if (fileCount > 0 || packageCount > 0) continue
+        await this.storage.deleteObject(key)
+      } catch (error) {
+        this.logger.warn(`Content store object cleanup failed for ${key}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
   }
 
   private async getDraftDto(tx: ContentStoreDb, userId: string, itemId: string): Promise<ContentStoreDraftDto> {
@@ -966,6 +1036,10 @@ function buildSearchText(
     ? body
     : files.find((file) => file.path === (type === "skill" ? "SKILL.md" : "RULE.md"))?.text
   return [title, description, bodyText].filter((value): value is string => Boolean(value)).join("\n")
+}
+
+function uniqueContentStoreObjectKeys(keys: readonly (string | null | undefined)[]): string[] {
+  return Array.from(new Set(keys.filter((key): key is string => Boolean(key))))
 }
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {

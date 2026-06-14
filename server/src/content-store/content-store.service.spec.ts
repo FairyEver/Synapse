@@ -101,6 +101,36 @@ describe("ContentStoreService", () => {
     expect(prisma.contentStoreFile.deleteMany).not.toHaveBeenCalled()
   })
 
+  it("deletes unreferenced draft objects after replacing draft files", async () => {
+    prisma.contentStoreDraft.findFirst
+      .mockResolvedValueOnce(draft({
+        id: "draft-1",
+        itemId: "item-1",
+        ownerUserId: "user-1",
+        revision: 1,
+        item: item({ id: "item-1", type: "skill" }),
+        files: [file({ storageKey: "content-store/drafts/user-1/draft-1/old" })],
+      }))
+      .mockResolvedValueOnce(draft({
+        id: "draft-1",
+        itemId: "item-1",
+        revision: 2,
+        files: [file({ storageKey: "content-store/drafts/user-1/draft-1/new" })],
+      }))
+    prisma.contentStoreFile.findMany.mockResolvedValueOnce([
+      { storageKey: "content-store/drafts/user-1/draft-1/old" },
+    ])
+    prisma.contentStoreDraft.updateMany.mockResolvedValue({ count: 1 })
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+
+    await service.saveDraft("user-1", "item-1", 1, {
+      title: "Next",
+      files: [{ path: "SKILL.md", contentBase64: Buffer.from("# Next").toString("base64") }],
+    })
+
+    expect(storage.deleteObject).toHaveBeenCalledWith("content-store/drafts/user-1/draft-1/old")
+  })
+
   it("creates a current draft from owned content when saving with revision zero", async () => {
     prisma.contentStoreDraft.findFirst
       .mockResolvedValueOnce(null)
@@ -212,6 +242,60 @@ describe("ContentStoreService", () => {
     expect(prisma.contentStoreItem.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ latestVersionId: "version-1" }),
     }))
+  })
+
+  it("deletes a newly written package when publishing fails before the database commit", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 1,
+      item: item({ id: "item-1", type: "skill" }),
+      files: [file({
+        path: "SKILL.md",
+        sha256: "5c01bdbb26f358bab27f267924aa2c9a03fcfdb8c2a8eb01ec6a57bf54e0629e",
+        text: "# Skill",
+        storageKey: "content-store/drafts/user-1/draft-1/5c01",
+      })],
+    }))
+    storage.getObjectStream.mockResolvedValue({ stream: bufferStream("# Skill") })
+    prisma.contentStoreVersion.count.mockResolvedValue(0)
+    prisma.contentStoreVersion.create.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreVersion.update.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreFile.createMany.mockRejectedValue(new Error("database failed"))
+
+    await expect(service.publishDraft("user-1", "item-1", 1)).rejects.toThrow("database failed")
+
+    expect(storage.deleteObject).toHaveBeenCalledWith("content-store/packages/item-1/version-1.zip")
+  })
+
+  it("deletes a copied package when copying content fails before the database commit", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "source-item",
+      type: "skill",
+      latestVersionId: "source-version",
+      visibility: "public",
+    }))
+    prisma.contentStoreVersion.findFirst.mockResolvedValue(version({
+      id: "source-version",
+      itemId: "source-item",
+      files: [file({
+        path: "SKILL.md",
+        sha256: "5c01bdbb26f358bab27f267924aa2c9a03fcfdb8c2a8eb01ec6a57bf54e0629e",
+        text: "# Skill",
+        storageKey: "content-store/drafts/source/draft/5c01",
+      })],
+    }))
+    prisma.contentStoreItem.create.mockResolvedValue(item({ id: "copied-item", ownerUserId: "user-1" }))
+    prisma.contentStoreVersion.create.mockResolvedValue(version({ id: "copied-version", itemId: "copied-item", versionNumber: 1 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+    storage.getObjectStream.mockResolvedValue({ stream: bufferStream("# Skill") })
+    prisma.contentStoreVersion.update.mockResolvedValue(version({ id: "copied-version", itemId: "copied-item", versionNumber: 1 }))
+    prisma.contentStoreItem.update.mockRejectedValue(new Error("copy failed"))
+
+    await expect(service.copyToMine("user-1", "source-item")).rejects.toThrow("copy failed")
+
+    expect(storage.deleteObject).toHaveBeenCalledWith("content-store/packages/copied-item/copied-version.zip")
   })
 
   it("publishes prompt drafts without storing a package", async () => {
@@ -447,6 +531,24 @@ describe("ContentStoreService", () => {
     await expect(service.deletePrivateItem("user-1", "item-1")).rejects.toThrow(BadRequestException)
   })
 
+  it("deletes private item package and file objects after database deletion", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({ id: "item-1", visibility: "private" }))
+    prisma.contentStoreVersion.findMany.mockResolvedValue([
+      { packageKey: "content-store/packages/item-1/version-1.zip" },
+    ])
+    prisma.contentStoreFile.findMany.mockResolvedValue([
+      { storageKey: "content-store/drafts/user-1/draft-1/old" },
+      { storageKey: "content-store/drafts/user-1/draft-1/current" },
+    ])
+    prisma.contentStoreItem.delete.mockResolvedValue(item({ id: "item-1", visibility: "private" }))
+
+    await expect(service.deletePrivateItem("user-1", "item-1")).resolves.toEqual({ ok: true })
+
+    expect(storage.deleteObject).toHaveBeenCalledWith("content-store/packages/item-1/version-1.zip")
+    expect(storage.deleteObject).toHaveBeenCalledWith("content-store/drafts/user-1/draft-1/old")
+    expect(storage.deleteObject).toHaveBeenCalledWith("content-store/drafts/user-1/draft-1/current")
+  })
+
   it("records installs with an install event upsert", async () => {
     prisma.contentStoreInstallSession.findFirst.mockResolvedValue({
       id: "session-1",
@@ -531,11 +633,14 @@ interface PrismaMock {
     create: MockFn
     update: MockFn
     findFirst: MockFn
+    findMany: MockFn
     count: MockFn
   }
   contentStoreFile: {
     createMany: MockFn
     deleteMany: MockFn
+    findMany: MockFn
+    count: MockFn
   }
   contentStoreInstallSession: {
     create: MockFn
@@ -563,8 +668,8 @@ function createPrismaMock(): PrismaMock {
     $transaction: vi.fn(),
     contentStoreItem: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     contentStoreDraft: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), upsert: vi.fn() },
-    contentStoreVersion: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
-    contentStoreFile: { createMany: vi.fn(), deleteMany: vi.fn() },
+    contentStoreVersion: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
+    contentStoreFile: { createMany: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     contentStoreInstallSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     contentStoreInstallEvent: { upsert: vi.fn(), count: vi.fn() },
     auditLog: { create: vi.fn() },
