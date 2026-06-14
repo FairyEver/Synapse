@@ -14,6 +14,7 @@ const logger = createMainLogger("source-acquisition.guarded-fetch")
 export interface CreateGuardedFetchUrlOptions {
   readonly timeoutMs?: number
   readonly allowLocalOrPrivateHosts?: boolean
+  readonly beforeRequest?: (url: URL) => Promise<void> | void
 }
 
 export function createGuardedFetchUrl(options: CreateGuardedFetchUrlOptions = {}): FetchUrl {
@@ -22,6 +23,7 @@ export function createGuardedFetchUrl(options: CreateGuardedFetchUrlOptions = {}
     redirectsRemaining: MAX_REDIRECTS,
     signal: init.signal,
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    beforeRequest: options.beforeRequest,
   })
 }
 
@@ -32,6 +34,7 @@ async function fetchWithRedirects(
     readonly redirectsRemaining: number
     readonly signal: AbortSignal
     readonly timeoutMs: number
+    readonly beforeRequest?: (url: URL) => Promise<void> | void
   },
 ): ReturnType<FetchUrl> {
   const response = await requestUrl(url, options)
@@ -65,6 +68,7 @@ async function requestUrl(
     readonly allowLocalOrPrivateHosts: boolean
     readonly signal: AbortSignal
     readonly timeoutMs: number
+    readonly beforeRequest?: (url: URL) => Promise<void> | void
   },
 ): ReturnType<FetchUrl> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -74,6 +78,7 @@ async function requestUrl(
     })
     throw new Error(`URL protocol is not supported: ${url.protocol}`)
   }
+  await options.beforeRequest?.(url)
   const resolvedAddress = await resolvePublicAddress(url, options.allowLocalOrPrivateHosts)
   const transport = url.protocol === "https:" ? https : http
 

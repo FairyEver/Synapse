@@ -209,14 +209,17 @@ export class KnowledgeBaseService {
     }
   }
 
-  async addUrlSource(payload: SynapseKnowledgeBaseAddUrlSourcePayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+  async addUrlSource(
+    payload: SynapseKnowledgeBaseAddUrlSourcePayload,
+    options: { readonly fetchUrl?: FetchUrl } = {},
+  ): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
     const projectId = payload.projectId
     const projectPath = await this.resolveProjectPath(projectId)
     const result = await stageKnowledgeBaseUrlSource({
       projectPath,
       url: payload.url,
       now: this.now,
-      fetchUrl: this.fetchUrl,
+      fetchUrl: options.fetchUrl ?? this.fetchUrl,
     })
     logger.info("Knowledge Base URL source upload completed.", {
       projectId,

@@ -10,6 +10,30 @@ const logStoreMock = vi.hoisted(() => ({
   },
 }))
 
+const guardedFetchMock = vi.hoisted(() => ({
+  createGuardedFetchUrl: vi.fn((options: {
+    readonly beforeRequest?: (url: URL) => Promise<void> | void
+  } = {}) => async (url: string) => {
+    await options.beforeRequest?.(new URL(url))
+    if (url.includes("redirect-source")) {
+      const redirectedUrl = new URL("https://cdn.example.com/final?token=redirect-secret")
+      await options.beforeRequest?.(redirectedUrl)
+      return {
+        url: redirectedUrl.toString(),
+        status: 200,
+        headers: { get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null },
+        text: async () => "<html><body><h1>Redirected</h1></body></html>",
+      }
+    }
+    return {
+      url,
+      status: 200,
+      headers: { get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null },
+      text: async () => "<html><body><h1>Article</h1><p>Body</p></body></html>",
+    }
+  }),
+}))
+
 import { createInMemoryHarness } from "../../../runtime/ipc"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
@@ -56,6 +80,10 @@ vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
 
+vi.mock("../../../services/source-acquisition/guarded-fetch-url", () => ({
+  createGuardedFetchUrl: guardedFetchMock.createGuardedFetchUrl,
+}))
+
 const roots: string[] = []
 
 async function tempDir(): Promise<string> {
@@ -71,6 +99,7 @@ afterEach(async () => {
 describe("knowledgeBaseIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    guardedFetchMock.createGuardedFetchUrl.mockClear()
     electronMock.BrowserWindow.getFocusedWindow.mockReturnValue(electronMock.focusedWindow)
     electronMock.BrowserWindow.getAllWindows.mockReturnValue([])
     electronMock.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ["/tmp/source.md"] })
@@ -264,7 +293,9 @@ describe("knowledgeBaseIpcModule", () => {
     expect(addUrlSource).toHaveBeenCalledWith({
       projectId: "kb-1",
       url: "https://example.com/article?token=secret-token",
-    })
+    }, expect.objectContaining({
+      fetchUrl: expect.any(Function),
+    }))
     expect(result.uploaded).toHaveLength(1)
     expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
       action: "network.connect",
@@ -278,6 +309,60 @@ describe("knowledgeBaseIpcModule", () => {
       resource: "managed-knowledge-base:kb-1",
       context: { source: "knowledgeBase.addUrlSource" },
     })
+  })
+
+  it("checks redirected URL source targets through guarded network permissions", async () => {
+    const addUrlSource = vi.fn(async (
+      _request: { projectId: string; url: string },
+      options: { fetchUrl: (url: string, init: { readonly signal: AbortSignal }) => Promise<unknown> },
+    ) => {
+      await options.fetchUrl("https://example.com/redirect-source?token=initial-secret", {
+        signal: new AbortController().signal,
+      })
+      return {
+        projectId: "kb-1",
+        uploaded: [{
+          originalPath: "https://example.com/redirect-source",
+          relativePath: ".raw/web/2026/05/24/final.md",
+          name: "final.md",
+          size: 128,
+          sourceKind: "url",
+          sourceUrl: "https://example.com/redirect-source",
+        }],
+        skipped: [],
+      }
+    })
+    const { auditSink, harness, permissionGuard } = createHarness({ service: { addUrlSource } })
+
+    await harness.invoke("synapse:knowledge-base:add-url-source", {
+      projectId: "kb-1",
+      url: "https://example.com/redirect-source?token=initial-secret",
+    })
+
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: "https://example.com/redirect-source?token=%5Bredacted%5D",
+      context: { source: "knowledgeBase.addUrlSource.fetch" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.addUrlSource" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(3, {
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: "https://cdn.example.com/final?token=%5Bredacted%5D",
+      context: { source: "knowledgeBase.addUrlSource.fetch" },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.connect",
+      outcome: "allowed",
+      resource: "https://cdn.example.com/final?token=%5Bredacted%5D",
+      metadata: { source: "knowledgeBase.addUrlSource.fetch" },
+    }))
   })
 
   it("allows URL acquisition skipped reasons in add URL results", async () => {

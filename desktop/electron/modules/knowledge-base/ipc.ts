@@ -6,6 +6,8 @@ import { createMainLogger } from "../../services/log-store"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
 import type { KnowledgeBaseStorageMigrationService } from "../../services/knowledge-base/storage-migration-service"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
+import { createGuardedFetchUrl } from "../../services/source-acquisition/guarded-fetch-url"
+import type { FetchUrl } from "../../services/source-acquisition/url-source"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { sanitizeError } from "../../services/error-sanitize"
 
@@ -412,6 +414,30 @@ async function checkKnowledgeBasePermission(options: {
   })
 }
 
+async function checkKnowledgeBaseNetworkConnect(
+  ctx: IpcHandlerContext,
+  resource: string,
+  checkedResources: Set<string>,
+): Promise<void> {
+  if (checkedResources.has(resource)) return
+  checkedResources.add(resource)
+  await checkKnowledgeBasePermission({
+    ctx,
+    action: "network.connect",
+    resource,
+    source: "knowledgeBase.addUrlSource.fetch",
+  })
+}
+
+function createKnowledgeBaseAddUrlSourceFetch(
+  ctx: IpcHandlerContext,
+  checkedResources: Set<string>,
+): FetchUrl {
+  return createGuardedFetchUrl({
+    beforeRequest: (url) => checkKnowledgeBaseNetworkConnect(ctx, sanitizeUrl(url.toString()), checkedResources),
+  })
+}
+
 async function runGuardedKnowledgeBaseFileUpload<T>(options: {
   ctx: IpcHandlerContext
   projectId: string
@@ -587,18 +613,16 @@ export const knowledgeBaseIpcModule: IpcModule = {
       request: addUrlSourcePayloadSchema,
       response: uploadSourcesResultSchema,
       handler: async (ctx, request: { projectId: string; url: string }) => {
-        await checkKnowledgeBasePermission({
-          ctx,
-          action: "network.connect",
-          resource: sanitizeUrl(request.url),
-          source: "knowledgeBase.addUrlSource.fetch",
-        })
+        const checkedNetworkResources = new Set<string>()
+        await checkKnowledgeBaseNetworkConnect(ctx, sanitizeUrl(request.url), checkedNetworkResources)
         return runGuardedKnowledgeBaseOperation({
           ctx,
           action: "fs.write",
           resource: `managed-knowledge-base:${request.projectId}`,
           source: "knowledgeBase.addUrlSource",
-          run: () => trackRawMutation(() => service(ctx).addUrlSource(request)),
+          run: () => trackRawMutation(() => service(ctx).addUrlSource(request, {
+            fetchUrl: createKnowledgeBaseAddUrlSourceFetch(ctx, checkedNetworkResources),
+          })),
         })
       },
     },
