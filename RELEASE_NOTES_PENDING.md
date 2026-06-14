@@ -45,6 +45,7 @@
 - 未配置公开站点 URL 时，密码重置、网盘分享/发布和 Webhook 链接会明确报配置错误，不再从请求 Host 拼出可能被污染的外部链接。
 - Webhook 请求日志会脱敏自定义密钥、token 和签名类 header，不再只依赖全局 cookie/authorization 遮蔽。
 - Bridge WebSocket 入站消息新增帧大小和字段大小限制，避免本地适配器用超大 payload 拖慢主进程。
+- 诊断包导出的日志文件会先脱敏 token、Authorization、Cookie 和敏感 URL 参数，排障时保留上下文但不再携带明文密钥。
 - 导入 Provider 配置包时，外部包里误放在普通 env 的 token、API key 等敏感变量会自动进入密钥存储，不再作为普通配置落库。
 - Server 请求日志会脱敏 URL query 里的密码、token、secret 和 API key，网盘公开链接带密码访问时不会把密码写进访问日志。
 - Server 审计失败摘要会脱敏 `accessToken=`、`refreshToken=` 等 token key 变体，避免失败审计落库真实凭据。

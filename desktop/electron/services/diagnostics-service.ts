@@ -9,7 +9,9 @@ import {
   buildDiagnosticsSummary,
   summarizeDiagnosticsChecks,
 } from "../../src/lib/diagnostics-summary"
+import { redactSensitiveText } from "../../src/lib/agent-redaction"
 import { errorLogMessage, sanitizeError } from "../../src/lib/error-sanitize"
+import { sanitizeUrl } from "../../src/lib/url-sanitize"
 import type {
   SynapseDiagnosticsBundleExportResult,
   SynapseDiagnosticsCheck,
@@ -1179,8 +1181,17 @@ class DiagnosticsService {
         relativePath,
         included,
         skipped,
+        async () => this.copyRedactedLogFile(
+          path.join(logDirectory, fileName),
+          path.join(packageRoot, relativePath),
+        ),
       )
     }
+  }
+
+  private async copyRedactedLogFile(sourcePath: string, targetPath: string): Promise<void> {
+    const content = await this.readTextFile(sourcePath)
+    await this.writeTextFile(targetPath, redactDiagnosticsLogContent(content))
   }
 
   private ok(
@@ -1572,6 +1583,17 @@ function sanitizeAgentRuntimeLogSample(line: string): string {
       "$1=[redacted]",
     )
   return sample.length > 240 ? `${sample.slice(0, 240)}...` : sample
+}
+
+function redactDiagnosticsLogContent(content: string): string {
+  return content
+    .split(/(\r?\n)/)
+    .map((segment) => segment.includes("\n") ? segment : redactDiagnosticsLogLine(segment))
+    .join("")
+}
+
+function redactDiagnosticsLogLine(line: string): string {
+  return redactSensitiveText(line.replace(/https?:\/\/[^\s"'<>]+/gi, (url) => sanitizeUrl(url)))
 }
 
 function summarizeServiceLifecycle(content: string): ServiceLifecycleSummary {

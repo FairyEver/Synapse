@@ -775,6 +775,55 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(manifestContent).not.toContain("/Users/example/private/config.json")
   })
 
+  it("redacts exported log files while preserving useful context", async () => {
+    const writtenFiles = new Map<string, string>()
+    const logContent = [
+      "[2026-04-29T03:31:20.000Z] [INFO] [agent] starting /Users/liyang/project/file.ts",
+      "Authorization: Bearer sk-live-bearer Cookie: session=raw-cookie",
+      "{\"apiKey\":\"sk-json-secret\",\"message\":\"ok\",\"dataServerToken\":\"data-server-secret\"}",
+      "fetch https://user:password@example.com/callback?token=query-secret&ok=1",
+      "ANTHROPIC_AUTH_TOKEN=sk-env-secret --env SYNAPSE_SIDE_CHANNEL_TOKEN=side-token",
+    ].join("\n")
+    const service = createService({
+      logStore: {
+        getLogDirectory: () => "/logs",
+        listLogFilesInfo: vi.fn(async () => [{ name: "main.log", sizeBytes: logContent.length }]),
+        readLogsByNames: vi.fn(async () => ""),
+        flush: vi.fn(async () => undefined),
+      },
+      readTextFile: vi.fn(async (targetPath: string) => {
+        if (targetPath === "/logs/main.log") return logContent
+        return ""
+      }),
+      writeTextFile: vi.fn(async (targetPath: string, content: string) => {
+        writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
+      }),
+    })
+    const report = await service.collect()
+
+    await service.exportBundle({ report })
+
+    const packagePathSuffix = "/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z"
+    const logPath = findWrittenPath(writtenFiles, `${packagePathSuffix}/logs/main.log`)
+    const exportedLog = writtenFiles.get(logPath ?? "")
+    expect(exportedLog).toBeDefined()
+    expect(exportedLog).toContain("[agent] starting /Users/liyang/project/file.ts")
+    expect(exportedLog).toContain("Authorization: Bearer [redacted]")
+    expect(exportedLog).toContain("Cookie: [redacted]")
+    expect(exportedLog).toContain("\"apiKey\":\"[redacted]\"")
+    expect(exportedLog).toContain("\"dataServerToken\":\"[redacted]\"")
+    expect(exportedLog).toContain("https://example.com/callback?token=%5Bredacted%5D&ok=1")
+    expect(exportedLog).toContain("ANTHROPIC_AUTH_TOKEN=[redacted]")
+    expect(exportedLog).toContain("SYNAPSE_SIDE_CHANNEL_TOKEN=[redacted]")
+    expect(exportedLog).not.toContain("sk-live-bearer")
+    expect(exportedLog).not.toContain("raw-cookie")
+    expect(exportedLog).not.toContain("sk-json-secret")
+    expect(exportedLog).not.toContain("data-server-secret")
+    expect(exportedLog).not.toContain("query-secret")
+    expect(exportedLog).not.toContain("sk-env-secret")
+    expect(exportedLog).not.toContain("side-token")
+  })
+
   it("does not use renderer-provided generatedAt for staging paths", { timeout: 15_000 }, async () => {
     const writtenFiles = new Map<string, string>()
     const service = createService({
