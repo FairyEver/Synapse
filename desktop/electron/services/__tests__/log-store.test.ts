@@ -97,4 +97,34 @@ describe("logStore", () => {
     expect(entry.details).toContain("/Users/example/repo/file.ts")
     expect(entry.details).not.toContain("secret.bearer.token")
   })
+
+  it("redacts fallback stderr output", async () => {
+    await logStore.dispose()
+    vi.resetModules()
+    electronMock.app.getPath.mockReturnValue(tempDir)
+    electronMock.app.getAppPath.mockImplementationOnce(() => {
+      throw new Error("app path failed token=raw-token Authorization: Bearer raw.bearer.token Cookie: session=raw sk-rawsecret")
+    })
+    const stderrWrite = vi.spyOn(process.stderr, "write").mockImplementation(() => true)
+
+    try {
+      const module = await import("../log-store")
+      logStore = module.logStore
+      await logStore.flush()
+      const output = stderrWrite.mock.calls.map((call) => String(call[0])).join("")
+
+      expect(output).toContain("[synapse-log] Failed to read app path for compatibility log.")
+      expect(output).toContain("token=[redacted]")
+      expect(output).toContain("Authorization: [redacted]")
+      expect(output).toContain("Cookie: [redacted]")
+      expect(output).not.toContain("raw-token")
+      expect(output).not.toContain("raw.bearer.token")
+      expect(output).not.toContain("session=raw")
+      expect(output).not.toContain("sk-rawsecret")
+    } finally {
+      stderrWrite.mockRestore()
+      electronMock.app.getAppPath.mockReset()
+      electronMock.app.getAppPath.mockReturnValue("/Applications/Synapse.app")
+    }
+  })
 })

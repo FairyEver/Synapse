@@ -94,6 +94,7 @@
 - Automation 执行和 MCP 修改在权限检查服务异常时会写入失败审计，排查自动化授权故障时不再只依赖运行日志。
 - CC Switch Provider 导入会限制 JSON 配置大小和 SQLite 预览行数，避免异常外部配置让设置页长时间卡住。
 - Electron 主进程日志会在写入前脱敏裸 Bearer、GitHub/GitLab token 和 sk- 开头密钥，避免错误字符串里的凭据进入本地日志。
+- Electron 日志 fallback 写入 stderr 前也会脱敏 token、Authorization、Cookie 等敏感内容，日志目录或 stream 异常时不再绕过遮蔽规则。
 - 知识库会话启用 plugin hooks 时保留用户本机 Claude Code 的 user/project/local hooks，行为与用户自己的 Claude 配置保持一致。
 - 知识库存储迁移在恢复时会继续处理旧目录清理，清理失败会明确提示旧副本仍保留，不再把恢复误报为完全清理完成。
 - 知识库存储迁移会拒绝系统根目录、用户主目录和临时目录等过宽位置，避免把托管知识库数据迁到危险路径。

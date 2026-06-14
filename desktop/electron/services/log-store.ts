@@ -34,6 +34,8 @@ const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_LOG_FILES = 30
 const REDACTED_LOG_VALUE = "[redacted]"
 const REDACTED_LOG_KEY_VALUE = "[key]"
+const AUTHORIZATION_LOG_PATTERN =
+  /\b(authorization)(\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi
 const SENSITIVE_LOG_ASSIGNMENT_PATTERN =
   /\b(session[_-]?key|sourceSessionKey|targetSessionKey|token|secret|api[-_]?key|authorization|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi
 const BEARER_LOG_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
@@ -63,6 +65,10 @@ function isSensitiveLogKey(key: string): boolean {
 
 function redactLogText(value: string): string {
   return value
+    .replace(
+      AUTHORIZATION_LOG_PATTERN,
+      (_match, key: string, separator: string) => `${key}${separator}${REDACTED_LOG_VALUE}`,
+    )
     .replace(
       SENSITIVE_LOG_ASSIGNMENT_PATTERN,
       (_match, key: string, separator: string) => `${key}${separator}${REDACTED_LOG_VALUE}`,
@@ -198,14 +204,14 @@ function getByteLength(value: string): number {
 
 function writeFallbackError(message: string, error: unknown): void {
   const formattedError = error instanceof Error
-    ? error.stack ?? error.message
-    : inspect(error, {
+    ? redactLogText(error.stack ?? error.message)
+    : redactLogText(inspect(sanitizeLogValue(error), {
         breakLength: 120,
         depth: 3,
         sorted: true,
-      })
+      }))
 
-  process.stderr.write(`[synapse-log] ${message}\n${formattedError}\n`)
+  process.stderr.write(`[synapse-log] ${redactLogText(message)}\n${formattedError}\n`)
 }
 
 /**
