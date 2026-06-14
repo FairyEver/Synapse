@@ -30,6 +30,7 @@ import type { ProviderReferenceScannerDeps } from "../../services/provider/provi
 import type { TaskSchedulerService } from "../../services/task-scheduler/task-scheduler-service"
 import type { WorkflowService } from "../../services/workflow/workflow-service"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { createMainLogger } from "../../services/log-store"
 import { resolveProjectAgent } from "./ipc-shared"
 
@@ -553,7 +554,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: z.object({ providerName: z.string().min(1) }),
     response: chooseProviderPackageExportTargetResultSchema,
     handler: async (_ctx, request: { providerName: string }) => {
-      const safeName = request.providerName.replace(/[\\/:*?"<>|]/g, "-").trim() || "provider"
+      const safeName = normalizeContentFileNameSegment(request.providerName, 80)
       const options = {
         title: "导出供应商",
         defaultPath: `${safeName}.synapse-provider.json`,

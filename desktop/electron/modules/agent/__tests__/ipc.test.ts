@@ -949,6 +949,31 @@ describe("agentIpcModule", () => {
     expect(JSON.stringify({ preview, imported, exported })).not.toContain("sk-")
   })
 
+  it("uses Windows-safe default file names when exporting provider packages", async () => {
+    electronMock.dialog.showSaveDialog.mockResolvedValue({ canceled: true })
+    const harness = createHarness({})
+
+    const cases = [
+      { providerName: "CON", expectedDefaultPath: "_CON.synapse-provider.json" },
+      { providerName: "NUL", expectedDefaultPath: "_NUL.synapse-provider.json" },
+      { providerName: "COM1", expectedDefaultPath: "_COM1.synapse-provider.json" },
+      { providerName: "Provider:One. ", expectedDefaultPath: "Provider_One.synapse-provider.json" },
+    ]
+
+    for (const item of cases) {
+      await expect(harness.invoke("synapse:agent:choose-provider-package-export-target", {
+        providerName: item.providerName,
+      })).resolves.toEqual({})
+    }
+
+    expect(electronMock.dialog.showSaveDialog).toHaveBeenCalledTimes(cases.length)
+    for (const [index, item] of cases.entries()) {
+      expect(electronMock.dialog.showSaveDialog).toHaveBeenNthCalledWith(index + 1, expect.objectContaining({
+        defaultPath: item.expectedDefaultPath,
+      }))
+    }
+  })
+
   it("returns Agent runtime readiness without exposing secrets", async () => {
     const harness = createHarness({
       providerService: {
