@@ -25,7 +25,7 @@ export function buildRepositoryTools(): McpToolDefinition[] {
     {
       name: "repository_item_list",
       description:
-        "List configured Synapse repositories. Returns uuid, name, local path, active state, and local variable count. This tool is read-only.",
+        "List configured Synapse repositories. Returns uuid, name, local path, and active state. This tool is read-only.",
       inputSchema: {
         type: "object",
         properties: {},

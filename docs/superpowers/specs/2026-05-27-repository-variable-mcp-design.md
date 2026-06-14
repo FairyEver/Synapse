@@ -87,12 +87,11 @@ Response:
     name: string
     localPath: string
     isActive: boolean
-    variableCount: number
   }>
 }
 ```
 
-`localPath` is included so agents can distinguish repositories with similar names. The tool must not include variable names or values; it only reports count.
+`localPath` is included so agents can distinguish repositories with similar names. The repository discovery tool must not include variable names or values; use the dedicated variable tools for variable metadata.
 
 ## Variable Scope Resolution
 
@@ -412,7 +411,7 @@ Metadata:
 Skill guidance:
 
 - Use only for configured Synapse repository discovery.
-- Call `repository_item_list` to find repository uuid, display name, path, active state, and variable count.
+- Call `repository_item_list` to find repository uuid, display name, path, and active state.
 - Do not claim support for creating, deleting, syncing, initializing, or modifying repositories.
 - Use the repository uuid returned by this skill when another Synapse MCP skill needs a repository scope.
 

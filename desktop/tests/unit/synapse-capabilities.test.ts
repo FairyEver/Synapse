@@ -91,7 +91,10 @@ describe("Repository capability domain", () => {
 
   it("maps repository MCP tools to canonical actions", () => {
     expect(REPOSITORY_MCP_TOOL_ACTIONS.repository_item_list).toBe("repository.item.list")
-    expect(buildRepositoryTools().map((tool) => tool.name)).toEqual(["repository_item_list"])
+    const tools = buildRepositoryTools()
+    expect(tools.map((tool) => tool.name)).toEqual(["repository_item_list"])
+    expect(tools[0]?.description).toContain("uuid, name, local path, and active state")
+    expect(tools[0]?.description).not.toContain("variable count")
   })
 })
 
