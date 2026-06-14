@@ -346,12 +346,13 @@ describe("SideChannelService", () => {
       "Outbox persistence failed.",
       expect.objectContaining({
         projectId: "project-1",
-        sessionKey: "bridge:s1",
+        hasSessionKey: true,
         errorName: "Error",
         errorLength: "write failed for secret session".length,
       }),
     )
     expect(JSON.stringify(warn.mock.calls)).not.toContain("write failed for secret session")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("bridge:s1")
   })
 
   it("sanitizes failed side-channel send dispatch diagnostics", async () => {
@@ -404,7 +405,7 @@ describe("SideChannelService", () => {
     ])
     expect(warn).toHaveBeenCalledWith("Side-channel send dispatch failed.", expect.objectContaining({
       projectId: "project-1",
-      sessionKey: "bridge:s1",
+      hasSessionKey: true,
       transportKind: "bridge",
       connectorId: "bridge",
       attachmentCount: 0,
@@ -415,6 +416,7 @@ describe("SideChannelService", () => {
     expect(JSON.stringify(auditSink.list())).not.toContain("secret prompt")
     expect(JSON.stringify(auditSink.list())).not.toContain("bridge:s1")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("bridge:s1")
   })
 
   it("sanitizes network listen failure audit metadata", async () => {
@@ -539,7 +541,7 @@ describe("SideChannelService", () => {
     ])
     expect(warn).toHaveBeenCalledWith("Side-channel send dispatch failed.", expect.objectContaining({
       projectId: "project-1",
-      sessionKey: "bridge:s1",
+      hasSessionKey: true,
       transportKind: "bridge",
       connectorId: "bridge",
       attachmentCount: 0,
@@ -550,6 +552,7 @@ describe("SideChannelService", () => {
     expect(JSON.stringify(auditSink.list())).not.toContain("generated file is ready")
     expect(JSON.stringify(auditSink.list())).not.toContain("bridge:s1")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("generated file is ready")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("bridge:s1")
   })
 
   it("logs failed relay HTTP requests with source session context", async () => {
@@ -595,7 +598,7 @@ describe("SideChannelService", () => {
       path: "/relay/send",
       method: "POST",
       projectId: "project-1",
-      sessionKey: "bridge:s1",
+      hasSessionKey: true,
       messageLength: 18,
       imageCount: 0,
       fileCount: 0,
@@ -607,6 +610,7 @@ describe("SideChannelService", () => {
     }))
     expect(JSON.stringify(warn.mock.calls)).not.toContain("relay failed with secret prompt")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("secret prompt body")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("bridge:s1")
     await service.stop()
   })
 
@@ -638,7 +642,7 @@ describe("SideChannelService", () => {
     await expectEventually(async () => warn.mock.calls.length, 1)
     expect(warn).toHaveBeenCalledWith("Reply target dispatch failed.", expect.objectContaining({
       projectId: "project-1",
-      sessionKey: "bridge:s1",
+      hasSessionKey: true,
       transportKind: "bridge",
       connectorId: "bridge",
       eventType: "error",
@@ -648,6 +652,7 @@ describe("SideChannelService", () => {
       errorLength: "dispatcher failed with secret prompt".length,
     }))
     expect(JSON.stringify(warn.mock.calls)).not.toContain("dispatcher failed with secret prompt")
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("bridge:s1")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("agent result failed")
   })
 

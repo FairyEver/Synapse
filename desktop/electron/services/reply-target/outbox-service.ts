@@ -70,7 +70,7 @@ export class ReplyOutboxService {
       .catch((error) => {
         this.deps.logger?.warn("Outbox persistence failed.", {
           projectId: input.target.projectId,
-          sessionKey: input.target.sessionKey,
+          hasSessionKey: Boolean(input.target.sessionKey),
           ...errorDiagnostic(error),
         })
       })

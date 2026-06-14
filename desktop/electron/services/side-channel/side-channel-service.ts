@@ -190,7 +190,7 @@ export class SideChannelService implements ReplyTargetRuntime {
     return dispatcher.dispatchAgentEvent(target, event).catch((error) => {
       this.deps.logger?.warn("Reply target dispatch failed.", {
         projectId: target.projectId,
-        sessionKey: target.sessionKey,
+        hasSessionKey: Boolean(target.sessionKey),
         transportKind: target.transport.kind,
         connectorId: target.transport.connectorId,
         eventType: event.type,
@@ -255,7 +255,7 @@ export class SideChannelService implements ReplyTargetRuntime {
       this.recordSendAudit("failed", target, attachments.length, diagnostic)
       this.deps.logger?.warn("Side-channel send dispatch failed.", {
         projectId: target.projectId,
-        sessionKey: target.sessionKey,
+        hasSessionKey: Boolean(target.sessionKey),
         transportKind: target.transport.kind,
         connectorId: target.transport.connectorId,
         attachmentCount: attachments.length,
@@ -463,7 +463,7 @@ export class SideChannelService implements ReplyTargetRuntime {
       path,
       method,
       projectId: stringValue(request?.projectId ?? request?.project ?? request?.sourceProjectId ?? request?.source_project),
-      sessionKey: stringValue(request?.sessionKey ?? request?.session_key ?? request?.sourceSessionKey ?? request?.source_session_key),
+      hasSessionKey: Boolean(stringValue(request?.sessionKey ?? request?.session_key ?? request?.sourceSessionKey ?? request?.source_session_key)),
       messageLength: typeof request?.message === "string" ? request.message.length : 0,
       imageCount: arrayLength(request?.images),
       fileCount: arrayLength(request?.files),

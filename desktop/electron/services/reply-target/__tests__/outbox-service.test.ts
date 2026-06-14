@@ -183,7 +183,7 @@ describe("ReplyOutboxService", () => {
       "Outbox persistence failed.",
       expect.objectContaining({
         projectId: "project-1",
-        sessionKey: "local:renderer",
+        hasSessionKey: true,
         errorName: "Error",
         errorLength: "SDK failed for secret prompt at /Users/liyang/token.txt".length,
       }),
@@ -191,6 +191,7 @@ describe("ReplyOutboxService", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/liyang")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("token.txt")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("local:renderer")
   })
 })
 
