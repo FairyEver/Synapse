@@ -164,7 +164,8 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
           case "automation.run.execute": {
             const { automationId } = parseAutomationIdParams(params)
             const run = await deps.service.runAutomationNow(automationId)
-            result = { ok: true, data: run ? toPublicAutomationRunSummary(run) : null }
+            if (!run) throw new Error(`Automation "${automationId}" was not found or did not start`)
+            result = { ok: true, data: toPublicAutomationRunSummary(run) }
             break
           }
 

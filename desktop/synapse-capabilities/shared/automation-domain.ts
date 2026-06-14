@@ -219,7 +219,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_run_execute",
-      description: "Manually run one Synapse Automation by automationId. Use automation_run_list or automation_runtime_inspect for follow-up.",
+      description: "Manually run one Synapse Automation by automationId. Fails if the Automation is missing or no run starts. Use automation_run_list or automation_runtime_inspect for follow-up.",
       inputSchema: { type: "object", properties: { automationId: automationIdProperty }, required: ["automationId"] },
     },
     {

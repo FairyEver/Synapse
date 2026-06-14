@@ -159,7 +159,7 @@ Input:
 { "automationId": "automation:..." }
 ```
 
-Returns a safe run summary or `null`.
+Returns a safe run summary. If the Automation is missing or no run starts, the tool fails instead of returning a successful empty result.
 
 ### automation_run_disable
 

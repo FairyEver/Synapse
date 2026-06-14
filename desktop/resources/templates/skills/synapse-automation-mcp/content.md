@@ -76,7 +76,7 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 
 ## Run Rules
 
-- `automation_run_execute` starts a manual run and returns a safe run summary.
+- `automation_run_execute` starts a manual run and returns a safe run summary. Treat tool failure as no run started.
 - `automation_run_disable` stops an active run by run id.
 - `automation_run_list` returns recent run summaries without raw logs or outputs.
 - `automation_runtime_inspect` shows which items are scheduled or running.

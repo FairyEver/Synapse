@@ -408,6 +408,28 @@ describe("automation capability dispatcher", () => {
     expect(JSON.stringify([run, runs, runtime])).not.toContain("private output")
   })
 
+  it("fails manual run execution when the automation is missing or no run starts", async () => {
+    const { auditSink, dispatcher, service } = createHarness()
+    vi.mocked(service.runAutomationNow).mockResolvedValueOnce(null)
+
+    await expect(dispatcher.dispatch("automation.run.execute", { automationId: "automation:missing" }, { source: "mcp-http" }))
+      .rejects
+      .toThrow('Automation "automation:missing" was not found or did not start')
+
+    expect(service.runAutomationNow).toHaveBeenCalledWith("automation:missing")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "automation.mutate",
+      resource: "automation:automation:missing",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        automationAction: "automation.run.execute",
+        automationId: "automation:missing",
+        errorName: "Error",
+      }),
+    }))
+  })
+
   it("redacts sensitive run summaries and whitelists public metrics", async () => {
     const { dispatcher, service } = createHarness()
     const sensitiveRun: AutomationRun = {
