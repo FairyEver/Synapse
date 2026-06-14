@@ -88,15 +88,19 @@ describe("server deployment configuration", () => {
     expect(entrypoint).toContain("npx prisma migrate deploy")
     expect(entrypoint).toContain("nginx -t")
     expect(entrypoint).toContain("nginx -g 'daemon off;' &")
-    expect(entrypoint).toContain("exec node server/dist/main.js")
+    expect(entrypoint).toContain("nginx_pid=$!")
+    expect(entrypoint).toContain("node_pid=$!")
+    expect(entrypoint).toContain("kill -0 \"$nginx_pid\"")
+    expect(entrypoint).toContain("kill -0 \"$node_pid\"")
+    expect(entrypoint).toContain("trap 'shutdown; exit 143' INT TERM")
   })
 
-  it("checks the server node process health through compose", () => {
+  it("checks the public nginx entrypoint health through compose", () => {
     const compose = readRepoFile("server/compose.yml")
 
     expect(compose).toContain("healthcheck:")
-    expect(compose).toContain("http://127.0.0.1:3001/healthz")
-    expect(compose).not.toContain("http://127.0.0.1:3000/healthz")
+    expect(compose).toContain("http://127.0.0.1:3000/healthz")
+    expect(compose).not.toContain("http://127.0.0.1:3001/healthz")
   })
 
   it("uses the configured postgres identity in compose", () => {
