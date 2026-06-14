@@ -32,6 +32,7 @@ import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-confi
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
 import type { EventBus } from "../runtime/event-bus"
 import { createMainLogger } from "./log-store"
+import { redactSensitiveText } from "../../src/lib/agent-redaction"
 
 const logger = createMainLogger("service.account")
 const CORE_ACCOUNT_NAMESPACE = "core.account"
@@ -1262,7 +1263,7 @@ async function formatHttpFailureBody(response: Response): Promise<string> {
   try {
     return truncateHttpFailureDetail(JSON.stringify(redactHttpFailureDetail(JSON.parse(text))))
   } catch {
-    return truncateHttpFailureDetail(text)
+    return truncateHttpFailureDetail(redactSensitiveText(text))
   }
 }
 

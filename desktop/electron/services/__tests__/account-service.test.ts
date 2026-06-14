@@ -76,6 +76,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function textResponse(body: string, status = 500): Response {
+  return new Response(body, {
+    status,
+    headers: { "Content-Type": "text/plain" },
+  })
+}
+
 const storedProfile: SynapseAccountProfile = {
   user: { id: "u1", email: "u@example.com", displayName: null, status: "active" },
   teams: [],
@@ -627,6 +634,43 @@ describe("AccountService", () => {
     expect(error?.message).toContain("HTTP 400")
     expect(error?.message).toContain("code expired")
     expect(error?.message).not.toContain("secret-response-token")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-code")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.state)
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.codeVerifier)
+  })
+
+  it("redacts plaintext HTTP failure bodies before logging account errors", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url) => {
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return textResponse(
+            "proxy failed Authorization: Bearer secret-response-token token=plain-secret Cookie: session=secret-cookie",
+            502,
+          )
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=secret-code&state=${attempt!.state}`,
+    )
+
+    expect(state.status).toBe("error")
+    const warning = accountLogger.warn.mock.calls.find(
+      ([message]) => message === "Desktop account callback exchange failed.",
+    )
+    const error = warning?.[1]?.error as Error | undefined
+    expect(error?.message).toContain("POST /api/auth/desktop/token")
+    expect(error?.message).toContain("HTTP 502")
+    expect(error?.message).toContain("proxy failed")
+    expect(error?.message).toContain("[redacted]")
+    expect(error?.message).not.toContain("secret-response-token")
+    expect(error?.message).not.toContain("plain-secret")
+    expect(error?.message).not.toContain("secret-cookie")
     expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-code")
     expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.state)
     expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.codeVerifier)
