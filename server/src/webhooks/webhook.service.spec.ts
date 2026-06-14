@@ -22,6 +22,7 @@ function createPrismaMock() {
   return {
     userWebhook: {
       findMany: vi.fn(),
+      count: vi.fn(),
       create: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
@@ -199,38 +200,51 @@ describe("WebhookService", () => {
         }],
       },
     ])
+    prisma.userWebhook.count.mockResolvedValue(1)
+    prisma.$transaction.mockImplementation((input) => Array.isArray(input) ? Promise.all(input) : input({}))
     const service = new WebhookService(prisma as never)
 
-    await expect(service.listForUser("user-1", "https://synapse.test")).resolves.toEqual([{
-      id: "webhook-1",
-      publicId: "wh_public",
-      name: "GitHub",
-      enabled: true,
-      url: null,
-      maskedUrl: "https://synapse.test/webhooks/wh_public/***",
-      createdAt: "2026-06-06T10:00:00.000Z",
-      updatedAt: "2026-06-06T10:00:00.000Z",
-      lastDeliveryAt: "2026-06-06T11:00:00.000Z",
-      lastDeliveryStatus: WEBHOOK_DELIVERY_STATUS.received,
-    }])
+    await expect(service.listForUser("user-1", {
+      publicAppUrl: "https://synapse.test",
+      pagination: { page: 2, pageSize: 10, sortBy: "createdAt", sortOrder: "desc" },
+    })).resolves.toEqual({
+      data: [{
+        id: "webhook-1",
+        publicId: "wh_public",
+        name: "GitHub",
+        enabled: true,
+        url: null,
+        maskedUrl: "https://synapse.test/webhooks/wh_public/***",
+        createdAt: "2026-06-06T10:00:00.000Z",
+        updatedAt: "2026-06-06T10:00:00.000Z",
+        lastDeliveryAt: "2026-06-06T11:00:00.000Z",
+        lastDeliveryStatus: WEBHOOK_DELIVERY_STATUS.received,
+      }],
+      total: 1,
+      page: 2,
+      pageSize: 10,
+    })
     const findManyArgs = prisma.userWebhook.findMany.mock.calls[0]?.[0]
     expect(findManyArgs.where).toEqual({ userId: "user-1", deletedAt: null })
     expect(findManyArgs.include.deliveries.orderBy).toEqual({ receivedAt: "desc" })
     expect(findManyArgs.include.deliveries.take).toBe(1)
+    expect(findManyArgs.skip).toBe(10)
+    expect(findManyArgs.take).toBe(10)
+    expect(prisma.userWebhook.count).toHaveBeenCalledWith({
+      where: { userId: "user-1", deletedAt: null },
+    })
   })
 
   it("returns null full URLs for legacy hash-only webhooks", async () => {
     const prisma = createPrismaMock()
-    prisma.userWebhook.findMany.mockResolvedValue([
-      {
-        ...baseWebhook,
-        secret: null,
-        deliveries: [],
-      },
-    ])
+    prisma.userWebhook.findFirst.mockResolvedValue({
+      ...baseWebhook,
+      secret: null,
+      deliveries: [],
+    })
     const service = new WebhookService(prisma as never)
 
-    await expect(service.listForUser("user-1", "https://synapse.test")).resolves.toEqual([{
+    await expect(service.getForUser("user-1", "webhook-1", "https://synapse.test")).resolves.toEqual({
       id: "webhook-1",
       publicId: "wh_public",
       name: "GitHub",
@@ -239,7 +253,7 @@ describe("WebhookService", () => {
       maskedUrl: "https://synapse.test/webhooks/wh_public/***",
       createdAt: "2026-06-06T10:00:00.000Z",
       updatedAt: "2026-06-06T10:00:00.000Z",
-    }])
+    })
   })
 
   it("resets secret and invalidates the old secret hash", async () => {
@@ -408,6 +422,7 @@ describe("WebhookService", () => {
   it("keeps users isolated when listing and mutating webhooks", async () => {
     const prisma = createPrismaMock()
     prisma.userWebhook.findMany.mockResolvedValue([{ ...baseWebhook, deliveries: [] }])
+    prisma.userWebhook.count.mockResolvedValue(1)
     const tx = {
       userWebhook: {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -417,12 +432,15 @@ describe("WebhookService", () => {
         create: vi.fn(),
       },
     }
-    prisma.$transaction.mockImplementation((callback) => callback(tx))
+    prisma.$transaction.mockImplementation((input) => Array.isArray(input) ? Promise.all(input) : input(tx))
     const service = new WebhookService(prisma as never)
 
     await expect(service.updateForUser("user-2", "webhook-1", { name: "Hack" }, "https://synapse.test"))
       .rejects.toThrow(NotFoundException)
-    await expect(service.listForUser("user-1", "https://synapse.test")).resolves.toHaveLength(1)
+    await expect(service.listForUser("user-1", {
+      publicAppUrl: "https://synapse.test",
+      pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+    })).resolves.toMatchObject({ total: 1, data: [expect.objectContaining({ id: "webhook-1" })] })
     expect(prisma.userWebhook.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { userId: "user-1", deletedAt: null },
     }))
@@ -468,18 +486,16 @@ describe("WebhookService", () => {
 
   it("omits unknown last delivery status from webhook DTOs", async () => {
     const prisma = createPrismaMock()
-    prisma.userWebhook.findMany.mockResolvedValue([
-      {
-        ...baseWebhook,
-        deliveries: [{
-          receivedAt: new Date("2026-06-06T11:00:00.000Z"),
-          status: "future_status",
-        }],
-      },
-    ])
+    prisma.userWebhook.findFirst.mockResolvedValue({
+      ...baseWebhook,
+      deliveries: [{
+        receivedAt: new Date("2026-06-06T11:00:00.000Z"),
+        status: "future_status",
+      }],
+    })
     const service = new WebhookService(prisma as never)
 
-    const [webhook] = await service.listForUser("user-1", "https://synapse.test")
+    const webhook = await service.getForUser("user-1", "webhook-1", "https://synapse.test")
 
     expect(webhook).not.toHaveProperty("lastDeliveryStatus")
   })

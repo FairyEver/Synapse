@@ -570,8 +570,14 @@ export const dashboardApi = {
         body: JSON.stringify(input),
       }
     ),
-  listWebhooks: () =>
-    request<DashboardWebhookDto[]>(`${consoleApiBasePath}/webhooks`),
+  listWebhooks: (options: PaginationOptions = {}) =>
+    request<PaginatedResponse<DashboardWebhookDto>>(
+      `${consoleApiBasePath}/webhooks${paginationSuffix(options)}`
+    ),
+  getWebhook: (id: string) =>
+    request<DashboardWebhookDto>(
+      `${consoleApiBasePath}/webhooks/${encodeURIComponent(id)}`
+    ),
   createWebhook: (input: { name: string }) =>
     request<DashboardWebhookSecretResult>(`${consoleApiBasePath}/webhooks`, {
       method: 'POST',

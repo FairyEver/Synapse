@@ -23,14 +23,12 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  findWebhookById,
   formatOptionalWebhookDateTime,
   getWebhookDeliveryStatusLabel,
   getWebhookUrlDisplayState,
 } from './webhook-display'
 import { getWebhookErrorMessage } from './webhook-error'
 import {
-  removeDeletedWebhookFromCache,
   WebhookFormDialog,
   type WebhookFormState,
 } from './index'
@@ -54,11 +52,11 @@ export default function WebhookDetailPage() {
   const navigate = useNavigate()
 
   const webhooksQuery = useQuery({
-    queryKey: ['dashboard-webhooks'],
-    queryFn: () => dashboardApi.listWebhooks(),
+    queryKey: ['dashboard-webhook', webhookId],
+    queryFn: () => dashboardApi.getWebhook(webhookId),
   })
 
-  const webhook = findWebhookById(webhooksQuery.data ?? [], webhookId)
+  const webhook = webhooksQuery.data ?? null
 
   const updateMutation = useMutation({
     mutationFn: ({
@@ -90,10 +88,8 @@ export default function WebhookDetailPage() {
     mutationFn: (id: string) => dashboardApi.deleteWebhook(id),
     onSuccess: (_result, deletedId) => {
       setDeleteTarget(null)
-      queryClient.setQueryData<DashboardWebhookDto[]>(
-        ['dashboard-webhooks'],
-        (current) => removeDeletedWebhookFromCache(current, deletedId)
-      )
+      queryClient.removeQueries({ queryKey: ['dashboard-webhook', deletedId] })
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
       toast.success('已删除')
       void navigate({ to: '/webhooks' })
     },
@@ -349,9 +345,6 @@ function replaceWebhookInCache(
   queryClient: QueryClient,
   webhook: DashboardWebhookDto
 ) {
-  queryClient.setQueryData<DashboardWebhookDto[]>(
-    ['dashboard-webhooks'],
-    (current) =>
-      (current ?? []).map((item) => (item.id === webhook.id ? webhook : item))
-  )
+  queryClient.setQueryData(['dashboard-webhook', webhook.id], webhook)
+  void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
 }

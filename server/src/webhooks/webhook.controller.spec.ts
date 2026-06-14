@@ -36,12 +36,30 @@ describe("WebhookDashboardController", () => {
 
   it("lists current-user webhooks", async () => {
     const service = {
-      listForUser: vi.fn().mockResolvedValue([]),
+      listForUser: vi.fn().mockResolvedValue({ data: [], total: 0, page: 2, pageSize: 10 }),
     }
     const controller = new WebhookDashboardController(service as unknown as WebhookService)
 
-    await expect(controller.list(createRequest() as never)).resolves.toEqual([])
-    expect(service.listForUser).toHaveBeenCalledWith("user-1", "https://synapse.test")
+    await expect(controller.list({
+      page: "2",
+      pageSize: "10",
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    }, createRequest() as never)).resolves.toEqual({ data: [], total: 0, page: 2, pageSize: 10 })
+    expect(service.listForUser).toHaveBeenCalledWith("user-1", {
+      publicAppUrl: "https://synapse.test",
+      pagination: { page: 2, pageSize: 10, sortBy: "createdAt", sortOrder: "desc" },
+    })
+  })
+
+  it("gets a current-user webhook by id", async () => {
+    const service = {
+      getForUser: vi.fn().mockResolvedValue({ id: "webhook-1" }),
+    }
+    const controller = new WebhookDashboardController(service as unknown as WebhookService)
+
+    await expect(controller.get("webhook-1", createRequest() as never)).resolves.toEqual({ id: "webhook-1" })
+    expect(service.getForUser).toHaveBeenCalledWith("user-1", "webhook-1", "https://synapse.test")
   })
 
   it("creates webhooks with configured public URLs", async () => {

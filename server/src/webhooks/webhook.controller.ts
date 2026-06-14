@@ -26,8 +26,16 @@ export class WebhookDashboardController {
   constructor(private readonly webhooks: WebhookService) {}
 
   @Get("/webhooks")
-  list(@Req() request: AuthenticatedUserRequest) {
-    return this.webhooks.listForUser(request.user!.id, resolveRequestPublicAppUrl(request))
+  list(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {
+    return this.webhooks.listForUser(request.user!.id, {
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+      pagination: parsePagination(query),
+    })
+  }
+
+  @Get("/webhooks/:id")
+  get(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.webhooks.getForUser(request.user!.id, id, resolveRequestPublicAppUrl(request))
   }
 
   @Post("/webhooks")

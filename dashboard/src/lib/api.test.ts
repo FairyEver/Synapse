@@ -87,14 +87,30 @@ describe('dashboardApi.webhooks', () => {
   }
 
   it('uses console webhook management endpoints', async () => {
-    const fetchMock = mockJsonResponse({ ok: true })
+    const fetchMock = mockJsonResponse({ data: [], total: 0, page: 1, pageSize: 20 })
 
+    await dashboardApi.listWebhooks({ page: 2, pageSize: 10 })
+    await dashboardApi.getWebhook('hook/id')
     await dashboardApi.updateWebhook('hook/id', { name: 'Deploy', enabled: false })
     await dashboardApi.resetWebhookSecret('hook/id')
     await dashboardApi.listWebhookDeliveries('hook/id')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
+      '/api/console/webhooks?page=2&pageSize=10',
+      expect.objectContaining({
+        credentials: 'include',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/console/webhooks/hook%2Fid',
+      expect.objectContaining({
+        credentials: 'include',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       '/api/console/webhooks/hook%2Fid',
       expect.objectContaining({
         body: JSON.stringify({ name: 'Deploy', enabled: false }),
@@ -103,7 +119,7 @@ describe('dashboardApi.webhooks', () => {
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+      4,
       '/api/console/webhooks/hook%2Fid/reset-secret',
       expect.objectContaining({
         credentials: 'include',
@@ -111,7 +127,7 @@ describe('dashboardApi.webhooks', () => {
       })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      5,
       '/api/console/webhooks/hook%2Fid/deliveries',
       expect.objectContaining({
         credentials: 'include',

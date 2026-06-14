@@ -80,15 +80,15 @@ describe('webhook display helpers', () => {
       id: `id-${index + 1}`,
     }))
 
-    expect(getWebhookCardPageState(webhooks, 1, 2)).toEqual({
+    expect(getWebhookCardPageState(webhooks.slice(0, 2), 5, 2)).toEqual({
       pageCount: 3,
       pageData: [{ id: 'id-1' }, { id: 'id-2' }],
     })
-    expect(getWebhookCardPageState(webhooks, 4, 2)).toEqual({
+    expect(getWebhookCardPageState(webhooks.slice(4, 5), 5, 2)).toEqual({
       pageCount: 3,
       pageData: [{ id: 'id-5' }],
     })
-    expect(getWebhookCardPageState([], 1, 20)).toEqual({
+    expect(getWebhookCardPageState([], 0, 20)).toEqual({
       pageCount: 1,
       pageData: [],
     })

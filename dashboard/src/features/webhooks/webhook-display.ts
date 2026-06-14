@@ -32,17 +32,15 @@ export function formatOptionalWebhookDateTime(value: string | undefined) {
 
 export function getWebhookCardPageState<T>(
   webhooks: readonly T[],
-  page: number,
+  total: number,
   pageSize: number
 ) {
   const safePageSize = Math.max(1, pageSize)
-  const pageCount = Math.max(1, Math.ceil(webhooks.length / safePageSize))
-  const boundedPage = Math.min(Math.max(1, page), pageCount)
-  const start = (boundedPage - 1) * safePageSize
+  const pageCount = Math.max(1, Math.ceil(total / safePageSize))
 
   return {
     pageCount,
-    pageData: webhooks.slice(start, start + safePageSize),
+    pageData: webhooks,
   }
 }
 

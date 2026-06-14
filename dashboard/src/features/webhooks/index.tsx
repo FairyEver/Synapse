@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
   type FormEvent,
   type ReactNode,
@@ -84,14 +83,16 @@ export default function WebhooksPage() {
   const navigate = useNavigate()
 
   const webhooksQuery = useQuery({
-    queryKey: ['dashboard-webhooks'],
-    queryFn: () => dashboardApi.listWebhooks(),
+    queryKey: ['dashboard-webhooks', page, pageSize],
+    queryFn: () => dashboardApi.listWebhooks({ page, pageSize }),
   })
 
-  const webhooks = webhooksQuery.data ?? []
-  const { pageCount, pageData } = useMemo(
-    () => getWebhookCardPageState(webhooks, page, pageSize),
-    [webhooks, page, pageSize]
+  const webhooksPage = webhooksQuery.data
+  const total = webhooksPage?.total ?? 0
+  const { pageCount, pageData } = getWebhookCardPageState(
+    webhooksPage?.data ?? [],
+    total,
+    pageSize
   )
 
   useEffect(() => {
@@ -104,11 +105,9 @@ export default function WebhooksPage() {
     mutationFn: (input: { name: string }) => dashboardApi.createWebhook(input),
     onSuccess: (result) => {
       setForm(null)
+      setPage(1)
       setOneTimeUrl({ title: 'Webhook URL', url: result.url })
-      queryClient.setQueryData<DashboardWebhookDto[]>(
-        ['dashboard-webhooks'],
-        (current) => [result.webhook, ...(current ?? [])]
-      )
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
       toast.success('已创建')
     },
     onError: (error) => toast.error(getWebhookErrorMessage(error, '创建失败')),
@@ -124,13 +123,8 @@ export default function WebhooksPage() {
     }) => dashboardApi.updateWebhook(id, input),
     onSuccess: (webhook) => {
       setForm(null)
-      queryClient.setQueryData<DashboardWebhookDto[]>(
-        ['dashboard-webhooks'],
-        (current) =>
-          (current ?? []).map((item) =>
-            item.id === webhook.id ? webhook : item
-          )
-      )
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
+      queryClient.setQueryData(['dashboard-webhook', webhook.id], webhook)
       toast.success('已保存')
     },
     onError: (error) => toast.error(getWebhookErrorMessage(error, '保存失败')),
@@ -140,10 +134,8 @@ export default function WebhooksPage() {
     mutationFn: (id: string) => dashboardApi.deleteWebhook(id),
     onSuccess: (_result, deletedId) => {
       setDeleteTarget(null)
-      queryClient.setQueryData<DashboardWebhookDto[]>(
-        ['dashboard-webhooks'],
-        (current) => removeDeletedWebhookFromCache(current, deletedId)
-      )
+      queryClient.removeQueries({ queryKey: ['dashboard-webhook', deletedId] })
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
       toast.success('已删除')
     },
     onError: (error) => toast.error(getWebhookErrorMessage(error, '删除失败')),
@@ -153,12 +145,10 @@ export default function WebhooksPage() {
     mutationFn: (id: string) => dashboardApi.resetWebhookSecret(id),
     onSuccess: (result) => {
       setOneTimeUrl({ title: '新的 Webhook URL', url: result.url })
-      queryClient.setQueryData<DashboardWebhookDto[]>(
-        ['dashboard-webhooks'],
-        (current) =>
-          (current ?? []).map((item) =>
-            item.id === result.webhook.id ? result.webhook : item
-          )
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
+      queryClient.setQueryData(
+        ['dashboard-webhook', result.webhook.id],
+        result.webhook
       )
       toast.success('已重置')
     },
@@ -206,7 +196,7 @@ export default function WebhooksPage() {
         ) : (
           <WebhookCardList
             webhooks={pageData}
-            total={webhooks.length}
+            total={total}
             page={page}
             pageCount={pageCount}
             pageSize={pageSize}

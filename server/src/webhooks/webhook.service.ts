@@ -104,6 +104,11 @@ type WebhookDeliveryHistoryOptions = {
   readonly filters?: WebhookDeliveryHistoryFilters
 }
 
+type WebhookListOptions = {
+  readonly pagination: PaginationQuery
+  readonly publicAppUrl?: string
+}
+
 const webhookWithLatestDelivery = {
   deliveries: {
     orderBy: { receivedAt: "desc" as const },
@@ -136,13 +141,31 @@ export class WebhookService implements OnModuleInit {
     })
   }
 
-  async listForUser(userId: string, publicAppUrl = ""): Promise<DashboardWebhookDto[]> {
-    const webhooks = await this.prisma.userWebhook.findMany({
-      where: { userId, deletedAt: null },
+  async listForUser(userId: string, options: WebhookListOptions): Promise<PaginatedResponse<DashboardWebhookDto>> {
+    const where = { userId, deletedAt: null }
+    const [webhooks, total] = await this.prisma.$transaction([
+      this.prisma.userWebhook.findMany({
+        where,
+        ...toPrismaArgs(options.pagination),
+        include: webhookWithLatestDelivery,
+      }),
+      this.prisma.userWebhook.count({ where }),
+    ])
+    return {
+      data: webhooks.map((webhook) => this.toDashboardWebhookDto(webhook, options.publicAppUrl ?? "")),
+      total,
+      page: options.pagination.page,
+      pageSize: options.pagination.pageSize,
+    }
+  }
+
+  async getForUser(userId: string, id: string, publicAppUrl = ""): Promise<DashboardWebhookDto> {
+    const webhook = await this.prisma.userWebhook.findFirst({
+      where: { id, userId, deletedAt: null },
       include: webhookWithLatestDelivery,
-      orderBy: { createdAt: "desc" },
     })
-    return webhooks.map((webhook) => this.toDashboardWebhookDto(webhook, publicAppUrl))
+    if (!webhook) throw new NotFoundException("Webhook not found")
+    return this.toDashboardWebhookDto(webhook, publicAppUrl)
   }
 
   async createForUser(
