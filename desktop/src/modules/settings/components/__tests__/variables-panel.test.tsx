@@ -6,11 +6,12 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
+import type { SynapseVariable } from "@/types/config"
 
 const mocks = vi.hoisted(() => ({
   config: {
     global: {
-      variables: [],
+      variables: [] as SynapseVariable[],
     },
   },
   updateConfig: vi.fn(),
@@ -112,5 +113,48 @@ describe("VariablesPanel", () => {
       },
     })
     expect(mocks.updateRepository).not.toHaveBeenCalled()
+  })
+
+  it("does not render saved variable values as visible text", async () => {
+    mocks.config.global.variables = [{
+      name: "GITEE_TOKEN",
+      value: "sk-secret-token",
+      description: "Gitee",
+    }]
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<VariablesPanel />)
+    })
+
+    expect(document.body.textContent).toContain("GITEE_TOKEN")
+    expect(document.body.textContent).toContain("********")
+    expect(document.body.textContent).not.toContain("sk-secret-token")
+  })
+
+  it("masks the value field when editing a variable", async () => {
+    mocks.config.global.variables = [{
+      name: "GITEE_TOKEN",
+      value: "sk-secret-token",
+      description: "Gitee",
+    }]
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<VariablesPanel />)
+    })
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="编辑变量"]')?.click()
+    })
+
+    const valueInput = document.querySelector<HTMLInputElement>("#variable-value")
+    expect(valueInput?.type).toBe("password")
+    expect(document.body.textContent).not.toContain("sk-secret-token")
   })
 })

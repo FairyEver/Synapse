@@ -60,7 +60,7 @@ function VariableCard({
         </div>
       </div>
       <p className="mt-1 truncate text-xs text-muted-foreground">
-        {variable.value || <span className="italic">（空值）</span>}
+        {variable.value ? "********" : <span className="italic">（空值）</span>}
       </p>
       {variable.description ? (
         <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
@@ -215,6 +215,7 @@ function VariablesPanel() {
         <Label htmlFor="variable-value">值</Label>
         <Input
           id="variable-value"
+          type="password"
           placeholder="sk-proj-..."
           value={form.value}
           onChange={(e) => setForm((prev) => ({ ...prev, value: e.target.value }))}
