@@ -197,16 +197,16 @@ export class BackupService {
         try {
           if (fs.existsSync(file)) fs.unlinkSync(file)
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          this.logger.warn?.({ error: message, file }, "Failed to remove backup temp file")
+          const message = formatAuditError(error)
+          this.logger.warn?.({ error: message, file: formatAuditError(file) }, "Failed to remove backup temp file")
         }
       }
       for (const dir of tempDirs) {
         try {
           fs.rmSync(dir, { recursive: true, force: true })
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
-          this.logger.warn?.({ error: message, dir }, "Failed to remove backup temp directory")
+          const message = formatAuditError(error)
+          this.logger.warn?.({ error: message, dir: formatAuditError(dir) }, "Failed to remove backup temp directory")
         }
       }
     }
@@ -240,7 +240,7 @@ export class BackupService {
         )
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = formatAuditError(error)
       this.logger.error({ error: message }, "Failed to list backups")
       throw error
     }
@@ -525,7 +525,6 @@ export class BackupService {
             },
           })
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error)
           const auditError = formatAuditError(error)
           await this.recordBackupCleanupAudit({
             action: "backup.cleanup.failed",
@@ -537,7 +536,7 @@ export class BackupService {
               error: auditError,
             },
           })
-          this.logger.warn({ error: message, filename: item.filename }, "Failed to delete expired backup")
+          this.logger.warn({ error: auditError, filename: item.filename }, "Failed to delete expired backup")
         }
       }
 
@@ -545,14 +544,13 @@ export class BackupService {
         this.logger.info({ count: expired.length }, "Cleaned expired backups")
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
       const auditError = formatAuditError(error)
       await this.recordBackupCleanupAudit({
         action: "backup.cleanup.failed",
         targetId: "expired-scan",
         detail: { error: auditError },
       })
-      this.logger.error({ error: message }, "Failed to clean expired backups")
+      this.logger.error({ error: auditError }, "Failed to clean expired backups")
     }
   }
 
@@ -579,7 +577,7 @@ export class BackupService {
         ipAddress: "system",
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = formatAuditError(error)
       this.logger.warn(
         { error: message, action: input.action, targetId: input.targetId },
         "Failed to record backup cleanup audit",

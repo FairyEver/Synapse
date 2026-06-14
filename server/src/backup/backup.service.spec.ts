@@ -232,9 +232,11 @@ describe("BackupService", () => {
       expect.any(Function),
     )
     expect(logger.warn).toHaveBeenCalledWith(
-      { error: "delete failed token=secret-token at /Users/liyang/private", filename: "expired-a.tar.gz" },
+      { error: "delete failed token=[REDACTED] at [PATH]", filename: "expired-a.tar.gz" },
       "Failed to delete expired backup",
     )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/liyang/private")
     expect(auditLog.record).toHaveBeenNthCalledWith(1, {
       adminEmail: "system",
       action: "backup.cleanup.failed",
@@ -280,9 +282,11 @@ describe("BackupService", () => {
       ipAddress: "system",
     })
     expect(logger.error).toHaveBeenCalledWith(
-      { error: "COS unavailable apiKey=secret-key at /tmp/backup" },
+      { error: "COS unavailable apiKey=[REDACTED] at [PATH]" },
       "Failed to clean expired backups",
     )
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("secret-key")
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("/tmp/backup")
   })
 
   it("records scheduled backup results in audit logs", async () => {
