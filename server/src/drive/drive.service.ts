@@ -1483,6 +1483,13 @@ export class DriveService implements OnApplicationBootstrap {
   ): Promise<DrivePublicationDto> {
     const publication = await this.prisma.drivePublication.findFirst({ where: { id: publicationId, userId } })
     if (!publication) throw new NotFoundException("发布不存在。")
+    const previousDeploymentId = publication.currentDeploymentId
+    const previousAssets = previousDeploymentId
+      ? await this.prisma.drivePublicationAsset.findMany({
+        where: { publicationId, deploymentId: previousDeploymentId },
+        select: { storageKey: true },
+      })
+      : []
     const deployment = await this.prisma.drivePublicationDeployment.create({
       data: { publicationId, status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.pending },
     })
@@ -1520,6 +1527,12 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: deployment.id },
           data: { status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.active, activatedAt: new Date() },
         })
+        if (previousDeploymentId) {
+          await tx.drivePublicationDeployment.update({
+            where: { id: previousDeploymentId },
+            data: { status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.superseded },
+          })
+        }
         return tx.drivePublication.update({
           where: { id: publicationId },
           data: {
@@ -1530,6 +1543,14 @@ export class DriveService implements OnApplicationBootstrap {
           include: { sourceItem: { select: { deletedAt: true } } },
         })
       })
+      if (previousDeploymentId && previousAssets.length > 0) {
+        await this.cleanupSupersededPublicationObjects({
+          publicationId,
+          deploymentId: previousDeploymentId,
+          replacementDeploymentId: deployment.id,
+          storageKeys: previousAssets.map((asset) => asset.storageKey),
+        })
+      }
       return toDrivePublicationDto(updated, publicAppUrl, this.decryptStoredPassword(updated.passwordEncrypted))
     } catch (error) {
       await this.cleanupCopiedPublicationObjects({
@@ -1555,6 +1576,45 @@ export class DriveService implements OnApplicationBootstrap {
           })]),
       ])
       throw error
+    }
+  }
+
+  private async cleanupSupersededPublicationObjects(input: {
+    readonly publicationId: string
+    readonly deploymentId: string
+    readonly replacementDeploymentId: string
+    readonly storageKeys: readonly string[]
+  }): Promise<void> {
+    let failed = false
+    for (const storageKey of input.storageKeys) {
+      try {
+        await this.storage.deleteObject(storageKey)
+      } catch (error) {
+        failed = true
+        this.logger.warn({
+          publicationId: input.publicationId,
+          deploymentId: input.deploymentId,
+          replacementDeploymentId: input.replacementDeploymentId,
+          storageKey,
+          cleanupErrorName: error instanceof Error ? error.name : typeof error,
+          cleanupErrorMessage: error instanceof Error ? error.message : undefined,
+        }, "Drive superseded publication object cleanup failed")
+      }
+    }
+    if (failed) return
+
+    try {
+      await this.prisma.drivePublicationAsset.deleteMany({
+        where: { publicationId: input.publicationId, deploymentId: input.deploymentId },
+      })
+    } catch (error) {
+      this.logger.warn({
+        publicationId: input.publicationId,
+        deploymentId: input.deploymentId,
+        replacementDeploymentId: input.replacementDeploymentId,
+        cleanupErrorName: error instanceof Error ? error.name : typeof error,
+        cleanupErrorMessage: error instanceof Error ? error.message : undefined,
+      }, "Drive superseded publication asset row cleanup failed")
     }
   }
 

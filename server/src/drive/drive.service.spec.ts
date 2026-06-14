@@ -981,6 +981,43 @@ describe("DriveService", () => {
     expect(deployments.map((deployment: any) => deployment.status).sort()).toEqual(["active", "failed"])
   })
 
+  it("cleans old publication deployment assets after a successful redeploy", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.html",
+      mimeType: "text/html",
+    })
+    const first = await service.publishPage("user-1", file.id, "https://synapse.test")
+    const firstDeploymentId = first.currentDeploymentId
+    const firstAssets = await prisma.drivePublicationAsset.findMany({
+      where: { deploymentId: firstDeploymentId ?? "" },
+    })
+    const firstAsset = firstAssets[0]
+    if (!firstAsset) throw new Error("missing first publication asset")
+
+    const second = await service.redeployPublication("user-1", first.id, "https://synapse.test")
+
+    expect(second.currentDeploymentId).not.toBe(firstDeploymentId)
+    expect(storage.deleteObject).toHaveBeenCalledWith(firstAsset.storageKey)
+    const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: first.id } })
+    expect(deployments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: firstDeploymentId, status: "superseded" }),
+      expect.objectContaining({ id: second.currentDeploymentId, status: "active" }),
+    ]))
+    const remainingOldAssets = await prisma.drivePublicationAsset.findMany({
+      where: { storageKey: firstAsset.storageKey },
+    })
+    expect(remainingOldAssets).toHaveLength(0)
+  })
+
   it("detects a published site child resource when deleting one file", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -2186,6 +2223,16 @@ function createPrismaMemory() {
         [...publicationAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})),
         orderBy,
       ),
+      deleteMany: async ({ where }: any) => {
+        let count = 0
+        for (const [assetId, asset] of publicationAssets.entries()) {
+          if (matchesWhere(asset, where ?? {})) {
+            publicationAssets.delete(assetId)
+            count += 1
+          }
+        }
+        return { count }
+      },
     },
   }
   return prisma
