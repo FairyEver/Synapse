@@ -623,6 +623,8 @@ export class ContentStoreService {
       await this.prisma.contentStoreInstallSession.update({ where: { id: sessionId }, data: { status: "expired" } })
       throw new BadRequestException("安装会话已过期。")
     }
+    if (session.item.moderationStatus !== "normal") throw new NotFoundException("内容不存在。")
+    if (session.item.visibility !== "public" && session.item.ownerUserId !== userId) throw new NotFoundException("内容不存在。")
     const type = toInstallableType(session.type)
     if (!session.version.packageKey || !session.version.packageSha256) throw new BadRequestException("内容安装包不存在。")
     return {

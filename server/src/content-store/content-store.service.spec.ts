@@ -551,6 +551,27 @@ describe("ContentStoreService", () => {
     expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
+  it("rejects non-owner install sessions after content becomes private", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession({
+      userId: "user-2",
+      item: item({ id: "item-1", ownerUserId: "user-1", visibility: "private", moderationStatus: "normal" }),
+    }))
+
+    await expect(service.openInstallPackage("user-2", "session-1")).rejects.toThrow(NotFoundException)
+
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("rejects install sessions after content is removed", async () => {
+    prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession({
+      item: item({ id: "item-1", ownerUserId: "user-1", visibility: "public", moderationStatus: "removed" }),
+    }))
+
+    await expect(service.openInstallPackage("user-1", "session-1")).rejects.toThrow(NotFoundException)
+
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
   it("rejects expired sessions when opening an install package", async () => {
     prisma.contentStoreInstallSession.findFirst.mockResolvedValue(installSession({
       expiresAt: new Date(Date.now() - 1),
