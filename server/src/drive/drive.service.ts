@@ -121,6 +121,10 @@ type DriveItemRecordWithStorage = DriveItemRecord & {
   readonly storageKey: string | null
 }
 
+type DriveAuditContext = {
+  readonly ipAddress?: string
+}
+
 const driveItemWithShares = {
   shares: {
     where: { enabled: true },
@@ -231,13 +235,13 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
-  async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput): Promise<DriveFolderUploadPrepareResult> {
+  async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput, auditContext: DriveAuditContext = {}): Promise<DriveFolderUploadPrepareResult> {
     if (input.files.length === 0) throw new BadRequestException("文件夹不能为空。")
     let root: DriveItemDto | null = null
     const entries: DriveFolderUploadPrepareResult["entries"] = []
 
     try {
-      root = await this.createFolder(userId, { parentId: input.parentId, name: input.folderName })
+      root = await this.createFolder(userId, { parentId: input.parentId, name: input.folderName }, auditContext)
       const folderIdsByPath = new Map<string, string>([["", root.id]])
 
       for (const file of input.files) {
@@ -254,7 +258,7 @@ export class DriveService implements OnApplicationBootstrap {
             parentId = existingId
             continue
           }
-          const folder = await this.createFolder(userId, { parentId, name: folderName })
+          const folder = await this.createFolder(userId, { parentId, name: folderName }, auditContext)
           folderIdsByPath.set(currentPath, folder.id)
           parentId = folder.id
         }
@@ -275,7 +279,7 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
-  async completeUpload(userId: string, sessionId: string): Promise<DriveItemDto> {
+  async completeUpload(userId: string, sessionId: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const session = await this.prisma.driveUploadSession.findFirst({
       where: { id: sessionId, userId },
       include: { item: { include: driveItemWithShares } },
@@ -342,12 +346,13 @@ export class DriveService implements OnApplicationBootstrap {
         targetType: "drive.item",
         targetId: result.item.id,
         detail: { userId, sessionId: session.id, itemId: result.item.id, name: result.item.name, size: result.item.size.toString() },
+        ipAddress: auditContext.ipAddress,
       })
     }
     return toDriveItemDto(result.item)
   }
 
-  async cancelUpload(userId: string, sessionId: string): Promise<{ readonly ok: true }> {
+  async cancelUpload(userId: string, sessionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const session = await this.prisma.driveUploadSession.findFirst({
       where: { id: sessionId, userId, status: DRIVE_UPLOAD_STATUS.pending },
     })
@@ -360,11 +365,12 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.uploadSession",
       targetId: session.id,
       detail: { userId, sessionId: session.id, itemId: session.itemId, status: DRIVE_UPLOAD_STATUS.cancelled },
+      ipAddress: auditContext.ipAddress,
     })
     return { ok: true }
   }
 
-  async createFolder(userId: string, input: { parentId: string | null; name: string }): Promise<DriveItemDto> {
+  async createFolder(userId: string, input: { parentId: string | null; name: string }, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const name = normalizeDriveName(input.name)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
     const existingFolder = await this.prisma.driveItem.findFirst({
@@ -390,11 +396,12 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.item",
       targetId: folder.id,
       detail: { userId, itemId: folder.id, parentId: folder.parentId, name: folder.name },
+      ipAddress: auditContext.ipAddress,
     })
     return toDriveItemDto(folder)
   }
 
-  async renameItem(userId: string, itemId: string, name: string): Promise<DriveItemDto> {
+  async renameItem(userId: string, itemId: string, name: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const item = await this.requireOwnedItem(userId, itemId)
     const nextName = normalizeDriveName(name)
     if (item.type === DRIVE_ITEM_TYPE.folder) {
@@ -415,11 +422,12 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.item",
       targetId: updated.id,
       detail: { userId, itemId: updated.id, previousName: item.name, nextName },
+      ipAddress: auditContext.ipAddress,
     })
     return toDriveItemDto(updated)
   }
 
-  async moveItem(userId: string, itemId: string, parentId: string | null): Promise<DriveItemDto> {
+  async moveItem(userId: string, itemId: string, parentId: string | null, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const item = await this.requireOwnedItem(userId, itemId)
     if (parentId === item.id) throw new BadRequestException("不能移动到自身。")
     if (parentId) await this.requireOwnedFolder(userId, parentId)
@@ -442,6 +450,7 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.item",
       targetId: updated.id,
       detail: { userId, itemId: updated.id, previousParentId: item.parentId, nextParentId: parentId },
+      ipAddress: auditContext.ipAddress,
     })
     return toDriveItemDto(updated)
   }
@@ -453,10 +462,13 @@ export class DriveService implements OnApplicationBootstrap {
     ipAddress = "system",
     options: { readonly disablePublications?: boolean; readonly publicAppUrl?: string } = {},
   ): Promise<{ readonly ok: true }> {
+    const resolvedActorEmail = actorEmail === userId
+      ? await this.resolveDriveAuditActorEmail(userId)
+      : actorEmail
     await this.deleteItemInternal({
       itemId,
       userId,
-      actorEmail,
+      actorEmail: resolvedActorEmail,
       ipAddress,
       admin: false,
       disablePublications: options.disablePublications ?? false,
@@ -470,6 +482,7 @@ export class DriveService implements OnApplicationBootstrap {
     itemId: string,
     publicAppUrl: string,
     settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
+    auditContext: DriveAuditContext = {},
   ): Promise<DriveShareDto> {
     const item = await this.requireOwnedItem(userId, itemId)
     if (item.storageStatus !== DRIVE_STORAGE_STATUS.active) {
@@ -500,11 +513,12 @@ export class DriveService implements OnApplicationBootstrap {
         passwordEnabled: dto.passwordEnabled,
         expiresAt: dto.expiresAt,
       },
+      ipAddress: auditContext.ipAddress,
     })
     return dto
   }
 
-  async disableShare(userId: string, shareId: string): Promise<{ readonly ok: true }> {
+  async disableShare(userId: string, shareId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const result = await this.prisma.driveShare.updateMany({
       where: { id: shareId, userId, enabled: true },
       data: { enabled: false, disabledAt: new Date() },
@@ -516,6 +530,7 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.share",
       targetId: shareId,
       detail: { userId, shareRecordId: shareId, disabledCount: result.count },
+      ipAddress: auditContext.ipAddress,
     })
     return { ok: true }
   }
@@ -578,6 +593,7 @@ export class DriveService implements OnApplicationBootstrap {
     itemId: string,
     publicAppUrl: string,
     settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
+    auditContext: DriveAuditContext = {},
   ): Promise<DrivePublicationDto> {
     const item = await this.requireOwnedItem(userId, itemId)
     if (item.type !== DRIVE_ITEM_TYPE.file || item.storageStatus !== DRIVE_STORAGE_STATUS.active || !item.storageKey) {
@@ -600,6 +616,7 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.publication",
       targetId: result.id,
       detail: this.publicationAuditDetail(userId, item.id, result),
+      ipAddress: auditContext.ipAddress,
     })
     return result
   }
@@ -609,6 +626,7 @@ export class DriveService implements OnApplicationBootstrap {
     itemId: string,
     publicAppUrl: string,
     settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
+    auditContext: DriveAuditContext = {},
   ): Promise<DrivePublicationDto> {
     const folder = await this.requireOwnedFolder(userId, itemId)
     if (folder.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new BadRequestException("站点文件夹不可发布。")
@@ -626,11 +644,12 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.publication",
       targetId: result.id,
       detail: this.publicationAuditDetail(userId, folder.id, result),
+      ipAddress: auditContext.ipAddress,
     })
     return result
   }
 
-  async redeployPublication(userId: string, publicationId: string, publicAppUrl: string): Promise<DrivePublicationDto> {
+  async redeployPublication(userId: string, publicationId: string, publicAppUrl: string, auditContext: DriveAuditContext = {}): Promise<DrivePublicationDto> {
     const publication = await this.prisma.drivePublication.findFirst({
       where: { id: publicationId, userId, status: DRIVE_PUBLICATION_STATUS.active },
     })
@@ -650,6 +669,7 @@ export class DriveService implements OnApplicationBootstrap {
         targetType: "drive.publication",
         targetId: result.id,
         detail: this.publicationAuditDetail(userId, publication.sourceItemId, result),
+        ipAddress: auditContext.ipAddress,
       })
       return result
     }
@@ -672,11 +692,12 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.publication",
       targetId: result.id,
       detail: this.publicationAuditDetail(userId, publication.sourceItemId, result),
+      ipAddress: auditContext.ipAddress,
     })
     return result
   }
 
-  async disablePublication(userId: string, publicationId: string): Promise<{ readonly ok: true }> {
+  async disablePublication(userId: string, publicationId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const result = await this.prisma.drivePublication.updateMany({
       where: { id: publicationId, userId, status: DRIVE_PUBLICATION_STATUS.active },
       data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: new Date() },
@@ -688,6 +709,7 @@ export class DriveService implements OnApplicationBootstrap {
       targetType: "drive.publication",
       targetId: publicationId,
       detail: { userId, publicationId, disabledCount: result.count },
+      ipAddress: auditContext.ipAddress,
     })
     return { ok: true }
   }
@@ -1582,15 +1604,25 @@ export class DriveService implements OnApplicationBootstrap {
     readonly targetType: string
     readonly targetId: string
     readonly detail: Record<string, unknown>
+    readonly ipAddress?: string
   }): Promise<void> {
+    const actorEmail = await this.resolveDriveAuditActorEmail(input.userId)
     await this.auditLog?.record({
-      adminEmail: input.userId,
+      adminEmail: actorEmail,
       action: input.action,
       targetType: input.targetType,
       targetId: input.targetId,
       detail: input.detail,
-      ipAddress: "system",
+      ipAddress: input.ipAddress ?? "system",
     })
+  }
+
+  private async resolveDriveAuditActorEmail(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    })
+    return user?.email ?? userId
   }
 
   private async collectPublicationSiteFiles(userId: string, rootId: string): Promise<PublicationSourceAsset[]> {

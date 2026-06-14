@@ -281,7 +281,7 @@ describe("DriveController", () => {
       expect(drive.prepareFolderUpload).toHaveBeenCalledWith("user-1", expect.objectContaining({
         parentId: null,
         folderName: "交接材料",
-      }))
+      }), expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }
@@ -319,13 +319,13 @@ describe("DriveController", () => {
       expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example", {
         passwordEnabled: true,
         expiresIn: "3d",
-      })
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
       expect(drive.publishSite).toHaveBeenCalledWith("user-1", "folder-1", "https://pages.example", {
         passwordEnabled: true,
         expiresIn: "3d",
-      })
-      expect(drive.redeployPublication).toHaveBeenCalledWith("user-1", "pub-row-1", "https://pages.example")
-      expect(drive.disablePublication).toHaveBeenCalledWith("user-1", "pub-row-1")
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
+      expect(drive.redeployPublication).toHaveBeenCalledWith("user-1", "pub-row-1", "https://pages.example", expect.objectContaining({ ipAddress: expect.any(String) }))
+      expect(drive.disablePublication).toHaveBeenCalledWith("user-1", "pub-row-1", expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }
@@ -380,15 +380,15 @@ describe("DriveController", () => {
       expect(drive.createShare).toHaveBeenCalledWith("user-1", "file-1", "https://app.example", {
         passwordEnabled: false,
         expiresIn: "3d",
-      })
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
       expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://pages.example", {
         passwordEnabled: true,
         expiresIn: "30d",
-      })
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
       expect(drive.publishSite).toHaveBeenCalledWith("user-1", "folder-1", "https://pages.example", {
         passwordEnabled: true,
         expiresIn: "1y",
-      })
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }
@@ -515,7 +515,7 @@ describe("DriveController", () => {
       expect(drive.publishPage).toHaveBeenCalledWith("user-1", "file-1", "https://app.example", {
         passwordEnabled: true,
         expiresIn: "3d",
-      })
+      }, expect.objectContaining({ ipAddress: expect.any(String) }))
     } finally {
       await userApp.close()
     }

@@ -374,16 +374,17 @@ describe("DriveService", () => {
       publicAppUrl: "https://synapse.test",
     })
 
-    const completed = await service.completeUpload("user-1", prepared.sessionId)
-    const renamed = await service.renameItem("user-1", completed.id, "index.html")
-    await service.moveItem("user-1", renamed.id, null)
+    const auditContext = { ipAddress: "127.0.0.1" }
+    const completed = await service.completeUpload("user-1", prepared.sessionId, auditContext)
+    const renamed = await service.renameItem("user-1", completed.id, "index.html", auditContext)
+    await service.moveItem("user-1", renamed.id, null, auditContext)
 
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "drive.upload.complete",
       targetType: "drive.item",
       targetId: completed.id,
-      adminEmail: "user-1",
-      ipAddress: "system",
+      adminEmail: "user@example.com",
+      ipAddress: "127.0.0.1",
       detail: expect.objectContaining({ userId: "user-1", sessionId: prepared.sessionId, itemId: completed.id }),
     }))
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
@@ -412,16 +413,19 @@ describe("DriveService", () => {
     })
     auditLog.record.mockClear()
 
-    const share = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
-    const redeployed = await service.redeployPublication("user-1", publication.id, "https://synapse.test")
-    await service.disablePublication("user-1", publication.id)
-    await service.disableShare("user-1", share.id)
+    const auditContext = { ipAddress: "127.0.0.1" }
+    const share = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" }, auditContext)
+    const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" }, auditContext)
+    const redeployed = await service.redeployPublication("user-1", publication.id, "https://synapse.test", auditContext)
+    await service.disablePublication("user-1", publication.id, auditContext)
+    await service.disableShare("user-1", share.id, auditContext)
 
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "drive.share.create",
       targetType: "drive.share",
       targetId: share.id,
+      adminEmail: "user@example.com",
+      ipAddress: "127.0.0.1",
       detail: expect.objectContaining({ userId: "user-1", itemId: file.id, shareId: share.shareId, passwordEnabled: true }),
     }))
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
@@ -1884,6 +1888,11 @@ function createPrismaMemory() {
       create: async ({ data }: any) => {
         users.set(data.id, data)
         return data
+      },
+      findUnique: async ({ where, select }: any) => {
+        const user = users.get(where.id) ?? null
+        if (!user) return null
+        return select ? selectFields(user, select) : user
       },
     },
     driveUsage: {

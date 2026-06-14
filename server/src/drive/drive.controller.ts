@@ -100,33 +100,33 @@ export class DriveUserController {
         mimeType: file.mimeType ?? null,
       })),
       publicAppUrl: resolveRequestPublicAppUrl(request),
-    })
+    }, driveAuditContext(request))
   }
 
   @Post("/uploads/:sessionId/complete")
   completeUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.completeUpload(request.user!.id, sessionId)
+    return this.drive.completeUpload(request.user!.id, sessionId, driveAuditContext(request))
   }
 
   @Post("/uploads/:sessionId/cancel")
   cancelUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.cancelUpload(request.user!.id, sessionId)
+    return this.drive.cancelUpload(request.user!.id, sessionId, driveAuditContext(request))
   }
 
   @Post("/folders")
   createFolder(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     const parsed = parseBody(folderSchema, body, "文件夹请求无效。")
-    return this.drive.createFolder(request.user!.id, { parentId: parsed.parentId ?? null, name: parsed.name })
+    return this.drive.createFolder(request.user!.id, { parentId: parsed.parentId ?? null, name: parsed.name }, driveAuditContext(request))
   }
 
   @Patch("/items/:id")
   updateItem(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     if (isRecord(body) && "name" in body) {
       const parsed = parseBody(renameSchema, body, "重命名请求无效。")
-      return this.drive.renameItem(request.user!.id, id, parsed.name)
+      return this.drive.renameItem(request.user!.id, id, parsed.name, driveAuditContext(request))
     }
     const parsed = parseBody(moveSchema, body, "移动请求无效。")
-    return this.drive.moveItem(request.user!.id, id, parsed.parentId)
+    return this.drive.moveItem(request.user!.id, id, parsed.parentId, driveAuditContext(request))
   }
 
   @Delete("/items/:id")
@@ -140,7 +140,7 @@ export class DriveUserController {
 
   @Post("/items/:id/share")
   createShare(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.createShare(request.user!.id, id, resolveRequestPublicAppUrl(request), parseAccessSettings(body))
+    return this.drive.createShare(request.user!.id, id, resolveRequestPublicAppUrl(request), parseAccessSettings(body), driveAuditContext(request))
   }
 
   @Get("/publications")
@@ -150,27 +150,27 @@ export class DriveUserController {
 
   @Post("/items/:id/publications/page")
   publishPage(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.publishPage(request.user!.id, id, resolveRequestPagesPublicUrl(request), parseAccessSettings(body))
+    return this.drive.publishPage(request.user!.id, id, resolveRequestPagesPublicUrl(request), parseAccessSettings(body), driveAuditContext(request))
   }
 
   @Post("/items/:id/publications/site")
   publishSite(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.publishSite(request.user!.id, id, resolveRequestPagesPublicUrl(request), parseAccessSettings(body))
+    return this.drive.publishSite(request.user!.id, id, resolveRequestPagesPublicUrl(request), parseAccessSettings(body), driveAuditContext(request))
   }
 
   @Post("/publications/:id/redeploy")
   redeployPublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.redeployPublication(request.user!.id, id, resolveRequestPagesPublicUrl(request))
+    return this.drive.redeployPublication(request.user!.id, id, resolveRequestPagesPublicUrl(request), driveAuditContext(request))
   }
 
   @Delete("/publications/:id")
   disablePublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.disablePublication(request.user!.id, id)
+    return this.drive.disablePublication(request.user!.id, id, driveAuditContext(request))
   }
 
   @Delete("/shares/:id")
   disableShare(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.disableShare(request.user!.id, id)
+    return this.drive.disableShare(request.user!.id, id, driveAuditContext(request))
   }
 
   @Get("/shares")
@@ -727,6 +727,10 @@ function parseAccessSettings(body: unknown): DriveAccessSettingsInput {
     passwordEnabled: parsed.passwordEnabled ?? DRIVE_DEFAULT_ACCESS_SETTINGS.passwordEnabled,
     expiresIn: parsed.expiresIn ?? DRIVE_DEFAULT_ACCESS_SETTINGS.expiresIn,
   }
+}
+
+function driveAuditContext(request: AuthenticatedUserRequest) {
+  return { ipAddress: request.ip ?? "system" }
 }
 
 function parseBrowserSurface(value: string | undefined): "standalone" | "console" {
