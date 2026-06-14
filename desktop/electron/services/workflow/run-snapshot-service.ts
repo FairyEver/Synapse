@@ -5,7 +5,7 @@ import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { createMainLogger } from "../log-store"
 import { errorCode } from "./workflow-utils"
 import { sanitizeError } from "../error-sanitize"
-import { assertSafeWorkflowId } from "./workflow-id"
+import { assertSafeWorkflowId, assertSafeWorkflowRunId } from "./workflow-id"
 import { sanitizeWorkflowRunSnapshot } from "./run-snapshot-sanitize"
 
 const logger = createMainLogger("service.workflow.snapshots")
@@ -54,9 +54,10 @@ export class RunSnapshotService {
   async save(s: WorkflowRunSnapshot): Promise<void> {
     const snapshot = sanitizeWorkflowRunSnapshot(s)
     const dir = this.dir(snapshot.workflowId)
+    const runId = assertSafeWorkflowRunId(snapshot.runId)
     try {
       await mkdir(dir, { recursive: true })
-      const target = path.join(dir, `${snapshot.runId}.json`)
+      const target = path.join(dir, `${runId}.json`)
       const tmp = `${target}.tmp`
       await writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf-8")
       await rename(tmp, target)
@@ -129,6 +130,7 @@ export class RunSnapshotService {
    * vs the N+1 file reads of iterating workflows and calling get() for each.
    */
   async findByRunId(runId: string): Promise<WorkflowRunSnapshot | null> {
+    const safeRunId = assertSafeWorkflowRunId(runId)
     let wfDirs: Dirent[]
     try {
       wfDirs = await readdir(path.join(this.dataDir, "workflow-runs"), { withFileTypes: true })
@@ -138,7 +140,7 @@ export class RunSnapshotService {
     }
     for (const dirent of wfDirs) {
       if (!dirent.isDirectory()) continue
-      const file = path.join(this.dataDir, "workflow-runs", dirent.name, `${runId}.json`)
+      const file = path.join(this.dataDir, "workflow-runs", dirent.name, `${safeRunId}.json`)
       try {
         const raw = JSON.parse(await readFile(file, "utf-8"))
         if (!isValidSnapshotShape(raw)) {
@@ -160,8 +162,9 @@ export class RunSnapshotService {
   }
 
   async get(runId: string, workflowId: string): Promise<WorkflowRunSnapshot | null> {
+    const safeRunId = assertSafeWorkflowRunId(runId)
     try {
-      const raw = JSON.parse(await readFile(path.join(this.dir(workflowId), `${runId}.json`), "utf-8"))
+      const raw = JSON.parse(await readFile(path.join(this.dir(workflowId), `${safeRunId}.json`), "utf-8"))
       if (!isValidSnapshotShape(raw)) {
         logger.warn("run snapshot get: invalid structure", { runId, workflowId })
         return null

@@ -618,6 +618,21 @@ describe("workflowIpcModule", () => {
     expect(ac.signal.aborted).toBe(true)
   })
 
+  it("rejects unsafe run ids before cancelling workflow runs", async () => {
+    const abortMap = new Map<string, AbortController>()
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-aborts") return abortMap as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:cancel", { runId: "../escaped-run" }))
+      .rejects
+      .toThrow()
+    expect(abortMap.size).toBe(0)
+  })
+
   it("uses the packaged renderer file URL when opening workflow windows outside dev mode", async () => {
     const previousDevServerUrl = process.env.VITE_DEV_SERVER_URL
     delete process.env.VITE_DEV_SERVER_URL
@@ -1184,6 +1199,23 @@ describe("workflowIpcModule", () => {
       .rejects
       .toThrow()
     expect(snapshots.list).not.toHaveBeenCalled()
+  })
+
+  it("rejects unsafe run ids before reading run status snapshots", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const snapshots = { findByRunId: vi.fn(async () => null) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await expect(harness.invoke("synapse:workflow:run-status", { runId: "../escaped-run" }))
+      .rejects
+      .toThrow()
+    expect(snapshots.findByRunId).not.toHaveBeenCalled()
   })
 
   it("lists all active workflow runs and excludes terminal in-memory statuses", async () => {

@@ -9,6 +9,7 @@ import { validateWorkflow, type WorkflowValidationOptions } from "../services/wo
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
+import { assertSafeWorkflowRunId } from "../services/workflow/workflow-id"
 import { layoutWorkflowNodes } from "../../src/lib/workflow-auto-layout"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 
@@ -38,6 +39,10 @@ function requireString(params: Record<string, unknown>, key: string): string {
   const v = params[key]
   if (typeof v !== "string" || !v) throw new Error(`Missing or invalid '${key}': expected non-empty string`)
   return v
+}
+
+function requireWorkflowRunId(params: Record<string, unknown>, key: string): string {
+  return assertSafeWorkflowRunId(requireString(params, key))
 }
 
 function requireObject(params: Record<string, unknown>, key: string): Record<string, unknown> {
@@ -256,7 +261,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.run.get": async (params, deps) => {
-    const runId = requireString(params, "runId")
+    const runId = requireWorkflowRunId(params, "runId")
     const status = await deps.getRunStatus(runId)
     if (status) return { ok: true, data: status }
     const snapshot = await deps.snapshotService.findByRunId(runId)
@@ -346,7 +351,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.run.disable": async (params, deps) => {
-    const runId = requireString(params, "runId")
+    const runId = requireWorkflowRunId(params, "runId")
     const cancelRequested = deps.cancelRun(runId)
     return { ok: true, data: { runId, cancelRequested } }
   },

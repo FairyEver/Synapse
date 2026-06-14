@@ -58,6 +58,18 @@ describe("RunSnapshotService", () => {
     await expect(readdir(path.join(root, "escaped-workflow"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
+  it("rejects unsafe run ids before writing snapshots outside workflow directories", async () => {
+    const root = await tmpDir()
+    const svc = new RunSnapshotService(root)
+    const unsafeSnapshot = {
+      ...snapshot("../escaped-run", 100),
+      workflowId: "wf",
+    }
+
+    await expect(svc.save(unsafeSnapshot)).rejects.toThrow("Invalid workflow run id")
+    await expect(readdir(path.join(root, "workflow-runs"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("rejects unsafe workflow ids before deleting snapshot directories", async () => {
     const root = await tmpDir()
     const escapedDir = path.join(root, "escaped-workflow")
@@ -207,5 +219,24 @@ describe("RunSnapshotService", () => {
       runId: "target-run",
       workflowId: "zzz-good",
     })
+  })
+
+  it("rejects unsafe run ids before reading snapshots outside workflow-runs", async () => {
+    const root = await tmpDir()
+    const escapedDir = path.join(root, "escaped-workflow")
+    await mkdir(escapedDir, { recursive: true })
+    await writeFile(
+      path.join(escapedDir, "target.json"),
+      JSON.stringify({ ...snapshot("target", 100), workflowId: "escaped-workflow" }),
+      "utf-8",
+    )
+    const svc = new RunSnapshotService(root)
+
+    await expect(svc.findByRunId("../escaped-workflow/target")).rejects.toThrow("Invalid workflow run id")
+    await expect(svc.findByRunId("bad/id")).rejects.toThrow("Invalid workflow run id")
+    await expect(svc.findByRunId("bad\\id")).rejects.toThrow("Invalid workflow run id")
+    await expect(svc.get("../escaped-workflow/target", "wf")).rejects.toThrow("Invalid workflow run id")
+    await expect(svc.get("bad/id", "wf")).rejects.toThrow("Invalid workflow run id")
+    await expect(svc.get("bad\\id", "wf")).rejects.toThrow("Invalid workflow run id")
   })
 })

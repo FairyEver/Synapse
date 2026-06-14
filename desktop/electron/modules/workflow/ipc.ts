@@ -19,7 +19,7 @@ import { normalizeContentFileNameSegment } from "../../../src/lib/content-attach
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
-import { isSafeWorkflowId, isSafeWorkflowNodeId } from "../../services/workflow/workflow-id"
+import { isSafeWorkflowId, isSafeWorkflowNodeId, isSafeWorkflowRunId } from "../../services/workflow/workflow-id"
 import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowRunSnapshot } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
@@ -284,6 +284,7 @@ function saveRunSnapshot(
 }
 
 const workflowIdSchema = z.string().refine(isSafeWorkflowId, "Invalid workflow id")
+const workflowRunIdSchema = z.string().refine(isSafeWorkflowRunId, "Invalid workflow run id")
 const workflowNodeIdSchema = z.string().refine(isSafeWorkflowNodeId, "Invalid workflow node id")
 
 const workflowDefinitionSchema = z.object({
@@ -1105,7 +1106,7 @@ export const workflowIpcModule: IpcModule = {
     },
     rerun: {
       channel: "synapse:workflow:rerun", kind: "invoke",
-      request: z.object({ previousRunId: z.string(), params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
+      request: z.object({ previousRunId: workflowRunIdSchema, params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
       response: z.union([
         z.object({ runId: z.string() }),
         z.object({ errors: z.array(validationErrorSchema) }),
@@ -1200,7 +1201,7 @@ export const workflowIpcModule: IpcModule = {
     },
     openRunner: {
       channel: "synapse:workflow:open-runner", kind: "invoke",
-      request: z.object({ workflowId: workflowIdSchema, runId: z.string() }),
+      request: z.object({ workflowId: workflowIdSchema, runId: workflowRunIdSchema }),
       response: z.void(),
       handler: async (ctx, { workflowId, runId }: { workflowId: string; runId: string }) => {
         logger.info("workflow:openRunner", { workflowId, runId })
@@ -1209,7 +1210,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     cancel: {
-      channel: "synapse:workflow:cancel", kind: "invoke", request: z.object({ runId: z.string() }), response: z.void(),
+      channel: "synapse:workflow:cancel", kind: "invoke", request: z.object({ runId: workflowRunIdSchema }), response: z.void(),
       handler: (ctx, { runId }: { runId: string }) => {
         logger.info("workflow:cancel requested", { runId })
         const controller = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts").get(runId)
@@ -1247,7 +1248,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     runStatus: {
-      channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: z.string() }), response: workflowRunStatusSchema.nullable(),
+      channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: workflowRunIdSchema }), response: workflowRunStatusSchema.nullable(),
       handler: async (ctx, { runId }: { runId: string }) => {
         const live = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses").get(runId)
         if (live) {
@@ -1304,7 +1305,7 @@ export const workflowIpcModule: IpcModule = {
       },
     },
     openEditor: {
-      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: workflowIdSchema, runId: z.string().optional() }), response: z.void(),
+      channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: workflowIdSchema, runId: workflowRunIdSchema.optional() }), response: z.void(),
       handler: async (ctx, { id, runId }: { id: string; runId?: string }) => {
         logger.info("workflow:openEditor", { workflowId: id, runId })
         const baseUrl = rendererBaseUrl()

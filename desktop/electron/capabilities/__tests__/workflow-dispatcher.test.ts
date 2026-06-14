@@ -160,6 +160,17 @@ describe("createWorkflowDispatcher", () => {
     expect(result.data).not.toHaveProperty("version")
   })
 
+  it("workflow.run.get rejects unsafe run ids before querying snapshots", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch("workflow.run.get", { runId: "../escaped-run" }, { source: "api" }))
+      .rejects
+      .toThrow("Invalid workflow run id")
+    expect(deps.getRunStatus).not.toHaveBeenCalled()
+    expect(deps.snapshotService.findByRunId).not.toHaveBeenCalled()
+  })
+
   it("serializes workflow.definition.update behind in-flight workflow mutations", async () => {
     const releaseFirstSave = deferred<{ versionHash: string }>()
     const baseDefinition: WorkflowDefinition = {
@@ -687,6 +698,16 @@ describe("createWorkflowDispatcher", () => {
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({ runId: "run-1", cancelRequested: true })
     expect(deps.cancelRun).toHaveBeenCalledWith("run-1")
+  })
+
+  it("workflow.run.disable rejects unsafe run ids before cancelling", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch("workflow.run.disable", { runId: "bad/run" }, { source: "api" }))
+      .rejects
+      .toThrow("Invalid workflow run id")
+    expect(deps.cancelRun).not.toHaveBeenCalled()
   })
 
   it("workflow.run.disable stays idempotent when the run is no longer active", async () => {

@@ -21,3 +21,14 @@ export function assertSafeWorkflowNodeId(nodeId: string): string {
   }
   return nodeId
 }
+
+export function isSafeWorkflowRunId(runId: string): boolean {
+  return SAFE_WORKFLOW_ID_PATTERN.test(runId)
+}
+
+export function assertSafeWorkflowRunId(runId: string): string {
+  if (!isSafeWorkflowRunId(runId)) {
+    throw new Error("Invalid workflow run id")
+  }
+  return runId
+}
