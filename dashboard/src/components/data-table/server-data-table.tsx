@@ -35,6 +35,7 @@ type ServerDataTableProps<TData, TValue> = {
   onRetry?: () => void
   className?: string
   getRowProps?: (row: Row<TData>) => HTMLAttributes<HTMLTableRowElement>
+  showPagination?: boolean
 }
 
 export function getServerDataTableErrorMessage(error: unknown) {
@@ -88,6 +89,7 @@ export function ServerDataTable<TData, TValue>({
   onRetry,
   className,
   getRowProps,
+  showPagination = true,
 }: ServerDataTableProps<TData, TValue>) {
   const pageCount = getServerDataTablePageCount(total, pageSize)
   const boundedPage = getServerDataTableBoundedPage(page, total, pageSize)
@@ -215,7 +217,7 @@ export function ServerDataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {errorMessage ? null : (
+      {errorMessage || !showPagination ? null : (
         <DataTablePagination table={table} className='mt-auto' />
       )}
     </div>
