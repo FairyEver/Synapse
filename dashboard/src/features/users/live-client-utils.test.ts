@@ -164,6 +164,31 @@ describe('live client utilities', () => {
     ).toMatchObject({ status: 'online' })
   })
 
+  it('uses degraded admin snapshot status when observed times tie', () => {
+    const updated = mergeLiveClientSnapshot(
+      [
+        {
+          ...client('user-1', 'client-a', 'online'),
+          lastSeenAt: '2026-06-06T10:03:00.000Z',
+        },
+      ],
+      [
+        {
+          ...client('user-1', 'client-a', 'stale'),
+          lastSeenAt: '2026-06-06T10:03:00.000Z',
+        },
+      ]
+    )
+
+    expect(updated).toHaveLength(1)
+    expect(updated[0]).toMatchObject({
+      userId: 'user-1',
+      clientInstanceId: 'client-a',
+      status: 'stale',
+      lastSeenAt: '2026-06-06T10:03:00.000Z',
+    })
+  })
+
   it('replaces own clients without requiring a user id', () => {
     const updated = upsertOwnLiveClient(
       [client(undefined, 'client-a', 'online')],

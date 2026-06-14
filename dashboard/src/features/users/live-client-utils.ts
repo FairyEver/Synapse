@@ -107,10 +107,7 @@ export function mergeLiveClientSnapshot(
     if (!key) continue
 
     const existing = byClient.get(key)
-    if (
-      !existing ||
-      getLiveClientObservedAt(client) > getLiveClientObservedAt(existing)
-    ) {
+    if (!existing || shouldUseAdminSnapshotClient(client, existing)) {
       byClient.set(key, client)
     }
   }
@@ -141,6 +138,23 @@ export function mergeOwnLiveClientSnapshot(
 function getAdminLiveClientKey(client: LiveClientRow) {
   if (!client.userId) return null
   return `${client.userId}:${client.clientInstanceId}`
+}
+
+function shouldUseAdminSnapshotClient(
+  snapshotClient: LiveClientRow,
+  existingClient: LiveClientRow
+) {
+  const snapshotObservedAt = getLiveClientObservedAt(snapshotClient)
+  const existingObservedAt = getLiveClientObservedAt(existingClient)
+  if (snapshotObservedAt > existingObservedAt) return true
+  if (snapshotObservedAt < existingObservedAt) return false
+  return getLiveClientStatusRank(snapshotClient.status) < getLiveClientStatusRank(existingClient.status)
+}
+
+function getLiveClientStatusRank(status: LiveClientRow['status']) {
+  if (status === 'online') return 2
+  if (status === 'stale') return 1
+  return 0
 }
 
 function getLiveClientObservedAt(client: LiveClientRow) {
