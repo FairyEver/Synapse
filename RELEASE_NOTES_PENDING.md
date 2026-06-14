@@ -76,6 +76,7 @@
 - 工作流 Prompt 节点选择托管知识库项目时，会加载知识库会话能力，可以正常使用知识库查询等命令。
 - 工作流结束日志会汇总本次运行的 token usage 和总费用，排查多节点运行成本时不再需要逐条累加节点日志。
 - 知识库 `/wiki-ingest` 改由 Synapse 受控写入 source manifest，Agent 只输出结构化 ingest 报告。
+- 知识库 `/wiki-ingest` 收尾时会把新建或更新页面 frontmatter 里的 DragonScale address 回填到 manifest，重摄入和页面改名能继续复用地址。
 - 知识库会话启用 plugin hooks 时保留用户本机 Claude Code 的 user/project/local hooks，行为与用户自己的 Claude 配置保持一致。
 - 知识库存储迁移在恢复时会继续处理旧目录清理，清理失败会明确提示旧副本仍保留，不再把恢复误报为完全清理完成。
 - 知识库存储迁移会拒绝系统根目录、用户主目录和临时目录等过宽位置，避免把托管知识库数据迁到危险路径。

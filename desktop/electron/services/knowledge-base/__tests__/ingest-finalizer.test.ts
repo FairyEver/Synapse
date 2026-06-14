@@ -37,8 +37,22 @@ describe("KnowledgeBaseIngestCoordinator", () => {
       isNewLiveSession: true,
       turnId: "turn-1",
     })
-    await writeFile(path.join(root, "wiki", "sources", "source.md"), "# Source Summary\n", "utf8")
-    await writeFile(path.join(root, "wiki", "index.md"), "# Index\n- [[source]]\n", "utf8")
+    await writeFile(path.join(root, "wiki", "sources", "source.md"), [
+      "---",
+      "address: c-000010",
+      "type: source",
+      "---",
+      "# Source Summary",
+      "",
+    ].join("\n"), "utf8")
+    await writeFile(path.join(root, "wiki", "index.md"), [
+      "---",
+      "address: c-999999",
+      "---",
+      "# Index",
+      "- [[source]]",
+      "",
+    ].join("\n"), "utf8")
 
     expect(prepared.content).toContain("Do not edit `.raw/.manifest.json`")
     await coordinator.finalizeTurn({
@@ -73,7 +87,64 @@ describe("KnowledgeBaseIngestCoordinator", () => {
       pages_created: ["wiki/sources/source.md"],
       pages_updated: ["wiki/index.md"],
     }))
-    expect(result.manifest.address_map).toEqual({ "wiki/existing.md": "c-000001" })
+    expect(result.manifest.address_map).toEqual({
+      "wiki/existing.md": "c-000001",
+      "wiki/sources/source.md": "c-000010",
+    })
+    expect(result.manifest.address_map).not.toHaveProperty("wiki/index.md")
+  })
+
+  it("moves existing address mappings to newly reported page paths", async () => {
+    const root = await createKnowledgeBaseRoot()
+    await writeKnowledgeBaseManifest(root, {
+      version: 1,
+      sources: {},
+      address_map: {
+        "wiki/existing.md": "c-000001",
+        "wiki/sources/old.md": "c-000011",
+      },
+    })
+    const coordinator = new KnowledgeBaseIngestCoordinator({ projectId: "kb-1", projectPath: root })
+
+    await coordinator.prepareTurn(baseMessage("/wiki-ingest ingest all"), {
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+    })
+    await writeFile(path.join(root, "wiki", "sources", "renamed.md"), [
+      "---",
+      "address: c-000011",
+      "---",
+      "# Renamed",
+      "",
+    ].join("\n"), "utf8")
+    await coordinator.finalizeTurn({
+      message: baseMessage("/wiki-ingest ingest all"),
+      conversationId: "conversation-1",
+      isNewLiveSession: true,
+      turnId: "turn-1",
+      result: {
+        conversationId: "conversation-1",
+        events: [],
+        resultText: [
+          "```synapse_kb_ingest_report",
+          JSON.stringify({
+            schema: "synapse.kb.ingest.report.v1",
+            processed_sources: [{
+              source: ".raw/source.md",
+              pages_created: ["wiki/sources/renamed.md"],
+            }],
+          }),
+          "```",
+        ].join("\n"),
+      },
+    })
+
+    const result = await readKnowledgeBaseManifest(root)
+    expect(result.manifest.address_map).toEqual({
+      "wiki/existing.md": "c-000001",
+      "wiki/sources/renamed.md": "c-000011",
+    })
   })
 
   it("ignores processed sources that were not in preflight", async () => {

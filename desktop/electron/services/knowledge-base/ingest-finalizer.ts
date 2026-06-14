@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { AgentProjectAfterTurnInput, AgentProjectMessageContext } from "../agent-runtime/project-contributions"
@@ -9,6 +9,18 @@ import { scanKnowledgeBaseSources, type KnowledgeBaseSourceScanItem } from "./so
 import { diffWikiSnapshots, snapshotWikiMarkdown, type WikiSnapshot } from "./wiki-snapshot"
 
 const REPORT_SCHEMA = "synapse.kb.ingest.report.v1"
+const ADDRESS_PATTERN = /^[cl]-\d{6}$/u
+const ADDRESS_EXCLUDED_FILENAMES = new Set([
+  "_index.md",
+  "index.md",
+  "log.md",
+  "hot.md",
+  "overview.md",
+  "dashboard.md",
+  "Wiki Map.md",
+  "getting-started.md",
+])
+const ADDRESS_EXCLUDED_PREFIXES = ["wiki/folds/", "wiki/meta/"]
 
 type IngestPreflight = {
   readonly sources: readonly KnowledgeBaseSourceScanItem[]
@@ -125,6 +137,7 @@ async function buildFinalManifest(
   const wikiAfter = await snapshotWikiMarkdown(projectPath)
   const diff = diffWikiSnapshots(preflight.wikiBefore, wikiAfter)
   const sources = { ...manifest.sources }
+  const addressMap = { ...manifest.address_map }
   let changed = false
 
   for (const item of report.processed_sources) {
@@ -132,6 +145,7 @@ async function buildFinalManifest(
     if (!source || !isSafeRawPath(item.source)) continue
     const pagesCreated = await validatedPages(projectPath, item.pages_created ?? [], diff.created)
     const pagesUpdated = await validatedPages(projectPath, item.pages_updated ?? [], diff.updated)
+    await syncAddressMapFromPages(projectPath, addressMap, [...pagesCreated, ...pagesUpdated])
     sources[item.source] = {
       hash: source.hash,
       ingested_at: new Date().toISOString(),
@@ -145,7 +159,7 @@ async function buildFinalManifest(
   return {
     ...manifest,
     sources,
-    address_map: { ...manifest.address_map },
+    address_map: addressMap,
   }
 }
 
@@ -174,4 +188,52 @@ function isSafeRawPath(value: string): boolean {
 
 function isSafeWikiPagePath(value: string): boolean {
   return value.startsWith("wiki/") && value.endsWith(".md") && !path.isAbsolute(value) && !value.split(/[\\/]/u).includes("..")
+}
+
+async function syncAddressMapFromPages(
+  projectPath: string,
+  addressMap: Record<string, string>,
+  pages: readonly string[],
+): Promise<void> {
+  for (const pagePath of [...new Set(pages)].sort((a, b) => a.localeCompare(b))) {
+    const address = await readPageAddress(projectPath, pagePath)
+    if (!address) continue
+    for (const [mappedPath, mappedAddress] of Object.entries(addressMap)) {
+      if (mappedPath !== pagePath && mappedAddress === address) {
+        delete addressMap[mappedPath]
+      }
+    }
+    addressMap[pagePath] = address
+  }
+}
+
+async function readPageAddress(projectPath: string, pagePath: string): Promise<string | null> {
+  if (isAddressExcludedPath(pagePath)) return null
+  let content: string
+  try {
+    content = await readFile(path.join(projectPath, pagePath), "utf8")
+  } catch {
+    return null
+  }
+  const frontmatter = parsePageFrontmatter(content)
+  const type = frontmatterField(frontmatter, "type")
+  if (type === "meta" || type === "fold") return null
+  const address = frontmatterField(frontmatter, "address")
+  return address && ADDRESS_PATTERN.test(address) ? address : null
+}
+
+function isAddressExcludedPath(pagePath: string): boolean {
+  if (ADDRESS_EXCLUDED_FILENAMES.has(path.basename(pagePath))) return true
+  return ADDRESS_EXCLUDED_PREFIXES.some((prefix) => pagePath.startsWith(prefix))
+}
+
+function parsePageFrontmatter(content: string): string {
+  if (!content.startsWith("---\n")) return ""
+  const end = content.indexOf("\n---", 4)
+  return end === -1 ? "" : content.slice(4, end)
+}
+
+function frontmatterField(frontmatter: string, key: "address" | "type"): string | null {
+  const match = new RegExp(`^${key}:\\s*([^\\n]+)`, "mu").exec(frontmatter)
+  return match?.[1]?.trim().replace(/^["']|["']$/g, "") || null
 }
