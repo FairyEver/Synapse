@@ -170,6 +170,48 @@ describe("LiveDeviceService", () => {
     })
   })
 
+  it("creates a live-only user device when renaming an online client", async () => {
+    const prisma = createPrismaMock()
+    prisma.userDevice.update.mockRejectedValue(prismaNotFound())
+    prisma.userDevice.upsert.mockResolvedValue(device({
+      displayName: "Studio Mac",
+      deviceName: "MacBook Pro",
+      appVersion: "0.2.254",
+      lastSeenAt: new Date("2026-06-06T10:05:00.000Z"),
+    }))
+    const registry = new LiveClientRegistry()
+    registerClient(registry)
+    const service = new LiveDeviceService(prisma as unknown as PrismaService, registry)
+
+    const renamed = await service.renameUserDevice("user-1", "client-a", " Studio Mac ")
+
+    expect(prisma.userDevice.upsert).toHaveBeenCalledWith({
+      where: {
+        userId_clientInstanceId: {
+          userId: "user-1",
+          clientInstanceId: "client-a",
+        },
+      },
+      create: {
+        userId: "user-1",
+        clientInstanceId: "client-a",
+        displayName: "Studio Mac",
+        deviceName: "MacBook Pro",
+        platform: "darwin-arm64",
+        appVersion: "0.2.254",
+        firstSeenAt: new Date("2026-06-06T10:05:00.000Z"),
+        lastSeenAt: new Date("2026-06-06T10:05:00.000Z"),
+      },
+      update: { displayName: "Studio Mac" },
+    })
+    expect(renamed).toMatchObject({
+      clientInstanceId: "client-a",
+      displayName: "Studio Mac",
+      deviceName: "MacBook Pro",
+      status: "online",
+    })
+  })
+
   it("throws not found when renaming a missing user device", async () => {
     const prisma = createPrismaMock()
     prisma.userDevice.update.mockRejectedValue(prismaNotFound())
@@ -178,6 +220,7 @@ describe("LiveDeviceService", () => {
     await expect(service.renameUserDevice("user-1", "client-a", "Studio Mac"))
       .rejects
       .toBeInstanceOf(NotFoundException)
+    expect(prisma.userDevice.upsert).not.toHaveBeenCalled()
   })
 
   it("lists admin devices with user identity and pagination", async () => {

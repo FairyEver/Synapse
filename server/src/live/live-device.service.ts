@@ -164,7 +164,30 @@ export class LiveDeviceService {
       return toDeviceRow(row, live, { includeUser: false })
     } catch (error) {
       if (isRecordNotFoundError(error)) {
-        throw new NotFoundException("设备不存在。")
+        const live = this.registry.listByUser(userId).find((client) => client.clientInstanceId === clientInstanceId)
+        if (!live) throw new NotFoundException("设备不存在。")
+
+        const observedAt = liveDeviceObservedAt(live)
+        const row = await this.prisma.userDevice.upsert({
+          where: {
+            userId_clientInstanceId: {
+              userId,
+              clientInstanceId,
+            },
+          },
+          create: {
+            userId,
+            clientInstanceId,
+            displayName: nextDisplayName,
+            deviceName: boundedText(live.deviceName, deviceNameLimit),
+            platform: boundedText(live.platform, platformLimit),
+            appVersion: boundedText(live.appVersion, appVersionLimit),
+            firstSeenAt: observedAt,
+            lastSeenAt: observedAt,
+          },
+          update: { displayName: nextDisplayName },
+        })
+        return toDeviceRow(row, live, { includeUser: false })
       }
       throw error
     }
@@ -251,6 +274,13 @@ function observedAt(row: DashboardDeviceRow): number {
     parseDeviceTime(row.disconnectedAt),
     parseDeviceTime(row.firstSeenAt),
   )
+}
+
+function liveDeviceObservedAt(live: LiveClientInstance): Date {
+  const timestamp = live.lastSeenAt ?? live.connectedAt
+  const parsed = timestamp ? new Date(timestamp) : null
+  if (parsed && Number.isFinite(parsed.getTime())) return parsed
+  return new Date()
 }
 
 function parseDeviceTime(value: string | null | undefined): number {
