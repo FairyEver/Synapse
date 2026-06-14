@@ -117,6 +117,13 @@ type DriveFolderZipBrowserResult = {
   readonly entries: readonly DriveFolderZipEntry[]
 }
 
+type DriveBrowserDownloadResult = {
+  readonly stream: NodeJS.ReadableStream
+  readonly fileName: string
+  readonly size?: bigint
+  readonly contentType?: string | null
+}
+
 type DriveItemRecordWithStorage = DriveItemRecord & {
   readonly userId: string
   readonly storageKey: string | null
@@ -970,6 +977,29 @@ export class DriveService implements OnApplicationBootstrap {
     const storageKey = this.requireActiveFileStorage(current)
     const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
     return { url: download.url, fileName: current.name }
+  }
+
+  async openShareBrowserItemDownload(input: {
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly accessCookie?: string
+  }): Promise<DriveBrowserDownloadResult> {
+    const share = await this.resolvePublicShare({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    const storageKey = this.requireActiveFileStorage(current)
+    const object = await this.storage.getObjectStream({ key: storageKey })
+    return {
+      stream: object.stream,
+      fileName: current.name,
+      size: object.size ?? current.size,
+      contentType: object.contentType ?? current.mimeType,
+    }
   }
 
   async createFolderZipEntriesForShareBrowserItem(input: {

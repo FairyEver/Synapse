@@ -1418,6 +1418,58 @@ describe("DriveService", () => {
     expect(download.url).toBe("https://cos.example/download")
   })
 
+  it("streams public share browser downloads without minting storage urls", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "brief.txt",
+      mimeType: "text/plain",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+    vi.mocked(storageMock.createDownloadUrl).mockClear()
+    vi.mocked(storageMock.getObjectStream).mockClear()
+    vi.mocked(storageMock.getObjectStream).mockResolvedValueOnce({
+      stream: Readable.from("brief"),
+      size: 5n,
+      contentType: "text/plain",
+    })
+
+    const download = await service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+
+    expect(download.fileName).toBe("brief.txt")
+    expect(download.size).toBe(5n)
+    expect(download.contentType).toBe("text/plain")
+    expect(storageMock.getObjectStream).toHaveBeenCalledWith({ key: `drive/${file.id}` })
+    expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
+  })
+
+  it("rejects revoked public share browser downloads before reading storage", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "brief.txt",
+      mimeType: "text/plain",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+    await service.disableShare("user-1", share.id)
+    vi.mocked(storageMock.createDownloadUrl).mockClear()
+    vi.mocked(storageMock.getObjectStream).mockClear()
+
+    await expect(service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })).rejects.toBeInstanceOf(NotFoundException)
+    expect(storageMock.getObjectStream).not.toHaveBeenCalled()
+    expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
+  })
+
   it("rejects protected share direct access before storage download urls", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)

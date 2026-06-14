@@ -546,12 +546,12 @@ export class DrivePublicController {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    const download = await this.drive.createDownloadUrlForShareBrowserItem({
+    const download = await this.drive.openShareBrowserItemDownload({
       shareId,
       password,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
-    response.redirect(302, download.url)
+    await sendDriveFileDownload(response, download)
   }
 
   @Get(["/files/:shareId/items/:itemId/download", "/files/:shareId/:itemId/download"])
@@ -570,13 +570,13 @@ export class DrivePublicController {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    const download = await this.drive.createDownloadUrlForShareBrowserItem({
+    const download = await this.drive.openShareBrowserItemDownload({
       shareId,
       itemId,
       password,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
-    response.redirect(302, download.url)
+    await sendDriveFileDownload(response, download)
   }
 
   @Get("/files/:shareId/zip")
@@ -918,6 +918,18 @@ async function sendDriveZip(
     response.destroy(error instanceof Error ? error : new Error("Drive zip stream failed."))
     throw error
   }
+}
+
+async function sendDriveFileDownload(response: Response, download: {
+  readonly stream: NodeJS.ReadableStream
+  readonly fileName: string
+  readonly size?: bigint
+  readonly contentType?: string | null
+}): Promise<void> {
+  response.attachment(download.fileName)
+  response.setHeader("Content-Type", download.contentType || "application/octet-stream")
+  if (download.size !== undefined) response.setHeader("Content-Length", download.size.toString())
+  await pipeline(download.stream, response)
 }
 
 async function sendPublishedAsset(response: Response, asset: {

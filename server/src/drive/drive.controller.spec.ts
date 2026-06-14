@@ -53,6 +53,7 @@ describe("DriveController", () => {
     createFolderZipEntriesForOwnerBrowserItem: vi.fn(),
     resolveOwnerRenderAccess: vi.fn(),
     createDownloadUrlForShareBrowserItem: vi.fn(),
+    openShareBrowserItemDownload: vi.fn(),
     createFolderZipEntriesForShareBrowserItem: vi.fn(),
     listAdminItems: vi.fn(),
   }
@@ -85,6 +86,7 @@ describe("DriveController", () => {
     drive.createFolderZipEntriesForOwnerBrowserItem.mockReset()
     drive.resolveOwnerRenderAccess.mockReset()
     drive.createDownloadUrlForShareBrowserItem.mockReset()
+    drive.openShareBrowserItemDownload.mockReset()
     drive.createFolderZipEntriesForShareBrowserItem.mockReset()
     drive.listAdminItems.mockReset()
     storage.getObjectStream.mockReset()
@@ -1022,7 +1024,7 @@ describe("DriveController", () => {
     expect(response.text).toContain("drive-password-shell")
   })
 
-  it("redirects canonical and legacy public file downloads", async () => {
+  it("streams canonical and legacy public file downloads", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
       value: {
@@ -1032,19 +1034,24 @@ describe("DriveController", () => {
         storageKey: null,
       },
     })
-    drive.createDownloadUrlForShareBrowserItem.mockResolvedValueOnce({ url: "https://cos.example/download" })
-    drive.createDownloadUrlForShareBrowserItem.mockResolvedValueOnce({ url: "https://cos.example/child-download" })
-    drive.createDownloadUrlForShareBrowserItem.mockResolvedValueOnce({ url: "https://cos.example/legacy-child-download" })
+    drive.openShareBrowserItemDownload
+      .mockResolvedValueOnce({ stream: Readable.from("root"), fileName: "root.txt", size: 4n, contentType: "text/plain" })
+      .mockResolvedValueOnce({ stream: Readable.from("child"), fileName: "child.txt", size: 5n, contentType: "text/plain" })
+      .mockResolvedValueOnce({ stream: Readable.from("legacy"), fileName: "legacy.txt", size: 6n, contentType: "text/plain" })
 
-    const download = await request(app!.getHttpServer()).get("/files/shr_folder/download").expect(302)
-    expect(download.headers.location).toBe("https://cos.example/download")
-    expect(drive.createDownloadUrlForShareBrowserItem).toHaveBeenCalledWith({ shareId: "shr_folder", cookie: undefined, password: undefined })
-    const childDownload = await request(app!.getHttpServer()).get("/files/shr_folder/items/file-1/download").expect(302)
-    expect(childDownload.headers.location).toBe("https://cos.example/child-download")
-    expect(drive.createDownloadUrlForShareBrowserItem).toHaveBeenCalledWith({ shareId: "shr_folder", itemId: "file-1", cookie: undefined, password: undefined })
-    const legacyChildDownload = await request(app!.getHttpServer()).get("/files/shr_folder/file-1/download").expect(302)
-    expect(legacyChildDownload.headers.location).toBe("https://cos.example/legacy-child-download")
-    expect(drive.createDownloadUrlForShareBrowserItem).toHaveBeenCalledWith({ shareId: "shr_folder", itemId: "file-1", cookie: undefined, password: undefined })
+    const download = await request(app!.getHttpServer()).get("/files/shr_folder/download").expect(200)
+    expect(download.text).toBe("root")
+    expect(download.headers["content-disposition"]).toContain("root.txt")
+    expect(drive.openShareBrowserItemDownload).toHaveBeenCalledWith({ shareId: "shr_folder", cookie: undefined, password: undefined })
+    const childDownload = await request(app!.getHttpServer()).get("/files/shr_folder/items/file-1/download").expect(200)
+    expect(childDownload.text).toBe("child")
+    expect(childDownload.headers["content-disposition"]).toContain("child.txt")
+    expect(drive.openShareBrowserItemDownload).toHaveBeenCalledWith({ shareId: "shr_folder", itemId: "file-1", cookie: undefined, password: undefined })
+    const legacyChildDownload = await request(app!.getHttpServer()).get("/files/shr_folder/file-1/download").expect(200)
+    expect(legacyChildDownload.text).toBe("legacy")
+    expect(legacyChildDownload.headers["content-disposition"]).toContain("legacy.txt")
+    expect(drive.openShareBrowserItemDownload).toHaveBeenCalledWith({ shareId: "shr_folder", itemId: "file-1", cookie: undefined, password: undefined })
+    expect(drive.createDownloadUrlForShareBrowserItem).not.toHaveBeenCalled()
   })
 
   it("streams public child folder zip archives", async () => {
