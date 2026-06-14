@@ -2,6 +2,7 @@ import { lstat, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
+import { validateKnowledgeBaseRawEntryNameInput } from "../../../src/lib/knowledge-base-raw-entry-name"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { acquireUrlSource, type FetchUrl, type UrlSourceErrorCode } from "../source-acquisition/url-source"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
@@ -114,7 +115,12 @@ function slugFromUrl(rawUrl: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-  return slug || "source"
+  return toWindowsSafeMarkdownBaseName(slug || "source")
+}
+
+function toWindowsSafeMarkdownBaseName(baseName: string): string {
+  if (validateKnowledgeBaseRawEntryNameInput(`${baseName}.md`) === null) return baseName
+  return `${baseName}-source`
 }
 
 function safeDecodeURIComponent(value: string): string {

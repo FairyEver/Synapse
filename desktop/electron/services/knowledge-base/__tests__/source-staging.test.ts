@@ -120,4 +120,38 @@ describe("knowledge base URL source staging", () => {
     expect(first.uploaded[0]).toMatchObject({ relativePath: ".raw/web/2026/05/24/alpha.md" })
     expect(second.uploaded[0]).toMatchObject({ relativePath: ".raw/web/2026/05/24/alpha-2.md" })
   })
+
+  it("stages URL sources with Windows reserved path names into safe files", async () => {
+    const projectPath = await tempDir()
+    const cases = [
+      ["https://example.com/con", "con-source.md"],
+      ["https://example.com/prn.html", "prn-source.md"],
+      ["https://example.com/COM1", "com1-source.md"],
+    ] as const
+
+    for (const [url, fileName] of cases) {
+      const fetchUrl: FetchUrl = async () => ({
+        url,
+        status: 200,
+        headers: {
+          get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
+        },
+        text: async () => `<html><body><h1>${fileName}</h1></body></html>`,
+      })
+
+      const result = await stageKnowledgeBaseUrlSource({
+        projectPath,
+        url,
+        fetchUrl,
+        now: () => new Date("2026-05-24T00:00:00.000Z"),
+      })
+
+      expect(result.uploaded[0]).toMatchObject({
+        relativePath: `.raw/web/2026/05/24/${fileName}`,
+        name: fileName,
+      })
+      await expect(access(path.join(projectPath, ".raw", "web", "2026", "05", "24", fileName)))
+        .resolves.toBeUndefined()
+    }
+  })
 })
