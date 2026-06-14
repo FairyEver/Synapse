@@ -156,6 +156,42 @@ describe("migrateTaskToAutomation", () => {
     expect(harness.automation.automationDisable).toHaveBeenCalledWith("automation:1")
     expect(harness.scheduler.schedulerTaskDisable).toHaveBeenCalledWith("task:1")
   })
+
+  it("fails migration when rollback cannot disable the automation side", async () => {
+    const harness = createMigrationHarness({
+      deleteError: new Error("delete failed"),
+      rollbackError: new Error("rollback failed"),
+      automationDisableError: new Error("automation disable failed"),
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps, logger: harness.logger as never }))
+      .rejects.toThrow("回滚安全停用未完成：automation")
+
+    expect(harness.automation.automationDisable).toHaveBeenCalledWith("automation:1")
+    expect(harness.scheduler.schedulerTaskDisable).toHaveBeenCalledWith("task:1")
+    expect(harness.logger.warn).toHaveBeenCalledWith("Failed to disable migration rollback side.", expect.objectContaining({
+      side: "automation",
+      errorName: "Error",
+    }))
+  })
+
+  it("fails migration when rollback cannot disable the scheduler side", async () => {
+    const harness = createMigrationHarness({
+      deleteError: new Error("delete failed"),
+      rollbackError: new Error("rollback failed"),
+      schedulerDisableError: new Error("scheduler disable failed"),
+    })
+
+    await expect(migrateTaskToAutomation({ taskId: "task:1", ...harness.deps, logger: harness.logger as never }))
+      .rejects.toThrow("回滚安全停用未完成：scheduler")
+
+    expect(harness.automation.automationDisable).toHaveBeenCalledWith("automation:1")
+    expect(harness.scheduler.schedulerTaskDisable).toHaveBeenCalledWith("task:1")
+    expect(harness.logger.warn).toHaveBeenCalledWith("Failed to disable migration rollback side.", expect.objectContaining({
+      side: "scheduler",
+      errorName: "Error",
+    }))
+  })
 })
 
 function createTask(overrides: Partial<ScheduledTaskEntry> = {}): ScheduledTaskEntry {
@@ -186,6 +222,8 @@ function createMigrationHarness(options: {
   createError?: Error
   deleteError?: Error
   rollbackError?: Error
+  automationDisableError?: Error
+  schedulerDisableError?: Error
 } = {}) {
   const task = options.task === undefined ? createTask() : options.task
   const scheduler = {
@@ -195,7 +233,10 @@ function createMigrationHarness(options: {
       if (options.deleteError) throw options.deleteError
       return { deleted: true }
     }),
-    schedulerTaskDisable: vi.fn(async () => createTask({ enabled: false })),
+    schedulerTaskDisable: vi.fn(async () => {
+      if (options.schedulerDisableError) throw options.schedulerDisableError
+      return createTask({ enabled: false })
+    }),
   }
   const automation = {
     automationCreate: vi.fn(async () => {
@@ -206,7 +247,10 @@ function createMigrationHarness(options: {
       if (options.rollbackError) throw options.rollbackError
       return { deleted: true }
     }),
-    automationDisable: vi.fn(async () => ({ id: "automation:1", enabled: false })),
+    automationDisable: vi.fn(async () => {
+      if (options.automationDisableError) throw options.automationDisableError
+      return { id: "automation:1", enabled: false }
+    }),
   }
   const logger = {
     info: vi.fn(),

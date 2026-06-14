@@ -168,10 +168,33 @@ async function rollbackCreatedAutomation({
       automationId,
       ...errorMetadata(rollbackError),
     })
-    await Promise.allSettled([
+    const disableResults = await Promise.allSettled([
       automation.automationDisable(automationId),
       scheduler.schedulerTaskDisable(taskId),
     ])
+    const disableFailures = [
+      { side: "automation", result: disableResults[0] },
+      { side: "scheduler", result: disableResults[1] },
+    ].filter((entry): entry is {
+      readonly side: "automation" | "scheduler"
+      readonly result: PromiseRejectedResult
+    } => entry.result?.status === "rejected")
+
+    for (const failure of disableFailures) {
+      logger?.warn("Failed to disable migration rollback side.", {
+        boundary: "task-scheduler.migrate-to-automation.rollback",
+        taskId,
+        automationId,
+        side: failure.side,
+        ...errorMetadata(failure.result.reason),
+      })
+    }
+
+    if (disableFailures.length > 0) {
+      throw new Error(`回滚安全停用未完成：${disableFailures.map((failure) => failure.side).join("、")}`, {
+        cause: rollbackError,
+      })
+    }
   }
 }
 
