@@ -93,6 +93,16 @@ export function createToolWindowService(deps: ToolWindowServiceDeps): ToolWindow
       const health = deps.createHealthService(tool)
       health.attach(window.webContents)
       toolWindowHealthServices.set(window, health)
+      let cleanedUp = false
+      const cleanupWindowTracking = () => {
+        if (cleanedUp) return
+        cleanedUp = true
+        health.detach()
+        toolWindowHealthServices.delete(window)
+        if (windowsByToolId.get(tool.id) === window) {
+          windowsByToolId.delete(tool.id)
+        }
+      }
 
       window.webContents.on("preload-error", (_event, _preloadPath, error) => {
         deps.logger.error("Tool window preload script failed.", { toolId: tool.id, error })
@@ -103,12 +113,19 @@ export function createToolWindowService(deps: ToolWindowServiceDeps): ToolWindow
       })
 
       window.on("closed", () => {
-        health.detach()
-        toolWindowHealthServices.delete(window)
-        windowsByToolId.delete(tool.id)
+        cleanupWindowTracking()
       })
 
-      await (deps.loadWindow ?? loadToolWindow)(window, tool)
+      try {
+        await (deps.loadWindow ?? loadToolWindow)(window, tool)
+      } catch (error) {
+        cleanupWindowTracking()
+        deps.logger.error("Failed to load tool window.", { toolId: tool.id, error })
+        if (!window.isDestroyed()) {
+          window.close()
+        }
+        throw error
+      }
     },
   }
 }
