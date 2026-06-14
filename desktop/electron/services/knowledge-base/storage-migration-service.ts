@@ -378,6 +378,33 @@ export class KnowledgeBaseStorageMigrationService {
 
       if (journal.newRootVerified || await this.canVerifyRecoveredTarget(journal)) {
         await this.deps.updateConfig({ global: { knowledgeBaseStorage: journal.targetStorage } })
+        await this.transitionState({
+          active: true,
+          phase: "cleaning",
+          cancellable: false,
+          progress: { copiedBytes: 0, totalBytes: null },
+          message: "正在清理旧位置",
+        })
+        const oldKnowledgeBasesPath = path.join(journal.oldRoot, "knowledge-bases")
+        if (await pathExists(oldKnowledgeBasesPath)) {
+          try {
+            await this.deps.trashItem(oldKnowledgeBasesPath)
+          } catch (error) {
+            logger.warn("Knowledge Base old storage cleanup failed during migration recovery.", {
+              oldKnowledgeBasesPath,
+              ...knowledgeBaseErrorMeta(error),
+            })
+            await this.clearJournal()
+            await this.transitionState({
+              active: false,
+              phase: "completed-with-warning",
+              cancellable: false,
+              message: "知识库存储迁移已恢复到新位置，旧副本仍保留",
+              warningCode: "old-copy-not-trashed",
+            })
+            return
+          }
+        }
         await this.clearJournal()
         await this.transitionState({
           active: false,

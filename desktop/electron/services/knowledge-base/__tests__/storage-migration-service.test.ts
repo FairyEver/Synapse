@@ -140,12 +140,30 @@ describe("KnowledgeBaseStorageMigrationService", () => {
   it("keeps a verified new root during recovery", async () => {
     const harness = await migrationHarness()
     await harness.seedRuntime("kb-1", harness.newRoot)
+    await harness.seedRuntime("kb-1", harness.oldRoot)
     await harness.writeJournal({ phase: "cleaning", switchStarted: true, newRootVerified: true })
     harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
 
     await harness.service.recoverIfNeeded()
 
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+    expect(harness.trashed).toEqual([path.join(harness.oldRoot, "knowledge-bases")])
+  })
+
+  it("reports a warning when verified recovery cannot trash the old root", async () => {
+    const harness = await migrationHarness({ trashError: new Error("trash unavailable") })
+    await harness.seedRuntime("kb-1", harness.newRoot)
+    await harness.seedRuntime("kb-1", harness.oldRoot)
+    await harness.writeJournal({ phase: "cleaning", switchStarted: true, newRootVerified: true })
+    harness.setStorage({ mode: "custom", rootPath: harness.newRoot })
+
+    await harness.service.recoverIfNeeded()
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "custom", rootPath: harness.newRoot })
+    expect(harness.states.at(-1)).toMatchObject({
+      phase: "completed-with-warning",
+      warningCode: "old-copy-not-trashed",
+    })
   })
 
   it("rejects migration when available space is below runtime size plus margin", async () => {

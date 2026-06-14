@@ -39,6 +39,7 @@
 - 工作流结束日志会汇总本次运行的 token usage 和总费用，排查多节点运行成本时不再需要逐条累加节点日志。
 - 知识库 `/wiki-ingest` 改由 Synapse 受控写入 source manifest，Agent 只输出结构化 ingest 报告。
 - 知识库会话启用 plugin hooks 时保留用户本机 Claude Code 的 user/project/local hooks，行为与用户自己的 Claude 配置保持一致。
+- 知识库存储迁移在恢复时会继续处理旧目录清理，清理失败会明确提示旧副本仍保留，不再把恢复误报为完全清理完成。
 - Webhook `exec` 请求通过认证后会进入默认 shell 执行权限策略，不再被 PermissionGuard 默认拒绝。
 - 定时 HTTP 请求的鉴权密钥会存入加密存储，导入导出任务时也会移除 Bearer token 和 Basic 密码。
 - 导入数据备份时，JSONL 数据的替换模式会真正清空旧记录后再导入，不再把旧数据和新数据追加混在一起。
