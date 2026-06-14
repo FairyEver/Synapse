@@ -5,6 +5,7 @@ import {
   canCopyPromptText,
   canDeleteMyContent,
   canInstallContent,
+  canSetContentPublic,
 } from './content-store-actions'
 
 function item(overrides: Partial<ContentStoreItemDto> = {}): ContentStoreItemDto {
@@ -70,5 +71,10 @@ describe('content store action helpers', () => {
   it('only allows deleting private owned content from the shell', () => {
     expect(canDeleteMyContent(item({ visibility: 'private' }))).toBe(true)
     expect(canDeleteMyContent(item({ visibility: 'public' }))).toBe(false)
+  })
+
+  it('only allows public visibility after a published version exists', () => {
+    expect(canSetContentPublic(item({ latestVersionId: 'version-1' }))).toBe(true)
+    expect(canSetContentPublic(item({ latestVersionId: null }))).toBe(false)
   })
 })

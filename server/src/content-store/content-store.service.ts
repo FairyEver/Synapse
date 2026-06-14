@@ -387,6 +387,7 @@ export class ContentStoreService {
     const where: Prisma.ContentStoreItemWhereInput = {
       visibility: "public",
       moderationStatus: "normal",
+      latestVersionId: { not: null },
       ...(options.type ? { type: options.type } : {}),
       ...buildSearchWhere(options.query, "public"),
     }
@@ -409,7 +410,7 @@ export class ContentStoreService {
         id: itemId,
         OR: [
           { ownerUserId: userId },
-          { visibility: "public", moderationStatus: "normal" },
+          { visibility: "public", moderationStatus: "normal", latestVersionId: { not: null } },
         ],
       },
       include: { owner: { select: { id: true, displayName: true } } },
@@ -498,6 +499,9 @@ export class ContentStoreService {
     if (!item) throw new NotFoundException("内容不存在。")
     if (visibility === "public" && !item.description?.trim()) {
       throw new BadRequestException("公开内容必须填写描述。")
+    }
+    if (visibility === "public" && !item.latestVersionId) {
+      throw new BadRequestException("公开内容必须先发布。")
     }
     const updated = await this.prisma.contentStoreItem.update({
       where: { id: itemId },

@@ -21,3 +21,7 @@ export function canCopyPromptText(item: ContentStoreItemDto) {
 export function canDeleteMyContent(item: ContentStoreItemDto) {
   return item.visibility === 'private'
 }
+
+export function canSetContentPublic(item: ContentStoreItemDto) {
+  return Boolean(item.latestVersionId)
+}

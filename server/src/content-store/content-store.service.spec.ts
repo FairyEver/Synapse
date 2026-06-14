@@ -210,6 +210,19 @@ describe("ContentStoreService", () => {
     await expect(service.setVisibility("user-1", "item-1", "public")).rejects.toThrow(BadRequestException)
   })
 
+  it("rejects public visibility before content has a published version", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(item({
+      id: "item-1",
+      ownerUserId: "user-1",
+      description: "Ready",
+      latestVersionId: null,
+    }))
+
+    await expect(service.setVisibility("user-1", "item-1", "public")).rejects.toThrow(BadRequestException)
+
+    expect(prisma.contentStoreItem.update).not.toHaveBeenCalled()
+  })
+
   it("publishes skill drafts by creating an immutable package", async () => {
     prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
       id: "draft-1",
@@ -382,11 +395,26 @@ describe("ContentStoreService", () => {
 
     expect(prisma.contentStoreItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
+        latestVersionId: { not: null },
         OR: expect.arrayContaining([
           { title: { contains: "needle", mode: "insensitive" } },
           { description: { contains: "needle", mode: "insensitive" } },
           { owner: { displayName: { contains: "needle", mode: "insensitive" } } },
           { versions: { some: expect.objectContaining({ searchText: { contains: "needle", mode: "insensitive" } }) } },
+        ]),
+      }),
+    }))
+  })
+
+  it("requires a published version for public detail access", async () => {
+    prisma.contentStoreItem.findFirst.mockResolvedValue(null)
+
+    await expect(service.getDetail("user-2", "item-1")).rejects.toThrow(NotFoundException)
+
+    expect(prisma.contentStoreItem.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        OR: expect.arrayContaining([
+          { visibility: "public", moderationStatus: "normal", latestVersionId: { not: null } },
         ]),
       }),
     }))

@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { canDeleteMyContent } from './content-store-actions'
+import { canDeleteMyContent, canSetContentPublic } from './content-store-actions'
 import {
   formatContentStoreDate,
   getContentStoreTypeLabel,
@@ -157,63 +157,69 @@ export default function MyContentListPage({
       },
       {
         id: 'actions',
-        cell: ({ row }) => (
-          <div className='flex justify-end gap-2'>
-            <Button
-              variant='ghost'
-              className='h-8 px-2'
-              onClick={(event) => {
-                event.stopPropagation()
-                void navigate({
-                  to: '/my-content/$contentId',
-                  params: { contentId: row.original.id },
-                })
-              }}
-            >
-              打开
-            </Button>
-            <Button
-              variant='ghost'
-              className='h-8 px-2'
-              onClick={(event) => {
-                event.stopPropagation()
-                void navigate({
-                  to: '/my-content/$contentId/edit',
-                  params: { contentId: row.original.id },
-                })
-              }}
-            >
-              编辑
-            </Button>
-            <Button
-              variant='ghost'
-              className='h-8 px-2'
-              disabled={visibilityMutation.isPending}
-              onClick={(event) => {
-                event.stopPropagation()
-                visibilityMutation.mutate({
-                  id: row.original.id,
-                  visibility:
-                    row.original.visibility === 'public' ? 'private' : 'public',
-                })
-              }}
-            >
-              {row.original.visibility === 'public' ? '取消公开' : '公开'}
-            </Button>
-            {canDeleteMyContent(row.original) ? (
+        cell: ({ row }) => {
+          const nextVisibility =
+            row.original.visibility === 'public' ? 'private' : 'public'
+          const isPublicDisabled =
+            nextVisibility === 'public' && !canSetContentPublic(row.original)
+
+          return (
+            <div className='flex justify-end gap-2'>
               <Button
                 variant='ghost'
                 className='h-8 px-2'
                 onClick={(event) => {
                   event.stopPropagation()
-                  setDeleteTarget(row.original)
+                  void navigate({
+                    to: '/my-content/$contentId',
+                    params: { contentId: row.original.id },
+                  })
                 }}
               >
-                删除
+                打开
               </Button>
-            ) : null}
-          </div>
-        ),
+              <Button
+                variant='ghost'
+                className='h-8 px-2'
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void navigate({
+                    to: '/my-content/$contentId/edit',
+                    params: { contentId: row.original.id },
+                  })
+                }}
+              >
+                编辑
+              </Button>
+              <Button
+                variant='ghost'
+                className='h-8 px-2'
+                disabled={visibilityMutation.isPending || isPublicDisabled}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  visibilityMutation.mutate({
+                    id: row.original.id,
+                    visibility: nextVisibility,
+                  })
+                }}
+              >
+                {row.original.visibility === 'public' ? '取消公开' : '公开'}
+              </Button>
+              {canDeleteMyContent(row.original) ? (
+                <Button
+                  variant='ghost'
+                  className='h-8 px-2'
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setDeleteTarget(row.original)
+                  }}
+                >
+                  删除
+                </Button>
+              ) : null}
+            </div>
+          )
+        },
         meta: {
           thClassName: 'text-right',
           tdClassName: 'text-right',
