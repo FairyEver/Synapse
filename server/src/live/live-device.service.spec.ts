@@ -182,15 +182,19 @@ describe("LiveDeviceService", () => {
 
   it("lists admin devices with user identity and pagination", async () => {
     const prisma = createPrismaMock()
-    prisma.userDevice.findMany.mockResolvedValue([
-      device({
-        user: {
-          id: "user-1",
-          email: "user@example.com",
-          displayName: "Li Yang",
-        },
-      }),
-    ])
+    prisma.userDevice.findMany
+      .mockResolvedValueOnce([
+        device({
+          user: {
+            id: "user-1",
+            email: "user@example.com",
+            displayName: "Li Yang",
+          },
+        }),
+      ])
+      .mockResolvedValueOnce([
+        { userId: "user-1", clientInstanceId: "client-a" },
+      ])
     prisma.userDevice.count.mockResolvedValue(1)
     const registry = new LiveClientRegistry()
     registerClient(registry)
@@ -221,6 +225,55 @@ describe("LiveDeviceService", () => {
           userDisplayName: "Li Yang",
           clientInstanceId: "client-a",
           status: "online",
+        }),
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+  })
+
+  it("includes live-only clients in the first admin device page", async () => {
+    const prisma = createPrismaMock()
+    prisma.userDevice.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    prisma.userDevice.count.mockResolvedValue(0)
+    const registry = new LiveClientRegistry()
+    registerClient(registry, {
+      clientInstanceId: "client-live-only",
+      connectionId: "conn-live-only",
+      deviceName: "Live Mac",
+    })
+    const service = new LiveDeviceService(prisma as unknown as PrismaService, registry)
+
+    const result = await service.listAdminDevices({
+      page: 1,
+      pageSize: 20,
+      sortBy: "lastSeenAt",
+      sortOrder: "desc",
+    })
+
+    expect(prisma.userDevice.findMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        OR: [{
+          userId: "user-1",
+          clientInstanceId: "client-live-only",
+        }],
+      },
+      select: {
+        userId: true,
+        clientInstanceId: true,
+      },
+    })
+    expect(result).toEqual({
+      data: [
+        expect.objectContaining({
+          userId: "user-1",
+          clientInstanceId: "client-live-only",
+          deviceName: "Live Mac",
+          status: "online",
+          connectedAt: "2026-06-06T10:05:00.000Z",
         }),
       ],
       total: 1,

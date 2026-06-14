@@ -107,6 +107,7 @@ export class LiveDeviceService {
   }
 
   async listAdminDevices(pagination: PaginationQuery): Promise<PaginatedResponse<DashboardDeviceRow>> {
+    const liveClients = this.registry.listAll()
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.userDevice.findMany({
         ...toPrismaArgs(pagination),
@@ -118,14 +119,26 @@ export class LiveDeviceService {
       }),
       this.prisma.userDevice.count(),
     ])
+    const liveKeysWithRows = await this.findPersistedLiveDeviceKeys(liveClients)
     const liveByKey = new Map(
-      this.registry.listAll().map((client) => [deviceKey(client.userId, client.clientInstanceId), client]),
+      liveClients.map((client) => [deviceKey(client.userId, client.clientInstanceId), client]),
     )
+    const devices = rows.map((row) => {
+      const key = deviceKey(row.userId, row.clientInstanceId)
+      const live = liveByKey.get(key)
+      liveByKey.delete(key)
+      return toDeviceRow(row, live, { includeUser: true })
+    })
+    const liveOnlyDevices = Array.from(liveByKey.values())
+      .filter((live) => !liveKeysWithRows.has(deviceKey(live.userId, live.clientInstanceId)))
+      .map((live) => toLiveOnlyDeviceRow(live, { includeUser: true }))
 
     return {
-      data: rows.map((row) =>
-        toDeviceRow(row, liveByKey.get(deviceKey(row.userId, row.clientInstanceId)), { includeUser: true })),
-      total,
+      data: [
+        ...devices,
+        ...(pagination.page === 1 ? liveOnlyDevices : []),
+      ].sort(compareDevicesByObservedAt),
+      total: total + liveOnlyDevices.length,
       page: pagination.page,
       pageSize: pagination.pageSize,
     }
@@ -155,6 +168,23 @@ export class LiveDeviceService {
       }
       throw error
     }
+  }
+
+  private async findPersistedLiveDeviceKeys(liveClients: readonly LiveClientInstance[]): Promise<ReadonlySet<string>> {
+    if (liveClients.length === 0) return new Set()
+    const rows = await this.prisma.userDevice.findMany({
+      where: {
+        OR: liveClients.map((client) => ({
+          userId: client.userId,
+          clientInstanceId: client.clientInstanceId,
+        })),
+      },
+      select: {
+        userId: true,
+        clientInstanceId: true,
+      },
+    })
+    return new Set(rows.map((row) => deviceKey(row.userId, row.clientInstanceId)))
   }
 }
 
