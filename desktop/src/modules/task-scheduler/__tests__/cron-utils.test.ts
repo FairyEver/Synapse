@@ -49,6 +49,13 @@ describe("cron-utils", () => {
     })
   })
 
+  it("rejects syntactically valid expressions with no future run", () => {
+    expect(validateCronExpression("0 9 31 2 *")).toEqual({
+      ok: false,
+      message: "Cron 在 5 年内没有运行时间",
+    })
+  })
+
   it("lists five ascending future runs", () => {
     const runs = listNextCronRuns("*/30 * * * *", new Date("2026-04-29T10:01:00"), 5)
 

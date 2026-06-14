@@ -167,7 +167,10 @@ function parseCronExpression(expr: string): ParsedCronExpression {
 
 function validateCronExpression(expr: string): CronValidationResult {
   try {
-    parseCronExpression(expr)
+    const parsed = parseCronExpression(expr)
+    if (!hasPossibleCalendarDay(parsed)) {
+      throw new Error("Cron 在 5 年内没有运行时间")
+    }
     return { ok: true }
   } catch (error) {
     return {
@@ -175,6 +178,22 @@ function validateCronExpression(expr: string): CronValidationResult {
       message: error instanceof Error ? error.message : "Cron 不合法",
     }
   }
+}
+
+function hasPossibleCalendarDay(parsed: ParsedCronExpression): boolean {
+  if (parsed.dayWildcard || !parsed.weekdayWildcard) return true
+
+  for (const month of parsed.month) {
+    const maxDay = maxDaysInMonth(month)
+    for (const day of parsed.day) {
+      if (day <= maxDay) return true
+    }
+  }
+  return false
+}
+
+function maxDaysInMonth(month: number): number {
+  return new Date(2024, month, 0).getDate()
 }
 
 function listNextCronRuns(expr: string, from = new Date(), count = 5): Date[] {
