@@ -2,6 +2,12 @@ const dashboardRedirectOrigin = 'https://synapse.local'
 const dashboardBasePath = '/console'
 const legacyDashboardBasePath = '/dashboard'
 
+type DashboardRedirectLocation = Pick<Location, 'pathname' | 'search' | 'hash'>
+
+export function buildDashboardRedirectPath(location: DashboardRedirectLocation) {
+  return `${location.pathname}${location.search}${location.hash}`
+}
+
 function stripDashboardBasePath(pathname: string) {
   if (pathname === dashboardBasePath) return '/'
   if (pathname.startsWith(`${dashboardBasePath}/`)) {

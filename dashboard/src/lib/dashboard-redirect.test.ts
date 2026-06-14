@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeDashboardRedirect } from './dashboard-redirect'
+import { buildDashboardRedirectPath, normalizeDashboardRedirect } from './dashboard-redirect'
+
+describe('buildDashboardRedirectPath', () => {
+  it('keeps search and hash from the current location', () => {
+    expect(buildDashboardRedirectPath({
+      pathname: '/console/content-store/install',
+      search: '?session=install_123',
+      hash: '#retry',
+    })).toBe('/console/content-store/install?session=install_123#retry')
+  })
+})
 
 describe('normalizeDashboardRedirect', () => {
   it('strips the console basepath from redirects', () => {
