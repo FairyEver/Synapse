@@ -1019,6 +1019,60 @@ describe("DriveController", () => {
     })
   })
 
+  it("posts share passwords for direct downloads and redirects back", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      cookie: "posted-cookie",
+      value: {
+        type: "file",
+        item: createDriveItem({ id: "file-1", name: "brief.txt" }),
+        ownerId: "user-1",
+        storageKey: "drive/file-1",
+      },
+    })
+
+    const response = await request(app!.getHttpServer())
+      .post("/files/shr_file/download")
+      .send({ password: "letmein" })
+      .expect(302)
+    const setCookie = response.headers["set-cookie"]
+
+    expect(response.headers.location).toBe("/files/shr_file/download")
+    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain(`${driveAccessCookieName("share", "shr_file")}=posted-cookie`)
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      password: "letmein",
+      cookie: undefined,
+    })
+  })
+
+  it("posts share passwords for child folder zip downloads and redirects back", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      cookie: "posted-cookie",
+      value: {
+        type: "folder",
+        item: createDriveItem({ id: "folder-1", name: "交接材料", type: "folder" }),
+        ownerId: "user-1",
+        storageKey: null,
+      },
+    })
+
+    const response = await request(app!.getHttpServer())
+      .post("/files/shr_folder/items/folder-2/zip")
+      .send({ password: "letmein" })
+      .expect(302)
+    const setCookie = response.headers["set-cookie"]
+
+    expect(response.headers.location).toBe("/files/shr_folder/items/folder-2/zip")
+    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain(`${driveAccessCookieName("share", "shr_folder")}=posted-cookie`)
+    expect(drive.resolvePublicShareAccess).toHaveBeenCalledWith({
+      shareId: "shr_folder",
+      password: "letmein",
+      cookie: undefined,
+    })
+  })
+
   it("cleans stale password query for share downloads before creating storage URLs", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
@@ -1051,6 +1105,19 @@ describe("DriveController", () => {
 
     expect(response.text).toContain("密码错误")
     expect(response.text).toContain("drive-password-shell")
+  })
+
+  it("renders password errors on direct download password posts", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer())
+      .post("/files/shr_file/download")
+      .send({ password: "wrong" })
+      .expect(200)
+
+    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('action="/files/shr_file/download"')
   })
 
   it("streams canonical and legacy public file downloads", async () => {

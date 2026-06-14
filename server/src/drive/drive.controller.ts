@@ -542,6 +542,30 @@ export class DrivePublicController {
 
   @Post("/files/:shareId")
   async unlockShare(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    await this.unlockShareToPath(shareId, request, response)
+  }
+
+  @Post("/files/:shareId/download")
+  async unlockShareDownload(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    await this.unlockShareToPath(shareId, request, response)
+  }
+
+  @Post(["/files/:shareId/items/:itemId/download", "/files/:shareId/:itemId/download"])
+  async unlockShareChildDownload(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    await this.unlockShareToPath(shareId, request, response)
+  }
+
+  @Post("/files/:shareId/zip")
+  async unlockShareZip(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    await this.unlockShareToPath(shareId, request, response)
+  }
+
+  @Post("/files/:shareId/items/:itemId/zip")
+  async unlockShareChildZip(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    await this.unlockShareToPath(shareId, request, response)
+  }
+
+  private async unlockShareToPath(shareId: string, request: Request, response: Response): Promise<void> {
     const access = await this.drive.resolvePublicShareAccess({
       shareId,
       password: readBodyPassword(request),
