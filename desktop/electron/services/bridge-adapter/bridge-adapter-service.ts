@@ -168,6 +168,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       },
       start: (binding) => createLocalNetworkHostLifecycle(binding, {
         maxBodyBytes: this.deps.maxBodyBytes,
+        maxWebSocketPayloadBytes: this.deps.maxBodyBytes,
         acceptWebSocket: (request) => this.acceptWebSocket(request),
         handleWebSocket: (connection) => this.handleWebSocket(connection),
         handleHttp: (request) => this.handleHttp(request),

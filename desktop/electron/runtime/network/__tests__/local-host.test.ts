@@ -75,6 +75,33 @@ describe("Local network host", () => {
     await registry.unregister("local-ws-test")
   })
 
+  it("closes WebSocket connections when payload exceeds the configured limit", async () => {
+    const port = await getFreePort()
+    const registry = createNetworkServiceRegistry()
+    await registry.register({
+      id: "local-ws-payload-test",
+      role: "websocket",
+      preferredPort: port,
+      handler: { handle: () => ({ ok: true }) },
+      start: (binding) => createLocalNetworkHostLifecycle(binding, {
+        maxWebSocketPayloadBytes: 32,
+        handleHttp: () => ({ status: 404, body: { ok: false } }),
+        handleWebSocket: (connection) => {
+          connection.onJsonMessage((message) => {
+            connection.sendJson({ echo: message })
+          })
+        },
+      }),
+    })
+
+    const ws = await openWebSocket(`ws://127.0.0.1:${String(port)}/ws`)
+    const closeCode = waitForClose(ws)
+    ws.send(JSON.stringify({ value: "x".repeat(64) }))
+
+    await expect(closeCode).resolves.toBe(1009)
+    await registry.unregister("local-ws-payload-test")
+  })
+
   it("sets a default Content-Type for string HTTP responses", async () => {
     const port = await getFreePort()
     const registry = createNetworkServiceRegistry()
@@ -123,5 +150,11 @@ function openWebSocket(
 function readJson(ws: WebSocket): Promise<unknown> {
   return new Promise((resolve) => {
     ws.once("message", (data) => resolve(JSON.parse(data.toString()) as unknown))
+  })
+}
+
+function waitForClose(ws: WebSocket): Promise<number> {
+  return new Promise((resolve) => {
+    ws.once("close", (code) => resolve(code))
   })
 }

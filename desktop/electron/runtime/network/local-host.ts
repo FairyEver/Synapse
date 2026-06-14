@@ -35,6 +35,7 @@ export interface LocalWebSocketUpgradeDecision {
 
 export interface LocalNetworkHostHandler {
   readonly maxBodyBytes?: number
+  readonly maxWebSocketPayloadBytes?: number
   handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> | LocalHttpResponse
   acceptWebSocket?(request: Omit<LocalHttpRequest, "body">): LocalWebSocketUpgradeDecision
   handleWebSocket?(
@@ -50,7 +51,10 @@ export async function createLocalNetworkHostLifecycle(
   handler: LocalNetworkHostHandler,
 ): Promise<NetworkServiceLifecycle> {
   const wsServer = handler.handleWebSocket
-    ? new WebSocketServer({ noServer: true })
+    ? new WebSocketServer({
+        noServer: true,
+        maxPayload: handler.maxWebSocketPayloadBytes ?? DEFAULT_MAX_BODY_BYTES,
+      })
     : undefined
   const server = createServer((req, res) => {
     void handleHttpRequest(req, res, handler)
@@ -211,6 +215,7 @@ class WsConnection implements LocalWebSocketConnection {
 
   constructor(ws: WebSocket) {
     this.ws = ws
+    this.ws.on("error", () => {})
   }
 
   sendJson(value: unknown): void {

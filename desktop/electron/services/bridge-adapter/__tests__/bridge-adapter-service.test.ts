@@ -16,6 +16,7 @@ import type {
 import type { ReplyTarget } from "../../reply-target"
 import type { SideChannelService } from "../../side-channel"
 import { BridgeAdapterService } from "../bridge-adapter-service"
+import { BRIDGE_MESSAGE_CONTENT_MAX_CHARS } from "../bridge-protocol"
 import type { BridgeOutboundDispatcher } from "../types"
 
 describe("BridgeAdapterService", () => {
@@ -127,6 +128,31 @@ describe("BridgeAdapterService", () => {
         capabilities: ["text", "typing"],
       }),
     }))
+    ws.close()
+    await service.stop()
+  })
+
+  it("rejects oversized inbound bridge messages before agent dispatch", async () => {
+    const agent = new FakeAgentRuntime()
+    const { service, port } = await startBridge(agent)
+    const ws = await registeredBridge(port, "tok", ["text"])
+
+    ws.send(JSON.stringify({
+      type: "message",
+      session_key: "bridge:room:user",
+      user_id: "u1",
+      content: "x".repeat(BRIDGE_MESSAGE_CONTENT_MAX_CHARS + 1),
+      reply_ctx: "ctx-1",
+      project: "project-1",
+    }))
+
+    await expect(readJson(ws)).resolves.toMatchObject({
+      type: "error",
+      error: {
+        code: "invalid_message",
+      },
+    })
+    expect(agent.messages).toEqual([])
     ws.close()
     await service.stop()
   })

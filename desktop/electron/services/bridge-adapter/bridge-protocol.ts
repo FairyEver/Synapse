@@ -1,8 +1,15 @@
+import { Buffer } from "node:buffer"
 import { z } from "zod"
 
 const metadataSchema = z.record(z.string(), z.unknown()).optional()
 const SENSITIVE_METADATA_VALUE_PATTERN =
   /\b(token|secret|authorization|password|credential|apiKey|api_key|cookie)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^,;]+?)(?=\s+\b(?:token|secret|authorization|password|credential|apiKey|api_key|cookie)\b\s*[:=]|$|[,;])/gi
+export const BRIDGE_MESSAGE_CONTENT_MAX_CHARS = 256 * 1024
+export const BRIDGE_REPLY_CONTEXT_MAX_BYTES = 128 * 1024
+export const BRIDGE_ATTACHMENT_MAX_COUNT = 4
+export const BRIDGE_ATTACHMENT_DATA_MAX_CHARS = 256 * 1024
+export const BRIDGE_ATTACHMENT_NAME_MAX_CHARS = 255
+export const BRIDGE_ATTACHMENT_MIME_TYPE_MAX_CHARS = 128
 
 export const bridgeRegisterSchema = z.object({
   type: z.literal("register"),
@@ -13,9 +20,9 @@ export const bridgeRegisterSchema = z.object({
 })
 
 const bridgeAttachmentSchema = z.object({
-  mime_type: z.string().trim().min(1),
-  data: z.string().min(1),
-  file_name: z.string().trim().min(1).optional(),
+  mime_type: z.string().trim().min(1).max(BRIDGE_ATTACHMENT_MIME_TYPE_MAX_CHARS),
+  data: z.string().min(1).max(BRIDGE_ATTACHMENT_DATA_MAX_CHARS),
+  file_name: z.string().trim().min(1).max(BRIDGE_ATTACHMENT_NAME_MAX_CHARS).optional(),
 })
 
 const bridgeFileAttachmentSchema = bridgeAttachmentSchema.extend({
@@ -28,11 +35,13 @@ export const bridgeMessageSchema = z.object({
   session_key: z.string().trim().min(1),
   user_id: z.string().trim().min(1),
   user_name: z.string().trim().min(1).optional(),
-  content: z.string(),
-  reply_ctx: z.unknown(),
+  content: z.string().max(BRIDGE_MESSAGE_CONTENT_MAX_CHARS),
+  reply_ctx: z.unknown().refine((value) => jsonByteLength(value) <= BRIDGE_REPLY_CONTEXT_MAX_BYTES, {
+    message: "reply_ctx is too large",
+  }),
   project: z.string().trim().min(1).optional(),
-  images: z.array(bridgeAttachmentSchema).optional().default([]),
-  files: z.array(bridgeFileAttachmentSchema).optional().default([]),
+  images: z.array(bridgeAttachmentSchema).max(BRIDGE_ATTACHMENT_MAX_COUNT).optional().default([]),
+  files: z.array(bridgeFileAttachmentSchema).max(BRIDGE_ATTACHMENT_MAX_COUNT).optional().default([]),
 })
 
 export const bridgeCardActionSchema = z.object({
@@ -138,6 +147,14 @@ export function sanitizeBridgeMetadata(
     result[key] = sanitizeMetadataValue(value)
   }
   return result
+}
+
+function jsonByteLength(value: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) ?? "null", "utf8")
+  } catch {
+    return Number.POSITIVE_INFINITY
+  }
 }
 
 function sanitizeMetadataValue(value: unknown): unknown {

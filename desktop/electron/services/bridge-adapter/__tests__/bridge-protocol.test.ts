@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  BRIDGE_ATTACHMENT_DATA_MAX_CHARS,
+  BRIDGE_ATTACHMENT_MAX_COUNT,
+  BRIDGE_MESSAGE_CONTENT_MAX_CHARS,
+  BRIDGE_REPLY_CONTEXT_MAX_BYTES,
   normalizeCapabilities,
   parseBridgeBase,
   parseBridgeMessage,
@@ -41,6 +45,40 @@ describe("bridge protocol schema", () => {
       session_key: "s1",
       content: "hello",
       reply_ctx: "ctx",
+    }).ok).toBe(false)
+  })
+
+  it("rejects oversized message fields", () => {
+    const baseMessage = {
+      type: "message",
+      session_key: "s1",
+      user_id: "u1",
+      content: "hello",
+      reply_ctx: "ctx",
+    }
+
+    expect(parseBridgeMessage({
+      ...baseMessage,
+      content: "x".repeat(BRIDGE_MESSAGE_CONTENT_MAX_CHARS + 1),
+    }).ok).toBe(false)
+    expect(parseBridgeMessage({
+      ...baseMessage,
+      reply_ctx: { value: "x".repeat(BRIDGE_REPLY_CONTEXT_MAX_BYTES) },
+    }).ok).toBe(false)
+    expect(parseBridgeMessage({
+      ...baseMessage,
+      images: Array.from({ length: BRIDGE_ATTACHMENT_MAX_COUNT + 1 }, () => ({
+        mime_type: "image/png",
+        data: "a",
+      })),
+    }).ok).toBe(false)
+    expect(parseBridgeMessage({
+      ...baseMessage,
+      files: [{
+        mime_type: "text/plain",
+        file_name: "a.txt",
+        data: "a".repeat(BRIDGE_ATTACHMENT_DATA_MAX_CHARS + 1),
+      }],
     }).ok).toBe(false)
   })
 
