@@ -33,6 +33,47 @@ describe('adminApi.downloadBackup', () => {
     vi.unstubAllGlobals()
   })
 
+  it('uses a native download link after a successful preflight', async () => {
+    const link = {
+      click: vi.fn(),
+      download: '',
+      href: '',
+      rel: '',
+      remove: vi.fn(),
+    }
+    const append = vi.fn()
+    const createElement = vi.fn(() => link)
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 200 })
+    )
+    const createObjectURL = vi.fn()
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('document', {
+      body: { append },
+      createElement,
+    })
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL,
+    })
+
+    await adminApi.downloadBackup('backup.tar.gz')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/backup/download/backup.tar.gz',
+      { credentials: 'include', method: 'HEAD' }
+    )
+    expect(createElement).toHaveBeenCalledWith('a')
+    expect(link.href).toBe('/api/admin/backup/download/backup.tar.gz')
+    expect(link.download).toBe('backup.tar.gz')
+    expect(link.rel).toBe('noopener')
+    expect(append).toHaveBeenCalledWith(link)
+    expect(link.click).toHaveBeenCalledOnce()
+    expect(link.remove).toHaveBeenCalledOnce()
+    expect(createObjectURL).not.toHaveBeenCalled()
+    expect(revokeObjectURL).not.toHaveBeenCalled()
+  })
+
   it('notifies auth expiration when the backup download request returns 401', async () => {
     const authExpired = vi.fn()
     const unsubscribe = subscribeAuthExpired(authExpired)
@@ -60,7 +101,7 @@ describe('adminApi.downloadBackup', () => {
 
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/admin/backup/download/backup.tar.gz',
-        { credentials: 'include' }
+        { credentials: 'include', method: 'HEAD' }
       )
       expect(authExpired).toHaveBeenCalledOnce()
     } finally {

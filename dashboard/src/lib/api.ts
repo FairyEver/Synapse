@@ -515,7 +515,7 @@ function subscribeServerEvents<TEvent>(
 }
 
 async function downloadFile(path: string, filename: string) {
-  const response = await fetch(path, { credentials: 'include' })
+  const response = await fetch(path, { credentials: 'include', method: 'HEAD' })
 
   if (!response.ok) {
     const message = await readErrorMessage(response)
@@ -525,18 +525,13 @@ async function downloadFile(path: string, filename: string) {
     throw new ApiError(message, response.status)
   }
 
-  const objectUrl = URL.createObjectURL(await response.blob())
-  try {
-    const link = document.createElement('a')
-    link.href = objectUrl
-    link.download = filename
-    link.rel = 'noopener'
-    document.body.append(link)
-    link.click()
-    link.remove()
-  } finally {
-    URL.revokeObjectURL(objectUrl)
-  }
+  const link = document.createElement('a')
+  link.href = path
+  link.download = filename
+  link.rel = 'noopener'
+  document.body.append(link)
+  link.click()
+  link.remove()
 }
 
 export function getBackupDownloadUrl(filename: string) {
