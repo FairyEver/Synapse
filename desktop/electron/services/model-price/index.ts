@@ -8,6 +8,7 @@ export {
   roundModelUsageCost,
 } from "./matching"
 export { estimateSynapseUsageCostSnapshot, usageTokenBreakdownFromRecord } from "./usage-cost-snapshot"
+export { MODEL_PRICE_COVERAGE_DEFAULT_LIMIT, MODEL_PRICE_COVERAGE_MAX_LIMIT } from "./types"
 export type {
   EstimatedModelUsageCost,
   ModelPriceCoverageInput,

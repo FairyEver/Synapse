@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
 import { initUsageAnalysisSchema } from "../../usage-analysis/db-schema"
 import { ModelPriceService } from "../service"
+import { MODEL_PRICE_COVERAGE_MAX_LIMIT } from "../types"
 
 function createDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:")
@@ -95,6 +96,37 @@ describe("model price coverage", () => {
     expect(service.listCoverage({ source: "codex", range: "today" })).toEqual([
       expect.objectContaining({ model: "today-model", sources: ["codex"], tokens: 2 }),
     ])
+    db.close()
+  })
+
+  it("caps oversized limits and aggregates all sources before limiting", () => {
+    const db = createDb()
+    const service = new ModelPriceService(db)
+    insertUsageEvent(db, "cc", { id: "cc-combined", model: "combined-model", inputTokens: 80 })
+    insertUsageEvent(db, "cx", { id: "cx-combined", model: "combined-model", inputTokens: 80 })
+    insertUsageEvent(db, "cc", { id: "cc-only", model: "cc-only-model", inputTokens: 120 })
+    insertUsageEvent(db, "cx", { id: "cx-only", model: "codex-only-model", inputTokens: 110 })
+
+    expect(service.listCoverage({ source: "all", range: "all", limit: 2 })).toEqual([
+      expect.objectContaining({ model: "combined-model", sources: ["cc", "codex"], tokens: 160 }),
+      expect.objectContaining({ model: "cc-only-model", sources: ["cc"], tokens: 120 }),
+    ])
+
+    for (let index = 0; index < MODEL_PRICE_COVERAGE_MAX_LIMIT + 5; index += 1) {
+      insertUsageEvent(db, "cc", {
+        id: `bulk-${index}`,
+        model: `bulk-model-${String(index).padStart(3, "0")}`,
+        inputTokens: index + 1,
+      })
+    }
+
+    const capped = service.listCoverage({ source: "cc", range: "all", limit: 10_000 })
+    expect(capped).toHaveLength(MODEL_PRICE_COVERAGE_MAX_LIMIT)
+    expect(capped[0]).toEqual(expect.objectContaining({
+      model: `bulk-model-${String(MODEL_PRICE_COVERAGE_MAX_LIMIT + 4).padStart(3, "0")}`,
+      tokens: MODEL_PRICE_COVERAGE_MAX_LIMIT + 5,
+    }))
+    expect(capped.at(-1)?.tokens).toBeGreaterThan(0)
     db.close()
   })
 })

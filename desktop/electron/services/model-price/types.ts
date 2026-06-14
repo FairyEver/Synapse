@@ -89,6 +89,9 @@ export type ModelPriceCoverageSource = "all" | "cc" | "codex"
 export type ModelPriceCoverageRange = "today" | "7d" | "30d" | "90d" | "all"
 export type ModelPriceUsageSourceName = "cc" | "codex"
 
+export const MODEL_PRICE_COVERAGE_DEFAULT_LIMIT = 200
+export const MODEL_PRICE_COVERAGE_MAX_LIMIT = 500
+
 export interface ModelPriceCoverageInput {
   readonly source?: ModelPriceCoverageSource
   readonly range?: ModelPriceCoverageRange

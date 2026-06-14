@@ -9,12 +9,14 @@ import type {
   ModelPriceRule,
   ModelPriceUsageSourceName,
 } from "./types"
+import {
+  MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
+  MODEL_PRICE_COVERAGE_MAX_LIMIT,
+} from "./types"
 
 type UsagePrefix = "cc" | "cx"
 
-type UsedModelAccumulator = Omit<ModelPriceCoverageRow, "sources" | "priceKnown" | "matchedRuleId" | "matchedRulePattern"> & {
-  readonly sources: Set<ModelPriceUsageSourceName>
-}
+type UsedModelQueryRow = Omit<ModelPriceCoverageRow, "priceKnown" | "matchedRuleId" | "matchedRulePattern">
 
 const RANGE_PRESETS: readonly ModelPriceCoverageRange[] = ["today", "7d", "30d", "90d", "all"]
 
@@ -26,49 +28,12 @@ export function listModelPriceCoverage(
   const source = normalizeSource(input.source)
   const range = normalizeRange(input.range)
   const limit = normalizeLimit(input.limit)
-  const byModel = new Map<string, UsedModelAccumulator>()
 
-  for (const item of selectedSources(source)) {
-    for (const row of queryUsedModels(db, item.prefix, range)) {
-      const current = byModel.get(row.model) ?? {
-        model: row.model,
-        sources: new Set<ModelPriceUsageSourceName>(),
-        tokens: 0,
-        requests: 0,
-        pricedTokens: 0,
-        unpricedTokens: 0,
-        estimatedCost: 0,
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        reasoning: 0,
-      }
-      current.sources.add(item.name)
-      byModel.set(row.model, {
-        ...current,
-        tokens: current.tokens + row.tokens,
-        requests: current.requests + row.requests,
-        pricedTokens: current.pricedTokens + row.pricedTokens,
-        unpricedTokens: current.unpricedTokens + row.unpricedTokens,
-        estimatedCost: current.estimatedCost + row.estimatedCost,
-        input: current.input + row.input,
-        output: current.output + row.output,
-        cacheRead: current.cacheRead + row.cacheRead,
-        cacheWrite: current.cacheWrite + row.cacheWrite,
-        reasoning: current.reasoning + row.reasoning,
-      })
-    }
-  }
-
-  return [...byModel.values()]
-    .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
-    .slice(0, limit)
+  return queryUsedModels(db, source, range, limit)
     .map((row) => {
       const matchedRule = findModelPriceRuleForModel(row.model, rules)
       return {
         ...row,
-        sources: [...row.sources].sort() as ModelPriceUsageSourceName[],
         priceKnown: matchedRule !== null,
         ...(matchedRule ? { matchedRuleId: matchedRule.id, matchedRulePattern: matchedRule.modelPattern } : {}),
       }
@@ -88,21 +53,27 @@ function normalizeRange(value: unknown): ModelPriceCoverageRange {
 }
 
 function normalizeLimit(value: unknown): number {
-  if (value === undefined) return 200
+  if (value === undefined) return MODEL_PRICE_COVERAGE_DEFAULT_LIMIT
   if (typeof value !== "number" || !Number.isFinite(value) || value < 1) throw new Error("Invalid 'limit': expected positive number")
-  return Math.floor(value)
+  return Math.min(Math.floor(value), MODEL_PRICE_COVERAGE_MAX_LIMIT)
 }
 
-function selectedSources(source: ModelPriceCoverageSource): Array<{ prefix: UsagePrefix; name: ModelPriceUsageSourceName }> {
-  if (source === "cc") return [{ prefix: "cc", name: "cc" }]
-  if (source === "codex") return [{ prefix: "cx", name: "codex" }]
-  return [
-    { prefix: "cc", name: "cc" },
-    { prefix: "cx", name: "codex" },
-  ]
+function queryUsedModels(
+  db: DatabaseSync,
+  source: ModelPriceCoverageSource,
+  preset: ModelPriceCoverageRange,
+  limit: number,
+): UsedModelQueryRow[] {
+  if (source === "all") return queryAllUsedModels(db, preset, limit)
+  const prefix = source === "cc" ? "cc" : "cx"
+  const sourceName = source === "cc" ? "cc" : "codex"
+  return querySingleSourceUsedModels(db, prefix, sourceName, preset, limit)
 }
 
-function queryUsedModels(db: DatabaseSync, prefix: UsagePrefix, preset: ModelPriceCoverageRange): Array<Omit<UsedModelAccumulator, "sources">> {
+function createUsageWhere(preset: ModelPriceCoverageRange): {
+  readonly params: Array<string | number>
+  readonly where: string
+} {
   const filter = createUsageRangeFilter({ preset })
   const where: string[] = ["model != ''"]
   const params: Array<string | number> = []
@@ -120,6 +91,17 @@ function queryUsedModels(db: DatabaseSync, prefix: UsagePrefix, preset: ModelPri
     where.push("date <= ?")
     params.push(filter.untilDate)
   }
+  return { where: where.join(" AND "), params }
+}
+
+function querySingleSourceUsedModels(
+  db: DatabaseSync,
+  prefix: UsagePrefix,
+  sourceName: ModelPriceUsageSourceName,
+  preset: ModelPriceCoverageRange,
+  limit: number,
+): UsedModelQueryRow[] {
+  const { where, params } = createUsageWhere(preset)
   const rows = db.prepare(`
     SELECT
       model,
@@ -134,13 +116,94 @@ function queryUsedModels(db: DatabaseSync, prefix: UsagePrefix, preset: ModelPri
       COALESCE(SUM(total_cost), 0) AS estimated_cost,
       COUNT(*) AS requests
     FROM ${prefix}_usage_events
-    WHERE ${where.join(" AND ")}
+    WHERE ${where}
     GROUP BY model
     HAVING tokens > 0
-  `).all(...params) as Record<string, unknown>[]
+    ORDER BY tokens DESC, model ASC
+    LIMIT ?
+  `).all(...params, limit) as Record<string, unknown>[]
 
-  return rows.map((row) => ({
+  return rows.map((row) => rowFromSql(row, [sourceName]))
+}
+
+function queryAllUsedModels(
+  db: DatabaseSync,
+  preset: ModelPriceCoverageRange,
+  limit: number,
+): UsedModelQueryRow[] {
+  const { where, params } = createUsageWhere(preset)
+  const rows = db.prepare(`
+    SELECT
+      model,
+      COALESCE(SUM(input), 0) AS input,
+      COALESCE(SUM(output), 0) AS output,
+      COALESCE(SUM(cache_read), 0) AS cache_read,
+      COALESCE(SUM(cache_write), 0) AS cache_write,
+      COALESCE(SUM(reasoning), 0) AS reasoning,
+      COALESCE(SUM(tokens), 0) AS tokens,
+      COALESCE(SUM(priced_tokens), 0) AS priced_tokens,
+      COALESCE(SUM(unpriced_tokens), 0) AS unpriced_tokens,
+      COALESCE(SUM(estimated_cost), 0) AS estimated_cost,
+      COALESCE(SUM(requests), 0) AS requests,
+      COALESCE(SUM(cc_requests), 0) AS cc_requests,
+      COALESCE(SUM(codex_requests), 0) AS codex_requests
+    FROM (
+      SELECT
+        model,
+        COALESCE(SUM(input_tokens), 0) AS input,
+        COALESCE(SUM(output_tokens), 0) AS output,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
+        COALESCE(SUM(cache_write_tokens), 0) AS cache_write,
+        COALESCE(SUM(reasoning_tokens), 0) AS reasoning,
+        COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens), 0) AS tokens,
+        COALESCE(SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END), 0) AS priced_tokens,
+        COALESCE(SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END), 0) AS unpriced_tokens,
+        COALESCE(SUM(total_cost), 0) AS estimated_cost,
+        COUNT(*) AS requests,
+        COUNT(*) AS cc_requests,
+        0 AS codex_requests
+      FROM cc_usage_events
+      WHERE ${where}
+      GROUP BY model
+      HAVING tokens > 0
+      UNION ALL
+      SELECT
+        model,
+        COALESCE(SUM(input_tokens), 0) AS input,
+        COALESCE(SUM(output_tokens), 0) AS output,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
+        COALESCE(SUM(cache_write_tokens), 0) AS cache_write,
+        COALESCE(SUM(reasoning_tokens), 0) AS reasoning,
+        COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens), 0) AS tokens,
+        COALESCE(SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END), 0) AS priced_tokens,
+        COALESCE(SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END), 0) AS unpriced_tokens,
+        COALESCE(SUM(total_cost), 0) AS estimated_cost,
+        COUNT(*) AS requests,
+        0 AS cc_requests,
+        COUNT(*) AS codex_requests
+      FROM cx_usage_events
+      WHERE ${where}
+      GROUP BY model
+      HAVING tokens > 0
+    )
+    GROUP BY model
+    HAVING tokens > 0
+    ORDER BY tokens DESC, model ASC
+    LIMIT ?
+  `).all(...params, ...params, limit) as Record<string, unknown>[]
+
+  return rows.map((row) => {
+    const sources: ModelPriceUsageSourceName[] = []
+    if (toNumber(row.cc_requests) > 0) sources.push("cc")
+    if (toNumber(row.codex_requests) > 0) sources.push("codex")
+    return rowFromSql(row, sources)
+  })
+}
+
+function rowFromSql(row: Record<string, unknown>, sources: ModelPriceUsageSourceName[]): UsedModelQueryRow {
+  return {
     model: String(row.model ?? "unknown"),
+    sources,
     tokens: toNumber(row.tokens),
     requests: toNumber(row.requests),
     pricedTokens: toNumber(row.priced_tokens),
@@ -151,7 +214,7 @@ function queryUsedModels(db: DatabaseSync, prefix: UsagePrefix, preset: ModelPri
     cacheRead: toNumber(row.cache_read),
     cacheWrite: toNumber(row.cache_write),
     reasoning: toNumber(row.reasoning),
-  }))
+  }
 }
 
 function toNumber(value: unknown): number {

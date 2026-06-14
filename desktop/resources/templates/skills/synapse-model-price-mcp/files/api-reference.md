@@ -22,7 +22,7 @@ Fields:
 
 - `source`: `all`, `cc`, or `codex`. Defaults to `all`.
 - `range`: `today`, `7d`, `30d`, `90d`, or `all`. Defaults to `all`.
-- `limit`: positive number. Defaults to `200`.
+- `limit`: positive number. Defaults to `200`; values above `500` are capped to `500`.
 
 Returns model rows sorted by tokens:
 

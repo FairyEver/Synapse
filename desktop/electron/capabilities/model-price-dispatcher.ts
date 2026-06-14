@@ -5,6 +5,8 @@ import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
 import {
   ModelPriceService,
+  MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
+  MODEL_PRICE_COVERAGE_MAX_LIMIT,
   type ModelPriceCoverageInput,
   type ModelPriceCoverageRange,
   type ModelPriceCoverageSource,
@@ -279,9 +281,9 @@ function normalizeRange(value: unknown): ModelPriceCoverageRange {
 }
 
 function normalizeLimit(value: unknown): number {
-  if (value === undefined) return 200
+  if (value === undefined) return MODEL_PRICE_COVERAGE_DEFAULT_LIMIT
   if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
     throw new Error("Invalid 'limit': expected positive number")
   }
-  return Math.floor(value)
+  return Math.min(Math.floor(value), MODEL_PRICE_COVERAGE_MAX_LIMIT)
 }

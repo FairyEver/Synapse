@@ -286,6 +286,31 @@ describe("model price capability dispatcher", () => {
     db.close()
   })
 
+  it("caps oversized used-model list limits before dispatching coverage", async () => {
+    const db = createTestDb()
+    for (let index = 0; index < 505; index += 1) {
+      insertUsageEvent(db, "cc", {
+        id: `cc-${index}`,
+        model: `model-${String(index).padStart(3, "0")}`,
+        inputTokens: index + 1,
+      })
+    }
+    const dispatcher = createModelPriceCapabilityDispatcher({ db })
+
+    const result = await dispatcher.dispatch("model_price.used_model.list", {
+      source: "cc",
+      range: "all",
+      limit: 10_000,
+    }, { source: "api" })
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toHaveLength(500)
+    expect(result.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ model: "model-504", tokens: 505 }),
+    ]))
+    db.close()
+  })
+
   it("does not change historical usage event costs when rules change", async () => {
     const db = createTestDb()
     insertUsageEvent(db, "cc", {

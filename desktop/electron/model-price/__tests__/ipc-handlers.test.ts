@@ -38,6 +38,8 @@ vi.mock("../../services/usage-analysis", () => ({
 }))
 
 vi.mock("../../services/model-price", () => ({
+  MODEL_PRICE_COVERAGE_DEFAULT_LIMIT: 200,
+  MODEL_PRICE_COVERAGE_MAX_LIMIT: 500,
   isModelPricePresetId: (value: unknown) => value === "deepseek-official" || value === "aliyun-bailian",
   ModelPriceService: vi.fn(function ModelPriceService() {
     return mocks.modelPriceService
@@ -90,6 +92,29 @@ describe("model price IPC handlers", () => {
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.rulesClear)?.({})).toEqual([])
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.rulesReset)?.({})).toEqual([])
     expect(mocks.modelPriceService.clearRules).toHaveBeenCalledTimes(2)
+  })
+
+  it("caps oversized coverage limits before calling the service", async () => {
+    mocks.modelPriceService.listCoverage.mockReturnValueOnce([])
+
+    const { registerModelPriceHandlers } = await import("../ipc-handlers")
+    registerModelPriceHandlers()
+
+    await expect(mocks.handlers.get(MODEL_PRICE_CHANNELS.coverageList)?.({}, {
+      source: "cc",
+      range: "all",
+      limit: 10_000,
+    })).resolves.toEqual([])
+    expect(mocks.modelPriceService.listCoverage).toHaveBeenCalledWith({
+      source: "cc",
+      range: "all",
+      limit: 500,
+    })
+    expect(mocks.logger.info).toHaveBeenCalledWith("Model price coverage requested.", {
+      source: "cc",
+      range: "all",
+      limit: 500,
+    })
   })
 
   it("validates rule save payloads before writing", async () => {

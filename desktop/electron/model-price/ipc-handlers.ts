@@ -5,6 +5,8 @@ import { createMainLogger } from "../services/log-store"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import {
   isModelPricePresetId,
+  MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
+  MODEL_PRICE_COVERAGE_MAX_LIMIT,
   ModelPriceService,
   type ModelPriceCoverageInput,
   type ModelPricePresetId,
@@ -31,7 +33,9 @@ export function normalizeModelPriceCoverageInput(input: ModelPriceCoverageInput 
   return {
     source: source === "cc" || source === "codex" || source === "all" ? source : "all",
     range: range === "today" || range === "7d" || range === "30d" || range === "90d" || range === "all" ? range : "30d",
-    limit: Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 200,
+    limit: Number.isFinite(limit) && limit > 0
+      ? Math.min(Math.floor(limit), MODEL_PRICE_COVERAGE_MAX_LIMIT)
+      : MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
   }
 }
 

@@ -2,6 +2,8 @@ import type { CapabilityId } from "./naming"
 import { capabilityIdToMcpTool } from "./naming"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
+const MODEL_PRICE_COVERAGE_MAX_LIMIT = 500
+
 const ruleIdProperty = {
   type: "string",
   description: "Opaque model price rule ID from a rule's id field. This is not a model name and not modelPattern. Call model_price_rule_list first when only modelPattern is known.",
@@ -51,7 +53,7 @@ export function buildModelPriceTools(): McpToolDefinition[] {
         properties: {
           source: { type: "string", enum: ["all", "cc", "codex"], description: "Usage source filter. Defaults to all." },
           range: { type: "string", enum: ["today", "7d", "30d", "90d", "all"], description: "Usage date range. Defaults to all." },
-          limit: { type: "number", minimum: 1, description: "Maximum number of model rows to return. Defaults to 200." },
+          limit: { type: "number", minimum: 1, maximum: MODEL_PRICE_COVERAGE_MAX_LIMIT, description: "Maximum number of model rows to return. Defaults to 200 and is capped at 500." },
         },
       },
     },
