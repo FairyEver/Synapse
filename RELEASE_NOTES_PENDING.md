@@ -129,6 +129,7 @@
 - 工作流 Code X 长任务输出大量 JSONL 时不再因为默认 1MiB stdout/stderr buffer 被中断，运行历史仍会保留可复盘的调试预览和文件路径。
 - 工作流 Code X 非零退出时会把已捕获的 stderr 作为失败原因展示，不再只显示退出码。
 - Live 桌面端 WebSocket 增加业务级消息大小限制，异常大消息会在解析前被拦截，减少服务端内存和 CPU 压力。
+- Live 桌面端 hello 字段增加协议级长度上限，超长设备名、平台、版本或客户端实例 ID 不再进入实时在线列表、日志和 SSE 事件。
 - 工作流 Code X 找不到本机 Codex CLI 时会显示明确的“未找到 Codex CLI”，不再暴露底层 spawn 错误。
 - 工作流 Code X 使用 stdout fallback 时不会再展示不存在的 last-message 调试文件路径。
 - 复制工作流运行报告时，Code X 高级配置覆盖项会隐藏具体 value，避免把本地执行配置里的敏感值带进剪贴板。

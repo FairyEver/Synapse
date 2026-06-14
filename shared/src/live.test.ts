@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  LIVE_HELLO_FIELD_LIMITS,
   LIVE_MESSAGE_TYPES,
   createLiveEnvelope,
   isLiveDesktopClientMessage,
@@ -37,6 +38,29 @@ describe("shared live protocol", () => {
       sentAt: "2026-06-06T10:00:00.000Z",
       payload: { clientInstanceId: "client-a" },
     })).toBe(false)
+  })
+
+  it("rejects live hello fields over protocol limits", () => {
+    const validPayload = {
+      clientInstanceId: "c".repeat(LIVE_HELLO_FIELD_LIMITS.clientInstanceId),
+      appVersion: "v".repeat(LIVE_HELLO_FIELD_LIMITS.appVersion),
+      platform: "p".repeat(LIVE_HELLO_FIELD_LIMITS.platform),
+      deviceName: "d".repeat(LIVE_HELLO_FIELD_LIMITS.deviceName),
+    }
+
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.hello,
+      validPayload,
+      { id: "msg-1", sentAt: "2026-06-06T10:00:00.000Z" },
+    ))).toBe(true)
+
+    for (const key of Object.keys(LIVE_HELLO_FIELD_LIMITS) as Array<keyof typeof LIVE_HELLO_FIELD_LIMITS>) {
+      expect(isLiveDesktopClientMessage(createLiveEnvelope(
+        LIVE_MESSAGE_TYPES.hello,
+        { ...validPayload, [key]: "x".repeat(LIVE_HELLO_FIELD_LIMITS[key] + 1) },
+        { id: `msg-${key}`, sentAt: "2026-06-06T10:00:00.000Z" },
+      ))).toBe(false)
+    }
   })
 
   it("recognizes client webhook delivery ack messages", () => {

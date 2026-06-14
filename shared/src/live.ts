@@ -9,6 +9,13 @@ export const LIVE_MESSAGE_TYPES = {
   webhookDeliveryAck: "webhook.delivery.ack",
 } as const
 
+export const LIVE_HELLO_FIELD_LIMITS = {
+  clientInstanceId: 120,
+  deviceName: 120,
+  platform: 80,
+  appVersion: 80,
+} as const
+
 export type LiveMessageType = typeof LIVE_MESSAGE_TYPES[keyof typeof LIVE_MESSAGE_TYPES]
 
 export interface LiveEnvelope<TType extends string, TPayload> {
@@ -91,10 +98,10 @@ export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktop
 
 function isHelloPayload(value: unknown): value is LiveDesktopHelloPayload {
   return isRecord(value) &&
-    nonEmptyString(value.clientInstanceId) &&
-    nonEmptyString(value.appVersion) &&
-    nonEmptyString(value.platform) &&
-    nonEmptyString(value.deviceName)
+    boundedString(value.clientInstanceId, LIVE_HELLO_FIELD_LIMITS.clientInstanceId) &&
+    boundedString(value.appVersion, LIVE_HELLO_FIELD_LIMITS.appVersion) &&
+    boundedString(value.platform, LIVE_HELLO_FIELD_LIMITS.platform) &&
+    boundedString(value.deviceName, LIVE_HELLO_FIELD_LIMITS.deviceName)
 }
 
 function isWelcomePayload(value: unknown): value is LiveDesktopWelcomePayload {
@@ -123,6 +130,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
+}
+
+function boundedString(value: unknown, maxLength: number): value is string {
+  return nonEmptyString(value) && value.length <= maxLength
 }
 
 function positiveNumber(value: unknown): value is number {
