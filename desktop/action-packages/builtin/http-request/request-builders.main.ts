@@ -1,5 +1,6 @@
 import type { OutboundHttpRequest } from "../../../electron/runtime/network"
 import { redactSensitiveText } from "../../../src/lib/agent-redaction"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import {
   httpRequestActionConfigSchema,
   type HttpRequestActionConfig,
@@ -73,6 +74,21 @@ export function buildOutboundHttpRequest(
 
 export function redactHttpResponseBody(body: string | undefined): string {
   return body ? redactSensitiveText(body) : ""
+}
+
+const SENSITIVE_RESPONSE_HEADER_PATTERN = /^(authorization|proxy-authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
+
+export function redactHttpResponseHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [
+      key,
+      SENSITIVE_RESPONSE_HEADER_PATTERN.test(key) ? "[redacted]" : redactHttpResponseHeaderValue(value),
+    ]),
+  )
+}
+
+function redactHttpResponseHeaderValue(value: string): string {
+  return redactSensitiveText(sanitizeUrl(value))
 }
 
 function assertMethodAllowsBody(config: HttpRequestActionConfig): void {

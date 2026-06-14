@@ -14,6 +14,7 @@ import {
   buildHttpRequestUrl,
   buildOutboundHttpRequest,
   redactHttpResponseBody,
+  redactHttpResponseHeaders,
 } from "./request-builders.main"
 import type { HttpRequestActionConfig } from "./schema"
 
@@ -104,6 +105,7 @@ export function createHttpRequestAction(deps: {
           abortSignal: context.abortSignal,
         }))
         const redactedBody = redactHttpResponseBody(response.body)
+        const redactedHeaders = redactHttpResponseHeaders(response.headers)
         return {
           status: response.status >= 400 ? "failed" : "success",
           summary: `${String(response.status)} ${response.statusText}`,
@@ -111,7 +113,7 @@ export function createHttpRequestAction(deps: {
           outputs: {
             status: response.status,
             statusText: response.statusText,
-            headers: response.headers,
+            headers: redactedHeaders,
             body: redactedBody,
           },
           metrics: { httpStatus: response.status, durationMs: Date.now() - startMs },

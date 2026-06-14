@@ -74,6 +74,7 @@
 - 待推送状态刷新改为读取计数、摘要和少量样本，状态中心也会限制渲染数量，离线积累大量本地变更时不再因为同步状态拖慢界面。
 - 云盘内置 MCP skill 会正确说明分享链接的密码和有效期设置，Agent 按用户要求创建无密码或指定有效期链接时不再被旧限制误导。
 - Automation MCP 返回运行记录时会对执行摘要和错误做脱敏，并且只暴露白名单内的非敏感指标，避免 Agent 执行结果里的 token、Authorization 等内容进入工具结果。
+- HTTP 请求动作会在保存运行结果前脱敏响应头，`Set-Cookie`、Authorization、API key 和自定义 token header 不再进入调度器或自动化历史。
 - Automation MCP 新增 Webhook 列表发现工具，Agent 创建 Webhook 触发的自动化时可以直接选择正确的 publicId，不再需要用户手工复制或猜测。
 - Automation 的命令和脚本执行器会在 Windows 上默认使用 cmd，编辑器新建和 MCP 发现结果不再默认写入 POSIX shell。
 - Automation MCP 内置 skill 补充了工作流执行器说明，Agent 创建自动化时能直接选择已保存工作流并配置参数模板。

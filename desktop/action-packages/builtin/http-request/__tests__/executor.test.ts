@@ -132,6 +132,56 @@ describe("builtin.http-request executor", () => {
     expect(JSON.stringify(result)).toContain("/Users/liyang/Documents/code/github/Synapse/plain.txt")
   })
 
+  it("redacts sensitive response headers before returning outputs", async () => {
+    const sendRequest = vi.fn(async () => ({
+      status: 200,
+      statusText: "OK",
+      headers: {
+        "content-type": "application/json",
+        "set-cookie": "sid=response-cookie-secret; Path=/",
+        Authorization: "Bearer response-auth-secret",
+        "x-api-key": "response-api-key-secret",
+        "x-custom-token": "custom-token-secret",
+        location: "https://example.com/callback?token=location-secret&ok=1",
+        "x-request-id": "request-123",
+      },
+      body: "{\"ok\":true}",
+    }))
+    const action = createHttpRequestAction({ sendRequest })
+
+    const result = await action.execute({
+      config: {
+        method: "GET",
+        url: "https://example.com/api",
+        bodyType: "none",
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "manual",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(result.outputs?.headers).toEqual({
+      "content-type": "application/json",
+      "set-cookie": "[redacted]",
+      Authorization: "[redacted]",
+      "x-api-key": "[redacted]",
+      "x-custom-token": "[redacted]",
+      location: "https://example.com/callback?token=%5Bredacted%5D&ok=1",
+      "x-request-id": "request-123",
+    })
+    const raw = JSON.stringify(result)
+    expect(raw).not.toContain("response-cookie-secret")
+    expect(raw).not.toContain("response-auth-secret")
+    expect(raw).not.toContain("response-api-key-secret")
+    expect(raw).not.toContain("custom-token-secret")
+    expect(raw).not.toContain("location-secret")
+  })
+
   it("fails before sending stale GET requests that still contain a body", async () => {
     const sendRequest = vi.fn()
     const action = createHttpRequestAction({ sendRequest })
