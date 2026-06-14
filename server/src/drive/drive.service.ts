@@ -111,6 +111,11 @@ type DriveFolderZipEntry = {
   readonly storageKey: string
 }
 
+type DriveFolderZipBrowserResult = {
+  readonly filename: string
+  readonly entries: readonly DriveFolderZipEntry[]
+}
+
 type DriveItemRecordWithStorage = DriveItemRecord & {
   readonly userId: string
   readonly storageKey: string | null
@@ -841,10 +846,13 @@ export class DriveService implements OnApplicationBootstrap {
     readonly userId: string
     readonly rootItemId: string
     readonly currentItemId?: string | null
-  }): Promise<readonly DriveFolderZipEntry[]> {
+  }): Promise<DriveFolderZipBrowserResult> {
     const { current } = await this.resolveOwnedBrowserCurrent(input)
     if (current.type !== DRIVE_ITEM_TYPE.folder) throw new NotFoundException("文件未找到")
-    return this.createFolderZipEntries(current.userId, current.id)
+    return {
+      filename: `${current.name}.zip`,
+      entries: await this.createFolderZipEntries(current.userId, current.id),
+    }
   }
 
   async resolveOwnerRenderAccess(input: {
@@ -947,7 +955,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly password?: string
     readonly cookie?: string
     readonly accessCookie?: string
-  }): Promise<readonly DriveFolderZipEntry[]> {
+  }): Promise<DriveFolderZipBrowserResult> {
     const share = await this.resolvePublicShare({
       shareId: input.shareId,
       password: input.password,
@@ -955,7 +963,10 @@ export class DriveService implements OnApplicationBootstrap {
     })
     const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
     if (current.type !== DRIVE_ITEM_TYPE.folder) throw new NotFoundException("文件未找到")
-    return this.createFolderZipEntries(share.ownerId, current.id)
+    return {
+      filename: `${current.name}.zip`,
+      entries: await this.createFolderZipEntries(share.ownerId, current.id),
+    }
   }
 
   async resolvePublicShareAccess(input: {

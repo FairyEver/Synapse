@@ -126,10 +126,12 @@ describe("DriveController", () => {
       providers: [{ provide: DriveService, useValue: drive }],
     })
       .overrideGuard(UserAuthGuard)
-      .useValue({ canActivate: vi.fn((context) => {
-        context.switchToHttp().getRequest().user = { id: "user-1" }
-        return true
-      }) })
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
       .compile()
     const userApp = moduleRef.createNestApplication()
     await userApp.init()
@@ -956,13 +958,17 @@ describe("DriveController", () => {
         storageKey: null,
       },
     })
-    drive.createFolderZipEntriesForShareBrowserItem.mockResolvedValue([{ path: "brief.txt", storageKey: "drive/file-1" }])
+    drive.createFolderZipEntriesForShareBrowserItem.mockResolvedValue({
+      filename: "资料.zip",
+      entries: [{ path: "brief.txt", storageKey: "drive/file-1" }],
+    })
     const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
 
     const response = await request(app!.getHttpServer()).get("/files/shr_folder/items/folder-2/zip").expect(200)
 
     expect(response.headers["content-type"]).toContain("application/zip")
+    expect(response.headers["content-disposition"]).toContain(`filename="${encodeURIComponent("资料.zip")}"`)
     expect(drive.createFolderZipEntriesForShareBrowserItem).toHaveBeenCalledWith({
       shareId: "shr_folder",
       itemId: "folder-2",
@@ -971,6 +977,42 @@ describe("DriveController", () => {
     })
     expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "drive/file-1" })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("streams owner folder zip archives with folder names", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DrivePublicController],
+      providers: [
+        { provide: DriveService, useValue: drive },
+        { provide: "DriveStoragePort", useValue: storage },
+      ],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.createFolderZipEntriesForOwnerBrowserItem.mockResolvedValue({
+        filename: "项目资料.zip",
+        entries: [{ path: "brief.txt", storageKey: "drive/file-1" }],
+      })
+
+      const response = await request(userApp.getHttpServer()).get("/drive/items/root-1/items/folder-2/zip").expect(200)
+
+      expect(response.headers["content-type"]).toContain("application/zip")
+      expect(response.headers["content-disposition"]).toContain(`filename="${encodeURIComponent("项目资料.zip")}"`)
+      expect(drive.createFolderZipEntriesForOwnerBrowserItem).toHaveBeenCalledWith({
+        userId: "user-1",
+        rootItemId: "root-1",
+        currentItemId: "folder-2",
+      })
+    } finally {
+      await userApp.close()
+    }
   })
 })
 

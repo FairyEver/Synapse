@@ -378,11 +378,11 @@ export class DrivePublicController {
   @UseGuards(UserAuthGuard)
   @Get("/drive/items/:rootItemId/zip")
   async downloadOwnerFolderZip(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
-    const entries = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
+    const archive = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
       userId: request.user!.id,
       rootItemId,
     })
-    await sendDriveZip(response, `${rootItemId}.zip`, entries, this.storage)
+    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
   }
 
   @UseGuards(UserAuthGuard)
@@ -393,12 +393,12 @@ export class DrivePublicController {
     @Req() request: AuthenticatedUserRequest,
     @Res() response: Response,
   ) {
-    const entries = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
+    const archive = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
       userId: request.user!.id,
       rootItemId,
       currentItemId: itemId,
     })
-    await sendDriveZip(response, `${itemId}.zip`, entries, this.storage)
+    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
   }
 
   @UseGuards(UserAuthGuard)
@@ -595,12 +595,12 @@ export class DrivePublicController {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    const entries = await this.drive.createFolderZipEntriesForShareBrowserItem({
+    const archive = await this.drive.createFolderZipEntriesForShareBrowserItem({
       shareId,
       password,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
-    await sendDriveZip(response, `${access.value.item.name}.zip`, entries, this.storage)
+    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
   }
 
   @Get("/files/:shareId/items/:itemId/zip")
@@ -624,13 +624,13 @@ export class DrivePublicController {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    const entries = await this.drive.createFolderZipEntriesForShareBrowserItem({
+    const archive = await this.drive.createFolderZipEntriesForShareBrowserItem({
       shareId,
       itemId,
       password,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
-    await sendDriveZip(response, `${itemId}.zip`, entries, this.storage)
+    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
   }
 
   private async sendPublishedAsset(response: Response, input: {

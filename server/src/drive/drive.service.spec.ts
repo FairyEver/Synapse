@@ -1395,12 +1395,13 @@ describe("DriveService", () => {
       mimeType: "application/pdf",
     })
 
-    const entries = await service.createFolderZipEntriesForOwnerBrowserItem({
+    const archive = await service.createFolderZipEntriesForOwnerBrowserItem({
       userId: "user-1",
       rootItemId: folder.id,
     })
 
-    expect(entries).toEqual([
+    expect(archive.filename).toBe("交接材料.zip")
+    expect(archive.entries).toEqual([
       { path: "report.pdf", storageKey: `drive/${first.id}` },
       { path: "report (2).pdf", storageKey: `drive/${second.id}` },
     ])
@@ -1424,13 +1425,14 @@ describe("DriveService", () => {
     })
     const share = await service.createShare("user-1", root.id, "https://synapse.test")
 
-    const entries = await service.createFolderZipEntriesForShareBrowserItem({
+    const archive = await service.createFolderZipEntriesForShareBrowserItem({
       shareId: share.shareId,
       itemId: docs.id,
       password: share.password ?? undefined,
     })
 
-    expect(entries).toEqual([
+    expect(archive.filename).toBe("docs.zip")
+    expect(archive.entries).toEqual([
       { path: "report.pdf", storageKey: `drive/${first.id}` },
       { path: "report (2).pdf", storageKey: `drive/${second.id}` },
     ])
