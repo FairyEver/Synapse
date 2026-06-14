@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Check, Copy, Loader2, Plus, Trash2 } from 'lucide-react'
 import { adminApi, type AdminInvitationRow, type AdminTeamListQuery, type AdminTeamRow } from '@/lib/api'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   DataTableColumnHeader,
   DEFAULT_DASHBOARD_PAGE_SIZE,
@@ -70,6 +71,7 @@ export default function InvitationsPage() {
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [teamSearch, setTeamSearch] = useState('')
   const [createdInvite, setCreatedInvite] = useState<CreatedInvite | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AdminInvitationRow | null>(null)
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
   ])
@@ -107,6 +109,7 @@ export default function InvitationsPage() {
   const deleteMutation = useMutation({
     mutationFn: adminApi.deleteInvitation,
     onSuccess: () => {
+      setDeleteTarget(null)
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] })
       toast.success('邀请已删除')
     },
@@ -205,7 +208,9 @@ export default function InvitationsPage() {
             <Button
               variant='ghost'
               className='h-8 w-8 p-0'
-              onClick={() => deleteMutation.mutate(row.original.id)}
+              aria-label={`删除 ${row.original.team?.name ?? row.original.id}`}
+              disabled={deleteMutation.isPending}
+              onClick={() => setDeleteTarget(row.original)}
             >
               <Trash2 data-icon='inline-start' />
               <span className='sr-only'>删除</span>
@@ -330,6 +335,21 @@ export default function InvitationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title='删除邀请'
+        desc={deleteTarget ? `${deleteTarget.team?.name ?? '邀请'} 删除后链接失效。` : ''}
+        cancelBtnText='取消'
+        confirmText='删除'
+        destructive
+        isLoading={deleteMutation.isPending}
+        handleConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
+        }}
+      />
     </>
   )
 }
