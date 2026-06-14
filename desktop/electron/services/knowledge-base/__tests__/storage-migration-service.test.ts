@@ -81,6 +81,22 @@ describe("KnowledgeBaseStorageMigrationService", () => {
       .resolves.toBe("# Knowledge\n")
   })
 
+  it("rejects copied runtimes when same-size file content changes", async () => {
+    const harness = await migrationHarness({ corruptCopiedClaudeContent: "# Wrongness\n" })
+    await harness.seedRuntime("kb-1")
+
+    await expect(harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })).rejects.toThrow("知识库存储迁移校验失败。")
+
+    expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
+    await expect(readFile(path.join(harness.oldRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .resolves.toBe("# Knowledge\n")
+    await expect(readFile(path.join(harness.newRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
+      .rejects.toThrow()
+  })
+
   it("rejects dangerous custom storage roots before migration starts", async () => {
     const targetRoots = [...new Set([
       path.parse(process.cwd()).root,
@@ -258,6 +274,7 @@ type MigrationHarnessOptions = {
   pauseAtPhase?: "switching"
   availableBytes?: number | null
   activeKnowledgeBaseSession?: boolean
+  corruptCopiedClaudeContent?: string
 }
 
 async function migrationHarness(options: MigrationHarnessOptions = {}) {
@@ -299,7 +316,18 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
     sourceManager,
     hasActiveKnowledgeBaseSession: async () => options.activeKnowledgeBaseSession === true,
     getAvailableBytes: async () => options.availableBytes === undefined ? 100_000_000_000 : options.availableBytes,
-    afterCopyEntry: async () => {
+    afterCopyEntry: async (sourceEntryPath) => {
+      if (options.corruptCopiedClaudeContent && sourceEntryPath.endsWith(path.join("kb-1", "CLAUDE.md"))) {
+        const migrationDirs = (await fsReaddir(newRoot))
+          .filter((entry) => entry.startsWith(".knowledge-bases-migration-"))
+        if (migrationDirs[0]) {
+          await writeFile(
+            path.join(newRoot, migrationDirs[0], "knowledge-bases", "kb-1", "CLAUDE.md"),
+            options.corruptCopiedClaudeContent,
+            "utf8",
+          )
+        }
+      }
       if (!options.pauseAfterFirstCopy || pausedCopy) return
       pausedCopy = true
       copyPausedResolve?.()

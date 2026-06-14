@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto"
 import { constants } from "node:fs"
+import { createReadStream } from "node:fs"
 import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -83,6 +85,10 @@ type MigrationJournal = {
   newRootVerified: boolean
   startedAt: string
 }
+
+type TreeManifestEntry =
+  | { type: "directory" }
+  | { type: "file"; size: number; hash: string }
 
 const INITIAL_STATE: KnowledgeBaseStorageMigrationState = {
   active: false,
@@ -661,9 +667,9 @@ async function verifyKnowledgeBasesTree(
   targetPath: string,
   runtimeIds: readonly string[],
 ): Promise<void> {
-  const sourceStats = await treeStats(sourcePath)
-  const targetStats = await treeStats(targetPath)
-  if (sourceStats.files !== targetStats.files || sourceStats.bytes !== targetStats.bytes) {
+  const sourceManifest = await treeManifest(sourcePath)
+  const targetManifest = await treeManifest(targetPath)
+  if (!treeManifestsMatch(sourceManifest, targetManifest)) {
     throw new MigrationVerificationError()
   }
   for (const runtimeId of runtimeIds) {
@@ -673,6 +679,79 @@ async function verifyKnowledgeBasesTree(
       }
     }
   }
+}
+
+async function treeManifest(rootPath: string): Promise<Map<string, TreeManifestEntry>> {
+  const entries = new Map<string, TreeManifestEntry>()
+  if (!await pathExists(rootPath)) return entries
+  const rootStat = await lstat(rootPath)
+  if (rootStat.isSymbolicLink()) return entries
+  if (!rootStat.isDirectory()) {
+    entries.set("", {
+      type: "file",
+      size: rootStat.size,
+      hash: await hashFile(rootPath),
+    })
+    return entries
+  }
+
+  const collect = async (entryPath: string) => {
+    const entryStat = await lstat(entryPath)
+    if (entryStat.isSymbolicLink()) return
+
+    const relativePath = normalizeRelativeManifestPath(path.relative(rootPath, entryPath))
+    if (entryStat.isDirectory()) {
+      entries.set(relativePath, { type: "directory" })
+      const children = await readdir(entryPath, { withFileTypes: true })
+      for (const child of children) {
+        await collect(path.join(entryPath, child.name))
+      }
+      return
+    }
+
+    if (!entryStat.isFile()) return
+    entries.set(relativePath, {
+      type: "file",
+      size: entryStat.size,
+      hash: await hashFile(entryPath),
+    })
+  }
+
+  const children = await readdir(rootPath, { withFileTypes: true })
+  for (const child of children) {
+    await collect(path.join(rootPath, child.name))
+  }
+  return entries
+}
+
+function treeManifestsMatch(
+  sourceManifest: Map<string, TreeManifestEntry>,
+  targetManifest: Map<string, TreeManifestEntry>,
+): boolean {
+  if (sourceManifest.size !== targetManifest.size) return false
+  for (const [relativePath, sourceEntry] of sourceManifest) {
+    const targetEntry = targetManifest.get(relativePath)
+    if (!targetEntry || sourceEntry.type !== targetEntry.type) return false
+    if (sourceEntry.type === "directory" && targetEntry.type === "directory") continue
+    if (sourceEntry.type !== "file" || targetEntry.type !== "file") return false
+    if (sourceEntry.size !== targetEntry.size || sourceEntry.hash !== targetEntry.hash) {
+      return false
+    }
+  }
+  return true
+}
+
+function normalizeRelativeManifestPath(relativePath: string): string {
+  return relativePath.split(path.sep).join("/")
+}
+
+async function hashFile(filePath: string): Promise<string> {
+  const hash = createHash("sha256")
+  const stream = createReadStream(filePath)
+  for await (const chunk of stream) {
+    hash.update(chunk)
+  }
+  return hash.digest("hex")
 }
 
 async function treeStats(rootPath: string): Promise<{ files: number; bytes: number }> {
