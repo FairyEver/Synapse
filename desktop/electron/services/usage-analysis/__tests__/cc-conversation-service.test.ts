@@ -387,12 +387,62 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     }))
     expect(logger.info).toHaveBeenCalledWith("CC conversation raw text search completed.", {
       candidateCount: 1,
+      candidateTotal: 1,
       matchedCount: 1,
       missingFileCount: 0,
       parseErrorCount: 0,
       partial: false,
       queryLength: 2,
     })
+  })
+
+  it("searches beyond the first raw text candidate batch when the requested limit grows", async () => {
+    const { db, dir } = setupFixture()
+    db.exec("BEGIN IMMEDIATE")
+    try {
+      for (let index = 2; index <= 151; index += 1) {
+        const sessionId = `session-${index}`
+        const filePath = path.join(dir, `${sessionId}.jsonl`)
+        fs.writeFileSync(filePath, JSON.stringify({
+          type: "user",
+          sessionId,
+          uuid: `u${index}`,
+          timestamp: "2026-05-27T01:00:00.000Z",
+          message: {
+            role: "user",
+            content: index === 40 ? "needle after first hundred" : `ordinary session ${index}`,
+          },
+        }), "utf8")
+        insertSession(db, { sessionId, filePath, workspaceLabel: `/repo/${index}` })
+        db.prepare("UPDATE cc_sessions SET ended_at = ? WHERE session_id = ?").run(
+          new Date(Date.parse("2026-05-27T02:00:00.000Z") + index * 1000).toISOString(),
+          sessionId,
+        )
+      }
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
+    }
+    const service = new CcConversationService({ db, logger })
+
+    const firstBatch = await service.searchConversationText({
+      preset: "all",
+      query: "needle after first hundred",
+      rawText: true,
+      limit: 100,
+    })
+    const expandedBatch = await service.searchConversationText({
+      preset: "all",
+      query: "needle after first hundred",
+      rawText: true,
+      limit: 150,
+    })
+
+    expect(firstBatch.items).toEqual([])
+    expect(firstBatch.partial).toBe(true)
+    expect(expandedBatch.items.map((item) => item.sessionId)).toContain("session-40")
+    expect(expandedBatch.partial).toBe(true)
   })
 
   it("redacts raw conversation secrets in details and search snippets", async () => {

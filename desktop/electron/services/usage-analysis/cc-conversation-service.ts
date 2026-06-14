@@ -321,7 +321,8 @@ export class CcConversationService {
     const query = input.query?.trim()
     if (!query || !input.rawText) return this.listConversations(input)
 
-    const candidates = this.listConversations({ ...input, query: undefined, rawText: false, limit: 100 }).items
+    const candidateResult = this.listConversations({ ...input, query: undefined, rawText: false })
+    const candidates = candidateResult.items
     const matches: CcConversationListItem[] = []
     let missingFileCount = 0
     let parseErrorCount = 0
@@ -371,9 +372,10 @@ export class CcConversationService {
       }
     }
 
-    const result = { items: matches, total: matches.length, partial: candidates.length >= 100 }
+    const result = { items: matches, total: matches.length, partial: candidateResult.total > candidates.length }
     this.logger.info("CC conversation raw text search completed.", {
       candidateCount: candidates.length,
+      candidateTotal: candidateResult.total,
       matchedCount: matches.length,
       missingFileCount,
       parseErrorCount,
