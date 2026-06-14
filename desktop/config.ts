@@ -34,6 +34,12 @@ export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 // 定时任务导入文件最大字节数：限制调度器从外部 JSON 导入任务时主进程读取和 IPC 传输的单文件体积。
 export const TASK_SCHEDULER_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 
+// Automation Ingress Webhook 运行记录持久化保留上限：限制 webhook.runs 本地历史无限增长。
+export const AUTOMATION_INGRESS_WEBHOOK_RUN_RETENTION_LIMIT = 1000
+
+// Automation Ingress Webhook 运行记录列表返回上限：限制单次状态查询和 UI 展示读取的历史数量。
+export const AUTOMATION_INGRESS_WEBHOOK_RUN_LIST_LIMIT = 100
+
 // 知识库资料目录上传最大文件数：限制外部文件夹递归复制进托管 .raw 时的单次文件数量，避免误选大目录拖垮主进程。
 export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILES = 2_000
 

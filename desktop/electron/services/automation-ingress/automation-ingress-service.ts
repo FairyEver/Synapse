@@ -1,5 +1,9 @@
 import { randomUUID, timingSafeEqual } from "node:crypto"
 
+import {
+  AUTOMATION_INGRESS_WEBHOOK_RUN_LIST_LIMIT,
+  AUTOMATION_INGRESS_WEBHOOK_RUN_RETENTION_LIMIT,
+} from "../../../config"
 import type {
   DataNamespace,
   WebhookConfigEntryV1,
@@ -72,6 +76,8 @@ export interface AutomationIngressServiceDeps {
   readonly auditSink?: AuditSink
   readonly executionIsolation?: ProcessIsolationResolver
   readonly logger?: StructuredLogger
+  readonly runListLimit?: number
+  readonly runRetentionLimit?: number
   readonly now?: () => Date
 }
 
@@ -83,6 +89,8 @@ interface PreparedWebhook {
 
 export class AutomationIngressService {
   private readonly deps: AutomationIngressServiceDeps
+  private readonly runListLimit: number
+  private readonly runRetentionLimit: number
   private readonly rateLimiter = new Map<string, number[]>()
   private binding: ResolvedNetworkBinding | undefined
   private runtimeConfigRestartRequired = false
@@ -90,6 +98,14 @@ export class AutomationIngressService {
 
   constructor(deps: AutomationIngressServiceDeps) {
     this.deps = deps
+    this.runListLimit = normalizePositiveLimit(
+      deps.runListLimit,
+      AUTOMATION_INGRESS_WEBHOOK_RUN_LIST_LIMIT,
+    )
+    this.runRetentionLimit = normalizePositiveLimit(
+      deps.runRetentionLimit,
+      AUTOMATION_INGRESS_WEBHOOK_RUN_RETENTION_LIMIT,
+    )
   }
 
   async start(): Promise<void> {
@@ -253,7 +269,9 @@ export class AutomationIngressService {
   async listRuns(projectId?: string): Promise<readonly WebhookRunEntryV1[]> {
     const runs = await this.deps.runs.list()
     const filteredRuns = projectId ? runs.filter((run) => run.projectId === projectId) : runs
-    return filteredRuns.map(sanitizeWebhookRunForDisplay)
+    return sortWebhookRunsNewestFirst(filteredRuns)
+      .slice(0, this.runListLimit)
+      .map(sanitizeWebhookRunForDisplay)
   }
 
   private async recoverInterruptedRuns(): Promise<void> {
@@ -656,6 +674,7 @@ export class AutomationIngressService {
       delete nextRun.metadata
     }
     await this.deps.runs.upsert(nextRun)
+    await this.pruneStoredRunsSafely()
   }
 
   private async finishRunSafely(
@@ -679,6 +698,24 @@ export class AutomationIngressService {
         ...errorDiagnostic(error),
       })
     }
+  }
+
+  private async pruneStoredRunsSafely(): Promise<void> {
+    try {
+      await this.pruneStoredRuns()
+    } catch (error) {
+      this.deps.logger?.warn("Webhook run retention cleanup failed.", {
+        boundary: "webhook.run-retention",
+        ...errorDiagnostic(error),
+      })
+    }
+  }
+
+  private async pruneStoredRuns(): Promise<void> {
+    const runs = await this.deps.runs.list()
+    const finishedRuns = sortWebhookRunsNewestFirst(runs.filter((run) => run.status !== "running"))
+    const staleRuns = finishedRuns.slice(this.runRetentionLimit)
+    await Promise.all(staleRuns.map((run) => this.deps.runs.remove(run.id)))
   }
 
   private async checkListenPermission(config: WebhookConfigEntryV1): Promise<void> {
@@ -753,6 +790,23 @@ function sanitizeWebhookRunForDisplay(run: WebhookRunEntryV1): WebhookRunEntryV1
     delete safeRun.metadata
   }
   return safeRun
+}
+
+function sortWebhookRunsNewestFirst(runs: readonly WebhookRunEntryV1[]): WebhookRunEntryV1[] {
+  return [...runs].sort((left, right) => {
+    const timeDelta = webhookRunTimeValue(right) - webhookRunTimeValue(left)
+    if (timeDelta !== 0) return timeDelta
+    return right.id.localeCompare(left.id)
+  })
+}
+
+function webhookRunTimeValue(run: WebhookRunEntryV1): number {
+  return Date.parse(run.finishedAt ?? run.updatedAt ?? run.startedAt ?? run.createdAt)
+}
+
+function normalizePositiveLimit(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback
+  return Math.max(1, Math.floor(value))
 }
 
 function sanitizeWebhookRequestMetadata(

@@ -515,6 +515,55 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("prunes old finished webhook runs after retaining the newest runs", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    let clock = Date.parse("2026-06-06T10:00:00.000Z")
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "ok" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      runRetentionLimit: 2,
+      now: () => {
+        clock += 1000
+        return new Date(clock)
+      },
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+
+    for (let index = 0; index < 4; index += 1) {
+      const response = await handleWebhookRequest(service, {
+        method: "POST",
+        url: "/hook",
+        headers: {
+          authorization: `Bearer ${config.token ?? ""}`,
+          "content-type": "application/json",
+        },
+        body: Buffer.from(JSON.stringify({
+          project: "project-1",
+          sessionKey: "local:automation",
+          messageId: `request-${index}`,
+          prompt: "run",
+          replyMode: "wait",
+        })),
+        remoteAddress: "127.0.0.1",
+      })
+      expect(response.status).toBe(200)
+    }
+
+    expect((await runs.list()).map((run) => run.metadata?.messageId).sort()).toEqual([
+      "request-2",
+      "request-3",
+    ])
+    expect((await service.listRuns()).map((run) => run.metadata?.messageId)).toEqual([
+      "request-3",
+      "request-2",
+    ])
+  })
+
   it("records webhook prompt agent errors as failed runs with redacted diagnostics", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
