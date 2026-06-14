@@ -1727,6 +1727,43 @@ describe("DriveService", () => {
     }))
   })
 
+  it("continues storage cleanup when delete audit recording fails", async () => {
+    const prisma = createPrismaMemory()
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const auditLog = { record: vi.fn(async (input: any) => {
+      if (input.action === "admin.drive.delete") throw new Error("audit failed")
+    }) }
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage, auditLog as never)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    try {
+      await expect(service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")).resolves.toEqual({ ok: true })
+
+      expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        action: "admin.drive.delete",
+        targetType: "drive_item",
+        targetId: prepared.item.id,
+        errorName: "Error",
+        errorMessage: "audit failed",
+      }), "Failed to record drive delete audit log")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("keeps admin delete pending storage cleanup visible in the admin list", async () => {
     const prisma = createPrismaMemory()
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)

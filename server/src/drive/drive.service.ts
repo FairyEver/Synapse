@@ -1788,7 +1788,7 @@ export class DriveService implements OnApplicationBootstrap {
         storageKey: session.storageKey,
       }))
     })
-    await this.auditLog?.record({
+    await this.recordDriveDeleteAuditSafely({
       adminEmail: input.actorEmail,
       action: input.admin ? "admin.drive.delete" : "drive.delete",
       targetType: "drive_item",
@@ -1843,6 +1843,20 @@ export class DriveService implements OnApplicationBootstrap {
           storageStatus: DRIVE_STORAGE_STATUS.deletePending,
         },
       })
+    }
+  }
+
+  private async recordDriveDeleteAuditSafely(input: Parameters<AuditLogService["record"]>[0]): Promise<void> {
+    try {
+      await this.auditLog?.record(input)
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : undefined,
+      }, "Failed to record drive delete audit log")
     }
   }
 }
