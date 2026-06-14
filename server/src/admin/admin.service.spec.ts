@@ -249,31 +249,39 @@ describe("AdminService", () => {
     expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.user.update.mock.invocationCallOrder[0])
   })
 
-  it("loads teams without exposing internal membership scalar fields", async () => {
+  it("loads teams with member counts instead of membership rows", async () => {
     const prisma = createPrismaMock()
+    prisma.$transaction.mockImplementationOnce((input: unknown) => Promise.all(input as Array<Promise<unknown>>))
+    prisma.team.findMany.mockResolvedValue([{
+      id: "team-1",
+      name: "研发",
+      createdByUser: { email: "admin@example.com" },
+      _count: { memberships: 3 },
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+    }])
+    prisma.team.count.mockResolvedValue(1)
     const service = new AdminService(prisma as unknown as PrismaService)
 
-    await service.listTeams()
+    const result = await service.listTeams()
 
     expect(prisma.team.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
         id: true,
         name: true,
         createdByUser: { select: { email: true } },
-        memberships: {
-          select: {
-            id: true,
-            role: true,
-            createdAt: true,
-            user: { select: { email: true } },
-          },
-          orderBy: { createdAt: "asc" },
-        },
+        _count: { select: { memberships: true } },
         createdAt: true,
         updatedAt: true,
       }),
     }))
     expect(prisma.team.findMany.mock.calls[0]?.[0]).not.toHaveProperty("include")
+    expect(prisma.team.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("memberships")
+    expect(result.data).toEqual([expect.objectContaining({
+      id: "team-1",
+      memberCount: 3,
+    })])
+    expect(JSON.stringify(result.data)).not.toContain("_count")
   })
 
   it("loads invitations without exposing token hashes or invite URLs", async () => {

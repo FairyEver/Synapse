@@ -32,18 +32,12 @@ const adminTeamSelect = {
   id: true,
   name: true,
   createdByUser: { select: { email: true } },
-  memberships: {
-    select: {
-      id: true,
-      role: true,
-      createdAt: true,
-      user: { select: { email: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  },
+  _count: { select: { memberships: true } },
   createdAt: true,
   updatedAt: true,
 } as const
+
+type AdminTeamRecord = Prisma.TeamGetPayload<{ select: typeof adminTeamSelect }>
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
@@ -302,7 +296,12 @@ export class AdminService {
       }),
       this.prisma.team.count(),
     ])
-    return { data, total, page: page.page, pageSize: page.pageSize }
+    return {
+      data: data.map(toAdminTeamListRow),
+      total,
+      page: page.page,
+      pageSize: page.pageSize,
+    }
   }
 
   async createInvitation(
@@ -385,5 +384,13 @@ function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; 
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
+  }
+}
+
+function toAdminTeamListRow(team: AdminTeamRecord) {
+  const { _count, ...row } = team
+  return {
+    ...row,
+    memberCount: _count.memberships,
   }
 }

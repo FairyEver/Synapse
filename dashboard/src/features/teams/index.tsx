@@ -34,7 +34,7 @@ const columns: ColumnDef<AdminTeamRow>[] = [
       <DataTableColumnHeader column={column} title='成员数' />
     ),
     cell: ({ row }) => (
-      <Badge variant='secondary'>{row.original.memberships.length}</Badge>
+      <Badge variant='secondary'>{row.original.memberCount}</Badge>
     ),
     enableSorting: false,
   },

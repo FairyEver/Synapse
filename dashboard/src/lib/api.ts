@@ -120,12 +120,7 @@ export type AdminTeamRow = {
   id: string
   name: string
   createdByUser: { email: string }
-  memberships: Array<{
-    id: string
-    role: 'owner' | 'member'
-    user: { id?: string; email: string }
-    createdAt: string
-  }>
+  memberCount: number
   createdAt: string
   updatedAt: string
 }
