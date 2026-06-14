@@ -313,7 +313,7 @@ describe("ConfigBackupService quick inputs", () => {
     expect(backup.config.global.defaultQuickInputsSeededVersion).toBe(SYNAPSE_APP_VERSION)
   })
 
-  it("preserves user variables and custom content directories in export payloads", async () => {
+  it("preserves user variable definitions without exporting secret values", async () => {
     const repository = {
       uuid: "repo-1",
       name: "Repo",
@@ -328,7 +328,7 @@ describe("ConfigBackupService quick inputs", () => {
       repositories: [repository],
       global: {
         ...createDefaultConfig().global,
-        variables: [{ name: "API_HOST", value: "https://example.test", description: "API" }],
+        variables: [{ name: "API_HOST", value: "sk-secret-host", description: "API" }],
       },
     }
     vi.mocked(configStore.load).mockResolvedValue(config)
@@ -337,8 +337,9 @@ describe("ConfigBackupService quick inputs", () => {
 
     expect(backup.config.repositories).toEqual([repository])
     expect(backup.config.global.variables).toEqual([
-      { name: "API_HOST", value: "https://example.test", description: "API" },
+      { name: "API_HOST", value: "", description: "API" },
     ])
+    expect(JSON.stringify(backup)).not.toContain("sk-secret-host")
   })
 
   it("redacts selected backup paths in import and export logs", async () => {

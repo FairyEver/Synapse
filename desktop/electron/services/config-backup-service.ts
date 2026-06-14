@@ -869,6 +869,14 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
     exportedAt: exportedAt.toISOString(),
     config: {
       ...config,
+      global: {
+        ...config.global,
+        variables: config.global.variables.map((variable) => ({
+          name: variable.name,
+          value: "",
+          ...(variable.description !== undefined ? { description: variable.description } : undefined),
+        })),
+      },
       repositories: config.repositories.map((repository) => ({
         uuid: repository.uuid,
         name: repository.name,
