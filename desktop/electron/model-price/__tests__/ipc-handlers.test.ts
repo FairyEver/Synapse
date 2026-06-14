@@ -91,4 +91,33 @@ describe("model price IPC handlers", () => {
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.rulesReset)?.({})).toEqual([])
     expect(mocks.modelPriceService.clearRules).toHaveBeenCalledTimes(2)
   })
+
+  it("validates rule save payloads before writing", async () => {
+    mocks.modelPriceService.saveRules.mockReturnValueOnce([{ id: "mpr_123456789abc", modelPattern: "claude" }])
+
+    const { registerModelPriceHandlers } = await import("../ipc-handlers")
+    registerModelPriceHandlers()
+    const save = mocks.handlers.get(MODEL_PRICE_CHANNELS.rulesSave)
+
+    await expect(save?.({}, [
+      { modelPattern: " claude ", inputPer1M: 0, outputPer1M: 3, enabled: true },
+    ])).resolves.toEqual([{ id: "mpr_123456789abc", modelPattern: "claude" }])
+    expect(mocks.modelPriceService.saveRules).toHaveBeenCalledWith([
+      { modelPattern: "claude", inputPer1M: 0, outputPer1M: 3, enabled: true },
+    ])
+
+    await expect(async () => {
+      await save?.({}, undefined)
+    }).rejects.toThrow("价格规则格式错误：需要数组。")
+    await expect(async () => {
+      await save?.({}, [{ modelPattern: " " }])
+    }).rejects.toThrow("模型匹配不能为空")
+    await expect(async () => {
+      await save?.({}, [{ modelPattern: "claude", inputPer1M: -1 }])
+    }).rejects.toThrow("inputPer1M 必须是大于等于 0 的数字")
+    await expect(async () => {
+      await save?.({}, [{ modelPattern: "claude", outputPer1M: Number.NaN }])
+    }).rejects.toThrow("outputPer1M 必须是大于等于 0 的数字")
+    expect(mocks.modelPriceService.saveRules).toHaveBeenCalledTimes(1)
+  })
 })

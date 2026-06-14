@@ -12,6 +12,17 @@ import {
 } from "../services/model-price"
 
 let registered = false
+const PRICE_FIELDS = [
+  "inputPer1M",
+  "outputPer1M",
+  "cacheReadPer1M",
+  "cacheWritePer1M",
+  "reasoningPer1M",
+] as const
+
+type MutableModelPriceRuleInput = {
+  -readonly [Key in keyof ModelPriceRuleInput]: ModelPriceRuleInput[Key]
+}
 
 export function normalizeModelPriceCoverageInput(input: ModelPriceCoverageInput | undefined): ModelPriceCoverageInput {
   const source = input?.source
@@ -49,11 +60,11 @@ export function registerModelPriceHandlers(): void {
     return importedRules
   })
   handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesGet, async () => modelPrice.listRules())
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesSave, async (_event, rules?: readonly ModelPriceRuleInput[]) => {
-    const normalizedRules = Array.isArray(rules) ? rules : []
-    const savedRules = modelPrice.saveRules(normalizedRules)
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesSave, async (_event, rules?: unknown) => {
+    const validatedRules = validateModelPriceRuleInputs(rules)
+    const savedRules = modelPrice.saveRules(validatedRules)
     logger.info("Model price rules save completed.", {
-      requestedRuleCount: normalizedRules.length,
+      requestedRuleCount: validatedRules.length,
       savedRuleCount: savedRules.length,
     })
     return savedRules
@@ -62,4 +73,45 @@ export function registerModelPriceHandlers(): void {
   handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesReset, async () => modelPrice.clearRules())
 
   registered = true
+}
+
+export function validateModelPriceRuleInputs(value: unknown): ModelPriceRuleInput[] {
+  if (!Array.isArray(value)) {
+    throw new Error("价格规则格式错误：需要数组。")
+  }
+  return value.map((rule, index) => validateModelPriceRuleInput(rule, index))
+}
+
+function validateModelPriceRuleInput(value: unknown, index: number): ModelPriceRuleInput {
+  if (!isRecord(value)) {
+    throw new Error(`第 ${index + 1} 行：价格规则格式错误。`)
+  }
+  const modelPattern = value.modelPattern
+  if (typeof modelPattern !== "string" || modelPattern.trim() === "") {
+    throw new Error(`第 ${index + 1} 行：模型匹配不能为空。`)
+  }
+  const rule: MutableModelPriceRuleInput = {
+    modelPattern: modelPattern.trim(),
+  }
+  if (typeof value.id === "string") rule.id = value.id
+  for (const field of PRICE_FIELDS) {
+    if (field in value) rule[field] = validatePriceField(value[field], field, index)
+  }
+  if (value.currency === "CNY") rule.currency = value.currency
+  if (typeof value.enabled === "boolean") rule.enabled = value.enabled
+  if (value.source === "builtin" || value.source === "user") rule.source = value.source
+  if (typeof value.sortIndex === "number" && Number.isFinite(value.sortIndex)) rule.sortIndex = value.sortIndex
+  if (typeof value.updatedAt === "string") rule.updatedAt = value.updatedAt
+  return rule
+}
+
+function validatePriceField(value: unknown, field: typeof PRICE_FIELDS[number], index: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`第 ${index + 1} 行：${field} 必须是大于等于 0 的数字。`)
+  }
+  return value
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }

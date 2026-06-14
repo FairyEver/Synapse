@@ -137,8 +137,8 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
       setRows(saved.map(toEditableRule))
       onSaved()
       showSuccess("已保存")
-    } catch {
-      showError("保存失败")
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "保存失败")
     } finally {
       setSaving(false)
     }
@@ -376,8 +376,9 @@ function formatPriceField(value: number): string {
 }
 
 function parsePriceField(value: string): number {
+  if (value.trim() === "") return 0
   const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+  return parsed
 }
 
 interface PresetListProps {

@@ -199,6 +199,47 @@ describe("PriceRulesView", () => {
     expect(notifications.success).toHaveBeenCalledWith("已导入预设")
   })
 
+  it("surfaces save validation errors without zeroing invalid prices", async () => {
+    modelPriceBridge.saveRules.mockRejectedValueOnce(new Error("第 1 行：inputPer1M 必须是大于等于 0 的数字。"))
+    const onSaved = vi.fn()
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PriceRulesView
+          state={{
+            data: [priceRule({ id: "local", modelPattern: "local-model", inputPer1M: 99 })],
+            loading: false,
+            error: null,
+            reload: vi.fn(),
+          }}
+          presetState={presetState([])}
+          onSaved={onSaved}
+        />,
+      )
+      await flushPromises()
+    })
+
+    await act(async () => {
+      changeInput("输入", "-1")
+      clickButton("保存")
+      await flushPromises()
+    })
+
+    expect(modelPriceBridge.saveRules).toHaveBeenCalledWith([
+      expect.objectContaining({
+        modelPattern: "local-model",
+        inputPer1M: -1,
+      }),
+    ])
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(notifications.success).not.toHaveBeenCalledWith("已保存")
+    expect(notifications.error).toHaveBeenCalledWith("第 1 行：inputPer1M 必须是大于等于 0 的数字。")
+  })
+
   it("disables table controls while importing", async () => {
     let resolveImport: (rules: ModelPriceRule[]) => void = () => undefined
     modelPriceBridge.importPreset.mockReturnValueOnce(new Promise<ModelPriceRule[]>((resolve) => {
@@ -262,6 +303,14 @@ function clickRadio(label: string): void {
   const radio = document.querySelector<HTMLElement>(`[aria-label="${label}"]`)
   if (!radio) throw new Error(`Radio not found: ${label}`)
   radio.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function changeInput(label: string, value: string): void {
+  const input = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)
+  if (!input) throw new Error(`Input not found: ${label}`)
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  valueSetter?.call(input, value)
+  input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
 function flushPromises(): Promise<void> {
