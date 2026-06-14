@@ -143,6 +143,41 @@ describe("AutomationService", () => {
     ])
   })
 
+  it("starts different matching event automations without waiting for the first run to finish", async () => {
+    const action = controllableEventAction()
+    const harness = createHarness({ action: action.definition, triggers: fakeEventTriggerRegistry() })
+    await harness.service.automationCreate({
+      name: "Slow event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "slow" } },
+    })
+    await harness.service.automationCreate({
+      name: "Quick event automation",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "quick" } },
+    })
+
+    const runs = harness.service.acceptEvent({
+      source: "webhook",
+      type: "demo.created",
+      payload: { deliveryId: "delivery-fanout" },
+      receivedAt: "2026-06-03T00:00:00.000Z",
+    })
+
+    await waitFor(async () => action.started.length === 2)
+    expect(action.started.map((run) => run.deliveryId)).toEqual(["delivery-fanout", "delivery-fanout"])
+
+    action.resolveNext()
+    action.resolveNext()
+
+    await expect(runs).resolves.toEqual([
+      expect.objectContaining({ automationId: "automation:1", status: "success" }),
+      expect.objectContaining({ automationId: "automation:2", status: "success" }),
+    ])
+  })
+
   it("marks listed automations that are currently running", async () => {
     const harness = createHarness({ action: longRunningAction() })
     const item = await harness.service.automationCreate(createAutomationInput())

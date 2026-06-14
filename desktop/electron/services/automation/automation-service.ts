@@ -331,7 +331,7 @@ export class AutomationService {
       boundary: "automation-event-trigger",
     })
     const items = await this.deps.items.list()
-    const acceptedRuns: AutomationRun[] = []
+    const acceptedRunPromises: Array<Promise<AutomationRun | null>> = []
     let matchedCount = 0
     for (const item of items) {
       if (!item.enabled) continue
@@ -360,23 +360,27 @@ export class AutomationService {
         })
         continue
       }
-      try {
-        acceptedRuns.push(await this.executeQueuedEvent(item, {
-          triggeredBy: "trigger",
-          triggeredAt: event.receivedAt,
-          scheduledAt: event.receivedAt,
-          event,
-        }))
-      } catch (error) {
-        this.deps.logger?.warn("Automation event execution failed, skipping item.", {
-          automationId: item.id,
-          triggerType: item.trigger.type,
-          executorType: item.executor.type,
-          boundary: "automation-event-trigger",
-          ...errorMetadata(error),
-        })
+      const triggerContext: AutomationTriggerRuntimeContext = {
+        triggeredBy: "trigger",
+        triggeredAt: event.receivedAt,
+        scheduledAt: event.receivedAt,
+        event,
       }
+      acceptedRunPromises.push(
+        this.executeQueuedEvent(item, triggerContext).catch((error) => {
+          this.deps.logger?.warn("Automation event execution failed, skipping item.", {
+            automationId: item.id,
+            triggerType: item.trigger.type,
+            executorType: item.executor.type,
+            boundary: "automation-event-trigger",
+            ...errorMetadata(error),
+          })
+          return null
+        }),
+      )
     }
+    const acceptedRuns = (await Promise.all(acceptedRunPromises))
+      .filter((run): run is AutomationRun => run !== null)
     this.deps.logger?.info("Automation event processing complete.", {
       source: "automation",
       eventSource: event.source,
