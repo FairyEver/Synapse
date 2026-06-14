@@ -10,6 +10,12 @@ import {
   AGENT_RUNTIME_SERVICE_ID,
 } from "../../services/agent-runtime"
 import type { AutomationIngressService } from "../../services/automation-ingress"
+import {
+  WEBHOOK_MAX_BODY_BYTES_LIMIT,
+  WEBHOOK_MAX_PORT,
+  WEBHOOK_MAX_RATE_LIMIT_PER_MINUTE,
+  WEBHOOK_MIN_PORT,
+} from "../../runtime/lib/webhook-config-validation"
 import { configStore } from "../../services/config-store"
 import type { DiagnosticsService } from "../../services/diagnostics-service"
 import type { ExecutionIsolationService } from "../../services/execution-isolation"
@@ -88,10 +94,10 @@ const runAsUpdateSchema = projectRequestSchema.extend({
 const webhookUpdateSchema = z.object({
   enabled: z.boolean().optional(),
   bindAddress: z.string().optional(),
-  preferredPort: z.number().optional(),
+  preferredPort: z.number().int().min(WEBHOOK_MIN_PORT).max(WEBHOOK_MAX_PORT).optional(),
   path: z.string().optional(),
-  maxBodyBytes: z.number().optional(),
-  rateLimitPerMinute: z.number().optional(),
+  maxBodyBytes: z.number().int().min(1).max(WEBHOOK_MAX_BODY_BYTES_LIMIT).optional(),
+  rateLimitPerMinute: z.number().int().min(1).max(WEBHOOK_MAX_RATE_LIMIT_PER_MINUTE).optional(),
   resetToken: z.boolean().optional(),
 })
 
@@ -153,10 +159,10 @@ const statusSchema = z.object({
     enabled: z.boolean(),
     bindAddress: z.string(),
     path: z.string(),
-    preferredPort: z.number().optional(),
-    assignedPort: z.number().optional(),
-    maxBodyBytes: z.number(),
-    rateLimitPerMinute: z.number(),
+    preferredPort: z.number().int().min(WEBHOOK_MIN_PORT).max(WEBHOOK_MAX_PORT).optional(),
+    assignedPort: z.number().int().min(WEBHOOK_MIN_PORT).max(WEBHOOK_MAX_PORT).optional(),
+    maxBodyBytes: z.number().int().min(1).max(WEBHOOK_MAX_BODY_BYTES_LIMIT),
+    rateLimitPerMinute: z.number().int().min(1).max(WEBHOOK_MAX_RATE_LIMIT_PER_MINUTE),
     serviceRestartRequired: z.boolean().optional(),
     lastError: z.string().optional(),
   }).optional(),

@@ -9,6 +9,11 @@
 
 import type { Migration, NamespaceSchema } from "../types"
 import type { JsonFileEnvelope } from "../backends/json"
+import {
+  isOptionalValidWebhookPort,
+  isValidWebhookMaxBodyBytes,
+  isValidWebhookRateLimitPerMinute,
+} from "../../lib/webhook-config-validation"
 
 const isAnyRecord = <T extends Record<string, unknown>>(value: unknown): value is T => {
   return typeof value === "object" && value !== null
@@ -802,12 +807,12 @@ export const webhookConfigSchema: NamespaceSchema<WebhookConfigEntryV1> = {
     && typeof (v as WebhookConfigEntryV1).id === "string"
     && typeof (v as WebhookConfigEntryV1).enabled === "boolean"
     && typeof (v as WebhookConfigEntryV1).bindAddress === "string"
-    && isOptionalNumber((v as WebhookConfigEntryV1).preferredPort)
-    && isOptionalNumber((v as WebhookConfigEntryV1).assignedPort)
+    && isOptionalValidWebhookPort((v as WebhookConfigEntryV1).preferredPort)
+    && isOptionalValidWebhookPort((v as WebhookConfigEntryV1).assignedPort)
     && typeof (v as WebhookConfigEntryV1).path === "string"
     && isOptionalString((v as WebhookConfigEntryV1).token)
-    && typeof (v as WebhookConfigEntryV1).maxBodyBytes === "number"
-    && typeof (v as WebhookConfigEntryV1).rateLimitPerMinute === "number"
+    && isValidWebhookMaxBodyBytes((v as WebhookConfigEntryV1).maxBodyBytes)
+    && isValidWebhookRateLimitPerMinute((v as WebhookConfigEntryV1).rateLimitPerMinute)
     && isOptionalBoolean((v as WebhookConfigEntryV1).serviceRestartRequired)
     && isOptionalString((v as WebhookConfigEntryV1).lastError)
     && typeof (v as WebhookConfigEntryV1).createdAt === "string"

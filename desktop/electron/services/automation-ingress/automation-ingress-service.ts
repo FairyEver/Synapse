@@ -20,6 +20,7 @@ import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import type { ControlledProcessRunner } from "../../runtime/process"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import { assertValidWebhookNumericConfig } from "../../runtime/lib/webhook-config-validation"
 import { sanitizeError } from "../error-sanitize"
 import { isShellKind, resolveShellCommand } from "../shell-exec"
 import {
@@ -165,6 +166,7 @@ export class AutomationIngressService {
   }
 
   async updateConfig(input: WebhookConfigUpdate): Promise<WebhookConfigUpdateResult> {
+    assertValidWebhookNumericConfig(input)
     const existing = await this.getOrCreateConfig()
     const bindAddress = input.bindAddress?.trim() || existing.bindAddress
     const preferredPort = input.preferredPort ?? existing.preferredPort

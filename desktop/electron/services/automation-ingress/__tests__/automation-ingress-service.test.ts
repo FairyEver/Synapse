@@ -136,6 +136,25 @@ describe("AutomationIngressService", () => {
     ])
   })
 
+  it("rejects invalid numeric webhook config before persisting", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+
+    await expect(service.updateConfig({ preferredPort: -1 })).rejects.toThrow("preferredPort 必须是")
+    await expect(service.updateConfig({ maxBodyBytes: 0 })).rejects.toThrow("maxBodyBytes 必须是")
+    await expect(service.updateConfig({ rateLimitPerMinute: 0 })).rejects.toThrow("rateLimitPerMinute 必须是")
+
+    await expect(configs.get("webhook:default")).resolves.toBeNull()
+  })
+
   it("does not keep restart-required status when assigned port persistence fails after binding", async () => {
     const configs = new FailingAssignedPortNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

@@ -119,6 +119,29 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     }
   })
 
+  it("rejects invalid webhook numeric config records", () => {
+    const validWebhookConfig = {
+      id: "webhook:default",
+      schemaVersion: 1,
+      enabled: false,
+      bindAddress: "127.0.0.1",
+      preferredPort: 4567,
+      assignedPort: 4568,
+      path: "/hook",
+      token: "token",
+      maxBodyBytes: 256 * 1024,
+      rateLimitPerMinute: 60,
+      createdAt: "2026-05-25T00:00:00.000Z",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    }
+
+    expect(webhookConfigSchema.validate(validWebhookConfig)).toBe(true)
+    expect(webhookConfigSchema.validate({ ...validWebhookConfig, preferredPort: -1 })).toBe(false)
+    expect(webhookConfigSchema.validate({ ...validWebhookConfig, assignedPort: 0 })).toBe(false)
+    expect(webhookConfigSchema.validate({ ...validWebhookConfig, maxBodyBytes: 0 })).toBe(false)
+    expect(webhookConfigSchema.validate({ ...validWebhookConfig, rateLimitPerMinute: 0 })).toBe(false)
+  })
+
   it("validate accepts a minimal valid record for each namespace", () => {
     expect(
       coreConfigSchema.validate({
