@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { constants } from "node:fs"
 import { createReadStream } from "node:fs"
-import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { access, copyFile, lstat, mkdir, open, readdir, readFile, rename, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import type {
@@ -357,7 +357,27 @@ export class KnowledgeBaseStorageMigrationService {
       throw new Error("知识库存储迁移正在进行。")
     }
 
-    const journal = await this.readJournal()
+    let journal: MigrationJournal | null
+    try {
+      journal = await this.readJournal()
+    } catch (error) {
+      if (!(error instanceof MigrationJournalCorruptError)) throw error
+      logger.warn("Knowledge Base storage migration journal is corrupt.", knowledgeBaseErrorMeta(error))
+      this.deps.sourceManager.setMigrationBlocked(true)
+      try {
+        await this.transitionState({
+          active: false,
+          phase: "failed",
+          cancellable: false,
+          progress: { copiedBytes: 0, totalBytes: null },
+          message: "知识库存储迁移恢复失败",
+          errorMessage: error.message,
+        })
+      } finally {
+        this.deps.sourceManager.setMigrationBlocked(false)
+      }
+      return
+    }
     if (!journal) return
 
     this.deps.sourceManager.setMigrationBlocked(true)
@@ -601,8 +621,26 @@ export class KnowledgeBaseStorageMigrationService {
   }
 
   private async writeJournal(journal: MigrationJournal): Promise<void> {
-    await mkdir(path.dirname(this.deps.journalPath), { recursive: true })
-    await writeFile(this.deps.journalPath, `${JSON.stringify(journal, null, 2)}\n`, "utf8")
+    const journalDir = path.dirname(this.deps.journalPath)
+    await mkdir(journalDir, { recursive: true })
+    const tempPath = path.join(
+      journalDir,
+      `.${path.basename(this.deps.journalPath)}.${process.pid}.${randomUUID()}.tmp`,
+    )
+    try {
+      const file = await open(tempPath, "w")
+      try {
+        await file.writeFile(`${JSON.stringify(journal, null, 2)}\n`, "utf8")
+        await file.sync()
+      } finally {
+        await file.close()
+      }
+      await rename(tempPath, this.deps.journalPath)
+      await syncDirectoryBestEffort(journalDir)
+    } catch (error) {
+      await rm(tempPath, { force: true }).catch(() => {})
+      throw error
+    }
   }
 
   private async clearJournal(): Promise<void> {
@@ -612,11 +650,18 @@ export class KnowledgeBaseStorageMigrationService {
   private async readJournal(): Promise<MigrationJournal | null> {
     try {
       const raw = await readFile(this.deps.journalPath, "utf8")
-      const parsed = JSON.parse(raw) as MigrationJournal
-      return parsed.version === 1 ? parsed : null
+      const parsed = JSON.parse(raw) as unknown
+      if (isVersionedMigrationJournal(parsed)) {
+        if (isMigrationJournal(parsed)) return parsed
+        throw new MigrationJournalCorruptError()
+      }
+      return null
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return null
+      }
+      if (error instanceof SyntaxError) {
+        throw new MigrationJournalCorruptError()
       }
       throw error
     }
@@ -652,6 +697,57 @@ class MigrationCancelledError extends Error {
   constructor() {
     super("知识库存储迁移已取消。")
   }
+}
+
+class MigrationJournalCorruptError extends Error {
+  constructor() {
+    super("知识库存储迁移恢复记录已损坏，请检查或移除恢复记录后重试。")
+  }
+}
+
+function isVersionedMigrationJournal(value: unknown): value is { readonly version: unknown } {
+  return isRecord(value) && "version" in value
+}
+
+function isMigrationJournal(value: unknown): value is MigrationJournal {
+  if (!isRecord(value)) return false
+  return value.version === 1
+    && isStorageConfig(value.oldStorage)
+    && isStorageConfig(value.targetStorage)
+    && typeof value.oldRoot === "string"
+    && typeof value.newRoot === "string"
+    && typeof value.tempPath === "string"
+    && isMigrationPhase(value.phase)
+    && typeof value.switchStarted === "boolean"
+    && typeof value.newRootVerified === "boolean"
+    && typeof value.startedAt === "string"
+}
+
+function isStorageConfig(value: unknown): value is SynapseKnowledgeBaseStorageConfig {
+  if (!isRecord(value)) return false
+  if (value.mode === "default") return true
+  return value.mode === "custom" && typeof value.rootPath === "string"
+}
+
+function isMigrationPhase(value: unknown): value is KnowledgeBaseStorageMigrationPhase {
+  return typeof value === "string"
+    && [
+      "idle",
+      "preparing",
+      "copying",
+      "verifying",
+      "switching",
+      "cleaning",
+      "completed",
+      "completed-with-warning",
+      "failed",
+      "cancelled",
+      "recovering",
+    ].includes(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function managedRuntimeIds(config: SynapseConfig): string[] {
@@ -790,6 +886,19 @@ async function pathExists(targetPath: string): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+async function syncDirectoryBestEffort(targetPath: string): Promise<void> {
+  try {
+    const directory = await open(targetPath, "r")
+    try {
+      await directory.sync()
+    } finally {
+      await directory.close()
+    }
+  } catch {
+    // Directory fsync is platform-dependent; the journal file itself was synced before rename.
   }
 }
 

@@ -198,6 +198,22 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     expect(harness.config.global.knowledgeBaseStorage).toEqual({ mode: "default" })
   })
 
+  it("reports a failed recovery state when the journal is corrupt", async () => {
+    const harness = await migrationHarness()
+    await harness.writeRawJournal("{\"version\":1")
+
+    await expect(harness.service.recoverIfNeeded()).resolves.toBeUndefined()
+
+    expect(harness.states.at(-1)).toMatchObject({
+      active: false,
+      phase: "failed",
+      message: "知识库存储迁移恢复失败",
+      errorMessage: "知识库存储迁移恢复记录已损坏，请检查或移除恢复记录后重试。",
+    })
+    expect(harness.sourceManager.setMigrationBlocked).toHaveBeenCalledWith(true)
+    expect(harness.sourceManager.setMigrationBlocked).toHaveBeenCalledWith(false)
+  })
+
   it("keeps a verified new root during recovery", async () => {
     const harness = await migrationHarness()
     await harness.seedRuntime("kb-1", harness.newRoot)
@@ -395,6 +411,10 @@ async function migrationHarness(options: MigrationHarnessOptions = {}) {
         startedAt: "2026-06-10T00:00:00.000Z",
         ...partial,
       }, null, 2)}\n`, "utf8")
+    },
+    async writeRawJournal(content: string) {
+      await mkdir(path.dirname(journalPath), { recursive: true })
+      await writeFile(journalPath, content, "utf8")
     },
     waitForPhase(phase: string) {
       if (states.some((state) => state.phase === phase)) return Promise.resolve()
