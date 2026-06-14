@@ -174,7 +174,10 @@ function setInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
-async function renderInstallDialog(onOpenChange = vi.fn()) {
+async function renderInstallDialog(
+  onOpenChange = vi.fn(),
+  onInstalled?: () => Promise<void> | void,
+) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -185,6 +188,7 @@ async function renderInstallDialog(onOpenChange = vi.fn()) {
       <ContentInstallDialog
         editor={editor}
         item={createSkillItem()}
+        onInstalled={onInstalled}
         onOpenChange={onOpenChange}
         open
         projects={[]}
@@ -334,6 +338,31 @@ describe("ContentInstallDialog", () => {
       replaceConfirmed: true,
       replacedContentId: "installed-skill",
     }))
+  })
+
+  it("keeps the dialog open when post-install completion fails", async () => {
+    mocks.targetStatus = "ready"
+    mocks.readContent.mockResolvedValue({ content: "plain content" })
+    mocks.installToEditor.mockResolvedValue({ targetPath: "/tmp/codex/skills/demo" })
+    const onOpenChange = vi.fn()
+    const onInstalled = vi.fn().mockRejectedValue(new Error("complete failed"))
+
+    await renderInstallDialog(onOpenChange, onInstalled)
+
+    await act(async () => {
+      clickButton("选择冲突目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+    await act(async () => {
+      clickButton("继续安装")
+      await Promise.resolve()
+    })
+
+    expect(onInstalled).toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(document.body.textContent).toContain("本地已写入，但安装完成记录失败，请重试。")
   })
 
   it("keeps the footer cancel action disabled while installation is running", async () => {

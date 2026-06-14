@@ -261,12 +261,14 @@ function ContentInstallDialog({
       try {
         await onInstalled?.()
       } catch (refreshError) {
+        setInstallError("本地已写入，但安装完成记录失败，请重试。")
         logger.warn("Post-install refresh failed; install itself succeeded.", {
           contentId: item.id,
           contentType: item.type,
           editorId: editor.id,
           error: refreshError,
         })
+        return
       }
       setIsRuleProjectInstallFormOpen(false)
       onOpenChange(false)
