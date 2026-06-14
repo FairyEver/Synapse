@@ -43,12 +43,6 @@ export default function DevicesPage() {
       (event) => {
         if (!event.client.userId) return
         setDevices((current) => {
-          const exists = current.some(
-            (device) =>
-              device.userId === event.client.userId &&
-              device.clientInstanceId === event.client.clientInstanceId
-          )
-          if (!exists) return current
           return upsertDeviceLiveEvent(current, event, { scope: 'admin' })
         })
       },

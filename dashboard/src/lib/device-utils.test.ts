@@ -119,4 +119,22 @@ describe('device utilities', () => {
       }),
     ])
   })
+
+  it('adds new admin devices from live events', () => {
+    const updated = upsertDeviceLiveEvent(
+      [],
+      event('client-a', { userId: 'user-1' }),
+      { scope: 'admin' }
+    )
+
+    expect(updated).toEqual([
+      expect.objectContaining({
+        userId: 'user-1',
+        clientInstanceId: 'client-a',
+        displayName: null,
+        firstSeenAt: '2026-06-06T10:05:00.000Z',
+        status: 'online',
+      }),
+    ])
+  })
 })
