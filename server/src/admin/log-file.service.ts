@@ -3,6 +3,7 @@ import { open, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { Writable } from "node:stream";
 import archiver from "archiver";
+import { redactSensitiveLogText } from "../common/audit-error";
 
 export const LOG_DIR_TOKEN = "LOG_DIR";
 
@@ -111,9 +112,19 @@ export class LogFileService {
             results.push({
               time: entryTime.toISOString(),
               level: this.levelToName(parsed.level),
-              msg: parsed.msg ?? parsed.message ?? "",
-              ...(parsed.req && { req: { method: parsed.req.method, url: parsed.req.url } }),
-              ...(parsed.err && { err: { message: parsed.err.message, stack: parsed.err.stack } }),
+              msg: redactSensitiveLogText(parsed.msg ?? parsed.message ?? ""),
+              ...(parsed.req && {
+                req: {
+                  method: String(parsed.req.method ?? ""),
+                  url: redactSensitiveLogText(parsed.req.url ?? ""),
+                },
+              }),
+              ...(parsed.err && {
+                err: {
+                  message: redactSensitiveLogText(parsed.err.message ?? ""),
+                  stack: redactSensitiveLogText(parsed.err.stack ?? ""),
+                },
+              }),
             });
           } catch {
             // skip malformed lines

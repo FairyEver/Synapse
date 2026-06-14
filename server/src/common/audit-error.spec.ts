@@ -36,4 +36,19 @@ describe("formatAuditError", () => {
     expect(output).not.toContain("authorization-secret")
     expect(output).not.toContain("bearer-secret")
   })
+
+  it("redacts prefixed env-style sensitive keys", () => {
+    const output = formatAuditError(new Error([
+      "ANTHROPIC_API_KEY=env-api-secret",
+      "SYNAPSE_SIDE_CHANNEL_TOKEN=env-token-secret",
+      "{\"ANTHROPIC_API_KEY\":\"json-env-api-secret\"}",
+    ].join(" ")))
+
+    expect(output).toContain("ANTHROPIC_API_KEY=[REDACTED]")
+    expect(output).toContain("SYNAPSE_SIDE_CHANNEL_TOKEN=[REDACTED]")
+    expect(output).toContain('"ANTHROPIC_API_KEY":"[REDACTED]"')
+    expect(output).not.toContain("env-api-secret")
+    expect(output).not.toContain("env-token-secret")
+    expect(output).not.toContain("json-env-api-secret")
+  })
 })

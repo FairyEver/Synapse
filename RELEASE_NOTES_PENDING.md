@@ -211,6 +211,7 @@
 - Database MCP/HTTP 的行查询会拒绝负数、小数和超大分页参数，避免误把分页读取变成无上限全表读取。
 - Provider 包导出默认文件名会避开 Windows 保留设备名和尾随点空格，供应商名为 `CON`、`NUL` 等时也能正常保存。
 - 内容商店独立安装窗口在安装中关闭后，会在安装流程结束时自动清理临时安装包，不再残留解压目录和 prepared source 状态。
+- 管理后台系统日志 recent 接口会在返回前脱敏 token、Authorization、Cookie、密码和 API key，同时保留普通路径等排障信息。
 
 ## 技术调整
 

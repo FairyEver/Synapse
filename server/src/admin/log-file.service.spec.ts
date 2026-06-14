@@ -128,6 +128,55 @@ describe("LogFileService", () => {
     expect(handle.read).toHaveBeenCalledTimes(1);
   });
 
+  it("redacts sensitive values from recent log entries without removing normal paths", async () => {
+    const entry = JSON.stringify({
+      time: "2026-05-23T01:00:00.000Z",
+      level: 50,
+      msg: "request failed Authorization: Bearer raw-bearer ANTHROPIC_API_KEY=env-secret",
+      req: {
+        method: "GET",
+        url: "/drive/pages/page-1?password=plain-password&apiKey=plain-api-key&file=/Users/liyang/project/readme.md",
+      },
+      err: {
+        message: "{\"token\":\"json-token\",\"apiKey\":\"json-api-key\"}",
+        stack: "Error: Cookie: sid=cookie-secret\n    at run (/Users/liyang/project/app.ts:1:1)",
+      },
+    });
+    mockReadableFile(`${entry}\n`);
+    mockedReaddir.mockResolvedValue(["app.log"] as never);
+    mockedStat.mockResolvedValue({
+      size: Buffer.byteLength(entry) + 1,
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+    } as never);
+    const service = new LogFileService("/tmp/synapse-logs");
+
+    const result = await service.readRecent({ limit: 1 });
+    const serialized = JSON.stringify(result);
+
+    expect(result[0]).toEqual({
+      time: "2026-05-23T01:00:00.000Z",
+      level: "error",
+      msg: "request failed Authorization: [REDACTED] ANTHROPIC_API_KEY=[REDACTED]",
+      req: {
+        method: "GET",
+        url: "/drive/pages/page-1?password=[REDACTED]&apiKey=[REDACTED]&file=/Users/liyang/project/readme.md",
+      },
+      err: {
+        message: "{\"token\":\"[REDACTED]\",\"apiKey\":\"[REDACTED]\"}",
+        stack: "Error: Cookie: [REDACTED]\n    at run (/Users/liyang/project/app.ts:1:1)",
+      },
+    });
+    expect(serialized).not.toContain("raw-bearer");
+    expect(serialized).not.toContain("env-secret");
+    expect(serialized).not.toContain("plain-password");
+    expect(serialized).not.toContain("plain-api-key");
+    expect(serialized).not.toContain("json-token");
+    expect(serialized).not.toContain("json-api-key");
+    expect(serialized).not.toContain("cookie-secret");
+    expect(serialized).toContain("/Users/liyang/project/readme.md");
+    expect(serialized).toContain("/Users/liyang/project/app.ts");
+  });
+
   it("filters recent entries by date range", async () => {
     const oldEntry = JSON.stringify({ time: "2026-05-21T23:00:00.000Z", level: 30, msg: "old" });
     const keptEntry = JSON.stringify({ time: "2026-05-23T01:00:00.000Z", level: 30, msg: "kept" });
