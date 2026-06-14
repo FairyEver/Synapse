@@ -130,8 +130,16 @@ export class TaskSchedulerService {
       clearTimeout(timer)
     }
     this.timers.clear()
-    await this.stopActiveRuns()
     this.started = false
+    try {
+      await this.stopActiveRuns()
+    } finally {
+      for (const timer of this.timers.values()) {
+        clearTimeout(timer)
+      }
+      this.timers.clear()
+      this.runningTaskIds.clear()
+    }
   }
 
   async schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
@@ -385,7 +393,17 @@ export class TaskSchedulerService {
       const runId = this.deps.execution.getActiveRunIdForTask(taskId)
       if (runId) runIds.add(runId)
     }
-    await Promise.all([...runIds].map((runId) => this.stopRun(runId)))
+    const activeRunIds = [...runIds]
+    const results = await Promise.allSettled(activeRunIds.map((runId) => this.stopRun(runId)))
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") return
+      const runId = activeRunIds[index]
+      this.deps.logger?.warn("Scheduled active run stop failed.", {
+        runId,
+        boundary: "task-scheduler-stop-active-runs",
+        ...errorMetadata(result.reason),
+      })
+    })
   }
 
   async schedulerRunList(

@@ -373,6 +373,50 @@ describe("TaskSchedulerService", () => {
     expect(harness.service.schedulerRuntimeInspect().runningTaskIds).toEqual([])
   })
 
+  it("clears runtime state when stopping active runs reports a failure", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ action: longRunningAction(), logger })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+    await harness.taskItems.upsert(createTask({ id: "task:2" }))
+    await harness.service.start()
+
+    const firstRun = harness.service.runNow("task:1")
+    const secondRun = harness.service.runNow("task:2")
+    await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.length === 2)
+    const runningRuns = [
+      ...await harness.runs.listByTask("task:1"),
+      ...await harness.runs.listByTask("task:2"),
+    ].filter((run) => run.status === "running")
+    const failedRun = runningRuns.find((run) => run.taskId === "task:1")
+    const otherRun = runningRuns.find((run) => run.taskId === "task:2")
+    expect(failedRun).toBeDefined()
+    expect(otherRun).toBeDefined()
+
+    const stopRunSpy = vi.spyOn(harness.execution, "stopRun")
+    const waitForRunToSettle = harness.execution.waitForRunToSettle.bind(harness.execution)
+    vi.spyOn(harness.execution, "waitForRunToSettle").mockImplementation((runId) => {
+      if (runId === failedRun!.id) return Promise.reject(new Error("settle failed"))
+      return waitForRunToSettle(runId)
+    })
+
+    await expect(harness.service.stop()).resolves.toBeUndefined()
+    await Promise.allSettled([firstRun, secondRun])
+
+    expect(stopRunSpy).toHaveBeenCalledWith(failedRun!.id)
+    expect(stopRunSpy).toHaveBeenCalledWith(otherRun!.id)
+    expect(harness.service.schedulerRuntimeInspect().runningTaskIds).toEqual([])
+    expect(logger.warn).toHaveBeenCalledWith("Scheduled active run stop failed.", expect.objectContaining({
+      runId: failedRun!.id,
+      boundary: "task-scheduler-stop-active-runs",
+      errorName: "Error",
+      errorLength: "settle failed".length,
+    }))
+
+    await harness.service.schedulerTaskDisable("task:1")
+    await harness.service.schedulerTaskEnable("task:1")
+    expect(harness.service.schedulerRuntimeInspect().timers).toEqual([])
+  })
+
   it("skips scheduled run when current day is not in activeDays", async () => {
     // 2026-04-29 is a Wednesday (day 3). activeDays excludes Wednesday.
     const harness = createHarness()
@@ -639,6 +683,7 @@ function createHarness(options: {
   }
   return {
     service: new TaskSchedulerService(serviceDeps),
+    execution,
     taskItems,
     runItems,
     tasks,
