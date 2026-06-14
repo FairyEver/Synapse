@@ -9,6 +9,7 @@ import {
   buildDiagnosticsSummary,
   summarizeDiagnosticsChecks,
 } from "../../src/lib/diagnostics-summary"
+import { errorLogMessage, sanitizeError } from "../../src/lib/error-sanitize"
 import type {
   SynapseDiagnosticsBundleExportResult,
   SynapseDiagnosticsCheck,
@@ -1140,7 +1141,7 @@ class DiagnosticsService {
       await this.writeTextFile(targetPath, `${JSON.stringify(value, null, 2)}\n`)
       included.push(relativePath)
     } catch (error) {
-      skipped.push({ path: relativePath, reason: error instanceof Error ? error.message : String(error) })
+      skipped.push({ path: relativePath, reason: formatOptionalSkippedReason(error) })
     }
   }
 
@@ -1156,7 +1157,7 @@ class DiagnosticsService {
       await Promise.resolve(copy())
       included.push(relativePath)
     } catch (error) {
-      skipped.push({ path: relativePath, reason: error instanceof Error ? error.message : String(error) })
+      skipped.push({ path: relativePath, reason: formatOptionalSkippedReason(error) })
     }
   }
 
@@ -1331,6 +1332,10 @@ class DiagnosticsService {
       },
     })
   }
+}
+
+function formatOptionalSkippedReason(error: unknown): string {
+  return sanitizeError(errorLogMessage(error, "Optional diagnostic file skipped"))
 }
 
 async function writeReadDeleteProbe(directoryPath: string): Promise<void> {

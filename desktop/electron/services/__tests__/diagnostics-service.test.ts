@@ -741,6 +741,40 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/example/private")
   })
 
+  it("redacts optional file failure reasons written to the bundle manifest", async () => {
+    const writtenFiles = new Map<string, string>()
+    const rawError = "config failed token=sk-secret Authorization: Bearer sk-live-token at /Users/example/private/config.json"
+    const service = createService({
+      createConfigBackupPayload: vi.fn(async () => {
+        throw new Error(rawError)
+      }),
+      writeTextFile: vi.fn(async (targetPath: string, content: string) => {
+        writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
+      }),
+    })
+    const report = await service.collect()
+
+    await service.exportBundle({ report })
+
+    const packagePathSuffix = "/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z"
+    const manifestContent = writtenFiles.get(findWrittenPath(writtenFiles, `${packagePathSuffix}/manifest.json`) ?? "")
+    expect(manifestContent).toBeDefined()
+    const manifest = JSON.parse(manifestContent ?? "") as {
+      readonly skipped: Array<{ readonly path: string; readonly reason: string }>
+    }
+    expect(manifest.skipped).toEqual([
+      {
+        path: "config/config-backup.json",
+        reason: expect.stringContaining("token=[redacted]"),
+      },
+    ])
+    expect(manifest.skipped[0]?.reason).toContain("[redacted]")
+    expect(manifest.skipped[0]?.reason).toContain("[path]")
+    expect(manifestContent).not.toContain("sk-secret")
+    expect(manifestContent).not.toContain("sk-live-token")
+    expect(manifestContent).not.toContain("/Users/example/private/config.json")
+  })
+
   it("does not use renderer-provided generatedAt for staging paths", { timeout: 15_000 }, async () => {
     const writtenFiles = new Map<string, string>()
     const service = createService({
