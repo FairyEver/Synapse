@@ -15,7 +15,7 @@ export function resolveBuiltinToolPermissions(
     .filter((permission) => conditionMatches(permission, input))
     .map((permission) => ({
       action: permission.action,
-      resource: stringFromPath(input, permission.pathFromInput, descriptor.id),
+      resource: resolvePermissionResource(input, permission, descriptor.id),
     }))
 }
 
@@ -32,3 +32,16 @@ function stringFromPath(input: Record<string, unknown>, field: string, toolId: s
   return value
 }
 
+function resolvePermissionResource(
+  input: Record<string, unknown>,
+  permission: BuiltinToolPermissionRequirement,
+  toolId: string,
+): string {
+  if (permission.action === "fs.write" && permission.pathFromInput === "outputDirectory") {
+    const explicitOutputPath = input.outputPath
+    if (typeof explicitOutputPath === "string" && explicitOutputPath.trim().length > 0) {
+      return explicitOutputPath
+    }
+  }
+  return stringFromPath(input, permission.pathFromInput, toolId)
+}

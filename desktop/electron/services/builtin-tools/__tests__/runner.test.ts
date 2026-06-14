@@ -12,6 +12,7 @@ const inputSchema = z.object({
   inputPath: z.string().min(1),
   outputMode: z.enum(["return", "write-file"]),
   outputDirectory: z.string().optional(),
+  outputPath: z.string().optional(),
 })
 
 const outputSchema = z.object({
@@ -51,6 +52,64 @@ describe("builtin tool runner", () => {
       { action: "fs.read.outside-userdata", resource: "/tmp/a.docx" },
       { action: "fs.write", resource: "/tmp/out" },
     ])
+  })
+
+  it("checks explicit outputPath instead of outputDirectory for write-file permissions", async () => {
+    const executeInWorker = vi.fn(async () => ({ markdown: "# OK", warnings: [] }))
+    const permissionGuard = makePermissionGuard()
+    const auditSink = makeAuditSink()
+    await runBuiltinTool({
+      toolId: "docx-to-markdown",
+      input: {
+        inputPath: "/tmp/a.docx",
+        outputMode: "write-file",
+        outputDirectory: "/tmp/allowed",
+        outputPath: "/tmp/unapproved/result.md",
+      },
+      context: { entryPoint: "tools", actor: { kind: "user" } },
+      registry: createBuiltinToolRegistryForTests([makeTool()]),
+      permissionGuard,
+      auditSink,
+      executeInWorker,
+    })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "/tmp/unapproved/result.md",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "/tmp/unapproved/result.md",
+      outcome: "allowed",
+    }))
+  })
+
+  it("does not run the worker when explicit outputPath write permission is denied", async () => {
+    const executeInWorker = vi.fn()
+    const permissionGuard = makePermissionGuard()
+    vi.mocked(permissionGuard.check).mockImplementation(async ({ resource }) =>
+      resource === "/tmp/unapproved/result.md"
+        ? { allowed: false, reason: "denied", policyId: "p1" }
+        : { allowed: true },
+    )
+    const result = await runBuiltinTool({
+      toolId: "docx-to-markdown",
+      input: {
+        inputPath: "/tmp/a.docx",
+        outputMode: "write-file",
+        outputDirectory: "/tmp/allowed",
+        outputPath: "/tmp/unapproved/result.md",
+      },
+      context: { entryPoint: "tools", actor: { kind: "user" } },
+      registry: createBuiltinToolRegistryForTests([makeTool()]),
+      permissionGuard,
+      auditSink: makeAuditSink(),
+      executeInWorker,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.ok ? "" : result.error).toEqual({ code: "permission_denied", message: "denied" })
+    expect(executeInWorker).not.toHaveBeenCalled()
   })
 
   it("skips permissions whose condition does not match", () => {
@@ -161,4 +220,3 @@ function makeAuditSink(): AuditSink {
     clearForTests: vi.fn(),
   }
 }
-
