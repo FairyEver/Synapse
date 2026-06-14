@@ -10,20 +10,24 @@ vi.mock("../../services/log-store", () => ({
   }),
 }))
 
-function postJson(port: number, payload: unknown): Promise<{ status: number; body: string }> {
+function postJson(port: number, payload: unknown, authorization?: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const body = Buffer.from(JSON.stringify(payload), "utf8")
+    const headers: Record<string, string | number> = {
+      "Content-Type": "application/json; charset=utf-8",
+      "Connection": "close",
+      "Content-Length": body.length,
+    }
+    if (authorization) {
+      headers.Authorization = authorization
+    }
     const req = request({
       method: "POST",
       hostname: "127.0.0.1",
       port,
       path: "/mcp",
       agent: false,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Connection": "close",
-        "Content-Length": body.length,
-      },
+      headers,
     }, (res) => {
       const chunks: Buffer[] = []
       res.on("data", (chunk: Buffer) => chunks.push(chunk))
@@ -46,7 +50,7 @@ describe("MCP HTTP server", () => {
     vi.resetModules()
   })
 
-  it("accepts local MCP requests without Authorization", async () => {
+  it("rejects local MCP requests without Authorization", async () => {
     const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
@@ -63,6 +67,50 @@ describe("MCP HTTP server", () => {
       },
     })
 
+    expect(response.status).toBe(401)
+    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" })
+  })
+
+  it("rejects local MCP requests with invalid Authorization", async () => {
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({
+      dispatch: vi.fn(),
+    })
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "test", version: "1.0.0" },
+      },
+    }, "Bearer wrong-token")
+
+    expect(response.status).toBe(401)
+    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" })
+  })
+
+  it("accepts local MCP requests with the server Bearer token", async () => {
+    const { getMcpServerToken, startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({
+      dispatch: vi.fn(),
+    })
+    const token = getMcpServerToken()
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "test", version: "1.0.0" },
+      },
+    }, `Bearer ${token}`)
+
+    expect(token).not.toBe("")
     expect(response.status).toBe(200)
     expect(JSON.parse(response.body)).toMatchObject({
       jsonrpc: "2.0",
@@ -74,16 +122,17 @@ describe("MCP HTTP server", () => {
   })
 
   it("lists Automation MCP tools", async () => {
-    const { startMcpServer } = await import("../mcp-server")
+    const { getMcpServerToken, startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
     })
+    const token = getMcpServerToken()
 
     const response = await postJson(port, {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/list",
-    })
+    }, `Bearer ${token}`)
 
     expect(response.status).toBe(200)
     const payload = JSON.parse(response.body)
@@ -98,8 +147,9 @@ describe("MCP HTTP server", () => {
 
   it("calls Automation tools through the action router", async () => {
     const dispatch = vi.fn(async () => ({ ok: true, data: [{ id: "automation:1" }] }))
-    const { startMcpServer } = await import("../mcp-server")
+    const { getMcpServerToken, startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({ dispatch })
+    const token = getMcpServerToken()
 
     const response = await postJson(port, {
       jsonrpc: "2.0",
@@ -109,7 +159,7 @@ describe("MCP HTTP server", () => {
         name: "automation_item_list",
         arguments: { enabled: true },
       },
-    })
+    }, `Bearer ${token}`)
 
     expect(response.status).toBe(200)
     expect(dispatch).toHaveBeenCalledWith("automation.item.list", { enabled: true }, {
