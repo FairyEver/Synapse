@@ -174,6 +174,69 @@ describe("ProviderService", () => {
     })
   })
 
+  it("rolls back active provider changes when switching providers fails midway", async () => {
+    const { service, providers } = makeProviderService()
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      env: {},
+    })
+    await service.createProvider({
+      id: "deepseek",
+      name: "DeepSeek",
+      category: "cn_official",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      env: {},
+    })
+
+    const originalUpsert = providers.upsert.bind(providers)
+    let upsertCount = 0
+    vi.spyOn(providers, "upsert").mockImplementation(async (item) => {
+      upsertCount += 1
+      if (upsertCount === 2) {
+        throw new Error("provider metadata write failed")
+      }
+      await originalUpsert(item)
+    })
+
+    await expect(service.setActiveProvider("deepseek")).rejects.toThrow("provider metadata write failed")
+    const allProviders = await service.listAllProviders()
+    expect(allProviders.find((provider) => provider.id === "anthropic")).toMatchObject({ active: true })
+    expect(allProviders.find((provider) => provider.id === "deepseek")?.active).not.toBe(true)
+    await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "anthropic" })
+  })
+
+  it("rolls back active provider clearing when switching to local provider fails", async () => {
+    const { service, providers } = makeProviderService()
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      env: {},
+    })
+
+    const originalUpsert = providers.upsert.bind(providers)
+    let upsertCount = 0
+    vi.spyOn(providers, "upsert").mockImplementation(async (item) => {
+      upsertCount += 1
+      if (upsertCount === 1) {
+        throw new Error("provider metadata write failed")
+      }
+      await originalUpsert(item)
+    })
+
+    await expect(service.setActiveProvider(LOCAL_CLAUDE_CODE_PROVIDER_ID)).rejects.toThrow("provider metadata write failed")
+    await expect(providers.get("anthropic")).resolves.toMatchObject({ active: true })
+    await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "anthropic" })
+  })
+
   it("rejects mutating the built-in local ClaudeCode/Synapse provider", async () => {
     const { service } = makeProviderService()
 

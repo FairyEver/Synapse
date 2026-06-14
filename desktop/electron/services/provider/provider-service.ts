@@ -490,14 +490,7 @@ export class ProviderService {
     }
     const now = this.isoNow()
     const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)
-    for (const provider of providers) {
-      const current = toProvider(provider)
-      await this.providers.upsert(toProviderEntry({
-        ...current,
-        active: current.id === target.id,
-        updatedAt: now,
-      }))
-    }
+    await this.applyProviderActiveState(providers, target.id, now)
   }
 
   async getActiveProvider(): Promise<CCProvider | null> {
@@ -945,14 +938,33 @@ export class ProviderService {
   private async clearActiveUserProvider(): Promise<void> {
     const now = this.isoNow()
     const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)
+    await this.applyProviderActiveState(providers.filter((provider) => toProvider(provider).active), null, now)
+  }
+
+  private async applyProviderActiveState(
+    providers: readonly ProviderEntryV1[],
+    activeProviderId: string | null,
+    now: string,
+  ): Promise<void> {
+    const snapshot = providers.map((provider) => ({ ...provider }))
+    try {
+      for (const provider of providers) {
+        const current = toProvider(provider)
+        await this.providers.upsert(toProviderEntry({
+          ...current,
+          active: current.id === activeProviderId,
+          updatedAt: now,
+        }))
+      }
+    } catch (error) {
+      await this.restoreProviderEntries(snapshot)
+      throw error
+    }
+  }
+
+  private async restoreProviderEntries(providers: readonly ProviderEntryV1[]): Promise<void> {
     for (const provider of providers) {
-      const current = toProvider(provider)
-      if (!current.active) continue
-      await this.providers.upsert(toProviderEntry({
-        ...current,
-        active: false,
-        updatedAt: now,
-      }))
+      await this.providers.upsert(provider)
     }
   }
 
