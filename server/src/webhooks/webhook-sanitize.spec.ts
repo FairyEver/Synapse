@@ -43,6 +43,29 @@ describe("webhook sanitize", () => {
     expect(sanitized).not.toContain("plain-api-key")
   })
 
+  it("redacts webhook URL query secrets before request logs are serialized", () => {
+    const request = sanitizeWebhookLogRequest({
+      originalUrl: "/webhooks/wh_public_id/whsec_secret_value?token=raw-token&signature=raw-signature&run=abc",
+      query: {
+        token: "raw-token",
+        signature: "raw-signature",
+        run: "abc",
+      },
+    })
+
+    expect(request).toMatchObject({
+      url: "/webhooks/wh_public_id/***?token=[redacted]&signature=[redacted]&run=abc",
+      query: {
+        token: "[redacted]",
+        signature: "[redacted]",
+        run: "abc",
+      },
+    })
+    expect(JSON.stringify(request)).not.toContain("whsec_secret_value")
+    expect(JSON.stringify(request)).not.toContain("raw-token")
+    expect(JSON.stringify(request)).not.toContain("raw-signature")
+  })
+
   it("keeps non-webhook request log URLs unchanged", () => {
     expect(sanitizeWebhookLogUrl("/api/webhooks?status=active")).toBe("/api/webhooks?status=active")
   })
