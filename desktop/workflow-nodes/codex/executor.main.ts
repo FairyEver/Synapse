@@ -278,7 +278,7 @@ export const codexNodeExecutor: NodeExecutor<CodexNodeConfig> = {
       }
 
       if (result.error || result.exitCode !== 0) {
-        const error = failureMessageFromResult(result)
+        const error = failureMessageFromResult({ ...result, stdout, stderr })
         logger.warn("codex node failed", {
           ...logContext,
           projectId,
@@ -514,11 +514,13 @@ async function resolveCodexPathList(input: {
 function failureMessageFromResult(result: {
   readonly exitCode: number | null
   readonly signal: NodeJS.Signals | null
+  readonly stdout?: string
   readonly stderr?: string
   readonly error?: string
 }): string {
   const candidate = result.error?.trim()
     || result.stderr?.trim()
+    || result.stdout?.trim()
     || (result.signal ? `Codex 被信号 ${result.signal} 终止` : undefined)
     || (result.exitCode !== null ? `Codex 退出码 ${String(result.exitCode)}` : "Codex 执行失败")
 

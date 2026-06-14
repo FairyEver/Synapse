@@ -487,6 +487,30 @@ describe("codexNodeExecutor", () => {
     expect(stderrArtifact).not.toContain("sk-secret")
   })
 
+  it("uses captured stderr for non-zero exit errors when process output is ignored", async () => {
+    const runtimeDeps = makeRuntimeDeps({
+      processRunner: {
+        run: vi.fn().mockImplementation(async (request: {
+          onStderrLine?: (line: string) => void
+        }) => {
+          request.onStderrLine?.("model not found")
+          return {
+            exitCode: 1,
+            signal: null,
+            timedOut: false,
+            durationMs: 25,
+          }
+        }),
+      },
+    })
+
+    const result = await codexNodeExecutor.execute(makeInput({}, runtimeDeps))
+
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("model not found")
+    expect(result.error).not.toContain("Codex 退出码 1")
+  })
+
   it("falls back to stdout when last-message.txt is missing", async () => {
     const runtimeDeps = makeRuntimeDeps()
 
