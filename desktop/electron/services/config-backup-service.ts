@@ -980,7 +980,18 @@ class ConfigBackupService {
       await userIdentityService.importIdentity(backup.identity)
     } catch (identityError) {
       logger.warn("Identity import failed, rolling back config.", { filePath: redactedFilePathForLog() })
-      await configStore.replace(previousConfig)
+      try {
+        await configStore.replace(previousConfig)
+      } catch (rollbackError) {
+        logger.error("Config backup import rollback failed.", {
+          filePath: redactedFilePathForLog(),
+          identityErrorName: identityError instanceof Error ? identityError.name : typeof identityError,
+          identityErrorLength: String(identityError).length,
+          rollbackErrorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
+          rollbackErrorLength: String(rollbackError).length,
+        })
+        throw new Error("配置备份导入失败，且旧配置恢复也失败。当前配置可能已部分改变，请检查配置后重试。")
+      }
       throw identityError
     }
 

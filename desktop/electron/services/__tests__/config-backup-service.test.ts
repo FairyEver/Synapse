@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     importIdentity: vi.fn(),
   },
   logger: {
+    error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
   },
@@ -368,6 +369,28 @@ describe("ConfigBackupService quick inputs", () => {
 
       expect(mocks.logger.warn).toHaveBeenCalledWith("Identity import failed, rolling back config.", { filePath: "[path]" })
       expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain(path.dirname(filePath))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
+  it("surfaces and logs rollback failures after identity import fails", async () => {
+    const filePath = await writeBackupFile({})
+    vi.mocked(userIdentityService.importIdentity).mockRejectedValueOnce(new Error("identity failed"))
+    vi.mocked(configStore.replace)
+      .mockResolvedValueOnce(createDefaultConfig())
+      .mockRejectedValueOnce(new Error("rollback failed"))
+
+    try {
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow("旧配置恢复也失败")
+
+      expect(mocks.logger.warn).toHaveBeenCalledWith("Identity import failed, rolling back config.", { filePath: "[path]" })
+      expect(mocks.logger.error).toHaveBeenCalledWith("Config backup import rollback failed.", expect.objectContaining({
+        filePath: "[path]",
+        identityErrorName: "Error",
+        rollbackErrorName: "Error",
+      }))
+      expect(JSON.stringify(mocks.logger.error.mock.calls)).not.toContain(path.dirname(filePath))
     } finally {
       await rm(path.dirname(filePath), { recursive: true, force: true })
     }
