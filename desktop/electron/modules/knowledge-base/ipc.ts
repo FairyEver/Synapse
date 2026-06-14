@@ -244,6 +244,12 @@ function assertStorageMigrationInactive(ctx: IpcHandlerContext): void {
   }
 }
 
+async function assertKnowledgeBaseStorageAvailable(ctx: IpcHandlerContext): Promise<void> {
+  const status = await migrationService(ctx).getStorageStatus()
+  if (status.available) return
+  throw new Error("知识库存储位置不可用。请在设置中重新检测。")
+}
+
 function trackRawMutation<T>(run: () => Promise<T>): Promise<T> {
   return knowledgeBaseSourceManagerWindowService.trackMutation(run)
 }
@@ -729,7 +735,10 @@ export const knowledgeBaseIpcModule: IpcModule = {
         action: "fs.read.outside-userdata",
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.openSourceManager",
-        run: () => knowledgeBaseSourceManagerWindowService.open(request),
+        run: async () => {
+          await assertKnowledgeBaseStorageAvailable(ctx)
+          await knowledgeBaseSourceManagerWindowService.open(request)
+        },
       }),
     },
     getStorageStatus: {

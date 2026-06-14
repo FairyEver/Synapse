@@ -38,6 +38,7 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES } from "../../../../config"
+import type { SynapseKnowledgeBaseStorageStatus } from "../../../../src/types/knowledge-base"
 import { KnowledgeBaseService } from "../../../services/knowledge-base/knowledge-base-service"
 import type { KnowledgeBaseStorageMigrationState } from "../../../services/knowledge-base/storage-migration-service"
 import { knowledgeBaseIpcModule } from "../ipc"
@@ -483,7 +484,7 @@ describe("knowledgeBaseIpcModule", () => {
   })
 
   it("opens the source manager window through guarded read permission", async () => {
-    const { harness, permissionGuard } = createHarness({ service: {} })
+    const { harness, migrationService, permissionGuard } = createHarness({ service: {} })
 
     await harness.invoke("synapse:knowledge-base:open-source-manager", {
       projectId: "project-1",
@@ -500,6 +501,25 @@ describe("knowledgeBaseIpcModule", () => {
       resource: "managed-knowledge-base:project-1",
       context: { source: "knowledgeBase.openSourceManager" },
     })
+    expect(migrationService.getStorageStatus).toHaveBeenCalled()
+  })
+
+  it("blocks source manager opening when knowledge base storage is unavailable", async () => {
+    const { harness, migrationService } = createHarness({ service: {} })
+    migrationService.getStorageStatus.mockResolvedValue({
+      mode: "custom",
+      rootPath: "/Volumes/Missing/Synapse",
+      knowledgeBasesPath: "/Volumes/Missing/Synapse/knowledge-bases",
+      available: false,
+      unavailableReason: "missing volume",
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:open-source-manager", {
+      projectId: "project-1",
+      projectName: "知识库001",
+    })).rejects.toThrow("知识库存储位置不可用。请在设置中重新检测。")
+
+    expect(sourceManagerWindowServiceMock.open).not.toHaveBeenCalled()
   })
 
   it("starts storage migration through a guarded write operation", async () => {
@@ -932,7 +952,12 @@ function createHarness(options: {
       },
       message: "",
     })),
-    getStorageStatus: vi.fn(),
+    getStorageStatus: vi.fn<() => Promise<SynapseKnowledgeBaseStorageStatus>>(async () => ({
+      mode: "default" as const,
+      rootPath: "/tmp/userData",
+      knowledgeBasesPath: "/tmp/userData/knowledge-bases",
+      available: true,
+    })),
     isActive: vi.fn(() => options.migrationActive ?? false),
     startMigration: vi.fn(),
   }
