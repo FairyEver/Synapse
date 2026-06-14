@@ -1,3 +1,4 @@
+import path from "node:path"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
@@ -32,7 +33,7 @@ export const editorCopyIpcModule: IpcModule = {
         logger.info("Handling editor copy request.", {
           contentType: payload.source.itemType,
           sourceEditorId: payload.source.editorId,
-          sourcePath: payload.source.itemPath,
+          sourceName: path.basename(payload.source.itemPath),
           targetEditorId: payload.targetEditorId,
           targetScope: payload.targetScope,
         })
