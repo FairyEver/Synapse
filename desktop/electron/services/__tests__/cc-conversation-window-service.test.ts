@@ -29,7 +29,7 @@ describe("createCcConversationWindowService", () => {
     )
   })
 
-  it("opens one window per session and focuses duplicates", async () => {
+  it("opens one window per session and reloads focus for duplicates", async () => {
     const window = createMockWindow()
     const createWindow = vi.fn(() => window as never)
     const loadWindow = vi.fn(async () => undefined)
@@ -43,11 +43,16 @@ describe("createCcConversationWindowService", () => {
       loadWindow,
     })
 
-    await service.openConversationWindow({ sessionId: "s1", title: "对话" })
-    await service.openConversationWindow({ sessionId: "s1", title: "对话" })
+    await service.openConversationWindow({ sessionId: "s1", title: "对话", focus: { eventId: "event-1" } })
+    await service.openConversationWindow({ sessionId: "s1", title: "对话", focus: { eventId: "event-2" } })
 
     expect(createWindow).toHaveBeenCalledTimes(1)
-    expect(loadWindow).toHaveBeenCalledTimes(1)
+    expect(loadWindow).toHaveBeenCalledTimes(2)
+    expect(loadWindow).toHaveBeenLastCalledWith(window, {
+      sessionId: "s1",
+      title: "对话",
+      focus: { eventId: "event-2" },
+    })
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
 

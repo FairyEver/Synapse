@@ -72,8 +72,13 @@ export function createCcConversationWindowService(deps: Deps) {
         if (existingWindow.isMinimized()) {
           existingWindow.restore()
         }
+        await (deps.loadWindow ?? ((targetWindow, targetPayload) =>
+          loadConversationWindow(targetWindow, targetPayload, deps.getAppPath())))(existingWindow, payload)
         existingWindow.focus()
-        deps.logger.info("Focused existing CC conversation window.", { sessionId: payload.sessionId })
+        deps.logger.info("Focused existing CC conversation window.", {
+          sessionId: payload.sessionId,
+          hasFocus: Boolean(payload.focus),
+        })
         return
       }
 
