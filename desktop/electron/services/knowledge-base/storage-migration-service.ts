@@ -1,5 +1,5 @@
 import { constants } from "node:fs"
-import { access, copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
+import { access, copyFile, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import type {
@@ -529,12 +529,16 @@ export class KnowledgeBaseStorageMigrationService {
     let copiedBytes = 0
     const copyEntry = async (sourceEntryPath: string, targetEntryPath: string) => {
       this.assertNotCancelled()
-      if (!await pathExists(sourceEntryPath)) {
+      let entryStat: Awaited<ReturnType<typeof lstat>>
+      try {
+        entryStat = await lstat(sourceEntryPath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
         await mkdir(targetEntryPath, { recursive: true })
         return
       }
 
-      const entryStat = await stat(sourceEntryPath)
+      if (entryStat.isSymbolicLink()) return
       if (entryStat.isDirectory()) {
         await mkdir(targetEntryPath, { recursive: true })
         const entries = await readdir(sourceEntryPath, { withFileTypes: true })
@@ -675,7 +679,10 @@ async function treeStats(rootPath: string): Promise<{ files: number; bytes: numb
   if (!await pathExists(rootPath)) {
     return { files: 0, bytes: 0 }
   }
-  const rootStat = await stat(rootPath)
+  const rootStat = await lstat(rootPath)
+  if (rootStat.isSymbolicLink()) {
+    return { files: 0, bytes: 0 }
+  }
   if (!rootStat.isDirectory()) {
     return { files: 1, bytes: rootStat.size }
   }
@@ -691,7 +698,7 @@ async function treeStats(rootPath: string): Promise<{ files: number; bytes: numb
       continue
     }
     if (!entry.isFile()) continue
-    const entryStat = await stat(entryPath)
+    const entryStat = await lstat(entryPath)
     files += 1
     bytes += entryStat.size
   }

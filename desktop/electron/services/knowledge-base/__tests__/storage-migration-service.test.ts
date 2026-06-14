@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir as fsReaddir, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir as fsReaddir, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -42,6 +42,29 @@ describe("KnowledgeBaseStorageMigrationService", () => {
     await expect(readFile(path.join(harness.newRoot, "knowledge-bases", "kb-1", "CLAUDE.md"), "utf8"))
       .resolves.toBe("# Knowledge\n")
     expect(harness.trashed).toEqual([path.join(harness.oldRoot, "knowledge-bases")])
+  })
+
+  it("does not follow symbolic links while migrating runtimes", async () => {
+    const harness = await migrationHarness()
+    await harness.seedRuntime("kb-1")
+    const outsideDir = path.join(await tempDir(), "outside")
+    await mkdir(outsideDir, { recursive: true })
+    const outsideFile = path.join(outsideDir, "secret.txt")
+    await writeFile(outsideFile, "external secret\n", "utf8")
+    const sourceRawDir = path.join(harness.oldRoot, "knowledge-bases", "kb-1", ".raw")
+    await symlink(outsideFile, path.join(sourceRawDir, "linked-secret.txt"))
+    await symlink(outsideDir, path.join(sourceRawDir, "linked-dir"), "dir")
+
+    const result = await harness.service.startMigration({
+      target: { mode: "custom", rootPath: harness.newRoot },
+      requestedBy: "test",
+    })
+
+    expect(result.status).toBe("completed")
+    await expect(readFile(path.join(harness.newRoot, "knowledge-bases", "kb-1", ".raw", "linked-secret.txt"), "utf8"))
+      .rejects.toThrow()
+    await expect(readFile(path.join(harness.newRoot, "knowledge-bases", "kb-1", ".raw", "linked-dir", "secret.txt"), "utf8"))
+      .rejects.toThrow()
   })
 
   it("keeps old config and old data when verification fails", async () => {
