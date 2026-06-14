@@ -20,7 +20,7 @@ import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 import { isSafeWorkflowId, isSafeWorkflowNodeId } from "../../services/workflow/workflow-id"
-import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot } from "../../services/workflow/run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowRunSnapshot } from "../../services/workflow/run-snapshot-sanitize"
 import { rendererBaseUrl } from "../shared/renderer-base-url"
 
 const logger = createMainLogger("workflow.ipc")
@@ -250,18 +250,19 @@ function saveRunSnapshot(
   // to prevent a late-finishing engine run from re-creating the deleted
   // workflow-runs directory via RunSnapshotService.save() → mkdir().
   if (deletedWorkflows.has(snapshot.workflowId)) return
-  void snapshots.save(snapshot).catch((error) => {
+  const sanitizedSnapshot = sanitizeWorkflowRunSnapshot(snapshot)
+  void snapshots.save(sanitizedSnapshot).catch((error) => {
     logger.warn("workflow snapshot save failed", {
-      runId: snapshot.runId,
-      workflowId: snapshot.workflowId,
-      status: snapshot.status,
+      runId: sanitizedSnapshot.runId,
+      workflowId: sanitizedSnapshot.workflowId,
+      status: sanitizedSnapshot.status,
       ...engineRejectionDiagnostic(error),
     })
     eventBus?.emit(
       {
         domain: "workflow",
         type: "workflow:snapshot-save-failed",
-        payload: { type: "workflow:snapshot-save-failed", runId: snapshot.runId, workflowId: snapshot.workflowId, status: snapshot.status },
+        payload: { type: "workflow:snapshot-save-failed", runId: sanitizedSnapshot.runId, workflowId: sanitizedSnapshot.workflowId, status: sanitizedSnapshot.status },
         timestamp: new Date().toISOString(),
       },
       { backpressure: "block" },

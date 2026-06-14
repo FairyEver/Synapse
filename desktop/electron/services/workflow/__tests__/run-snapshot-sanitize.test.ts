@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot } from "../run-snapshot-sanitize"
-import type { NodeRunResult, WorkflowDefinition } from "../../../../src/types/workflow"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowDefinitionForSnapshot, sanitizeWorkflowRunSnapshot } from "../run-snapshot-sanitize"
+import type { NodeRunResult, WorkflowDefinition, WorkflowRunSnapshot } from "../../../../src/types/workflow"
 
 describe("sanitizeNodeResultsForSnapshot", () => {
   it("removes agent conversation session keys from persisted outputs", () => {
@@ -168,5 +168,41 @@ describe("sanitizeWorkflowDefinitionForSnapshot", () => {
       { key: "ANTHROPIC_API_KEY", value: "sk-raw-secret" },
       { key: "model_reasoning_effort", value: "high" },
     ])
+  })
+})
+
+describe("sanitizeWorkflowRunSnapshot", () => {
+  it("sanitizes top-level run params before persistence", () => {
+    const snapshot: WorkflowRunSnapshot = {
+      runId: "run-1",
+      workflowId: "workflow-1",
+      version: "v1",
+      startedAt: 1,
+      status: "completed",
+      params: {
+        apiToken: "sk-raw-secret",
+        nested: {
+          password: "plain-password",
+          note: "Authorization: Bearer raw-token at /Users/liyang/private.txt",
+        },
+      },
+      nodeResults: {},
+    }
+
+    const sanitized = sanitizeWorkflowRunSnapshot(snapshot)
+    const raw = JSON.stringify(sanitized)
+
+    expect(sanitized.params).toEqual({
+      apiToken: "[redacted]",
+      nested: {
+        password: "[redacted]",
+          note: "Authorization=[redacted] [redacted] at [path]",
+      },
+    })
+    expect(raw).not.toContain("sk-raw-secret")
+    expect(raw).not.toContain("plain-password")
+    expect(raw).not.toContain("raw-token")
+    expect(raw).not.toContain("/Users/liyang/private.txt")
+    expect(snapshot.params.apiToken).toBe("sk-raw-secret")
   })
 })

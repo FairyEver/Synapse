@@ -17,6 +17,7 @@ export function sanitizeNodeResultsForSnapshot(
 export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): WorkflowRunSnapshot {
   return {
     ...snapshot,
+    params: sanitizeSnapshotValue(snapshot.params) as WorkflowRunSnapshot["params"],
     nodeResults: sanitizeNodeResultsForSnapshot(snapshot.nodeResults),
     ...(snapshot.definition ? { definition: sanitizeWorkflowDefinitionForSnapshot(snapshot.definition) } : {}),
     ...(snapshot.error !== undefined ? { error: sanitizeError(snapshot.error) } : {}),

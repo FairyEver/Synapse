@@ -489,7 +489,13 @@ describe("bootstrap descriptors (T1.5)", () => {
 
     const result = await engine.runtimeDeps.workflowCall?.runWorkflow({
       definition: childDefinition,
-      params: {},
+      params: {
+        apiToken: "sk-child-param-secret",
+        nested: {
+          password: "plain-child-password",
+          note: "Authorization: Bearer child-raw-token at /Users/example/child-params",
+        },
+      },
       projectId: "repo-1",
       triggerSource: "workflow-call",
       abortSignal: new AbortController().signal,
@@ -502,7 +508,13 @@ describe("bootstrap descriptors (T1.5)", () => {
       runId: result?.runId,
       workflowId: "child-workflow",
       status: "completed",
-      params: {},
+      params: {
+        apiToken: "[redacted]",
+        nested: {
+          password: "[redacted]",
+          note: "Authorization=[redacted] [redacted] at [path]",
+        },
+      },
       definition: childDefinition,
       nodeResults: expect.objectContaining({
         end: expect.objectContaining({
@@ -512,6 +524,10 @@ describe("bootstrap descriptors (T1.5)", () => {
         }),
       }),
     }))
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-child-param-secret")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("plain-child-password")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("child-raw-token")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/child-params")
   })
 
   it("workflow Agent dependency converts node timeout minutes to milliseconds", async () => {
@@ -1051,12 +1067,25 @@ describe("bootstrap descriptors (T1.5)", () => {
       capabilityLogger: capabilityLogger as never,
     })
 
-    await handler("wf-1", {})
+    await handler("wf-1", {
+      apiToken: "sk-param-secret",
+      nested: {
+        password: "plain-password",
+        note: "Authorization: Bearer raw-token at /Users/example/params",
+      },
+    })
 
     await vi.waitFor(() => {
       expect(snapshotService.save).toHaveBeenCalled()
     })
     expect(snapshotService.save).toHaveBeenCalledWith(expect.objectContaining({
+      params: {
+        apiToken: "[redacted]",
+        nested: {
+          password: "[redacted]",
+          note: "Authorization=[redacted] [redacted] at [path]",
+        },
+      },
       nodeResults: {
         "end-1": expect.objectContaining({
           input: {
@@ -1067,7 +1096,11 @@ describe("bootstrap descriptors (T1.5)", () => {
       },
     }))
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-param-secret")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("plain-password")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("raw-token")
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/repo")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/params")
   })
 
   it("createRunWorkflowHandler keeps resolved node input and progress in live run status", async () => {

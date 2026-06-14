@@ -113,7 +113,13 @@ describe("workflowIpcModule", () => {
 
     const result = await harness.invoke("synapse:workflow:run", {
       id: "workflow-1",
-      params: {},
+      params: {
+        apiToken: "sk-param-secret",
+        nested: {
+          password: "plain-password",
+          note: "Authorization: Bearer raw-token at /Users/example/params",
+        },
+      },
     })
     await Promise.resolve()
 
@@ -131,6 +137,13 @@ describe("workflowIpcModule", () => {
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("prompt text")
     expect(snapshots.save).toHaveBeenCalledWith(expect.objectContaining({
+      params: {
+        apiToken: "[redacted]",
+        nested: {
+          password: "[redacted]",
+          note: "Authorization=[redacted] [redacted] at [path]",
+        },
+      },
       nodeResults: {
         "prompt-1": expect.objectContaining({
           input: {
@@ -141,7 +154,11 @@ describe("workflowIpcModule", () => {
       },
     }))
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("sk-param-secret")
+    expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("plain-password")
+    expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("raw-token")
     expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("/Users/example/repo")
+    expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("/Users/example/params")
   })
 
   it("passes triggerSource to engine.run for each IPC entry point", async () => {

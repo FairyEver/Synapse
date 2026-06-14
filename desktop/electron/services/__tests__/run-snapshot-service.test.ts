@@ -138,6 +138,32 @@ describe("RunSnapshotService", () => {
     expect(JSON.stringify(listed)).not.toContain("sk-raw-secret")
   })
 
+  it("redacts workflow params before writing snapshot files", async () => {
+    const root = await tmpDir()
+    const svc = new RunSnapshotService(root)
+    await svc.save({
+      ...snapshot("run-param-secret", 100),
+      params: {
+        apiToken: "sk-param-secret",
+        nested: {
+          password: "plain-password",
+          note: "Authorization: Bearer raw-token at /Users/liyang/private.txt",
+        },
+      },
+    })
+
+    const raw = await readFile(path.join(root, "workflow-runs", "wf", "run-param-secret.json"), "utf-8")
+    const listed = await svc.list("wf")
+
+    expect(raw).toContain("[redacted]")
+    expect(raw).toContain("[path]")
+    expect(raw).not.toContain("sk-param-secret")
+    expect(raw).not.toContain("plain-password")
+    expect(raw).not.toContain("raw-token")
+    expect(raw).not.toContain("/Users/liyang/private.txt")
+    expect(JSON.stringify(listed)).not.toContain("sk-param-secret")
+  })
+
   it("sanitizes file paths from error messages in logs", async () => {
     const root = await tmpDir()
     const wfDir = path.join(root, "workflow-runs", "wf")

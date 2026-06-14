@@ -134,7 +134,7 @@ import { WorkflowPackageService } from "../services/workflow/workflow-package-se
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
-import { sanitizeNodeResultsForSnapshot } from "../services/workflow/run-snapshot-sanitize"
+import { sanitizeNodeResultsForSnapshot, sanitizeWorkflowRunSnapshot } from "../services/workflow/run-snapshot-sanitize"
 import { agentProviderFailureFromResponse } from "../services/workflow/workflow-utils"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { sanitizeError } from "../services/error-sanitize"
@@ -481,7 +481,7 @@ export function createRunWorkflowHandler(deps: {
         const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
         runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
         if (!isWorkflowDeleted?.(id)) {
-          Promise.resolve(snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: sanitizeNodeResultsForSnapshot(event.result?.nodeResults ?? nextNodeResults), definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })).catch((err) => {
+          Promise.resolve(snapshotService.save(sanitizeWorkflowRunSnapshot({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) }))).catch((err) => {
             capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
             eventBus.emit({ domain: "workflow", type: "snapshot:failed", payload: { runId, workflowId: id, error: err instanceof Error ? err.message : String(err) }, timestamp: new Date().toISOString() }, { backpressure: "block" })
           })
@@ -516,14 +516,14 @@ export function createRunWorkflowHandler(deps: {
           timestamp: new Date().toISOString(),
         }, { backpressure: "block" })
         if (!isWorkflowDeleted?.(id)) {
-          Promise.resolve(snapshotService.save({
+          Promise.resolve(snapshotService.save(sanitizeWorkflowRunSnapshot({
             runId, workflowId: id, version: def.version,
             startedAt, endedAt, status: "failed",
             params: effectiveParams,
             nodeResults: sanitizedNodeResults,
             definition: def,
             error: "工作流引擎异常",
-          })).catch((err) => {
+          }))).catch((err) => {
             capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
           })
         }
@@ -1766,7 +1766,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           )
           const endedAt = Date.now()
           try {
-            await snapshots.save({
+            await snapshots.save(sanitizeWorkflowRunSnapshot({
               runId,
               workflowId: input.definition.id,
               version: input.definition.version,
@@ -1774,10 +1774,10 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
               endedAt,
               status: result.status,
               params: input.params,
-              nodeResults: sanitizeNodeResultsForSnapshot(result.nodeResults),
+              nodeResults: result.nodeResults,
               definition: input.definition,
               ...(workflowError ? { error: workflowError } : {}),
-            })
+            }))
           } catch (err) {
             engineLogger.warn("failed to persist nested workflow run snapshot", {
               runId,
