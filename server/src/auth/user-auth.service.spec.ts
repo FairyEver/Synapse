@@ -163,6 +163,42 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("returns login tokens when success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      passwordHash: await hashPassword("StrongPassword123!"),
+      status: "active",
+    })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const service = createService(prisma, auditLog)
+
+    try {
+      const result = await service.login({ email: "u@example.com", password: "StrongPassword123!" }, "203.0.113.24")
+
+      expect(result.accessToken).toEqual(expect.any(String))
+      expect(result.refreshToken).toEqual(expect.any(String))
+      expect(prisma.userSession.create).toHaveBeenCalledWith({
+        data: {
+          userId: "user-1",
+          refreshTokenHash: expect.any(String),
+          expiresAt: expect.any(Date),
+        },
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.login.success",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user authentication success audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("authorizes and exchanges a desktop login code with PKCE without returning user profile", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue({ id: "user-1", email: "desktop@example.com", status: "active" })
@@ -253,6 +289,102 @@ describe("UserAuthService", () => {
       targetId: "user-1",
       ipAddress: "127.0.0.1",
     })
+  })
+
+  it("returns desktop login codes when issue success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({ id: "user-1", email: "desktop@example.com", status: "active" })
+    prisma.desktopLoginCode.create.mockResolvedValue({ id: "code-1" })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const service = createService(prisma, auditLog)
+    const codeVerifier = "desktop-code-verifier-1234567890"
+    const codeChallenge = pkceChallenge(codeVerifier)
+
+    try {
+      const issued = await service.authorizeDesktopLogin({
+        userId: "user-1",
+        clientId: "synapse-desktop",
+        redirectUri: "synapse://auth/desktop/callback",
+        state: "state-1234567890",
+        codeChallenge,
+        codeChallengeMethod: "S256",
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+      })
+
+      expect(issued.code).toHaveLength(43)
+      expect(prisma.desktopLoginCode.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          codeHash: hashToken(issued.code),
+          userId: "user-1",
+          state: "state-1234567890",
+        }),
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.desktop_login.issue",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user authentication success audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it("returns desktop token pairs when exchange success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    const codeVerifier = "desktop-code-verifier-1234567890"
+    prisma.desktopLoginCode.findUnique.mockResolvedValue({
+      id: "code-1",
+      userId: "user-1",
+      codeHash: "hash",
+      clientId: "synapse-desktop",
+      redirectUri: "synapse://auth/desktop/callback",
+      state: "state-1234567890",
+      codeChallenge: pkceChallenge(codeVerifier),
+      codeChallengeMethod: "S256",
+      usedAt: null,
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      user: { id: "user-1", email: "desktop@example.com", status: "active" },
+    })
+    prisma.desktopLoginCode.updateMany.mockResolvedValue({ count: 1 })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const service = createService(prisma, auditLog)
+
+    try {
+      const result = await service.exchangeDesktopLoginToken({
+        code: "desktop-code",
+        state: "state-1234567890",
+        codeVerifier,
+        ipAddress: "127.0.0.1",
+      })
+
+      expect(result.accessToken).toEqual(expect.any(String))
+      expect(result.refreshToken).toEqual(expect.any(String))
+      expect(prisma.__tx.desktopLoginCode.updateMany).toHaveBeenCalledWith({
+        where: { id: "code-1", usedAt: null },
+        data: { usedAt: expect.any(Date) },
+      })
+      expect(prisma.__tx.userSession.create).toHaveBeenCalledWith({
+        data: {
+          userId: "user-1",
+          refreshTokenHash: expect.any(String),
+          expiresAt: expect.any(Date),
+        },
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.desktop_login.exchange.success",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user authentication success audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it("rejects desktop login code replay", async () => {
@@ -700,6 +832,50 @@ describe("UserAuthService", () => {
       targetId: "user-1",
       ipAddress: "203.0.113.42",
     })
+  })
+
+  it("returns password reset success when success audit logging fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const prisma = createPrismaMock()
+    const token = "reset-token"
+    prisma.userPasswordResetToken.findUnique.mockResolvedValue({
+      id: "reset-1",
+      tokenHash: hashToken(token),
+      userId: "user-1",
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      usedAt: null,
+      user: { id: "user-1", email: "u@example.com", status: "active" },
+    })
+    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
+    const service = createService(prisma, auditLog)
+
+    try {
+      await expect(service.resetPassword({
+        token,
+        password: "NewPassword123!",
+      }, "203.0.113.42")).resolves.toEqual({ ok: true })
+
+      expect(prisma.__tx.user.update).toHaveBeenCalledWith({
+        where: { id: "user-1" },
+        data: {
+          passwordHash: expect.any(String),
+          passwordChangedAt: expect.any(Date),
+        },
+      })
+      expect(prisma.__tx.userSession.updateMany).toHaveBeenCalledWith({
+        where: { userId: "user-1", revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.password_reset.success",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user authentication success audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it("rejects expired or reused password reset tokens", async () => {

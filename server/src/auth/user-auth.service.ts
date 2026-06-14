@@ -340,10 +340,9 @@ export class UserAuthService {
       throw error
     }
 
-    await this.auditLog?.record({
+    await this.recordUserAuthSuccessAuditSafely({
       adminEmail: record.user.email,
       action: "user.password_reset.success",
-      targetType: "user",
       targetId: record.user.id,
       ipAddress,
     })
@@ -375,10 +374,9 @@ export class UserAuthService {
       throw new UnauthorizedException("邮箱或密码错误。")
     }
     const tokens = await this.issueTokenPair(user)
-    await this.auditLog?.record({
+    await this.recordUserAuthSuccessAuditSafely({
       adminEmail: user.email,
       action: "user.login.success",
-      targetType: "user",
       targetId: user.id,
       ipAddress,
     })
@@ -433,10 +431,9 @@ export class UserAuthService {
         userAgent: input.userAgent,
       },
     })
-    await this.auditLog?.record({
+    await this.recordUserAuthSuccessAuditSafely({
       adminEmail: user.email,
       action: "user.desktop_login.issue",
-      targetType: "user",
       targetId: user.id,
       ipAddress: input.ipAddress,
     })
@@ -487,10 +484,9 @@ export class UserAuthService {
       throw error
     }
 
-    await this.auditLog?.record({
+    await this.recordUserAuthSuccessAuditSafely({
       adminEmail: record.user.email,
       action: "user.desktop_login.exchange.success",
-      targetType: "user",
       targetId: record.user.id,
       ipAddress: input.ipAddress,
     })
@@ -725,6 +721,30 @@ export class UserAuthService {
       targetId: input.targetId,
       ipAddress: input.ipAddress,
     })
+  }
+
+  private async recordUserAuthSuccessAuditSafely(input: {
+    readonly adminEmail: string
+    readonly action: string
+    readonly targetId: string
+    readonly ipAddress: string
+  }): Promise<void> {
+    try {
+      await this.auditLog?.record({
+        adminEmail: input.adminEmail,
+        action: input.action,
+        targetType: "user",
+        targetId: input.targetId,
+        ipAddress: input.ipAddress,
+      })
+    } catch (error) {
+      this.logger.warn({
+        action: input.action,
+        targetType: "user",
+        targetId: input.targetId,
+        ...safeAuditErrorDetail(error),
+      }, "Failed to record user authentication success audit log")
+    }
   }
 
   private async recordUserProfileUpdateAuditSafely(input: {
