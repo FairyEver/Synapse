@@ -855,7 +855,7 @@ describe("ProviderPanel dialog editor", () => {
     expect(toast).toHaveBeenCalledWith("导入失败")
   })
 
-  it("exports a user provider package from the row action", async () => {
+  it("confirms before exporting a provider package with secrets", async () => {
     const chooseProviderPackageExportTarget = vi.fn().mockResolvedValue({
       targetPath: "/Users/test/Custom Provider.synapse-provider.json",
     })
@@ -878,7 +878,16 @@ describe("ProviderPanel dialog editor", () => {
     await flush()
 
     await act(async () => {
-      buttonByText(document.body, "导出").click()
+      buttonByText(document.body, "导出密钥包").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("文件会包含")
+    expect(document.body.textContent).toContain("API Key")
+    expect(chooseProviderPackageExportTarget).not.toHaveBeenCalled()
+
+    await act(async () => {
+      buttonByText(document.body, "导出含密钥文件").click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -888,7 +897,7 @@ describe("ProviderPanel dialog editor", () => {
       providerId: "custom-provider",
       targetPath: "/Users/test/Custom Provider.synapse-provider.json",
     })
-    expect(toast).toHaveBeenCalledWith("已导出供应商配置")
+    expect(toast).toHaveBeenCalledWith("已导出含密钥的供应商配置")
   })
 
   it("does not show package export for the built-in provider", async () => {
@@ -905,7 +914,7 @@ describe("ProviderPanel dialog editor", () => {
     renderProviderPanel()
     await flush()
 
-    expect(document.body.textContent).not.toContain("导出")
+    expect(document.body.textContent).not.toContain("导出密钥包")
   })
 
   it("previews and imports a provider package", async () => {

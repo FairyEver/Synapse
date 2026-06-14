@@ -169,6 +169,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [packagePreview, setPackagePreview] = useState<SynapseProviderPackageImportPreview | null>(null)
   const [importingPackage, setImportingPackage] = useState(false)
   const [deletingProvider, setDeletingProvider] = useState<SynapseAgentProvider | null>(null)
+  const [exportConfirm, setExportConfirm] = useState<SynapseAgentProvider | null>(null)
   const [archiveConfirm, setArchiveConfirm] = useState<{ provider: SynapseAgentProvider; taskCount: number; workflowNodeCount: number } | null>(null)
   const [formValues, setFormValues] = useState<ProviderFormValues>(() => emptyProviderForm())
   const requestIdRef = useRef(0)
@@ -305,7 +306,13 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     }
   }, [packagePreview, refresh])
 
-  const handleExportPackage = useCallback(async (provider: SynapseAgentProvider) => {
+  const handleExportPackage = useCallback((provider: SynapseAgentProvider) => {
+    setExportConfirm(provider)
+  }, [])
+
+  const confirmExportPackage = useCallback(async () => {
+    const provider = exportConfirm
+    if (!provider) return
     try {
       const choice = await requireSynapseBridge().agent.chooseProviderPackageExportTarget({
         providerName: provider.name,
@@ -315,7 +322,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         providerId: provider.id,
         targetPath: choice.targetPath,
       })
-      toast("已导出供应商配置")
+      toast("已导出含密钥的供应商配置")
     } catch (rawError) {
       logger.error("Provider package export failed.", {
         boundary: "settings.providers.package.export",
@@ -324,8 +331,10 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         ...providerErrorDiagnostic(rawError),
       })
       toast(errorToastMessage(rawError, "导出失败"))
+    } finally {
+      setExportConfirm(null)
     }
-  }, [])
+  }, [exportConfirm])
 
   const openEditDialog = useCallback((provider: SynapseAgentProvider) => {
     setEditingProvider(provider)
@@ -462,6 +471,20 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         onOpenChange={(open) => { if (!open) setDeletingProvider(null) }}
         onDeleted={() => void refresh()}
       />
+      <AlertDialog open={Boolean(exportConfirm)} onOpenChange={(open) => { if (!open) setExportConfirm(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>导出含密钥的供应商配置</AlertDialogTitle>
+            <AlertDialogDescription>
+              文件会包含 &ldquo;{exportConfirm?.name}&rdquo; 的 API Key 和 secret env。只保存到可信位置。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmExportPackage()}>导出含密钥文件</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={Boolean(archiveConfirm)} onOpenChange={(open) => { if (!open) setArchiveConfirm(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -735,7 +758,7 @@ function ProviderRowActions({
 
   return (
     <div className="flex justify-end gap-2">
-      <ProviderTextAction onClick={() => onExport(provider)}>导出</ProviderTextAction>
+      <ProviderTextAction onClick={() => onExport(provider)}>导出密钥包</ProviderTextAction>
       <ProviderTextAction onClick={() => onEdit(provider)}>编辑</ProviderTextAction>
       <ProviderTextAction onClick={() => onArchive(provider)}>归档</ProviderTextAction>
       <ProviderTextAction onClick={() => onDelete(provider)}>删除</ProviderTextAction>
