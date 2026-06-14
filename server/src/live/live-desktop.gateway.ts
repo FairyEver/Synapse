@@ -55,6 +55,7 @@ export interface LiveBroadcastClientResult {
 const liveDesktopPath = "/api/live/desktop"
 const heartbeatIntervalMs = 20_000
 const heartbeatTimeoutMs = 45_000
+export const liveDesktopMaxPayloadBytes = 16 * 1024
 
 @Injectable()
 export class LiveDesktopGateway implements OnApplicationShutdown {
@@ -125,7 +126,10 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
   }
 
   createWebSocketServer(): WebSocketServer {
-    return new WebSocketServer({ noServer: true })
+    return new WebSocketServer({
+      noServer: true,
+      maxPayload: liveDesktopMaxPayloadBytes,
+    })
   }
 
   onApplicationShutdown(signal?: string): void {

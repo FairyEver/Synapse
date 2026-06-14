@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 import {
   createLiveDesktopGatewayForTest,
+  liveDesktopMaxPayloadBytes,
   LiveDesktopGateway,
   parseLiveDesktopMessage,
 } from "./live-desktop.gateway"
@@ -199,6 +200,17 @@ describe("parseLiveDesktopMessage", () => {
 })
 
 describe("LiveDesktopGateway", () => {
+  it("caps inbound websocket payloads before message parsing", () => {
+    const gateway = createGateway()
+    const server = gateway.createWebSocketServer() as ReturnType<LiveDesktopGateway["createWebSocketServer"]> & {
+      readonly options: { readonly maxPayload: number }
+    }
+
+    expect(server.options.maxPayload).toBe(liveDesktopMaxPayloadBytes)
+    expect(server.options.maxPayload).toBeLessThan(100 * 1024 * 1024)
+    server.close()
+  })
+
   it("registers a client after hello, sends welcome, responds to ping, and publishes events", () => {
     const socket = new FakeSocket()
     const register = vi.fn().mockReturnValue(createClient())
