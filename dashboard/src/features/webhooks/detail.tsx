@@ -33,6 +33,10 @@ import {
   type WebhookFormState,
 } from './index'
 import { WebhookUrlDialog } from './webhook-url-dialog'
+import {
+  getWebhookResetSecretDialogDescription,
+  webhookResetSecretDialogTitle,
+} from './webhook-reset-secret'
 
 type OneTimeUrlState = {
   title: string
@@ -48,6 +52,8 @@ export default function WebhookDetailPage() {
   const [deleteTarget, setDeleteTarget] = useState<DashboardWebhookDto | null>(
     null
   )
+  const [resetSecretTarget, setResetSecretTarget] =
+    useState<DashboardWebhookDto | null>(null)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
@@ -77,6 +83,7 @@ export default function WebhookDetailPage() {
   const resetSecretMutation = useMutation({
     mutationFn: (id: string) => dashboardApi.resetWebhookSecret(id),
     onSuccess: (result) => {
+      setResetSecretTarget(null)
       setOneTimeUrl({ title: '新的 Webhook URL', url: result.url })
       replaceWebhookInCache(queryClient, result.webhook)
       toast.success('已重置')
@@ -144,7 +151,7 @@ export default function WebhookDetailPage() {
                 input: { enabled: !target.enabled },
               })
             }
-            onResetSecret={(target) => resetSecretMutation.mutate(target.id)}
+            onResetSecret={setResetSecretTarget}
             onDelete={setDeleteTarget}
           />
         ) : (
@@ -182,6 +189,21 @@ export default function WebhookDetailPage() {
           url={oneTimeUrl?.url ?? ''}
           onOpenChange={(open) => {
             if (!open) setOneTimeUrl(null)
+          }}
+        />
+        <ConfirmDialog
+          open={Boolean(resetSecretTarget)}
+          onOpenChange={(open) => {
+            if (!open) setResetSecretTarget(null)
+          }}
+          title={webhookResetSecretDialogTitle}
+          desc={getWebhookResetSecretDialogDescription(resetSecretTarget)}
+          cancelBtnText='取消'
+          confirmText='重置'
+          destructive
+          isLoading={resetSecretMutation.isPending}
+          handleConfirm={() => {
+            if (resetSecretTarget) resetSecretMutation.mutate(resetSecretTarget.id)
           }}
         />
         <ConfirmDialog
