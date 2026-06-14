@@ -182,4 +182,54 @@ describe("GitSyncStatusCenter", () => {
     expect(onRetry).not.toHaveBeenCalled()
     expect(onOpenSettings).not.toHaveBeenCalled()
   })
+
+  it("renders a bounded pending item list", async () => {
+    const pendingItems = Array.from({ length: 120 }, (_, index) => ({
+      id: index + 1,
+      commitHash: null,
+      action: "update",
+      targetId: `rule-${index + 1}`,
+      title: `Rule ${index + 1}`,
+      createdAt: "2026-06-14T00:00:00.000Z",
+      retryCount: 0,
+      lastError: null,
+      lastErrorCategory: null,
+      lastAttemptAt: null,
+      nextRetryAt: null,
+    }))
+    const container = render(
+      <GitSyncStatusCenter
+        repository={{
+          uuid: "repo-1",
+          name: "Team Repo",
+          localPath: "/repo",
+          contentDirs: {},
+        }}
+        status="pending"
+        pendingCount={120}
+        snapshot={{
+          repositoryUuid: "repo-1",
+          status: "pending",
+          operation: null,
+          phase: "completed",
+          pendingCount: 120,
+          pendingItems,
+          message: "120 条变更等待同步",
+          retryCount: 0,
+          canRetryNow: true,
+          primaryAction: "retry",
+        }}
+        onRetry={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      getButtonByName(container, /9\+ 条待同步/).click()
+    })
+
+    expect(container.textContent).toContain("Rule 100")
+    expect(container.textContent).not.toContain("Rule 101")
+    expect(container.textContent).toContain("还有 20 项")
+  })
 })

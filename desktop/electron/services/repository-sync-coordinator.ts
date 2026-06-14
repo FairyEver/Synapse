@@ -402,12 +402,15 @@ class RepositorySyncCoordinator {
       return createEmptySnapshot(repositoryUuid)
     }
 
-    const firstError = pending.items.find((item) => item.lastErrorCategory || item.lastError)
-    const retryCount = pending.items.reduce((total, item) => total + item.retryCount, 0)
-    const nextRetryAt = pending.items
-      .map((item) => item.nextRetryAt)
-      .filter((value): value is string => Boolean(value))
-      .sort()[0] ?? null
+    const firstError = pending.firstErrorItem
+      ?? pending.items.find((item) => item.lastErrorCategory || item.lastError)
+    const retryCount = pending.retryCount
+      ?? pending.items.reduce((total, item) => total + item.retryCount, 0)
+    const nextRetryAt = pending.nextRetryAt
+      ?? pending.items
+        .map((item) => item.nextRetryAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()[0] ?? null
     const failureCategory = firstError?.lastErrorCategory ?? null
     const failureSnapshotState = failureCategory
       ? this.getPersistedFailureSnapshotState(failureCategory)
@@ -423,7 +426,7 @@ class RepositorySyncCoordinator {
       message: firstError?.lastError ?? `${pending.count} 条变更等待同步`,
       detail: failureCategory ? undefined : firstError?.title ?? undefined,
       failureCategory,
-      lastAttemptAt: pending.items.find((item) => item.lastAttemptAt)?.lastAttemptAt ?? null,
+      lastAttemptAt: pending.lastAttemptAt ?? pending.items.find((item) => item.lastAttemptAt)?.lastAttemptAt ?? null,
       nextRetryAt,
       retryCount,
       canRetryNow: true,
@@ -497,7 +500,7 @@ class RepositorySyncCoordinator {
       alreadyExclusive?: boolean
     } = {},
   ): Promise<boolean> {
-    const pending = await pendingPushesService.readState(repository)
+    const pending = await pendingPushesService.readState(repository, { limit: null })
 
     if (pending.count === 0) {
       this.emitSnapshot(createEmptySnapshot(repository.uuid))

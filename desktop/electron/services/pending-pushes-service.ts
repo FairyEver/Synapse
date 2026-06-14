@@ -13,6 +13,11 @@ type PendingPushInsertParams = {
   targetId: string
   title: string | null
 }
+type PendingPushReadOptions = {
+  readonly limit?: number | null
+}
+
+const DEFAULT_PENDING_PUSH_ITEM_LIMIT = 100
 
 function getTargetIds(ids?: number[]): number[] | null {
   if (!ids || ids.length === 0) {
@@ -60,7 +65,10 @@ class PendingPushesService {
     return repositoryState.status === "ready" && repositoryState.isGitRepository
   }
 
-  async readState(repository: SynapseRepositoryConfig): Promise<SynapsePendingPushState> {
+  async readState(
+    repository: SynapseRepositoryConfig,
+    options: PendingPushReadOptions = {},
+  ): Promise<SynapsePendingPushState> {
     const t = Date.now()
     logger.info("readState: starting.", { repositoryUuid: repository.uuid })
     if (!(await this.canUsePendingPushes(repository))) {
@@ -72,7 +80,7 @@ class PendingPushesService {
     }
 
     const result = await withRepositoryCacheDatabase(repository.uuid, (database) => {
-      return this.readStateRows(database)
+      return this.readStateRows(database, options)
     }, {
       includePendingPushes: true,
     })
@@ -243,17 +251,63 @@ class PendingPushesService {
     return totalCount
   }
 
-  private readStateRows(database: DatabaseSync): SynapsePendingPushState {
+  private readStateRows(database: DatabaseSync, options: PendingPushReadOptions = {}): SynapsePendingPushState {
+    const countRow = database.prepare("SELECT COUNT(*) AS count FROM pending_pushes").get() as { count?: unknown } | undefined
+    const count = typeof countRow?.count === "number" ? countRow.count : 0
+    const limit = options.limit === null ? null : Math.max(1, options.limit ?? DEFAULT_PENDING_PUSH_ITEM_LIMIT)
     const rows = database.prepare(`
       SELECT *
       FROM pending_pushes
       ORDER BY created_at ASC, id ASC
-    `).all() as Record<string, unknown>[]
+      ${limit === null ? "" : "LIMIT ?"}
+    `).all(...(limit === null ? [] : [limit])) as Record<string, unknown>[]
     const items = rows
       .map(mapPendingPushRow)
       .filter((item): item is SynapsePendingPushEntry => item !== null)
+    const firstErrorItem = this.readFirstErrorItem(database)
+    const summary = this.readSummary(database)
 
-    return { count: items.length, items }
+    return {
+      count,
+      items,
+      itemsTruncated: items.length < count,
+      firstErrorItem,
+      lastAttemptAt: summary.lastAttemptAt,
+      nextRetryAt: summary.nextRetryAt,
+      retryCount: summary.retryCount,
+    }
+  }
+
+  private readFirstErrorItem(database: DatabaseSync): SynapsePendingPushEntry | null {
+    const row = database.prepare(`
+      SELECT *
+      FROM pending_pushes
+      WHERE last_error IS NOT NULL OR last_error_category IS NOT NULL
+      ORDER BY created_at ASC, id ASC
+      LIMIT 1
+    `).get() as Record<string, unknown> | undefined
+
+    return row ? mapPendingPushRow(row) : null
+  }
+
+  private readSummary(database: DatabaseSync): {
+    readonly lastAttemptAt: string | null
+    readonly nextRetryAt: string | null
+    readonly retryCount: number
+  } {
+    const row = database.prepare(`
+      SELECT
+        COALESCE(SUM(retry_count), 0) AS retry_count,
+        MIN(next_retry_at) AS next_retry_at,
+        MAX(last_attempt_at) AS last_attempt_at
+      FROM pending_pushes
+    `).get() as Record<string, unknown> | undefined
+
+    return {
+      retryCount: typeof row?.retry_count === "number" ? row.retry_count : 0,
+      nextRetryAt: typeof row?.next_retry_at === "string" ? row.next_retry_at : null,
+      lastAttemptAt: typeof row?.last_attempt_at === "string" ? row.last_attempt_at : null,
+    }
   }
 }
 

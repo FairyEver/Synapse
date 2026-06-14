@@ -26,6 +26,7 @@ const pendingActionLabels: Record<string, string> = {
   compaction: "整理",
   gc: "清理",
 }
+const PENDING_ITEMS_RENDER_LIMIT = 100
 
 function formatPendingAction(entry: SynapsePendingPushEntry): string {
   return pendingActionLabels[entry.action] ?? entry.action
@@ -77,6 +78,8 @@ function GitSyncStatusCenter({
   const message = getStatusMessage(snapshot, status, pendingCount)
   const canRetry = snapshot?.canRetryNow === true || status === "pending" || status === "offline"
   const pendingItems = snapshot?.pendingItems ?? []
+  const visiblePendingItems = pendingItems.slice(0, PENDING_ITEMS_RENDER_LIMIT)
+  const hiddenPendingCount = Math.max(0, pendingCount - visiblePendingItems.length)
 
   return (
     <Popover data-track="git-sync-status-center">
@@ -105,12 +108,12 @@ function GitSyncStatusCenter({
             </p>
           ) : null}
 
-          {pendingItems.length > 0 ? (
+          {visiblePendingItems.length > 0 ? (
             <>
               <Separator />
               <ScrollArea className="max-h-44">
                 <div className="flex flex-col gap-2 pr-2">
-                  {pendingItems.map((item) => (
+                  {visiblePendingItems.map((item) => (
                     <div key={item.id} className="flex flex-col gap-0.5 text-sm">
                       <span className="truncate">{item.title ?? item.targetId}</span>
                       <span className="text-xs text-muted-foreground">
@@ -118,6 +121,9 @@ function GitSyncStatusCenter({
                       </span>
                     </div>
                   ))}
+                  {hiddenPendingCount > 0 ? (
+                    <div className="text-xs text-muted-foreground">还有 {hiddenPendingCount} 项</div>
+                  ) : null}
                 </div>
               </ScrollArea>
             </>

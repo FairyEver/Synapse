@@ -322,7 +322,7 @@ class ContentSubmissionService {
       return
     }
 
-    const pendingState = await pendingPushesService.readState(repository)
+    const pendingState = await pendingPushesService.readState(repository, { limit: null })
     const attemptedPendingPushIds = pendingState.items.map((item) => item.id)
 
     if (pendingState.count === 0) {

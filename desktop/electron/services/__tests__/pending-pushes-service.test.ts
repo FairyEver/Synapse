@@ -167,4 +167,26 @@ describe("pendingPushesService", { timeout: 15_000 }, () => {
       }),
     ])
   })
+
+  it("returns a bounded state sample by default and supports full reads for push execution", async () => {
+    const { pendingPushesService } = await import("../pending-pushes-service")
+    for (let index = 0; index < 105; index += 1) {
+      await pendingPushesService.enqueue(repository, {
+        action: "update",
+        commitHash: `commit-${index}`,
+        targetId: `rule-${index}`,
+        title: `Rule ${index}`,
+      })
+    }
+
+    const sampled = await pendingPushesService.readState(repository)
+    const full = await pendingPushesService.readState(repository, { limit: null })
+
+    expect(sampled.count).toBe(105)
+    expect(sampled.items).toHaveLength(100)
+    expect(sampled.itemsTruncated).toBe(true)
+    expect(full.count).toBe(105)
+    expect(full.items).toHaveLength(105)
+    expect(full.itemsTruncated).toBe(false)
+  })
 })

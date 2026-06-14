@@ -155,6 +155,11 @@ export type SynapseRepositorySyncSnapshotUpdatedEvent = {
 export type SynapsePendingPushState = {
   count: number
   items: SynapsePendingPushEntry[]
+  itemsTruncated?: boolean
+  firstErrorItem?: SynapsePendingPushEntry | null
+  lastAttemptAt?: string | null
+  nextRetryAt?: string | null
+  retryCount?: number
 }
 
 export type SynapsePendingPushUpdatedEvent = {
