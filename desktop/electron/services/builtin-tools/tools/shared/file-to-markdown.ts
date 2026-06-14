@@ -2,7 +2,11 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { FileConversionError, type FileConversionResult } from "../../../file-conversion"
-import { resolveUniqueMarkdownOutputBundle, writeMarkdownOutputBundle } from "../../../tools/file-conversion-output"
+import {
+  type MarkdownOutputBundle,
+  resolveUniqueMarkdownOutputBundle,
+  writeMarkdownOutputBundle,
+} from "../../../tools/file-conversion-output"
 import { BuiltinToolError } from "../../errors"
 
 export interface FileToMarkdownBaseInput {
@@ -35,6 +39,7 @@ export function assertExtension(inputPath: string, extension: string): void {
 export async function outputFromConversionResult(
   input: FileToMarkdownBaseInput,
   result: FileConversionResult,
+  options: { readonly outputBundle?: MarkdownOutputBundle } = {},
 ): Promise<MarkdownToolOutput> {
   if (input.outputMode !== "write-file") {
     return mapConversionResult(result)
@@ -51,7 +56,8 @@ export async function outputFromConversionResult(
       throw new BuiltinToolError("invalid_input", "outputDirectory is required when outputMode is write-file.")
     }
 
-    const outputBundle = await resolveUniqueMarkdownOutputBundle(input.outputDirectory, input.inputPath, new Set())
+    const outputBundle = options.outputBundle
+      ?? await resolveUniqueMarkdownOutputBundle(input.outputDirectory, input.inputPath, new Set())
     await writeMarkdownOutputBundle(outputBundle, result.markdown, result.assets ?? [])
     return { ...mapConversionResult(result), outputPath: outputBundle.markdownPath }
   } catch (error) {
