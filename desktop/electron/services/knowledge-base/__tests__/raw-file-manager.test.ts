@@ -1,4 +1,4 @@
-import { mkdir, readFile, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import { lstat, mkdir, readFile, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -34,6 +34,28 @@ describe("KnowledgeBaseRawFileManager", () => {
 
     expect(rootEntries.map((entry) => entry.name)).toEqual(["子目录", "brief.md"])
     expect(childEntries.map((entry) => entry.name)).toEqual([".gitkeep"])
+  })
+
+  it("rejects Windows-incompatible folder names before creating raw directories", async () => {
+    const rawRoot = await tempDir()
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    for (const name of ["CON", "con.txt", "AUX", "COM1", "LPT9", "bad:name", "bad?name", "tail.", "tail "]) {
+      await expect(manager.createFolder(rawRoot, "", name)).rejects.toThrow("名称不可用。")
+      await expect(lstat(path.join(rawRoot, name))).rejects.toMatchObject({ code: "ENOENT" })
+    }
+  })
+
+  it("rejects Windows-incompatible rename targets without moving the raw entry", async () => {
+    const rawRoot = await tempDir()
+    await writeFile(path.join(rawRoot, "note.md"), "note\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    for (const name of ["NUL", "PRN.txt", "bad|name", "bad<name", "tail.", "tail "]) {
+      await expect(manager.renameEntry(rawRoot, "note.md", name)).rejects.toThrow("名称不可用。")
+      await expect(readFile(path.join(rawRoot, "note.md"), "utf8")).resolves.toBe("note\n")
+      await expect(lstat(path.join(rawRoot, name))).rejects.toMatchObject({ code: "ENOENT" })
+    }
   })
 
   it("logs skipped uploads without raw absolute paths", async () => {

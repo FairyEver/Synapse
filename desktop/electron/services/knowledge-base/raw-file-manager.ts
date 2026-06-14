@@ -10,6 +10,9 @@ import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 type TrashItem = (targetPath: string) => Promise<void>
 
+const WINDOWS_RESERVED_ENTRY_BASENAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
+const WINDOWS_UNSAFE_ENTRY_CHAR_PATTERN = /[<>:"|?*\u0000-\u001F]/u
+
 export interface RawFileManagerDeps {
   readonly trashItem: TrashItem
 }
@@ -378,7 +381,13 @@ function isRootInternalRawFile(relativePath: string): boolean {
 
 function validateEntryName(name: string): void {
   const trimmed = name.trim()
-  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) {
+  if (!trimmed
+    || trimmed === "."
+    || trimmed === ".."
+    || /[\\/]/.test(trimmed)
+    || WINDOWS_UNSAFE_ENTRY_CHAR_PATTERN.test(trimmed)
+    || /[. ]$/u.test(name)
+    || WINDOWS_RESERVED_ENTRY_BASENAME_PATTERN.test(trimmed)) {
     throw new Error("名称不可用。")
   }
 }
