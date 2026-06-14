@@ -180,6 +180,61 @@ describe("BackupService", () => {
     ])
   })
 
+  it("lists backups across paginated COS results", async () => {
+    const logger = { error: vi.fn() }
+    const getBucket = vi.fn((options, callback) => {
+      if (options.Marker === "next") {
+        callback(null, {
+          Contents: [
+            {
+              Key: "backups/page-b.tar.gz",
+              Size: "4096",
+              LastModified: "2026-05-24T00:00:00.000Z",
+            },
+          ],
+          IsTruncated: "false",
+        })
+        return
+      }
+      callback(null, {
+        Contents: [
+          {
+            Key: "backups/page-a.tar.gz",
+            Size: "2048",
+            LastModified: "2026-05-23T00:00:00.000Z",
+          },
+        ],
+        IsTruncated: "true",
+        NextMarker: "next",
+      })
+    })
+    const service = createBackupService({ getBucket }, logger)
+
+    await expect(service.listBackups()).resolves.toEqual([
+      {
+        filename: "page-a.tar.gz",
+        size: 2048,
+        createdAt: "2026-05-23T00:00:00.000Z",
+      },
+      {
+        filename: "page-b.tar.gz",
+        size: 4096,
+        createdAt: "2026-05-24T00:00:00.000Z",
+      },
+    ])
+    expect(getBucket).toHaveBeenCalledTimes(2)
+    expect(getBucket).toHaveBeenNthCalledWith(
+      2,
+      {
+        Bucket: "bucket",
+        Region: "ap-guangzhou",
+        Prefix: "backups/",
+        Marker: "next",
+      },
+      expect.any(Function),
+    )
+  })
+
   it("propagates COS list failures instead of returning an empty list", async () => {
     const error = new Error("COS unavailable")
     const logger = { error: vi.fn() }
@@ -262,6 +317,53 @@ describe("BackupService", () => {
       },
       ipAddress: "system",
     })
+  })
+
+  it("cleans expired backups across paginated COS results", async () => {
+    const deleteObject = vi.fn((_options, callback) => callback(null))
+    const getBucket = vi.fn((options, callback) => {
+      if (options.Marker === "next") {
+        callback(null, {
+          Contents: [
+            {
+              Key: "backups/expired-b.tar.gz",
+              Size: "1",
+              LastModified: "2026-04-02T00:00:00.000Z",
+            },
+          ],
+          IsTruncated: "false",
+        })
+        return
+      }
+      callback(null, {
+        Contents: [
+          {
+            Key: "backups/expired-a.tar.gz",
+            Size: "1",
+            LastModified: "2026-04-01T00:00:00.000Z",
+          },
+        ],
+        IsTruncated: "true",
+        NextMarker: "next",
+      })
+    })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const service = createBackupService({ deleteObject, getBucket }, logger, auditLog)
+
+    await (service as unknown as { cleanExpiredBackups(): Promise<void> }).cleanExpiredBackups()
+
+    expect(getBucket).toHaveBeenCalledTimes(2)
+    expect(deleteObject).toHaveBeenCalledTimes(2)
+    expect(deleteObject).toHaveBeenNthCalledWith(
+      2,
+      {
+        Bucket: "bucket",
+        Region: "ap-guangzhou",
+        Key: "backups/expired-b.tar.gz",
+      },
+      expect.any(Function),
+    )
   })
 
   it("records failed cleanup scans in audit logs", async () => {

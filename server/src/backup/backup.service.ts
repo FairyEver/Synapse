@@ -216,29 +216,47 @@ export class BackupService {
     if (!this.cos) return []
 
     try {
-      return await new Promise((resolve, reject) => {
-        this.cos!.getBucket(
-          {
-            Bucket: this.bucket,
-            Region: this.region,
-            Prefix: this.prefix,
-          },
-          (err, data) => {
-            if (err) {
-              reject(err)
-              return
-            }
-            const items: BackupItem[] = (data.Contents ?? [])
-              .filter((obj) => obj.Key !== this.prefix)
-              .map((obj) => ({
-                filename: obj.Key.replace(this.prefix, ""),
-                size: Number(obj.Size),
-                createdAt: obj.LastModified,
-              }))
-            resolve(items)
-          },
-        )
-      })
+      const items: BackupItem[] = []
+      let marker: string | undefined
+
+      do {
+        const page = await new Promise<{
+          readonly Contents?: Array<{
+            readonly Key: string
+            readonly Size: string | number
+            readonly LastModified: string
+          }>
+          readonly IsTruncated?: string | boolean
+          readonly NextMarker?: string
+        }>((resolve, reject) => {
+          this.cos!.getBucket(
+            {
+              Bucket: this.bucket,
+              Region: this.region,
+              Prefix: this.prefix,
+              ...(marker ? { Marker: marker } : {}),
+            },
+            (err, data) => {
+              if (err) reject(err)
+              else resolve(data)
+            },
+          )
+        })
+
+        for (const obj of page.Contents ?? []) {
+          if (obj.Key === this.prefix) continue
+          items.push({
+            filename: obj.Key.replace(this.prefix, ""),
+            size: Number(obj.Size),
+            createdAt: obj.LastModified,
+          })
+        }
+
+        marker = page.NextMarker
+        if (page.IsTruncated !== true && page.IsTruncated !== "true") marker = undefined
+      } while (marker)
+
+      return items
     } catch (error) {
       const message = formatAuditError(error)
       this.logger.error({ error: message }, "Failed to list backups")
