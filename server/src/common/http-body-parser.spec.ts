@@ -12,10 +12,23 @@ type SupertestChain = {
 
 const request = require("supertest") as (server: unknown) => { readonly post: (path: string) => SupertestChain }
 
+let authLoginCalls = 0
+
 @Controller()
 class BodyParserTestController {
   @Post("/json")
   receiveJson(@Body() body: { readonly value?: string }) {
+    return { size: body.value?.length ?? 0 }
+  }
+
+  @Post("/api/auth/login")
+  receiveAuthLogin(@Body() body: { readonly value?: string }) {
+    authLoginCalls++
+    return { size: body.value?.length ?? 0 }
+  }
+
+  @Post("/api/content-store/drafts")
+  receiveContentStoreDraft(@Body() body: { readonly value?: string }) {
     return { size: body.value?.length ?? 0 }
   }
 }
@@ -27,6 +40,7 @@ describe("HTTP body parser configuration", () => {
   let app: NestExpressApplication
 
   beforeEach(async () => {
+    authLoginCalls = 0
     const moduleRef = await Test.createTestingModule({
       imports: [BodyParserTestModule],
     }).compile()
@@ -43,6 +57,30 @@ describe("HTTP body parser configuration", () => {
     const value = "x".repeat(160 * 1024)
     const response = await request(app.getHttpServer())
       .post("/json")
+      .set("content-type", "application/json")
+      .send({ value })
+      .expect(201)
+
+    expect(response.body).toEqual({ size: value.length })
+  })
+
+  it("rejects large public auth JSON before controller handling", async () => {
+    const value = "x".repeat(2 * 1024 * 1024)
+
+    await request(app.getHttpServer())
+      .post("/api/auth/login")
+      .set("content-type", "application/json")
+      .send({ value })
+      .expect(413)
+
+    expect(authLoginCalls).toBe(0)
+  })
+
+  it("keeps large JSON enabled for content store draft uploads", async () => {
+    const value = "x".repeat(2 * 1024 * 1024)
+
+    const response = await request(app.getHttpServer())
+      .post("/api/content-store/drafts")
       .set("content-type", "application/json")
       .send({ value })
       .expect(201)
