@@ -189,4 +189,29 @@ describe("LiveClientRegistry", () => {
       disconnectReason: "socket_close",
     })
   })
+
+  it("prunes offline clients after the retention window", () => {
+    const registry = LiveClientRegistry.withOptions({ offlineRetentionMs: 60_000 })
+    registry.register({
+      userId: "user-1",
+      clientInstanceId: "client-a",
+      connectionId: "conn-a",
+      appVersion: "0.2.253",
+      platform: "darwin-arm64",
+      deviceName: "MacBook",
+      now: new Date("2026-06-06T10:00:00.000Z"),
+    })
+
+    registry.markDisconnected({
+      connectionId: "conn-a",
+      now: new Date("2026-06-06T10:02:00.000Z"),
+      reason: "socket_close",
+    })
+
+    registry.markStaleClients(new Date("2026-06-06T10:02:59.000Z"))
+    expect(registry.listByUser("user-1")).toHaveLength(1)
+
+    registry.markStaleClients(new Date("2026-06-06T10:03:01.000Z"))
+    expect(registry.listByUser("user-1")).toEqual([])
+  })
 })

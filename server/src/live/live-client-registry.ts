@@ -3,6 +3,7 @@ import type { LiveClientDisconnectReason, LiveClientInstance } from "./live.type
 
 export interface LiveClientRegistryOptions {
   readonly heartbeatTimeoutMs?: number
+  readonly offlineRetentionMs?: number
   readonly staleGraceMs?: number
 }
 
@@ -27,6 +28,7 @@ interface MarkDisconnectedInput {
 export class LiveClientRegistry {
   private readonly clients = new Map<string, LiveClientInstance>()
   private heartbeatTimeoutMs = 45_000
+  private offlineRetentionMs = 60 * 60_000
   private staleGraceMs = 45_000
 
   static withOptions(options: LiveClientRegistryOptions): LiveClientRegistry {
@@ -37,6 +39,7 @@ export class LiveClientRegistry {
 
   private configure(options: LiveClientRegistryOptions): void {
     this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 45_000
+    this.offlineRetentionMs = options.offlineRetentionMs ?? 60 * 60_000
     this.staleGraceMs = options.staleGraceMs ?? 45_000
   }
 
@@ -102,7 +105,14 @@ export class LiveClientRegistry {
     const changedClients: LiveClientInstance[] = []
 
     for (const [key, client] of this.clients) {
-      if (client.status === "offline" || !client.lastSeenAt) {
+      if (client.status === "offline") {
+        if (this.isOfflineExpired(client, now)) {
+          this.clients.delete(key)
+        }
+        continue
+      }
+
+      if (!client.lastSeenAt) {
         continue
       }
 
@@ -172,5 +182,12 @@ export class LiveClientRegistry {
 
   private createKey(userId: string, clientInstanceId: string): string {
     return `${userId}:${clientInstanceId}`
+  }
+
+  private isOfflineExpired(client: LiveClientInstance, now: Date): boolean {
+    const observedAt = client.disconnectedAt ?? client.lastSeenAt
+    if (!observedAt) return false
+    const observedTime = new Date(observedAt).getTime()
+    return Number.isFinite(observedTime) && now.getTime() - observedTime > this.offlineRetentionMs
   }
 }
