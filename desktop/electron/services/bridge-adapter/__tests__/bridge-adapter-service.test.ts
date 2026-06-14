@@ -310,9 +310,73 @@ describe("BridgeAdapterService", () => {
     expect(message.card.title).toBe("Answer required")
     expect(message.card.body).toContain("Pick one: 你最想学哪门编程语言？")
     expect(message.card.body).toContain("- Python: AI/数据科学")
-    expect(message.card.actions).toEqual([{ label: "Skip", action: "perm:question-1:deny" }])
+    expect(message.card.actions).toEqual([
+      { label: "Submit answer", action: "question:question-1:answer" },
+      { label: "Skip", action: "perm:question-1:deny" },
+    ])
     expect(JSON.stringify(message)).not.toContain("Permission required")
     expect(JSON.stringify(message)).not.toContain("Allow")
+    ws.close()
+    await service.stop()
+  })
+
+  it("submits AskUserQuestion answers from bridge card actions", async () => {
+    const agent = new FakeAgentRuntime()
+    const { service, port } = await startBridge(agent)
+    const ws = await registeredBridge(port, "tok", ["text", "card"])
+
+    ws.send(JSON.stringify({
+      type: "card_action",
+      session_key: "bridge:s1",
+      action: "question:question-1:answer",
+      updated_input: {
+        answers: {
+          "选一个？": "A",
+        },
+      },
+      reply_ctx: "ctx",
+      project: "project-1",
+    }))
+
+    await expectEventually(() => agent.permissions.length, 1)
+    expect(agent.permissions[0]).toEqual(expect.objectContaining({
+      requestId: "question-1",
+      behavior: "allow",
+      actor: { kind: "user", id: "bridge:bridge" },
+      updatedInput: {
+        answers: {
+          "选一个？": "A",
+        },
+      },
+    }))
+    ws.close()
+    await service.stop()
+  })
+
+  it("rejects AskUserQuestion answer actions without answers", async () => {
+    const agent = new FakeAgentRuntime()
+    const { service, port } = await startBridge(agent)
+    const ws = await registeredBridge(port, "tok", ["text", "card"])
+
+    ws.send(JSON.stringify({
+      type: "card_action",
+      session_key: "bridge:s1",
+      action: "question:question-1:answer",
+      updated_input: {},
+      reply_ctx: "ctx",
+      project: "project-1",
+    }))
+
+    await expect(readJson(ws)).resolves.toEqual(expect.objectContaining({
+      type: "error",
+      session_key: "bridge:s1",
+      reply_ctx: "ctx",
+      error: {
+        code: "invalid_card_action",
+        message: "question answers are required",
+      },
+    }))
+    expect(agent.permissions).toEqual([])
     ws.close()
     await service.stop()
   })

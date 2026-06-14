@@ -10,6 +10,7 @@ export const BRIDGE_ATTACHMENT_MAX_COUNT = 4
 export const BRIDGE_ATTACHMENT_DATA_MAX_CHARS = 256 * 1024
 export const BRIDGE_ATTACHMENT_NAME_MAX_CHARS = 255
 export const BRIDGE_ATTACHMENT_MIME_TYPE_MAX_CHARS = 128
+export const BRIDGE_CARD_ACTION_UPDATED_INPUT_MAX_BYTES = 64 * 1024
 
 export const bridgeRegisterSchema = z.object({
   type: z.literal("register"),
@@ -48,6 +49,10 @@ export const bridgeCardActionSchema = z.object({
   type: z.literal("card_action"),
   session_key: z.string().trim().min(1),
   action: z.string().trim().min(1),
+  updated_input: z.record(z.string(), z.unknown()).optional().refine(
+    (value) => value === undefined || jsonByteLength(value) <= BRIDGE_CARD_ACTION_UPDATED_INPUT_MAX_BYTES,
+    { message: "updated_input is too large" },
+  ),
   reply_ctx: z.unknown(),
   project: z.string().trim().min(1).optional(),
 })

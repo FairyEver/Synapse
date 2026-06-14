@@ -477,7 +477,8 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     }
     const action = parsed.value
     const permission = parsePermissionAction(action.action)
-    if (!permission) {
+    const questionAnswer = parseQuestionAnswerAction(action.action)
+    if (!permission && !questionAnswer) {
       this.sendProtocolError(
         adapter,
         "unsupported_card_action",
@@ -489,6 +490,34 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     }
     try {
       const { project, agent } = await this.resolveProjectAgent(action.project)
+      if (questionAnswer) {
+        const answers = recordValue(action.updated_input?.answers)
+        if (!answers || Object.keys(answers).length === 0) {
+          this.sendProtocolError(
+            adapter,
+            "invalid_card_action",
+            "question answers are required",
+            action.session_key,
+            action.reply_ctx,
+          )
+          return
+        }
+        await agent.respondPermission({
+          requestId: questionAnswer.requestId,
+          behavior: "allow",
+          actor: { kind: "user", id: `bridge:${adapter.platform}` },
+          sessionKey: action.session_key,
+          updatedInput: action.updated_input,
+        })
+        this.recordAdapterAudit("allowed", adapter.platform, "card_action", {
+          projectId: project.projectId,
+          sessionKey: action.session_key,
+          requestId: questionAnswer.requestId,
+          behavior: "allow",
+        })
+        return
+      }
+      if (!permission) return
       await agent.respondPermission({
         requestId: permission.requestId,
         behavior: permission.behavior,
@@ -502,6 +531,8 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         behavior: permission.behavior,
       })
     } catch (error) {
+      const requestId = permission?.requestId ?? questionAnswer?.requestId ?? ""
+      const behavior = permission?.behavior ?? "allow"
       this.sendProtocolError(
         adapter,
         "permission_response_failed",
@@ -512,8 +543,8 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       this.deps.logger?.warn("Bridge permission response failed.", {
         platform: adapter.platform,
         sessionKey: action.session_key,
-        requestId: permission.requestId,
-        behavior: permission.behavior,
+        requestId,
+        behavior,
         ...errorDiagnostic(error),
       })
     }
@@ -944,6 +975,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         title: "Answer required",
         body,
         actions: [
+          { label: "Submit answer", action: `question:${event.requestId}:answer` },
           { label: "Skip", action: `perm:${event.requestId}:deny` },
         ],
       },
@@ -1157,6 +1189,20 @@ function parsePermissionAction(action: string):
   const match = /^perm:(.+):(allow|deny)$/.exec(action)
   if (!match?.[1] || !match[2]) return null
   return { requestId: match[1], behavior: match[2] as "allow" | "deny" }
+}
+
+function parseQuestionAnswerAction(action: string):
+  | { readonly requestId: string }
+  | null {
+  const match = /^question:(.+):answer$/.exec(action)
+  if (!match?.[1]) return null
+  return { requestId: match[1] }
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
 }
 
 function isAskUserQuestionEvent(event: Extract<AgentEvent, { type: "permissionRequest" }>): boolean {
