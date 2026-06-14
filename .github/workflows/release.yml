@@ -182,11 +182,17 @@ jobs:
           find ../cdn-release -maxdepth 2 -type f | sort
 
       - name: Install COSCLI
+        env:
+          COSCLI_SHA256: 7165f2ae16c5f7ac495864c963ca574a76e04ec72680d7bc8a8eee3234d8cf91
+          COSCLI_VERSION: v1.0.8
         run: |
+          set -euo pipefail
+          COSCLI_NAME="coscli-${COSCLI_VERSION}-linux-amd64"
           curl --fail --silent --show-error --location \
-            --output "$RUNNER_TEMP/coscli" \
-            https://cosbrowser.cloud.tencent.com/software/coscli/coscli-linux-amd64
-          chmod 755 "$RUNNER_TEMP/coscli"
+            --output "$RUNNER_TEMP/$COSCLI_NAME" \
+            "https://github.com/tencentyun/coscli/releases/download/${COSCLI_VERSION}/${COSCLI_NAME}"
+          printf '%s  %s\n' "$COSCLI_SHA256" "$RUNNER_TEMP/$COSCLI_NAME" | sha256sum --check -
+          install -m 0755 "$RUNNER_TEMP/$COSCLI_NAME" "$RUNNER_TEMP/coscli"
           "$RUNNER_TEMP/coscli" --version
 
       - name: Upload release artifacts to COS
