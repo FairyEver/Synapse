@@ -27,6 +27,9 @@ const FIELD_MESSAGES: Record<string, string> = {
   variables: "请检查变量绑定。",
   url: "URL 不能为空。",
   script: "脚本不能为空。",
+  additionalWritableDirs: "可写目录不能为空。",
+  images: "图片路径不能为空。",
+  configOverrides: "配置覆盖项 key 不能重复或为空。",
 }
 
 export function buildWorkflowValidationDisplayItems(

@@ -506,6 +506,37 @@ describe("CodexNodePanel", () => {
     }))
   })
 
+  it("shows validation errors for advanced fields", () => {
+    render(
+      <CodexNodePanel
+        config={{
+          ...defaultCodexNodeConfig,
+          prompt: "Run",
+          configOverrides: [
+            { key: "model_reasoning_effort", value: "high" },
+            { key: "model_reasoning_effort", value: "low" },
+          ],
+        }}
+        onChange={vi.fn()}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+        validationItems={[
+          {
+            id: "node:codex-1:0",
+            summary: "配置覆盖项 key 不能重复或为空。",
+            location: "Code X",
+            nodeId: "codex-1",
+            fieldKey: "configOverrides",
+            type: "invalid_config",
+          },
+        ]}
+      />,
+    )
+
+    expect(getByText("配置覆盖项 key 不能重复或为空。")).toBeTruthy()
+  })
+
   it("syncs external config into local panel state before later edits", () => {
     const onChange = vi.fn()
     const { rerender } = render(

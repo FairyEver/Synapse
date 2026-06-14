@@ -77,6 +77,29 @@ describe("buildWorkflowValidationDisplayItems", () => {
       type: "disconnected_node",
     })
   })
+
+  it("maps Code X advanced config paths to field errors", () => {
+    const errors: ValidationError[] = [{
+      type: "invalid_config",
+      nodeId: "prompt-1",
+      message: JSON.stringify([
+        {
+          code: "custom",
+          path: ["configOverrides", 1, "key"],
+          message: "配置覆盖项 key 不能重复",
+        },
+      ]),
+    }]
+
+    const items = buildWorkflowValidationDisplayItems(definition(), errors)
+
+    expect(items[0]).toMatchObject({
+      summary: "配置覆盖项 key 不能重复或为空。",
+      fieldKey: "configOverrides",
+      type: "invalid_config",
+    })
+    expect(items[0].summary).not.toContain("[")
+  })
 })
 
 function definition(): WorkflowDefinition {

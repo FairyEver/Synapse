@@ -245,6 +245,9 @@ export function CodexNodePanel({
   }
 
   const errorFor = (fieldKey: string) => validationItems.find((item) => item.fieldKey === fieldKey)?.summary
+  const additionalWritableDirsError = errorFor("additionalWritableDirs")
+  const imagesError = errorFor("images")
+  const configOverridesError = errorFor("configOverrides")
   const promptSummary = prompt.length > 0 ? `${prompt.length}字` : undefined
   const variableSummary = config.variables.length > 0 ? `${config.variables.length}个` : undefined
 
@@ -441,6 +444,7 @@ export function CodexNodePanel({
             addLabel="添加可写目录"
             onChange={updateWritableDirs}
             onBlur={normalizeWritableDirs}
+            error={additionalWritableDirsError}
           />
 
           <StringListEditor
@@ -450,6 +454,7 @@ export function CodexNodePanel({
             addLabel="添加图片路径"
             onChange={updateImages}
             onBlur={normalizeImages}
+            error={imagesError}
           />
 
           <ConfigOverrideEditor
@@ -457,6 +462,7 @@ export function CodexNodePanel({
             values={configOverrides}
             onChange={updateConfigOverrides}
             onBlur={normalizeOverrides}
+            error={configOverridesError}
           />
         </div>
       </CollapsibleSection>
@@ -576,6 +582,7 @@ function StringListEditor({
   addLabel,
   onChange,
   onBlur,
+  error,
 }: {
   label: string
   help?: HelpTopic
@@ -583,6 +590,7 @@ function StringListEditor({
   addLabel: string
   onChange: (values: string[]) => void
   onBlur: () => void
+  error?: string
 }) {
   const add = () => onChange([...values, ""])
   const update = (index: number, value: string) => onChange(values.map((item, itemIndex) => itemIndex === index ? value : item))
@@ -626,6 +634,7 @@ function StringListEditor({
           </Button>
         </div>
       ))}
+      <FieldError message={error} />
     </div>
   )
 }
@@ -635,11 +644,13 @@ function ConfigOverrideEditor({
   values,
   onChange,
   onBlur,
+  error,
 }: {
   help?: HelpTopic
   values: CodexNodeConfig["configOverrides"]
   onChange: (values: CodexNodeConfig["configOverrides"]) => void
   onBlur: () => void
+  error?: string
 }) {
   const add = () => onChange([...values, { key: "", value: "" }])
   const update = (index: number, patch: Partial<CodexNodeConfig["configOverrides"][number]>) => {
@@ -692,8 +703,13 @@ function ConfigOverrideEditor({
           </Button>
         </div>
       ))}
+      <FieldError message={error} />
     </div>
   )
+}
+
+function FieldError({ message }: { readonly message?: string }) {
+  return message ? <p className="text-xs text-destructive">{message}</p> : null
 }
 
 function ModelInput({
