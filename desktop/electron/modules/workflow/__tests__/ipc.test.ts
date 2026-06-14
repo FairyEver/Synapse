@@ -47,6 +47,7 @@ vi.mock("../../../services/workflow/workflow-validator", () => ({
   validateWorkflow: vi.fn(() => ({ valid: true, errors: [], warnings: [] })),
   validateRunParams: vi.fn(() => []),
   buildEffectiveRunParams: vi.fn((_def: unknown, params: Record<string, unknown>) => params),
+  configuredWorkflowProjectIdsFromConfig: vi.fn(() => ["project-1"]),
 }))
 
 describe("workflowIpcModule", () => {

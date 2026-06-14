@@ -5,7 +5,7 @@ import type { RunSnapshotService } from "../services/workflow/run-snapshot-servi
 import type { NodeTypeRegistry } from "../../workflow-nodes/registry"
 import type { EventBus } from "../runtime/event-bus/types"
 import type { WorkflowDefinition, WorkflowRunSnapshot, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
-import { validateWorkflow } from "../services/workflow/workflow-validator"
+import { validateWorkflow, type WorkflowValidationOptions } from "../services/workflow/workflow-validator"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
@@ -27,6 +27,11 @@ export type WorkflowDispatchDeps = {
   listProviders?: () => Promise<readonly { id: string; name: string; model?: string; haikuModel?: string; sonnetModel?: string; opusModel?: string }[]>
   permissionGuard?: PermissionGuard
   auditSink?: AuditSink
+  loadValidationOptions?: () => Promise<WorkflowValidationOptions>
+}
+
+async function validateWorkflowForDispatch(deps: Pick<WorkflowDispatchDeps, "loadValidationOptions">, definition: WorkflowDefinition) {
+  return validateWorkflow(definition, await deps.loadValidationOptions?.())
 }
 
 function requireString(params: Record<string, unknown>, key: string): string {
@@ -120,7 +125,7 @@ async function atomicMutate(
     if (!def) throw new Error(`Workflow not found: ${workflowId}`)
     const draft = structuredClone(def) as WorkflowDefinition
     mutate(draft)
-    const validation = validateWorkflow(draft)
+    const validation = await validateWorkflowForDispatch(deps, draft)
     if (!validation.valid) {
       throw new Error(`Save failed: ${validation.errors.map((e) => e.message).join("; ")}`)
     }
@@ -244,9 +249,9 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { ok: true, data: def }
   },
 
-  "workflow.definition.inspect": async (params) => {
+  "workflow.definition.inspect": async (params, deps) => {
     const definition = requireObject(params, "definition") as unknown as WorkflowDefinition
-    const result = validateWorkflow(definition)
+    const result = await validateWorkflowForDispatch(deps, definition)
     return { ok: true, data: result }
   },
 

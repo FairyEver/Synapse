@@ -11,7 +11,7 @@ import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
 import type { EventBus } from "../../runtime/event-bus"
-import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../../services/workflow/workflow-validator"
+import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateRunParams, type WorkflowValidationOptions } from "../../services/workflow/workflow-validator"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
@@ -610,6 +610,13 @@ async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string
   return projectId || undefined
 }
 
+async function loadWorkflowValidationOptions(): Promise<WorkflowValidationOptions> {
+  const appConfig = await configStore.load()
+  return {
+    configuredProjectIds: configuredWorkflowProjectIdsFromConfig(appConfig),
+  }
+}
+
 function findActiveRun(runStatuses: Map<string, WorkflowRunStatus>, workflowId: string): string | undefined {
   for (const [runId, status] of runStatuses) {
     if (status.workflowId === workflowId && status.status === "running") return runId
@@ -963,7 +970,7 @@ export const workflowIpcModule: IpcModule = {
       handler: async (_ctx, def) => {
         const d = def as { id: string; nodes: unknown[] }
         logger.info("workflow:validate requested", { id: d.id, nodeCount: d.nodes.length })
-        const result = validateWorkflow(def as never)
+        const result = validateWorkflow(def as never, await loadWorkflowValidationOptions())
         logger.info("workflow:validate result", { id: d.id, valid: result.valid, errorCount: result.errors.length, warnCount: result.warnings.length })
         if (!result.valid) logger.warn("workflow:validate errors", { id: d.id, errors: result.errors })
         return result
@@ -993,7 +1000,7 @@ export const workflowIpcModule: IpcModule = {
 
         // Validate before running — prevents invalid workflows from executing
         // when triggered from paths that skip editor-side validation (e.g. list page "Run" button)
-        const validation = validateWorkflow(def)
+        const validation = validateWorkflow(def, await loadWorkflowValidationOptions())
         if (!validation.valid) {
           logger.warn("workflow:run blocked by validation", { workflowId: id, errors: validation.errors })
           return { errors: validation.errors }
@@ -1046,7 +1053,7 @@ export const workflowIpcModule: IpcModule = {
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
 
-        const validation = validateWorkflow(def)
+        const validation = validateWorkflow(def, await loadWorkflowValidationOptions())
         if (!validation.valid) {
           logger.warn("workflow:runDefinition blocked by validation", { workflowId: def.id, errors: validation.errors })
           return { errors: validation.errors }
@@ -1142,7 +1149,7 @@ export const workflowIpcModule: IpcModule = {
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
 
-        const validation = validateWorkflow(def)
+        const validation = validateWorkflow(def, await loadWorkflowValidationOptions())
         if (!validation.valid) return { errors: validation.errors }
         const paramErrors = validateRunParams(def, effectiveParams)
         if (paramErrors.length > 0) {

@@ -147,6 +147,43 @@ describe("validateWorkflow", () => {
     }))
   })
 
+  it("rejects codex nodes with stale configured project references", () => {
+    const result = validateWorkflow(definitionWithCodexNode({
+      defaultProjectId: "project-1",
+      nodes: [
+        codexNode({
+          prompt: "Run codex",
+          projectId: "deleted-project",
+        }),
+        endNode(),
+      ],
+    }), { configuredProjectIds: ["project-1"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "codex-1",
+        field: "projectId",
+        message: expect.stringContaining("deleted-project"),
+      }),
+    ]))
+  })
+
+  it("rejects codex nodes that inherit a stale workflow default project", () => {
+    const result = validateWorkflow(definitionWithCodexNode({
+      defaultProjectId: "deleted-default-project",
+    }), { configuredProjectIds: ["project-1"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "codex-1",
+        field: "defaultProjectId",
+        message: expect.stringContaining("deleted-default-project"),
+      }),
+    ]))
+  })
+
   it("checks template placeholders inside codex advanced paths", () => {
     const result = validateWorkflow(definitionWithCodexNode({
       defaultProjectId: "project-1",

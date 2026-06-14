@@ -1,4 +1,5 @@
 import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
+import type { SynapseConfig } from "../../../src/types/config"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
@@ -7,6 +8,21 @@ import { extractWorkflowCallTemplateVariables } from "../../../workflow-nodes/wo
 import { isSafeWorkflowNodeId } from "./workflow-id"
 
 const logger = createMainLogger("service.workflow.validator")
+
+export interface WorkflowValidationOptions {
+  readonly configuredProjectIds?: Iterable<string>
+}
+
+export function configuredWorkflowProjectIdsFromConfig(config: Pick<SynapseConfig, "repositories" | "global">): string[] {
+  const ids = new Set<string>()
+  for (const repository of config.repositories) {
+    if (repository.uuid) ids.add(repository.uuid)
+  }
+  for (const project of config.global.projects) {
+    if (project.id) ids.add(project.id)
+  }
+  return [...ids]
+}
 
 function buildReverseAdj(def: WorkflowDefinition): Map<string, string[]> {
   const r = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
@@ -117,9 +133,44 @@ function hasTemplatePlaceholder(value: string): boolean {
   return /\{\{\s*\$?[\p{L}\p{N}_.-]+\s*\}\}/u.test(value)
 }
 
-export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
+function normalizeProjectId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined
+}
+
+function normalizeConfiguredProjectIds(ids: Iterable<string> | undefined): Set<string> | undefined {
+  if (!ids) return undefined
+  const normalized = new Set<string>()
+  for (const id of ids) {
+    const trimmed = id.trim()
+    if (trimmed) normalized.add(trimmed)
+  }
+  return normalized
+}
+
+function missingConfiguredProjectError(input: {
+  readonly node: WorkflowDefinition["nodes"][number]
+  readonly field: "projectId" | "defaultProjectId"
+  readonly projectId: string
+}): ValidationError {
+  return {
+    type: "invalid_config",
+    nodeId: input.node.id,
+    nodeName: input.node.name,
+    field: input.field,
+    message: `节点「${input.node.name}」引用的项目「${input.projectId}」不存在，请重新选择项目`,
+    retryable: false,
+    details: {
+      projectId: input.projectId,
+      source: input.field,
+    },
+  }
+}
+
+export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValidationOptions = {}): ValidationResult {
   const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
-  const hasDefaultProjectId = typeof def.defaultProjectId === "string" && def.defaultProjectId.trim().length > 0
+  const defaultProjectId = normalizeProjectId(def.defaultProjectId)
+  const hasDefaultProjectId = Boolean(defaultProjectId)
+  const configuredProjectIds = normalizeConfiguredProjectIds(options.configuredProjectIds)
 
   if (!def.name?.trim()) {
     errors.push({ type: "invalid_config", message: "工作流名称不能为空" })
@@ -200,7 +251,8 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       const cfg = node.config as Record<string, unknown>
       const hasProviderId = typeof cfg.providerId === "string" && cfg.providerId.length > 0
       const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0
-      const hasProjectId = typeof cfg.projectId === "string" && cfg.projectId.trim().length > 0
+      const nodeProjectId = normalizeProjectId(cfg.projectId)
+      const hasProjectId = Boolean(nodeProjectId)
       const requiresProviderAndModel = node.type === "prompt" || node.type === "switch"
       if (requiresProviderAndModel && !hasProviderId && !def.defaultProviderId) {
         errors.push(missingWorkflowDefaultError({
@@ -219,6 +271,16 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
           node, field: "defaultProjectId", nodeField: "projectId", label: "项目", cfg,
           defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
         }))
+      }
+      if (node.type === "codex" && configuredProjectIds) {
+        const effectiveProjectId = nodeProjectId ?? defaultProjectId
+        if (effectiveProjectId && !configuredProjectIds.has(effectiveProjectId)) {
+          errors.push(missingConfiguredProjectError({
+            node,
+            field: nodeProjectId ? "projectId" : "defaultProjectId",
+            projectId: effectiveProjectId,
+          }))
+        }
       }
     }
 

@@ -26,6 +26,7 @@ Only **prompt** and **switch** nodes require a provider (AI service), model tier
 
 - **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override; when no timeout is configured, the default is 60 minutes. Codex nodes inherit only `defaultProjectId`; set `timeoutMins` directly on the codex node when needed.
 - **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. For codex config, set Codex CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `enableSearch`, `additionalWritableDirs`, `images`, `configOverrides`, and debug or safety flags; do not set `providerId` or `modelTier`.
+- **Project validity** — Any effective Codex `projectId` (node override or inherited `defaultProjectId`) must refer to a currently configured Synapse project or repository. If a project was deleted, update the workflow default or the codex node before saving or running.
 
 To discover available providers, call `workflow_node_type_describe` with `nodeType: "prompt"` (or `"switch"`). The response includes an `availableProviders` array:
 ```json
@@ -142,7 +143,7 @@ Config fields:
 
 - `prompt` — Codex instruction template. Use `{{variableName}}` placeholders declared in `variables`.
 - `variables` — bindings from workflow params, upstream node outputs, or static values.
-- `projectId?` — execution project. If omitted, the node inherits workflow `defaultProjectId`.
+- `projectId?` — execution project. If omitted, the node inherits workflow `defaultProjectId`. The effective project must exist in the current Synapse project or repository configuration.
 - `workingDirectory?` — per-task working directory. Supports `{{variableName}}`, must already exist, and becomes both process cwd and Codex `--cd`. It is not automatically added to `additionalWritableDirs`.
 - `timeoutMins?` — optional node timeout in minutes.
 - `approvalPolicy` — `"never"`, `"on-request"`, or `"untrusted"`.

@@ -18,6 +18,7 @@ vi.mock("../log-store", () => ({
 import { DataRepositoryImpl, JsonNamespace, reviveWorkflowsEnvelope, workflowsSchema, type WorkflowEntryV1 } from "../../runtime/data-repo"
 import { WorkflowService } from "../workflow/workflow-service"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+import { defaultCodexNodeConfig } from "../../../workflow-nodes/codex/schema"
 import "../../../workflow-nodes/register.main"
 
 const roots: string[] = []
@@ -157,6 +158,36 @@ describe("WorkflowService", () => {
     const result = await svc.save(def)
     expect("errors" in result).toBe(true)
     expect((result as { errors: Array<{ message: string }> }).errors[0].message).toContain("ID")
+    expect(await svc.list()).toEqual([])
+  })
+  it("rejects codex workflows with stale default projects before persisting", async () => {
+    const { repo } = createRepo()
+    const svc = new WorkflowService(repo, async () => ({ configuredProjectIds: ["project-1"] }))
+    const def: WorkflowDefinition = {
+      ...makeDef(),
+      defaultProjectId: "deleted-project",
+      nodes: [
+        {
+          id: "codex-1",
+          name: "Codex",
+          type: "codex",
+          position: { x: 0, y: 0 },
+          config: { ...defaultCodexNodeConfig, prompt: "Run codex" },
+        },
+        { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "", variables: [] } },
+      ],
+      edges: [{ id: "edge-1", from: "codex-1", to: "end" }],
+    }
+
+    const result = await svc.save(def)
+
+    expect("errors" in result).toBe(true)
+    expect((result as { errors: Array<{ field?: string; message: string }> }).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        field: "defaultProjectId",
+        message: expect.stringContaining("deleted-project"),
+      }),
+    ]))
     expect(await svc.list()).toEqual([])
   })
   it("normalizes nullable optional metadata before persisting so restart can list workflows", async () => {

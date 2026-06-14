@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
 import { normalizeWorkflowEntry, type DataNamespace, type DataRepository, type WorkflowEntryV1 } from "../../runtime/data-repo"
-import { validateWorkflow } from "./workflow-validator"
+import { validateWorkflow, type WorkflowValidationOptions } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
 import { sanitizeAgentError } from "./workflow-utils"
@@ -15,13 +15,16 @@ export interface WorkflowDefaultProviderModel {
   providerId: string
   modelTier: NonNullable<WorkflowDefinition["defaultModelTier"]>
 }
+export type WorkflowValidationOptionsProvider = () => Promise<WorkflowValidationOptions> | WorkflowValidationOptions
 
 export class WorkflowService {
   private _seq = 0
   private readonly workflowsNamespace: DataNamespace<WorkflowEntryV1>
+  private readonly validationOptionsProvider?: WorkflowValidationOptionsProvider
 
-  constructor(dataRepository: DataRepository) {
+  constructor(dataRepository: DataRepository, validationOptionsProvider?: WorkflowValidationOptionsProvider) {
     this.workflowsNamespace = dataRepository.namespace<WorkflowEntryV1>("workflows")
+    this.validationOptionsProvider = validationOptionsProvider
   }
 
   private versionHash(def: WorkflowDefinition): string {
@@ -96,7 +99,18 @@ export class WorkflowService {
     if (typeof def.id !== "string" || !def.id.trim()) {
       return { errors: [{ type: "invalid_config", message: "工作流 ID 不能为空" }] }
     }
-    const validation = validateWorkflow(def)
+    let validationOptions: WorkflowValidationOptions | undefined
+    try {
+      validationOptions = await this.validationOptionsProvider?.()
+    } catch (err) {
+      logger.warn("workflow save project validation context failed", {
+        id: def.id,
+        name: def.name,
+        ...errorLogMeta(err),
+      })
+      return { errors: [{ type: "invalid_config", message: "保存失败：项目配置读取失败，请重试" }] }
+    }
+    const validation = validateWorkflow(def, validationOptions)
     if (!validation.valid) {
       logger.warn("workflow save blocked by validation", { id: def.id, name: def.name, errorCount: validation.errors.length, errors: validation.errors })
       return { errors: validation.errors }

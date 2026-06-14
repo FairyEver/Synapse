@@ -133,7 +133,7 @@ import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowPackageService } from "../services/workflow/workflow-package-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
-import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
+import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { sanitizeNodeResultsForSnapshot } from "../services/workflow/run-snapshot-sanitize"
 import { agentProviderFailureFromResponse } from "../services/workflow/workflow-utils"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
@@ -374,10 +374,13 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
           snapshotService,
           eventBus: ctx.registry.get<EventBus>("core.event-bus"),
           runAborts,
-          runStatuses,
-          runCompletions,
-          capabilityLogger,
+        runStatuses,
+        runCompletions,
+        capabilityLogger,
+        loadValidationOptions: async () => ({
+          configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
         }),
+      }),
       },
       getAgentRuntime: async (projectId) => {
         const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
@@ -411,12 +414,13 @@ export function createRunWorkflowHandler(deps: {
   runCompletions: Map<string, Promise<unknown>>
   capabilityLogger: ReturnType<typeof createMainLogger>
   isWorkflowDeleted?: (workflowId: string) => boolean
+  loadValidationOptions?: () => Promise<import("../services/workflow/workflow-validator").WorkflowValidationOptions>
 }) {
   return async (id: string, params: Record<string, unknown>, options?: RunWorkflowHandlerOptions): Promise<{ runId: string } | { errors: ValidationError[] }> => {
-    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, runCompletions, capabilityLogger, isWorkflowDeleted } = deps
+    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, runCompletions, capabilityLogger, isWorkflowDeleted, loadValidationOptions } = deps
     const def = await workflowService.get(id)
     if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
-    const validation = validateWorkflow(def)
+    const validation = validateWorkflow(def, await loadValidationOptions?.())
     if (!validation.valid) return { errors: validation.errors }
     const paramErrors = validateRunParams(def, params)
     if (paramErrors.length > 0) return { errors: paramErrors }
@@ -543,6 +547,7 @@ export function createRunWorkflowAndWait(deps: {
   runCompletions: Map<string, Promise<unknown>>
   capabilityLogger: ReturnType<typeof createMainLogger>
   isWorkflowDeleted?: (workflowId: string) => boolean
+  loadValidationOptions?: () => Promise<import("../services/workflow/workflow-validator").WorkflowValidationOptions>
 }) {
   return async (input: {
     readonly workflowId: string
@@ -670,6 +675,9 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         runCompletions,
         capabilityLogger,
         isWorkflowDeleted: (workflowId) => deletedWorkflowIds.has(workflowId),
+        loadValidationOptions: async () => ({
+          configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
+        }),
       }),
       cancelRun: (runId: string) => {
         const controller = runAborts.get(runId)
@@ -704,6 +712,9 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       listProviders: () => providerService.listProviders(),
       permissionGuard,
       auditSink,
+      loadValidationOptions: async () => ({
+        configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
+      }),
     })
     const contentDispatcher = createContentCapabilityDispatcher({
       contentReader: contentService,
@@ -1590,7 +1601,9 @@ export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> =
   dependsOn: ["core.data-repository"],
   create(ctx) {
     const dataRepo = ctx.registry.get<DataRepository>("core.data-repository")
-    return new WorkflowService(dataRepo)
+    return new WorkflowService(dataRepo, async () => ({
+      configuredProjectIds: configuredWorkflowProjectIdsFromConfig(await configStore.load()),
+    }))
   },
 }
 
