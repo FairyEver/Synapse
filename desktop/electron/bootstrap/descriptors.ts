@@ -77,7 +77,6 @@ import { ExecutionIsolationService } from "../services/execution-isolation"
 import { AgentRelayService } from "../services/relay"
 import { AutomationIngressService } from "../services/automation-ingress"
 import { DiagnosticsService } from "../services/diagnostics-service"
-import { createConfigBackupPayload } from "../services/config-backup-service"
 import { contentService } from "../services/content-service"
 import { contentSubmissionService } from "../services/content-submission-service"
 import { prepareContentIconImageBytes } from "../services/content-icon-image-service"
@@ -1148,7 +1147,6 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
         actor: { kind: "user" },
         processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       }),
-      createConfigBackupPayload,
     })
   },
 }

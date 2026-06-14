@@ -671,6 +671,20 @@ describe("DiagnosticsService.exportBundle", () => {
     }
     const service = createService({
       auditSink,
+      configStore: {
+        load: vi.fn(async () => {
+          const config = createConfig({
+            knowledgeBaseStorage: { mode: "custom", rootPath: "/secret/kb-root" },
+          })
+          return {
+            ...config,
+            global: {
+              ...config.global,
+              variables: [{ name: "API_KEY", value: "sk-secret-value", description: "token" }],
+            },
+          }
+        }),
+      },
       writeTextFile: vi.fn(async (targetPath: string, content: string) => {
         writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
       }),
@@ -694,7 +708,18 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(writtenFiles.get(findWrittenPath(writtenFiles, `${packagePathSuffix}/summary.md`) ?? ""))
       .toContain("# Synapse Diagnostics Summary")
     expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/manifest.json`)).toBeDefined()
-    expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/config/config-backup.json`)).toBeDefined()
+    const configSummaryPath = findWrittenPath(writtenFiles, `${packagePathSuffix}/config/config-summary.json`)
+    expect(configSummaryPath).toBeDefined()
+    expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/config/config-backup.json`)).toBeUndefined()
+    const configSummary = writtenFiles.get(configSummaryPath ?? "") ?? ""
+    expect(configSummary).toContain('"repositories"')
+    expect(configSummary).toContain('"variables"')
+    expect(configSummary).toContain("API_KEY")
+    expect(configSummary).not.toContain("/repo")
+    expect(configSummary).not.toContain("/missing-project")
+    expect(configSummary).not.toContain("/secret/kb-root")
+    expect(configSummary).not.toContain("sk-secret-value")
+    expect(configSummary).not.toContain("userId")
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write",
       outcome: "allowed",
@@ -745,10 +770,10 @@ describe("DiagnosticsService.exportBundle", () => {
     const writtenFiles = new Map<string, string>()
     const rawError = "config failed token=sk-secret Authorization: Bearer sk-live-token at /Users/example/private/config.json"
     const service = createService({
-      createConfigBackupPayload: vi.fn(async () => {
-        throw new Error(rawError)
-      }),
       writeTextFile: vi.fn(async (targetPath: string, content: string) => {
+        if (targetPath.replace(/\\/g, "/").endsWith("/config/config-summary.json")) {
+          throw new Error(rawError)
+        }
         writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
       }),
     })
@@ -764,7 +789,7 @@ describe("DiagnosticsService.exportBundle", () => {
     }
     expect(manifest.skipped).toEqual([
       {
-        path: "config/config-backup.json",
+        path: "config/config-summary.json",
         reason: expect.stringContaining("token=[redacted]"),
       },
     ])
@@ -940,26 +965,6 @@ function createService(
     copyFile: vi.fn(async () => undefined),
     createZipArchive: vi.fn(async () => undefined),
     removePath: vi.fn(async () => undefined),
-    createConfigBackupPayload: vi.fn(async () => ({
-      schemaVersion: 1,
-      exportedAt: "2026-04-29T03:31:20.000Z",
-      config: {
-        activeRepoUuid: null,
-        repositories: [],
-        global: {
-          themeMode: "system",
-          projects: [],
-          favorites: { rule: [], skill: [], prompt: [] },
-          recentlyViewed: { rule: [], skill: [], prompt: [] },
-          contentSortOrder: "modified-desc",
-        },
-      },
-      identity: {
-        schemaVersion: 2,
-        userId: "0123456789abcdef0123456789abcdef",
-        generatedAt: "2026-04-29T03:31:20.000Z",
-      },
-    })),
     ...overrides,
   })
 }

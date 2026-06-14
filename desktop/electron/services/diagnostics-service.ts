@@ -149,7 +149,6 @@ type DiagnosticsServiceDeps = {
   copyFile?: (sourcePath: string, targetPath: string) => Promise<void>
   createZipArchive?: (sourceDirectoryPath: string, outputFilePath: string) => Promise<void>
   removePath?: (targetPath: string) => Promise<void>
-  createConfigBackupPayload?: () => Promise<unknown>
   collectShellEnvironment?: () => ShellEnvironmentSnapshot
   probeGitVersion?: (input: { gitPath: string; effectivePath: string }) => Promise<GitVersionProbeResult>
   inspectClaudeRuntime?: () => PackagedClaudeRuntimeStatus
@@ -450,9 +449,9 @@ class DiagnosticsService {
       included.push("summary.md")
 
       await this.writeOptionalJsonFile(
-        path.join(packageRoot, "config", "config-backup.json"),
-        "config/config-backup.json",
-        () => this.createConfigBackupPayload(),
+        path.join(packageRoot, "config", "config-summary.json"),
+        "config/config-summary.json",
+        () => this.createConfigDiagnosticsPayload(exportedAt),
         included,
         skipped,
       )
@@ -1278,13 +1277,45 @@ class DiagnosticsService {
     return this.deps.removePath?.(targetPath) ?? rm(targetPath, { recursive: true, force: true })
   }
 
-  private async createConfigBackupPayload(): Promise<unknown> {
-    if (this.deps.createConfigBackupPayload) {
-      return this.deps.createConfigBackupPayload()
+  private async createConfigDiagnosticsPayload(generatedAt: string): Promise<unknown> {
+    const config = await this.deps.configStore.load()
+    const favoriteCount = Object.values(config.global.favorites).reduce((sum, values) => sum + values.length, 0)
+    const recentlyViewedCount = Object.values(config.global.recentlyViewed).reduce((sum, values) => sum + values.length, 0)
+    return {
+      schemaVersion: 1,
+      generatedAt,
+      repositories: {
+        count: config.repositories.length,
+        activeConfigured: Boolean(config.activeRepoUuid),
+        contentDirectoryCount: config.repositories.reduce(
+          (sum, repository) => sum + Object.values(repository.contentDirs).filter(Boolean).length,
+          0,
+        ),
+      },
+      projects: {
+        count: config.global.projects.length,
+        managedKnowledgeBaseCount: config.global.projects.filter(isManagedKnowledgeBaseProject).length,
+      },
+      variables: {
+        count: config.global.variables.length,
+        names: config.global.variables.map((variable) => variable.name),
+      },
+      knowledgeBaseStorage: {
+        mode: config.global.knowledgeBaseStorage.mode,
+        customRootConfigured: config.global.knowledgeBaseStorage.mode === "custom",
+      },
+      agent: {
+        defaultPermissionMode: config.agent.defaultPermissionMode,
+        defaultProviderModelConfigured: Boolean(config.agent.defaultProviderModel),
+      },
+      ui: {
+        themeMode: config.global.themeMode,
+        quickInputCount: config.global.quickInputs.length,
+        favoriteCount,
+        recentlyViewedCount,
+        contentSortOrder: config.global.contentSortOrder,
+      },
     }
-
-    const backupService = await import("./config-backup-service.js")
-    return backupService.createConfigBackupPayload()
   }
 
   private now(): Date {
