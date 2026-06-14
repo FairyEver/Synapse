@@ -17,7 +17,7 @@ import type {
 } from "../../../src/types/agent"
 import { formatAgentTranscript } from "../../../src/lib/agent-transcript"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
-import { redactSensitiveValue } from "./redaction"
+import { REDACTED, redactSensitiveValue } from "./redaction"
 
 const EXPORT_SOURCE = "agent.exportConversationBundle"
 
@@ -181,7 +181,7 @@ class AgentConversationExportService {
         redaction: {
           enabled: true,
           marker: "[redacted]",
-          description: "Sensitive tokens, API keys, Authorization/Bearer headers, cookies, passwords, credentials, and secrets are redacted.",
+          description: "Sensitive tokens, session keys, API keys, Authorization/Bearer headers, cookies, passwords, credentials, and secrets are redacted.",
         },
         attachments: {
           binaryIncluded: false,
@@ -494,7 +494,7 @@ function auditRequestMetadata(request: AgentConversationExportRequest): Record<s
   return {
     projectId: request.projectId,
     conversationId: request.conversationId,
-    sessionKey: request.sessionKey,
+    sessionKey: request.sessionKey ? REDACTED : undefined,
   }
 }
 

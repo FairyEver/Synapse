@@ -9,9 +9,11 @@ import type {
   ConversationEntryV1,
   DataNamespace,
 } from "../../../runtime/data-repo"
+import type { AuditSink } from "../../../runtime/security"
 import { AgentConversationExportService } from "../conversation-export-service"
 
 const tempRoots: string[] = []
+const TEST_SESSION_KEY = "local:renderer-secret-session"
 
 afterEach(async () => {
   for (const root of tempRoots.splice(0)) {
@@ -27,6 +29,7 @@ describe("AgentConversationExportService", () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
     const conversation = createConversation()
     await conversations.upsert(conversation)
     await agentEvents.upsert({
@@ -71,8 +74,12 @@ describe("AgentConversationExportService", () => {
     const createZipArchive = vi.fn(async (sourceDirectoryPath: string, targetPath: string) => {
       expect(targetPath).toBe(outputPath)
       const readPackageFile = (name: string) => readFile(path.join(sourceDirectoryPath, name), "utf8")
-      const manifest = JSON.parse(await readPackageFile("manifest.json")) as { included: string[] }
-      const summary = JSON.parse(await readPackageFile("summary.json")) as {
+      const conversationText = await readPackageFile("conversation.json")
+      const manifestText = await readPackageFile("manifest.json")
+      const summaryText = await readPackageFile("summary.json")
+      const manifest = JSON.parse(manifestText) as { included: string[]; sessionKey?: string }
+      const summary = JSON.parse(summaryText) as {
+        sessionKey?: string
         toolCallCount: number
         failedToolCount: number
         usageSummary: { totalTokens: number }
@@ -87,6 +94,14 @@ describe("AgentConversationExportService", () => {
       const eventsText = await readPackageFile("agent-events.json")
       const timelineText = await readPackageFile("timeline.json")
       const transcript = await readPackageFile("transcript.md")
+      const packageText = [
+        conversationText,
+        manifestText,
+        summaryText,
+        eventsText,
+        timelineText,
+        transcript,
+      ].join("\n")
 
       expect(manifest.included).toEqual(expect.arrayContaining([
         "conversation.json",
@@ -99,10 +114,15 @@ describe("AgentConversationExportService", () => {
         "live-state.json",
       ]))
       expect(summary).toMatchObject({
+        sessionKey: "[redacted]",
         toolCallCount: 1,
         failedToolCount: 1,
         usageSummary: { totalTokens: 14 },
       })
+      expect(manifest.sessionKey).toBe("[redacted]")
+      expect(conversationText).toContain("\"sessionKey\": \"[redacted]\"")
+      expect(timelineText).toContain("\"sessionKey\": \"[redacted]\"")
+      expect(packageText).not.toContain(TEST_SESSION_KEY)
       expect(attachments.messages).toEqual([{
         messageIndex: 0,
         role: "user",
@@ -141,7 +161,7 @@ describe("AgentConversationExportService", () => {
       createZipArchive,
       getTimeline: async () => ({
         projectId: "project-1",
-        sessionKey: "local:renderer",
+        sessionKey: TEST_SESSION_KEY,
         conversationId: "conv-1",
         entries: [
           {
@@ -181,18 +201,29 @@ describe("AgentConversationExportService", () => {
       }),
       now: () => new Date("2026-06-08T08:30:00.000Z"),
       removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+      auditSink: {
+        record: (event) => {
+          auditEvents.push(event)
+        },
+        list: () => [],
+        clearForTests: () => {},
+      },
     })
 
     await expect(service.exportBundle({
       projectId: "project-1",
       conversationId: "conv-1",
-      sessionKey: "local:renderer",
+      sessionKey: TEST_SESSION_KEY,
     })).resolves.toEqual({
       success: true,
       filePath: outputPath,
       fileCount: 8,
     })
     expect(createZipArchive).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(auditEvents)).not.toContain(TEST_SESSION_KEY)
+    expect(auditEvents[0]?.metadata).toMatchObject({
+      sessionKey: "[redacted]",
+    })
   })
 
   it("returns success false when the save dialog is cancelled", async () => {
@@ -238,7 +269,7 @@ describe("AgentConversationExportService", () => {
       createZipArchive,
       getTimeline: async () => ({
         projectId: "project-1",
-        sessionKey: "local:renderer",
+        sessionKey: TEST_SESSION_KEY,
         conversationId: "conv-1",
         entries: [{
           id: "tool-call",
@@ -261,7 +292,7 @@ describe("AgentConversationExportService", () => {
     await expect(service.exportBundle({
       projectId: "project-1",
       conversationId: "conv-1",
-      sessionKey: "local:renderer",
+      sessionKey: TEST_SESSION_KEY,
     })).resolves.toMatchObject({
       success: true,
       filePath: outputPath,
@@ -275,7 +306,7 @@ function createConversation(): ConversationEntryV1 {
     id: "conv-1",
     schemaVersion: 1,
     projectId: "project-1",
-    sessionKey: "local:renderer",
+    sessionKey: TEST_SESSION_KEY,
     providerId: "anthropic",
     sdkSessionId: "sdk-1",
     usage: {

@@ -1,6 +1,6 @@
 const REDACTED = "[redacted]"
 
-const SENSITIVE_KEY_PATTERN = /api[-_]?key|authorization|cookie|password|credential|secret|token/i
+const SENSITIVE_KEY_PATTERN = /api[-_]?key|authorization|cookie|password|credential|secret|session[-_]?key|token/i
 const TEXT_ASSIGNMENT_PATTERN = /\b([A-Za-z_][A-Za-z0-9_-]*)(\s*[:=]\s*)(?:(Bearer)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;'"`]+)/gi
 const JSON_ASSIGNMENT_PATTERN = /(["'])([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)(["'])([^"']*)\4/gi
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
@@ -17,6 +17,7 @@ function isSensitiveKey(key: string): boolean {
     || normalized.includes("cookie")
     || normalized.includes("password")
     || normalized.includes("credential")
+    || normalized.includes("sessionkey")
     || (normalized.includes("token") && !normalized.endsWith("tokens"))
 }
 

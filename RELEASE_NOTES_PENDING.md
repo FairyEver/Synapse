@@ -383,6 +383,7 @@
 - Command、Script 和 HTTP 自动化动作的超时配置会限制在 1 到 120 分钟，旧的越界配置会提示更新，不再因为底层计时器溢出而立即超时。
 - Webhook 触发 Agent prompt 时会固定使用已配置项目的工作目录，请求体里的 `workspacePath` 不再能覆盖会话目录。
 - 知识库存储迁移恢复记录会用原子替换写入；如果崩溃后恢复记录损坏，启动恢复会进入明确失败状态，不再直接中断恢复流程。
+- Agent 会话导出包会遮盖 `sessionKey`，manifest、summary、timeline、conversation 和审计记录不再包含原始会话标识。
 
 ## 技术调整
 
