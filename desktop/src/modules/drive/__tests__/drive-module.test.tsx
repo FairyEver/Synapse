@@ -329,6 +329,22 @@ describe("DriveModule", () => {
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
   })
 
+  it("keeps file management available when publication status loading fails", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    mocks.listDrivePublications.mockRejectedValueOnce(new Error("发布列表加载失败。"))
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).not.toContain("云盘加载失败")
+    expect(document.body.textContent).toContain("report.txt")
+    expect(getButton("上传文件").disabled).toBe(false)
+    expect(getButton("新建文件夹").disabled).toBe(false)
+    expect(mocks.toast).toHaveBeenCalledWith("发布状态加载失败")
+  })
+
   it("shows meaningful storage status labels", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "pending-file", name: "pending.txt", type: "file", storageStatus: "pending" }),

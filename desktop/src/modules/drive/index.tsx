@@ -191,12 +191,14 @@ function DriveModule() {
     setError(null)
     try {
       const bridge = requireSynapseBridge()
-      const [nextItems, nextPublications] = await Promise.all([
-        bridge.account.listDriveItems({ parentId }),
-        bridge.account.listDrivePublications(),
-      ])
+      const nextItems = await bridge.account.listDriveItems({ parentId })
       setItems(nextItems)
-      setPublications(nextPublications)
+      try {
+        setPublications(await bridge.account.listDrivePublications())
+      } catch {
+        setPublications([])
+        toast("发布状态加载失败")
+      }
     } catch (rawError) {
       setError(driveLoadError(rawError))
     } finally {
