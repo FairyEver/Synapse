@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ContentStoreType, ContentStoreVisibility } from '@synapse/shared'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,6 +37,10 @@ export function ContentStorePublishDialog({
   onPublish,
 }: ContentStorePublishDialogProps) {
   const [publishPublic, setPublishPublic] = useState(visibility === 'public')
+  useEffect(() => {
+    if (open) setPublishPublic(visibility === 'public')
+  }, [open, visibility])
+
   const needsDescription = publishPublic && !description.trim()
 
   return (
