@@ -221,6 +221,36 @@ describe("DriveService", () => {
     expect(session?.status).toBe("cancelled")
   })
 
+  it("releases reserved quota once when upload cancellation requests race", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    const results = await Promise.allSettled([
+      service.cancelUpload("user-1", prepared.sessionId),
+      service.cancelUpload("user-1", prepared.sessionId),
+    ])
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1)
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.reservedBytes).toBe(0n)
+    expect(storage.deleteObject).toHaveBeenCalledTimes(1)
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    expect(session?.status).toBe("cancelled")
+  })
+
   it("marks sessions failed and releases quota when upload instruction creation fails", async () => {
     const prisma = createPrismaMemory()
     const failingStorage: DriveStoragePort = {

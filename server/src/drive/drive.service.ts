@@ -347,7 +347,8 @@ export class DriveService implements OnApplicationBootstrap {
       where: { id: sessionId, userId, status: DRIVE_UPLOAD_STATUS.pending },
     })
     if (!session) throw new NotFoundException("上传会话不存在。")
-    await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled, new Date(), session.storageKey)
+    const transitioned = await this.failUploadSession(userId, session.id, session.itemId, session.expectedSize, DRIVE_UPLOAD_STATUS.cancelled, new Date(), session.storageKey)
+    if (!transitioned) throw new NotFoundException("上传会话不存在。")
     await this.recordDriveAudit({
       userId,
       action: "drive.upload.cancel",
@@ -1312,22 +1313,25 @@ export class DriveService implements OnApplicationBootstrap {
     status: string,
     now = new Date(),
     storageKey?: string,
-  ): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.driveUploadSession.update({
-        where: { id: sessionId },
+  ): Promise<boolean> {
+    const transitioned = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.driveUploadSession.updateMany({
+        where: { id: sessionId, userId, status: DRIVE_UPLOAD_STATUS.pending },
         data: { status, failedAt: now },
-      }),
-      this.prisma.driveItem.update({
+      })
+      if (updated.count === 0) return false
+      await tx.driveItem.update({
         where: { id: itemId },
         data: { storageStatus: DRIVE_STORAGE_STATUS.failed, uploadStatus: status },
-      }),
-      this.prisma.driveUsage.update({
+      })
+      await tx.driveUsage.update({
         where: { userId },
         data: { reservedBytes: { decrement: expectedSize } },
-      }),
-    ])
-    if (storageKey) await this.deleteStorageObject(itemId, storageKey)
+      })
+      return true
+    })
+    if (transitioned && storageKey) await this.deleteStorageObject(itemId, storageKey)
+    return transitioned
   }
 
   private async rollbackFolderUploadPrepare(userId: string, rootItemId: string, now = new Date()): Promise<void> {
