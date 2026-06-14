@@ -37,6 +37,7 @@ const guardedFetchMock = vi.hoisted(() => ({
 import { createInMemoryHarness } from "../../../runtime/ipc"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
+import { KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES } from "../../../../config"
 import { KnowledgeBaseService } from "../../../services/knowledge-base/knowledge-base-service"
 import type { KnowledgeBaseStorageMigrationState } from "../../../services/knowledge-base/storage-migration-service"
 import { knowledgeBaseIpcModule } from "../ipc"
@@ -794,6 +795,22 @@ describe("knowledgeBaseIpcModule", () => {
 
     expect(exportRawEntries).not.toHaveBeenCalled()
     expect(result).toEqual({ projectId: "kb-1", entries: [], skipped: [] })
+  })
+
+  it("rejects oversized raw export selections before opening the target directory picker", async () => {
+    const exportRawEntries = vi.fn()
+    const { harness } = createHarness({ service: { exportRawEntries } })
+
+    await expect(harness.invoke("synapse:knowledge-base:export-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: Array.from(
+        { length: KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES + 1 },
+        (_, index) => `entry-${index}.md`,
+      ),
+    })).rejects.toThrow()
+
+    expect(electronMock.dialog.showOpenDialog).not.toHaveBeenCalled()
+    expect(exportRawEntries).not.toHaveBeenCalled()
   })
 
   it("mutates raw entries through guarded write permission", async () => {

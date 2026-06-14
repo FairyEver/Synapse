@@ -8,6 +8,11 @@ import type {
 } from "../../../src/types/knowledge-base"
 import { validateKnowledgeBaseRawEntryNameInput } from "../../../src/lib/knowledge-base-raw-entry-name"
 import {
+  KNOWLEDGE_BASE_RAW_EXPORT_MAX_DEPTH,
+  KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES,
+  KNOWLEDGE_BASE_RAW_EXPORT_MAX_FILES,
+  KNOWLEDGE_BASE_RAW_EXPORT_MAX_FILE_BYTES,
+  KNOWLEDGE_BASE_RAW_EXPORT_MAX_TOTAL_BYTES,
   KNOWLEDGE_BASE_RAW_UPLOAD_MAX_DEPTH,
   KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILE_BYTES,
   KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILES,
@@ -23,11 +28,18 @@ type RawUploadLimits = {
   readonly maxFileBytes: number
   readonly maxTotalBytes: number
 }
+type RawExportLimits = RawUploadLimits & {
+  readonly maxEntries: number
+}
 type RawUploadBudget = {
   copiedFiles: number
   copiedBytes: number
   stopped: boolean
   stopReason?: RawUploadSkipReason
+}
+type RawExportBudget = {
+  copiedFiles: number
+  copiedBytes: number
 }
 type RawEntryListOptions = {
   readonly entryKind?: "all" | "directory"
@@ -46,11 +58,13 @@ type RawEntryListPage = {
 export interface RawFileManagerDeps {
   readonly trashItem: TrashItem
   readonly uploadLimits?: Partial<RawUploadLimits>
+  readonly exportLimits?: Partial<RawExportLimits>
 }
 
 export class KnowledgeBaseRawFileManager {
   private readonly trashItem: TrashItem
   private readonly uploadLimits: RawUploadLimits
+  private readonly exportLimits: RawExportLimits
 
   constructor(deps: RawFileManagerDeps) {
     this.trashItem = deps.trashItem
@@ -60,6 +74,14 @@ export class KnowledgeBaseRawFileManager {
       maxFileBytes: KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILE_BYTES,
       maxTotalBytes: KNOWLEDGE_BASE_RAW_UPLOAD_MAX_TOTAL_BYTES,
       ...deps.uploadLimits,
+    }
+    this.exportLimits = {
+      maxEntries: KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES,
+      maxFiles: KNOWLEDGE_BASE_RAW_EXPORT_MAX_FILES,
+      maxDepth: KNOWLEDGE_BASE_RAW_EXPORT_MAX_DEPTH,
+      maxFileBytes: KNOWLEDGE_BASE_RAW_EXPORT_MAX_FILE_BYTES,
+      maxTotalBytes: KNOWLEDGE_BASE_RAW_EXPORT_MAX_TOTAL_BYTES,
+      ...deps.exportLimits,
     }
   }
 
@@ -381,11 +403,30 @@ export class KnowledgeBaseRawFileManager {
     await mkdir(targetDirectory, { recursive: true })
     const entries: SynapseKnowledgeBaseRawEntry[] = []
     const skipped: SynapseKnowledgeBaseRawMutationResult["skipped"] = []
-    for (const relativePath of relativePaths) {
+    let budget: RawExportBudget = { copiedFiles: 0, copiedBytes: 0 }
+    const uniqueRelativePaths = Array.from(new Set(relativePaths))
+    for (const [index, relativePath] of uniqueRelativePaths.entries()) {
       try {
+        if (index >= this.exportLimits.maxEntries) {
+          skipped.push({ path: relativePath, reason: "too-many-files" })
+          continue
+        }
         const source = resolveRawPath(rawRoot, relativePath)
         await assertNoSymlinkInRawPath(rawRoot, relativePath)
+        const nextBudget = { ...budget }
+        const budgetFailure = await this.reserveRawEntryForExport(rawRoot, source, nextBudget, 0)
+        if (budgetFailure) {
+          knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
+            reason: budgetFailure,
+            relativePath,
+            copiedFiles: budget.copiedFiles,
+            copiedBytes: budget.copiedBytes,
+          })
+          skipped.push({ path: relativePath, reason: budgetFailure })
+          continue
+        }
         await this.copyRawEntryForExport(rawRoot, source, targetDirectory, entries, skipped)
+        budget = nextBudget
       } catch (error) {
         const reason = isInvalidRawPathError(error) ? "invalid-path" : "export-error"
         knowledgeBaseLogger.warn("Knowledge Base raw entry export skipped.", {
@@ -397,6 +438,37 @@ export class KnowledgeBaseRawFileManager {
       }
     }
     return { entries: sortEntries(entries), skipped }
+  }
+
+  private async reserveRawEntryForExport(
+    rawRoot: string,
+    sourcePath: string,
+    budget: RawExportBudget,
+    depth: number,
+  ): Promise<RawUploadSkipReason | null> {
+    const sourceStat = await lstat(sourcePath)
+    const relativePath = normalizeRelativePath(path.relative(rawRoot, sourcePath))
+    if (isRootInternalRawFile(relativePath) || relativePath === ".manifest.json") {
+      return null
+    }
+    if (isSystemNoiseFile(path.basename(sourcePath)) || sourceStat.isSymbolicLink()) {
+      return null
+    }
+    if (sourceStat.isFile()) {
+      return reserveRawExportFileBudget(sourceStat.size, budget, this.exportLimits)
+    }
+    if (!sourceStat.isDirectory()) {
+      return null
+    }
+    if (depth > this.exportLimits.maxDepth) {
+      return "too-deep"
+    }
+    const children = await readdir(sourcePath, { withFileTypes: true })
+    for (const child of children) {
+      const failure = await this.reserveRawEntryForExport(rawRoot, path.join(sourcePath, child.name), budget, depth + 1)
+      if (failure) return failure
+    }
+    return null
   }
 
   private async copyRawEntryForExport(
@@ -486,6 +558,15 @@ function reserveRawUploadFileBudget(size: number, budget: RawUploadBudget, limit
     budget.stopReason = "too-large"
     return "too-large"
   }
+  budget.copiedFiles += 1
+  budget.copiedBytes += size
+  return null
+}
+
+function reserveRawExportFileBudget(size: number, budget: RawExportBudget, limits: RawExportLimits): RawUploadSkipReason | null {
+  if (size > limits.maxFileBytes) return "file-too-large"
+  if (budget.copiedFiles + 1 > limits.maxFiles) return "too-many-files"
+  if (budget.copiedBytes + size > limits.maxTotalBytes) return "too-large"
   budget.copiedFiles += 1
   budget.copiedBytes += size
   return null

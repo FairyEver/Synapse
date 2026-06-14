@@ -10,6 +10,7 @@ import { createGuardedFetchUrl } from "../../services/source-acquisition/guarded
 import type { FetchUrl } from "../../services/source-acquisition/url-source"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { sanitizeError } from "../../services/error-sanitize"
+import { KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES } from "../../../config"
 
 const logger = createMainLogger("knowledge-base.ipc")
 const KNOWLEDGE_BASE_RESOURCE_PREFIX = "managed-knowledge-base:"
@@ -109,7 +110,7 @@ const trashRawEntriesPayloadSchema = z.object({
 
 const exportRawEntriesPayloadSchema = z.object({
   projectId: z.string().min(1),
-  relativePaths: z.array(z.string().min(1)),
+  relativePaths: z.array(z.string().min(1)).min(1).max(KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES),
 })
 
 const addUrlSourcePayloadSchema = z.object({

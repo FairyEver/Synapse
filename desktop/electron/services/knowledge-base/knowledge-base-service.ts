@@ -297,9 +297,10 @@ export class KnowledgeBaseService {
   async exportRawEntries(payload: SynapseKnowledgeBaseExportRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
-    const result = await this.rawFileManager.exportEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
+    const relativePaths = Array.from(new Set(payload.relativePaths))
+    const result = await this.rawFileManager.exportEntries(rawRoot, relativePaths, payload.targetDirectoryPath)
     this.recordRawMutation("exportRawEntries", payload.projectId, result, {
-      rawRelativePaths: payload.relativePaths,
+      rawRelativePaths: relativePaths,
     })
     return { projectId: payload.projectId, ...result }
   }

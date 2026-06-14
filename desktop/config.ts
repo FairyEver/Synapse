@@ -46,6 +46,21 @@ export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILE_BYTES = 256 * 1024 * 1024
 // 知识库资料目录上传总字节数：限制外部文件夹递归复制进托管 .raw 时的单次总写入体积，避免误选大目录占满磁盘。
 export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_TOTAL_BYTES = 1024 * 1024 * 1024
 
+// 知识库资料导出最大选中条目数：限制单次从托管 .raw 导出到外部目录的顶层条目数量。
+export const KNOWLEDGE_BASE_RAW_EXPORT_MAX_ENTRIES = 200
+
+// 知识库资料导出最大文件数：限制目录递归导出时实际写入外部目录的文件数量。
+export const KNOWLEDGE_BASE_RAW_EXPORT_MAX_FILES = 2_000
+
+// 知识库资料导出最大目录深度：限制目录递归导出时遍历 .raw 子目录的嵌套层数。
+export const KNOWLEDGE_BASE_RAW_EXPORT_MAX_DEPTH = 16
+
+// 知识库资料导出单文件最大字节数：限制目录递归导出时的单个文件大小，超出后跳过该顶层导出条目。
+export const KNOWLEDGE_BASE_RAW_EXPORT_MAX_FILE_BYTES = 256 * 1024 * 1024
+
+// 知识库资料导出总字节数：限制单次导出写入外部目录的总数据量，避免误选大目录占满磁盘。
+export const KNOWLEDGE_BASE_RAW_EXPORT_MAX_TOTAL_BYTES = 1024 * 1024 * 1024
+
 // CC Switch JSON 配置导入最大字节数：限制设置页读取外部 .cc-switch/config.json 的单次解析体积。
 export const CC_SWITCH_IMPORT_JSON_MAX_BYTES = 2 * 1024 * 1024
 

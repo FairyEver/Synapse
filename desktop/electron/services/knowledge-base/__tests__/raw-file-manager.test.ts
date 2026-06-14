@@ -300,6 +300,42 @@ describe("KnowledgeBaseRawFileManager", () => {
     await expect(readFile(path.join(exportRoot, "会议资料", "01-2.pdf"), "utf8")).resolves.toBe("new\n")
   })
 
+  it("skips folder export without partial copies when the recursive file budget is exceeded", async () => {
+    const rawRoot = await tempDir()
+    const exportRoot = await tempDir()
+    await mkdir(path.join(rawRoot, "会议资料"), { recursive: true })
+    await writeFile(path.join(rawRoot, "会议资料", "01.md"), "one\n", "utf8")
+    await writeFile(path.join(rawRoot, "会议资料", "02.md"), "two\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      exportLimits: { maxFiles: 1 },
+    })
+
+    const result = await manager.exportEntries(rawRoot, ["会议资料"], exportRoot)
+
+    expect(result.entries).toEqual([])
+    expect(result.skipped).toEqual([{ path: "会议资料", reason: "too-many-files" }])
+    await expect(readFile(path.join(exportRoot, "会议资料", "01.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(exportRoot, "会议资料", "02.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("skips folder export without partial copies when the recursive depth budget is exceeded", async () => {
+    const rawRoot = await tempDir()
+    const exportRoot = await tempDir()
+    await mkdir(path.join(rawRoot, "资料", "一级", "二级"), { recursive: true })
+    await writeFile(path.join(rawRoot, "资料", "一级", "二级", "note.md"), "note\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      exportLimits: { maxDepth: 1 },
+    })
+
+    const result = await manager.exportEntries(rawRoot, ["资料"], exportRoot)
+
+    expect(result.entries).toEqual([])
+    expect(result.skipped).toEqual([{ path: "资料", reason: "too-deep" }])
+    await expect(readFile(path.join(exportRoot, "资料", "一级", "二级", "note.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("does not export root internal files when exporting the raw root", async () => {
     const rawRoot = await tempDir()
     const exportRoot = await tempDir()
