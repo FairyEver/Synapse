@@ -40,6 +40,9 @@ export const AUTOMATION_INGRESS_WEBHOOK_RUN_RETENTION_LIMIT = 1000
 // Automation Ingress Webhook 运行记录列表返回上限：限制单次状态查询和 UI 展示读取的历史数量。
 export const AUTOMATION_INGRESS_WEBHOOK_RUN_LIST_LIMIT = 100
 
+// Reply Outbox 已发送记录保留上限：按回复目标保留最近的已发送事件，避免长会话外部回复历史无限增长。
+export const REPLY_OUTBOX_SENT_RETENTION_LIMIT = 500
+
 // 知识库资料目录上传最大文件数：限制外部文件夹递归复制进托管 .raw 时的单次文件数量，避免误选大目录拖垮主进程。
 export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILES = 2_000
 

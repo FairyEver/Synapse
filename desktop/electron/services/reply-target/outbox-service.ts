@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 
+import { REPLY_OUTBOX_SENT_RETENTION_LIMIT } from "../../../config"
 import type { DataNamespace, OutboxEntryV1, OutboxPayloadV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AgentEvent } from "../agent-runtime"
@@ -31,16 +32,22 @@ export interface ReplyOutboxServiceDeps {
   readonly projectId: string
   readonly outbox: DataNamespace<OutboxEntryV1>
   readonly logger?: Pick<StructuredLogger, "warn">
+  readonly sentRetentionLimit?: number
   readonly now?: () => Date
   readonly idFactory?: () => string
 }
 
 export class ReplyOutboxService {
   private readonly deps: ReplyOutboxServiceDeps
+  private readonly sentRetentionLimit: number
   private pendingWrite: Promise<void> = Promise.resolve()
 
   constructor(deps: ReplyOutboxServiceDeps) {
     this.deps = deps
+    this.sentRetentionLimit = normalizePositiveLimit(
+      deps.sentRetentionLimit,
+      REPLY_OUTBOX_SENT_RETENTION_LIMIT,
+    )
   }
 
   record(input: ReplyOutboxRecordInput): Promise<string> {
@@ -105,6 +112,14 @@ export class ReplyOutboxService {
           lastError: lastError ? outboxErrorSummary(lastError) : undefined,
           updatedAt: now,
         })
+        if (status === "sent") {
+          await this.pruneSentEntriesSafely({
+            ...entry,
+            status,
+            lastError: undefined,
+            updatedAt: now,
+          })
+        }
       })
     this.pendingWrite = write
       .catch((error) => {
@@ -123,6 +138,33 @@ export class ReplyOutboxService {
 
   flushForTests(): Promise<void> {
     return this.pendingWrite
+  }
+
+  private async pruneSentEntriesSafely(entry: OutboxEntryV1): Promise<void> {
+    try {
+      await this.pruneSentEntries(entry)
+    } catch (error) {
+      this.deps.logger?.warn("Outbox retention cleanup failed.", {
+        projectId: entry.projectId,
+        platform: entry.destination.platform,
+        connectorId: entry.destination.connectorId,
+        hasSessionKey: Boolean(entry.destination.sessionKey),
+        boundary: "reply-outbox-retention",
+        ...errorDiagnostic(error),
+      })
+    }
+  }
+
+  private async pruneSentEntries(entry: OutboxEntryV1): Promise<void> {
+    const entries = await this.deps.outbox.list({
+      projectId: entry.projectId,
+      status: "sent",
+    })
+    const matchingSentEntries = entries
+      .filter((candidate) => sameDestination(candidate.destination, entry.destination))
+      .sort((left, right) => outboxUpdatedAt(right) - outboxUpdatedAt(left))
+    const staleEntries = matchingSentEntries.slice(this.sentRetentionLimit)
+    await Promise.all(staleEntries.map((candidate) => this.deps.outbox.remove(candidate.id)))
   }
 
   private nextId(): string {
@@ -198,4 +240,22 @@ function errorDiagnostic(error: unknown): Record<string, unknown> {
 
 function outboxErrorSummary(message: string): string {
   return `Error (${message.length} chars)`
+}
+
+function sameDestination(
+  left: OutboxEntryV1["destination"],
+  right: OutboxEntryV1["destination"],
+): boolean {
+  return left.platform === right.platform
+    && left.connectorId === right.connectorId
+    && left.sessionKey === right.sessionKey
+}
+
+function outboxUpdatedAt(entry: OutboxEntryV1): number {
+  return Date.parse(entry.updatedAt || entry.createdAt)
+}
+
+function normalizePositiveLimit(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback
+  return Math.max(1, Math.floor(value))
 }

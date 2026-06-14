@@ -117,6 +117,55 @@ describe("ReplyOutboxService", () => {
     expect(JSON.stringify(await outbox.list())).not.toContain("/Users/example")
   })
 
+  it("prunes old sent entries for the same reply target", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    let nextId = 0
+    let clock = Date.parse("2026-04-26T00:00:00.000Z")
+    const service = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox,
+      idFactory: () => `outbox-${nextId++}`,
+      now: () => {
+        clock += 1000
+        return new Date(clock)
+      },
+      sentRetentionLimit: 2,
+    })
+    const target = {
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      transport: { kind: "local-renderer" },
+    }
+    await service.record({
+      target,
+      payload: { kind: "text", content: "pending", metadata: {} },
+      status: "pending",
+    })
+    await service.record({
+      target,
+      payload: { kind: "text", content: "failed", metadata: {} },
+      status: "failed",
+      lastError: "failed",
+    })
+
+    for (let index = 0; index < 4; index += 1) {
+      const id = await service.record({
+        target,
+        payload: { kind: "text", content: `sent-${index}`, metadata: {} },
+        status: "pending",
+      })
+      await service.updateRecordStatus(id, "sent")
+    }
+    await service.flushForTests()
+
+    expect((await outbox.list()).map((entry) => entry.id).sort()).toEqual([
+      "outbox-0",
+      "outbox-1",
+      "outbox-4",
+      "outbox-5",
+    ])
+  })
+
   it("records Agent event correlation metadata for diagnostics", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const service = new ReplyOutboxService({
