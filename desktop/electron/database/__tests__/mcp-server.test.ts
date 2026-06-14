@@ -10,7 +10,12 @@ vi.mock("../../services/log-store", () => ({
   }),
 }))
 
-function postJson(port: number, payload: unknown, authorization?: string): Promise<{ status: number; body: string }> {
+function postJson(
+  port: number,
+  payload: unknown,
+  authorization?: string,
+  origin?: string,
+): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const body = Buffer.from(JSON.stringify(payload), "utf8")
     const headers: Record<string, string | number> = {
@@ -20,6 +25,9 @@ function postJson(port: number, payload: unknown, authorization?: string): Promi
     }
     if (authorization) {
       headers.Authorization = authorization
+    }
+    if (origin) {
+      headers.Origin = origin
     }
     const req = request({
       method: "POST",
@@ -90,6 +98,26 @@ describe("MCP HTTP server", () => {
 
     expect(response.status).toBe(401)
     expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" })
+  })
+
+  it("rejects localhost-origin tool calls without Authorization", async () => {
+    const dispatch = vi.fn()
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({ dispatch })
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "automation_item_create",
+        arguments: { name: "unsafe" },
+      },
+    }, undefined, "http://localhost:5173")
+
+    expect(response.status).toBe(401)
+    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" })
+    expect(dispatch).not.toHaveBeenCalled()
   })
 
   it("accepts local MCP requests with the server Bearer token", async () => {
