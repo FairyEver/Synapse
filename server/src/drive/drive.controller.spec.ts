@@ -1074,7 +1074,9 @@ describe("DriveController", () => {
     const response = await request(app!.getHttpServer()).get("/files/shr_folder/items/folder-2/zip").expect(200)
 
     expect(response.headers["content-type"]).toContain("application/zip")
-    expect(response.headers["content-disposition"]).toContain(`filename="${encodeURIComponent("资料.zip")}"`)
+    expect(response.headers["content-disposition"]).toBe(
+      "attachment; filename=\"__.zip\"; filename*=UTF-8''%E8%B5%84%E6%96%99.zip",
+    )
     expect(drive.createFolderZipEntriesForShareBrowserItem).toHaveBeenCalledWith({
       shareId: "shr_folder",
       itemId: "folder-2",
@@ -1110,7 +1112,9 @@ describe("DriveController", () => {
       const response = await request(userApp.getHttpServer()).get("/drive/items/root-1/items/folder-2/zip").expect(200)
 
       expect(response.headers["content-type"]).toContain("application/zip")
-      expect(response.headers["content-disposition"]).toContain(`filename="${encodeURIComponent("项目资料.zip")}"`)
+      expect(response.headers["content-disposition"]).toBe(
+        "attachment; filename=\"____.zip\"; filename*=UTF-8''%E9%A1%B9%E7%9B%AE%E8%B5%84%E6%96%99.zip",
+      )
       expect(drive.createFolderZipEntriesForOwnerBrowserItem).toHaveBeenCalledWith({
         userId: "user-1",
         rootItemId: "root-1",

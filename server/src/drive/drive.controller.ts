@@ -18,7 +18,7 @@ import {
   type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
-import { type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
+import { driveContentDisposition, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
@@ -898,7 +898,7 @@ async function sendDriveZip(
   storage: DriveStoragePort,
 ): Promise<void> {
   response.setHeader("Content-Type", "application/zip")
-  response.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`)
+  response.setHeader("Content-Disposition", driveContentDisposition(filename))
   const archive = archiver("zip", { zlib: { level: 6 } })
   const archiveError = new Promise<never>((_, reject) => {
     archive.once("error", reject)

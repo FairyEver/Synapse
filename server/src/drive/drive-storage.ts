@@ -210,7 +210,7 @@ export class CosDriveStorage implements DriveStoragePort {
       key: input.key,
       method: "get",
       expires: driveDownloadUrlTtlSeconds,
-      responseContentDisposition: contentDisposition(input.filename),
+      responseContentDisposition: driveContentDisposition(input.filename),
     })
     return { url, expiresAt }
   }
@@ -347,7 +347,7 @@ function parseContentLength(value: string | undefined): bigint | undefined {
   return BigInt(value)
 }
 
-function contentDisposition(filename: string): string {
+export function driveContentDisposition(filename: string): string {
   const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
   return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
 }
