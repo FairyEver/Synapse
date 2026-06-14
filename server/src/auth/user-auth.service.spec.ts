@@ -546,6 +546,40 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("keeps logout successful when success audit persistence fails", async () => {
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    try {
+      const prisma = createPrismaMock()
+      prisma.userSession.findUnique.mockResolvedValue({
+        id: "session-1",
+        revokedAt: null,
+        user: { id: "user-1", email: "u@example.com" },
+      })
+      prisma.userSession.update.mockResolvedValue({})
+      const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit token=secret failed")) }
+      const service = createService(prisma, auditLog)
+
+      await expect(service.logout({ refreshToken: "refresh-token" }, "203.0.113.25"))
+        .resolves
+        .toEqual({ ok: true })
+
+      expect(prisma.userSession.update).toHaveBeenCalledWith({
+        where: { id: "session-1" },
+        data: { revokedAt: expect.any(Date) },
+      })
+      expect(warnSpy).toHaveBeenCalledWith({
+        action: "user.logout.success",
+        targetType: "user",
+        targetId: "user-1",
+        errorName: "Error",
+      }, "Failed to record user authentication success audit log")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("refresh-token")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("registers users without issuing refresh sessions and records success audits with the request ip", async () => {
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }

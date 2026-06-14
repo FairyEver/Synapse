@@ -575,7 +575,7 @@ export class UserAuthService {
         where: { id: session.id },
         data: { revokedAt: new Date() },
       })
-      await this.recordUserAudit({
+      await this.recordUserAuthSuccessAuditSafely({
         adminEmail: session.user.email,
         action: "user.logout.success",
         targetId: session.user.id,
