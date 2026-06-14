@@ -7,9 +7,28 @@ import type {
   SynapseKnowledgeBaseRawMutationResult,
 } from "../../../src/types/knowledge-base"
 import { validateKnowledgeBaseRawEntryNameInput } from "../../../src/lib/knowledge-base-raw-entry-name"
+import {
+  KNOWLEDGE_BASE_RAW_UPLOAD_MAX_DEPTH,
+  KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILE_BYTES,
+  KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILES,
+  KNOWLEDGE_BASE_RAW_UPLOAD_MAX_TOTAL_BYTES,
+} from "../../../config"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 type TrashItem = (targetPath: string) => Promise<void>
+type RawUploadSkipReason = SynapseKnowledgeBaseRawMutationResult["skipped"][number]["reason"]
+type RawUploadLimits = {
+  readonly maxFiles: number
+  readonly maxDepth: number
+  readonly maxFileBytes: number
+  readonly maxTotalBytes: number
+}
+type RawUploadBudget = {
+  copiedFiles: number
+  copiedBytes: number
+  stopped: boolean
+  stopReason?: RawUploadSkipReason
+}
 type RawEntryListOptions = {
   readonly entryKind?: "all" | "directory"
   readonly query?: string
@@ -26,13 +45,22 @@ type RawEntryListPage = {
 
 export interface RawFileManagerDeps {
   readonly trashItem: TrashItem
+  readonly uploadLimits?: Partial<RawUploadLimits>
 }
 
 export class KnowledgeBaseRawFileManager {
   private readonly trashItem: TrashItem
+  private readonly uploadLimits: RawUploadLimits
 
   constructor(deps: RawFileManagerDeps) {
     this.trashItem = deps.trashItem
+    this.uploadLimits = {
+      maxFiles: KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILES,
+      maxDepth: KNOWLEDGE_BASE_RAW_UPLOAD_MAX_DEPTH,
+      maxFileBytes: KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILE_BYTES,
+      maxTotalBytes: KNOWLEDGE_BASE_RAW_UPLOAD_MAX_TOTAL_BYTES,
+      ...deps.uploadLimits,
+    }
   }
 
   async list(rawRoot: string, directoryPath: string): Promise<SynapseKnowledgeBaseRawEntry[]> {
@@ -140,8 +168,13 @@ export class KnowledgeBaseRawFileManager {
     await mkdir(targetDirectory, { recursive: true })
     const entries: SynapseKnowledgeBaseRawEntry[] = []
     const skipped: SynapseKnowledgeBaseRawMutationResult["skipped"] = []
+    const budget: RawUploadBudget = { copiedFiles: 0, copiedBytes: 0, stopped: false }
     for (const itemPath of itemPaths) {
-      await this.copyExternalItem(rawRoot, itemPath, targetDirectory, entries, skipped)
+      if (budget.stopped) {
+        skipped.push({ path: itemPath, reason: budget.stopReason ?? "too-large" })
+        continue
+      }
+      await this.copyExternalItem(rawRoot, itemPath, targetDirectory, entries, skipped, budget, 0)
     }
     return { entries: sortEntries(entries), skipped }
   }
@@ -152,8 +185,14 @@ export class KnowledgeBaseRawFileManager {
     targetDirectory: string,
     entries: SynapseKnowledgeBaseRawEntry[],
     skipped: SynapseKnowledgeBaseRawMutationResult["skipped"],
+    budget: RawUploadBudget,
+    depth: number,
   ): Promise<void> {
     try {
+      if (budget.stopped) {
+        skipped.push({ path: sourcePath, reason: budget.stopReason ?? "too-large" })
+        return
+      }
       const resolvedSource = path.resolve(sourcePath)
       const sourceStat = await lstat(resolvedSource)
       if (isSystemNoiseFile(path.basename(resolvedSource))) {
@@ -173,12 +212,31 @@ export class KnowledgeBaseRawFileManager {
         return
       }
       if (sourceStat.isFile()) {
+        const budgetFailure = reserveRawUploadFileBudget(sourceStat.size, budget, this.uploadLimits)
+        if (budgetFailure) {
+          knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
+            itemName: path.basename(sourcePath),
+            reason: budgetFailure,
+            copiedFiles: budget.copiedFiles,
+            copiedBytes: budget.copiedBytes,
+          })
+          skipped.push({ path: sourcePath, reason: budgetFailure })
+          return
+        }
         const targetPath = await copyFileToAvailablePath(resolvedSource, targetDirectory, path.basename(resolvedSource))
         entries.push(await entryForPath(rawRoot, targetPath, "file"))
         return
       }
       if (sourceStat.isDirectory()) {
-        await this.copyExternalDirectory(rawRoot, resolvedSource, targetDirectory, entries, skipped)
+        if (depth > this.uploadLimits.maxDepth) {
+          knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
+            itemName: path.basename(sourcePath),
+            reason: "too-deep",
+          })
+          skipped.push({ path: sourcePath, reason: "too-deep" })
+          return
+        }
+        await this.copyExternalDirectory(rawRoot, resolvedSource, targetDirectory, entries, skipped, budget, depth)
         return
       }
       knowledgeBaseLogger.warn("Knowledge Base raw item upload skipped.", {
@@ -202,13 +260,20 @@ export class KnowledgeBaseRawFileManager {
     targetDirectory: string,
     entries: SynapseKnowledgeBaseRawEntry[],
     skipped: SynapseKnowledgeBaseRawMutationResult["skipped"],
+    budget: RawUploadBudget,
+    depth: number,
   ): Promise<void> {
     const targetPath = path.join(targetDirectory, path.basename(sourceDirectory))
     await mkdir(targetPath, { recursive: true })
     entries.push(await entryForPath(rawRoot, targetPath, "directory"))
     const children = await readdir(sourceDirectory, { withFileTypes: true })
     for (const child of children) {
-      await this.copyExternalItem(rawRoot, path.join(sourceDirectory, child.name), targetPath, entries, skipped)
+      const childPath = path.join(sourceDirectory, child.name)
+      if (budget.stopped) {
+        skipped.push({ path: childPath, reason: budget.stopReason ?? "too-large" })
+        break
+      }
+      await this.copyExternalItem(rawRoot, childPath, targetPath, entries, skipped, budget, depth + 1)
     }
   }
 
@@ -407,6 +472,23 @@ function joinRawPath(parent: string, name: string): string {
 
 function isSystemNoiseFile(name: string): boolean {
   return name === ".DS_Store" || name === "Thumbs.db" || name === "desktop.ini"
+}
+
+function reserveRawUploadFileBudget(size: number, budget: RawUploadBudget, limits: RawUploadLimits): RawUploadSkipReason | null {
+  if (size > limits.maxFileBytes) return "file-too-large"
+  if (budget.copiedFiles + 1 > limits.maxFiles) {
+    budget.stopped = true
+    budget.stopReason = "too-many-files"
+    return "too-many-files"
+  }
+  if (budget.copiedBytes + size > limits.maxTotalBytes) {
+    budget.stopped = true
+    budget.stopReason = "too-large"
+    return "too-large"
+  }
+  budget.copiedFiles += 1
+  budget.copiedBytes += size
+  return null
 }
 
 function isRootInternalRawFile(relativePath: string): boolean {

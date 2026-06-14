@@ -200,6 +200,70 @@ describe("KnowledgeBaseRawFileManager", () => {
     expect(result.skipped).toEqual([{ path: path.join(folder, "link.md"), reason: "symlink" }])
   })
 
+  it("stops recursive upload when the file count budget is reached", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const folder = path.join(sourceRoot, "资料")
+    await mkdir(folder, { recursive: true })
+    await writeFile(path.join(folder, "a.md"), "a\n", "utf8")
+    await writeFile(path.join(folder, "b.md"), "b\n", "utf8")
+    await writeFile(path.join(folder, "c.md"), "c\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      uploadLimits: { maxFiles: 2 },
+    })
+
+    const result = await manager.uploadItems(rawRoot, "", [folder])
+
+    expect(result.entries.filter((entry) => entry.kind === "file")).toHaveLength(2)
+    expect(result.skipped).toEqual([{ path: path.join(folder, "c.md"), reason: "too-many-files" }])
+  })
+
+  it("skips files that exceed recursive upload byte budgets", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const folder = path.join(sourceRoot, "资料")
+    await mkdir(folder, { recursive: true })
+    await writeFile(path.join(folder, "big.md"), "12345", "utf8")
+    await writeFile(path.join(folder, "first.md"), "1234", "utf8")
+    await writeFile(path.join(folder, "second.md"), "1234", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      uploadLimits: { maxFileBytes: 4, maxTotalBytes: 6 },
+    })
+
+    const result = await manager.uploadItems(rawRoot, "", [folder])
+
+    expect(result.entries.map((entry) => entry.relativePath)).toEqual([
+      "资料",
+      "资料/first.md",
+    ])
+    expect(result.skipped).toEqual([
+      { path: path.join(folder, "big.md"), reason: "file-too-large" },
+      { path: path.join(folder, "second.md"), reason: "too-large" },
+    ])
+  })
+
+  it("stops recursive upload when the directory depth budget is reached", async () => {
+    const rawRoot = await tempDir()
+    const sourceRoot = await tempDir()
+    const folder = path.join(sourceRoot, "资料")
+    await mkdir(path.join(folder, "一级", "二级"), { recursive: true })
+    await writeFile(path.join(folder, "一级", "二级", "note.md"), "note\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+      uploadLimits: { maxDepth: 1 },
+    })
+
+    const result = await manager.uploadItems(rawRoot, "", [folder])
+
+    expect(result.entries.map((entry) => entry.relativePath).sort()).toEqual([
+      "资料",
+      "资料/一级",
+    ])
+    expect(result.skipped).toEqual([{ path: path.join(folder, "一级", "二级"), reason: "too-deep" }])
+  })
+
   it("exports a file to an external directory with collision-safe names", async () => {
     const rawRoot = await tempDir()
     const exportRoot = await tempDir()

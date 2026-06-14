@@ -34,6 +34,18 @@ export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 // 定时任务导入文件最大字节数：限制调度器从外部 JSON 导入任务时主进程读取和 IPC 传输的单文件体积。
 export const TASK_SCHEDULER_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 
+// 知识库资料目录上传最大文件数：限制外部文件夹递归复制进托管 .raw 时的单次文件数量，避免误选大目录拖垮主进程。
+export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILES = 2_000
+
+// 知识库资料目录上传最大目录深度：限制外部文件夹递归复制进托管 .raw 时的嵌套层数，避免异常深目录长时间遍历。
+export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_DEPTH = 16
+
+// 知识库资料目录上传单文件最大字节数：限制外部文件夹递归复制时的单个文件大小，超出后跳过该文件。
+export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILE_BYTES = 256 * 1024 * 1024
+
+// 知识库资料目录上传总字节数：限制外部文件夹递归复制进托管 .raw 时的单次总写入体积，避免误选大目录占满磁盘。
+export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_TOTAL_BYTES = 1024 * 1024 * 1024
+
 // 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
 export const DEFAULT_APP_NAVIGATION_TAB_ID = "skill" satisfies AppNavigationTabId
 

@@ -166,6 +166,10 @@ const rawMutationResultSchema = z.object({
       "symlink",
       "system-noise",
       "export-error",
+      "too-many-files",
+      "too-large",
+      "too-deep",
+      "file-too-large",
     ]),
   })),
 })

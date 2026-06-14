@@ -260,6 +260,14 @@ function skippedReasonLabel(reason: string): string {
       return "系统文件"
     case "export-error":
       return "导出失败"
+    case "too-many-files":
+      return "文件过多"
+    case "too-large":
+      return "总大小超限"
+    case "too-deep":
+      return "目录过深"
+    case "file-too-large":
+      return "文件过大"
     case "invalid_url":
       return "URL 无效"
     case "unsupported_protocol":

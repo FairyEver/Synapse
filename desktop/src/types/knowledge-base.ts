@@ -159,6 +159,10 @@ export type SynapseKnowledgeBaseRawSkipReason =
   | "symlink"
   | "system-noise"
   | "export-error"
+  | "too-many-files"
+  | "too-large"
+  | "too-deep"
+  | "file-too-large"
 
 export type SynapseKnowledgeBaseRawMutationResult = {
   projectId: string
