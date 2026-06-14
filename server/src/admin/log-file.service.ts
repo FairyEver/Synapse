@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
-import { open, readdir, stat, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import type { Stats } from "node:fs";
+import { lstat, open, readdir, realpath, unlink } from "node:fs/promises";
+import { basename, isAbsolute, join, relative } from "node:path";
 import type { Writable } from "node:stream";
 import archiver from "archiver";
 import { redactSensitiveLogText } from "../common/audit-error";
@@ -46,6 +47,12 @@ export interface LogCleanupResult {
   failures: LogCleanupFailure[];
 }
 
+interface ResolvedLogFile {
+  name: string;
+  path: string;
+  stat: Stats;
+}
+
 @Injectable()
 export class LogFileService {
   private readonly logDir: string;
@@ -65,18 +72,12 @@ export class LogFileService {
     const files: LogFileInfo[] = [];
 
     for (const name of entries) {
-      if (!name.endsWith(".log")) continue;
-      let fileStat: Awaited<ReturnType<typeof stat>>;
-      try {
-        fileStat = await stat(join(this.logDir, name));
-      } catch (error) {
-        if (this.isFileNotFoundError(error)) continue;
-        throw error;
-      }
+      const file = await this.resolveLogFile(name);
+      if (!file) continue;
       files.push({
-        name,
-        size: fileStat.size,
-        modifiedAt: fileStat.mtime.toISOString(),
+        name: file.name,
+        size: file.stat.size,
+        modifiedAt: file.stat.mtime.toISOString(),
       });
     }
 
@@ -141,16 +142,22 @@ export class LogFileService {
 
   async streamZipTo(output: Writable, opts: { from?: string; to?: string } = {}): Promise<LogZipStreamResult> {
     const filtered = await this.listDownloadFiles(opts);
+    const archiveEntries: Array<{ name: string; path: string }> = [];
+    for (const file of filtered) {
+      const resolved = await this.resolveLogFile(file.name);
+      if (resolved) archiveEntries.push({ name: file.name, path: resolved.path });
+    }
+
     return new Promise((resolve, reject) => {
       const archive = archiver("zip", { zlib: { level: 6 } });
 
       archive.on("error", reject);
       output.on("error", reject);
-      archive.on("end", () => resolve({ bytes: archive.pointer(), fileCount: filtered.length }));
+      archive.on("end", () => resolve({ bytes: archive.pointer(), fileCount: archiveEntries.length }));
       archive.pipe(output);
 
-      for (const file of filtered) {
-        archive.file(join(this.logDir, file.name), { name: file.name });
+      for (const file of archiveEntries) {
+        archive.file(file.path, { name: file.name });
       }
 
       archive.finalize();
@@ -206,6 +213,32 @@ export class LogFileService {
 
   private isFileNotFoundError(error: unknown): boolean {
     return error instanceof Error && "code" in error && error.code === "ENOENT";
+  }
+
+  private async resolveLogFile(name: string): Promise<ResolvedLogFile | null> {
+    if (!name.endsWith(".log") || basename(name) !== name) return null;
+
+    const path = join(this.logDir, name);
+    try {
+      const fileStat = await lstat(path);
+      if (!fileStat.isFile()) return null;
+
+      const [resolvedLogDir, resolvedPath] = await Promise.all([
+        realpath(this.logDir),
+        realpath(path),
+      ]);
+      if (!this.isPathInside(resolvedLogDir, resolvedPath)) return null;
+
+      return { name, path: resolvedPath, stat: fileStat };
+    } catch (error) {
+      if (this.isFileNotFoundError(error)) return null;
+      throw error;
+    }
+  }
+
+  private isPathInside(parentPath: string, childPath: string): boolean {
+    const relativePath = relative(parentPath, childPath);
+    return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
   }
 
   private cleanupFailure(name: string, error: unknown): LogCleanupFailure {

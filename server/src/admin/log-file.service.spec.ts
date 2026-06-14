@@ -1,4 +1,4 @@
-import { open, readdir, readFile, stat, unlink } from "node:fs/promises";
+import { lstat, open, readdir, readFile, realpath, unlink } from "node:fs/promises";
 import { Writable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogFileService } from "./log-file.service";
@@ -33,9 +33,10 @@ const archiverMock = vi.hoisted(() => {
 });
 
 vi.mock("node:fs/promises", () => ({
+  lstat: vi.fn(),
   open: vi.fn(),
   readdir: vi.fn(),
-  stat: vi.fn(),
+  realpath: vi.fn(),
   readFile: vi.fn(),
   unlink: vi.fn(),
 }));
@@ -44,27 +45,30 @@ vi.mock("archiver", () => ({
   default: archiverMock.factory,
 }));
 
+const mockedLstat = vi.mocked(lstat);
 const mockedOpen = vi.mocked(open);
 const mockedReaddir = vi.mocked(readdir);
 const mockedReadFile = vi.mocked(readFile);
-const mockedStat = vi.mocked(stat);
+const mockedRealpath = vi.mocked(realpath);
 const mockedUnlink = vi.mocked(unlink);
 
 describe("LogFileService", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     archiverMock.reset();
+    mockedRealpath.mockImplementation(async (path) => String(path) as never);
   });
 
-  it("skips log files deleted between readdir and stat", async () => {
+  it("skips log files deleted between readdir and lstat", async () => {
     mockedReaddir.mockResolvedValue(["app.log", "rotated.log", "notes.txt"] as never);
-    mockedStat.mockImplementation(async (path) => {
+    mockedLstat.mockImplementation(async (path) => {
       if (String(path).endsWith("rotated.log")) {
         throw Object.assign(new Error("missing"), { code: "ENOENT" });
       }
       return {
         size: 12,
         mtime: new Date("2026-05-23T00:00:00.000Z"),
+        isFile: () => true,
       } as never;
     });
 
@@ -79,9 +83,9 @@ describe("LogFileService", () => {
     ]);
   });
 
-  it("keeps unexpected stat errors visible", async () => {
+  it("keeps unexpected lstat errors visible", async () => {
     mockedReaddir.mockResolvedValue(["app.log"] as never);
-    mockedStat.mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+    mockedLstat.mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
 
     const service = new LogFileService("/tmp/synapse-logs");
 
@@ -102,7 +106,7 @@ describe("LogFileService", () => {
     const service = new LogFileService("/tmp/synapse-logs");
 
     await expect(service.listFiles()).rejects.toThrow("permission denied");
-    expect(mockedStat).not.toHaveBeenCalled();
+    expect(mockedLstat).not.toHaveBeenCalled();
   });
 
   it("reads recent entries from the file tail without loading the whole file", async () => {
@@ -110,9 +114,10 @@ describe("LogFileService", () => {
     const content = `${"not-json\n".repeat(20_000)}${entry}\n`;
     const handle = mockReadableFile(content);
     mockedReaddir.mockResolvedValue(["app.log"] as never);
-    mockedStat.mockResolvedValue({
+    mockedLstat.mockResolvedValue({
       size: Buffer.byteLength(content),
       mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => true,
     } as never);
 
     const service = new LogFileService("/tmp/synapse-logs");
@@ -144,9 +149,10 @@ describe("LogFileService", () => {
     });
     mockReadableFile(`${entry}\n`);
     mockedReaddir.mockResolvedValue(["app.log"] as never);
-    mockedStat.mockResolvedValue({
+    mockedLstat.mockResolvedValue({
       size: Buffer.byteLength(entry) + 1,
       mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => true,
     } as never);
     const service = new LogFileService("/tmp/synapse-logs");
 
@@ -184,9 +190,10 @@ describe("LogFileService", () => {
     const content = `${oldEntry}\n${keptEntry}\n${newEntry}\n`;
     mockReadableFile(content);
     mockedReaddir.mockResolvedValue(["app.log"] as never);
-    mockedStat.mockResolvedValue({
+    mockedLstat.mockResolvedValue({
       size: Buffer.byteLength(content),
       mtime: new Date("2026-05-24T00:00:00.000Z"),
+      isFile: () => true,
     } as never);
 
     const service = new LogFileService("/tmp/synapse-logs");
@@ -202,9 +209,10 @@ describe("LogFileService", () => {
 
   it("reports cleanup failures when one log file cannot be deleted", async () => {
     mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
-    mockedStat.mockResolvedValue({
+    mockedLstat.mockResolvedValue({
       size: 12,
       mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => true,
     } as never);
     mockedUnlink.mockImplementation(async (path) => {
       if (String(path).endsWith("server.2026-05-01.log")) {
@@ -227,9 +235,10 @@ describe("LogFileService", () => {
 
   it("treats cleanup ENOENT as already deleted by another request", async () => {
     mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
-    mockedStat.mockResolvedValue({
+    mockedLstat.mockResolvedValue({
       size: 12,
       mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => true,
     } as never);
     mockedUnlink.mockImplementation(async (path) => {
       if (String(path).endsWith("server.2026-05-01.log")) {
@@ -249,9 +258,10 @@ describe("LogFileService", () => {
 
   it("streams log zip data to the provided writable without buffering the archive", async () => {
     mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
-    mockedStat.mockResolvedValue({
+    mockedLstat.mockResolvedValue({
       size: 12,
       mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => true,
     } as never);
     const service = new LogFileService("/tmp/synapse-logs");
     const output = new Writable({
@@ -268,6 +278,57 @@ describe("LogFileService", () => {
     expect(archiverMock.archive.file).toHaveBeenCalledTimes(2);
     expect(archiverMock.archive.finalize).toHaveBeenCalledWith();
     expect(mockedReadFile).not.toHaveBeenCalled();
+  });
+
+  it("does not include symlinked log entries in zip downloads", async () => {
+    mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "secret.2026-05-01.log"] as never);
+    mockedLstat.mockImplementation(async (path) => ({
+      size: 12,
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => !String(path).endsWith("secret.2026-05-01.log"),
+    }) as never);
+    const service = new LogFileService("/tmp/synapse-logs");
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+
+    await expect(service.streamZipTo(output, { from: "2026-05-01", to: "2026-05-01" }))
+      .resolves
+      .toEqual({ bytes: 42, fileCount: 1 });
+
+    expect(archiverMock.archive.file).toHaveBeenCalledTimes(1);
+    expect(archiverMock.archive.file).toHaveBeenCalledWith(
+      "/tmp/synapse-logs/server.2026-05-01.log",
+      { name: "server.2026-05-01.log" },
+    );
+  });
+
+  it("does not include resolved log paths outside the log directory", async () => {
+    mockedReaddir.mockResolvedValue(["server.2026-05-01.log"] as never);
+    mockedLstat.mockResolvedValue({
+      size: 12,
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+      isFile: () => true,
+    } as never);
+    mockedRealpath.mockImplementation(async (path) => (
+      String(path).endsWith("server.2026-05-01.log")
+        ? "/tmp/outside/server.2026-05-01.log"
+        : String(path)
+    ) as never);
+    const service = new LogFileService("/tmp/synapse-logs");
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+
+    await expect(service.streamZipTo(output, { from: "2026-05-01", to: "2026-05-01" }))
+      .resolves
+      .toEqual({ bytes: 42, fileCount: 0 });
+
+    expect(archiverMock.archive.file).not.toHaveBeenCalled();
   });
 });
 
