@@ -764,6 +764,97 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("DeepSeek")
   })
 
+  it("logs CC Switch preview failures without raw secret messages", async () => {
+    const previewCcSwitchClaudeProviders = vi.fn()
+      .mockRejectedValue(new Error("sqlite read failed token=sk-secret"))
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          previewCcSwitchClaudeProviders,
+          importCcSwitchClaudeProviders: vi.fn(),
+          chooseCcSwitchClaudeImportSource: vi.fn().mockResolvedValue({}),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "从 CCS 导入").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith("CC Switch preview failed.", {
+      action: "previewCcSwitchClaudeProviders",
+      boundary: "settings.providers.cc-switch.preview",
+      errorLength: 34,
+      errorName: "Error",
+    })
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
+    expect(document.body.textContent).toContain("读取失败")
+  })
+
+  it("logs CC Switch import failures without raw secret messages", async () => {
+    const previewCcSwitchClaudeProviders = vi.fn().mockResolvedValue({
+      source: { kind: "json", path: "/Users/test/cc-switch.json" },
+      items: [{
+        id: "deepseek",
+        name: "DeepSeek",
+        category: "cn_official",
+        baseUrl: "https://api.deepseek.com/anthropic",
+        apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+        model: "deepseek-chat",
+        haikuModel: "deepseek-haiku",
+        sonnetModel: "deepseek-sonnet",
+        opusModel: "deepseek-opus",
+        status: "ready",
+        selectedByDefault: true,
+      }],
+    })
+    const importCcSwitchClaudeProviders = vi.fn()
+      .mockRejectedValue(new Error("import failed apiKey=sk-secret"))
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          previewCcSwitchClaudeProviders,
+          importCcSwitchClaudeProviders,
+          chooseCcSwitchClaudeImportSource: vi.fn().mockResolvedValue({}),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "从 CCS 导入").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText(document.body, "导入 1 个").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith("CC Switch import failed.", {
+      action: "importCcSwitchClaudeProviders",
+      boundary: "settings.providers.cc-switch.import",
+      errorLength: 30,
+      errorName: "Error",
+    })
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
+    expect(toast).toHaveBeenCalledWith("导入失败")
+  })
+
   it("exports a user provider package from the row action", async () => {
     const chooseProviderPackageExportTarget = vi.fn().mockResolvedValue({
       targetPath: "/Users/test/Custom Provider.synapse-provider.json",

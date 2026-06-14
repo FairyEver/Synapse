@@ -61,7 +61,7 @@ function CcSwitchImportDialog({
       logger.error("CC Switch preview failed.", {
         boundary: "settings.providers.cc-switch.preview",
         action: "previewCcSwitchClaudeProviders",
-        error: rawError instanceof Error ? rawError.message : String(rawError),
+        ...ccSwitchImportErrorDiagnostic(rawError),
       })
       setError("读取失败")
     } finally {
@@ -86,7 +86,7 @@ function CcSwitchImportDialog({
       logger.error("CC Switch source choose failed.", {
         boundary: "settings.providers.cc-switch.choose",
         action: "chooseCcSwitchClaudeImportSource",
-        error: rawError instanceof Error ? rawError.message : String(rawError),
+        ...ccSwitchImportErrorDiagnostic(rawError),
       })
       toast("选择失败")
     }
@@ -120,7 +120,7 @@ function CcSwitchImportDialog({
       logger.error("CC Switch import failed.", {
         boundary: "settings.providers.cc-switch.import",
         action: "importCcSwitchClaudeProviders",
-        error: rawError instanceof Error ? rawError.message : String(rawError),
+        ...ccSwitchImportErrorDiagnostic(rawError),
       })
       toast("导入失败")
     } finally {
@@ -270,6 +270,18 @@ function ImportStatusBadge({ item }: { readonly item: SynapseCcSwitchClaudeProvi
   if (item.status === "ready") return <Badge variant="secondary">可导入</Badge>
   if (item.status === "duplicate") return <Badge variant="outline">已存在</Badge>
   return <Badge variant="destructive">缺少 Key</Badge>
+}
+
+function ccSwitchImportErrorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { CcSwitchImportDialog }
