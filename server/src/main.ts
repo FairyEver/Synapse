@@ -14,7 +14,7 @@ import { registerLiveShutdownSignalHandlers } from "./live/live-shutdown-signals
 async function bootstrap(): Promise<void> {
   const env = loadEnv(process.env)
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, bodyParser: false })
-  app.set("trust proxy", true)
+  app.set("trust proxy", env.trustProxy)
   app.useLogger(app.get(Logger))
   app.useGlobalFilters(new AllExceptionsFilter(await app.resolve(PinoLogger)))
   registerHttpBodyParsers(app)

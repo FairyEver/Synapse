@@ -18,6 +18,7 @@ describe("loadEnv", () => {
     expect(env.databasePoolSize).toBe(10)
     expect(env.adminEmail).toBe("admin@d2.com")
     expect(env.appPublicUrl).toBe("https://synapse.test")
+    expect(env.trustProxy).toBe(false)
   })
 
   it("allows missing public app URL outside production", () => {
@@ -62,6 +63,18 @@ describe("loadEnv", () => {
 
   it("rejects missing required settings", () => {
     expect(() => loadEnv({})).toThrow("DATABASE_URL")
+  })
+
+  it("keeps proxy trust disabled unless explicitly configured", () => {
+    const env = loadEnv(baseEnv)
+
+    expect(env.trustProxy).toBe(false)
+  })
+
+  it("parses explicit proxy trust settings", () => {
+    expect(loadEnv({ ...baseEnv, TRUST_PROXY: "true" }).trustProxy).toBe(true)
+    expect(loadEnv({ ...baseEnv, TRUST_PROXY: "1" }).trustProxy).toBe(1)
+    expect(loadEnv({ ...baseEnv, TRUST_PROXY: "loopback,uniquelocal" }).trustProxy).toBe("loopback,uniquelocal")
   })
 
   it("rejects missing user access jwt secret", () => {

@@ -1,5 +1,29 @@
 import { z } from "zod"
 
+export type TrustProxySetting = boolean | number | string
+
+function parseTrustProxySetting(value: string | undefined): TrustProxySetting {
+  const normalized = value?.trim()
+  if (!normalized || normalized === "0") {
+    return false
+  }
+
+  const lower = normalized.toLowerCase()
+  if (lower === "false" || lower === "off" || lower === "no") {
+    return false
+  }
+
+  if (lower === "true" || lower === "on" || lower === "yes") {
+    return true
+  }
+
+  if (/^[1-9]\d*$/u.test(normalized)) {
+    return Number(normalized)
+  }
+
+  return normalized
+}
+
 const envSchema = z
   .object({
     DATABASE_URL: z.string().min(1),
@@ -11,6 +35,7 @@ const envSchema = z
     USER_REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().default(30),
     NODE_ENV: z.string().optional(),
     APP_PUBLIC_URL: z.string().url().optional(),
+    TRUST_PROXY: z.string().optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
     PORT: z.coerce.number().int().positive().default(3000),
     DRIVE_COS_SECRET_ID: z.string().optional(),
@@ -48,6 +73,7 @@ export interface ServerEnv {
   readonly userAccessTokenMinutes: number
   readonly userRefreshTokenDays: number
   readonly appPublicUrl?: string
+  readonly trustProxy: TrustProxySetting
   readonly databasePoolSize: number
   readonly port: number
   readonly driveCosSecretId?: string
@@ -80,6 +106,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     userAccessTokenMinutes: result.data.USER_ACCESS_TOKEN_MINUTES,
     userRefreshTokenDays: result.data.USER_REFRESH_TOKEN_DAYS,
     appPublicUrl: result.data.APP_PUBLIC_URL,
+    trustProxy: parseTrustProxySetting(result.data.TRUST_PROXY),
     databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,
     driveCosSecretId: result.data.DRIVE_COS_SECRET_ID,
