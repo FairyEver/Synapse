@@ -20,8 +20,8 @@ describe("invitation URL helpers", () => {
     })).toBe("https://app.example.com")
   })
 
-  it("falls back to forwarded request origin", () => {
-    expect(resolvePublicAppUrl({
+  it("rejects missing public app URL instead of falling back to forwarded request origin", () => {
+    expect(() => resolvePublicAppUrl({
       configuredPublicAppUrl: "",
       request: {
         protocol: "http",
@@ -31,11 +31,11 @@ describe("invitation URL helpers", () => {
         },
         get: () => undefined,
       },
-    })).toBe("https://synapse.example.com")
+    })).toThrow("APP_PUBLIC_URL 未配置，无法生成公开链接。")
   })
 
-  it("does not let mismatched forwarded host override the request host", () => {
-    expect(resolvePublicAppUrl({
+  it("rejects missing public app URL instead of using the request host", () => {
+    expect(() => resolvePublicAppUrl({
       configuredPublicAppUrl: "",
       request: {
         protocol: "http",
@@ -46,7 +46,7 @@ describe("invitation URL helpers", () => {
         },
         get: (name: string) => name.toLowerCase() === "host" ? "app.example.com" : undefined,
       },
-    })).toBe("http://app.example.com")
+    })).toThrow("APP_PUBLIC_URL 未配置，无法生成公开链接。")
   })
 
   it("parses tokens from token query URLs", () => {

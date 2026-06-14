@@ -1,15 +1,11 @@
 import type { IncomingHttpHeaders } from "node:http"
+import { InternalServerErrorException } from "@nestjs/common"
 import { normalizePublicAppUrl } from "@synapse/shared"
 
 type RequestOriginInput = {
   readonly headers: IncomingHttpHeaders
   readonly protocol?: string
   get(name: string): string | undefined
-}
-
-function readHeader(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) return value[0] ?? ""
-  return value ?? ""
 }
 
 function resolvePublicAppUrl(input: {
@@ -19,18 +15,7 @@ function resolvePublicAppUrl(input: {
   const configured = normalizePublicAppUrl(input.configuredPublicAppUrl ?? "")
   if (configured) return configured
 
-  const forwardedProto = readHeader(input.request.headers["x-forwarded-proto"])
-    .split(",")[0]
-    .trim()
-  const forwardedHost = readHeader(input.request.headers["x-forwarded-host"])
-    .split(",")[0]
-    .trim()
-  const requestHost = input.request.get("host") || readHeader(input.request.headers.host)
-  const useForwardedOrigin = Boolean(forwardedHost && (!requestHost || forwardedHost === requestHost))
-  const host = useForwardedOrigin ? forwardedHost : requestHost
-  const protocol = (useForwardedOrigin ? forwardedProto : "") || input.request.protocol || "http"
-
-  return normalizePublicAppUrl(`${protocol}://${host}`)
+  throw new InternalServerErrorException("APP_PUBLIC_URL 未配置，无法生成公开链接。")
 }
 
 export { normalizePublicAppUrl, resolvePublicAppUrl }

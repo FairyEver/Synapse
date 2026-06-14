@@ -18,7 +18,7 @@ function createRequest() {
 }
 
 beforeEach(() => {
-  vi.stubEnv("APP_PUBLIC_URL", "")
+  vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
 })
 
 afterEach(() => {
@@ -44,7 +44,7 @@ describe("WebhookDashboardController", () => {
     expect(service.listForUser).toHaveBeenCalledWith("user-1", "https://synapse.test")
   })
 
-  it("creates webhooks with request-resolved public URLs", async () => {
+  it("creates webhooks with configured public URLs", async () => {
     const service = {
       createForUser: vi.fn().mockResolvedValue({ url: "https://synapse.test/webhooks/wh_id/whsec_secret" }),
     }
@@ -101,7 +101,7 @@ describe("WebhookDashboardController", () => {
     expect(service.updateForUser).not.toHaveBeenCalled()
   })
 
-  it("resets webhook secrets with request-resolved public URLs", async () => {
+  it("resets webhook secrets with configured public URLs", async () => {
     const service = {
       resetSecret: vi.fn().mockResolvedValue({ url: "https://synapse.test/webhooks/wh_id/whsec_new" }),
     }
@@ -111,6 +111,19 @@ describe("WebhookDashboardController", () => {
       .resolves
       .toEqual({ url: "https://synapse.test/webhooks/wh_id/whsec_new" })
     expect(service.resetSecret).toHaveBeenCalledWith("user-1", "webhook-1", "https://synapse.test", "203.0.113.20")
+  })
+
+  it("rejects webhook URL generation when APP_PUBLIC_URL is missing", async () => {
+    const service = {
+      resetSecret: vi.fn(),
+    }
+    const controller = new WebhookDashboardController(service as unknown as WebhookService)
+
+    vi.stubEnv("APP_PUBLIC_URL", "")
+
+    expect(() => controller.resetSecret("webhook-1", createRequest() as never))
+      .toThrow("APP_PUBLIC_URL 未配置，无法生成公开链接。")
+    expect(service.resetSecret).not.toHaveBeenCalled()
   })
 
   it("deletes and lists deliveries for the current user", async () => {
@@ -197,9 +210,33 @@ describe("WebhookPublicController", () => {
       body: Buffer.from("{\"ok\":true}"),
       contentType: "application/json",
       remoteAddress: "203.0.113.30",
-      publicAppUrl: "http://synapse.test",
+      publicAppUrl: "https://synapse.test",
     }))
     expect(Reflect.getMetadata("__guards__", WebhookPublicController)).toBeUndefined()
     expect(Reflect.getMetadata("__httpCode__", controller.receive)).toBe(202)
+  })
+
+  it("rejects public webhook URL generation when APP_PUBLIC_URL is missing", async () => {
+    const service = {
+      receivePublicWebhook: vi.fn(),
+    }
+    const controller = new WebhookPublicController(service as unknown as WebhookService)
+    const request = {
+      method: "POST",
+      path: "/webhooks/wh_public/whsec_secret",
+      query: {},
+      headers: { host: "evil.example.com" },
+      body: Buffer.from("{}"),
+      ip: "203.0.113.30",
+      protocol: "https",
+      get: (name: string) => name.toLowerCase() === "host" ? "evil.example.com" : undefined,
+    }
+
+    vi.stubEnv("APP_PUBLIC_URL", "")
+
+    await expect(controller.receive("wh_public", "whsec_secret", request as never))
+      .rejects
+      .toThrow("APP_PUBLIC_URL 未配置，无法生成公开链接。")
+    expect(service.receivePublicWebhook).not.toHaveBeenCalled()
   })
 })

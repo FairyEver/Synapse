@@ -555,6 +555,33 @@ describe("DriveController", () => {
     }
   })
 
+  it("rejects share URL generation when APP_PUBLIC_URL is missing", async () => {
+    process.env.PAGES_PUBLIC_URL = ""
+    process.env.APP_PUBLIC_URL = ""
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({ canActivate: vi.fn((context) => {
+        context.switchToHttp().getRequest().user = { id: "user-1" }
+        return true
+      }) })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      await request(userApp.getHttpServer())
+        .post("/api/drive/items/file-1/share")
+        .set("Host", "evil.example.com")
+        .expect(500)
+
+      expect(drive.createShare).not.toHaveBeenCalled()
+    } finally {
+      await userApp.close()
+    }
+  })
+
   it("serves a published page through the server proxy", async () => {
     drive.resolvePublishedAssetAccess.mockResolvedValue({
       status: "ok",

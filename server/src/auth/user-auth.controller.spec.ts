@@ -55,21 +55,21 @@ describe("UserAuthController", () => {
     }, "203.0.113.21")
   })
 
-  it("passes password reset requests with the resolved public app URL", () => {
+  it("passes password reset requests with the configured public app URL", () => {
     const auth = {
       requestPasswordReset: vi.fn().mockResolvedValue({ ok: true }),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
-    vi.stubEnv("APP_PUBLIC_URL", "")
+    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
     try {
       controller.requestPasswordReset(
         { email: "user@example.com" },
         {
           ip: "203.0.113.30",
           protocol: "https",
-          headers: { host: "app.example.com" },
-          get: (name: string) => (name === "host" ? "app.example.com" : undefined),
+          headers: { host: "evil.example.com" },
+          get: (name: string) => (name === "host" ? "evil.example.com" : undefined),
         } as never,
       )
     } finally {
@@ -80,6 +80,30 @@ describe("UserAuthController", () => {
       email: "user@example.com",
       publicAppUrl: "https://app.example.com",
     }, "203.0.113.30")
+  })
+
+  it("rejects password reset URL generation when APP_PUBLIC_URL is missing", () => {
+    const auth = {
+      requestPasswordReset: vi.fn(),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    vi.stubEnv("APP_PUBLIC_URL", "")
+    try {
+      expect(() => controller.requestPasswordReset(
+        { email: "user@example.com" },
+        {
+          ip: "203.0.113.30",
+          protocol: "https",
+          headers: { host: "evil.example.com" },
+          get: (name: string) => (name === "host" ? "evil.example.com" : undefined),
+        } as never,
+      )).toThrow("APP_PUBLIC_URL 未配置，无法生成公开链接。")
+    } finally {
+      vi.unstubAllEnvs()
+    }
+
+    expect(auth.requestPasswordReset).not.toHaveBeenCalled()
   })
 
   it("passes valid password reset confirmations with the request ip", () => {
