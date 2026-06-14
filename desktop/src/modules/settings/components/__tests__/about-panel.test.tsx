@@ -12,6 +12,7 @@ import {
   WORKFLOW_ENTRY_TITLE_SEQUENCE,
 } from "@/modules/settings/cheat-codes"
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
+import type { SynapseAppUpdateState } from "@/types/update"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -39,10 +40,12 @@ vi.mock("sonner", () => ({
 import { AboutPanel } from "@/modules/settings/components/about-panel"
 
 let roots: Root[] = []
+let updaterStateListeners: Array<(state: SynapseAppUpdateState) => void> = []
 
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  updaterStateListeners = []
   installUpdaterBridge()
   Object.defineProperty(window.navigator, "clipboard", {
     configurable: true,
@@ -75,6 +78,36 @@ describe("AboutPanel cheat codes", () => {
 
     expect(window.navigator.clipboard.writeText).toHaveBeenCalledWith("v0.2.189")
     expect(toast).toHaveBeenCalledWith("版本号已复制")
+  })
+
+  it("clears stale update action errors when a fresh updater state arrives", async () => {
+    const updater = getUpdaterBridge()
+    vi.mocked(updater.getState).mockResolvedValueOnce(updateState({
+      canCheck: true,
+      message: "当前已是最新版本。",
+      status: "idle",
+    }))
+    vi.mocked(updater.checkForUpdates).mockRejectedValueOnce(new Error("检查失败"))
+
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    await act(async () => {
+      getUpdateActionButton().click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("检查失败")
+
+    act(() => {
+      emitUpdaterState(updateState({
+        canCheck: false,
+        message: "正在检查更新...",
+        status: "checking",
+      }))
+    })
+
+    expect(document.body.textContent).not.toContain("检查失败")
+    expect(document.body.textContent).toContain("正在检查更新...")
   })
 
   it("arms title input from logo clicks with subtle animated letter spacing", async () => {
@@ -305,6 +338,17 @@ function getVersionButton(): HTMLButtonElement {
   return button
 }
 
+function getUpdateActionButton(): HTMLButtonElement {
+  const button = Array.from(document.body.querySelectorAll("button"))
+    .find((element) => element.textContent === "检查更新")
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error("Update action button not found")
+  }
+
+  return button
+}
+
 function hoverTitlePart(index: number): void {
   act(() => {
     getTitlePart(index).dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
@@ -335,7 +379,12 @@ function installUpdaterBridge(): void {
       transferredBytes: null,
     }),
     installUpdate: vi.fn(),
-    onStateChanged: vi.fn(() => () => {}),
+    onStateChanged: vi.fn((listener: (state: SynapseAppUpdateState) => void) => {
+      updaterStateListeners.push(listener)
+      return () => {
+        updaterStateListeners = updaterStateListeners.filter((item) => item !== listener)
+      }
+    }),
   }
 
   const states = new Map<string, boolean>()
@@ -363,6 +412,39 @@ function installUpdaterBridge(): void {
     cheatCodes,
     updater,
   }
+}
+
+function updateState(overrides: Partial<SynapseAppUpdateState>): SynapseAppUpdateState {
+  return {
+    bytesPerSecond: null,
+    canCheck: false,
+    currentVersion: "0.2.189",
+    downloadPercent: null,
+    error: null,
+    lastCheckedAt: null,
+    message: "当前已是最新版本。",
+    releaseVersion: null,
+    status: "idle",
+    totalBytes: null,
+    transferredBytes: null,
+    ...overrides,
+  }
+}
+
+function emitUpdaterState(state: SynapseAppUpdateState): void {
+  for (const listener of updaterStateListeners) {
+    listener(state)
+  }
+}
+
+function getUpdaterBridge(): NonNullable<Window["synapse"]>["updater"] {
+  const bridge = window.synapse?.updater
+
+  if (!bridge) {
+    throw new Error("Updater bridge not found")
+  }
+
+  return bridge
 }
 
 function getCheatCodeBridge(): NonNullable<Window["synapse"]>["cheatCodes"] {

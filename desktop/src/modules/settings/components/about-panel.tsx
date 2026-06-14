@@ -157,6 +157,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     })
 
     const unsubscribe = bridge.onStateChanged((state) => {
+      setActionError(null)
       setUpdateState(state)
     })
 
