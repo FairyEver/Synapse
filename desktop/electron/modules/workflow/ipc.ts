@@ -15,6 +15,7 @@ import { buildEffectiveRunParams, configuredWorkflowProjectIdsFromConfig, valida
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunListItem, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
 import type { SynapseWorkflowPackageV1, WorkflowImportOptions, WorkflowModelMapping } from "../../../src/types/workflow-package"
+import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
@@ -236,7 +237,7 @@ function parseWorkflowPackageOrFail(options: {
       errorName: error instanceof Error ? error.name : typeof error,
       errorLength: (error instanceof Error ? error.message : String(error)).length,
     })
-    throw new Error("工作流包格式无效。")
+    throw new Error("工作流包格式无效。", { cause: error })
   }
 }
 
@@ -408,19 +409,6 @@ const workflowRunListItemSchema: z.ZodType<WorkflowRunListItem> = z.object({
   definition: workflowDefinitionSchema.optional() as z.ZodType<WorkflowDefinition | undefined>,
 })
 
-const workflowRunSnapshotSchema: z.ZodType<WorkflowRunSnapshot> = z.object({
-  runId: z.string(),
-  workflowId: z.string(),
-  version: z.string(),
-  startedAt: z.number(),
-  endedAt: z.number().optional(),
-  status: z.enum(["completed", "failed", "cancelled"]),
-  params: z.record(z.string(), z.unknown()),
-  nodeResults: z.record(z.string(), nodeRunResultSchema),
-  error: z.string().optional(),
-  definition: workflowDefinitionSchema.optional() as z.ZodType<WorkflowDefinition | undefined>,
-})
-
 const validationErrorSchema = z.object({
   type: z.string(),
   nodeId: z.string().optional(),
@@ -576,7 +564,7 @@ function handleEngineRejection(options: {
   readonly runStatuses: Map<string, WorkflowRunStatus>
   readonly triggerSource: string
 }): void {
-  const { err, def, params, runId, startedAt, snapshots, eventBus, abortMap, runStatuses, triggerSource } = options
+  const { err, def, params, runId, startedAt, snapshots, eventBus, abortMap, runStatuses } = options
   const diagnostic = engineRejectionDiagnostic(err)
   const visibleError = visibleEngineRejectionError(err)
   logger.error("workflow engine rejected unexpectedly", { workflowId: def.id, runId, ...diagnostic })
@@ -673,7 +661,7 @@ export const workflowIpcModule: IpcModule = {
       response: z.object({ path: z.string() }).nullable(),
       handler: async (ctx, { workflowId, workflowName }: { workflowId: string; workflowName?: string }) => {
         const pkg = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportPackage(workflowId)
-        const safeName = (workflowName || pkg.workflow.name || "workflow").replace(/[\\/:*?"<>|]/g, "-")
+        const safeName = normalizeContentFileNameSegment(workflowName || pkg.workflow.name || "workflow")
         const parentWindow = focusedWindow()
         const result = parentWindow
           ? await dialog.showSaveDialog(parentWindow, {

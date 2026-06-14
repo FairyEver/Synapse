@@ -815,6 +815,34 @@ describe("workflowIpcModule", () => {
     }
   })
 
+  it("uses a Windows-safe default file name for workflow package export", async () => {
+    electronMock.dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true })
+    const packageService = {
+      buildExportPackage: vi.fn(async () => ({
+        format: "synapse-workflow-package-v1",
+        exportedAt: "2026-05-26T00:00:00.000Z",
+        workflow: { ...workflowDefinition(), name: "CON" },
+        modelReferences: [],
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:export-package", {
+      workflowId: "workflow-1",
+      workflowName: "CON",
+    })
+
+    expect(result).toBeNull()
+    expect(electronMock.dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
+      defaultPath: "_CON.synapse-workflow.json",
+    }))
+  })
+
   it("blocks workflow:run when the workflow already has an active run", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     runStatuses.set("active-run", {
