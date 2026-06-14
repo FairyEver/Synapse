@@ -119,6 +119,7 @@ const IPC_CHANNELS = {
     "exportRawEntries": "synapse:knowledge-base:export-raw-entries",
     "openSourceManager": "synapse:knowledge-base:open-source-manager",
     "getStorageStatus": "synapse:knowledge-base:get-storage-status",
+    "getStorageMigrationState": "synapse:knowledge-base:get-storage-migration-state",
     "startStorageMigration": "synapse:knowledge-base:start-storage-migration",
     "cancelStorageMigration": "synapse:knowledge-base:cancel-storage-migration",
     "recheckStorage": "synapse:knowledge-base:recheck-storage",
@@ -755,6 +756,7 @@ const synapseBridge: SynapseBridge = {
     openSourceManager: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].openSourceManager)(payload),
     getStorageStatus: invoke(IPC_CHANNELS["knowledge-base"].getStorageStatus),
+    getStorageMigrationState: invoke(IPC_CHANNELS["knowledge-base"].getStorageMigrationState),
     startStorageMigration: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].startStorageMigration)(payload),
     cancelStorageMigration: invoke(IPC_CHANNELS["knowledge-base"].cancelStorageMigration),

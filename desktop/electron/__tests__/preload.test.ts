@@ -456,6 +456,7 @@ describe("preload bridge", () => {
     const listener = vi.fn()
 
     await bridge.knowledgeBase.getStorageStatus()
+    await bridge.knowledgeBase.getStorageMigrationState()
     await bridge.knowledgeBase.startStorageMigration({
       target: { mode: "custom", rootPath: "/Volumes/Data/SynapseData" },
     })
@@ -465,6 +466,10 @@ describe("preload bridge", () => {
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:knowledge-base:get-storage-status",
+      undefined,
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:knowledge-base:get-storage-migration-state",
       undefined,
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(

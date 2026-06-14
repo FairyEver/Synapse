@@ -918,6 +918,7 @@ export type SynapseBridge = {
     ) => Promise<SynapseKnowledgeBaseRawMutationResult>
     openSourceManager: (payload: SynapseKnowledgeBaseOpenSourceManagerPayload) => Promise<void>
     getStorageStatus: () => Promise<SynapseKnowledgeBaseStorageStatus>
+    getStorageMigrationState: () => Promise<SynapseKnowledgeBaseStorageMigrationProgress>
     startStorageMigration: (
       payload: SynapseKnowledgeBaseStorageMigrationPayload,
     ) => Promise<SynapseKnowledgeBaseStorageMigrationResult>

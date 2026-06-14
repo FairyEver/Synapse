@@ -710,6 +710,13 @@ export const knowledgeBaseIpcModule: IpcModule = {
       response: storageStatusSchema,
       handler: (ctx) => migrationService(ctx).getStorageStatus(),
     },
+    getStorageMigrationState: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:get-storage-migration-state",
+      request: z.void(),
+      response: storageMigrationProgressSchema,
+      handler: (ctx) => storageMigrationProgressPayload(migrationService(ctx).getState()),
+    },
     startStorageMigration: {
       kind: "invoke",
       channel: "synapse:knowledge-base:start-storage-migration",
@@ -752,4 +759,17 @@ export const knowledgeBaseIpcModule: IpcModule = {
       payload: storageMigrationProgressSchema,
     },
   },
+}
+
+function storageMigrationProgressPayload(state: ReturnType<KnowledgeBaseStorageMigrationService["getState"]>) {
+  return {
+    active: state.active,
+    phase: state.phase,
+    cancellable: state.cancellable,
+    copiedBytes: state.progress.copiedBytes,
+    totalBytes: state.progress.totalBytes,
+    message: state.message,
+    ...(state.warningCode ? { warningCode: state.warningCode } : {}),
+    ...(state.errorMessage ? { errorMessage: state.errorMessage } : {}),
+  }
 }

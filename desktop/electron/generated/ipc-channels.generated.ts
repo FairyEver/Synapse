@@ -129,6 +129,7 @@ export const IPC_CHANNELS = {
     "exportRawEntries": "synapse:knowledge-base:export-raw-entries",
     "openSourceManager": "synapse:knowledge-base:open-source-manager",
     "getStorageStatus": "synapse:knowledge-base:get-storage-status",
+    "getStorageMigrationState": "synapse:knowledge-base:get-storage-migration-state",
     "startStorageMigration": "synapse:knowledge-base:start-storage-migration",
     "cancelStorageMigration": "synapse:knowledge-base:cancel-storage-migration",
     "recheckStorage": "synapse:knowledge-base:recheck-storage",

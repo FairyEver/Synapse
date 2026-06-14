@@ -14,7 +14,28 @@ function useKnowledgeBaseStorageMigration() {
   const [progress, setProgress] = useState<SynapseKnowledgeBaseStorageMigrationProgress>(idleProgress)
 
   useEffect(() => {
-    return window.synapse?.knowledgeBase.onStorageMigrationChanged?.(setProgress)
+    const bridge = window.synapse?.knowledgeBase
+    let disposed = false
+    let receivedEvent = false
+    const unsubscribe = bridge?.onStorageMigrationChanged?.((nextProgress) => {
+      receivedEvent = true
+      if (!disposed) {
+        setProgress(nextProgress)
+      }
+    })
+
+    void bridge?.getStorageMigrationState?.()
+      .then((snapshot) => {
+        if (!disposed && !receivedEvent) {
+          setProgress(snapshot)
+        }
+      })
+      .catch(() => undefined)
+
+    return () => {
+      disposed = true
+      unsubscribe?.()
+    }
   }, [])
 
   return {

@@ -14,6 +14,7 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_GLOBAL_CONFIG } from "../../../../src/constants/defaults"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { KnowledgeBaseService } from "../../../services/knowledge-base/knowledge-base-service"
+import type { KnowledgeBaseStorageMigrationState } from "../../../services/knowledge-base/storage-migration-service"
 import { knowledgeBaseIpcModule } from "../ipc"
 
 const electronMock = vi.hoisted(() => ({
@@ -456,6 +457,27 @@ describe("knowledgeBaseIpcModule", () => {
       })
   })
 
+  it("returns current storage migration state", async () => {
+    const { harness, migrationService } = createHarness({ service: {} })
+    migrationService.getState.mockReturnValue({
+      active: true,
+      phase: "copying",
+      cancellable: true,
+      progress: {
+        copiedBytes: 12,
+        totalBytes: 24,
+      },
+      message: "正在复制知识库",
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:get-storage-migration-state", undefined))
+      .resolves.toMatchObject({
+        active: true,
+        phase: "copying",
+        copiedBytes: 12,
+      })
+  })
+
   it("lists raw directory entries through guarded read permission", async () => {
     const listRawDirectory = vi.fn().mockResolvedValue({
       projectId: "kb-1",
@@ -798,6 +820,16 @@ function createHarness(options: {
   }
   const migrationService = {
     cancelMigration: vi.fn(),
+    getState: vi.fn<() => KnowledgeBaseStorageMigrationState>(() => ({
+      active: false,
+      phase: "idle",
+      cancellable: false,
+      progress: {
+        copiedBytes: 0,
+        totalBytes: null,
+      },
+      message: "",
+    })),
     getStorageStatus: vi.fn(),
     isActive: vi.fn(() => options.migrationActive ?? false),
     startMigration: vi.fn(),
