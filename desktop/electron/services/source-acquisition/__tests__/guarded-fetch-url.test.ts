@@ -28,14 +28,16 @@ describe("createGuardedFetchUrl", () => {
     lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }])
     const fetchUrl = createGuardedFetchUrl()
 
-    await expect(fetchUrl("http://127.0.0.1/source", {
+    await expect(fetchUrl("http://user:pass@127.0.0.1/source?token=plain-token&state=plain-state&file=ok", {
       signal: new AbortController().signal,
     })).rejects.toThrow("Local and private network URLs are not allowed.")
     expect(logger.warn).toHaveBeenCalledWith("Guarded URL fetch blocked local or private host.", {
-      url: "http://127.0.0.1/source",
+      url: "http://127.0.0.1/source?token=%5Bredacted%5D&state=%5Bredacted%5D&file=ok",
       hostname: "127.0.0.1",
       addresses: ["127.0.0.1"],
     })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("plain-token")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("plain-state")
   })
 
   it("rejects DNS results in the shared address space", async () => {

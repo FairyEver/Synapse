@@ -3,6 +3,7 @@ import http from "node:http"
 import https from "node:https"
 import type { IncomingMessage, RequestOptions } from "node:http"
 
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { isLocalOrPrivateHost, UrlResponseSizeLimitError, type FetchUrl } from "./url-source"
 import { createMainLogger } from "../log-store"
 
@@ -148,10 +149,7 @@ async function resolvePublicAddress(
 }
 
 function safeUrlForLog(url: URL): string {
-  const safeUrl = new URL(url)
-  safeUrl.username = ""
-  safeUrl.password = ""
-  return safeUrl.toString()
+  return sanitizeUrl(url.toString())
 }
 
 function responseFromMessage(url: string, message: IncomingMessage): Awaited<ReturnType<FetchUrl>> {
