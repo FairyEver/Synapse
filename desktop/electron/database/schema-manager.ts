@@ -465,19 +465,17 @@ export class SchemaManager {
     for (const v of allowed) usage[v] = 0
 
     if (isMultiChoice) {
-      const rows = db.prepare(`SELECT ${q(column)} AS v FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''`).all() as { v: unknown }[]
+      const rows = db.prepare(`
+        SELECT value AS v, COUNT(*) AS c
+        FROM (
+          SELECT DISTINCT ${q(table)}.rowid AS row_id, CAST(choice.value AS TEXT) AS value
+          FROM ${q(table)}, json_each(${jsonArrayExpression(table, column)}) AS choice
+        )
+        GROUP BY value
+      `).all() as { v: unknown; c: number | bigint }[]
       for (const row of rows) {
-        try {
-          const parsed = JSON.parse(String(row.v))
-          if (!Array.isArray(parsed)) continue
-          const seen = new Set<string>()
-          for (const item of parsed) {
-            const s = String(item)
-            if (seen.has(s)) continue
-            seen.add(s)
-            usage[s] = (usage[s] ?? 0) + 1
-          }
-        } catch { /* ignore */ }
+        const s = String(row.v)
+        usage[s] = (usage[s] ?? 0) + toNumber(row.c)
       }
     } else {
       const rows = db.prepare(`SELECT ${q(column)} AS v, COUNT(*) AS c FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != '' GROUP BY ${q(column)}`).all() as { v: unknown; c: number | bigint }[]
@@ -509,21 +507,21 @@ export class SchemaManager {
 
     const isMultiChoice = isMultiChoiceKind(meta.kind)
     const allowed = new Set(choices)
-    const existingRows = db.prepare(`SELECT DISTINCT ${q(column)} AS v FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''`).all() as { v: unknown }[]
     const invalid = new Set<string>()
-    for (const row of existingRows) {
-      if (row.v === null || row.v === undefined) continue
-      if (isMultiChoice) {
-        try {
-          const parsed = JSON.parse(String(row.v))
-          if (Array.isArray(parsed)) {
-            for (const item of parsed) {
-              const s = String(item)
-              if (!allowed.has(s)) invalid.add(s)
-            }
-          }
-        } catch { /* ignore */ }
-      } else {
+    if (isMultiChoice) {
+      const placeholders = choices.map(() => "?").join(", ")
+      const existingRows = db.prepare(`
+        SELECT DISTINCT CAST(choice.value AS TEXT) AS v
+        FROM ${q(table)}, json_each(${jsonArrayExpression(table, column)}) AS choice
+        WHERE CAST(choice.value AS TEXT) NOT IN (${placeholders})
+      `).all(...choices) as { v: unknown }[]
+      for (const row of existingRows) {
+        if (row.v !== null && row.v !== undefined) invalid.add(String(row.v))
+      }
+    } else {
+      const existingRows = db.prepare(`SELECT DISTINCT ${q(column)} AS v FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != ''`).all() as { v: unknown }[]
+      for (const row of existingRows) {
+        if (row.v === null || row.v === undefined) continue
         const s = String(row.v)
         if (!allowed.has(s)) invalid.add(s)
       }
@@ -538,4 +536,9 @@ export class SchemaManager {
 
     this.setColumnMetaEntry(table, column, { kind: meta.kind, choices })
   }
+}
+
+function jsonArrayExpression(table: string, column: string): string {
+  const value = `${q(table)}.${q(column)}`
+  return `CASE WHEN json_valid(${value}) AND json_type(${value}) = 'array' THEN ${value} ELSE '[]' END`
 }

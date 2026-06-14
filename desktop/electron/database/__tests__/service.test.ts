@@ -250,6 +250,28 @@ describe("DatabaseService table descriptions", () => {
     }).rows).toEqual([])
   })
 
+  it("counts and validates multi-choice values without loading raw rows into JavaScript", () => {
+    service.databaseTableCreate("tasks", [
+      { name: "labels", kind: "multi_choice", choices: ["bug", "feature", "urgent"] },
+    ])
+
+    service.databaseRowCreate("tasks", { labels: ["bug", "bug", "feature"] })
+    service.databaseRowCreate("tasks", { labels: ["feature"] })
+    service.databaseSqlExecute(`INSERT INTO "tasks" ("labels") VALUES (?)`, ["not-json"])
+
+    expect(service.databaseChoiceUsageGet("tasks", "labels")).toEqual({
+      bug: 1,
+      feature: 2,
+      urgent: 0,
+    })
+    expect(() => service.databaseChoiceUpdate("tasks", "labels", ["bug"]))
+      .toThrow("existing rows contain values not in the new list: feature")
+
+    service.databaseChoiceUpdate("tasks", "labels", ["bug", "feature"])
+    expect(service.databaseTableDescribe("tasks").columns.find((column) => column.name === "labels"))
+      .toMatchObject({ choices: ["bug", "feature"] })
+  })
+
   it("rejects table moves before mutating folder membership when targets are missing", () => {
     service.databaseTableCreate("tasks", [
       { name: "title", kind: "text" },
