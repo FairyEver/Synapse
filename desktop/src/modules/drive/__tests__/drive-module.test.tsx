@@ -1392,7 +1392,7 @@ describe("DriveModule", () => {
     await clickButtonByLabel("取消发布 report.html")
 
     expect(mocks.listDrivePublications).toHaveBeenCalled()
-    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(4)
+    expect(mocks.listDrivePublications).toHaveBeenCalledTimes(6)
     expect(mocks.disableDrivePublication).toHaveBeenCalledWith({ publicationId: "pub-row-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已取消发布")
   })
@@ -1540,6 +1540,56 @@ describe("DriveModule", () => {
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(2)
     expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
+  })
+
+  it("refreshes the main list after disabling a share from the public links dialog", async () => {
+    let driveItems = [
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
+    ]
+    mocks.listDriveItems.mockImplementation(() => Promise.resolve(driveItems))
+    mocks.listDriveShares.mockResolvedValue([
+      createDriveShare({ id: "share-row-1", shareId: "shr_test", itemName: "report.txt", itemType: "file" }),
+    ])
+    mocks.disableDriveShare.mockImplementation(async () => {
+      driveItems = [createDriveItem({ id: "file-1", name: "report.txt", type: "file", shared: false, activeShareId: null })]
+      return { ok: true }
+    })
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(getTableRow("report.txt").textContent).toContain("已分享")
+
+    await clickButtonText("公开链接")
+    await flushAct()
+    await clickButtonByLabel("取消分享 report.txt")
+    await clickButtonText("关闭")
+
+    expect(getTableRow("report.txt").textContent).not.toContain("已分享")
+  })
+
+  it("refreshes the main list after disabling a publication from the public links dialog", async () => {
+    let publications = [createDrivePublication({ id: "pub-row-1", name: "report.html", type: "page" })]
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.html", type: "file", mimeType: "text/html" }),
+    ])
+    mocks.listDrivePublications.mockImplementation(() => Promise.resolve(publications))
+    mocks.disableDrivePublication.mockImplementation(async () => {
+      publications = []
+      return { ok: true }
+    })
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(getTableRow("report.html").textContent).toContain("已发布")
+
+    await clickButtonText("公开链接")
+    await flushAct()
+    await clickTabText("发布")
+    await flushAct()
+    await clickButtonByLabel("取消发布 report.html")
+    await clickButtonText("关闭")
+
+    expect(getTableRow("report.html").textContent).not.toContain("已发布")
   })
 
   it("shows share loading, empty, and retry states in the public links dialog", async () => {

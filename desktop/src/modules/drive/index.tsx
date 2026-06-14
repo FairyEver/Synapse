@@ -743,6 +743,7 @@ function DriveModule() {
               open={publicLinksOpen}
               onOpenChange={setPublicLinksOpen}
               onPublicationDeployed={setPublicationSuccess}
+              onDriveItemsChanged={loadItems}
             />
             <DriveAccessSettingsDialog
               target={accessSettingsTarget}
@@ -1590,10 +1591,12 @@ function DrivePublicLinksDialog({
   open,
   onOpenChange,
   onPublicationDeployed,
+  onDriveItemsChanged,
 }: {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
+  readonly onDriveItemsChanged: () => Promise<void>
 }) {
   const [tab, setTab] = useState<DrivePublicLinkTab>("shares")
   const [shares, setShares] = useState<DriveShareListItemDto[]>([])
@@ -1626,6 +1629,11 @@ function DrivePublicLinksDialog({
       void loadPublicLinks()
     }
   }, [loadPublicLinks, open])
+
+  const reloadAfterPublicLinkChange = useCallback(async () => {
+    await loadPublicLinks()
+    await onDriveItemsChanged()
+  }, [loadPublicLinks, onDriveItemsChanged])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1664,7 +1672,8 @@ function DrivePublicLinksDialog({
                     publications={[]}
                     shares={shares}
                     onPublicationDeployed={onPublicationDeployed}
-                    onReload={loadPublicLinks}
+                    onRetry={loadPublicLinks}
+                    onReload={reloadAfterPublicLinkChange}
                   />
                 </TabsContent>
                 <TabsContent value="publications">
@@ -1675,7 +1684,8 @@ function DrivePublicLinksDialog({
                     publications={publications}
                     shares={[]}
                     onPublicationDeployed={onPublicationDeployed}
-                    onReload={loadPublicLinks}
+                    onRetry={loadPublicLinks}
+                    onReload={reloadAfterPublicLinkChange}
                   />
                 </TabsContent>
               </div>
@@ -1697,6 +1707,7 @@ function DrivePublicLinkList({
   publications,
   shares,
   onPublicationDeployed,
+  onRetry,
   onReload,
 }: {
   readonly emptyTitle: string
@@ -1705,10 +1716,11 @@ function DrivePublicLinkList({
   readonly publications: readonly DrivePublicationDto[]
   readonly shares: readonly DriveShareListItemDto[]
   readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
+  readonly onRetry: () => Promise<void>
   readonly onReload: () => Promise<void>
 }) {
   if (loading) return <DrivePublicationTableSkeleton />
-  if (error) return <DriveDialogErrorState message={error} onRetry={onReload} />
+  if (error) return <DriveDialogErrorState message={error} onRetry={onRetry} />
   if (publications.length === 0 && shares.length === 0) return <DriveDialogEmptyState title={emptyTitle} />
 
   return (
