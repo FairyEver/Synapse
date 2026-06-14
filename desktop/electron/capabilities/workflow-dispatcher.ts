@@ -659,7 +659,7 @@ async function authorizeWorkflowMutation(
       action: "workflow.mutate",
       actor: security.actor,
       resource: security.resource,
-      outcome: "denied",
+      outcome: "failed",
       metadata: {
         ...security.metadata,
         reason: "permission-check-error",
@@ -667,7 +667,7 @@ async function authorizeWorkflowMutation(
         errorLength: String(error).length,
       },
     })
-    logger.warn("workflow mutation permission check failed", {
+    logger.warn("workflow mcp dispatch failed", {
       ...security.metadata,
       ...dispatchErrorDiagnostic(error),
     })

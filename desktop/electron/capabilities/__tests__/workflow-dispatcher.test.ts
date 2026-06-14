@@ -409,7 +409,7 @@ describe("createWorkflowDispatcher", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "workflow.mutate",
       resource: "workflow:wf-1",
-      outcome: "denied",
+      outcome: "failed",
       metadata: expect.objectContaining({
         source: "mcp-http",
         workflowAction: "workflow.definition.delete",
@@ -423,9 +423,7 @@ describe("createWorkflowDispatcher", () => {
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-prompt")
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/liyang/private-workflow")
 
-    const failedLog = logStoreMock.logger.warn.mock.calls.find(
-      ([message]) => message === "workflow mutation permission check failed",
-    )
+    const failedLog = logStoreMock.logger.warn.mock.calls.find(([message]) => message === "workflow mcp dispatch failed")
     expect(failedLog).toBeDefined()
     const serializedLog = JSON.stringify(failedLog)
     expect(serializedLog).not.toContain("secret-prompt")
