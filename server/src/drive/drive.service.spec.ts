@@ -1711,7 +1711,7 @@ describe("DriveService", () => {
 
       const list = await service.listAdminItems({
         pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
-        filters: {},
+        filters: { search: "handoff" },
       })
       expect(list.data).toEqual([
         expect.objectContaining({
