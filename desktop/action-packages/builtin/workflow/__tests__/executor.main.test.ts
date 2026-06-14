@@ -77,6 +77,40 @@ describe("workflow action executor", () => {
     })
   })
 
+  it("redacts workflow output before returning action outputs", async () => {
+    const runWorkflowAndWait = vi.fn(async () => ({
+      runId: "workflow-run-1",
+      definition,
+      result: {
+        status: "completed" as const,
+        nodeResults: {},
+        durationMs: 20,
+        output: [
+          "Authorization: Bearer workflow-token",
+          "Cookie: session=workflow-cookie",
+          "apiKey=workflow-api-key",
+          "/Users/liyang/private.txt",
+        ].join(" "),
+      },
+    }))
+    const action = createWorkflowAction({
+      getWorkflowDefinition: vi.fn(async () => definition),
+      runWorkflowAndWait,
+    })
+
+    const result = await action.execute({
+      config: { workflowId: "wf-1", paramTemplates: { topic: "{{trigger.request.body.title}}" } },
+      context,
+    })
+
+    expect(result.outputs?.output).toContain("[redacted]")
+    expect(result.outputs?.output).toContain("[path]")
+    expect(JSON.stringify(result.outputs)).not.toContain("workflow-token")
+    expect(JSON.stringify(result.outputs)).not.toContain("workflow-cookie")
+    expect(JSON.stringify(result.outputs)).not.toContain("workflow-api-key")
+    expect(JSON.stringify(result.outputs)).not.toContain("/Users/liyang/private.txt")
+  })
+
   it("returns failed result when workflow is missing", async () => {
     const action = createWorkflowAction({
       getWorkflowDefinition: vi.fn(async () => null),

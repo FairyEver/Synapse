@@ -24,6 +24,10 @@ export function sanitizeWorkflowRunSnapshot(snapshot: WorkflowRunSnapshot): Work
   }
 }
 
+export function sanitizeWorkflowOutputForHistory<T>(output: T): T {
+  return sanitizeSnapshotValue(output) as T
+}
+
 export function sanitizeWorkflowDefinitionForSnapshot(definition: WorkflowDefinition): WorkflowDefinition {
   return {
     ...definition,

@@ -1,4 +1,5 @@
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
+import { sanitizeWorkflowOutputForHistory } from "../../../electron/services/workflow/run-snapshot-sanitize"
 import type {
   WorkflowDefinition,
   WorkflowRunResult,
@@ -78,7 +79,7 @@ export function createWorkflowAction(deps: WorkflowActionRuntimeDeps): MainActio
             workflowName: run.definition.name,
             workflowRunId: run.runId,
             workflowStatus: run.result.status,
-            output: run.result.output,
+            output: sanitizeWorkflowOutputForHistory(run.result.output),
           },
           error: status === "failed" ? "工作流执行失败" : undefined,
         }
