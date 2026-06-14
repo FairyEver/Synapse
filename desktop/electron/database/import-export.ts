@@ -1,5 +1,5 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs"
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import type { Column, DatabaseTableImportInspection } from "./types"
@@ -23,6 +23,11 @@ const TABLE_EXPORT_FORMAT = "synapse-table-sql"
 const TABLE_EXPORT_VERSION = 1
 const TABLE_EXPORT_BEGIN_MARKER = "-- synapse-table-export-b64"
 const TABLE_EXPORT_END_MARKER = "-- synapse-table-export-end"
+const TABLE_EXPORT_MAX_ROWS = 10_000
+const TABLE_EXPORT_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024
+const TABLE_EXPORT_MAX_CELL_BYTES = 1024 * 1024
+const TABLE_IMPORT_MAX_FILE_BYTES = 32 * 1024 * 1024
+const TABLE_IMPORT_MAX_BASE64_CHARS = Math.ceil(TABLE_EXPORT_MAX_PAYLOAD_BYTES * 4 / 3) + 1024
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,7 +163,13 @@ function splitBase64(value: string): string[] {
 }
 
 function stringifyPayloadForSql(payload: TableExportPayload): string {
-  const base64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64")
+  assertTableExportBudget(payload)
+  const json = JSON.stringify(payload)
+  const jsonBytes = Buffer.byteLength(json, "utf8")
+  if (jsonBytes > TABLE_EXPORT_MAX_PAYLOAD_BYTES) {
+    throw new Error("数据表导出内容超过大小限制")
+  }
+  const base64 = Buffer.from(json, "utf8").toString("base64")
   return [
     TABLE_EXPORT_BEGIN_MARKER,
     ...splitBase64(base64).map((chunk) => `-- ${chunk}`),
@@ -174,16 +185,27 @@ function parsePayloadFromSql(contents: string): TableExportPayload {
   }
 
   const chunks: string[] = []
+  let base64Length = 0
   for (let index = startIndex + 1; index < lines.length; index += 1) {
     const line = lines[index]?.trim() ?? ""
     if (line === TABLE_EXPORT_END_MARKER) {
-      const json = Buffer.from(chunks.join(""), "base64").toString("utf8")
-      return assertTableExportPayload(JSON.parse(json) as unknown)
+      const jsonBuffer = Buffer.from(chunks.join(""), "base64")
+      if (jsonBuffer.byteLength > TABLE_EXPORT_MAX_PAYLOAD_BYTES) {
+        throw new Error("数据表导出文件超过大小限制")
+      }
+      const payload = assertTableExportPayload(JSON.parse(jsonBuffer.toString("utf8")) as unknown)
+      assertTableExportBudget(payload)
+      return payload
     }
     if (!line.startsWith("-- ")) {
       throw new Error("数据表导出文件已损坏")
     }
-    chunks.push(line.slice(3).trim())
+    const chunk = line.slice(3).trim()
+    base64Length += chunk.length
+    if (base64Length > TABLE_IMPORT_MAX_BASE64_CHARS) {
+      throw new Error("数据表导出文件超过大小限制")
+    }
+    chunks.push(chunk)
   }
 
   throw new Error("数据表导出文件已损坏")
@@ -250,6 +272,54 @@ function assertTableExportPayload(value: unknown): TableExportPayload {
   }
 
   return value as TableExportPayload
+}
+
+function assertTableExportBudget(payload: TableExportPayload): void {
+  if (payload.rows.length > TABLE_EXPORT_MAX_ROWS) {
+    throw new Error(`数据表导出行数超过限制（最多 ${TABLE_EXPORT_MAX_ROWS} 行）`)
+  }
+  let totalBytes = 0
+  for (const row of payload.rows) {
+    totalBytes += estimateSerializedRowBytes(row)
+    if (totalBytes > TABLE_EXPORT_MAX_PAYLOAD_BYTES) {
+      throw new Error("数据表导出内容超过大小限制")
+    }
+  }
+}
+
+function estimateSerializedRowBytes(row: SerializedTableRow): number {
+  let bytes = 2
+  for (const [key, value] of Object.entries(row)) {
+    bytes += Buffer.byteLength(key, "utf8") + estimateSerializedValueBytes(value) + 4
+  }
+  return bytes
+}
+
+function estimateSerializedValueBytes(value: SerializedExportValue): number {
+  if (value === null) return 4
+  if (typeof value === "number" || typeof value === "boolean") return 8
+  if (typeof value === "string") {
+    const bytes = Buffer.byteLength(value, "utf8")
+    if (bytes > TABLE_EXPORT_MAX_CELL_BYTES) {
+      throw new Error("数据表导出单元格超过大小限制")
+    }
+    return bytes
+  }
+  const payload = value.__synapseType === "blob" ? value.data : value.value
+  const bytes = Buffer.byteLength(payload, "utf8")
+  if (bytes > TABLE_EXPORT_MAX_CELL_BYTES) {
+    throw new Error("数据表导出单元格超过大小限制")
+  }
+  return bytes
+}
+
+function countTableRows(db: DatabaseSync, table: string): number {
+  const row = db.prepare(`SELECT COUNT(*) AS count FROM ${q(table)}`).get() as { count: number | bigint }
+  const count = Number(row.count)
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error("无法导出数据表：行数异常")
+  }
+  return count
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +393,10 @@ export class ImportExportManager {
     validateName(table, "table")
 
     const db = this.getDb()
+    const rowCount = countTableRows(db, table)
+    if (rowCount > TABLE_EXPORT_MAX_ROWS) {
+      throw new Error(`数据表导出行数超过限制（最多 ${TABLE_EXPORT_MAX_ROWS} 行）`)
+    }
     const schema = this.databaseTableDescribe(table)
     const userColumns = schema.columns.filter((column) => !("system" in column && column.system) && !("primaryKey" in column && column.primaryKey))
     const rows = db.prepare(`SELECT * FROM ${q(table)} ORDER BY "id" ASC`).all() as Record<string, unknown>[]
@@ -384,8 +458,18 @@ export class ImportExportManager {
   private readTableExportPayload(sourcePath: string): TableExportPayload {
     let contents: string
     try {
+      const info = statSync(sourcePath)
+      if (!info.isFile()) {
+        throw new Error("not-file")
+      }
+      if (info.size > TABLE_IMPORT_MAX_FILE_BYTES) {
+        throw new Error("too-large")
+      }
       contents = readFileSync(sourcePath, "utf8")
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === "too-large") {
+        throw new Error("数据表导入文件超过大小限制")
+      }
       throw new Error("无法读取导入文件，文件可能已被移动或删除")
     }
     return parsePayloadFromSql(contents)
