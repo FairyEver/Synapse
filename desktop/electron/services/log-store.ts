@@ -33,8 +33,13 @@ const LOG_DIR_NAME = "logs"
 const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_LOG_FILES = 30
 const REDACTED_LOG_VALUE = "[redacted]"
+const REDACTED_LOG_KEY_VALUE = "[key]"
 const SENSITIVE_LOG_ASSIGNMENT_PATTERN =
   /\b(session[_-]?key|sourceSessionKey|targetSessionKey|token|secret|api[-_]?key|authorization|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi
+const BEARER_LOG_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+const PLATFORM_LOG_TOKEN_PATTERN =
+  /\b(?:github_pat_[A-Za-z0-9_]{8,}|ghp_[A-Za-z0-9_]{8,}|glpat-[A-Za-z0-9_-]{8,})\b/g
+const SK_LOG_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g
 
 interface LogWriteInput {
   source: SynapseLogSource
@@ -57,10 +62,14 @@ function isSensitiveLogKey(key: string): boolean {
 }
 
 function redactLogText(value: string): string {
-  return value.replace(
-    SENSITIVE_LOG_ASSIGNMENT_PATTERN,
-    (_match, key: string, separator: string) => `${key}${separator}${REDACTED_LOG_VALUE}`,
-  )
+  return value
+    .replace(
+      SENSITIVE_LOG_ASSIGNMENT_PATTERN,
+      (_match, key: string, separator: string) => `${key}${separator}${REDACTED_LOG_VALUE}`,
+    )
+    .replace(BEARER_LOG_PATTERN, `Bearer ${REDACTED_LOG_VALUE}`)
+    .replace(PLATFORM_LOG_TOKEN_PATTERN, REDACTED_LOG_KEY_VALUE)
+    .replace(SK_LOG_KEY_PATTERN, REDACTED_LOG_KEY_VALUE)
 }
 
 function isPlainRecord(value: object): value is Record<string, unknown> {

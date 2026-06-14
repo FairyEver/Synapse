@@ -53,4 +53,48 @@ describe("logStore", () => {
     expect(entry.details).not.toContain("inline-secret")
     expect(entry.details).not.toContain("inline-token")
   })
+
+  it("redacts bare bearer and platform tokens without removing paths", () => {
+    const entry = logStore.write({
+      source: "main",
+      level: "warn",
+      category: "agent-runtime",
+      message: "request failed: Bearer abc.def.token",
+      details: [
+        "github_pat_1234567890",
+        "ghp_1234567890",
+        "glpat-1234567890",
+        "sk-1234567890",
+        "/Users/example/repo",
+      ].join(" "),
+    })
+
+    expect(entry.message).toContain("Bearer [redacted]")
+    expect(entry.message).not.toContain("abc.def.token")
+    expect(entry.details).toContain("/Users/example/repo")
+    expect(entry.details).not.toContain("github_pat_1234567890")
+    expect(entry.details).not.toContain("ghp_1234567890")
+    expect(entry.details).not.toContain("glpat-1234567890")
+    expect(entry.details).not.toContain("sk-1234567890")
+  })
+
+  it("redacts bare bearer tokens from error messages and stacks", () => {
+    const error = new Error("request failed: Bearer secret.bearer.token at /Users/example/repo")
+    error.stack = [
+      "Error: request failed: Bearer secret.bearer.token",
+      "    at /Users/example/repo/file.ts:1:1",
+    ].join("\n")
+
+    const entry = logStore.write({
+      source: "main",
+      level: "error",
+      category: "agent-runtime",
+      message: error,
+    })
+
+    expect(entry.message).toContain("Bearer [redacted]")
+    expect(entry.message).not.toContain("secret.bearer.token")
+    expect(entry.details).toContain("/Users/example/repo/file.ts")
+    expect(entry.details).not.toContain("secret.bearer.token")
+  })
 })
