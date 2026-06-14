@@ -599,6 +599,44 @@ describe("DriveController", () => {
     expect(response.headers["content-type"]).toContain("text/plain")
   })
 
+  it("returns public not found when published page password unlock cannot resolve access", async () => {
+    drive.resolvePublishedAssetAccess.mockRejectedValue(new NotFoundException("网页未找到"))
+
+    const response = await request(app!.getHttpServer())
+      .post("/pages/pub_missing")
+      .send({ password: "letmein" })
+      .expect(404)
+
+    expect(response.text).toBe("网页未找到")
+    expect(response.headers["content-type"]).toContain("text/plain")
+    expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
+      publishId: "pub_missing",
+      type: "page",
+      relativePath: "index.html",
+      password: "letmein",
+      cookie: undefined,
+    })
+  })
+
+  it("returns public not found when published site password unlock hits an invalid path", async () => {
+    drive.resolvePublishedAssetAccess.mockRejectedValue(new Error("Invalid publication path"))
+
+    const response = await request(app!.getHttpServer())
+      .post("/sites/pub_site/private")
+      .send({ password: "letmein" })
+      .expect(404)
+
+    expect(response.text).toBe("网页未找到")
+    expect(response.headers["content-type"]).toContain("text/plain")
+    expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
+      publishId: "pub_site",
+      type: "site",
+      relativePath: "private",
+      password: "letmein",
+      cookie: undefined,
+    })
+  })
+
   it("returns public not found when a published asset stream fails before sending headers", async () => {
     const error = new Error("stream failed")
     drive.resolvePublishedAssetAccess.mockResolvedValue({

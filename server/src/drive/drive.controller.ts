@@ -680,17 +680,26 @@ export class DrivePublicController {
     readonly type: "page" | "site"
     readonly relativePath: string
   }): Promise<void> {
-    const access = await this.drive.resolvePublishedAssetAccess({
-      ...input,
-      password: readBodyPassword(request),
-      cookie: readDriveAccessCookie(request, { kind: input.type, publicId: input.publishId }),
-    })
-    if (access.status !== "ok" || !access.cookie) {
-      response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
-      return
+    try {
+      const access = await this.drive.resolvePublishedAssetAccess({
+        ...input,
+        password: readBodyPassword(request),
+        cookie: readDriveAccessCookie(request, { kind: input.type, publicId: input.publishId }),
+      })
+      if (access.status !== "ok" || !access.cookie) {
+        response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
+        return
+      }
+      setDriveAccessCookie(response, access.cookie, { kind: input.type, publicId: input.publishId })
+      response.redirect(302, request.path)
+    } catch (error) {
+      if (response.headersSent) {
+        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+        return
+      }
+      if (response.destroyed) return
+      sendPublicNotFound(response)
     }
-    setDriveAccessCookie(response, access.cookie, { kind: input.type, publicId: input.publishId })
-    response.redirect(302, request.path)
   }
 }
 
