@@ -314,8 +314,7 @@ export class WebhookService implements OnModuleInit {
   async listDeliveryHistoryForAdmin(
     options: WebhookDeliveryHistoryOptions,
   ): Promise<PaginatedResponse<WebhookDeliveryHistoryDto>> {
-    const userFilterIds = await this.resolveAdminHistoryUserFilter(options.filters)
-    const where = buildDeliveryHistoryWhere(null, options.filters, userFilterIds)
+    const where = buildDeliveryHistoryWhere(null, options.filters)
     const [deliveries, total] = await this.prisma.$transaction([
       this.prisma.webhookDelivery.findMany({
         where,
@@ -331,24 +330,6 @@ export class WebhookService implements OnModuleInit {
       page: options.pagination.page,
       pageSize: options.pagination.pageSize,
     }
-  }
-
-  private async resolveAdminHistoryUserFilter(
-    filters: WebhookDeliveryHistoryFilters | undefined,
-  ): Promise<readonly string[] | undefined> {
-    const userSearch = filters?.user?.trim()
-    if (!userSearch) return undefined
-    const users = await this.prisma.user.findMany({
-      where: {
-        OR: [
-          { email: { contains: userSearch, mode: "insensitive" } },
-          { displayName: { contains: userSearch, mode: "insensitive" } },
-        ],
-      },
-      select: { id: true },
-      take: 100,
-    })
-    return users.map((user) => user.id)
   }
 
   private async loadHistoryUsers(
@@ -781,17 +762,23 @@ function parseDeliveryHistoryDate(value: string, boundary: "start" | "end" = "st
 function buildDeliveryHistoryWhere(
   ownerUserId: string | null,
   filters: WebhookDeliveryHistoryFilters = {},
-  filteredUserIds?: readonly string[],
 ): Prisma.WebhookDeliveryWhereInput {
   const where: Prisma.WebhookDeliveryWhereInput = {}
   if (ownerUserId) {
     where.userId = ownerUserId
-  } else if (filters.userId && filteredUserIds) {
-    where.userId = filteredUserIds.includes(filters.userId) ? filters.userId : { in: [] }
   } else if (filters.userId) {
     where.userId = filters.userId
-  } else if (filteredUserIds) {
-    where.userId = { in: [...filteredUserIds] }
+  }
+  const userSearch = ownerUserId ? "" : filters.user?.trim()
+  if (userSearch) {
+    where.webhook = {
+      user: {
+        OR: [
+          { email: { contains: userSearch, mode: "insensitive" } },
+          { displayName: { contains: userSearch, mode: "insensitive" } },
+        ],
+      },
+    }
   }
   if (filters.webhookId) where.webhookId = filters.webhookId
   if (filters.status) {

@@ -682,9 +682,7 @@ describe("WebhookService", () => {
       receipts: [],
       webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub", deletedAt: null },
     }
-    prisma.user.findMany
-      .mockResolvedValueOnce([{ id: "user-1" }])
-      .mockResolvedValueOnce([{ id: "user-1", email: "user@example.com", displayName: "Ada" }])
+    prisma.user.findMany.mockResolvedValueOnce([{ id: "user-1", email: "user@example.com", displayName: "Ada" }])
     prisma.webhookDelivery.findMany.mockResolvedValue([delivery])
     prisma.webhookDelivery.count.mockResolvedValue(1)
     prisma.$transaction.mockImplementation((input) => Array.isArray(input) ? Promise.all(input) : input({}))
@@ -698,8 +696,19 @@ describe("WebhookService", () => {
       total: 1,
     })
     expect(prisma.webhookDelivery.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { userId: { in: ["user-1"] } },
+      where: {
+        webhook: {
+          user: {
+            OR: [
+              { email: { contains: "user@example.com", mode: "insensitive" } },
+              { displayName: { contains: "user@example.com", mode: "insensitive" } },
+            ],
+          },
+        },
+      },
     }))
+    expect(prisma.user.findMany).toHaveBeenCalledTimes(1)
+    expect(prisma.user.findMany).not.toHaveBeenCalledWith(expect.objectContaining({ take: 100 }))
   })
 
   it("accepts a webhook request, broadcasts to online clients, and stores delivery counts", async () => {
