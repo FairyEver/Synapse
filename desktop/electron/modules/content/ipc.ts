@@ -13,6 +13,7 @@ import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createControlledProcessRunner } from "../../runtime/process"
 import { getContentTypeDefinition } from "../../../src/config/content-types"
+import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
 import { getActiveRepositoryConfig } from "../../../src/lib/config"
 import type { SynapseContentType } from "../../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
@@ -598,7 +599,7 @@ export const contentIpcModule: IpcModule = {
 
         const detail = await contentService.getDetail(args.contentType, args.id)
         const fileNameBase = detail.title?.trim() || args.id
-        const sanitizedFileName = fileNameBase.replace(/[<>:"/\\|?*]/g, "_").slice(0, 100)
+        const sanitizedFileName = normalizeContentFileNameSegment(fileNameBase)
 
         const result = await dialog.showSaveDialog({
           buttonLabel: "下载",

@@ -265,6 +265,28 @@ describe("contentIpcModule sync ownership", () => {
     }))
   })
 
+  it("uses a Windows-safe default file name for content downloads", async () => {
+    const { dialog } = await import("electron")
+    const { contentIpcModule } = await import("../ipc")
+    mocks.contentService.getDetail.mockResolvedValueOnce({
+      id: "rule-1",
+      title: "CON",
+    })
+    vi.mocked(dialog.showSaveDialog).mockResolvedValueOnce({
+      canceled: true,
+      filePath: "",
+    })
+
+    await contentIpcModule.methods.download.handler(createContext() as never, {
+      contentType: "rule",
+      id: "rule-1",
+    })
+
+    expect(dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
+      defaultPath: "/tmp/_CON.md",
+    }))
+  })
+
   it.each([
     ["create", "createContent"],
     ["update", "updateContent"],

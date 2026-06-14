@@ -1,7 +1,7 @@
 import { normalizePathForCompare } from "./path-compare"
 
 const WINDOWS_RESERVED_BASENAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu
-const WINDOWS_UNSAFE_CHARS = new Set(["<", ">", ":", "\"", "|", "?", "*"])
+const WINDOWS_UNSAFE_CHARS = new Set(["<", ">", ":", "\"", "|", "?", "*", "/", "\\"])
 
 function normalizeContentAttachmentPath(originalName: string): string {
   return originalName
@@ -20,6 +20,11 @@ function normalizeContentAttachmentSegment(originalName: string): string {
   const segments = normalized.split("/").filter(Boolean)
 
   return segments.at(-1) ?? ""
+}
+
+function normalizeContentFileNameSegment(originalName: string, maxLength = 100): string {
+  const clipped = originalName.normalize("NFC").trim().slice(0, maxLength)
+  return toWindowsSafeSegment(clipped) || "download"
 }
 
 function assertUniqueContentAttachmentPaths(originalNames: readonly string[]): void {
@@ -62,4 +67,5 @@ export {
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
   normalizeContentAttachmentSegment,
+  normalizeContentFileNameSegment,
 }

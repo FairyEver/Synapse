@@ -4,6 +4,7 @@ import {
   assertUniqueContentAttachmentPaths,
   normalizeContentAttachmentPath,
   normalizeContentAttachmentSegment,
+  normalizeContentFileNameSegment,
 } from "../content-attachments"
 
 describe("normalizeContentAttachmentPath", () => {
@@ -30,6 +31,16 @@ describe("normalizeContentAttachmentPath", () => {
   it("normalizes one Windows-safe file segment", () => {
     expect(normalizeContentAttachmentSegment("C:\\temp\\AUX.txt"))
       .toBe("_AUX.txt")
+  })
+
+  it("normalizes one Windows-safe download file name segment", () => {
+    expect(normalizeContentFileNameSegment("CON"))
+      .toBe("_CON")
+    expect(normalizeContentFileNameSegment("PRN.zip"))
+      .toBe("_PRN.zip")
+    expect(normalizeContentFileNameSegment("会议:纪要. "))
+      .toBe("会议_纪要")
+    expect(normalizeContentFileNameSegment("")).toBe("download")
   })
 
   it("rejects collisions after Windows-safe normalization", () => {
