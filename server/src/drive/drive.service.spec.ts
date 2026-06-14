@@ -926,6 +926,56 @@ describe("DriveService", () => {
     expect(await prisma.drivePublicationAsset.findMany()).toHaveLength(0)
   })
 
+  it("redacts copied publication cleanup failure logs", async () => {
+    const prisma = createPrismaMemory()
+    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
+    const copiedKeys: string[] = []
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async ({ toKey }) => {
+        copiedKeys.push(toKey)
+        if (copiedKeys.length === 2) {
+          throw new Error("copy failed token=copy-secret Authorization: Bearer copy-bearer /Users/example/site")
+        }
+      }),
+      deleteObject: vi.fn(async () => {
+        throw new Error("cleanup failed apiKey=cleanup-secret Cookie: session=cleanup-cookie /tmp/site")
+      }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "index.html",
+      mimeType: "text/html",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "app.js",
+      mimeType: "application/javascript",
+    })
+
+    try {
+      await expect(service.publishSite("user-1", folder.id, "https://synapse.test")).rejects.toThrow("copy failed")
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
+        failureName: "Error",
+        failureMessage: expect.stringContaining("token=[REDACTED]"),
+        cleanupErrorName: "Error",
+        cleanupErrorMessage: expect.stringContaining("apiKey=[REDACTED]"),
+      }), "Drive publication copied object cleanup failed")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("copy-secret")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("copy-bearer")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("cleanup-secret")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("cleanup-cookie")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("/Users/example/site")
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("/tmp/site")
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
   it("deletes copied publication objects when deployment asset persistence fails", async () => {
     const prisma = createPrismaMemory()
     const copiedKeys: string[] = []

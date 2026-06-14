@@ -5,6 +5,7 @@ const MAX_AUDIT_ERROR_LENGTH = 300
 
 const AUTHORIZATION_PATTERN = /\bAuthorization\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/gi
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+const COOKIE_PATTERN = /\bCookie\s*[:=]\s*[^\r\n]+/gi
 const SENSITIVE_ASSIGNMENT_PATTERN = /\b(token|api[_-]?key|secret|password|credential)\s*=\s*[^&\s,;]+/gi
 const SENSITIVE_JSON_FIELD_PATTERN = /(["']?(?:token|api[_-]?key|secret|password|credential)["']?\s*:\s*)["'][^"']*["']/gi
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"']+/gi
@@ -16,6 +17,7 @@ export function formatAuditError(error: unknown): string {
   const redacted = raw
     .replace(AUTHORIZATION_PATTERN, `Authorization: ${REDACTED_VALUE}`)
     .replace(BEARER_PATTERN, `Bearer ${REDACTED_VALUE}`)
+    .replace(COOKIE_PATTERN, `Cookie: ${REDACTED_VALUE}`)
     .replace(SENSITIVE_JSON_FIELD_PATTERN, `$1"${REDACTED_VALUE}"`)
     .replace(SENSITIVE_ASSIGNMENT_PATTERN, (_match, key: string) => `${key}=${REDACTED_VALUE}`)
     .replace(URL_PATTERN, REDACTED_URL)

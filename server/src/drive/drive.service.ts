@@ -17,6 +17,7 @@ import {
   type DriveUsageDto,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
+import { formatAuditError } from "../common/audit-error"
 import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { PrismaService } from "../prisma/prisma.service"
 import {
@@ -1597,7 +1598,7 @@ export class DriveService implements OnApplicationBootstrap {
           replacementDeploymentId: input.replacementDeploymentId,
           storageKey,
           cleanupErrorName: error instanceof Error ? error.name : typeof error,
-          cleanupErrorMessage: error instanceof Error ? error.message : undefined,
+          cleanupErrorMessage: formatAuditError(error),
         }, "Drive superseded publication object cleanup failed")
       }
     }
@@ -1613,7 +1614,7 @@ export class DriveService implements OnApplicationBootstrap {
         deploymentId: input.deploymentId,
         replacementDeploymentId: input.replacementDeploymentId,
         cleanupErrorName: error instanceof Error ? error.name : typeof error,
-        cleanupErrorMessage: error instanceof Error ? error.message : undefined,
+        cleanupErrorMessage: formatAuditError(error),
       }, "Drive superseded publication asset row cleanup failed")
     }
   }
@@ -1633,9 +1634,9 @@ export class DriveService implements OnApplicationBootstrap {
           deploymentId: input.deploymentId,
           storageKey,
           failureName: input.failure instanceof Error ? input.failure.name : typeof input.failure,
-          failureMessage: input.failure instanceof Error ? input.failure.message : undefined,
+          failureMessage: formatAuditError(input.failure),
           cleanupErrorName: error instanceof Error ? error.name : typeof error,
-          cleanupErrorMessage: error instanceof Error ? error.message : undefined,
+          cleanupErrorMessage: formatAuditError(error),
         }, "Drive publication copied object cleanup failed")
       }
     }
