@@ -55,4 +55,17 @@ describe("RepositoryTemplateService", () => {
     expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("builtin.workflow")
     expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("paramTemplates")
   })
+
+  it("documents Workflow actions in the built-in Scheduler MCP skill", async () => {
+    const seeds = await readRepositorySeedContents()
+    const schedulerSkill = seeds.find((seed) => seed.id === "synapse-scheduler-mcp")
+    const apiReference = schedulerSkill?.attachments
+      ?.find((attachment) => attachment.originalName === "api-reference.md")
+
+    expect(schedulerSkill?.content).toContain("builtin.workflow")
+    expect(schedulerSkill?.content).toContain("workflowId")
+    expect(schedulerSkill?.content).toContain("paramTemplates")
+    expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("builtin.workflow")
+    expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("paramTemplates")
+  })
 })

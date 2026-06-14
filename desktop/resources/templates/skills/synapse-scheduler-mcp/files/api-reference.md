@@ -134,3 +134,11 @@ Fields: `method`, `url`, `headers?`, `query?`, `bodyType`, `body?`, `timeoutMins
 Sends scheduled work to an agent.
 
 Fields: `projectId`, `agentType`, `providerId`, `modelTier`, `mode`, `prompt`, `sessionPolicy`, `timeoutMins?`
+
+### builtin.workflow
+
+Runs a saved Workflow.
+
+Fields: `workflowId`, `paramTemplates?`
+
+`paramTemplates` is an object keyed by Workflow parameter name. Values are string templates that may use Scheduler template variables when available.

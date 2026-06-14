@@ -52,8 +52,11 @@ Known built-in action types include:
 - `builtin.script` — runs shell script content. Config includes `script`, `shell`, optional `env`, `pathStrategy`, `posixLogin`, and `timeoutMins`.
 - `builtin.http-request` — sends an HTTP request. Config includes `method`, `url`, optional `headers`, `query`, `bodyType`, `body`, `timeoutMins`, and `auth`.
 - `builtin.agent` — sends scheduled work to an agent. Config includes `projectId`, `agentType`, `providerId`, `modelTier`, `mode`, `prompt`, `sessionPolicy`, and `timeoutMins`.
+- `builtin.workflow` — runs a saved Workflow. Config includes `workflowId` and optional `paramTemplates`.
 
-Do not guess provider ids, model tiers, project ids, or action config fields. Ask the user or use available discovery tools when needed.
+For `builtin.workflow`, set `action.config.workflowId` to the saved Workflow id. Set `action.config.paramTemplates` to an object whose keys are Workflow parameter names and whose values may use Scheduler template variables when available.
+
+Do not guess provider ids, model tiers, project ids, workflow ids, or action config fields. Ask the user or use available discovery tools when needed.
 
 ## Update Rules
 
