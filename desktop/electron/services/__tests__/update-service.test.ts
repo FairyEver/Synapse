@@ -132,6 +132,44 @@ describe("UpdateService", () => {
     expect(state.message).toBe("正在下载更新...")
   })
 
+  it("keeps stale cancellation events from clearing a new manual update flow", async () => {
+    const { updateService } = await importUpdateService()
+
+    await updateService.checkForUpdates()
+    await updateService.cancelDownload()
+
+    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
+      updaterMock.autoUpdater.emit("checking-for-update")
+      updaterMock.autoUpdater.emit("update-available", {
+        version: "0.2.33",
+        files: [{ url: "Synapse-0.2.33-mac-arm64.zip" }],
+      })
+      return {
+        isUpdateAvailable: true,
+        updateInfo: { version: "0.2.33" },
+        versionInfo: { version: "0.2.33" },
+      }
+    })
+
+    const retryState = await updateService.checkForUpdates()
+    expect(retryState).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.33",
+      status: "downloading",
+    }))
+
+    updaterMock.autoUpdater.emit("update-cancelled", {
+      version: "0.2.32",
+      files: [{ url: "Synapse-0.2.32-mac-arm64.zip" }],
+    })
+    updaterMock.autoUpdater.emit("error", new Error("cancelled"))
+
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.33",
+      status: "downloading",
+    }))
+    expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(2)
+  })
+
   it("broadcasts manual update state changes to managed windows", async () => {
     const { updateService } = await importUpdateService()
     const sent: Array<{ channel: string; payload: unknown }> = []

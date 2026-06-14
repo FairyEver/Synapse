@@ -72,6 +72,9 @@ class UpdateService {
   private downloadCancellationToken: CancellationToken | null = null
   private isCancellingDownload = false
   private activeUpdateMode: "manual" | "auto" | null = null
+  private activeUpdateFlowId: number | null = null
+  private cancelledDownloadFlowId: number | null = null
+  private nextUpdateFlowId = 0
   private lastNotifiedVersion: string | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
@@ -85,38 +88,64 @@ class UpdateService {
     this.beforeInstallQuitHandler = handler
   }
 
-  private clearDownloadTracking(): void {
+  private clearDownloadTracking(cancellationToken?: CancellationToken, flowId?: number): void {
+    if (cancellationToken && this.downloadCancellationToken !== cancellationToken) {
+      return
+    }
     this.downloadCancellationToken = null
     this.isCancellingDownload = false
-  }
-
-  private beginUpdateFlow(mode: "manual" | "auto"): void {
-    this.activeUpdateMode = mode
-  }
-
-  private clearUpdateFlow(mode?: "manual" | "auto"): void {
-    if (!mode || this.activeUpdateMode === mode) {
-      this.activeUpdateMode = null
+    if (flowId === undefined || this.cancelledDownloadFlowId === flowId) {
+      this.cancelledDownloadFlowId = null
     }
   }
 
-  private isManualUpdateFlow(): boolean {
-    return this.activeUpdateMode === "manual"
+  private beginUpdateFlow(mode: "manual" | "auto"): number {
+    this.activeUpdateMode = mode
+    this.activeUpdateFlowId = this.nextUpdateFlowId + 1
+    this.nextUpdateFlowId = this.activeUpdateFlowId
+    return this.activeUpdateFlowId
+  }
+
+  private clearUpdateFlow(mode?: "manual" | "auto", flowId?: number): void {
+    if (
+      (!mode || this.activeUpdateMode === mode)
+      && (flowId === undefined || this.activeUpdateFlowId === flowId)
+    ) {
+      this.activeUpdateMode = null
+      this.activeUpdateFlowId = null
+    }
+  }
+
+  private isManualUpdateFlow(flowId?: number): boolean {
+    return this.activeUpdateMode === "manual" && (flowId === undefined || this.activeUpdateFlowId === flowId)
   }
 
   private isAutoUpdateFlow(): boolean {
     return this.activeUpdateMode === "auto"
   }
 
-  private isDownloadCancelledError(error: unknown): boolean {
-    return this.isCancellingDownload || (error instanceof Error && error.message === "cancelled")
+  private isDownloadCancelledError(error: unknown, flowId?: number): boolean {
+    return (flowId !== undefined && this.cancelledDownloadFlowId === flowId)
+      || this.isCancellingDownload
+      || (error instanceof Error && error.message === "cancelled")
+  }
+
+  private shouldHandleManualDownloadCancellation(flowId: number | null): flowId is number {
+    return flowId !== null
+      && this.isManualUpdateFlow(flowId)
+      && (this.cancelledDownloadFlowId === null || this.cancelledDownloadFlowId === flowId)
   }
 
   async cancelDownload(): Promise<void> {
     if (this.downloadCancellationToken) {
       logger.info("Cancelling update download.")
+      this.cancelledDownloadFlowId = this.activeUpdateFlowId
       this.isCancellingDownload = true
       this.downloadCancellationToken.cancel()
+    }
+    const cancelledFlowId = this.activeUpdateFlowId
+    if (cancelledFlowId !== null) {
+      this.clearUpdateFlow("manual", cancelledFlowId)
     }
 
     if (this.state.status === "downloading" || this.state.status === "available") {
@@ -247,20 +276,24 @@ class UpdateService {
       logger.info("Update download cancelled.", {
         version: updateInfo.version,
       })
-      if (this.isManualUpdateFlow()) {
-        this.handleDownloadCancelled(updateInfo)
+      const flowId = this.activeUpdateFlowId
+      if (this.shouldHandleManualDownloadCancellation(flowId)) {
+        this.handleDownloadCancelled(updateInfo, flowId)
       }
     })
 
     autoUpdater.on("error", (error) => {
       logger.error("App updater reported an error.", error)
       if (this.isManualUpdateFlow()) {
-        if (this.isDownloadCancelledError(error)) {
-          this.handleDownloadCancelled()
+        const flowId = this.activeUpdateFlowId
+        if (this.isDownloadCancelledError(error, flowId ?? undefined)) {
+          if (this.shouldHandleManualDownloadCancellation(flowId)) {
+            this.handleDownloadCancelled(undefined, flowId)
+          }
           return
         }
 
-        this.handleError(error)
+        this.handleError(error, flowId ?? undefined)
         return
       }
 
@@ -297,13 +330,15 @@ class UpdateService {
       return this.getState()
     }
 
-    this.beginUpdateFlow("manual")
+    const flowId = this.beginUpdateFlow("manual")
 
     try {
       await autoUpdater.checkForUpdates()
       return this.getState()
     } catch (error) {
-      this.handleError(error)
+      if (this.isManualUpdateFlow(flowId)) {
+        this.handleError(error, flowId)
+      }
       return this.getState()
     }
   }
@@ -322,18 +357,23 @@ class UpdateService {
       canCheck: false,
     })
 
-    void this.downloadLatestUpdate(updateInfo).catch((error) => {
-      if (this.isDownloadCancelledError(error)) {
-        this.handleDownloadCancelled(updateInfo)
+    const flowId = this.activeUpdateFlowId
+    if (flowId === null) return
+    void this.downloadLatestUpdate(updateInfo, flowId).catch((error) => {
+      if (this.isDownloadCancelledError(error, flowId)) {
+        if (this.isManualUpdateFlow(flowId)) {
+          this.handleDownloadCancelled(updateInfo, flowId)
+        }
         return
       }
+      if (!this.isManualUpdateFlow(flowId)) return
 
       logger.error("Failed to download update.", error)
-      this.handleError(error)
+      this.handleError(error, flowId)
     })
   }
 
-  private async downloadLatestUpdate(updateInfo: UpdateInfo): Promise<void> {
+  private async downloadLatestUpdate(updateInfo: UpdateInfo, flowId: number): Promise<void> {
     const cancellationToken = new CancellationToken()
     this.downloadCancellationToken = cancellationToken
     this.isCancellingDownload = false
@@ -352,13 +392,13 @@ class UpdateService {
     try {
       await autoUpdater.downloadUpdate(cancellationToken)
     } catch (error) {
-      if (this.isDownloadCancelledError(error)) {
+      if (this.isDownloadCancelledError(error, flowId)) {
         return
       }
 
       throw error
     } finally {
-      this.clearDownloadTracking()
+      this.clearDownloadTracking(cancellationToken, flowId)
     }
   }
 
@@ -391,9 +431,9 @@ class UpdateService {
     })
   }
 
-  private handleDownloadCancelled(updateInfo?: UpdateInfo): void {
-    this.clearDownloadTracking()
-    this.clearUpdateFlow("manual")
+  private handleDownloadCancelled(updateInfo?: UpdateInfo, flowId?: number): void {
+    this.clearDownloadTracking(undefined, flowId)
+    this.clearUpdateFlow("manual", flowId)
 
     if (this.state.status !== "downloading" && this.state.status !== "available") {
       return
@@ -412,9 +452,9 @@ class UpdateService {
     })
   }
 
-  private handleError(_error: unknown): void {
-    this.clearDownloadTracking()
-    this.clearUpdateFlow()
+  private handleError(_error: unknown, flowId?: number): void {
+    this.clearDownloadTracking(undefined, flowId)
+    this.clearUpdateFlow(undefined, flowId)
 
     this.setState({
       status: "error",
