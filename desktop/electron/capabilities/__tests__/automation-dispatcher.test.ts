@@ -99,6 +99,29 @@ function commandAction(): MainActionDefinition<CommandActionConfig> {
   }
 }
 
+const scriptActionSchema = z.object({ script: z.string().min(1) })
+type ScriptActionConfig = z.infer<typeof scriptActionSchema>
+
+function scriptAction(): MainActionDefinition<ScriptActionConfig> {
+  return {
+    manifest: {
+      id: "builtin.script",
+      title: "Script",
+      permissions: ["shell.exec"],
+      defaultConfig: { script: "date" },
+      configFields: [{ name: "script", kind: "string", required: true, defaultValue: "" }],
+      configSchema: scriptActionSchema,
+    },
+    buildPermissionRequest: ({ config, context }) => ({
+      action: "shell.exec",
+      actor: context.actor,
+      resource: config.script,
+      context: { taskId: context.taskId, runId: context.runId },
+    }),
+    execute: async (_input: ActionExecutionInput<ScriptActionConfig>) => ({ status: "success" }),
+  }
+}
+
 const agentActionSchema = z.object({
   projectId: z.string().min(1),
   agentType: z.string().min(1),
@@ -132,6 +155,7 @@ function registries() {
   triggers.register(intervalTrigger())
   const actions = new MainActionRegistry()
   actions.register(commandAction())
+  actions.register(scriptAction())
   actions.register(agentAction())
   return { triggers, actions }
 }
@@ -184,7 +208,7 @@ function auditSinkMock() {
   } satisfies AuditSink
 }
 
-function createHarness() {
+function createHarness(options: { readonly platform?: string } = {}) {
   const { triggers, actions } = registries()
   const service = serviceMock()
   const accountService = accountServiceMock()
@@ -195,6 +219,7 @@ function createHarness() {
     accountService,
     triggers,
     actions,
+    platform: options.platform,
     permissionGuard,
     auditSink,
   })
@@ -229,9 +254,10 @@ describe("automation capability dispatcher", () => {
     const result = await dispatcher.dispatch("automation.executor_type.list", {}, { source: "api" })
     expect(result).toMatchObject({
       ok: true,
-      total: 2,
+      total: 3,
       data: [
         expect.objectContaining({ type: "builtin.command", title: "Command", permissions: ["shell.exec"] }),
+        expect.objectContaining({ type: "builtin.script", title: "Script", permissions: ["shell.exec"] }),
         expect.objectContaining({ type: "builtin.agent", title: "Agent", permissions: ["agent.spawn"] }),
       ],
     })
@@ -259,6 +285,25 @@ describe("automation capability dispatcher", () => {
     })
     expect(JSON.stringify(result)).not.toContain("whsec_secret")
     expect(JSON.stringify(result)).not.toContain("maskedUrl")
+  })
+
+  it("returns Windows-aware shell defaults for Automation executor discovery", async () => {
+    const { dispatcher } = createHarness({ platform: "win32" })
+
+    const result = await dispatcher.dispatch("automation.executor_type.list", {}, { source: "mcp-http" })
+    const data = result.ok ? result.data : []
+    const executors = Array.isArray(data) ? data : []
+
+    expect(executors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "builtin.command",
+        defaultConfig: expect.objectContaining({ shell: "cmd" }),
+      }),
+      expect.objectContaining({
+        type: "builtin.script",
+        defaultConfig: expect.objectContaining({ shell: "cmd" }),
+      }),
+    ]))
   })
 
   it("lists and gets public item summaries without raw configs", async () => {

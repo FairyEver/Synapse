@@ -61,7 +61,7 @@ Known built-in executor types include:
 - `builtin.http-request` - sends one HTTP request.
 - `builtin.agent` - sends work to an Agent.
 
-Use `automation_executor_type_list` for public config fields, defaults, and permissions. Do not guess provider ids, model tiers, project ids, or Agent settings.
+Use `automation_executor_type_list` for public config fields, platform-aware defaults, and permissions. On Windows, `builtin.command` and `builtin.script` defaults use `cmd`; do not force `posix` unless the user explicitly asks for a POSIX shell. Do not guess provider ids, model tiers, project ids, or Agent settings.
 
 ## Update Rules
 

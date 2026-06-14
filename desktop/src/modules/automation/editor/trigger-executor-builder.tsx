@@ -11,6 +11,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Separator } from "@/components/ui/separator"
+import { createPlatformActionDefaultConfig } from "../../../../action-packages/builtin/shell-defaults"
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -22,6 +23,7 @@ type TriggerExecutorBuilderProps = {
   executorType: string | null
   executorConfig: ActionConfig
   projects?: readonly SynapseProjectConfig[]
+  platform?: string
   onTriggerChange: (type: string | null, config: AutomationTriggerConfig) => void
   onExecutorChange: (type: string | null, config: ActionConfig) => void
 }
@@ -137,6 +139,7 @@ export function TriggerExecutorBuilder({
   executorType,
   executorConfig,
   projects = [],
+  platform,
   onTriggerChange,
   onExecutorChange,
 }: TriggerExecutorBuilderProps) {
@@ -224,7 +227,10 @@ export function TriggerExecutorBuilder({
               id: executor.manifest.id,
               title: executor.manifest.title,
             }))}
-            onSelect={(id) => onExecutorChange(id, { ...rendererActionRegistry.getDefaultConfig(id) })}
+            onSelect={(id) => onExecutorChange(
+              id,
+              createPlatformActionDefaultConfig(id, rendererActionRegistry.getDefaultConfig(id), platform),
+            )}
           />
         )}
       </section>

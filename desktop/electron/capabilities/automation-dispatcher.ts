@@ -6,6 +6,7 @@ import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/secur
 import type { AutomationService } from "../services/automation"
 import type { AutomationTriggerRegistry } from "../services/automation/trigger-registry"
 import { sanitizeError } from "../services/error-sanitize"
+import { createPlatformActionDefaultConfig } from "../../action-packages/builtin/shell-defaults"
 import type {
   AutomationCreateInput,
   AutomationItem,
@@ -39,6 +40,7 @@ export type AutomationCapabilityDispatcherDeps = {
   readonly accountService: AutomationAccountServicePort
   readonly triggers: AutomationTriggerRegistry
   readonly actions: MainActionRegistry
+  readonly platform?: string
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
 }
@@ -90,11 +92,16 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
           }
 
           case "automation.executor_type.list": {
+            const platform = deps.platform ?? process.platform
             const descriptors = deps.actions.list().map((definition) => ({
               type: definition.manifest.id,
               title: definition.manifest.title,
               permissions: [...definition.manifest.permissions],
-              defaultConfig: definition.manifest.defaultConfig,
+              defaultConfig: createPlatformActionDefaultConfig(
+                definition.manifest.id,
+                definition.manifest.defaultConfig,
+                platform,
+              ),
               configFields: definition.manifest.configFields,
             }))
             result = { ok: true, data: descriptors, total: descriptors.length }

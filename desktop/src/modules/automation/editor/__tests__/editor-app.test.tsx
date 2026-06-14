@@ -62,6 +62,7 @@ describe("AutomationEditorApp", () => {
 
   afterEach(() => {
     document.body.innerHTML = ""
+    Reflect.deleteProperty(window, "synapse")
     vi.clearAllMocks()
     vi.restoreAllMocks()
     window.history.replaceState(null, "", "/")
@@ -538,6 +539,47 @@ describe("AutomationEditorApp", () => {
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(executorSummary?.compareDocumentPosition(executorConfig as Node) ?? 0)
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
+  it("saves new Windows command executors with cmd shell defaults", async () => {
+    window.synapse = { platform: "win32" } as typeof window.synapse
+    createItem.mockResolvedValue(buildAutomationItem())
+    vi.spyOn(window, "close").mockImplementation(() => undefined)
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    await act(async () => {
+      findButtonContaining("命令")?.click()
+    })
+
+    const command = document.querySelector<HTMLInputElement>("#task-action-command-content")
+    await act(async () => {
+      if (!command) return
+      changeInput(command, "echo ok")
+    })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "保存并启用")?.click()
+    })
+
+    expect(createItem).toHaveBeenCalledWith(expect.objectContaining({
+      enabled: true,
+      executor: {
+        type: "builtin.command",
+        config: expect.objectContaining({
+          command: "echo ok",
+          shell: "cmd",
+          timeoutMins: 30,
+        }),
+      },
+    }))
   })
 
   it("shows a discard confirmation when closing with unsaved changes", async () => {

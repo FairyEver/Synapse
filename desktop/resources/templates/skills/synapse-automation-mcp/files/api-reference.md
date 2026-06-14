@@ -24,6 +24,8 @@ Input:
 
 Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig`, and `configFields`.
 
+`defaultConfig` is platform-aware. On Windows, `builtin.command` and `builtin.script` return `shell: "cmd"` by default. Explicit saved or user-provided `shell` values are still honored.
+
 ## Items
 
 ### automation_item_list

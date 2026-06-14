@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input"
 import { holdBeforeUnloadForCustomDialog } from "@/lib/before-unload"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { sanitizeError } from "@/lib/error-sanitize"
+import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode } from "../types"
 import {
   buildAutomationCreateInputFromDraft,
@@ -91,6 +92,7 @@ function validationIssueMessage(issue: { readonly path?: readonly unknown[]; rea
 export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
   const { config } = useAppConfig()
   const projects = config.global.projects
+  const platform = getRendererPlatform()
   const [loadState, setLoadState] = useState<AutomationEditorLoadState>(() => (
     mode.mode === "create"
       ? { status: "ready", draft: createDefaultAutomationDraft(generateAutomationDraftName([])) }
@@ -298,6 +300,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
           executorType={draft.executorType}
           executorConfig={draft.executorConfig}
           projects={projects}
+          platform={platform}
           onTriggerChange={(triggerType, triggerConfig) =>
             updateDraft((current) => ({ ...current, triggerType, triggerConfig }))}
           onExecutorChange={(executorType, executorConfig) =>

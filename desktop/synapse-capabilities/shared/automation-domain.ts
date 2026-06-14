@@ -260,7 +260,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_executor_type_list",
-      description: "List registered Automation executor types from Action Runtime, including public config fields and defaults.",
+      description: "List registered Automation executor types from Action Runtime, including public config fields and platform-aware defaults.",
       inputSchema: { type: "object", properties: {} },
     },
   ]

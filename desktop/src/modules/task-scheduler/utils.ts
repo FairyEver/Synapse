@@ -12,11 +12,11 @@ import type { SynapseAgentGlobalConfig, SynapseProjectConfig } from "@/types/con
 import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import type { AgentActionConfig } from "../../../action-packages/builtin/agent"
+import { createPlatformActionDefaultConfig } from "../../../action-packages/builtin/shell-defaults"
 import type { ActionConfig } from "../../../action-packages/types"
 import type { TaskExportFile, TaskFormState } from "./types"
 
 const DEFAULT_ACTION_TYPE = "builtin.command"
-const WINDOWS_DEFAULT_SHELL = "cmd"
 const logger = createRendererLogger("task-scheduler.utils")
 
 const DEFAULT_TASK_FORM_STATE: TaskFormState = {
@@ -67,18 +67,11 @@ function createTaskFormState(
 }
 
 function createDefaultTaskActionConfig(actionType: string, platform?: string): ActionConfig {
-  const baseConfig = rendererActionRegistry.getDefaultConfig(actionType)
-  if (platform === "win32" && isShellActionType(actionType)) {
-    return {
-      ...baseConfig,
-      shell: WINDOWS_DEFAULT_SHELL,
-    }
-  }
-  return { ...baseConfig }
-}
-
-function isShellActionType(actionType: string): boolean {
-  return actionType === "builtin.command" || actionType === "builtin.script"
+  return createPlatformActionDefaultConfig(
+    actionType,
+    rendererActionRegistry.getDefaultConfig(actionType),
+    platform,
+  )
 }
 
 function createDefaultAgentActionConfig(
