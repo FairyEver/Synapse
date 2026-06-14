@@ -1331,6 +1331,29 @@ describe("AccountService", () => {
     })
   })
 
+  it("keeps stored credentials and enters offline when refresh is rate limited", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/auth/refresh")) return jsonResponse({ error: "rate limited" }, 429)
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state).toMatchObject({
+      status: "authenticated",
+      connectivity: "offline",
+      offlineReason: "server_unavailable",
+      profile: storedProfile,
+    })
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-old",
+      lastProfile: storedProfile,
+    })
+  })
+
   it("clears stored credentials when refresh returns 401", async () => {
     const { namespace, service } = await createTestAccountService({
       fetch: vi.fn(async (url) => {

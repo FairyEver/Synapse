@@ -1329,6 +1329,7 @@ function errorCode(error: unknown): string | undefined {
 function classifyAccountRefreshFailure(error: unknown): AccountHttpFailureKind {
   if (isAccountHttpError(error)) {
     if (error.status === 401 || error.status === 403) return "auth"
+    if (error.status === 429) return "temporary"
     if (error.status >= 500) return "temporary"
     return "other"
   }
@@ -1336,7 +1337,7 @@ function classifyAccountRefreshFailure(error: unknown): AccountHttpFailureKind {
 }
 
 function offlineReasonForFailure(error: unknown): SynapseAccountOfflineReason {
-  if (isAccountHttpError(error) && error.status >= 500) return "server_unavailable"
+  if (isAccountHttpError(error) && (error.status === 429 || error.status >= 500)) return "server_unavailable"
   return "network_error"
 }
 
