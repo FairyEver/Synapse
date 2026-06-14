@@ -318,20 +318,28 @@ describe("BackupService", () => {
       size: 0,
       uploadedAt: "2026-05-23T03:00:00.000Z",
       status: "failed" as const,
-      error: "pg_dump failed",
+      error: "pg_dump failed apiKey=secret-key Authorization: Bearer sk-secret https://example.com/private /Users/example/private/report.zip",
     }
     vi.spyOn(service, "performBackup").mockResolvedValue(result)
 
     await service.scheduledBackup()
 
+    const detail = {
+      ...result,
+      error: expect.stringContaining("apiKey=[REDACTED]"),
+    }
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "system",
       action: "backup.scheduled.failed",
       targetType: "backup",
       targetId: "synapse-backup-2026-05-23.tar.gz",
-      detail: result,
+      detail,
       ipAddress: "system",
     })
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("secret-key")
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("https://example.com/private")
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("/Users/example/private/report.zip")
   })
 
   it("exports postgres globals into the backup package", async () => {
@@ -611,7 +619,7 @@ describe("BackupService", () => {
 
   it("waits for the backup archive stream to finish before resolving upload", async () => {
     const archiveStream = new PassThrough()
-    vi.mocked(fs.createReadStream).mockReturnValueOnce(archiveStream as fs.ReadStream)
+    vi.mocked(fs.createReadStream).mockReturnValueOnce(archiveStream as unknown as fs.ReadStream)
     const putObject = vi.fn((options, callback) => {
       ;(options.Body as NodeJS.ReadableStream).resume()
       callback(null)

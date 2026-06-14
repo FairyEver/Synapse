@@ -116,7 +116,7 @@ export class BackupService {
       action: result.status === "failed" ? "backup.scheduled.failed" : "backup.scheduled",
       targetType: "backup",
       targetId: result.filename,
-      detail: result,
+      detail: formatScheduledBackupAuditDetail(result),
       ipAddress: "system",
     })
   }
@@ -585,5 +585,13 @@ export class BackupService {
         "Failed to record backup cleanup audit",
       )
     }
+  }
+}
+
+function formatScheduledBackupAuditDetail(result: BackupResult): BackupResult {
+  if (result.status !== "failed" || !result.error) return result
+  return {
+    ...result,
+    error: formatAuditError(result.error),
   }
 }
