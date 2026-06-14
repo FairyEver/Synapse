@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import vm from "node:vm"
 import type { IpcHandlerContext } from "../../../runtime/ipc/types"
+import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "../../../../src/lib/drive-local-upload-limits"
 
 vi.mock("electron", () => ({
   app: {
@@ -176,6 +177,33 @@ describe("accountIpcModule", () => {
         folderName: "bad",
         files: [{ path: "/tmp/bad.txt", relativePath: "../bad.txt" }],
       }],
+    })).toThrow()
+
+    expect(() => requestSchema.parse({
+      parentId: null,
+      items: [{
+        kind: "folder",
+        folderName: "bulk",
+        files: Array.from({ length: DRIVE_LOCAL_UPLOAD_MAX_FILES + 1 }, (_, index) => ({
+          path: `/tmp/bulk/file-${index}.txt`,
+          relativePath: `file-${index}.txt`,
+        })),
+      }],
+    })).toThrow()
+
+    expect(() => requestSchema.parse({
+      parentId: null,
+      items: [
+        { kind: "file", path: "/tmp/report.txt", name: "report.txt", mimeType: "text/plain" },
+        {
+          kind: "folder",
+          folderName: "bulk",
+          files: Array.from({ length: DRIVE_LOCAL_UPLOAD_MAX_FILES }, (_, index) => ({
+            path: `/tmp/bulk/file-${index}.txt`,
+            relativePath: `file-${index}.txt`,
+          })),
+        },
+      ],
     })).toThrow()
   })
 

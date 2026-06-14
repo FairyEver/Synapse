@@ -4,6 +4,10 @@ import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import { accountService } from "../../services/account-service"
 import { sanitizeError } from "../../services/error-sanitize"
+import {
+  DRIVE_LOCAL_UPLOAD_MAX_FILES,
+  DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
+} from "../../../src/lib/drive-local-upload-limits"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 const accountUserSchema = z.object({
@@ -176,6 +180,9 @@ const unsafeRelativePathSegmentPattern = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
 const driveLocalUploadRelativePathSchema = z.string().min(1).refine(
   (value) => !unsafeRelativePathSegmentPattern.test(value) && !value.includes("\\"),
   "relativePath must be a safe slash-delimited relative path",
+).refine(
+  (value) => driveLocalUploadRelativePathDepth(value) <= DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
+  `relativePath folder depth must be at most ${DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH}`,
 )
 
 const driveLocalUploadFileItemSchema = z.object({
@@ -192,7 +199,7 @@ const driveLocalUploadFolderItemSchema = z.object({
     path: z.string().min(1),
     relativePath: driveLocalUploadRelativePathSchema,
     mimeType: z.string().nullable().optional(),
-  })).min(1),
+  })).min(1).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
 })
 
 const driveLocalUploadRequestSchema = z.object({
@@ -200,7 +207,18 @@ const driveLocalUploadRequestSchema = z.object({
   items: z.array(z.discriminatedUnion("kind", [
     driveLocalUploadFileItemSchema,
     driveLocalUploadFolderItemSchema,
-  ])).min(1),
+  ])).min(1).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
+}).superRefine((request, ctx) => {
+  const fileCount = countDriveLocalUploadRequestFiles(request)
+  if (fileCount <= DRIVE_LOCAL_UPLOAD_MAX_FILES) return
+  ctx.addIssue({
+    code: z.ZodIssueCode.too_big,
+    maximum: DRIVE_LOCAL_UPLOAD_MAX_FILES,
+    origin: "array",
+    inclusive: true,
+    path: ["items"],
+    message: `local drive upload must include at most ${DRIVE_LOCAL_UPLOAD_MAX_FILES} files`,
+  })
 })
 
 const driveLocalUploadResultSchema = z.object({
@@ -250,6 +268,16 @@ function isArrayBufferLike(value: unknown): value is ArrayBuffer {
 
 type DriveLocalUploadRequestForIpc = z.infer<typeof driveLocalUploadRequestSchema>
 type DrivePreparedFileUploadRequestForIpc = z.infer<typeof drivePreparedFileUploadSchema>
+
+function driveLocalUploadRelativePathDepth(relativePath: string): number {
+  return Math.max(0, relativePath.split("/").filter(Boolean).length - 1)
+}
+
+function countDriveLocalUploadRequestFiles(request: DriveLocalUploadRequestForIpc): number {
+  return request.items.reduce((count, item) => (
+    item.kind === "file" ? count + 1 : count + item.files.length
+  ), 0)
+}
 
 function driveLocalUploadPaths(request: DriveLocalUploadRequestForIpc): string[] {
   return request.items.flatMap((item) => (

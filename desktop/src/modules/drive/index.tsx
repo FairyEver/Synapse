@@ -32,6 +32,12 @@ import { useAccount } from "@/app-shell/account"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
+import {
+  DRIVE_LOCAL_UPLOAD_MAX_FILES,
+  DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
+  createDriveLocalUploadTooDeepError,
+  createDriveLocalUploadTooManyFilesError,
+} from "@/lib/drive-local-upload-limits"
 import { cn } from "@/lib/utils"
 import {
   AlertDialog,
@@ -2243,6 +2249,11 @@ type DriveFileSystemDirectoryEntry = DriveFileSystemEntry & {
   }
 }
 
+type DriveDirectoryFile = {
+  readonly file: File
+  readonly relativePath: string
+}
+
 async function buildDriveLocalUploadRequestFromFiles({
   files,
   mode,
@@ -2252,6 +2263,7 @@ async function buildDriveLocalUploadRequestFromFiles({
   readonly mode: DriveLocalUploadFilesMode
   readonly parentId: string | null
 }): Promise<DriveLocalUploadBuildResult> {
+  assertDriveLocalUploadFileCapacity(files.length)
   const items = mode === "folders"
     ? await buildDriveLocalFolderItemsFromFiles(files)
     : buildDriveLocalFileItems(files)
@@ -2283,8 +2295,10 @@ async function buildDriveLocalUploadRequestFromDrop({
 
   const items: DriveLocalUploadItem[] = []
   let skipped = 0
+  let selectedFileCount = 0
   for (const entry of entries) {
     if (isDriveFileEntry(entry)) {
+      selectedFileCount = nextDriveLocalUploadFileCount(selectedFileCount, 1)
       const file = await fileFromEntry(entry)
       const item = driveLocalFileItemFromFile(file)
       if (item) {
@@ -2295,9 +2309,10 @@ async function buildDriveLocalUploadRequestFromDrop({
       continue
     }
     if (isDriveDirectoryEntry(entry)) {
-      const folder = await driveLocalFolderItemFromDirectoryEntry(entry)
+      const folder = await driveLocalFolderItemFromDirectoryEntry(entry, DRIVE_LOCAL_UPLOAD_MAX_FILES - selectedFileCount)
       if (folder.item) {
         items.push(folder.item)
+        selectedFileCount = nextDriveLocalUploadFileCount(selectedFileCount, countDriveLocalUploadItems([folder.item]))
       }
       skipped += folder.skipped
     }
@@ -2321,6 +2336,7 @@ function buildDriveLocalFileItems(files: readonly File[]): { readonly items: Dri
 }
 
 async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Promise<{ readonly items: DriveLocalUploadItem[]; readonly skipped: number }> {
+  assertDriveLocalUploadFileCapacity(files.length)
   const folders = new Map<string, DriveLocalUploadFolderItem["files"]>()
   let skipped = 0
 
@@ -2332,6 +2348,7 @@ async function buildDriveLocalFolderItemsFromFiles(files: readonly File[]): Prom
       continue
     }
 
+    assertDriveLocalUploadRelativePathDepth(relativePath)
     const [folderName, ...rest] = relativePath.split("/")
     if (!folderName) {
       skipped += 1
@@ -2368,8 +2385,8 @@ function driveLocalFileItemFromFile(file: File): DriveLocalUploadItem | null {
   }
 }
 
-async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry): Promise<{ readonly item: DriveLocalUploadItem | null; readonly skipped: number }> {
-  const files = await filesFromDirectoryEntry(entry)
+async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles: number): Promise<{ readonly item: DriveLocalUploadItem | null; readonly skipped: number }> {
+  const files = await filesFromDirectoryEntry(entry, maxFiles)
   const uploadFiles: DriveLocalUploadFolderItem["files"] = []
   let skipped = 0
 
@@ -2398,31 +2415,58 @@ async function driveLocalFolderItemFromDirectoryEntry(entry: DriveFileSystemDire
   }
 }
 
-async function filesFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry): Promise<Array<{ readonly file: File; readonly relativePath: string }>> {
+async function filesFromDirectoryEntry(entry: DriveFileSystemDirectoryEntry, maxFiles = DRIVE_LOCAL_UPLOAD_MAX_FILES): Promise<DriveDirectoryFile[]> {
+  const files: DriveDirectoryFile[] = []
+  await collectFilesFromDirectoryEntry({
+    entry,
+    files,
+    maxFiles,
+    prefix: "",
+    depth: 0,
+  })
+  return files
+}
+
+async function collectFilesFromDirectoryEntry({
+  entry,
+  files,
+  maxFiles,
+  prefix,
+  depth,
+}: {
+  readonly entry: DriveFileSystemDirectoryEntry
+  readonly files: DriveDirectoryFile[]
+  readonly maxFiles: number
+  readonly prefix: string
+  readonly depth: number
+}): Promise<void> {
+  if (depth > DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH) {
+    throw createDriveLocalUploadTooDeepError()
+  }
   const reader = entry.createReader()
-  const files: Array<{ readonly file: File; readonly relativePath: string }> = []
 
   for (;;) {
     const entries = await readDirectoryEntries(reader)
     if (entries.length === 0) break
     for (const child of entries) {
       if (isDriveFileEntry(child)) {
-        files.push({ file: await fileFromEntry(child), relativePath: child.name })
+        if (files.length >= maxFiles) {
+          throw createDriveLocalUploadTooManyFilesError()
+        }
+        files.push({ file: await fileFromEntry(child), relativePath: `${prefix}${child.name}` })
         continue
       }
       if (isDriveDirectoryEntry(child)) {
-        const childFiles = await filesFromDirectoryEntry(child)
-        for (const childFile of childFiles) {
-          files.push({
-            file: childFile.file,
-            relativePath: `${child.name}/${childFile.relativePath}`,
-          })
-        }
+        await collectFilesFromDirectoryEntry({
+          entry: child,
+          files,
+          maxFiles,
+          prefix: `${prefix}${child.name}/`,
+          depth: depth + 1,
+        })
       }
     }
   }
-
-  return files
 }
 
 function readDirectoryEntries(reader: ReturnType<DriveFileSystemDirectoryEntry["createReader"]>): Promise<DriveFileSystemEntry[]> {
@@ -2469,6 +2513,25 @@ function normalizeSlashRelativePath(value: string): string | null {
   if (parts.length === 0) return null
   if (parts.some((part) => part === "." || part === "..")) return null
   return parts.join("/")
+}
+
+function assertDriveLocalUploadFileCapacity(fileCount: number): void {
+  if (fileCount > DRIVE_LOCAL_UPLOAD_MAX_FILES) {
+    throw createDriveLocalUploadTooManyFilesError()
+  }
+}
+
+function nextDriveLocalUploadFileCount(current: number, added: number): number {
+  const next = current + added
+  assertDriveLocalUploadFileCapacity(next)
+  return next
+}
+
+function assertDriveLocalUploadRelativePathDepth(relativePath: string): void {
+  const folderDepth = Math.max(0, relativePath.split("/").length - 2)
+  if (folderDepth > DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH) {
+    throw createDriveLocalUploadTooDeepError()
+  }
 }
 
 async function copyDriveUrl(url: string): Promise<void> {

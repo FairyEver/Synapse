@@ -12,6 +12,7 @@ import {
   type DriveShareListItemDto,
 } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
+import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "@/lib/drive-local-upload-limits"
 
 import { DriveModule } from "../index"
 
@@ -813,6 +814,26 @@ describe("DriveModule", () => {
         },
       ],
     })
+  })
+
+  it("stops expanding dropped folders when the local upload file limit is reached", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const dropzone = getDriveDropzone()
+    const fileEntries = Array.from({ length: DRIVE_LOCAL_UPLOAD_MAX_FILES + 1 }, (_, index) => (
+      createFileEntry(`file-${index}.txt`, new File(["content"], `file-${index}.txt`, { type: "text/plain" }))
+    ))
+
+    dispatchDragEvent(dropzone, "drop", createDataTransfer({
+      items: [
+        createDirectoryTransferItem("bulk", fileEntries),
+      ],
+    }))
+    await flushAct()
+
+    expect(mocks.uploadDriveLocalItems).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`)
   })
 
   it("shows cancel share when a shared item keeps its active share id", async () => {
