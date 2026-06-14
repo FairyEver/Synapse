@@ -210,6 +210,7 @@ describe("DiagnosticsPanel", () => {
 
     await clickButton(container, "运行诊断")
     await clickButton(container, "导出诊断包")
+    await clickButton(document.body, "继续导出")
 
     expect(notificationState.promiseErrors).toEqual(["导出诊断包失败"])
     expect(rendererLogger.error).toHaveBeenCalledWith("Diagnostics bundle export failed.", {
@@ -220,6 +221,24 @@ describe("DiagnosticsPanel", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example/private/report.zip")
     expect(container.textContent).not.toContain("sk-secret")
+  })
+
+  it("requires confirmation before exporting diagnostics bundle", async () => {
+    const container = renderPanel()
+
+    await clickButton(container, "运行诊断")
+    await clickButton(container, "导出诊断包")
+
+    expect(document.body.textContent).toContain("数据库副本")
+    expect(bridgeOps.exportDiagnosticsBundle).not.toHaveBeenCalled()
+
+    await clickButton(document.body, "取消")
+    expect(bridgeOps.exportDiagnosticsBundle).not.toHaveBeenCalled()
+
+    await clickButton(container, "导出诊断包")
+    await clickButton(document.body, "继续导出")
+
+    expect(bridgeOps.exportDiagnosticsBundle).toHaveBeenCalledTimes(1)
   })
 })
 

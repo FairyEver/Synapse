@@ -3,6 +3,17 @@ import { useCallback, useMemo, useState, type ReactNode } from "react"
 
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -155,18 +166,35 @@ function DiagnosticsPanel() {
               )}
               运行诊断
             </Button>
-            <Button
-              variant="outline"
-              disabled={!report || isExporting}
-              onClick={() => void handleExport()}
-            >
-              {isExporting ? (
-                <LoaderCircle className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <Download data-icon="inline-start" />
-              )}
-              导出诊断包
-            </Button>
+            <AlertDialog data-track="diagnostics-export-confirm">
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={!report || isExporting}
+                >
+                  {isExporting ? (
+                    <LoaderCircle className="animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <Download data-icon="inline-start" />
+                  )}
+                  导出诊断包
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>导出诊断包</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    诊断包会包含日志、配置摘要和数据库副本。数据库副本可能包含会话、审计、工作流和调度数据。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => void handleExport()}>
+                    继续导出
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             <Button
               variant="outline"
               disabled={!report}
