@@ -1,6 +1,7 @@
 import { type DragEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Download,
   FileText,
@@ -66,6 +67,7 @@ import type {
 
 const logger = createRendererLogger("knowledge-base.source-manager")
 const INTERNAL_RAW_DRAG_TYPE = "application/x-synapse-raw-entry-paths"
+const RAW_DIRECTORY_PAGE_SIZE = 200
 type DirectoryTree = Record<string, SynapseKnowledgeBaseRawEntry[]>
 type TreeRenderer = (items: SynapseKnowledgeBaseRawEntry[], depth?: number) => ReactNode
 type PendingRawMove = {
@@ -99,6 +101,16 @@ type SourceSelectionBarProps = {
   onMove: () => void
   onExport: () => void
   onTrash: () => void
+}
+
+type SourceEntryPaginationProps = {
+  page: number
+  pageSize: number
+  totalCount: number
+  visibleCount: number
+  hasMore: boolean
+  onPrevious: () => void
+  onNext: () => void
 }
 
 type SourceEntryListProps = {
@@ -478,6 +490,37 @@ function SourceSelectionBar({
   )
 }
 
+function SourceEntryPagination({
+  page,
+  pageSize,
+  totalCount,
+  visibleCount,
+  hasMore,
+  onPrevious,
+  onNext,
+}: SourceEntryPaginationProps) {
+  if (totalCount <= pageSize && page === 0) return null
+
+  const start = totalCount === 0 ? 0 : page * pageSize + 1
+  const end = Math.min(page * pageSize + visibleCount, totalCount)
+
+  return (
+    <div className="flex min-h-9 items-center justify-between gap-3 px-1 py-1">
+      <div className="text-sm text-muted-foreground">{start}-{end} / {totalCount}</div>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" size="sm" disabled={page === 0} onClick={onPrevious} aria-label="上一页">
+          <ChevronLeft data-icon="inline-start" />
+          上一页
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={!hasMore} onClick={onNext} aria-label="下一页">
+          下一页
+          <ChevronRight data-icon="inline-end" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function SourceEntryList({
   entries,
   isLoading,
@@ -638,6 +681,9 @@ function KnowledgeBaseSourceManagerWindow() {
   const payload = useMemo(readWindowPayload, [])
   const { error: showError, promise, warning: showWarning } = useAppNotifications()
   const [entries, setEntries] = useState<SynapseKnowledgeBaseRawEntry[]>([])
+  const [entryPage, setEntryPage] = useState(0)
+  const [entryTotalCount, setEntryTotalCount] = useState(0)
+  const [entryHasMore, setEntryHasMore] = useState(false)
   const [directoryTree, setDirectoryTree] = useState<DirectoryTree>({})
   const [checkedTreeDirectories, setCheckedTreeDirectories] = useState<Set<string>>(() => new Set())
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set([""]))
@@ -670,6 +716,7 @@ function KnowledgeBaseSourceManagerWindow() {
 
   const openDirectory = useCallback((directoryPath: string) => {
     currentDirectoryRef.current = directoryPath
+    setEntryPage(0)
     setCurrentDirectory(directoryPath)
   }, [])
 
@@ -720,6 +767,8 @@ function KnowledgeBaseSourceManagerWindow() {
   const refreshDirectory = useCallback(async () => {
     if (!payload || !bridge) return
     const requestDirectory = currentDirectory
+    const requestPage = entryPage
+    const requestQuery = query.trim()
     const activeRequestVersion = bumpActiveDirectoryVersion(requestDirectory)
     const treeRequestVersion = bumpTreeDirectoryVersion(requestDirectory)
     const isActiveDirectoryRequest = () =>
@@ -730,25 +779,50 @@ function KnowledgeBaseSourceManagerWindow() {
       setIsLoading(true)
       setLoadError(false)
     }
+    void bridge.knowledgeBase.listRawDirectory({
+      projectId: payload.projectId,
+      directoryPath: requestDirectory,
+      entryKind: "directory",
+    }).then((treeResult) => {
+      if (treeDirectoryVersionsRef.current.get(requestDirectory) === treeRequestVersion) {
+        setDirectoryTree((previous) => ({
+          ...previous,
+          [requestDirectory]: directoriesOnly(treeResult.entries),
+        }))
+        markTreeDirectoryChecked(requestDirectory)
+      }
+    }).catch((error: unknown) => {
+      if (treeDirectoryVersionsRef.current.get(requestDirectory) === treeRequestVersion) {
+        logger.error("Failed to load knowledge base raw tree directory.", { error })
+        if (currentDirectoryRef.current === requestDirectory) {
+          showError("读取资料失败")
+        }
+      }
+    }).finally(() => {
+      if (treeDirectoryVersionsRef.current.get(requestDirectory) === treeRequestVersion) {
+        setTreeDirectoryLoading(requestDirectory, false)
+      }
+    })
     try {
       const result = await bridge.knowledgeBase.listRawDirectory({
         projectId: payload.projectId,
         directoryPath: requestDirectory,
+        entryKind: "all",
+        query: requestQuery || undefined,
+        offset: requestPage * RAW_DIRECTORY_PAGE_SIZE,
+        limit: RAW_DIRECTORY_PAGE_SIZE,
       })
       if (isActiveDirectoryRequest()) {
         setEntries(result.entries)
-      }
-      if (treeDirectoryVersionsRef.current.get(requestDirectory) === treeRequestVersion) {
-        setDirectoryTree((previous) => ({
-          ...previous,
-          [requestDirectory]: directoriesOnly(result.entries),
-        }))
-        markTreeDirectoryChecked(requestDirectory)
+        setEntryTotalCount(result.totalCount ?? result.entries.length)
+        setEntryHasMore(result.hasMore ?? false)
       }
     } catch (error) {
       if (isActiveDirectoryRequest()) {
         logger.error("Failed to load knowledge base raw directory.", { error })
         setEntries([])
+        setEntryTotalCount(0)
+        setEntryHasMore(false)
         setLoadError(true)
         showError("读取资料失败")
       }
@@ -756,17 +830,16 @@ function KnowledgeBaseSourceManagerWindow() {
       if (setActiveLoading && isActiveDirectoryRequest()) {
         setIsLoading(false)
       }
-      if (treeDirectoryVersionsRef.current.get(requestDirectory) === treeRequestVersion) {
-        setTreeDirectoryLoading(requestDirectory, false)
-      }
     }
   }, [
     bridge,
     bumpActiveDirectoryVersion,
     bumpTreeDirectoryVersion,
     currentDirectory,
+    entryPage,
     markTreeDirectoryChecked,
     payload,
+    query,
     setTreeDirectoryLoading,
     showError,
   ])
@@ -778,6 +851,10 @@ function KnowledgeBaseSourceManagerWindow() {
   useEffect(() => {
     setSelectedPaths(new Set())
   }, [currentDirectory])
+
+  useEffect(() => {
+    setEntryPage(0)
+  }, [currentDirectory, query])
 
   const pruneTreeDirectories = useCallback((directoryPaths: readonly string[]) => {
     const stalePaths = uniqueDirectoryPaths(directoryPaths.filter(Boolean))
@@ -835,6 +912,7 @@ function KnowledgeBaseSourceManagerWindow() {
         const result = await bridge.knowledgeBase.listRawDirectory({
           projectId: payload.projectId,
           directoryPath,
+          entryKind: "directory",
         })
         if (treeDirectoryVersionsRef.current.get(directoryPath) === requestVersion) {
           setDirectoryTree((previous) => ({
@@ -883,6 +961,7 @@ function KnowledgeBaseSourceManagerWindow() {
       const result = await bridge.knowledgeBase.listRawDirectory({
         projectId: payload.projectId,
         directoryPath,
+        entryKind: "directory",
       })
       if (treeDirectoryVersionsRef.current.get(directoryPath) === treeRequestVersion) {
         setDirectoryTree((previous) => ({
@@ -926,6 +1005,14 @@ function KnowledgeBaseSourceManagerWindow() {
     () => entries.filter((entry) => matchesSearch(entry, query)),
     [entries, query],
   )
+
+  const previousEntryPage = useCallback(() => {
+    setEntryPage((previous) => Math.max(0, previous - 1))
+  }, [])
+
+  const nextEntryPage = useCallback(() => {
+    setEntryPage((previous) => previous + 1)
+  }, [])
 
   const selectedList = useMemo(() => Array.from(selectedPaths), [selectedPaths])
   const selectedVisibleCount = useMemo(
@@ -1467,6 +1554,15 @@ function KnowledgeBaseSourceManagerWindow() {
               onDropOnDirectory={(targetDirectoryPath, event) => {
                 void dropInternalDrag(targetDirectoryPath, event)
               }}
+            />
+            <SourceEntryPagination
+              page={entryPage}
+              pageSize={RAW_DIRECTORY_PAGE_SIZE}
+              totalCount={entryTotalCount}
+              visibleCount={visibleEntries.length}
+              hasMore={entryHasMore}
+              onPrevious={previousEntryPage}
+              onNext={nextEntryPage}
             />
           </div>
           {isDragging ? (

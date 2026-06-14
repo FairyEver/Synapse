@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseSourceManagerWindow } from "../source-manager-window"
 import type {
+  SynapseKnowledgeBaseListRawDirectoryPayload,
   SynapseKnowledgeBaseListRawDirectoryResult,
   SynapseKnowledgeBaseRawMutationResult,
   SynapseKnowledgeBaseUploadSourcesResult,
@@ -73,52 +74,69 @@ function createBridgeMocks() {
     entries: [],
     skipped: [],
   }
+  const rawEntriesByDirectory: Record<string, SynapseKnowledgeBaseListRawDirectoryResult["entries"]> = {
+    "客户": [{
+      relativePath: "客户/访谈.md",
+      name: "访谈.md",
+      kind: "file",
+      size: 24,
+      modifiedAt: "2026-05-23T14:20:00.000Z",
+    }],
+    "2026": [{
+      relativePath: "2026/05",
+      name: "05",
+      kind: "directory",
+      size: null,
+      modifiedAt: "2026-05-24T16:05:00.000Z",
+    }],
+    "": [
+      {
+        relativePath: "2026",
+        name: "2026",
+        kind: "directory",
+        size: null,
+        modifiedAt: "2026-05-24T16:05:00.000Z",
+      },
+      {
+        relativePath: "客户",
+        name: "客户",
+        kind: "directory",
+        size: null,
+        modifiedAt: "2026-05-22T11:03:00.000Z",
+      },
+      {
+        relativePath: "brief.md",
+        name: "brief.md",
+        kind: "file",
+        size: 43008,
+        modifiedAt: "2026-05-23T14:20:00.000Z",
+      },
+    ],
+  }
   return {
     knowledgeBase: {
-      listRawDirectory: vi.fn<(payload: { projectId: string; directoryPath: string }) => Promise<SynapseKnowledgeBaseListRawDirectoryResult>>()
-        .mockImplementation(async ({ directoryPath }) => ({
-          projectId: "project-1",
-          directoryPath,
-          entries: directoryPath === "客户"
-            ? [{
-              relativePath: "客户/访谈.md",
-              name: "访谈.md",
-              kind: "file",
-              size: 24,
-              modifiedAt: "2026-05-23T14:20:00.000Z",
-            }]
-            : directoryPath === "2026"
-              ? [{
-                relativePath: "2026/05",
-                name: "05",
-                kind: "directory",
-                size: null,
-                modifiedAt: "2026-05-24T16:05:00.000Z",
-              }]
-            : [
-              {
-                relativePath: "2026",
-                name: "2026",
-                kind: "directory",
-                size: null,
-                modifiedAt: "2026-05-24T16:05:00.000Z",
-              },
-              {
-                relativePath: "客户",
-                name: "客户",
-                kind: "directory",
-                size: null,
-                modifiedAt: "2026-05-22T11:03:00.000Z",
-              },
-              {
-                relativePath: "brief.md",
-                name: "brief.md",
-                kind: "file",
-                size: 43008,
-                modifiedAt: "2026-05-23T14:20:00.000Z",
-              },
-            ],
-        })),
+      listRawDirectory: vi.fn<(payload: SynapseKnowledgeBaseListRawDirectoryPayload) => Promise<SynapseKnowledgeBaseListRawDirectoryResult>>()
+        .mockImplementation(async (payload) => {
+          const query = payload.query?.trim().toLowerCase() ?? ""
+          const allEntries = rawEntriesByDirectory[payload.directoryPath] ?? []
+          const filtered = allEntries.filter((entry) => (
+            (payload.entryKind !== "directory" || entry.kind === "directory")
+            && (!query || `${entry.name}\n${entry.relativePath}`.toLowerCase().includes(query))
+          ))
+          const offset = payload.offset ?? 0
+          const entries = payload.limit === undefined
+            ? filtered.slice(offset)
+            : filtered.slice(offset, offset + payload.limit)
+          return {
+            projectId: payload.projectId,
+            directoryPath: payload.directoryPath,
+            entries,
+            totalCount: filtered.length,
+            offset,
+            limit: payload.limit,
+            hasMore: payload.limit !== undefined && offset + payload.limit < filtered.length,
+          }
+        }),
       uploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
       uploadRawItems: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; itemPaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
@@ -216,9 +234,13 @@ function openContextMenuOnButton(label: string): void {
   }))
 }
 
-function listDirectoryCallCount(directoryPath: string): number {
+function listDirectoryCallCount(
+  directoryPath: string,
+  entryKind?: SynapseKnowledgeBaseListRawDirectoryPayload["entryKind"],
+): number {
   return bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
     payload.directoryPath === directoryPath
+    && (entryKind === undefined || payload.entryKind === entryKind)
   )).length
 }
 
@@ -327,6 +349,72 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
   })
 
+  it("requests raw entries by page while loading tree folders with directory-only requests", async () => {
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async (payload) => {
+      if (payload.entryKind === "directory") {
+        return {
+          projectId: payload.projectId,
+          directoryPath: payload.directoryPath,
+          entries: [],
+          totalCount: 0,
+          offset: 0,
+          hasMore: false,
+        }
+      }
+      const offset = payload.offset ?? 0
+      const entryName = offset === 0 ? "file-001.md" : "file-201.md"
+      return {
+        projectId: payload.projectId,
+        directoryPath: payload.directoryPath,
+        entries: [{
+          relativePath: entryName,
+          name: entryName,
+          kind: "file",
+          size: 12,
+          modifiedAt: "2026-05-23T14:20:00.000Z",
+        }],
+        totalCount: 201,
+        offset,
+        limit: payload.limit,
+        hasMore: offset === 0,
+      }
+    })
+
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("file-001.md")
+    })
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      directoryPath: "",
+      entryKind: "all",
+      offset: 0,
+      limit: 200,
+    }))
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      directoryPath: "",
+      entryKind: "directory",
+    }))
+
+    await act(async () => {
+      buttonByLabel("下一页").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("file-201.md")
+    })
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      directoryPath: "",
+      entryKind: "all",
+      offset: 200,
+      limit: 200,
+    }))
+  })
+
   it("keeps batch actions visible and disabled until entries are selected", async () => {
     renderWindow()
 
@@ -365,10 +453,13 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       await Promise.resolve()
     })
 
-    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "project-1",
       directoryPath: "客户",
-    })
+      entryKind: "all",
+      offset: 0,
+      limit: 200,
+    }))
   })
 
   it("does not open a directory when clicking its selection checkbox", async () => {
@@ -504,10 +595,13 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     await waitForExpectation(() => {
       expect(document.body.textContent).toContain("访谈.md")
     })
-    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "project-1",
       directoryPath: "客户",
-    })
+      entryKind: "all",
+      offset: 0,
+      limit: 200,
+    }))
     expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
   })
 
@@ -537,10 +631,11 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       projectId: "project-1",
       url: "https://example.com/notes",
     })
-    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "project-1",
       directoryPath: "",
-    })
+      entryKind: "all",
+    }))
   })
 
   it("keeps breadcrumbs in a dedicated scroll row below toolbar actions", async () => {
@@ -718,10 +813,17 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     const staleRefreshRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
     let customerRequestCount = 0
     bridgeMocks.knowledgeBase.selectAndUploadRawFiles.mockReturnValue(uploadRequest.promise)
-    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath, entryKind }) => {
       if (directoryPath === "客户") {
+        if (entryKind === "directory") {
+          return {
+            projectId: "project-1",
+            directoryPath,
+            entries: [],
+          }
+        }
         customerRequestCount += 1
-        if (customerRequestCount <= 2) {
+        if (customerRequestCount === 1) {
           return {
             projectId: "project-1",
             directoryPath,
@@ -810,8 +912,8 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
     await waitForExpectation(() => {
       expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
-        payload.directoryPath === "客户"
-      ))).toHaveLength(3)
+        payload.directoryPath === "客户" && payload.entryKind === "all"
+      ))).toHaveLength(2)
     })
 
     expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("2026")
@@ -867,22 +969,24 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     renderWindow()
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "2026",
-      })
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        entryKind: "directory",
+      }))
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "客户",
-      })
+        entryKind: "directory",
+      }))
     })
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10))
     })
-    expect(bridgeMocks.knowledgeBase.listRawDirectory).not.toHaveBeenCalledWith({
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).not.toHaveBeenCalledWith(expect.objectContaining({
       projectId: "project-1",
       directoryPath: "2026/05",
-    })
+    }))
   })
 
   it("settles one root child preload without waiting for a pending sibling", async () => {
@@ -915,14 +1019,16 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
 
     renderWindow()
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "2026",
-      })
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        entryKind: "directory",
+      }))
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "客户",
-      })
+        entryKind: "directory",
+      }))
     })
 
     await act(async () => {
@@ -953,7 +1059,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(treeText).not.toContain("读取中")
     })
     expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
-      payload.directoryPath === "客户"
+      payload.directoryPath === "客户" && payload.entryKind === "directory"
     ))).toHaveLength(1)
   })
 
@@ -989,14 +1095,16 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     renderWindow()
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "2026",
-      })
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        entryKind: "directory",
+      }))
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "客户",
-      })
+        entryKind: "directory",
+      }))
     })
 
     await act(async () => {
@@ -1065,7 +1173,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
     await waitForExpectation(() => {
       expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
-        payload.directoryPath === "客户"
+        payload.directoryPath === "客户" && payload.entryKind === "directory"
       ))).toHaveLength(2)
     })
 
@@ -1108,10 +1216,11 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     renderWindow()
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "客户",
-      })
+        entryKind: "directory",
+      }))
       expect(document.querySelector('[aria-label="展开 2026"]')).not.toBeNull()
       expect(document.querySelector('[aria-label="展开 客户"]')).toBeNull()
       expect(document.querySelector('[aria-label="折叠 客户"]')).toBeNull()
@@ -1133,10 +1242,13 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     await waitForExpectation(() => {
       expect(document.body.textContent).toContain("访谈.md")
     })
-    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "project-1",
       directoryPath: "客户",
-    })
+      entryKind: "all",
+      offset: 0,
+      limit: 200,
+    }))
   })
 
   it("does not show rename or delete actions for the left file tree root", async () => {
@@ -1234,10 +1346,9 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       size: 128,
       modifiedAt: "2026-05-25T09:10:00.000Z",
     }
-    const activeProjectRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
-    const treeProjectRequest = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
-    let projectRequestCount = 0
-    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+    const activeProjectRequests: Array<ReturnType<typeof createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>>> = []
+    const treeProjectRequests: Array<ReturnType<typeof createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>>> = []
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath, entryKind }) => {
       if (directoryPath === "") {
         return {
           projectId: "project-1",
@@ -1253,8 +1364,13 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
         }
       }
       if (directoryPath === "客户/项目") {
-        projectRequestCount += 1
-        return projectRequestCount === 1 ? activeProjectRequest.promise : treeProjectRequest.promise
+        const request = createDeferred<SynapseKnowledgeBaseListRawDirectoryResult>()
+        if (entryKind === "directory") {
+          treeProjectRequests.push(request)
+        } else {
+          activeProjectRequests.push(request)
+        }
+        return request.promise
       }
       return {
         projectId: "project-1",
@@ -1281,9 +1397,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       await Promise.resolve()
     })
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
-        payload.directoryPath === "客户/项目"
-      ))).toHaveLength(1)
+      expect(activeProjectRequests).toHaveLength(1)
     })
 
     const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="搜索当前文件夹"]')
@@ -1293,18 +1407,23 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       await Promise.resolve()
     })
     expect(document.body.textContent).toContain("读取中")
+    await waitForExpectation(() => {
+      expect(activeProjectRequests.length).toBeGreaterThan(1)
+    })
 
     await act(async () => {
       buttonByLabel("展开 项目").click()
       await Promise.resolve()
     })
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.filter(([payload]) => (
-        payload.directoryPath === "客户/项目"
-      ))).toHaveLength(2)
+      expect(bridgeMocks.knowledgeBase.listRawDirectory.mock.calls.some(([payload]) => (
+        payload.directoryPath === "客户/项目" && payload.entryKind === "directory"
+      ))).toBe(true)
     })
 
     await act(async () => {
+      const treeProjectRequest = treeProjectRequests.at(-1)
+      if (!treeProjectRequest) throw new Error("Tree project request not found.")
       treeProjectRequest.resolve({
         projectId: "project-1",
         directoryPath: "客户/项目",
@@ -1314,12 +1433,14 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await act(async () => {
-      activeProjectRequest.resolve({
-        projectId: "project-1",
-        directoryPath: "客户/项目",
-        entries: [projectNote],
-      })
-      await activeProjectRequest.promise
+      for (const activeProjectRequest of activeProjectRequests) {
+        activeProjectRequest.resolve({
+          projectId: "project-1",
+          directoryPath: "客户/项目",
+          entries: [projectNote],
+        })
+      }
+      await Promise.all(activeProjectRequests.map((request) => request.promise))
     })
 
     await waitForExpectation(() => {
@@ -1984,10 +2105,11 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "客户",
-      })
+        entryKind: "directory",
+      }))
     })
 
     await act(async () => {
@@ -2298,14 +2420,16 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
 
     renderWindow()
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "客户",
-      })
-      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        entryKind: "directory",
+      }))
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         directoryPath: "2026",
-      })
+        entryKind: "directory",
+      }))
     })
 
     await act(async () => {

@@ -36,6 +36,34 @@ describe("KnowledgeBaseRawFileManager", () => {
     expect(childEntries.map((entry) => entry.name)).toEqual([".gitkeep"])
   })
 
+  it("lists raw directory pages with total metadata", async () => {
+    const rawRoot = await tempDir()
+    await writeFile(path.join(rawRoot, "a.md"), "a\n", "utf8")
+    await writeFile(path.join(rawRoot, "b.md"), "b\n", "utf8")
+    await writeFile(path.join(rawRoot, "c.md"), "c\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    const result = await manager.listPage(rawRoot, "", { offset: 1, limit: 1 })
+
+    expect(result.entries.map((entry) => entry.name)).toEqual(["b.md"])
+    expect(result.totalCount).toBe(3)
+    expect(result.offset).toBe(1)
+    expect(result.limit).toBe(1)
+    expect(result.hasMore).toBe(true)
+  })
+
+  it("lists only raw child directories for tree refreshes", async () => {
+    const rawRoot = await tempDir()
+    await mkdir(path.join(rawRoot, "会议资料"), { recursive: true })
+    await writeFile(path.join(rawRoot, "brief.md"), "brief\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })
+
+    const result = await manager.listPage(rawRoot, "", { entryKind: "directory" })
+
+    expect(result.entries.map((entry) => entry.name)).toEqual(["会议资料"])
+    expect(result.totalCount).toBe(1)
+  })
+
   it("rejects Windows-incompatible folder names before creating raw directories", async () => {
     const rawRoot = await tempDir()
     const manager = new KnowledgeBaseRawFileManager({ trashItem: async () => undefined })

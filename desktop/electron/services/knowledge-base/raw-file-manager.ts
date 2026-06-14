@@ -1,4 +1,4 @@
-import { constants } from "node:fs"
+import { constants, type Dirent } from "node:fs"
 import { access, copyFile, lstat, mkdir, readdir, rename } from "node:fs/promises"
 import path from "node:path"
 
@@ -10,6 +10,19 @@ import { validateKnowledgeBaseRawEntryNameInput } from "../../../src/lib/knowled
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 type TrashItem = (targetPath: string) => Promise<void>
+type RawEntryListOptions = {
+  readonly entryKind?: "all" | "directory"
+  readonly query?: string
+  readonly offset?: number
+  readonly limit?: number
+}
+type RawEntryListPage = {
+  readonly entries: SynapseKnowledgeBaseRawEntry[]
+  readonly totalCount: number
+  readonly offset: number
+  readonly limit?: number
+  readonly hasMore: boolean
+}
 
 export interface RawFileManagerDeps {
   readonly trashItem: TrashItem
@@ -23,28 +36,51 @@ export class KnowledgeBaseRawFileManager {
   }
 
   async list(rawRoot: string, directoryPath: string): Promise<SynapseKnowledgeBaseRawEntry[]> {
+    return (await this.listPage(rawRoot, directoryPath)).entries
+  }
+
+  async listPage(rawRoot: string, directoryPath: string, options: RawEntryListOptions = {}): Promise<RawEntryListPage> {
     const directory = resolveRawPath(rawRoot, directoryPath)
     await assertNoSymlinkInRawPath(rawRoot, directoryPath)
     const stat = await lstat(directory)
     if (!stat.isDirectory()) throw new Error("目标不是文件夹。")
-    const entries = await readdir(directory, { withFileTypes: true })
-    const result: SynapseKnowledgeBaseRawEntry[] = []
-    for (const entry of entries) {
-      if (entry.isSymbolicLink()) continue
-      if (!entry.isFile() && !entry.isDirectory()) continue
+    const query = options.query?.trim().toLowerCase() ?? ""
+    const entryKind = options.entryKind ?? "all"
+    const offset = Math.max(0, options.offset ?? 0)
+    const limit = options.limit === undefined ? undefined : Math.max(1, options.limit)
+    const entries = (await readdir(directory, { withFileTypes: true }))
+      .filter((entry) => {
+        if (entry.isSymbolicLink()) return false
+        if (!entry.isFile() && !entry.isDirectory()) return false
+        if (entryKind === "directory" && !entry.isDirectory()) return false
+        const relativePath = normalizeRelativePath(path.join(normalizeRawPath(directoryPath), entry.name))
+        if (entry.name === ".manifest.json" || isRootInternalRawFile(relativePath)) return false
+        if (!query) return true
+        return `${entry.name}\n${relativePath}`.toLowerCase().includes(query)
+      })
+      .sort(compareRawDirents)
+    const totalCount = entries.length
+    const pageEntries = limit === undefined ? entries.slice(offset) : entries.slice(offset, offset + limit)
+    const result = await mapWithConcurrency(pageEntries, 32, async (entry) => {
       const absolutePath = path.join(directory, entry.name)
       const relativePath = normalizeRelativePath(path.relative(rawRoot, absolutePath))
-      if (entry.name === ".manifest.json" || isRootInternalRawFile(relativePath)) continue
       const entryStat = await lstat(absolutePath)
-      result.push({
+      const kind: SynapseKnowledgeBaseRawEntry["kind"] = entry.isDirectory() ? "directory" : "file"
+      return {
         name: entry.name,
         relativePath,
-        kind: entry.isDirectory() ? "directory" : "file",
-        size: entry.isDirectory() ? null : entryStat.size,
+        kind,
+        size: kind === "directory" ? null : entryStat.size,
         modifiedAt: entryStat.mtime.toISOString(),
-      })
+      }
+    })
+    return {
+      entries: result,
+      totalCount,
+      offset,
+      limit,
+      hasMore: limit !== undefined && offset + limit < totalCount,
     }
-    return sortEntries(result)
   }
 
   async createFolder(rawRoot: string, parentDirectoryPath: string, name: string): Promise<SynapseKnowledgeBaseRawEntry> {
@@ -420,6 +456,29 @@ function sortEntries(entries: SynapseKnowledgeBaseRawEntry[]): SynapseKnowledgeB
     if (left.kind !== right.kind) return left.kind === "directory" ? -1 : 1
     return left.name.localeCompare(right.name, "zh-CN")
   })
+}
+
+function compareRawDirents(left: Dirent, right: Dirent): number {
+  if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1
+  return left.name.localeCompare(right.name, "zh-CN")
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let nextIndex = 0
+  const workerCount = Math.min(concurrency, items.length)
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await mapper(items[index]!)
+    }
+  }))
+  return results
 }
 
 async function copyFileToAvailablePath(sourcePath: string, directoryPath: string, fileName: string): Promise<string> {

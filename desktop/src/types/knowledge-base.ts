@@ -104,12 +104,20 @@ export type SynapseKnowledgeBaseRawEntry = {
 export type SynapseKnowledgeBaseListRawDirectoryPayload = {
   projectId: string
   directoryPath: string
+  entryKind?: "all" | "directory"
+  query?: string
+  offset?: number
+  limit?: number
 }
 
 export type SynapseKnowledgeBaseListRawDirectoryResult = {
   projectId: string
   directoryPath: string
   entries: SynapseKnowledgeBaseRawEntry[]
+  totalCount?: number
+  offset?: number
+  limit?: number
+  hasMore?: boolean
 }
 
 export type SynapseKnowledgeBaseCreateRawFolderPayload = {

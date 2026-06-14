@@ -476,10 +476,35 @@ describe("KnowledgeBaseService", () => {
     expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw directory listed.", {
       projectId,
       directoryPath: "",
+      entryKind: "all",
       entryCount: 2,
+      totalCount: 2,
       directoryCount: 1,
       fileCount: 1,
+      offset: 0,
+      limit: undefined,
     })
+  })
+
+  it("lists raw directory entries with pagination options", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "a.md"), "a\n")
+    await writeFile(path.join(projectPath, ".raw", "b.md"), "b\n")
+    await writeFile(path.join(projectPath, ".raw", "c.md"), "c\n")
+
+    const result = await service.listRawDirectory({
+      projectId,
+      directoryPath: "",
+      offset: 1,
+      limit: 1,
+    })
+
+    expect(result.entries.map((entry) => entry.name)).toEqual(["b.md"])
+    expect(result.totalCount).toBe(3)
+    expect(result.offset).toBe(1)
+    expect(result.limit).toBe(1)
+    expect(result.hasMore).toBe(true)
   })
 
   it("does not create missing raw directory while listing raw entries", async () => {

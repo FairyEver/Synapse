@@ -231,15 +231,32 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     assertRawRelativePathInside(projectPath, payload.directoryPath)
     const rawRoot = await this.requireRawRoot(projectPath)
-    const entries = await this.rawFileManager.list(rawRoot, payload.directoryPath)
+    const result = await this.rawFileManager.listPage(rawRoot, payload.directoryPath, {
+      entryKind: payload.entryKind,
+      query: payload.query,
+      offset: payload.offset,
+      limit: payload.limit,
+    })
     logger.info("Knowledge Base raw directory listed.", {
       projectId: payload.projectId,
       directoryPath: payload.directoryPath,
-      entryCount: entries.length,
-      directoryCount: entries.filter((entry) => entry.kind === "directory").length,
-      fileCount: entries.filter((entry) => entry.kind === "file").length,
+      entryKind: payload.entryKind ?? "all",
+      entryCount: result.entries.length,
+      totalCount: result.totalCount,
+      directoryCount: result.entries.filter((entry) => entry.kind === "directory").length,
+      fileCount: result.entries.filter((entry) => entry.kind === "file").length,
+      offset: result.offset,
+      limit: result.limit,
     })
-    return { projectId: payload.projectId, directoryPath: payload.directoryPath, entries }
+    return {
+      projectId: payload.projectId,
+      directoryPath: payload.directoryPath,
+      entries: result.entries,
+      totalCount: result.totalCount,
+      offset: result.offset,
+      limit: result.limit,
+      hasMore: result.hasMore,
+    }
   }
 
   async createRawFolder(payload: SynapseKnowledgeBaseCreateRawFolderPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {

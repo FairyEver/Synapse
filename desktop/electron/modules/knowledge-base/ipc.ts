@@ -49,12 +49,20 @@ const rawEntrySchema = z.object({
 const listRawDirectoryPayloadSchema = z.object({
   projectId: z.string().min(1),
   directoryPath: z.string(),
+  entryKind: z.enum(["all", "directory"]).optional(),
+  query: z.string().optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
 })
 
 const listRawDirectoryResultSchema = z.object({
   projectId: z.string(),
   directoryPath: z.string(),
   entries: z.array(rawEntrySchema),
+  totalCount: z.number().int().min(0).optional(),
+  offset: z.number().int().min(0).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+  hasMore: z.boolean().optional(),
 })
 
 const uploadRawFilesPayloadSchema = z.object({
