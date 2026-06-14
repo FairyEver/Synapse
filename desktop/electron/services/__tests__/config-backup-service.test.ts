@@ -113,6 +113,32 @@ describe("ConfigBackupService quick inputs", () => {
     }
   })
 
+  it("keeps the current machine knowledge base storage root when importing a backup", async () => {
+    const currentConfig: SynapseConfig = {
+      ...createDefaultConfig(),
+      global: {
+        ...createDefaultConfig().global,
+        knowledgeBaseStorage: { mode: "custom", rootPath: "/current-machine/kb-root" },
+      },
+    }
+    vi.mocked(configStore.load).mockResolvedValue(currentConfig)
+    const filePath = await writeBackupFile({
+      knowledgeBaseStorage: { mode: "custom", rootPath: "/backup-machine/kb-root" },
+    })
+
+    try {
+      await configBackupService.readImport(filePath)
+
+      expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
+        global: expect.objectContaining({
+          knowledgeBaseStorage: { mode: "custom", rootPath: "/current-machine/kb-root" },
+        }),
+      }))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("migrates legacy repository variables and preserves custom directories global lists sort order and agent defaults when importing a backup", async () => {
     const filePath = await writeBackupFile({
       favorites: { rule: ["rule-1"], skill: ["skill-1"], prompt: ["prompt-1"] },

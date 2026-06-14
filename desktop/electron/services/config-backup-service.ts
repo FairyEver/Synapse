@@ -11,6 +11,7 @@ import type {
 import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
 import type {
   SynapseAgentGlobalConfig,
+  SynapseConfig,
   SynapseFavorites,
   SynapseKnowledgeBaseStorageConfig,
   SynapseProjectCapabilities,
@@ -330,6 +331,19 @@ function mergeBackupVariables(config: BackupConfigWithLegacyVariables): SynapseC
     global: {
       ...config.global,
       variables: result,
+    },
+  }
+}
+
+function mergeLocalMachineConfig(
+  importedConfig: SynapseConfigBackup["config"],
+  currentConfig: SynapseConfig,
+): SynapseConfigBackup["config"] {
+  return {
+    ...importedConfig,
+    global: {
+      ...importedConfig.global,
+      knowledgeBaseStorage: currentConfig.global.knowledgeBaseStorage,
     },
   }
 }
@@ -945,7 +959,7 @@ class ConfigBackupService {
     const backup = parseBackup(parsedValue)
 
     const previousConfig = await configStore.load()
-    await configStore.replace(mergeBackupVariables(backup.config))
+    await configStore.replace(mergeLocalMachineConfig(mergeBackupVariables(backup.config), previousConfig))
 
     try {
       await userIdentityService.importIdentity(backup.identity)
