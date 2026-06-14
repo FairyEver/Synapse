@@ -244,6 +244,7 @@
 - 知识库添加 URL 资料时，HTTP 重定向后的真实请求目标也会经过 network.connect 权限检查和审计，审计里能看到脱敏后的实际连接地址。
 - 内容商店 Rule/Prompt 草稿会在接口入口直接拦截超过 1MB 的正文，不再等到 service 层处理后才拒绝。
 - 审计日志写入失败时，服务日志会记录脱敏后的错误摘要，不再把底层原始异常对象直接写入日志。
+- Server 灾备包里的 PostgreSQL globals 导出不再包含 role password hash，和 manifest 的“不含 secret”声明保持一致。
 
 ## 技术调整
 

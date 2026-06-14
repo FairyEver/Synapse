@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { execFile } from "node:child_process"
 import * as fs from "node:fs"
 import { mkdtemp, readFile, writeFile } from "node:fs/promises"
 import * as os from "node:os"
@@ -459,6 +460,19 @@ describe("BackupService", () => {
 
     try {
       expect(fs.readFileSync(globalsPath, "utf8")).toContain("postgres globals")
+      const pgDumpAllCall = vi.mocked(execFile).mock.calls.find(([command]) => command === "pg_dumpall")
+      expect(pgDumpAllCall?.[1]).toEqual([
+        "-h",
+        "localhost",
+        "-p",
+        "5432",
+        "-U",
+        "synapse",
+        "--globals-only",
+        "--no-role-passwords",
+        "-f",
+        globalsPath,
+      ])
     } finally {
       fs.rmSync(globalsPath, { force: true })
     }

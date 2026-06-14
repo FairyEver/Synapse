@@ -62,7 +62,7 @@ synapse-backup-2026-06-08T14-23-25-189Z.tar
 
 ### `postgres-globals.sql`
 
-使用 `pg_dumpall --globals-only` 导出的 PostgreSQL 角色和全局权限。恢复时先按需导入 globals，再导入业务数据库。
+使用 `pg_dumpall --globals-only --no-role-passwords` 导出的 PostgreSQL 角色和全局权限，不能包含 role password hash。恢复时先按需导入 globals，再导入业务数据库；账号密码或认证材料必须通过独立安全渠道重新配置。
 
 ### `drive-cos-manifest.json`
 
@@ -141,7 +141,7 @@ synapse-backup-2026-06-08T14-23-25-189Z.tar
 1. 校验 Backup COS 配置完整。
 2. 创建临时工作目录。
 3. 导出 `database.sql.gz`。
-4. 导出 `postgres-globals.sql`。
+4. 使用 `--no-role-passwords` 导出 `postgres-globals.sql`。
 5. 如果 Drive COS 已配置，分页列出 `drive/` 前缀对象并写入 `drive-cos-manifest.json`。
 6. 计算备份包内容校验和，写入 `backup-manifest.json`。
 7. 写入 `restore.md`。
@@ -188,4 +188,3 @@ synapse-backup-2026-06-08T14-23-25-189Z.tar
 3. 在临时数据库中验证 `database.sql.gz` 可恢复。
 4. 校验 `drive-cos-manifest.json` 与当前 Drive COS 对象可对应。
 5. 更新 `server/README.md` 的后台备份和恢复说明。
-

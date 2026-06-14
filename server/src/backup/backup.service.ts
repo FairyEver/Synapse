@@ -330,6 +330,7 @@ export class BackupService {
       "-U",
       pgDump.args[5],
       "--globals-only",
+      "--no-role-passwords",
       "-f",
       filePath,
     ], { env: pgDump.env })
