@@ -44,11 +44,14 @@ export class XlsxExtractor implements FileExtractor {
       }
       for (const sheetName of sheetNames) {
         const sheet = workbook.Sheets[sheetName]
-        const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, blankrows: false })
-        const rows = rawRows
-          .slice(0, this.maxRowsPerSheet + 1)
-          .map((row) => row.slice(0, this.maxColumnsPerSheet))
-        if (rawRows.length > this.maxRowsPerSheet + 1 || rawRows.some((row) => row.length > this.maxColumnsPerSheet)) {
+        const boundedRange = boundedSheetRange(sheet, this.maxRowsPerSheet, this.maxColumnsPerSheet)
+        const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+          header: 1,
+          raw: false,
+          blankrows: false,
+          ...(boundedRange.range ? { range: boundedRange.range } : undefined),
+        })
+        if (boundedRange.truncated) {
           warnings.push({
             code: "xlsx_truncated",
             message: `Sheet "${sheetName}" exceeded ${this.maxRowsPerSheet} rows or ${this.maxColumnsPerSheet} columns.`,
@@ -77,4 +80,30 @@ export class XlsxExtractor implements FileExtractor {
 
 function defaultParseWorkbook(filePath: string): XLSX.WorkBook {
   return XLSX.readFile(filePath, { cellDates: true })
+}
+
+function boundedSheetRange(
+  sheet: XLSX.WorkSheet | undefined,
+  maxRowsPerSheet: number,
+  maxColumnsPerSheet: number,
+): { range?: string; truncated: boolean } {
+  const ref = sheet?.["!ref"]
+  if (!ref) return { truncated: false }
+
+  const decoded = XLSX.utils.decode_range(ref)
+  const maxMaterializedRows = maxRowsPerSheet + 1
+  const originalRows = decoded.e.r - decoded.s.r + 1
+  const originalColumns = decoded.e.c - decoded.s.c + 1
+  const bounded = {
+    s: decoded.s,
+    e: {
+      r: Math.min(decoded.e.r, decoded.s.r + maxMaterializedRows - 1),
+      c: Math.min(decoded.e.c, decoded.s.c + maxColumnsPerSheet - 1),
+    },
+  }
+
+  return {
+    range: XLSX.utils.encode_range(bounded),
+    truncated: originalRows > maxMaterializedRows || originalColumns > maxColumnsPerSheet,
+  }
 }

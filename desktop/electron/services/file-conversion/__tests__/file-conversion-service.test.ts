@@ -1,7 +1,8 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import type * as XlsxTypes from "xlsx"
 
 import {
   FileConversionError,
@@ -196,6 +197,46 @@ describe("modern file extractors", () => {
     expect(result.markdown).toContain("## Sheet: Summary")
     expect(result.markdown).toContain("| Product | 120000 |")
     expect(result.metadata).toEqual({ sheetNames: ["Summary"] })
+  })
+
+  it("limits xlsx sheet_to_json to the bounded row and column range", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "huge-range.xlsx")
+    await writeFile(filePath, "xlsx")
+    const XLSX = await import("xlsx")
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["A", "B", "C"],
+      ["1", "2", "3"],
+      ["4", "5", "6"],
+      ["7", "8", "9"],
+    ])
+    sheet["!ref"] = "A1:D100"
+    const workbook: XlsxTypes.WorkBook = {
+      SheetNames: ["Huge"],
+      Sheets: { Huge: sheet },
+    }
+    const sheetToJson = vi.spyOn(XLSX.utils, "sheet_to_json")
+    const service = new FileConversionService({
+      extractors: [new XlsxExtractor({
+        maxRowsPerSheet: 2,
+        maxColumnsPerSheet: 2,
+        parseWorkbook: () => workbook,
+      })],
+    })
+
+    try {
+      const result = await service.convert({ filePath })
+
+      expect(sheetToJson).toHaveBeenCalledWith(sheet, expect.objectContaining({ range: "A1:B3" }))
+      expect(result.warnings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: "xlsx_truncated" }),
+      ]))
+      expect(result.markdown).toContain("| A | B |")
+      expect(result.markdown).not.toContain("C")
+      expect(result.markdown).not.toContain("9")
+    } finally {
+      sheetToJson.mockRestore()
+    }
   })
 
   it("converts pdf parser output into pdf markdown", async () => {
