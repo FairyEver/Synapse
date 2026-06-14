@@ -28,19 +28,19 @@ async function withRepositoryCacheDatabase<T>(
   const database = new DatabaseSync(databasePath)
   const tOpenDone = Date.now()
 
-  const tSchema = Date.now()
-  ensureRepositoryCacheSchema(database, options)
-  const tSchemaDone = Date.now()
-
-  if (tSchemaDone - t0 > 50) {
-    logger.warn("withRepositoryCacheDatabase: slow open+schema.", {
-      openMs: tOpenDone - tOpen,
-      schemaMs: tSchemaDone - tSchema,
-      repositoryUuid,
-    })
-  }
-
   try {
+    const tSchema = Date.now()
+    ensureRepositoryCacheSchema(database, options)
+    const tSchemaDone = Date.now()
+
+    if (tSchemaDone - t0 > 50) {
+      logger.warn("withRepositoryCacheDatabase: slow open+schema.", {
+        openMs: tOpenDone - tOpen,
+        schemaMs: tSchemaDone - tSchema,
+        repositoryUuid,
+      })
+    }
+
     return await callback(database)
   } finally {
     database.close()

@@ -31,4 +31,30 @@ describe("repository cache database schema", () => {
       expect(rows.map((row) => row.name)).toContain("usage")
     })
   })
+
+  it("closes the database when schema initialization fails", async () => {
+    const close = vi.fn()
+    const exec = vi.fn(() => {
+      throw new Error("schema failed")
+    })
+    const DatabaseSync = vi.fn(function DatabaseSyncMock() {
+      return { close, exec }
+    })
+
+    vi.resetModules()
+    vi.doMock("node:sqlite", () => ({ DatabaseSync }))
+    const { withRepositoryCacheDatabase: withMockedRepositoryCacheDatabase } = await import(
+      "../repository-cache-database"
+    )
+
+    await expect(withMockedRepositoryCacheDatabase("repo-schema-fail", () => undefined)).rejects.toThrow(
+      "schema failed",
+    )
+
+    expect(DatabaseSync).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledTimes(1)
+
+    vi.doUnmock("node:sqlite")
+    vi.resetModules()
+  })
 })
