@@ -31,6 +31,9 @@ export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 // 配置备份导入文件最大字节数：限制设置页从外部 JSON 恢复配置时主进程读取和解析的单文件体积。
 export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 
+// 定时任务导入文件最大字节数：限制调度器从外部 JSON 导入任务时主进程读取和 IPC 传输的单文件体积。
+export const TASK_SCHEDULER_IMPORT_MAX_BYTES = 2 * 1024 * 1024
+
 // 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
 export const DEFAULT_APP_NAVIGATION_TAB_ID = "skill" satisfies AppNavigationTabId
 

@@ -1,7 +1,8 @@
 import { BrowserWindow, dialog } from "electron"
-import { readFile, writeFile } from "node:fs/promises"
+import { readFile, stat, writeFile } from "node:fs/promises"
 import { z } from "zod"
 
+import { TASK_SCHEDULER_IMPORT_MAX_BYTES } from "../../../config"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard, PermissionAction } from "../../runtime/security"
 import { createMainLogger } from "../../services/log-store"
@@ -72,6 +73,20 @@ function recordFilePermissionFailure(
       errorLength: message.length,
     },
   })
+}
+
+async function readTaskImportFile(filePath: string): Promise<string> {
+  const fileStats = await stat(filePath)
+  if (fileStats.size > TASK_SCHEDULER_IMPORT_MAX_BYTES) {
+    throw new Error(`任务导入文件超过 ${TASK_SCHEDULER_IMPORT_MAX_BYTES} 字节上限。`)
+  }
+
+  const content = await readFile(filePath)
+  if (content.byteLength > TASK_SCHEDULER_IMPORT_MAX_BYTES) {
+    throw new Error(`任务导入文件超过 ${TASK_SCHEDULER_IMPORT_MAX_BYTES} 字节上限。`)
+  }
+
+  return content.toString("utf-8")
 }
 
 const taskScopeSchema = z.discriminatedUnion("type", [
@@ -452,7 +467,7 @@ export const taskSchedulerIpcModule: IpcModule = {
         })
         let content: string
         try {
-          content = await readFile(filePath, "utf-8")
+          content = await readTaskImportFile(filePath)
         } catch (error) {
           recordFilePermissionFailure(auditSink, action, filePath, source, error)
           throw error

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const logStoreMock = vi.hoisted(() => ({
   logger: {
@@ -7,14 +7,42 @@ const logStoreMock = vi.hoisted(() => ({
   },
 }))
 
+const fsMock = vi.hoisted(() => ({
+  readFile: vi.fn(),
+  stat: vi.fn(),
+  writeFile: vi.fn(),
+}))
+
+const electronMock = vi.hoisted(() => ({
+  BrowserWindow: {
+    getAllWindows: vi.fn(),
+    getFocusedWindow: vi.fn(),
+  },
+  dialog: {
+    showOpenDialog: vi.fn(),
+    showSaveDialog: vi.fn(),
+  },
+}))
+
+import { TASK_SCHEDULER_IMPORT_MAX_BYTES } from "../../../../config"
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import { taskSchedulerIpcModule } from "../ipc"
+
+vi.mock("electron", () => electronMock)
+
+vi.mock("node:fs/promises", () => fsMock)
 
 vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
 
 describe("taskSchedulerIpcModule", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    electronMock.BrowserWindow.getFocusedWindow.mockReturnValue(null)
+    electronMock.BrowserWindow.getAllWindows.mockReturnValue([])
+  })
+
   it("declares a scheduler task changed event", () => {
     expect(taskSchedulerIpcModule.events.changed.channel).toBe("synapse:events:scheduler")
     expect(taskSchedulerIpcModule.events.changed.payload.parse({
@@ -32,6 +60,41 @@ describe("taskSchedulerIpcModule", () => {
         runId: "run:1",
       },
     })
+  })
+
+  it("rejects oversized task imports before reading file content", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ["/tmp/huge-tasks.json"],
+    })
+    fsMock.stat.mockResolvedValue({ size: TASK_SCHEDULER_IMPORT_MAX_BYTES + 1 })
+    fsMock.readFile.mockResolvedValue(Buffer.from("{}"))
+    const auditSink = { record: vi.fn() }
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(taskSchedulerIpcModule, { moduleId: "task-scheduler", resolve })
+
+    await expect(harness.invoke("synapse:task-scheduler:tasks:import-from-file", undefined))
+      .rejects.toThrow("任务导入文件超过")
+
+    expect(fsMock.readFile).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "allowed",
+      resource: "/tmp/huge-tasks.json",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      outcome: "failed",
+      resource: "/tmp/huge-tasks.json",
+    }))
   })
 
   it("routes task CRUD and run calls", async () => {
