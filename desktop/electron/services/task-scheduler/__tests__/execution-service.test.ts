@@ -73,6 +73,37 @@ describe("TaskSchedulerExecutionService", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("/Users/example")
   })
 
+  it("sanitizes persisted action logs and outputs while preserving regular paths", async () => {
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async () => ({
+          status: "success",
+          summary: "Authorization: Bearer abc123 at /Users/example/repo",
+          logs: [
+            { label: "stdout", value: "token=sk-secret-value at /Users/example/repo" },
+            { label: "stderr", value: "Cookie: session=session-secret" },
+          ],
+          outputs: {
+            stdout: "--env API_KEY=plain-secret /Users/example/repo",
+            nested: { token: "raw-token", filePath: "/Users/example/repo" },
+          },
+        }),
+      },
+    })
+
+    const run = await harness.service.runTask(harness.task, "schedule")
+    const payload = JSON.stringify(run.result)
+
+    expect(payload).not.toContain("abc123")
+    expect(payload).not.toContain("sk-secret-value")
+    expect(payload).not.toContain("session-secret")
+    expect(payload).not.toContain("plain-secret")
+    expect(payload).not.toContain("raw-token")
+    expect(payload).toContain("[redacted]")
+    expect(payload).toContain("/Users/example/repo")
+  })
+
   it("records failed run when action permission is denied", async () => {
     const harness = await createExecutionHarness({
       permissionGuard: permissionGuard({ allowed: false, reason: "denied by test" }),

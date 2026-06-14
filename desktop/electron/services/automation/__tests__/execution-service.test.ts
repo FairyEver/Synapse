@@ -124,6 +124,37 @@ describe("AutomationExecutionService", () => {
     ])
   })
 
+  it("sanitizes persisted executor logs and outputs while preserving regular paths", async () => {
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async () => ({
+          status: "success",
+          summary: "Authorization: Bearer abc123 at /Users/example/repo",
+          logs: [
+            { label: "stdout", value: "token=sk-secret-value at /Users/example/repo" },
+            { label: "stderr", value: "Cookie: session=session-secret" },
+          ],
+          outputs: {
+            stdout: "--env API_KEY=plain-secret /Users/example/repo",
+            nested: { token: "raw-token", filePath: "/Users/example/repo" },
+          },
+        }),
+      },
+    })
+
+    const run = await harness.service.runItem(harness.item, "manual")
+    const payload = JSON.stringify(run.result)
+
+    expect(payload).not.toContain("abc123")
+    expect(payload).not.toContain("sk-secret-value")
+    expect(payload).not.toContain("session-secret")
+    expect(payload).not.toContain("plain-secret")
+    expect(payload).not.toContain("raw-token")
+    expect(payload).toContain("[redacted]")
+    expect(payload).toContain("/Users/example/repo")
+  })
+
   it("cancels an active run by run id", async () => {
     let releaseAction: (() => void) | undefined
     let markStarted: (() => void) | undefined

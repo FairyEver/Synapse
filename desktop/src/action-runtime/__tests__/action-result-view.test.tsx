@@ -1,7 +1,25 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
-
+import { afterEach, describe, expect, it } from "vitest"
 import { ActionResultView } from "../action-result-view"
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+})
 
 describe("ActionResultView", () => {
   it("renders summary, metrics, and logs", () => {
@@ -51,5 +69,32 @@ describe("ActionResultView", () => {
     expect(html).not.toContain("费用")
     expect(html).not.toContain("¥0.072")
     expect(html).not.toContain("$0.01")
+  })
+
+  it("redacts sensitive action result text while preserving regular paths", () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    act(() => {
+      root.render(
+        <ActionResultView
+          result={{
+            status: "failed",
+            summary: "Authorization: Bearer abc123 at /Users/example/repo",
+            error: "token=sk-secret-value at /Users/example/repo",
+            logs: [{ label: "stdout", value: "Cookie: session=session-secret" }],
+          }}
+        />,
+      )
+    })
+
+    const text = document.body.textContent ?? ""
+    expect(text).not.toContain("abc123")
+    expect(text).not.toContain("sk-secret-value")
+    expect(text).not.toContain("session-secret")
+    expect(text).toContain("[redacted]")
+    expect(text).toContain("/Users/example/repo")
   })
 })

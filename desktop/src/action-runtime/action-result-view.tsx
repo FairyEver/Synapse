@@ -1,6 +1,7 @@
 import type { ActionRunResult } from "../../action-packages/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { TokenUsageSummary } from "@/components/token-usage-summary"
+import { redactSensitiveText } from "@/lib/agent-redaction"
 
 interface DiagnosticsData {
   readonly envKeys?: readonly string[]
@@ -17,7 +18,7 @@ function ActionResultView({ result }: { readonly result: ActionRunResult }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      {result.summary ? <p className="text-sm text-muted-foreground break-words">{result.summary}</p> : null}
+      {result.summary ? <p className="text-sm text-muted-foreground break-words">{redactSensitiveText(result.summary)}</p> : null}
       {result.metrics ? <MetricsView metrics={result.metrics} /> : null}
       <TokenUsageSummary usage={result.usage} />
       {result.error ? <OutputBlock label="错误" value={result.error} /> : null}
@@ -41,11 +42,12 @@ function MetricsView({ metrics }: { readonly metrics: NonNullable<ActionRunResul
 }
 
 function OutputBlock({ label, value }: { readonly label: string; readonly value: string }) {
+  const redactedValue = redactSensitiveText(value)
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <p className="text-xs font-medium">{label}</p>
       <ScrollArea className="max-h-40 rounded-md bg-muted p-2.5" scrollbars="both">
-        <pre className="text-xs break-all whitespace-pre-wrap">{value}</pre>
+        <pre className="text-xs break-all whitespace-pre-wrap">{redactedValue}</pre>
       </ScrollArea>
     </div>
   )

@@ -1,6 +1,7 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import { ControlledProcessPermissionError } from "../../runtime/process"
 import type { ActorIdentity, AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
+import { sanitizePersistableActionRunResult } from "../action-run-result-sanitize"
 import { sanitizeError } from "../error-sanitize"
 import { createMainLogger } from "../log-store"
 import type { ScheduledTaskRunRepository } from "./run-repository"
@@ -138,9 +139,10 @@ export class TaskSchedulerExecutionService {
         })
         this.logger.warn("Scheduled task action failed.", metadata)
       }
-      const persistableResult = result.error
-        ? { ...result, error: persistableActionError(result.error) }
-        : result
+      const sanitizedResult = sanitizePersistableActionRunResult(result)
+      const persistableResult = sanitizedResult.error
+        ? { ...sanitizedResult, error: persistableActionError(sanitizedResult.error) }
+        : sanitizedResult
       const finished = await this.deps.runs.finish(run.id, {
         status: result.status,
         result: persistableResult,
