@@ -75,6 +75,25 @@ Input:
 }
 ```
 
+Workflow executor example:
+
+```json
+{
+  "executor": {
+    "type": "builtin.workflow",
+    "config": {
+      "workflowId": "workflow-id",
+      "paramTemplates": {
+        "title": "{{trigger.request.body.title}}",
+        "triggeredAt": "{{trigger.triggeredAt}}"
+      }
+    }
+  }
+}
+```
+
+`builtin.workflow` config fields are `workflowId` and `paramTemplates`. `paramTemplates` values may use Automation template variables returned by trigger discovery.
+
 Returns a public item summary.
 
 ### automation_item_update

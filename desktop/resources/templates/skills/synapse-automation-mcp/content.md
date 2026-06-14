@@ -60,8 +60,11 @@ Known built-in executor types include:
 - `builtin.script` - runs shell script content.
 - `builtin.http-request` - sends one HTTP request.
 - `builtin.agent` - sends work to an Agent.
+- `builtin.workflow` - runs a saved Workflow.
 
 Use `automation_executor_type_list` for public config fields, platform-aware defaults, and permissions. On Windows, `builtin.command` and `builtin.script` defaults use `cmd`; do not force `posix` unless the user explicitly asks for a POSIX shell. Do not guess provider ids, model tiers, project ids, or Agent settings.
+
+For `builtin.workflow`, set `executor.config.workflowId` to the saved Workflow id. Set `executor.config.paramTemplates` to an object whose keys are Workflow parameter names and whose values may use Automation template variables such as `{{trigger.triggeredAt}}` or Webhook variables from `automation_trigger_type_list`.
 
 ## Update Rules
 

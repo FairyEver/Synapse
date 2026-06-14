@@ -42,4 +42,17 @@ describe("RepositoryTemplateService", () => {
     expect(driveSkill?.content).toContain("passwordEnabled")
     expect(driveSkill?.content).toContain("expiresIn")
   })
+
+  it("documents Workflow executors in the built-in Automation MCP skill", async () => {
+    const seeds = await readRepositorySeedContents()
+    const automationSkill = seeds.find((seed) => seed.id === "synapse-automation-mcp")
+    const apiReference = automationSkill?.attachments
+      ?.find((attachment) => attachment.originalName === "api-reference.md")
+
+    expect(automationSkill?.content).toContain("builtin.workflow")
+    expect(automationSkill?.content).toContain("workflowId")
+    expect(automationSkill?.content).toContain("paramTemplates")
+    expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("builtin.workflow")
+    expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("paramTemplates")
+  })
 })
