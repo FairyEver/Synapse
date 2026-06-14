@@ -612,7 +612,15 @@ describe("AccountService", () => {
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url) => {
         if (String(url).endsWith("/auth/desktop/token")) {
-          return jsonResponse({ error: "code expired", token: "secret-response-token" }, 400)
+          return jsonResponse({
+            error: "code expired",
+            token: "secret-response-token",
+            api_key: "secret-api-key",
+            "api-key": "secret-dash-api-key",
+            access_token: "secret-access-token",
+            refresh_token: "secret-refresh-token",
+            nested: { api_key: "secret-nested-api-key" },
+          }, 400)
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -634,6 +642,16 @@ describe("AccountService", () => {
     expect(error?.message).toContain("HTTP 400")
     expect(error?.message).toContain("code expired")
     expect(error?.message).not.toContain("secret-response-token")
+    expect(error?.message).not.toContain("secret-api-key")
+    expect(error?.message).not.toContain("secret-dash-api-key")
+    expect(error?.message).not.toContain("secret-access-token")
+    expect(error?.message).not.toContain("secret-refresh-token")
+    expect(error?.message).not.toContain("secret-nested-api-key")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-api-key")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-dash-api-key")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-access-token")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-refresh-token")
+    expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-nested-api-key")
     expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain("secret-code")
     expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.state)
     expect(JSON.stringify(accountLogger.warn.mock.calls)).not.toContain(attempt!.codeVerifier)

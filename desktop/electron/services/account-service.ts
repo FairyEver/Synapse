@@ -39,7 +39,7 @@ const CORE_ACCOUNT_NAMESPACE = "core.account"
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
 const ACCOUNT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000, 120_000, 300_000] as const
 const HTTP_ERROR_BODY_MAX_LENGTH = 200
-const SENSITIVE_HTTP_DETAIL_KEY_PATTERN = /password|token|secret|credential|authorization|cookie|apiKey/i
+const SENSITIVE_HTTP_DETAIL_KEY_PATTERN = /password|token|secret|credential|authorization|cookie|api[-_]?key/i
 const UNSAFE_DRIVE_RELATIVE_PATH_PATTERN = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
 const sharedUrlsPromise = import("@synapse/shared")
 
