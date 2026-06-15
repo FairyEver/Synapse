@@ -163,11 +163,15 @@ class ContentDownloadService {
               throw new Error("当前还没有选中的本地目录。")
             }
 
-            await attachmentsPoolService.copyAttachmentToPath(
+            const copied = await attachmentsPoolService.copyAttachmentToPath(
               repositoryRootPath,
               { ...attachment, originalName },
               attachmentTargetPath,
             )
+
+            if (!copied) {
+              throw new Error(`Skill 附件复制失败：${originalName}`)
+            }
           }
         }
 
