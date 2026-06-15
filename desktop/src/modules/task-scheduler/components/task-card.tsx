@@ -94,6 +94,7 @@ function TaskCard({
   const scope = formatTaskScope(task, projects)
   const description = formatTaskDescription(task.description)
   const deleteDisabled = busy || activeRunning
+  const runDisabled = disabled || busy || needsUpdate
 
   return (
     <div
@@ -134,7 +135,8 @@ function TaskCard({
             <Button
               variant={task.lastStatus === "failed" || task.lastStatus === "timeout" ? "default" : "secondary"}
               size="sm"
-              disabled={disabled || busy}
+              disabled={runDisabled}
+              title={needsUpdate ? "先编辑任务配置" : undefined}
               onClick={onRun}
             >
               <Play className="size-3.5" />
