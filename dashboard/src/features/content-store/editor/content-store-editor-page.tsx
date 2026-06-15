@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ContentStoreType } from '@synapse/shared'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Save } from 'lucide-react'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,7 @@ export function ContentStoreEditorPage({
     isSettingVisibility,
   } = useContentStoreDraftEditor({ contentId })
   const [publishOpen, setPublishOpen] = useState(false)
+  const [visibilityTarget, setVisibilityTarget] = useState<'private' | 'public' | null>(null)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const canChangeVisibility =
     detail
@@ -182,9 +184,7 @@ export function ContentStoreEditorPage({
               isSettingVisibility={isSettingVisibility}
               onTitleChange={actions.setTitle}
               onDescriptionChange={actions.setDescription}
-              onVisibilityChange={(visibility) =>
-                void actions.setVisibility(visibility)
-              }
+              onVisibilityChange={setVisibilityTarget}
             />
           </section>
         ) : (
@@ -218,7 +218,7 @@ export function ContentStoreEditorPage({
                     checked={detail.visibility === 'public'}
                     disabled={isSettingVisibility || !canChangeVisibility}
                     onCheckedChange={(checked) =>
-                      void actions.setVisibility(checked ? 'public' : 'private')
+                      setVisibilityTarget(checked ? 'public' : 'private')
                     }
                   />
                 </div>
@@ -244,6 +244,30 @@ export function ContentStoreEditorPage({
         isPublishing={isPublishing}
         onDescriptionChange={actions.setDescription}
         onPublish={(publishPublic) => actions.publishDraft(publishPublic)}
+      />
+      <ConfirmDialog
+        open={Boolean(visibilityTarget)}
+        onOpenChange={(open) => {
+          if (!open) setVisibilityTarget(null)
+        }}
+        title={visibilityTarget
+          ? getVisibilityDialogTitle(visibilityTarget)
+          : '更新可见性'}
+        desc={visibilityTarget
+          ? `${state.title || detail.title} 将变为${getVisibilityLabel(visibilityTarget)}。`
+          : ''}
+        confirmText={visibilityTarget
+          ? getVisibilityDialogConfirmText(visibilityTarget)
+          : '确认'}
+        cancelBtnText='取消'
+        destructive={visibilityTarget === 'private'}
+        isLoading={isSettingVisibility}
+        handleConfirm={() => {
+          if (!visibilityTarget) return
+          void actions.setVisibility(visibilityTarget)
+            .then(() => setVisibilityTarget(null))
+            .catch(() => undefined)
+        }}
       />
     </>
   )
@@ -303,4 +327,16 @@ function ContentMetadataPanel({
       </div>
     </aside>
   )
+}
+
+function getVisibilityLabel(visibility: 'private' | 'public') {
+  return visibility === 'public' ? '公开' : '私有'
+}
+
+function getVisibilityDialogTitle(visibility: 'private' | 'public') {
+  return visibility === 'public' ? '公开内容' : '取消公开'
+}
+
+function getVisibilityDialogConfirmText(visibility: 'private' | 'public') {
+  return visibility === 'public' ? '公开' : '取消公开'
 }

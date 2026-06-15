@@ -20,4 +20,12 @@ describe('content store editor page layout', () => {
       "grid shrink-0 gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)]"
     )
   })
+
+  it('routes visibility changes through a confirmation dialog', () => {
+    const source = readFileSync(editorPagePath, 'utf8')
+
+    expect(source).toContain("import { ConfirmDialog } from '@/components/confirm-dialog'")
+    expect(source).toContain('setVisibilityTarget')
+    expect(source).toContain('<ConfirmDialog')
+  })
 })
