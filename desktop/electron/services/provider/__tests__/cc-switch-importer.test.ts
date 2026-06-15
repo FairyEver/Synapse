@@ -129,19 +129,26 @@ function createManyCcSwitchDb(filePath: string, count: number): void {
         id, app_type, name, settings_config, website_url, category, created_at, sort_index, notes, meta
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    for (let index = 0; index < count; index += 1) {
-      insert.run(
-        `provider-${String(index).padStart(4, "0")}`,
-        "claude",
-        `Provider ${index}`,
-        JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: `sk-${index}` } }),
-        null,
-        "custom",
-        index,
-        index,
-        null,
-        "{}",
-      )
+    db.exec("BEGIN TRANSACTION")
+    try {
+      for (let index = 0; index < count; index += 1) {
+        insert.run(
+          `provider-${String(index).padStart(4, "0")}`,
+          "claude",
+          `Provider ${index}`,
+          JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: `sk-${index}` } }),
+          null,
+          "custom",
+          index,
+          index,
+          null,
+          "{}",
+        )
+      }
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
     }
   } finally {
     db.close()
