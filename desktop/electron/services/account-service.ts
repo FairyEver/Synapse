@@ -23,13 +23,22 @@ import type {
   DriveBrowserSnapshotDto,
   DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
+  DriveFolderPathEnsureInput,
+  DriveFolderPathEnsureResultDto,
   DriveItemDto,
+  DriveItemTreeListInput,
+  DriveItemTreeListPageDto,
   DrivePublicationListPageDto,
   DrivePublicationDto,
   DrivePublicLinksPageInput,
+  DriveReorganizationApplyInput,
+  DriveReorganizationApplyResultDto,
+  DriveReorganizationPreviewDto,
+  DriveReorganizationPreviewInput,
   DriveShareDto,
   DriveShareListPageDto,
   DriveShareListItemDto,
+  DriveStatsDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
   ContentStoreDraftDto,
@@ -521,6 +530,49 @@ export class AccountService {
 
   async getDriveUsage(): Promise<DriveUsageDto> {
     return this.getAuthenticatedJson<DriveUsageDto>(`${apiBaseUrl()}/drive/usage`, "云盘用量加载失败。")
+  }
+
+  async getDriveStats(): Promise<DriveStatsDto> {
+    return this.getAuthenticatedJson<DriveStatsDto>(`${apiBaseUrl()}/drive/stats`, "云盘统计加载失败。")
+  }
+
+  async listDriveItemTree(input: DriveItemTreeListInput): Promise<DriveItemTreeListPageDto> {
+    const params = new URLSearchParams()
+    if (input.parentId) params.set("parentId", input.parentId)
+    if (input.offset !== undefined) params.set("offset", String(input.offset))
+    if (input.limit !== undefined) params.set("limit", String(input.limit))
+    const query = params.toString()
+    return this.getAuthenticatedJson<DriveItemTreeListPageDto>(
+      `${apiBaseUrl()}/drive/items/tree${query ? `?${query}` : ""}`,
+      "云盘目录树加载失败。",
+    )
+  }
+
+  async ensureDriveFolderPath(input: DriveFolderPathEnsureInput): Promise<DriveFolderPathEnsureResultDto> {
+    return this.requestAuthenticatedJson<DriveFolderPathEnsureResultDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/folders/ensure-path`,
+      { parentId: input.parentId ?? null, segments: input.segments },
+      "云盘文件夹路径创建失败。",
+    )
+  }
+
+  async previewDriveReorganization(input: DriveReorganizationPreviewInput): Promise<DriveReorganizationPreviewDto> {
+    return this.requestAuthenticatedJson<DriveReorganizationPreviewDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/reorganizations/preview`,
+      input,
+      "云盘整理预检失败。",
+    )
+  }
+
+  async applyDriveReorganization(input: DriveReorganizationApplyInput): Promise<DriveReorganizationApplyResultDto> {
+    return this.requestAuthenticatedJson<DriveReorganizationApplyResultDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/reorganizations/apply`,
+      input,
+      "云盘整理应用失败。",
+    )
   }
 
   private async uploadDriveLocalFile(
@@ -1443,7 +1495,7 @@ function limitUtf8Preview(value: string | null, maxBytes: number | undefined): {
 async function writeResponseBodyToFile(response: Response, outputPath: string): Promise<void> {
   if (!response.body) throw new Error("下载响应为空。")
   await mkdir(path.dirname(outputPath), { recursive: true })
-  await pipeline(Readable.fromWeb(response.body as ReadableStream<Uint8Array>), createWriteStream(outputPath))
+  await pipeline(Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(outputPath))
 }
 
 function localUploadErrorMessage(): string {

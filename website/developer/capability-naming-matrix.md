@@ -109,5 +109,10 @@
 | `drive.publication_deployment.create` | `drive_publication_deployment_create` | `drive.publication_deployment.create` | `drivePublicationDeploymentCreate` |
 | `drive.publication.disable` | `drive_publication_disable` | `drive.publication.disable` | `drivePublicationDisable` |
 | `drive.usage.get` | `drive_usage_get` | `drive.usage.get` | `driveUsageGet` |
+| `drive.stats.get` | `drive_stats_get` | `drive.stats.get` | `driveStatsGet` |
+| `drive.item_tree.list` | `drive_item_tree_list` | `drive.item_tree.list` | `driveItemTreeList` |
+| `drive.folder_path.ensure` | `drive_folder_path_ensure` | `drive.folder_path.ensure` | `driveFolderPathEnsure` |
+| `drive.reorganization.preview` | `drive_reorganization_preview` | `drive.reorganization.preview` | `driveReorganizationPreview` |
+| `drive.reorganization.apply` | `drive_reorganization_apply` | `drive.reorganization.apply` | `driveReorganizationApply` |
 
 只支持本矩阵中的规范公开名称。

@@ -28,6 +28,11 @@ Use these tools only for Synapse Drive:
 - `drive_publication_deployment_create`
 - `drive_publication_disable`
 - `drive_usage_get`
+- `drive_stats_get`
+- `drive_item_tree_list`
+- `drive_folder_path_ensure`
+- `drive_reorganization_preview`
+- `drive_reorganization_apply`
 
 Do not use this skill for database records, content resources, scheduler tasks, workflow definitions, provider settings, or general local file editing.
 
@@ -44,7 +49,11 @@ Do not use this skill for database records, content resources, scheduler tasks, 
    - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; omitting it uses `3d`.
 8. If the user wants to publish HTML as a webpage, call `drive_page_publication_create`. If the user wants to publish a folder as a static site, call `drive_site_publication_create`; the folder must contain a root-level `index.html`.
 9. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
-10. Report the final item name, item id, and share or publication URL when one was created.
+10. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
+11. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
+12. Use `drive_folder_path_ensure` to create or reuse target category folders, then call `drive_reorganization_preview` with item ids and target folder ids. Show the preview summary to the user before applying.
+13. Apply organization changes only with `drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
+14. Report the final item name, item id, and share or publication URL when one was created.
 
 ## Safety
 
@@ -57,6 +66,8 @@ Shares and publications are different:
 
 - Shares use `/files/...` and let others browse or download files and folders.
 - Publications use `/pages/...` or `/sites/...` and serve HTML pages or static site snapshots.
+
+Drive organization changes can move many user files. Always preview first, then apply by `planId` only after the user has confirmed. If apply reports that the Drive changed, refresh the tree and create a new preview.
 
 ## Common Requests
 
@@ -75,3 +86,4 @@ Shares and publications are different:
 - "公开链接列表": call `drive_share_list` and/or `drive_publication_list`.
 - "删除并下线相关发布": call `drive_item_delete` with `disablePublications: true`.
 - "看看云盘空间": call `drive_usage_get`.
+- "整理我的云盘": call `drive_stats_get`, `drive_item_tree_list`, optional small per-file `drive_file_content_read`, `drive_folder_path_ensure`, `drive_reorganization_preview`, then `drive_reorganization_apply` with the returned `planId`.

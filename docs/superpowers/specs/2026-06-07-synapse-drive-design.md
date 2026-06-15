@@ -339,6 +339,11 @@ Canonical capabilities and MCP tools:
 | `drive.publication_deployment.create` | `drive_publication_deployment_create` | true | Create a new deployment snapshot for an existing publication. |
 | `drive.publication.disable` | `drive_publication_disable` | true | Disable a page or site publication. |
 | `drive.usage.get` | `drive_usage_get` | false | Return quota and usage summary. |
+| `drive.stats.get` | `drive_stats_get` | false | Return item counts and quota usage summary. |
+| `drive.item_tree.list` | `drive_item_tree_list` | false | Recursively list Drive item metadata without reading file contents. |
+| `drive.folder_path.ensure` | `drive_folder_path_ensure` | true | Create or reuse a nested folder path for organization. |
+| `drive.reorganization.preview` | `drive_reorganization_preview` | false | Validate an organization move plan and return a `planId`. |
+| `drive.reorganization.apply` | `drive_reorganization_apply` | true | Apply a previously previewed organization plan by `planId`. |
 
 MCP responses must not include COS credentials, AK/SK, signed URLs with long lifetime, password hashes, or private admin-only metadata.
 
@@ -351,6 +356,8 @@ Add a built-in skill template named `synapse-drive-mcp`. The skill should guide 
 - Use share tools only for `/files/...` browse/download links.
 - Use publication tools only when the user wants an HTML page or site online under `/pages/...` or `/sites/...`.
 - Use preview and text-read tools for inspection, and download or zip tools when the user asks to save Drive content locally.
+- For Drive organization, prefer metadata from `drive_item_tree_list`; read only a small number of text-like files one at a time with `drive_file_content_read`. Do not bulk-read file contents.
+- Preview large organization moves with `drive_reorganization_preview` and apply only by the returned `planId`.
 - Never guess ids from names when duplicates may exist.
 - Confirm before deleting or moving many items.
 - Report partial failures from folder upload.
@@ -451,6 +458,8 @@ Dashboard and desktop tests:
 MCP tests:
 
 - `drive_item_list`, `drive_item_get`, and `drive_usage_get` return safe summaries.
+- `drive_stats_get` and `drive_item_tree_list` return counts and recursive metadata without file content.
+- `drive_reorganization_preview` returns a short-lived `planId`, and `drive_reorganization_apply` rejects raw move lists, expired plans, and changed items.
 - Upload defaults to root when no parent is supplied.
 - Upload uses prepare/complete semantics and does not expose permanent COS credentials.
 - Share create returns `/files/<shareId>`.

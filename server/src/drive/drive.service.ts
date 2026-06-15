@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
+import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import {
   type DriveBrowserChildrenPageDto,
@@ -11,9 +12,20 @@ import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveDeleteImpactDto,
   type DriveAccessSettingsInput,
+  type DriveFolderPathEnsureInput,
+  type DriveFolderPathEnsureResultDto,
   type DriveFolderUploadPrepareResult,
   type DriveItemDto,
+  type DriveItemTreeEntryDto,
+  type DriveItemTreeListInput,
+  type DriveItemTreeListPageDto,
   type DrivePublicationDto,
+  type DriveReorganizationApplyInput,
+  type DriveReorganizationApplyResultDto,
+  type DriveReorganizationPlannedMoveDto,
+  type DriveReorganizationPreviewDto,
+  type DriveReorganizationPreviewInput,
+  type DriveStatsDto,
   type DriveShareDto,
   type DriveShareListPageDto,
   type DriveShareListItemDto,
@@ -86,6 +98,14 @@ type PublicationSourceAsset = {
   readonly relativePath: string
   readonly contentType: string | null
   readonly size: bigint
+}
+
+type DriveReorganizationPlan = {
+  readonly userId: string
+  readonly planId: string
+  readonly expiresAt: Date
+  readonly moves: readonly DriveReorganizationPlannedMoveDto[]
+  readonly skipped: readonly { readonly itemId: string; readonly reason: string }[]
 }
 
 type DrivePublicationWithImpactAssets = DrivePublicationRecord & {
@@ -163,6 +183,9 @@ const DRIVE_MARKDOWN_RENDER_MAX_BYTES = 10 * 1024 * 1024
 const DRIVE_MARKDOWN_RENDER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
 const DRIVE_BROWSER_CHILDREN_DEFAULT_LIMIT = 100
 const DRIVE_BROWSER_CHILDREN_MAX_LIMIT = 200
+const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
+const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
+const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
 const DRIVE_SITE_PUBLICATION_MAX_FILES = 1000
 const DRIVE_SITE_PUBLICATION_MAX_PATHS = 1200
 const DRIVE_SITE_PUBLICATION_MAX_DEPTH = 12
@@ -172,6 +195,7 @@ const DRIVE_SITE_PUBLICATION_MAX_TOTAL_BYTES = 512n * 1024n * 1024n
 export class DriveService implements OnApplicationBootstrap {
   private readonly accessSecret = readUserAccessJwtSecret(process.env)
   private readonly logger = new Logger(DriveService.name)
+  private readonly reorganizationPlans = new Map<string, DriveReorganizationPlan>()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -854,6 +878,159 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
+  async getStats(userId: string): Promise<DriveStatsDto> {
+    const usage = await ensureUsage(this.prisma, userId)
+    const [itemCount, fileCount, folderCount] = await this.prisma.$transaction([
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, type: DRIVE_ITEM_TYPE.file } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, type: DRIVE_ITEM_TYPE.folder } }),
+    ])
+    return {
+      itemCount,
+      fileCount,
+      folderCount,
+      usedBytes: usage.usedBytes.toString(),
+      reservedBytes: usage.reservedBytes.toString(),
+      quotaBytes: usage.quotaBytes.toString(),
+    }
+  }
+
+  async listItemTree(userId: string, input: DriveItemTreeListInput = {}): Promise<DriveItemTreeListPageDto> {
+    const parentId = input.parentId ?? null
+    if (parentId) await this.requireOwnedFolder(userId, parentId)
+    const page = normalizeDriveItemTreePage(input)
+    const items = await this.prisma.driveItem.findMany({
+      where: { userId, deletedAt: null },
+      include: driveItemWithShares,
+      orderBy: [{ type: "asc" }, { createdAt: "desc" }],
+    })
+    const entries = buildDriveItemTreeEntries(items.map(toDriveItemDto), parentId)
+    const pageItems = entries.slice(page.offset, page.offset + page.limit)
+    return {
+      items: pageItems,
+      total: entries.length,
+      fileCount: entries.filter((item) => item.type === "file").length,
+      folderCount: entries.filter((item) => item.type === "folder").length,
+      hasMore: page.offset + page.limit < entries.length,
+      nextOffset: page.offset + page.limit < entries.length ? page.offset + page.limit : null,
+    }
+  }
+
+  async ensureFolderPath(userId: string, input: DriveFolderPathEnsureInput, auditContext: DriveAuditContext = {}): Promise<DriveFolderPathEnsureResultDto> {
+    const segments = normalizeDriveFolderPathSegments(input.segments)
+    let parentId = input.parentId ?? null
+    if (parentId) await this.requireOwnedFolder(userId, parentId)
+    const created: DriveItemDto[] = []
+    const reused: DriveItemDto[] = []
+
+    for (const name of segments) {
+      const fileCollision = await this.prisma.driveItem.findFirst({
+        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null },
+        select: { id: true },
+      })
+      if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
+
+      const existingFolder = await this.prisma.driveItem.findFirst({
+        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null },
+        include: driveItemWithShares,
+      })
+      if (existingFolder) {
+        const dto = toDriveItemDto(existingFolder)
+        reused.push(dto)
+        parentId = dto.id
+        continue
+      }
+
+      const folder = await this.prisma.driveItem.create({
+        data: {
+          userId,
+          parentId,
+          type: DRIVE_ITEM_TYPE.folder,
+          name,
+          size: 0n,
+          storageStatus: DRIVE_STORAGE_STATUS.active,
+          uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+        },
+        include: driveItemWithShares,
+      })
+      const dto = toDriveItemDto(folder)
+      created.push(dto)
+      parentId = dto.id
+    }
+
+    const item = created.at(-1) ?? reused.at(-1)
+    if (!item) throw new BadRequestException("文件夹路径不能为空。")
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.folder_path.ensure",
+      targetType: "drive.item",
+      targetId: item.id,
+      detail: { userId, itemId: item.id, createdCount: created.length, reusedCount: reused.length },
+      ipAddress: auditContext.ipAddress,
+    })
+    return { item, created, reused }
+  }
+
+  async previewReorganization(userId: string, input: DriveReorganizationPreviewInput): Promise<DriveReorganizationPreviewDto> {
+    const moves = await this.resolveReorganizationMoves(userId, input)
+    const planId = `drive-reorg-${randomUUID()}`
+    const expiresAt = new Date(Date.now() + DRIVE_REORGANIZATION_PLAN_TTL_MS)
+    const plan: DriveReorganizationPlan = {
+      userId,
+      planId,
+      expiresAt,
+      moves: moves.planned,
+      skipped: moves.skipped,
+    }
+    this.reorganizationPlans.set(planId, plan)
+    this.pruneExpiredReorganizationPlans()
+    return {
+      planId,
+      expiresAt: expiresAt.toISOString(),
+      summary: {
+        moveCount: moves.planned.length,
+        skippedCount: moves.skipped.length,
+        conflictCount: 0,
+      },
+      moves: moves.planned,
+      skipped: moves.skipped,
+      conflicts: [],
+    }
+  }
+
+  async applyReorganization(
+    userId: string,
+    input: DriveReorganizationApplyInput,
+    auditContext: DriveAuditContext = {},
+  ): Promise<DriveReorganizationApplyResultDto> {
+    const plan = this.reorganizationPlans.get(input.planId)
+    if (!plan || plan.userId !== userId) throw new BadRequestException("整理计划不存在或已过期。")
+    if (plan.expiresAt.getTime() <= Date.now()) {
+      this.reorganizationPlans.delete(input.planId)
+      throw new BadRequestException("整理计划已过期，请重新预检。")
+    }
+
+    const validated = await this.validateReorganizationPlan(userId, plan)
+    await this.prisma.$transaction(async (tx) => {
+      for (const move of validated) {
+        await tx.driveItem.update({
+          where: { id: move.itemId },
+          data: { parentId: move.targetParentId },
+        })
+      }
+    })
+    this.reorganizationPlans.delete(input.planId)
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.reorganization.apply",
+      targetType: "drive.item",
+      targetId: input.planId,
+      detail: { userId, planId: input.planId, movedCount: validated.length, skippedCount: plan.skipped.length },
+      ipAddress: auditContext.ipAddress,
+    })
+    return { ok: true, movedCount: validated.length, skippedCount: plan.skipped.length }
+  }
+
   async getOwnerBrowserSnapshot(input: {
     readonly userId: string
     readonly rootItemId: string
@@ -1268,6 +1445,104 @@ export class DriveService implements OnApplicationBootstrap {
     }
 
     return { shares, publications }
+  }
+
+  private async resolveReorganizationMoves(
+    userId: string,
+    input: DriveReorganizationPreviewInput,
+  ): Promise<{
+      readonly planned: DriveReorganizationPlannedMoveDto[]
+      readonly skipped: Array<{ readonly itemId: string; readonly reason: string }>
+    }> {
+    if (!Array.isArray(input.moves) || input.moves.length === 0) throw new BadRequestException("整理计划不能为空。")
+    const seen = new Set<string>()
+    for (const move of input.moves) {
+      if (seen.has(move.itemId)) throw new BadRequestException("整理计划包含重复条目。")
+      seen.add(move.itemId)
+    }
+
+    const planned: DriveReorganizationPlannedMoveDto[] = []
+    const skipped: Array<{ readonly itemId: string; readonly reason: string }> = []
+    const movedFolders: string[] = []
+
+    for (const move of input.moves) {
+      const item = await this.requireOwnedItem(userId, move.itemId)
+      const targetParentId = move.targetParentId ?? null
+      if (targetParentId === item.id) throw new BadRequestException("不能移动到自身。")
+      if (targetParentId) await this.requireOwnedFolder(userId, targetParentId)
+      if (item.parentId === targetParentId) {
+        skipped.push({ itemId: item.id, reason: "already-in-target" })
+        continue
+      }
+      if (item.type === DRIVE_ITEM_TYPE.folder) {
+        await this.assertNoFolderCycle(item.id, targetParentId)
+        await this.assertNoDuplicateFolderAtTarget(userId, item.id, item.name, targetParentId)
+        movedFolders.push(item.id)
+      }
+      planned.push({
+        itemId: item.id,
+        name: item.name,
+        fromParentId: item.parentId,
+        targetParentId,
+        updatedAt: item.updatedAt.toISOString(),
+      })
+    }
+
+    await this.assertNoRelatedFoldersInReorganization(movedFolders)
+    return { planned, skipped }
+  }
+
+  private async validateReorganizationPlan(
+    userId: string,
+    plan: DriveReorganizationPlan,
+  ): Promise<DriveReorganizationPlannedMoveDto[]> {
+    const movedFolders: string[] = []
+    for (const move of plan.moves) {
+      const item = await this.requireOwnedItem(userId, move.itemId)
+      if (item.parentId !== move.fromParentId || item.updatedAt.toISOString() !== move.updatedAt || item.name !== move.name) {
+        throw new BadRequestException("云盘内容已变化，请重新预检。")
+      }
+      if (move.targetParentId === item.id) throw new BadRequestException("不能移动到自身。")
+      if (move.targetParentId) await this.requireOwnedFolder(userId, move.targetParentId)
+      if (item.type === DRIVE_ITEM_TYPE.folder) {
+        await this.assertNoFolderCycle(item.id, move.targetParentId)
+        await this.assertNoDuplicateFolderAtTarget(userId, item.id, item.name, move.targetParentId)
+        movedFolders.push(item.id)
+      }
+    }
+    await this.assertNoRelatedFoldersInReorganization(movedFolders)
+    return [...plan.moves]
+  }
+
+  private async assertNoDuplicateFolderAtTarget(
+    userId: string,
+    itemId: string,
+    name: string,
+    targetParentId: string | null,
+  ): Promise<void> {
+    const duplicate = await this.prisma.driveItem.findFirst({
+      where: { userId, parentId: targetParentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, id: { not: itemId } },
+      select: { id: true },
+    })
+    if (duplicate) throw new BadRequestException("目标位置已有同名文件夹。")
+  }
+
+  private async assertNoRelatedFoldersInReorganization(folderIds: readonly string[]): Promise<void> {
+    for (let leftIndex = 0; leftIndex < folderIds.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < folderIds.length; rightIndex += 1) {
+        const left = folderIds[leftIndex]
+        const right = folderIds[rightIndex]
+        if (await this.isDescendantOf(left, right) || await this.isDescendantOf(right, left)) {
+          throw new BadRequestException("同一整理计划不能同时移动父子文件夹。")
+        }
+      }
+    }
+  }
+
+  private pruneExpiredReorganizationPlans(now = Date.now()): void {
+    for (const [planId, plan] of this.reorganizationPlans.entries()) {
+      if (plan.expiresAt.getTime() <= now) this.reorganizationPlans.delete(planId)
+    }
   }
 
   private async requireOwnedItem(userId: string, itemId: string) {
@@ -2062,6 +2337,61 @@ function normalizeDriveName(value: string): string {
   const name = value.normalize("NFC")
   if (!isValidDriveItemName(name)) throw new BadRequestException("文件名无效。")
   return name
+}
+
+function normalizeDriveFolderPathSegments(value: readonly string[]): string[] {
+  if (!Array.isArray(value) || value.length === 0) throw new BadRequestException("文件夹路径不能为空。")
+  return value.map(normalizeDriveName)
+}
+
+function normalizeDriveItemTreePage(input: DriveItemTreeListInput): { readonly offset: number; readonly limit: number } {
+  const offset = typeof input.offset === "number" && Number.isFinite(input.offset) && input.offset > 0
+    ? Math.floor(input.offset)
+    : 0
+  const requestedLimit = typeof input.limit === "number" && Number.isFinite(input.limit) && input.limit > 0
+    ? Math.floor(input.limit)
+    : DRIVE_ITEM_TREE_DEFAULT_LIMIT
+  return {
+    offset,
+    limit: Math.min(requestedLimit, DRIVE_ITEM_TREE_MAX_LIMIT),
+  }
+}
+
+function buildDriveItemTreeEntries(items: readonly DriveItemDto[], parentId: string | null): DriveItemTreeEntryDto[] {
+  const childrenByParent = new Map<string | null, DriveItemDto[]>()
+  const itemById = new Map(items.map((item) => [item.id, item]))
+  for (const item of items) {
+    const children = childrenByParent.get(item.parentId) ?? []
+    children.push(item)
+    childrenByParent.set(item.parentId, children)
+  }
+
+  const entries: DriveItemTreeEntryDto[] = []
+
+  const findPath = (itemId: string): string => {
+    const chain: string[] = []
+    let current = itemById.get(itemId)
+    while (current) {
+      chain.unshift(current.name)
+      current = current.parentId ? itemById.get(current.parentId) : undefined
+    }
+    return chain.join("/")
+  }
+
+  const walk = (currentParentId: string | null, prefix: string, depth: number) => {
+    for (const child of childrenByParent.get(currentParentId) ?? []) {
+      const path = prefix ? `${prefix}/${child.name}` : child.name
+      entries.push({ ...child, path, depth })
+      if (child.type === "folder") walk(child.id, path, depth + 1)
+    }
+  }
+
+  if (parentId) {
+    walk(parentId, findPath(parentId), 1)
+  } else {
+    walk(null, "", 0)
+  }
+  return entries
 }
 
 function parseRequestedSize(value: string): bigint {

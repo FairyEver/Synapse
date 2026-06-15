@@ -7,12 +7,21 @@ import type {
   DriveAccessSettingsInput,
   DriveBrowserSnapshotDto,
   DriveFolderUploadPrepareResult,
+  DriveFolderPathEnsureInput,
+  DriveFolderPathEnsureResultDto,
   DriveItemDto,
+  DriveItemTreeListInput,
+  DriveItemTreeListPageDto,
   DrivePublicationDto,
   DrivePublicationListPageDto,
   DrivePublicLinksPageInput,
+  DriveReorganizationApplyInput,
+  DriveReorganizationApplyResultDto,
+  DriveReorganizationPreviewDto,
+  DriveReorganizationPreviewInput,
   DriveShareDto,
   DriveShareListPageDto,
+  DriveStatsDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -46,6 +55,11 @@ type DriveAccountServicePort = {
   readonly shareDriveItem: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DriveShareDto>
   readonly disableDriveShare: (shareId: string) => Promise<{ ok: true }>
   readonly getDriveUsage: () => Promise<DriveUsageDto>
+  readonly getDriveStats: () => Promise<DriveStatsDto>
+  readonly listDriveItemTree: (input: DriveItemTreeListInput) => Promise<DriveItemTreeListPageDto>
+  readonly ensureDriveFolderPath: (input: DriveFolderPathEnsureInput) => Promise<DriveFolderPathEnsureResultDto>
+  readonly previewDriveReorganization: (input: DriveReorganizationPreviewInput) => Promise<DriveReorganizationPreviewDto>
+  readonly applyDriveReorganization: (input: DriveReorganizationApplyInput) => Promise<DriveReorganizationApplyResultDto>
   readonly getDriveDeleteImpact: (itemId: string) => Promise<unknown>
   readonly listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
   readonly listDrivePublications: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicationListPageDto>
@@ -268,6 +282,31 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveRead(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.getDriveUsage(),
+          }))
+        case "drive.stats.get":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.getDriveStats(),
+          }))
+        case "drive.item_tree.list":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const tree = await deps.accountService.listDriveItemTree(parseDriveTreeListInput(params))
+            return { ok: true, data: tree, total: tree.total }
+          })
+        case "drive.folder_path.ensure":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.ensureDriveFolderPath(parseFolderPathEnsureInput(params)),
+          }))
+        case "drive.reorganization.preview":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.previewDriveReorganization(parseReorganizationPreviewInput(params)),
+          }))
+        case "drive.reorganization.apply":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.applyDriveReorganization({ planId: requireString(params, "planId") }),
           }))
         default:
           throw new Error(`Unknown drive action: ${action}`)
@@ -524,7 +563,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "shareId", "publicationId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "disablePublications"]) {
+  for (const key of ["itemId", "shareId", "publicationId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "disablePublications", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
   }
@@ -568,6 +607,8 @@ function driveResultCorrelation(result: DispatchResult): Record<string, unknown>
   if (typeof record.id === "string" && !metadata.itemId && !metadata.shareId) metadata.itemId = record.id
   if (typeof record.completed === "number") metadata.completed = record.completed
   if (typeof record.failed === "number") metadata.failed = record.failed
+  if (typeof record.movedCount === "number") metadata.movedCount = record.movedCount
+  if (typeof record.skippedCount === "number") metadata.skippedCount = record.skippedCount
   if (record.root && typeof record.root === "object" && !Array.isArray(record.root)) {
     const rootId = (record.root as Record<string, unknown>).id
     if (typeof rootId === "string") metadata.rootItemId = rootId
@@ -713,6 +754,37 @@ function parsePublicLinksPageInput(params: Record<string, unknown>): DrivePublic
   }
 }
 
+function parseDriveTreeListInput(params: Record<string, unknown>): DriveItemTreeListInput {
+  return {
+    parentId: optionalNullableString(params.parentId),
+    offset: optionalNumber(params.offset),
+    limit: optionalNumber(params.limit),
+  }
+}
+
+function parseFolderPathEnsureInput(params: Record<string, unknown>): DriveFolderPathEnsureInput {
+  return {
+    parentId: optionalNullableString(params.parentId),
+    segments: requireStringArray(params, "segments"),
+  }
+}
+
+function parseReorganizationPreviewInput(params: Record<string, unknown>): DriveReorganizationPreviewInput {
+  if (!Array.isArray(params.moves)) throw new Error("moves must be an array.")
+  return {
+    moves: params.moves.map((move, index) => {
+      if (!move || typeof move !== "object" || Array.isArray(move)) {
+        throw new Error(`moves[${index}] must be an object.`)
+      }
+      const input = move as Record<string, unknown>
+      return {
+        itemId: requireString(input, "itemId"),
+        targetParentId: optionalNullableString(input.targetParentId),
+      }
+    }),
+  }
+}
+
 function optionalDriveAccessExpiresIn(value: unknown): DriveAccessExpiresIn | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value !== "string" || !DRIVE_ACCESS_EXPIRES_IN_VALUES.has(value as DriveAccessExpiresIn)) {
@@ -735,6 +807,17 @@ function optionalNullableString(value: unknown): string | null {
   if (value === undefined || value === null) return null
   if (typeof value !== "string") throw new Error("Expected string or null.")
   return value.trim() || null
+}
+
+function requireStringArray(params: Record<string, unknown>, key: string): string[] {
+  const value = params[key]
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`Missing or invalid '${key}': expected non-empty string array`)
+  return value.map((entry, index) => {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      throw new Error(`Missing or invalid '${key}[${index}]': expected non-empty string`)
+    }
+    return entry.trim()
+  })
 }
 
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {

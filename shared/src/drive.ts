@@ -123,6 +123,93 @@ export interface DriveUsageDto {
   readonly quotaBytes: string
 }
 
+export interface DriveStatsDto extends DriveUsageDto {
+  readonly itemCount: number
+  readonly fileCount: number
+  readonly folderCount: number
+}
+
+export interface DriveItemTreeEntryDto extends DriveItemDto {
+  readonly path: string
+  readonly depth: number
+}
+
+export interface DriveItemTreeListInput {
+  readonly parentId?: string | null
+  readonly offset?: number
+  readonly limit?: number
+}
+
+export interface DriveItemTreeListPageDto {
+  readonly items: readonly DriveItemTreeEntryDto[]
+  readonly total: number
+  readonly fileCount: number
+  readonly folderCount: number
+  readonly hasMore: boolean
+  readonly nextOffset: number | null
+}
+
+export interface DriveFolderPathEnsureInput {
+  readonly parentId?: string | null
+  readonly segments: readonly string[]
+}
+
+export interface DriveFolderPathEnsureResultDto {
+  readonly item: DriveItemDto
+  readonly created: readonly DriveItemDto[]
+  readonly reused: readonly DriveItemDto[]
+}
+
+export interface DriveReorganizationMoveInput {
+  readonly itemId: string
+  readonly targetParentId: string | null
+}
+
+export interface DriveReorganizationPreviewInput {
+  readonly moves: readonly DriveReorganizationMoveInput[]
+}
+
+export interface DriveReorganizationPlannedMoveDto {
+  readonly itemId: string
+  readonly name: string
+  readonly fromParentId: string | null
+  readonly targetParentId: string | null
+  readonly updatedAt: string
+}
+
+export interface DriveReorganizationSkippedMoveDto {
+  readonly itemId: string
+  readonly reason: string
+}
+
+export interface DriveReorganizationConflictDto {
+  readonly itemId?: string
+  readonly reason: string
+}
+
+export interface DriveReorganizationPreviewDto {
+  readonly planId: string
+  readonly expiresAt: string
+  readonly summary: {
+    readonly moveCount: number
+    readonly skippedCount: number
+    readonly conflictCount: number
+  }
+  readonly moves: readonly DriveReorganizationPlannedMoveDto[]
+  readonly skipped: readonly DriveReorganizationSkippedMoveDto[]
+  readonly conflicts: readonly DriveReorganizationConflictDto[]
+}
+
+export interface DriveReorganizationApplyInput {
+  readonly planId: string
+}
+
+export interface DriveReorganizationApplyResultDto {
+  readonly ok: true
+  readonly movedCount: number
+  readonly skippedCount: number
+}
+
 export interface DriveBrowserItemDto {
   readonly id: string
   readonly name: string

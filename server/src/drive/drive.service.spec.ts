@@ -2226,6 +2226,99 @@ describe("DriveService", () => {
 
     expect(list.data.map((item) => item.id)).toEqual([active.item.id])
   })
+
+  it("returns Drive stats and a paged recursive metadata tree without reading file contents", async () => {
+    const prisma = createPrismaMemory()
+    const storage = { ...storageMock, getObjectStream: vi.fn(storageMock.getObjectStream) }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const work = await service.createFolder("user-1", { parentId: null, name: "Work" })
+    const archive = await service.createFolder("user-1", { parentId: work.id, name: "Archive" })
+    await createCompletedUpload(service, "user-1", { parentId: work.id, name: "report.md", mimeType: "text/markdown" })
+    await createCompletedUpload(service, "user-1", { parentId: archive.id, name: "old.txt", mimeType: "text/plain" })
+
+    await expect(service.getStats("user-1")).resolves.toEqual({
+      itemCount: 4,
+      fileCount: 2,
+      folderCount: 2,
+      usedBytes: "22",
+      reservedBytes: "0",
+      quotaBytes: "10737418240",
+    })
+
+    const tree = await service.listItemTree("user-1", { parentId: null, offset: 1, limit: 2 })
+
+    expect(tree).toMatchObject({
+      total: 4,
+      fileCount: 2,
+      folderCount: 2,
+      hasMore: true,
+      nextOffset: 3,
+    })
+    expect(tree.items).toHaveLength(2)
+    expect(tree.items.every((item) => item.path.startsWith("Work"))).toBe(true)
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("ensures nested folder paths by reusing existing folders and creating missing folders", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const work = await service.createFolder("user-1", { parentId: null, name: "Work" })
+
+    const result = await service.ensureFolderPath("user-1", { parentId: null, segments: ["Work", "Reports"] })
+
+    expect(result.item.name).toBe("Reports")
+    expect(result.item.parentId).toBe(work.id)
+    expect(result.reused.map((item) => item.id)).toEqual([work.id])
+    expect(result.created.map((item) => item.name)).toEqual(["Reports"])
+  })
+
+  it("previews and applies reorganization plans with drift protection", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const inbox = await service.createFolder("user-1", { parentId: null, name: "Inbox" })
+    const work = await service.createFolder("user-1", { parentId: null, name: "Work" })
+    const file = await createCompletedUpload(service, "user-1", { parentId: inbox.id, name: "report.md", mimeType: "text/markdown" })
+
+    const preview = await service.previewReorganization("user-1", {
+      moves: [{ itemId: file.id, targetParentId: work.id }],
+    })
+
+    expect(preview.planId).toMatch(/^drive-reorg-/u)
+    expect(preview.summary).toEqual({ moveCount: 1, skippedCount: 0, conflictCount: 0 })
+    await service.renameItem("user-1", file.id, "renamed.md")
+    await expect(service.applyReorganization("user-1", { planId: preview.planId }))
+      .rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it("applies valid reorganization plans atomically and rejects unsafe folder moves", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const parent = await service.createFolder("user-1", { parentId: null, name: "Parent" })
+    const child = await service.createFolder("user-1", { parentId: parent.id, name: "Child" })
+    const target = await service.createFolder("user-1", { parentId: null, name: "Target" })
+    const file = await createCompletedUpload(service, "user-1", { parentId: parent.id, name: "report.md", mimeType: "text/markdown" })
+
+    await expect(service.previewReorganization("user-1", {
+      moves: [
+        { itemId: parent.id, targetParentId: target.id },
+        { itemId: child.id, targetParentId: target.id },
+      ],
+    })).rejects.toBeInstanceOf(BadRequestException)
+
+    const preview = await service.previewReorganization("user-1", {
+      moves: [{ itemId: file.id, targetParentId: target.id }],
+    })
+    await expect(service.applyReorganization("user-1", { planId: preview.planId })).resolves.toEqual({
+      ok: true,
+      movedCount: 1,
+      skippedCount: 0,
+    })
+    await expect(service.getItem("user-1", file.id)).resolves.toMatchObject({ parentId: target.id })
+  })
 })
 
 async function createCompletedUpload(

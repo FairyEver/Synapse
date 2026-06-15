@@ -50,6 +50,11 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_publication_deployment_create",
       "drive_publication_disable",
       "drive_usage_get",
+      "drive_stats_get",
+      "drive_item_tree_list",
+      "drive_folder_path_ensure",
+      "drive_reorganization_preview",
+      "drive_reorganization_apply",
     ])
   })
 
@@ -65,6 +70,74 @@ describe("createDriveCapabilityDispatcher", () => {
       total: 1,
     })
     expect(accountService.listDriveItems).toHaveBeenCalledWith(null)
+  })
+
+  it("routes Drive organization reads and path ensure without reading file contents in bulk", async () => {
+    const treePage = {
+      items: [driveTreeItem({ id: "file-1", path: "Inbox/report.md" })],
+      total: 1,
+      fileCount: 1,
+      folderCount: 0,
+      hasMore: false,
+      nextOffset: null,
+    }
+    const stats = { itemCount: 3, fileCount: 2, folderCount: 1, usedBytes: "22", reservedBytes: "0", quotaBytes: "100" }
+    const folder = driveItem({ id: "folder-work", type: "folder", name: "Work" })
+    const accountService = createAccountService({
+      getDriveStats: vi.fn(async () => stats),
+      listDriveItemTree: vi.fn(async () => treePage),
+      ensureDriveFolderPath: vi.fn(async () => ({ item: folder, created: [], reused: [folder] })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.stats.get", {}, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: stats })
+    await expect(dispatcher.dispatch("drive.item_tree.list", { parentId: null, offset: 5, limit: 10 }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: treePage, total: 1 })
+    await expect(dispatcher.dispatch("drive.folder_path.ensure", { segments: ["Work"] }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: { item: folder, created: [], reused: [folder] } })
+
+    expect(accountService.listDriveItemTree).toHaveBeenCalledWith({ parentId: null, offset: 5, limit: 10 })
+    expect(accountService.ensureDriveFolderPath).toHaveBeenCalledWith({ parentId: null, segments: ["Work"] })
+    expect(accountService.readDriveFileContent).not.toHaveBeenCalled()
+  })
+
+  it("previews and applies Drive reorganizations only through a generated plan id", async () => {
+    const preview = {
+      planId: "drive-reorg-plan-1",
+      expiresAt: "2026-06-07T12:05:00.000Z",
+      summary: { moveCount: 1, skippedCount: 0, conflictCount: 0 },
+      moves: [{
+        itemId: "file-1",
+        name: "report.md",
+        fromParentId: null,
+        targetParentId: "folder-work",
+        updatedAt: "2026-06-07T00:00:00.000Z",
+      }],
+      skipped: [],
+      conflicts: [],
+    }
+    const applied = { ok: true as const, movedCount: 1, skippedCount: 0 }
+    const accountService = createAccountService({
+      previewDriveReorganization: vi.fn(async () => preview),
+      applyDriveReorganization: vi.fn(async () => applied),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.reorganization.apply", {
+      moves: [{ itemId: "file-1", targetParentId: "folder-work" }],
+    }, { source: "mcp-stdio" })).rejects.toThrow("planId")
+    await expect(dispatcher.dispatch("drive.reorganization.preview", {
+      moves: [{ itemId: "file-1", targetParentId: "folder-work" }],
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: preview })
+    await expect(dispatcher.dispatch("drive.reorganization.apply", {
+      planId: "drive-reorg-plan-1",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: applied })
+
+    expect(accountService.previewDriveReorganization).toHaveBeenCalledWith({
+      moves: [{ itemId: "file-1", targetParentId: "folder-work" }],
+    })
+    expect(accountService.applyDriveReorganization).toHaveBeenCalledWith({ planId: "drive-reorg-plan-1" })
   })
 
   it("authorizes and audits Drive item reads", async () => {
@@ -691,6 +764,11 @@ function createAccountService(overrides: Partial<DriveAccountService> = {}): Dri
     publishDriveSite: vi.fn(),
     redeployDrivePublication: vi.fn(),
     disableDrivePublication: vi.fn(),
+    getDriveStats: vi.fn(),
+    listDriveItemTree: vi.fn(),
+    ensureDriveFolderPath: vi.fn(),
+    previewDriveReorganization: vi.fn(),
+    applyDriveReorganization: vi.fn(),
     getDriveItemPreview: vi.fn(),
     readDriveFileContent: vi.fn(),
     downloadDriveFile: vi.fn(),
@@ -796,6 +874,27 @@ function drivePage() {
     limit: 20,
     hasMore: false,
     nextOffset: null,
+  }
+}
+
+type DriveTreeItem = Awaited<ReturnType<DriveAccountService["listDriveItemTree"]>>["items"][number]
+
+function driveTreeItem(overrides: Partial<DriveTreeItem>): DriveTreeItem {
+  return {
+    id: "file-1",
+    parentId: null,
+    type: "file",
+    name: "report.md",
+    path: "report.md",
+    depth: 0,
+    size: "11",
+    mimeType: "text/markdown",
+    storageStatus: "active",
+    shared: false,
+    activeShareId: null,
+    createdAt: "2026-06-07T00:00:00.000Z",
+    updatedAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
   }
 }
 

@@ -28,8 +28,14 @@ describe("Drive capability domain", () => {
       "drive_publication_deployment_create",
       "drive_publication_disable",
       "drive_usage_get",
+      "drive_stats_get",
+      "drive_item_tree_list",
+      "drive_folder_path_ensure",
+      "drive_reorganization_preview",
+      "drive_reorganization_apply",
     ])
     expect(MCP_TOOL_ACTIONS.drive_file_upload).toBe("drive.file.upload")
+    expect(MCP_TOOL_ACTIONS.drive_reorganization_apply).toBe("drive.reorganization.apply")
     expect(MCP_TOOL_ACTIONS.drive_page_publication_create).toBe("drive.page_publication.create")
     expect(getActionDomainId("drive.item.list")).toBe("drive")
   })

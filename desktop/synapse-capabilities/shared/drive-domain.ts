@@ -25,6 +25,11 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.publication_deployment.create" as CapabilityId, title: "Create publication deployment", description: "Create a new deployment snapshot for an existing Drive publication.", mutates: true },
   { id: "drive.publication.disable" as CapabilityId, title: "Disable publication", description: "Disable a Synapse Drive page or site publication.", mutates: true },
   { id: "drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
+  { id: "drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
+  { id: "drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List recursive Synapse Drive file and folder metadata without reading file contents.", mutates: false },
+  { id: "drive.folder_path.ensure" as CapabilityId, title: "Ensure folder path", description: "Create or reuse a nested Synapse Drive folder path.", mutates: true },
+  { id: "drive.reorganization.preview" as CapabilityId, title: "Preview reorganization", description: "Validate a Synapse Drive reorganization plan without moving items.", mutates: false },
+  { id: "drive.reorganization.apply" as CapabilityId, title: "Apply reorganization", description: "Apply a previously previewed Synapse Drive reorganization plan.", mutates: true },
 ]
 
 export const DRIVE_DOMAIN: CapabilityDomainDefinition = {
@@ -301,6 +306,75 @@ export function buildDriveTools(): McpToolDefinition[] {
       inputSchema: {
         type: "object",
         properties: {},
+      },
+    },
+    {
+      name: "drive_stats_get",
+      description: "Get Synapse Drive item counts and quota usage for the current user.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "drive_item_tree_list",
+      description: "Recursively list Synapse Drive file and folder metadata without reading file contents. Use this before organizing Drive files.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          parentId: optionalParentId,
+          offset: { type: "number", description: "Optional pagination offset across the flattened recursive tree. Defaults to 0." },
+          limit: { type: "number", description: "Optional page size. Defaults to 500 and is capped by the server." },
+        },
+      },
+    },
+    {
+      name: "drive_folder_path_ensure",
+      description: "Create or reuse a nested Drive folder path. Fails if any path segment collides with an existing file.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          parentId: optionalParentId,
+          segments: {
+            type: "array",
+            description: "Folder names from parent to leaf.",
+            items: stringField("Folder name segment."),
+          },
+        },
+        required: ["segments"],
+      },
+    },
+    {
+      name: "drive_reorganization_preview",
+      description: "Validate a Drive reorganization plan and return a planId. This does not move files or read file contents.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          moves: {
+            type: "array",
+            description: "Items to move by stable id.",
+            items: {
+              type: "object",
+              properties: {
+                itemId: stringField("Drive item id to move."),
+                targetParentId: optionalParentId,
+              },
+              required: ["itemId", "targetParentId"],
+            },
+          },
+        },
+        required: ["moves"],
+      },
+    },
+    {
+      name: "drive_reorganization_apply",
+      description: "Apply a previously previewed Drive reorganization plan. Requires planId; raw moves are not accepted.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          planId: stringField("Plan id returned by drive_reorganization_preview."),
+        },
+        required: ["planId"],
       },
     },
   ]

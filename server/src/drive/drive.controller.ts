@@ -46,6 +46,22 @@ const folderSchema = z.object({
   name: z.string().min(1).max(255),
 }).strict()
 
+const folderPathEnsureSchema = z.object({
+  parentId: z.string().nullable().optional(),
+  segments: z.array(z.string().min(1).max(255)).min(1).max(20),
+}).strict()
+
+const reorganizationPreviewSchema = z.object({
+  moves: z.array(z.object({
+    itemId: z.string().min(1),
+    targetParentId: z.string().nullable(),
+  }).strict()).min(1).max(1000),
+}).strict()
+
+const reorganizationApplySchema = z.object({
+  planId: z.string().min(1),
+}).strict()
+
 const renameSchema = z.object({ name: z.string().min(1).max(255) }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
 const deleteItemSchema = z.object({ disablePublications: z.boolean().optional() }).strict()
@@ -64,6 +80,20 @@ export class DriveUserController {
   @Get("/items")
   listItems(@Query("parentId") parentId: string | undefined, @Req() request: AuthenticatedUserRequest) {
     return this.drive.listItems(request.user!.id, parentId ?? null)
+  }
+
+  @Get("/items/tree")
+  listItemTree(
+    @Query("parentId") parentId: string | undefined,
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.listItemTree(request.user!.id, {
+      parentId: parentId ?? null,
+      offset: parseOptionalNonNegativeInteger(offset, "offset"),
+      limit: parseOptionalNonNegativeInteger(limit, "limit"),
+    })
   }
 
   @Get("/items/:id")
@@ -197,6 +227,32 @@ export class DriveUserController {
   @Get("/usage")
   getUsage(@Req() request: AuthenticatedUserRequest) {
     return this.drive.getUsage(request.user!.id)
+  }
+
+  @Get("/stats")
+  getStats(@Req() request: AuthenticatedUserRequest) {
+    return this.drive.getStats(request.user!.id)
+  }
+
+  @Post("/folders/ensure-path")
+  ensureFolderPath(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(folderPathEnsureSchema, body, "文件夹路径无效。")
+    return this.drive.ensureFolderPath(request.user!.id, {
+      parentId: parsed.parentId ?? null,
+      segments: parsed.segments,
+    }, driveAuditContext(request))
+  }
+
+  @Post("/reorganizations/preview")
+  previewReorganization(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(reorganizationPreviewSchema, body, "整理计划无效。")
+    return this.drive.previewReorganization(request.user!.id, parsed)
+  }
+
+  @Post("/reorganizations/apply")
+  applyReorganization(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(reorganizationApplySchema, body, "整理计划无效。")
+    return this.drive.applyReorganization(request.user!.id, parsed, driveAuditContext(request))
   }
 
   @Get("/browser/owner/root")
