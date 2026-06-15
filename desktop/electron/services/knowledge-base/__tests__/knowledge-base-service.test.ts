@@ -32,6 +32,7 @@ vi.mock("../../log-store", () => ({
 }))
 
 const roots: string[] = []
+const itSupportsPosixModeBits = process.platform === "win32" ? it.skip : it
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-"))
@@ -669,7 +670,7 @@ describe("KnowledgeBaseService", () => {
     })
   })
 
-  it("rolls back moved raw entries when manifest sync fails", async () => {
+  itSupportsPosixModeBits("rolls back moved raw entries when manifest sync fails", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     const rawRoot = path.join(projectPath, ".raw")
     await mkdir(path.join(rawRoot, "client-a"), { recursive: true })
@@ -705,7 +706,7 @@ describe("KnowledgeBaseService", () => {
     })
   })
 
-  it("blocks trashing manifest-tracked raw entries when manifest cannot be written", async () => {
+  itSupportsPosixModeBits("blocks trashing manifest-tracked raw entries when manifest cannot be written", async () => {
     const trashItem = vi.fn(async () => undefined)
     const { projectId, projectPath, service } = await managedFixture({
       rawFileManager: new KnowledgeBaseRawFileManager({ trashItem }),

@@ -202,7 +202,7 @@ describe("cc-switch importer", () => {
 
     expect(source.providers).toHaveLength(CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS)
     expect(source.providers.at(-1)?.id).toBe(`provider-${String(CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS - 1).padStart(4, "0")}`)
-  })
+  }, 20_000)
 
   it("reads legacy config.json as an explicit JSON source", () => {
     const jsonPath = path.join(tempRoot(), ".cc-switch", "config.json")

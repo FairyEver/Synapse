@@ -1,3 +1,4 @@
+import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createInMemoryHarness } from "../../../runtime/ipc"
@@ -31,6 +32,9 @@ vi.mock("../../../services/editor-adapter-service", () => ({
 }))
 
 describe("editorIpcModule", () => {
+  const rulesPath = path.resolve("/Users/test/.claude/rules")
+  const skillsPath = path.resolve("/Users/test/.claude/skills")
+
   beforeEach(() => {
     vi.clearAllMocks()
     fsMock.mkdir.mockResolvedValue(undefined)
@@ -38,9 +42,9 @@ describe("editorIpcModule", () => {
       {
         editorId: "codex",
         label: "Codex",
-        rulesPath: "/Users/test/.claude/rules",
+        rulesPath,
         rulesExists: false,
-        skillsPath: "/Users/test/.claude/skills",
+        skillsPath,
         skillsExists: false,
       },
     ])
@@ -50,34 +54,34 @@ describe("editorIpcModule", () => {
     const { harness, auditSink, permissionGuard } = createHarness()
 
     await harness.invoke("synapse:editor:create-directory", {
-      dirPath: "/Users/test/.claude/rules",
+      dirPath: rulesPath,
     })
 
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.write",
       actor: { kind: "user" },
-      resource: "/Users/test/.claude/rules",
+      resource: rulesPath,
       context: { source: "editor.createDirectory" },
     })
-    expect(fsMock.mkdir).toHaveBeenCalledWith("/Users/test/.claude/rules", { recursive: true })
+    expect(fsMock.mkdir).toHaveBeenCalledWith(rulesPath, { recursive: true })
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "shell.exec",
       actor: { kind: "user" },
-      resource: "/Users/test/.claude/rules",
+      resource: rulesPath,
       context: { source: "editor.createDirectory" },
     })
-    expect(electronMock.shell.showItemInFolder).toHaveBeenCalledWith("/Users/test/.claude/rules")
+    expect(electronMock.shell.showItemInFolder).toHaveBeenCalledWith(rulesPath)
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write",
       actor: { kind: "user" },
-      resource: "/Users/test/.claude/rules",
+      resource: rulesPath,
       outcome: "allowed",
       metadata: { source: "editor.createDirectory" },
     }))
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "shell.exec",
       actor: { kind: "user" },
-      resource: "/Users/test/.claude/rules",
+      resource: rulesPath,
       outcome: "allowed",
       metadata: { source: "editor.createDirectory" },
     }))
@@ -102,7 +106,7 @@ describe("editorIpcModule", () => {
     })
 
     await expect(harness.invoke("synapse:editor:create-directory", {
-      dirPath: "/Users/test/.claude/skills",
+      dirPath: skillsPath,
     })).rejects.toThrow("denied by test-policy")
 
     expect(fsMock.mkdir).not.toHaveBeenCalled()
@@ -110,7 +114,7 @@ describe("editorIpcModule", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write",
       actor: { kind: "user" },
-      resource: "/Users/test/.claude/skills",
+      resource: skillsPath,
       outcome: "denied",
       metadata: {
         source: "editor.createDirectory",

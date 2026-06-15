@@ -1,3 +1,4 @@
+import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => {
@@ -210,6 +211,8 @@ describe("repositoryIpcModule", () => {
 
   it("guards local repository creation with write permission and audit", async () => {
     const { repositoryIpcModule } = await import("../ipc")
+    const parentPath = path.resolve("/parent")
+    const resourcePath = path.resolve("/parent", "Local Repo")
 
     await repositoryIpcModule.methods.createLocalRepository.handler(createContext() as never, {
       name: "Local Repo",
@@ -219,10 +222,10 @@ describe("repositoryIpcModule", () => {
     expect(mocks.permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.write.outside-userdata",
       actor: { kind: "user" },
-      resource: "/parent/Local Repo",
+      resource: resourcePath,
       context: {
         source: "repository.createLocalRepository",
-        parentPath: "/parent",
+        parentPath,
       },
     })
     expect(mocks.repositoryStructureService.createLocalRepository).toHaveBeenCalledWith({
@@ -232,7 +235,7 @@ describe("repositoryIpcModule", () => {
     expect(mocks.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       actor: { kind: "user" },
-      resource: "/parent/Local Repo",
+      resource: resourcePath,
       outcome: "allowed",
       metadata: { source: "repository.createLocalRepository" },
     }))
@@ -240,6 +243,7 @@ describe("repositoryIpcModule", () => {
 
   it("does not create a local repository when write permission is denied", async () => {
     const { repositoryIpcModule } = await import("../ipc")
+    const resourcePath = path.resolve("/parent", "Local Repo")
     mocks.permissionGuard.check.mockResolvedValueOnce({
       allowed: false,
       reason: "denied by test-policy",
@@ -255,7 +259,7 @@ describe("repositoryIpcModule", () => {
     expect(mocks.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write.outside-userdata",
       actor: { kind: "user" },
-      resource: "/parent/Local Repo",
+      resource: resourcePath,
       outcome: "denied",
       metadata: {
         source: "repository.createLocalRepository",

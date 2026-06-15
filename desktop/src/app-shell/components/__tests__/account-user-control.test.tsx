@@ -3,6 +3,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { buildAccountDashboardHomeUrl } from "@/lib/account-dashboard-url"
 import type { SynapseAccountState } from "@/types/account"
 
 function createAuthenticatedState(): SynapseAccountState {
@@ -230,6 +231,6 @@ describe("AccountUserControl", () => {
       await Promise.resolve()
     })
 
-    expect(shellBridge.openExternal).toHaveBeenCalledWith("http://localhost:3000/console/")
+    expect(shellBridge.openExternal).toHaveBeenCalledWith(buildAccountDashboardHomeUrl())
   })
 })

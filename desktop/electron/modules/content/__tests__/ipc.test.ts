@@ -1,3 +1,4 @@
+import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -283,7 +284,7 @@ describe("contentIpcModule sync ownership", () => {
     })
 
     expect(dialog.showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
-      defaultPath: "/tmp/_CON.md",
+      defaultPath: path.join("/tmp", "_CON.md"),
     }))
   })
 
