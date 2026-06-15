@@ -25,9 +25,7 @@ describe("RepositoryTemplateService", () => {
       { id: "synapse-content-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-database-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-drive-mcp", icon: "folder-tree", iconBg: "teal" },
-      { id: "synapse-model-price-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-repository-mcp", icon: "terminal", iconBg: "teal" },
-      { id: "synapse-scheduler-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-variable-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-workflow-mcp", icon: "terminal", iconBg: "teal" },
     ])
@@ -56,16 +54,4 @@ describe("RepositoryTemplateService", () => {
     expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("paramTemplates")
   })
 
-  it("documents Workflow actions in the built-in Scheduler MCP skill", async () => {
-    const seeds = await readRepositorySeedContents()
-    const schedulerSkill = seeds.find((seed) => seed.id === "synapse-scheduler-mcp")
-    const apiReference = schedulerSkill?.attachments
-      ?.find((attachment) => attachment.originalName === "api-reference.md")
-
-    expect(schedulerSkill?.content).toContain("builtin.workflow")
-    expect(schedulerSkill?.content).toContain("workflowId")
-    expect(schedulerSkill?.content).toContain("paramTemplates")
-    expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("builtin.workflow")
-    expect(apiReference ? Buffer.from(apiReference.bytes).toString("utf8") : "").toContain("paramTemplates")
-  })
 })
