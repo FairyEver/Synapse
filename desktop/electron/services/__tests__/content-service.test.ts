@@ -1,3 +1,4 @@
+import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_AGENT_GLOBAL_CONFIG } from "../../../src/constants/defaults"
 import type { SynapseConfig, SynapseRepositoryConfig } from "../../../src/types/config"
@@ -171,12 +172,14 @@ describe("contentService.readIconImage", () => {
   })
 
   it("reads a bounded content icon image", async () => {
+    const iconPath = path.join("/repo/rules/rule-1", "icon.png")
+
     await expect(contentService.readIconImage("rule", "rule-1")).resolves.toBe(
       `data:image/png;base64,${Buffer.from("icon").toString("base64")}`,
     )
 
-    expect(mocks.fsPromises.stat).toHaveBeenCalledWith("/repo/rules/rule-1/icon.png")
-    expect(mocks.fsPromises.readFile).toHaveBeenCalledWith("/repo/rules/rule-1/icon.png")
+    expect(mocks.fsPromises.stat).toHaveBeenCalledWith(iconPath)
+    expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(iconPath)
   })
 
   it("skips oversized content icon images before reading the file", async () => {

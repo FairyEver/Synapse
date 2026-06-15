@@ -817,7 +817,7 @@ describe("DiagnosticsService.exportBundle", () => {
         flush: vi.fn(async () => undefined),
       },
       readTextFile: vi.fn(async (targetPath: string) => {
-        if (targetPath === "/logs/main.log") return logContent
+        if (targetPath.replace(/\\/g, "/") === "/logs/main.log") return logContent
         return ""
       }),
       writeTextFile: vi.fn(async (targetPath: string, content: string) => {
