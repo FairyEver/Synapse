@@ -296,7 +296,7 @@ bash deploy.sh
 
 `deploy.sh` 会先读取线上已应用的 Prisma migration，扫描本次待发布 migration 中的危险 SQL。遇到删表、删列、删行、唯一索引或危险 `NOT NULL` 变更时，默认会把待发布 migration、风险数量、文件行号和 SQL 明细写入日志并继续部署；如果需要让风险扫描恢复为阻断部署，可用 `STRICT_MIGRATION_RISK_SCAN=1 bash deploy.sh`。
 
-部署脚本会把本机 `server/.env` 作为配置源，合并同步到服务器的 `/www/wwwroot/synapse/server/.env`，再用远端 `docker compose --env-file .env config` 校验；普通代码同步仍会排除 `server/.env` 和 `server/data/`，避免密钥和本地 Drive fallback 数据进入 rsync 删除流程。已有远端配置时，`POSTGRES_PASSWORD`、`POSTGRES_USER`、`POSTGRES_DB`、`DATABASE_URL` 会始终保留远端值，避免覆盖已有 Postgres volume 的真实数据库身份。修改 Drive COS、Backup COS、JWT、公开访问地址等配置后，运行 `bash deploy.sh` 会同步到服务器。生产数据库密码轮换需要先备份，再执行数据库用户密码变更并同步远端 `.env`，不要通过普通 deploy 覆盖本机值。
+本机保留两份服务端配置：`server/.env.local` 只用于本地开发，数据库地址通常指向宿主机端口；`server/.env.server` 是生产部署的完整配置源，数据库地址必须使用 Docker Compose 网络内的 `postgres:5432`。部署脚本会把本机 `server/.env.server` 直接同步为服务器的 `/www/wwwroot/synapse/server/.env`，同步前会备份远端旧 `.env`，并用远端 `docker compose --env-file .env config` 校验。普通代码同步仍会排除 `server/.env`、`server/.env.local`、`server/.env.server` 和 `server/data/`，避免密钥和本地 Drive fallback 数据进入 rsync 删除流程。修改生产数据库、COS、JWT、公开访问地址等配置后，先更新 `server/.env.server`，再运行 `bash deploy.sh`。
 
 部署会生成这些切换备份：远端 `.env` 备份保存到 `/www/wwwroot/synapse/backups/env/`，Postgres 角色和权限 globals 备份保存到 `/www/wwwroot/synapse/backups/globals/`，在线数据库备份用于临时数据库预演，停旧服务后的最终数据库备份会先恢复到 `synapse_final_verify_*` 临时库验证成功后才启动新服务。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。未配置 Drive COS 且存在 `server/data/drive` 时，部署还会在切换窗口打包本地 Drive 数据到 `/www/wwwroot/synapse/backups/drive/`。
 
@@ -342,7 +342,7 @@ docker compose down -v
 
 管理后台“备份”页面和每天凌晨 3 点的定时任务会把轻量灾备包上传到 `BACKUP_COS_BUCKET/backups/`。灾备包包含业务数据库、PostgreSQL globals、Drive COS 对象清单、备份 manifest 和恢复说明。灾备包不包含 `.env`、JWT secret、COS Secret、数据库密码或 Drive 文件字节。
 
-恢复时需要使用你本机保存的 `server/.env` 作为配置来源。如果 Drive COS bucket 或对象已经被删除，灾备包只能恢复数据库和 Drive 元数据，不能恢复文件内容。
+恢复时需要使用你本机保存的 `server/.env.server` 作为生产配置来源。如果 Drive COS bucket 或对象已经被删除，灾备包只能恢复数据库和 Drive 元数据，不能恢复文件内容。
 
 `deploy.sh` 的发布切换备份仍保存在 `/www/wwwroot/synapse/backups/`。在线预演备份文件名形如 `synapse-online-before-deploy-20260606_121500.sql`，最终切换前备份文件名形如 `synapse-final-before-switch-20260606_121500.sql`；远端 `.env` 备份在 `backups/env/`，Postgres globals 备份在 `backups/globals/`，本地 Drive fallback 备份在 `backups/drive/`。
 

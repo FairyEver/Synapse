@@ -303,7 +303,7 @@ function WebhookCardList({
   onOpenDeliveries,
   onDelete,
 }: {
-  webhooks: DashboardWebhookDto[]
+  webhooks: readonly DashboardWebhookDto[]
   total: number
   page: number
   pageCount: number

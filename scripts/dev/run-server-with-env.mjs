@@ -5,7 +5,7 @@ import { runPnpm } from "./process-utils.mjs"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, "../..")
-const envPath = path.join(repoRoot, "server/.env")
+const envPath = path.join(repoRoot, "server/.env.local")
 
 function parseEnvFile(raw) {
   const env = {}

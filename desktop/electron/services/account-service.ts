@@ -42,6 +42,7 @@ const CORE_ACCOUNT_NAMESPACE = "core.account"
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
 const ACCOUNT_RETRY_DELAYS_MS = [10_000, 30_000, 60_000, 120_000, 300_000] as const
 const HTTP_ERROR_BODY_MAX_LENGTH = 200
+const ACCOUNT_WEBHOOK_PAGE_SIZE = 100
 const SENSITIVE_HTTP_DETAIL_KEY_PATTERN = /password|token|secret|credential|authorization|cookie|api[-_]?key/i
 const UNSAFE_DRIVE_RELATIVE_PATH_PATTERN = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
 const sharedUrlsPromise = import("@synapse/shared")
@@ -65,6 +66,13 @@ type AccountHttpError = Error & {
   status: number
   url?: string
   method?: string
+}
+
+type PaginatedAccountResponse<T> = {
+  readonly data: readonly T[]
+  readonly total: number
+  readonly page: number
+  readonly pageSize: number
 }
 
 type AccountExternalUrlOpener = (url: string) => Promise<void>
@@ -305,10 +313,17 @@ export class AccountService {
   }
 
   async listWebhooks(): Promise<DashboardWebhookDto[]> {
-    return this.getAuthenticatedJson<DashboardWebhookDto[]>(
-      `${apiBaseUrl()}/console/webhooks`,
-      "Webhook 列表加载失败。",
-    )
+    const webhooks: DashboardWebhookDto[] = []
+    for (let page = 1; ; page += 1) {
+      const result = await this.getAuthenticatedJson<PaginatedAccountResponse<DashboardWebhookDto>>(
+        `${apiBaseUrl()}/console/webhooks?page=${page}&pageSize=${ACCOUNT_WEBHOOK_PAGE_SIZE}`,
+        "Webhook 列表加载失败。",
+      )
+      webhooks.push(...result.data)
+      if (webhooks.length >= result.total || result.data.length === 0) {
+        return webhooks
+      }
+    }
   }
 
   async createContentStoreSkillDraft(input: CreateContentStoreSkillDraftInput): Promise<ContentStoreDraftDto> {

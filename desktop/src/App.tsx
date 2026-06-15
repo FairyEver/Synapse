@@ -41,6 +41,7 @@ import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
+import { DatabaseModule } from "@/modules/database"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import { AutomationModule } from "@/modules/automation"
@@ -371,6 +372,11 @@ function MainApp() {
           {activeTab === "drive" ? (
             <ErrorBoundary fallbackTitle="云盘模块出现问题">
               <DriveModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "database" ? (
+            <ErrorBoundary fallbackTitle="数据库模块出现问题">
+              <DatabaseModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "task-scheduler" ? (

@@ -6,6 +6,7 @@
 .env.local
 **/.env
 **/.env.local
+**/.env.server
 !**/.env.example
 
 node_modules

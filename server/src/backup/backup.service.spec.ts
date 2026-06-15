@@ -135,13 +135,13 @@ describe("backup package helpers", () => {
     expect(scanForSecretLikeText("Authorization: Bearer token")).toBe(true)
   })
 
-  it("creates restore markdown that points users to local server env", () => {
+  it("creates restore markdown that points users to the production server env", () => {
     const restore = createRestoreMarkdown({
       createdAt: "2026-06-08T14:23:25.189Z",
       filename: "synapse-backup-2026-06-08T14-23-25-189Z.tar",
     })
 
-    expect(restore).toContain("server/.env")
+    expect(restore).toContain("server/.env.server")
     expect(restore).toContain("database.sql.gz")
     expect(restore).toContain("postgres-globals.sql")
     expect(scanForSecretLikeText(restore)).toBe(false)
@@ -628,7 +628,7 @@ describe("BackupService", () => {
       expect(fs.existsSync(path.join(extractDir, "database.sql.gz"))).toBe(true)
       expect(fs.readFileSync(path.join(extractDir, "postgres-globals.sql"), "utf8")).toBe("globals")
       expect(fs.existsSync(path.join(extractDir, "drive-cos-manifest.json"))).toBe(true)
-      expect(fs.readFileSync(path.join(extractDir, "restore.md"), "utf8")).toContain("server/.env")
+      expect(fs.readFileSync(path.join(extractDir, "restore.md"), "utf8")).toContain("server/.env.server")
 
       const manifest = JSON.parse(fs.readFileSync(path.join(extractDir, "backup-manifest.json"), "utf8"))
       expect(manifest.secretsIncluded).toBe(false)

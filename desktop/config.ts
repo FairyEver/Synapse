@@ -10,6 +10,7 @@ export const APP_NAVIGATION_TABS = [
   { id: "rule", label: "规则" },
   { id: "prompt", label: "提示词" },
   { id: "agent", label: "对话" },
+  { id: "database", label: "数据库" },
   { id: "task-scheduler", label: "定时" },
   { id: "automation", label: "自动化" },
   { id: "workflow", label: "工作流", requiresWorkflowEntry: true },

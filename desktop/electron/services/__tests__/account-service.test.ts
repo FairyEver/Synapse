@@ -44,7 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
-import type { DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
+import type { DashboardWebhookDto, DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -95,6 +95,19 @@ const expectedApiMode = new URL(expectedApiBaseUrl).hostname === "localhost" ? "
 
 function expectedApiUrl(path: string): string {
   return `${expectedApiBaseUrl}${path}`
+}
+
+function webhookFixture(id: string): DashboardWebhookDto {
+  return {
+    id,
+    publicId: `wh_${id}`,
+    name: `Webhook ${id}`,
+    enabled: true,
+    url: null,
+    maskedUrl: `https://synapse.test/webhooks/wh_${id}/***`,
+    createdAt: "2026-06-06T10:00:00.000Z",
+    updatedAt: "2026-06-06T10:00:00.000Z",
+  }
 }
 
 async function createTestAccountService(input: {
@@ -969,7 +982,7 @@ describe("AccountService", () => {
     expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
   })
 
-  it("lists account webhooks with the authenticated desktop token", async () => {
+  it("lists account webhooks from the paginated console endpoint with the authenticated desktop token", async () => {
     const calls: string[] = []
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url, init) => {
@@ -981,17 +994,14 @@ describe("AccountService", () => {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
-        if (String(url).endsWith("/console/webhooks")) {
+        if (String(url).endsWith("/console/webhooks?page=1&pageSize=100")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-          return jsonResponse([{
-            id: "webhook-1",
-            publicId: "wh_123",
-            name: "GitHub",
-            enabled: true,
-            maskedUrl: "https://synapse.test/webhooks/wh_123/***",
-            createdAt: "2026-06-06T10:00:00.000Z",
-            updatedAt: "2026-06-06T10:00:00.000Z",
-          }])
+          return jsonResponse({
+            data: [{ ...webhookFixture("123"), name: "GitHub" }],
+            total: 1,
+            page: 1,
+            pageSize: 100,
+          })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -1007,7 +1017,49 @@ describe("AccountService", () => {
     expect(calls).toEqual([
       expectedApiUrl("/auth/desktop/token"),
       expectedApiUrl("/auth/me"),
-      expectedApiUrl("/console/webhooks"),
+      expectedApiUrl("/console/webhooks?page=1&pageSize=100"),
+    ])
+  })
+
+  it("loads every account webhook page for the desktop selector", async () => {
+    const calls: string[] = []
+    const firstPage = Array.from({ length: 100 }, (_, index) => webhookFixture(String(index + 1)))
+    const secondPage = [webhookFixture("101")]
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        calls.push(String(url))
+        if (String(url).endsWith("/auth/desktop/token")) {
+          return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        if (String(url).endsWith("/console/webhooks?page=1&pageSize=100")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse({ data: firstPage, total: 101, page: 1, pageSize: 100 })
+        }
+        if (String(url).endsWith("/console/webhooks?page=2&pageSize=100")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse({ data: secondPage, total: 101, page: 2, pageSize: 100 })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+    await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
+
+    const webhooks = await service.listWebhooks()
+
+    expect(webhooks).toHaveLength(101)
+    expect(webhooks.at(-1)).toMatchObject({ publicId: "wh_101" })
+    expect(calls).toEqual([
+      expectedApiUrl("/auth/desktop/token"),
+      expectedApiUrl("/auth/me"),
+      expectedApiUrl("/console/webhooks?page=1&pageSize=100"),
+      expectedApiUrl("/console/webhooks?page=2&pageSize=100"),
     ])
   })
 
@@ -1283,7 +1335,7 @@ describe("AccountService", () => {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
-        if (String(url).endsWith("/console/webhooks") && calls.filter((item) => item.endsWith("/console/webhooks")).length === 1) {
+        if (String(url).endsWith("/console/webhooks?page=1&pageSize=100") && calls.filter((item) => item.includes("/console/webhooks")).length === 1) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
           return jsonResponse({ error: "stale access" }, 401)
         }
@@ -1295,9 +1347,9 @@ describe("AccountService", () => {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
-        if (String(url).endsWith("/console/webhooks")) {
+        if (String(url).endsWith("/console/webhooks?page=1&pageSize=100")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-          return jsonResponse([])
+          return jsonResponse({ data: [], total: 0, page: 1, pageSize: 100 })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -1312,10 +1364,10 @@ describe("AccountService", () => {
     expect(calls).toEqual([
       expectedApiUrl("/auth/desktop/token"),
       expectedApiUrl("/auth/me"),
-      expectedApiUrl("/console/webhooks"),
+      expectedApiUrl("/console/webhooks?page=1&pageSize=100"),
       expectedApiUrl("/auth/refresh"),
       expectedApiUrl("/auth/me"),
-      expectedApiUrl("/console/webhooks"),
+      expectedApiUrl("/console/webhooks?page=1&pageSize=100"),
     ])
     expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
   })
