@@ -22,6 +22,7 @@ export class CheatCodeStateService {
   private readonly eventBus?: Pick<EventBus, "emit">
   private readonly logger: CheatCodeStateLogger
   private readonly now: () => Date
+  private readonly mutationQueues = new Map<string, Promise<void>>()
 
   constructor(deps: CheatCodeStateServiceDeps) {
     this.states = deps.states
@@ -54,7 +55,30 @@ export class CheatCodeStateService {
   async setState(state: SynapseCheatCodeStateResult): Promise<SynapseCheatCodeStateResult> {
     assertCheatCodeName(state.name)
 
+    return this.enqueueStateMutation(state.name, async () => this.setStateInQueue(state))
+  }
+
+  async toggleState(name: string): Promise<SynapseCheatCodeStateResult> {
+    assertCheatCodeName(name)
+
+    return this.enqueueStateMutation(name, async () => {
+      const entry = await this.load()
+      const active = !(entry.states[name] ?? false)
+
+      return this.persistState(entry, { active, name })
+    })
+  }
+
+  private async setStateInQueue(state: SynapseCheatCodeStateResult): Promise<SynapseCheatCodeStateResult> {
     const entry = await this.load()
+
+    return this.persistState(entry, state)
+  }
+
+  private async persistState(
+    entry: CheatCodeStatesEntryV1,
+    state: SynapseCheatCodeStateResult,
+  ): Promise<SynapseCheatCodeStateResult> {
     const previousActive = entry.states[state.name] ?? false
 
     if (previousActive === state.active) {
@@ -92,20 +116,29 @@ export class CheatCodeStateService {
     return state
   }
 
-  async toggleState(name: string): Promise<SynapseCheatCodeStateResult> {
-    assertCheatCodeName(name)
-
-    const entry = await this.load()
-    const active = !(entry.states[name] ?? false)
-
-    return this.setState({ active, name })
-  }
-
   private async load(): Promise<CheatCodeStatesEntryV1> {
     return await this.states.getSingleton() ?? {
       schemaVersion: 1,
       states: {},
     }
+  }
+
+  private enqueueStateMutation<T>(
+    name: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.mutationQueues.get(name) ?? Promise.resolve()
+    const run = previous.catch(() => undefined).then(operation)
+    const cleanup = run.then(() => undefined, () => undefined)
+
+    this.mutationQueues.set(name, cleanup)
+    void cleanup.finally(() => {
+      if (this.mutationQueues.get(name) === cleanup) {
+        this.mutationQueues.delete(name)
+      }
+    })
+
+    return run
   }
 
   private emitStateChanged(state: SynapseCheatCodeStateResult): void {

@@ -40,6 +40,19 @@ describe("CheatCodeStateService", () => {
     })
   })
 
+  it("serializes concurrent toggles for the same state name", async () => {
+    const service = createService()
+
+    await Promise.all([
+      service.toggleState("settings:test-state"),
+      service.toggleState("settings:test-state"),
+    ])
+
+    await expect(service.getStates(["settings:test-state"])).resolves.toEqual({
+      "settings:test-state": false,
+    })
+  })
+
   it("emits state change events without exposing input sequences", async () => {
     const eventBus = { emit: vi.fn() } as unknown as TestEventBus
     const service = createService({ eventBus })
