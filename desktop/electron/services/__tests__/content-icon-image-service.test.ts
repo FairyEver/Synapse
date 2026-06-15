@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -114,6 +114,40 @@ describe("content icon image service", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       outcome: "allowed",
       resource: filePath,
+    }))
+  })
+
+  it("rejects symlink image paths before reading the target", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "target.png")
+    const linkPath = path.join(root, "icon-link.png")
+    await mkdir(root, { recursive: true })
+    await writeFile(targetPath, Buffer.from("image"))
+    await symlink(targetPath, linkPath)
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const permissionGuard = {
+      check: vi.fn().mockResolvedValue({ allowed: true as const }),
+      registerPolicy: vi.fn(() => () => {}),
+    }
+
+    await expect(prepareContentIconImageBytes({
+      iconImagePath: linkPath,
+    }, {
+      actor: { kind: "agent", id: "mcp-client" },
+      auditSink,
+      permissionGuard,
+    })).rejects.toMatchObject({
+      code: "CONTENT_INVALID_INPUT",
+    })
+
+    expect(imageMockState.crop).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "failed",
+      resource: linkPath,
     }))
   })
 

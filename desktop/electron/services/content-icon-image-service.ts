@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises"
+import { lstat, readFile } from "node:fs/promises"
 import { nativeImage } from "electron"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { ContentCapabilityError } from "./content-capability-errors"
@@ -47,7 +47,10 @@ async function readIconImagePath(
   await checkIconImageReadPermission(security, iconImagePath, auditMetadata)
 
   try {
-    const info = await stat(iconImagePath)
+    const info = await lstat(iconImagePath)
+    if (info.isSymbolicLink()) {
+      throwInvalid("iconImagePath", "iconImagePath 不能是符号链接。")
+    }
     if (!info.isFile()) {
       throwInvalid("iconImagePath", "iconImagePath 必须指向图片文件。")
     }
