@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
@@ -396,6 +397,23 @@ describe("ContentStoreService", () => {
     expect(prisma.contentStoreVersion.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ body: "Prompt body", packageKey: null, packageSha256: null, packageSize: null }),
     }))
+  })
+
+  it("returns the revision mismatch message when concurrent publish hits a version conflict", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      revision: 1,
+      body: "Prompt body",
+      item: item({ id: "item-1", type: "prompt" }),
+      files: [],
+    }))
+    prisma.contentStoreVersion.count.mockResolvedValue(0)
+    prisma.contentStoreVersion.create.mockRejectedValue(createPrismaKnownRequestError("P2002"))
+
+    await expect(service.publishDraft("user-1", "item-1", 1))
+      .rejects
+      .toThrow("草稿已在其它页面更新，请刷新后继续。")
   })
 
   it("builds Skill search text from SKILL.md only", async () => {
@@ -941,6 +959,13 @@ function createStorageMock(): StorageMock {
     headObject: vi.fn(),
     deleteObject: vi.fn(),
   }
+}
+
+function createPrismaKnownRequestError(code: string) {
+  return new Prisma.PrismaClientKnownRequestError("Prisma conflict", {
+    code,
+    clientVersion: "6.0.0",
+  })
 }
 
 function item(overrides: Record<string, unknown> = {}) {

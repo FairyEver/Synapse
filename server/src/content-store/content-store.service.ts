@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import type {
   ContentStoreDetailDto,
   ContentStoreDraftDto,
@@ -388,6 +388,9 @@ export class ContentStoreService {
       })
     } catch (error) {
       await this.cleanupUnreferencedContentStoreObjects([packageKeyForRollback])
+      if (isPublishConcurrencyConflict(error)) {
+        throw new BadRequestException(revisionMismatchMessage)
+      }
       throw error
     }
   }
@@ -1179,6 +1182,11 @@ function isStorageObjectNotFound(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
   const value = error as { readonly code?: unknown; readonly statusCode?: unknown }
   return value.code === "ENOENT" || value.statusCode === 404
+}
+
+function isPublishConcurrencyConflict(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === "P2002" || error.code === "P2025")
 }
 
 function numberFromSize(size: bigint | number): number {
