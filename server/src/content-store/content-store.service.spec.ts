@@ -285,6 +285,35 @@ describe("ContentStoreService", () => {
     }))
   })
 
+  it("streams skill packages to storage when publishing drafts", async () => {
+    prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
+      id: "draft-1",
+      itemId: "item-1",
+      ownerUserId: "user-1",
+      revision: 1,
+      item: item({ id: "item-1", type: "skill" }),
+      files: [file({
+        path: "SKILL.md",
+        sha256: "5c01bdbb26f358bab27f267924aa2c9a03fcfdb8c2a8eb01ec6a57bf54e0629e",
+        text: "# Skill",
+        storageKey: "content-store/drafts/user-1/draft-1/5c01",
+      })],
+    }))
+    storage.getObjectStream.mockResolvedValue({ stream: bufferStream("# Skill") })
+    prisma.contentStoreVersion.count.mockResolvedValue(0)
+    prisma.contentStoreVersion.create.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreVersion.update.mockResolvedValue(version({ id: "version-1", itemId: "item-1", versionNumber: 1 }))
+    prisma.contentStoreFile.createMany.mockResolvedValue({ count: 1 })
+    prisma.contentStoreItem.update.mockResolvedValue(item({ id: "item-1", latestVersionId: "version-1" }))
+    prisma.contentStoreDraft.delete.mockResolvedValue(draft({ id: "draft-1", itemId: "item-1" }))
+
+    await service.publishDraft("user-1", "item-1", 1)
+
+    const putInput = storage.putObject.mock.calls[0]?.[0] as { readonly body?: unknown } | undefined
+    expect(Buffer.isBuffer(putInput?.body)).toBe(false)
+    expect(putInput?.body).toHaveProperty("pipe")
+  })
+
   it("deletes a newly written package when publishing fails before the database commit", async () => {
     prisma.contentStoreDraft.findFirst.mockResolvedValue(draft({
       id: "draft-1",
@@ -905,7 +934,9 @@ function createPrismaMock(): PrismaMock {
 
 function createStorageMock(): StorageMock {
   return {
-    putObject: vi.fn().mockResolvedValue(undefined),
+    putObject: vi.fn(async (input: { readonly body: Buffer | NodeJS.ReadableStream }) => {
+      if (!Buffer.isBuffer(input.body)) await streamToBuffer(input.body)
+    }),
     getObjectStream: vi.fn(),
     headObject: vi.fn(),
     deleteObject: vi.fn(),
@@ -1011,4 +1042,12 @@ function file(overrides: Record<string, unknown> = {}) {
 
 function bufferStream(input: string): NodeJS.ReadableStream {
   return Readable.from([Buffer.from(input)])
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks)
 }

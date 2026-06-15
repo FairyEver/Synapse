@@ -23,9 +23,9 @@ import {
   contentStoreSkillMaxTotalBytes,
 } from "./content-store.constants"
 import { normalizePromptBody, normalizeRuleBody, normalizeSkillFiles } from "./content-store-file-rules"
-import { buildContentStorePackage } from "./content-store-package"
+import { createContentStorePackageStream } from "./content-store-package"
 import type { ContentStoreStoragePort } from "./content-store-storage"
-import type { ContentStoreFileInput, NormalizedContentStoreFile } from "./content-store.types"
+import type { ContentStoreFileInput, ContentStorePackageStreamFile, NormalizedContentStoreFile } from "./content-store.types"
 
 const revisionMismatchMessage = "草稿已在其它页面更新，请刷新后继续。"
 const listSortFields = ["createdAt", "updatedAt", "installCount"] as const
@@ -348,17 +348,18 @@ export class ContentStoreService {
         }) as ContentStoreVersionRow
 
         if (type === "skill" || type === "rule") {
-          const files = await this.filesWithBytes(draft.files ?? [])
-          const packageResult = await buildContentStorePackage({ contentId: itemId, versionId: version.id, type, title: draft.title, files })
+          const files = await this.filesWithStreams(draft.files ?? [])
+          const packageResult = createContentStorePackageStream({ contentId: itemId, versionId: version.id, type, title: draft.title, files })
           const packageKey = `content-store/packages/${itemId}/${version.id}.zip`
-          await this.storage.putObject({ key: packageKey, body: packageResult.bytes, contentType: "application/zip" })
+          await this.storage.putObject({ key: packageKey, body: packageResult.body, contentType: "application/zip" })
+          const packageMetadata = await packageResult.result
           packageKeyForRollback = packageKey
           const packagedVersion = await tx.contentStoreVersion.update({
             where: { id: version.id },
             data: {
               packageKey,
-              packageSha256: packageResult.sha256,
-              packageSize: BigInt(packageResult.bytes.length),
+              packageSha256: packageMetadata.sha256,
+              packageSize: packageMetadata.size,
             },
           }) as ContentStoreVersionRow
           await this.createVersionFiles(tx, version.id, draft.files ?? [])
@@ -483,14 +484,15 @@ export class ContentStoreService {
         await this.createVersionFiles(tx, newVersion.id, sourceVersion.files ?? [])
 
         if (type === "skill" || type === "rule") {
-          const packageFiles = await this.filesWithBytes(sourceVersion.files ?? [])
-          const packageResult = await buildContentStorePackage({ contentId: newItem.id, versionId: newVersion.id, type, title: newVersion.title, files: packageFiles })
+          const packageFiles = await this.filesWithStreams(sourceVersion.files ?? [])
+          const packageResult = createContentStorePackageStream({ contentId: newItem.id, versionId: newVersion.id, type, title: newVersion.title, files: packageFiles })
           const packageKey = `content-store/packages/${newItem.id}/${newVersion.id}.zip`
-          await this.storage.putObject({ key: packageKey, body: packageResult.bytes, contentType: "application/zip" })
+          await this.storage.putObject({ key: packageKey, body: packageResult.body, contentType: "application/zip" })
+          const packageMetadata = await packageResult.result
           packageKeyForRollback = packageKey
           await tx.contentStoreVersion.update({
             where: { id: newVersion.id },
-            data: { packageKey, packageSha256: packageResult.sha256, packageSize: BigInt(packageResult.bytes.length) },
+            data: { packageKey, packageSha256: packageMetadata.sha256, packageSize: packageMetadata.size },
           })
         }
 
@@ -851,6 +853,24 @@ export class ContentStoreService {
         mimeType: file.mimeType,
         text: file.text,
         bytes,
+      })
+    }
+    return result
+  }
+
+  private async filesWithStreams(files: readonly ContentStoreFileRow[]): Promise<ContentStorePackageStreamFile[]> {
+    const result: ContentStorePackageStreamFile[] = []
+    for (const file of files) {
+      result.push({
+        path: file.path,
+        size: numberFromSize(file.size),
+        sha256: file.sha256,
+        kind: toFileKind(file.kind),
+        mimeType: file.mimeType,
+        text: file.text,
+        stream: file.storageKey
+          ? (await this.storage.getObjectStream({ key: file.storageKey })).stream as Readable
+          : Readable.from([Buffer.from(file.text ?? "", "utf8")]),
       })
     }
     return result
