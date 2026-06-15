@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from "node:crypto"
-import { createReadStream, type Stats } from "node:fs"
-import { stat } from "node:fs/promises"
+import { createReadStream, createWriteStream, type Stats } from "node:fs"
+import { mkdir, stat } from "node:fs/promises"
 import path from "node:path"
+import { Readable } from "node:stream"
+import { pipeline } from "node:stream/promises"
 import { app, safeStorage } from "electron"
 
 import type {
@@ -18,6 +20,7 @@ import type {
 import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
+  DriveBrowserSnapshotDto,
   DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
@@ -198,6 +201,23 @@ async function currentOwnerDriveBrowserUrl(itemId: string): Promise<string> {
   return `${publicAppUrl().trim().replace(/\/+$/u, "")}${buildOwnerDriveBrowserUrl(itemId)}`
 }
 
+function currentOwnerDriveDownloadUrl(itemId: string): string {
+  return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/download`
+}
+
+function currentOwnerDriveZipUrl(itemId: string): string {
+  return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/zip`
+}
+
+type DriveFileContentReadResult = {
+  readonly itemId: string
+  readonly name: string
+  readonly kind: string
+  readonly text: string | null
+  readonly html: string | null
+  readonly truncated: boolean
+}
+
 function isLocalApiBaseUrl(value: string): boolean {
   try {
     const url = new URL(value)
@@ -345,8 +365,63 @@ export class AccountService {
     return this.getAuthenticatedJson<DriveItemDto[]>(`${apiBaseUrl()}/drive/items${query}`, "云盘列表加载失败。")
   }
 
+  async getDriveItem(itemId: string): Promise<DriveItemDto> {
+    return this.getAuthenticatedJson<DriveItemDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, "云盘条目加载失败。")
+  }
+
   async getDriveItemPreviewUrl(itemId: string): Promise<{ readonly url: string }> {
     return { url: await currentOwnerDriveBrowserUrl(itemId) }
+  }
+
+  async getDriveItemPreview(input: {
+    readonly itemId: string
+    readonly surface?: "standalone" | "console"
+    readonly childrenOffset?: number
+    readonly childrenLimit?: number
+  }): Promise<DriveBrowserSnapshotDto> {
+    const params = new URLSearchParams()
+    params.set("surface", input.surface ?? "standalone")
+    if (input.childrenOffset !== undefined) params.set("childrenOffset", String(input.childrenOffset))
+    if (input.childrenLimit !== undefined) params.set("childrenLimit", String(input.childrenLimit))
+    return this.getAuthenticatedJson<DriveBrowserSnapshotDto>(
+      `${apiBaseUrl()}/drive/browser/owner/items/${encodeURIComponent(input.itemId)}?${params.toString()}`,
+      "云盘预览加载失败。",
+    )
+  }
+
+  async readDriveFileContent(input: {
+    readonly itemId: string
+    readonly maxBytes?: number
+  }): Promise<DriveFileContentReadResult> {
+    const snapshot = await this.getDriveItemPreview({ itemId: input.itemId, surface: "standalone" })
+    if (snapshot.current.type !== "file" || !snapshot.preview) {
+      throw new Error("该云盘条目没有可读取的文件预览内容。")
+    }
+    const text = limitUtf8Preview(snapshot.preview.text, input.maxBytes)
+    const html = limitUtf8Preview(snapshot.preview.html, input.maxBytes)
+    if (text.value === null && html.value === null) {
+      throw new Error("该文件不是可预览的小文本内容，请使用下载工具。")
+    }
+    return {
+      itemId: snapshot.current.id,
+      name: snapshot.current.name,
+      kind: snapshot.preview.kind,
+      text: text.value,
+      html: html.value,
+      truncated: snapshot.preview.truncated || text.truncated || html.truncated,
+    }
+  }
+
+  async downloadDriveFile(input: { readonly itemId: string; readonly outputPath: string }): Promise<{ readonly ok: true; readonly path: string }> {
+    const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), {}, "文件下载失败。")
+    await writeResponseBodyToFile(response, input.outputPath)
+    return { ok: true, path: input.outputPath }
+  }
+
+  async downloadDriveFolderZip(input: { readonly itemId: string; readonly outputPath: string }): Promise<{ readonly ok: true; readonly path: string }> {
+    const response = await this.fetchAuthenticated(currentOwnerDriveZipUrl(input.itemId), {}, "文件夹下载失败。")
+    await writeResponseBodyToFile(response, input.outputPath)
+    return { ok: true, path: input.outputPath }
   }
 
   async prepareDriveUpload(input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }): Promise<DriveUploadPrepareResult> {
@@ -1352,6 +1427,23 @@ function isSafeDriveRelativePath(value: string): boolean {
 function withContentLengthHeader(headers: Record<string, string>, sizeBytes: number): Record<string, string> {
   if (Object.keys(headers).some((key) => key.toLowerCase() === "content-length")) return headers
   return { ...headers, "Content-Length": String(sizeBytes) }
+}
+
+function limitUtf8Preview(value: string | null, maxBytes: number | undefined): { readonly value: string | null; readonly truncated: boolean } {
+  if (value === null || maxBytes === undefined) return { value, truncated: false }
+  if (!Number.isFinite(maxBytes) || maxBytes < 0) throw new Error("maxBytes 必须是非负数字。")
+  const buffer = Buffer.from(value, "utf8")
+  if (buffer.length <= maxBytes) return { value, truncated: false }
+  return {
+    value: buffer.subarray(0, maxBytes).toString("utf8"),
+    truncated: true,
+  }
+}
+
+async function writeResponseBodyToFile(response: Response, outputPath: string): Promise<void> {
+  if (!response.body) throw new Error("下载响应为空。")
+  await mkdir(path.dirname(outputPath), { recursive: true })
+  await pipeline(Readable.fromWeb(response.body as ReadableStream<Uint8Array>), createWriteStream(outputPath))
 }
 
 function localUploadErrorMessage(): string {

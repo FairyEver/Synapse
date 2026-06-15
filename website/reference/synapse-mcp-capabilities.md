@@ -127,7 +127,7 @@ Content MCP 的更新和删除只允许修改当前仓库身份创建的资源�
 
 ## Drive MCP
 
-Drive MCP 暴露云盘文件、文件夹和分享能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证或预签名上传 URL。
+Drive MCP 暴露普通用户云盘文件、文件夹、预览、下载、分享和发布能力。上传未指定 `parentId` 时默认进入用户云盘根目录；上传工具使用服务端准备的直传会话，结果不返回 COS 凭证、Authorization header 或预签名上传 URL。分享工具返回 `/files/...` 浏览/下载链接；发布工具返回 `/pages/...` 或 `/sites/...` HTML/站点快照链接。
 
 ## Repository And Variable MCP
 

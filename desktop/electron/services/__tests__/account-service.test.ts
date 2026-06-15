@@ -1237,6 +1237,35 @@ describe("AccountService", () => {
     const shareSettings = { passwordEnabled: true, expiresIn: "30d" } as const
     const pageSettings = { passwordEnabled: true, expiresIn: "1y" } as const
     const siteSettings = { passwordEnabled: false, expiresIn: "forever" } as const
+    const driveItemDto = driveItem({ id: "item-1", name: "report.html", mimeType: "text/html" })
+    const previewSnapshot = {
+      context: "owner",
+      surface: "standalone",
+      current: {
+        id: "item-1",
+        name: "report.html",
+        type: "file",
+        size: "12",
+        mimeType: "text/html",
+        updatedAt: "2026-06-09T00:00:00.000Z",
+        previewKind: "html-source",
+        browserUrl: `${expectedPublicAppUrl}/drive/items/item-1`,
+        downloadUrl: `${expectedPublicAppUrl}/drive/items/item-1/download`,
+      },
+      breadcrumbs: [],
+      children: [],
+      childrenPage: { offset: 0, limit: 100, hasMore: false, nextOffset: null },
+      preview: {
+        kind: "html-source",
+        text: "<h1>Report</h1>",
+        html: null,
+        truncated: false,
+        imageUrl: null,
+        visitUrl: `${expectedPublicAppUrl}/drive/items/item-1/render`,
+      },
+      canDownload: true,
+      canZip: false,
+    }
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url, init) => {
         const method = init?.method ?? "GET"
@@ -1253,6 +1282,8 @@ describe("AccountService", () => {
           return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
         }
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+        if (String(url).endsWith("/drive/items/item-1") && method === "GET") return jsonResponse(driveItemDto)
+        if (String(url).endsWith("/drive/browser/owner/items/item-1?surface=standalone")) return jsonResponse(previewSnapshot)
         if (String(url).endsWith("/drive/publications")) {
           return jsonResponse({
             items: [publication],
@@ -1284,6 +1315,16 @@ describe("AccountService", () => {
       items: [expectedPagePublication],
       page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
     })
+    await expect(service.getDriveItem("item-1")).resolves.toEqual(driveItemDto)
+    await expect(service.getDriveItemPreview({ itemId: "item-1" })).resolves.toEqual(previewSnapshot)
+    await expect(service.readDriveFileContent({ itemId: "item-1", maxBytes: 8 })).resolves.toEqual({
+      itemId: "item-1",
+      name: "report.html",
+      kind: "html-source",
+      text: "<h1>Repo",
+      html: null,
+      truncated: true,
+    })
     await expect(service.shareDriveItem("item-1", shareSettings)).resolves.toEqual(expectedShareResult)
     await expect(service.publishDrivePage("item-1", pageSettings)).resolves.toEqual(expectedPagePublication)
     await expect(service.publishDriveSite("folder-1", siteSettings)).resolves.toEqual(expectedSitePublication)
@@ -1300,6 +1341,9 @@ describe("AccountService", () => {
       { url: expectedApiUrl("/auth/desktop/token"), method: "POST", body: expect.any(Object) },
       { url: expectedApiUrl("/auth/me"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/publications"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/items/item-1"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/share"), method: "POST", body: shareSettings },
       { url: expectedApiUrl("/drive/items/item-1/publications/page"), method: "POST", body: pageSettings },
       { url: expectedApiUrl("/drive/items/folder-1/publications/site"), method: "POST", body: siteSettings },
