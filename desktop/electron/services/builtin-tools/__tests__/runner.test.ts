@@ -189,6 +189,38 @@ describe("builtin tool runner", () => {
     expect(result.ok ? "" : result.error).toEqual({ code: "permission_denied", message: "denied" })
   })
 
+  it("audits failed permission infrastructure errors without raw error details", async () => {
+    const permissionGuard = makePermissionGuard()
+    vi.mocked(permissionGuard.check).mockRejectedValue(new Error("policy load failed with token=secret-value"))
+    const auditSink = makeAuditSink()
+
+    const result = await runBuiltinTool({
+      toolId: "docx-to-markdown",
+      input: { inputPath: "/tmp/a.docx", outputMode: "return" },
+      context: { entryPoint: "tools", actor: { kind: "user" } },
+      registry: createBuiltinToolRegistryForTests([makeTool()]),
+      permissionGuard,
+      auditSink,
+      executeInWorker: vi.fn(),
+    })
+
+    expect(result.ok).toBe(false)
+    expect(auditSink.record).toHaveBeenCalledWith({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/a.docx",
+      outcome: "failed",
+      metadata: {
+        source: "tools.builtinTool.run",
+        toolId: "docx-to-markdown",
+        entryPoint: "tools",
+        boundary: "permissionGuard.check",
+        errorType: "Error",
+      },
+    })
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret-value")
+  })
+
   it("normalizes worker errors", async () => {
     const result = await runBuiltinTool({
       toolId: "docx-to-markdown",
