@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   disableDriveShare: vi.fn(),
   filePathForDroppedFile: vi.fn(),
   getDriveItemPreviewUrl: vi.fn(),
+  getDriveUsage: vi.fn(),
   getDriveDeleteImpact: vi.fn(),
   listDrivePublications: vi.fn(),
   listDriveItems: vi.fn(),
@@ -101,6 +102,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       disableDriveShare: mocks.disableDriveShare,
       filePathForDroppedFile: mocks.filePathForDroppedFile,
       getDriveItemPreviewUrl: mocks.getDriveItemPreviewUrl,
+      getDriveUsage: mocks.getDriveUsage,
       getDriveDeleteImpact: mocks.getDriveDeleteImpact,
       listDrivePublications: mocks.listDrivePublications,
       listDriveItems: mocks.listDriveItems,
@@ -140,6 +142,7 @@ beforeEach(() => {
   mocks.disableDriveShare.mockResolvedValue({ ok: true })
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
+  mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
   mocks.getDriveDeleteImpact.mockResolvedValue({ publications: [] })
   mocks.listDrivePublications.mockResolvedValue(createDrivePublicLinksPage([]))
   mocks.listDriveItems.mockResolvedValue([])
@@ -237,6 +240,25 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("发布")
   })
 
+  it("shows drive capacity usage next to the title", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(mocks.getDriveUsage).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("已占用 4 B / 100 B")
+    expect(document.querySelector('[aria-label="云盘容量"]')?.getAttribute("aria-valuenow")).toBe("4")
+  })
+
+  it("counts reserved bytes as occupied capacity", async () => {
+    mocks.getDriveUsage.mockResolvedValueOnce({ usedBytes: "40", reservedBytes: "10", quotaBytes: "100" })
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("已占用 50 B / 100 B")
+    expect(document.querySelector('[aria-label="云盘容量"]')?.getAttribute("aria-valuenow")).toBe("50")
+  })
+
   it("keeps file actions in the list toolbar after search", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
@@ -252,6 +274,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.listDriveItems).not.toHaveBeenCalled()
+    expect(mocks.getDriveUsage).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("需要登录账号")
     expect(document.body.textContent).toContain("登录后才能查看云盘。")
     expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
@@ -274,6 +297,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.listDriveItems).not.toHaveBeenCalled()
+    expect(mocks.getDriveUsage).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("等待账号登录")
     expect(document.body.textContent).toContain("在浏览器完成登录后会自动刷新。")
     expect(queryButton("上传文件")).toBeNull()
@@ -568,6 +592,8 @@ describe("DriveModule", () => {
 
   it("uploads selected files through the unified local upload bridge without reading file bodies", async () => {
     await render(<DriveModule />)
+    await flushAct()
+    mocks.getDriveUsage.mockClear()
 
     const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
     if (!(input instanceof HTMLInputElement)) throw new Error("File input not found")
@@ -601,6 +627,7 @@ describe("DriveModule", () => {
     expect(mocks.uploadDrivePreparedFile).not.toHaveBeenCalled()
     expect(mocks.completeDriveUpload).not.toHaveBeenCalled()
     expect(mocks.toast).toHaveBeenCalledWith("已上传 1 个文件")
+    expect(mocks.getDriveUsage).toHaveBeenCalledTimes(1)
   })
 
   it("keeps non-upload list actions available while a local upload is running", async () => {
@@ -1341,6 +1368,7 @@ describe("DriveModule", () => {
     expect(mocks.getDriveDeleteImpact).toHaveBeenCalledWith({ itemId: "file-1" })
     expect(mocks.deleteDriveItem).toHaveBeenCalledWith({ itemId: "file-1", disablePublications: false })
     expect(mocks.toast).toHaveBeenCalledWith("已删除")
+    expect(mocks.getDriveUsage).toHaveBeenCalledTimes(2)
   })
 
   it("passes disablePublications when the delete checkbox is selected", async () => {

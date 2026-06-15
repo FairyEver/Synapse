@@ -29,6 +29,7 @@ import {
   type DriveShareDto,
   type DriveShareListItemDto,
   type DriveUploadPrepareResult,
+  type DriveUsageDto,
 } from "@synapse/shared"
 import { useAccount } from "@/app-shell/account"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
@@ -116,6 +117,12 @@ type DriveLoadError =
   | { readonly type: "auth" }
   | { readonly type: "load"; readonly message: string }
 
+type DriveUsageState =
+  | { readonly status: "idle"; readonly usage: null }
+  | { readonly status: "loading"; readonly usage: DriveUsageDto | null }
+  | { readonly status: "ready"; readonly usage: DriveUsageDto }
+  | { readonly status: "error"; readonly usage: null }
+
 type DriveItemPublicationActions = {
   readonly page: DrivePublicationDto | null
   readonly site: DrivePublicationDto | null
@@ -180,6 +187,7 @@ function DriveModule() {
   const [publications, setPublications] = useState<DrivePublicationDto[]>([])
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [loading, setLoading] = useState(false)
+  const [usageState, setUsageState] = useState<DriveUsageState>({ status: "idle", usage: null })
   const [openingFolderId, setOpeningFolderId] = useState<string | null>(null)
   const [error, setError] = useState<DriveLoadError | null>(null)
   const [query, setQuery] = useState("")
@@ -228,10 +236,29 @@ function DriveModule() {
     }
   }, [accountAuthenticated, parentId])
 
+  const loadDriveUsage = useCallback(async () => {
+    if (!accountAuthenticated) return
+    setUsageState((current) => ({ status: "loading", usage: current.usage }))
+    try {
+      const usage = await requireSynapseBridge().account.getDriveUsage()
+      setUsageState({ status: "ready", usage })
+    } catch {
+      setUsageState({ status: "error", usage: null })
+    }
+  }, [accountAuthenticated])
+
+  const refreshDriveView = useCallback(async () => {
+    await Promise.all([
+      loadItems(),
+      loadDriveUsage(),
+    ])
+  }, [loadDriveUsage, loadItems])
+
   useEffect(() => {
     if (!accountAuthenticated) {
       setItems([])
       setPublications([])
+      setUsageState({ status: "idle", usage: null })
       setLoading(false)
       setOpeningFolderId(null)
       setError(null)
@@ -242,8 +269,8 @@ function DriveModule() {
       prefetchedParentIdRef.current = undefined
       return
     }
-    void loadItems()
-  }, [accountAuthenticated, loadItems, parentId])
+    void refreshDriveView()
+  }, [accountAuthenticated, parentId, refreshDriveView])
 
   const actionsDisabled = !accountAuthenticated || loading || openingFolderId !== null || error !== null
   const uploadActionsDisabled = actionsDisabled || uploading
@@ -297,7 +324,8 @@ function DriveModule() {
     } catch (rawError) {
       setError(driveLoadError(rawError))
     }
-  }, [accountAuthenticated])
+    await loadDriveUsage()
+  }, [accountAuthenticated, loadDriveUsage])
 
   const runLocalUpload = useCallback(async (createRequest: () => Promise<DriveLocalUploadBuildResult>) => {
     if (uploadActionsDisabled) return
@@ -427,12 +455,13 @@ function DriveModule() {
       setDeleteImpact(null)
       setDisablePublicationsOnDelete(false)
       await loadItems()
+      await loadDriveUsage()
     } catch (rawError) {
       toast(errorMessage(rawError, "删除失败"))
     } finally {
       setSubmitting(false)
     }
-  }, [deleteTarget, disablePublicationsOnDelete, loadItems])
+  }, [deleteTarget, disablePublicationsOnDelete, loadDriveUsage, loadItems])
 
   const handleShare = useCallback((item: DriveItemDto) => {
     setAccessSettingsTarget({ kind: "share", item })
@@ -647,6 +676,7 @@ function DriveModule() {
     <TooltipProvider>
       <ModulePage
         title="云盘"
+        titleAddon={accountAuthenticated ? <DriveUsageIndicator state={usageState} /> : undefined}
         actions={(
           <>
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
@@ -657,7 +687,7 @@ function DriveModule() {
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" disabled={!accountAuthenticated || loading || openingFolderId !== null} onClick={() => void loadItems()}>
+                <Button variant="ghost" size="icon-sm" disabled={!accountAuthenticated || loading || openingFolderId !== null} onClick={() => void refreshDriveView()}>
                   <RefreshCw />
                   <span className="sr-only">刷新</span>
                 </Button>
@@ -791,6 +821,42 @@ function DriveModule() {
         {content}
       </ModulePage>
     </TooltipProvider>
+  )
+}
+
+function DriveUsageIndicator({ state }: { readonly state: DriveUsageState }) {
+  if (state.status === "idle") return null
+  if (state.status === "loading" && !state.usage) {
+    return (
+      <div className="flex min-w-48 items-center gap-2" aria-label="云盘容量加载中">
+        <Skeleton className="h-2 w-28 rounded-full" />
+        <Skeleton className="h-3 w-24" />
+      </div>
+    )
+  }
+  if (state.status === "error") {
+    return <span className="text-xs text-muted-foreground">用量加载失败</span>
+  }
+  if (!state.usage) return null
+
+  const usage = getDriveUsageViewModel(state.usage)
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground" aria-busy={state.status === "loading" || undefined}>
+      <div
+        aria-label="云盘容量"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={usage.percentRounded}
+        className="h-2 w-40 overflow-hidden rounded-full bg-green-100"
+        role="progressbar"
+      >
+        <div
+          className="h-full rounded-full bg-green-700"
+          style={{ width: `${usage.percent}%` }}
+        />
+      </div>
+      <span className="shrink-0">已占用 {usage.occupiedLabel} / {usage.quotaLabel}</span>
+    </div>
   )
 }
 
@@ -2776,6 +2842,32 @@ function formatBytes(value: string): string {
 
   const formattedValue = unitIndex === 0 ? String(Math.round(nextValue)) : DRIVE_BYTE_NUMBER_FORMAT.format(nextValue)
   return `${formattedValue} ${DRIVE_BYTE_UNITS[unitIndex]}`
+}
+
+function getDriveUsageViewModel(usage: DriveUsageDto): {
+  readonly occupiedLabel: string
+  readonly quotaLabel: string
+  readonly percent: number
+  readonly percentRounded: number
+} {
+  const usedBytes = parseDriveUsageBytes(usage.usedBytes)
+  const reservedBytes = parseDriveUsageBytes(usage.reservedBytes)
+  const quotaBytes = parseDriveUsageBytes(usage.quotaBytes)
+  const occupiedBytes = usedBytes + reservedBytes
+  const percent = quotaBytes > 0 ? Math.min(100, Math.max(0, occupiedBytes / quotaBytes * 100)) : 0
+
+  return {
+    occupiedLabel: formatBytes(String(occupiedBytes)),
+    quotaLabel: quotaBytes > 0 ? formatBytes(String(quotaBytes)) : "-",
+    percent,
+    percentRounded: Math.round(percent),
+  }
+}
+
+function parseDriveUsageBytes(value: string): number {
+  const bytes = Number(value)
+  if (!Number.isFinite(bytes) || bytes < 0) return 0
+  return bytes
 }
 
 function getDriveStatusBadges(item: DriveItemDto, publicationActions: DriveItemPublicationActions): DriveStatusBadge[] {
