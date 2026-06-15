@@ -15,6 +15,7 @@ function postJson(
   payload: unknown,
   authorization?: string,
   origin?: string,
+  path = "/mcp",
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const body = Buffer.from(JSON.stringify(payload), "utf8")
@@ -33,7 +34,7 @@ function postJson(
       method: "POST",
       hostname: "127.0.0.1",
       port,
-      path: "/mcp",
+      path,
       agent: false,
       headers,
     }, (res) => {
@@ -58,7 +59,7 @@ describe("MCP HTTP server", () => {
     vi.resetModules()
   })
 
-  it("rejects local MCP requests without Authorization", async () => {
+  it("accepts local MCP initialize requests without Authorization", async () => {
     const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
@@ -75,11 +76,17 @@ describe("MCP HTTP server", () => {
       },
     })
 
-    expect(response.status).toBe(401)
-    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" })
+    expect(response.status).toBe(200)
+    expect(JSON.parse(response.body)).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        serverInfo: { name: "synapse-mcp" },
+      },
+    })
   })
 
-  it("rejects local MCP requests with invalid Authorization", async () => {
+  it("accepts local MCP requests even when an invalid Authorization header is present", async () => {
     const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
@@ -96,11 +103,17 @@ describe("MCP HTTP server", () => {
       },
     }, "Bearer wrong-token")
 
-    expect(response.status).toBe(401)
-    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" })
+    expect(response.status).toBe(200)
+    expect(JSON.parse(response.body)).toMatchObject({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        serverInfo: { name: "synapse-mcp" },
+      },
+    })
   })
 
-  it("rejects localhost-origin tool calls without Authorization", async () => {
+  it("rejects non-local origins before dispatching tool calls", async () => {
     const dispatch = vi.fn()
     const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({ dispatch })
@@ -113,19 +126,18 @@ describe("MCP HTTP server", () => {
         name: "automation_item_create",
         arguments: { name: "unsafe" },
       },
-    }, undefined, "http://localhost:5173")
+    }, undefined, "https://example.com")
 
-    expect(response.status).toBe(401)
-    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" })
+    expect(response.status).toBe(403)
+    expect(JSON.parse(response.body)).toEqual({ error: "Forbidden origin" })
     expect(dispatch).not.toHaveBeenCalled()
   })
 
-  it("accepts local MCP requests with the server Bearer token", async () => {
-    const { getMcpServerToken, startMcpServer } = await import("../mcp-server")
+  it("returns 404 for non-MCP paths", async () => {
+    const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
     })
-    const token = getMcpServerToken()
 
     const response = await postJson(port, {
       jsonrpc: "2.0",
@@ -136,31 +148,23 @@ describe("MCP HTTP server", () => {
         capabilities: {},
         clientInfo: { name: "test", version: "1.0.0" },
       },
-    }, `Bearer ${token}`)
+    }, undefined, undefined, "/not-mcp")
 
-    expect(token).not.toBe("")
-    expect(response.status).toBe(200)
-    expect(JSON.parse(response.body)).toMatchObject({
-      jsonrpc: "2.0",
-      id: 1,
-      result: {
-        serverInfo: { name: "synapse-mcp" },
-      },
-    })
+    expect(response.status).toBe(404)
+    expect(JSON.parse(response.body)).toEqual({ error: "Not found" })
   })
 
   it("lists Automation MCP tools", async () => {
-    const { getMcpServerToken, startMcpServer } = await import("../mcp-server")
+    const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
     })
-    const token = getMcpServerToken()
 
     const response = await postJson(port, {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/list",
-    }, `Bearer ${token}`)
+    })
 
     expect(response.status).toBe(200)
     const payload = JSON.parse(response.body)
@@ -176,9 +180,8 @@ describe("MCP HTTP server", () => {
 
   it("calls Automation tools through the action router", async () => {
     const dispatch = vi.fn(async () => ({ ok: true, data: [{ id: "automation:1" }] }))
-    const { getMcpServerToken, startMcpServer } = await import("../mcp-server")
+    const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({ dispatch })
-    const token = getMcpServerToken()
 
     const response = await postJson(port, {
       jsonrpc: "2.0",
@@ -188,7 +191,7 @@ describe("MCP HTTP server", () => {
         name: "automation_item_list",
         arguments: { enabled: true },
       },
-    }, `Bearer ${token}`)
+    })
 
     expect(response.status).toBe(200)
     expect(dispatch).toHaveBeenCalledWith("automation.item.list", { enabled: true }, {

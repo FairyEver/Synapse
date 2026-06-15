@@ -1,4 +1,3 @@
-import { randomBytes, timingSafeEqual } from "node:crypto"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { createMainLogger } from "../services/log-store"
 import type { SynapseActionRouter } from "../capabilities/action-router"
@@ -20,7 +19,6 @@ const MAX_BODY_SIZE = 1024 * 1024
 
 let server: Server | null = null
 let activePort = 0
-let activeToken = ""
 let actionRouter: SynapseActionRouter | null = null
 
 async function executeTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
@@ -128,12 +126,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return
   }
 
-  if (!isAuthorized(req.headers.authorization)) {
-    res.writeHead(401, { "Content-Type": "application/json" })
-    res.end(JSON.stringify({ error: "Unauthorized" }))
-    return
-  }
-
   let body: JsonRpcRequest
   try {
     body = JSON.parse(await readBody(req)) as JsonRpcRequest
@@ -177,7 +169,6 @@ function tryListen(port: number): Promise<number> {
 
 async function startMcpServer(router: SynapseActionRouter): Promise<number> {
   actionRouter = router
-  activeToken = randomBytes(32).toString("base64url")
   for (let i = 0; i < MCP_PORT_ATTEMPTS; i++) {
     const port = MCP_DEFAULT_PORT + i
     try {
@@ -189,18 +180,15 @@ async function startMcpServer(router: SynapseActionRouter): Promise<number> {
         logger.warn(`MCP port ${port} in use, trying next.`)
         continue
       }
-      activeToken = ""
       throw error
     }
   }
-  activeToken = ""
   throw new Error(`All MCP ports ${MCP_DEFAULT_PORT}–${MCP_DEFAULT_PORT + MCP_PORT_ATTEMPTS - 1} occupied`)
 }
 
 function stopMcpServer(): Promise<void> {
   return new Promise((resolve) => {
     activePort = 0
-    activeToken = ""
     actionRouter = null
     if (!server) { resolve(); return }
     server.close(() => {
@@ -215,10 +203,6 @@ function getMcpServerPort(): number {
   return activePort
 }
 
-function getMcpServerToken(): string {
-  return activeToken
-}
-
 function isMcpServerRunning(): boolean {
   return activePort > 0 && server !== null
 }
@@ -227,15 +211,4 @@ function getMcpServerUrl(): string {
   return activePort > 0 ? `http://127.0.0.1:${activePort}/mcp` : ""
 }
 
-function isAuthorized(header: string | undefined): boolean {
-  if (!activeToken || !header?.startsWith("Bearer ")) return false
-  return timingSafeEqualText(header.slice("Bearer ".length), activeToken)
-}
-
-function timingSafeEqualText(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left)
-  const rightBuffer = Buffer.from(right)
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer)
-}
-
-export { startMcpServer, stopMcpServer, getMcpServerPort, getMcpServerToken, isMcpServerRunning, getMcpServerUrl }
+export { startMcpServer, stopMcpServer, getMcpServerPort, isMcpServerRunning, getMcpServerUrl }

@@ -6,7 +6,6 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import { createMainLogger } from "../services/log-store"
 import { mcpDefinitions } from "../services/definitions/generated/main-registry"
 import type { SynapseMcpDefinition } from "../../src/definitions/types"
-import { getMcpServerToken } from "./mcp-server"
 import { SYNAPSE_MCP_LEGACY_SERVER_NAMES, SYNAPSE_MCP_SERVER_NAME } from "../../database/shared/server-identity"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 
@@ -115,7 +114,7 @@ function buildMcpWriteAudit(
       operation,
       target,
       settingsPath,
-      writesSecret: Boolean(getMcpServerToken()),
+      writesSecret: false,
     },
   }
 }
@@ -227,11 +226,8 @@ function detectJsonRegistration(settings: Record<string, unknown>): { registered
 function registerJsonMcp(settingsPath: string, mcpUrl: string): void {
   const settings = readJsonSettings(settingsPath)
   const servers = isRecord(settings.mcpServers) ? settings.mcpServers : {}
-  const token = getMcpServerToken()
 
-  servers[SYNAPSE_MCP_SERVER_NAME] = token
-    ? { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${token}` } }
-    : { type: "http", url: mcpUrl }
+  servers[SYNAPSE_MCP_SERVER_NAME] = { type: "http", url: mcpUrl }
   settings.mcpServers = servers
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
 }
@@ -285,16 +281,10 @@ function findCodexServerSectionRange(lines: string[], serverName: string): { sta
 }
 
 function buildCodexServerBlock(mcpUrl: string, lineEnding: string): string {
-  const token = getMcpServerToken()
   const lines = [
     getCodexServerTableName(SYNAPSE_MCP_SERVER_NAME),
     `url = ${escapeTomlString(mcpUrl)}`,
   ]
-  if (token) {
-    lines.push("")
-    lines.push(`[mcp_servers.${SYNAPSE_MCP_SERVER_NAME}.headers]`)
-    lines.push(`Authorization = ${escapeTomlString(`Bearer ${token}`)}`)
-  }
   return lines.join(lineEnding)
 }
 
@@ -422,15 +412,95 @@ function detectHermesYamlRegistration(raw: string): { registered: boolean; mode:
 function registerHermesYamlMcp(settingsPath: string, mcpUrl: string): void {
   const settings = readHermesYamlSettings(settingsPath)
   const servers = isRecord(settings.mcp_servers) ? settings.mcp_servers : {}
-  const token = getMcpServerToken()
 
-  servers[SYNAPSE_MCP_SERVER_NAME] = token
-    ? { url: mcpUrl, headers: { Authorization: `Bearer ${token}` } }
-    : { url: mcpUrl }
+  servers[SYNAPSE_MCP_SERVER_NAME] = { url: mcpUrl }
   settings.mcp_servers = servers
 
   ensureParentDirectory(settingsPath)
   writeFileSync(settingsPath, stringifyYaml(settings, { lineWidth: 0 }), "utf-8")
+}
+
+function removeAuthorizationKeys(headers: Record<string, unknown>): boolean {
+  let modified = false
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === "authorization") {
+      delete headers[key]
+      modified = true
+    }
+  }
+  return modified
+}
+
+function cleanupJsonStaticAuthorization(settingsPath: string): boolean {
+  const settings = readJsonSettings(settingsPath)
+  const servers = settings.mcpServers
+  if (!isRecord(servers)) return false
+  const server = servers[SYNAPSE_MCP_SERVER_NAME]
+  if (!isRecord(server) || !isRecord(server.headers)) return false
+
+  const modified = removeAuthorizationKeys(server.headers)
+  if (!modified) return false
+  if (Object.keys(server.headers).length === 0) {
+    delete server.headers
+  }
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
+  return true
+}
+
+function cleanupCodexStaticAuthorization(settingsPath: string, mcpUrl: string): boolean {
+  if (!existsSync(settingsPath)) return false
+  const raw = readFileSync(settingsPath, "utf-8")
+  const section = extractCodexServerSection(raw)
+  if (!section || !/^\s*Authorization\s*=/im.test(section)) return false
+
+  const nextConfig = upsertCodexServerConfig(raw, mcpUrl)
+  if (nextConfig === raw) return false
+  writeFileSync(settingsPath, nextConfig, "utf-8")
+  return true
+}
+
+function cleanupHermesStaticAuthorization(settingsPath: string): boolean {
+  const settings = readHermesYamlSettings(settingsPath)
+  const servers = settings.mcp_servers
+  if (!isRecord(servers)) return false
+  const server = servers[SYNAPSE_MCP_SERVER_NAME]
+  if (!isRecord(server) || !isRecord(server.headers)) return false
+
+  const modified = removeAuthorizationKeys(server.headers)
+  if (!modified) return false
+  if (Object.keys(server.headers).length === 0) {
+    delete server.headers
+  }
+  writeFileSync(settingsPath, stringifyYaml(settings, { lineWidth: 0 }), "utf-8")
+  return true
+}
+
+async function cleanupStaticAuthorizationForTarget(
+  definition: SynapseMcpDefinition,
+  settingsPath: string,
+  mcpUrl: string,
+  security?: McpRegistrationSecurity,
+): Promise<void> {
+  const audit = buildMcpWriteAudit(definition.target, settingsPath, security, "register")
+  const permission = await authorizeMcpWrite(security, audit)
+  if (!permission.allowed) {
+    logger.warn("MCP static Authorization cleanup denied.", { target: definition.target, reason: permission.reason })
+    return
+  }
+
+  let modified = false
+  if (usesJsonSettings(definition)) {
+    modified = cleanupJsonStaticAuthorization(settingsPath)
+  } else if (usesHermesYamlSettings(definition)) {
+    modified = cleanupHermesStaticAuthorization(settingsPath)
+  } else {
+    modified = cleanupCodexStaticAuthorization(settingsPath, mcpUrl)
+  }
+
+  if (modified) {
+    recordMcpWriteAudit(security, audit, "allowed")
+    logger.info("MCP static Authorization header removed.", { target: definition.target, settingsPath })
+  }
 }
 
 function removeHermesYamlMcp(settingsPath: string, serverName: string): boolean {
@@ -696,6 +766,7 @@ async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecuri
 
       if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) {
         logger.info("MCP target already registered with correct URL.", { target, settingsPath })
+        await cleanupStaticAuthorizationForTarget(definition, settingsPath, mcpUrl, security)
         await cleanupLegacyMcpNamesForTarget(target, security)
         if (target === CLAUDE_TARGET) await cleanupLegacyClaudePermissions(security)
         continue

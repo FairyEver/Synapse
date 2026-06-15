@@ -30,10 +30,6 @@ vi.mock("electron", () => ({
   },
 }))
 
-vi.mock("../mcp-server", () => ({
-  getMcpServerToken: () => "test-token",
-}))
-
 vi.mock("../../services/log-store", () => ({
   createMainLogger: () => state.logger,
 }))
@@ -128,7 +124,7 @@ describe("mcp-installer", () => {
         settingsPath,
         source: "test.mcp.register",
         target: "cursor",
-        writesSecret: true,
+        writesSecret: false,
       }),
     }))
     expect(auditEvents).toEqual([
@@ -146,7 +142,7 @@ describe("mcp-installer", () => {
     ])
   })
 
-  it("audits allowed editor MCP config writes without leaking bearer tokens", async () => {
+  it("audits allowed JSON editor MCP config writes without static authorization headers", async () => {
     const { registerMcp } = await import("../mcp-installer")
     const { auditEvents, security } = createSecurity({ allowed: true })
     const settingsPath = path.join(state.home, ".cursor", "mcp.json")
@@ -159,9 +155,6 @@ describe("mcp-installer", () => {
         "synapse-mcp": {
           type: "http",
           url: "http://127.0.0.1:51234/mcp",
-          headers: {
-            Authorization: "Bearer test-token",
-          },
         },
       },
     })
@@ -173,11 +166,43 @@ describe("mcp-installer", () => {
         metadata: expect.objectContaining({
           operation: "register",
           target: "cursor",
-          writesSecret: true,
+          writesSecret: false,
         }),
       }),
     ])
-    expect(JSON.stringify(auditEvents)).not.toContain("test-token")
+    expect(readFileSync(settingsPath, "utf-8")).not.toContain("Authorization")
+    expect(readFileSync(settingsPath, "utf-8")).not.toContain("Bearer")
+  })
+
+  it("registers Codex MCP without static authorization headers", async () => {
+    const { registerMcp } = await import("../mcp-installer")
+    const { security } = createSecurity({ allowed: true })
+    const settingsPath = path.join(state.home, ".codex", "config.toml")
+
+    const result = await registerMcp("codex", 51234, security)
+
+    expect(result).toEqual({ success: true })
+    const raw = readFileSync(settingsPath, "utf-8")
+    expect(raw).toContain("[mcp_servers.synapse-mcp]")
+    expect(raw).toContain('url = "http://127.0.0.1:51234/mcp"')
+    expect(raw).not.toContain("[mcp_servers.synapse-mcp.headers]")
+    expect(raw).not.toContain("Authorization")
+    expect(raw).not.toContain("Bearer")
+  })
+
+  it("registers Hermes MCP without static authorization headers", async () => {
+    const { registerMcp } = await import("../mcp-installer")
+    const { security } = createSecurity({ allowed: true })
+    const settingsPath = path.join(state.home, ".hermes", "config.yaml")
+
+    const result = await registerMcp("hermes", 51234, security)
+
+    expect(result).toEqual({ success: true })
+    const raw = readFileSync(settingsPath, "utf-8")
+    expect(raw).toContain("synapse-mcp:")
+    expect(raw).toContain("url: http://127.0.0.1:51234/mcp")
+    expect(raw).not.toContain("Authorization")
+    expect(raw).not.toContain("Bearer")
   })
 
   it("rejects MCP registration when the HTTP server port is not available", async () => {
@@ -243,9 +268,43 @@ describe("mcp-installer", () => {
         "synapse-mcp": {
           type: "http",
           url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+  })
+
+  it("auto-registration removes stale static authorization headers from existing MCP config", async () => {
+    const { autoRegisterMcp } = await import("../mcp-installer")
+    const settingsPath = path.join(state.home, ".cursor", "mcp.json")
+    writeFileSync(settingsPath, JSON.stringify({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
           headers: {
-            Authorization: "Bearer test-token",
+            Authorization: "Bearer old-token",
           },
+        },
+        figma: {
+          type: "http",
+          url: "http://127.0.0.1:3845/mcp",
+          headers: {},
+        },
+      },
+    }), "utf8")
+
+    await autoRegisterMcp(51234)
+
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+        figma: {
+          type: "http",
+          url: "http://127.0.0.1:3845/mcp",
+          headers: {},
         },
       },
     })

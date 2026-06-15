@@ -296,7 +296,7 @@ function DriveBrowserFixedLayout({
       </div>
       <div className='hidden h-full min-h-0 md:block'>
         <ResizablePanelGroup orientation='horizontal' className='min-h-0'>
-          <ResizablePanel defaultSize='52%' minSize='28%' maxSize='72%'>
+          <ResizablePanel defaultSize='33%' minSize='28%' maxSize='72%'>
             <div className='h-full min-h-0'>
               <DriveBrowserList
                 snapshot={snapshot}
@@ -308,7 +308,7 @@ function DriveBrowserFixedLayout({
             </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
-          <ResizablePanel defaultSize='48%' minSize='28%'>
+          <ResizablePanel defaultSize='67%' minSize='28%'>
             <DriveBrowserPreview
               preview={snapshot.preview}
               current={snapshot.current}

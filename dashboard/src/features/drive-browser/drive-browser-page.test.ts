@@ -166,6 +166,17 @@ describe('drive browser view model', () => {
     expect(html).toContain('data-slot="resizable-handle"')
   })
 
+  it('uses a one-third detail panel and two-thirds preview panel by default', () => {
+    const snapshot = createSnapshot()
+
+    const html = renderToStaticMarkup(
+      createElement(DriveBrowserView, { snapshot, layoutMode: 'fixed' })
+    )
+
+    expect(html).toContain('flex-basis:33%')
+    expect(html).toContain('flex-basis:67%')
+  })
+
   it('keeps auto layout mode free of the resizable panel group', () => {
     const snapshot = createSnapshot()
 
