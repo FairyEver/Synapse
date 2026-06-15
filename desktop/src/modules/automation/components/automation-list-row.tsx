@@ -59,6 +59,7 @@ function AutomationListRow({
   const executorType = formatAutomationExecutorType(item)
   const subtitle = `触发器 ${triggerType} · 执行器 ${executorType}`
   const stopDisabled = activeRunning && !item.activeRun?.id
+  const runDisabled = disabled || pending || running || needsUpdate
 
   return (
     <TableRow
@@ -139,8 +140,8 @@ function AutomationListRow({
                   type="button"
                   size="icon-sm"
                   variant="ghost"
-                  disabled={disabled || pending || running}
-                  aria-label="运行自动化"
+                  disabled={runDisabled}
+                  aria-label={needsUpdate ? "需要更新后才能运行自动化" : "运行自动化"}
                   onClick={() => {
                     onRun()
                   }}
@@ -148,7 +149,7 @@ function AutomationListRow({
                   {running ? <Loader2 className="animate-spin" /> : <Play />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>运行</TooltipContent>
+              <TooltipContent>{needsUpdate ? "需要更新" : "运行"}</TooltipContent>
             </Tooltip>
           )}
           <Tooltip>

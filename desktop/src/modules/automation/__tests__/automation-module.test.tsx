@@ -392,6 +392,51 @@ describe("AutomationModule", () => {
     expect(stopButton?.disabled).toBe(false)
   })
 
+  it("disables manual run for automations that need updates", async () => {
+    const onRun = vi.fn()
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <table>
+            <tbody>
+              <AutomationListRow
+                item={createItem({
+                  validation: {
+                    status: "needs_update",
+                    issues: [{ field: "trigger.config", message: "检查触发器" }],
+                  },
+                })}
+                projects={[]}
+                pending={false}
+                running={false}
+                onOpen={vi.fn()}
+                onRun={onRun}
+                onStop={vi.fn()}
+                onToggleEnabled={vi.fn()}
+                onHistory={vi.fn()}
+                onDelete={vi.fn()}
+              />
+            </tbody>
+          </table>
+        </TooltipProvider>,
+      )
+    })
+
+    const runButton = document.querySelector<HTMLButtonElement>('button[aria-label="需要更新后才能运行自动化"]')
+    expect(runButton).not.toBeNull()
+    expect(runButton?.disabled).toBe(true)
+
+    await act(async () => {
+      runButton?.click()
+    })
+
+    expect(onRun).not.toHaveBeenCalled()
+  })
+
   it("only shows a manual-run spinner on the automation being run", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
