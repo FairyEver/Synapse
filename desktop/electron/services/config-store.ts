@@ -7,6 +7,7 @@ import {
   createDefaultConfig,
   sanitizeSynapseConfig,
 } from "../../src/lib/config"
+import { sanitizeConfigPatchForLog } from "../../src/lib/config-log-redaction"
 import type { SynapseConfig, SynapseConfigPatch } from "../../src/types/config"
 import { createMainLogger } from "./log-store"
 import { JsonNamespace } from "../runtime/data-repo/backends/json"
@@ -309,17 +310,3 @@ class ConfigStore {
 
 // Singleton instance
 export const configStore = new ConfigStore()
-
-function sanitizeConfigPatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
-  if (!patch.global?.variables) return patch
-  return {
-    ...patch,
-    global: {
-      ...patch.global,
-      variables: patch.global.variables.map((variable) => ({
-        ...variable,
-        value: variable.value ? "[redacted]" : variable.value,
-      })),
-    },
-  }
-}

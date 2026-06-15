@@ -108,6 +108,28 @@ describe("configIpcModule", () => {
     expect(result.agent.defaultProviderModel).toEqual(providerModel)
   })
 
+  it("summarizes quick input content before logging update requests", async () => {
+    vi.mocked(configStore.update).mockResolvedValue(configFixture({ defaultPermissionMode: "default", defaultProviderModel: null }))
+    const harness = createHarness()
+
+    await harness.invoke("synapse:config:update", {
+      global: {
+        quickInputs: [{ id: "quick-1", content: "token=secret-value\n内部资料", directSend: true }],
+      },
+    })
+
+    const updateLog = mocks.logger.info.mock.calls.find(([message]) =>
+      String(message).startsWith("Handling config.update request."),
+    )
+    expect(updateLog).toBeDefined()
+
+    const loggedMessage = String(updateLog?.[0])
+    expect(loggedMessage).toContain("quick-1")
+    expect(loggedMessage).toContain("contentLength")
+    expect(loggedMessage).not.toContain("token=secret-value")
+    expect(loggedMessage).not.toContain("内部资料")
+  })
+
   it("ignores legacy conversation rollover prompt patches through IPC", async () => {
     vi.mocked(configStore.update).mockResolvedValue(
       configFixture({

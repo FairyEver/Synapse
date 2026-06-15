@@ -11,6 +11,7 @@ import {
 import { LoaderCircle } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { sanitizeConfigPatchForLog } from "@/lib/config-log-redaction"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseConfig,
@@ -85,7 +86,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = useCallback(
     async (patch: SynapseConfigPatch, reset = false) => {
-      logger.info("Updating app config from renderer.", { patch: sanitizePatchForLog(patch), reset })
+      logger.info("Updating app config from renderer.", { patch: sanitizeConfigPatchForLog(patch), reset })
       const nextConfig = await updateConfigThroughBridge(patch)
 
       setConfig(nextConfig)
@@ -222,21 +223,3 @@ function useAppConfig(): AppConfigContextValue {
 }
 
 export { AppConfigProvider, useAppConfig }
-
-function sanitizePatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
-  const nextPatch: SynapseConfigPatch = patch.global?.variables
-    ? {
-        ...patch,
-        global: {
-          ...patch.global,
-          variables: patch.global.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })),
-        },
-      }
-    : patch
-
-  if (!nextPatch.repositories || !Array.isArray(nextPatch.repositories)) return nextPatch
-  return {
-    ...nextPatch,
-    repositories: nextPatch.repositories,
-  }
-}
