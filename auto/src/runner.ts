@@ -383,6 +383,32 @@ export async function runWorker(
     onUpdate?.(runningWorker(workerId, logger, startedAt, lastMessage))
   }
 
+  const processStdoutLine = (line: string): void => {
+    if (!line.trim()) return
+    const event = parseJsonLine(line)
+    if (event) {
+      logger.writeEvent(event)
+      const readable = redactSensitiveText(eventAccumulator.read(event))
+      lastMessage = readable ? lastNonEmptyOutputLine(readable) : lastMessage
+      if (readable) {
+        publishOutputText(onOutput, workerId, 'event', readable)
+      }
+    } else {
+      const safeLine = redactSensitiveText(line)
+      lastMessage = safeLine
+      onOutput?.({ workerId, stream: 'stdout', text: safeLine, ts: Date.now() })
+    }
+    emitProgress()
+  }
+
+  const processStderrLine = (line: string): void => {
+    if (!line.trim()) return
+    const safeLine = redactSensitiveText(line)
+    lastMessage = safeLine
+    onOutput?.({ workerId, stream: 'stderr', text: safeLine, ts: Date.now() })
+    emitProgress()
+  }
+
   if (!isClaudeCode) {
     child.stdin.write(workerPrompt)
   }
@@ -395,21 +421,7 @@ export async function runWorker(
     const lines = stdoutBuffer.split(/\r?\n/)
     stdoutBuffer = lines.pop() ?? ''
     for (const line of lines) {
-      if (!line.trim()) continue
-      const event = parseJsonLine(line)
-      if (event) {
-        logger.writeEvent(event)
-        const readable = redactSensitiveText(eventAccumulator.read(event))
-        lastMessage = readable ? lastNonEmptyOutputLine(readable) : lastMessage
-        if (readable) {
-          publishOutputText(onOutput, workerId, 'event', readable)
-        }
-      } else {
-        const safeLine = redactSensitiveText(line)
-        lastMessage = safeLine
-        onOutput?.({ workerId, stream: 'stdout', text: safeLine, ts: Date.now() })
-      }
-      emitProgress()
+      processStdoutLine(line)
     }
   })
 
@@ -420,12 +432,7 @@ export async function runWorker(
     const lines = stderrBuffer.split(/\r?\n/)
     stderrBuffer = lines.pop() ?? ''
     for (const line of lines) {
-      if (line.trim()) {
-        const safeLine = redactSensitiveText(line)
-        lastMessage = safeLine
-        onOutput?.({ workerId, stream: 'stderr', text: safeLine, ts: Date.now() })
-      }
-      emitProgress()
+      processStderrLine(line)
     }
   })
 
@@ -471,7 +478,10 @@ export async function runWorker(
 
   if (timeout) clearTimeout(timeout)
   if (forceKillTimeout) clearTimeout(forceKillTimeout)
-  if (!lastMessage && stderrBuffer.trim()) lastMessage = redactSensitiveText(stderrBuffer.trim())
+  processStdoutLine(stdoutBuffer)
+  stdoutBuffer = ''
+  processStderrLine(stderrBuffer)
+  stderrBuffer = ''
   const durationMs = Date.now() - startedAt
   const status: WorkerStatus = timedOut ? 'timeout' : exitCode === 0 ? 'success' : 'error'
   await logger.close({ status, durationMs, exitCode })
