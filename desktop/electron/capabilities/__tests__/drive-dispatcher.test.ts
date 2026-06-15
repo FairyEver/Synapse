@@ -26,6 +26,33 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("exposes the full Drive MCP tool set without legacy gaps", () => {
+    expect(buildDriveTools().map((tool) => tool.name)).toEqual([
+      "drive_item_list",
+      "drive_item_get",
+      "drive_file_upload",
+      "drive_folder_upload",
+      "drive_folder_create",
+      "drive_item_rename",
+      "drive_item_move",
+      "drive_delete_impact_get",
+      "drive_item_delete",
+      "drive_item_preview_get",
+      "drive_file_content_read",
+      "drive_file_download_create",
+      "drive_folder_zip_create",
+      "drive_share_list",
+      "drive_share_create",
+      "drive_share_disable",
+      "drive_publication_list",
+      "drive_page_publication_create",
+      "drive_site_publication_create",
+      "drive_publication_deployment_create",
+      "drive_publication_disable",
+      "drive_usage_get",
+    ])
+  })
+
   it("lists Drive items under root by default", async () => {
     const accountService = createAccountService({
       listDriveItems: vi.fn(async () => [driveItem({ id: "item-1", name: "a.txt" })]),
@@ -148,6 +175,130 @@ describe("createDriveCapabilityDispatcher", () => {
       resource: "synapse-drive:drive.usage.get",
       metadata: expect.objectContaining({ driveAction: "drive.usage.get", errorName: "Error" }),
     }))
+  })
+
+  it("gets and renames Drive items", async () => {
+    const accountService = createAccountService({
+      getDriveItem: vi.fn(async () => driveItem({ id: "item-1", name: "before.md" })),
+      renameDriveItem: vi.fn(async () => driveItem({ id: "item-1", name: "after.md" })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.item.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: driveItem({ id: "item-1", name: "before.md" }) })
+    await expect(dispatcher.dispatch("drive.item.rename", {
+      itemId: "item-1",
+      name: "after.md",
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveItem({ id: "item-1", name: "after.md" }),
+    })
+
+    expect(accountService.getDriveItem).toHaveBeenCalledWith("item-1")
+    expect(accountService.renameDriveItem).toHaveBeenCalledWith("item-1", "after.md")
+  })
+
+  it("routes publication and public link management tools", async () => {
+    const publication = drivePublication({ id: "publication-1", type: "page" })
+    const accountService = createAccountService({
+      getDriveDeleteImpact: vi.fn(async () => ({ publications: [publication] })),
+      listDriveShares: vi.fn(async () => ({ items: [driveShareListItem({ id: "share-1" })], page: drivePage() })),
+      listDrivePublications: vi.fn(async () => ({ items: [publication], page: drivePage() })),
+      publishDrivePage: vi.fn(async () => publication),
+      publishDriveSite: vi.fn(async () => drivePublication({ id: "publication-2", type: "site" })),
+      redeployDrivePublication: vi.fn(async () => publication),
+      disableDrivePublication: vi.fn(async () => ({ ok: true as const })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.delete_impact.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: { publications: [publication] } })
+    await expect(dispatcher.dispatch("drive.share.list", { offset: 10, limit: 5 }, { source: "mcp-stdio" }))
+      .resolves.toMatchObject({ ok: true, data: { items: [expect.objectContaining({ id: "share-1" })] } })
+    await expect(dispatcher.dispatch("drive.publication.list", {}, { source: "mcp-stdio" }))
+      .resolves.toMatchObject({ ok: true, data: { items: [publication] } })
+    await expect(dispatcher.dispatch("drive.page_publication.create", {
+      itemId: "item-1",
+      passwordEnabled: false,
+      expiresIn: "30d",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: publication })
+    await expect(dispatcher.dispatch("drive.site_publication.create", { itemId: "folder-1" }, { source: "mcp-stdio" }))
+      .resolves.toMatchObject({ ok: true, data: { type: "site" } })
+    await expect(dispatcher.dispatch("drive.publication_deployment.create", { publicationId: "publication-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: publication })
+    await expect(dispatcher.dispatch("drive.publication.disable", { publicationId: "publication-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: { ok: true } })
+
+    expect(accountService.listDriveShares).toHaveBeenCalledWith({ offset: 10, limit: 5 })
+    expect(accountService.publishDrivePage).toHaveBeenCalledWith("item-1", {
+      passwordEnabled: false,
+      expiresIn: "30d",
+    })
+    expect(accountService.publishDriveSite).toHaveBeenCalledWith("folder-1", {
+      passwordEnabled: true,
+      expiresIn: "3d",
+    })
+  })
+
+  it("returns preview snapshots and text content without creating shares or publications", async () => {
+    const snapshot = drivePreviewSnapshot({
+      preview: { kind: "markdown", text: "# Note", html: "<h1>Note</h1>", truncated: false, imageUrl: null, visitUrl: null },
+    })
+    const accountService = createAccountService({
+      getDriveItemPreview: vi.fn(async () => snapshot),
+      readDriveFileContent: vi.fn(async () => ({
+        itemId: "item-1",
+        name: "note.md",
+        kind: "markdown",
+        text: "# Note",
+        html: "<h1>Note</h1>",
+        truncated: false,
+      })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.item_preview.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: snapshot })
+    await expect(dispatcher.dispatch("drive.file_content.read", { itemId: "item-1", maxBytes: 4096 }, { source: "mcp-stdio" }))
+      .resolves.toMatchObject({ ok: true, data: { text: "# Note", truncated: false } })
+
+    expect(accountService.getDriveItemPreview).toHaveBeenCalledWith({ itemId: "item-1", surface: "standalone" })
+    expect(accountService.readDriveFileContent).toHaveBeenCalledWith({ itemId: "item-1", maxBytes: 4096 })
+  })
+
+  it("checks fs.write before saving Drive file and folder downloads locally", async () => {
+    const accountService = createAccountService({
+      downloadDriveFile: vi.fn(async () => ({ ok: true as const, path: "/tmp/report.md" })),
+      downloadDriveFolderZip: vi.fn(async () => ({ ok: true as const, path: "/tmp/project.zip" })),
+    })
+    const auditSink = createAuditSink()
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink, permissionGuard })
+
+    await expect(dispatcher.dispatch("drive.file_download.create", {
+      itemId: "item-1",
+      outputPath: "/tmp/report.md",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, path: "/tmp/report.md" } })
+    await expect(dispatcher.dispatch("drive.folder_zip.create", {
+      itemId: "folder-1",
+      outputPath: "/tmp/project.zip",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, path: "/tmp/project.zip" } })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "/tmp/report.md",
+      context: expect.objectContaining({ driveAction: "drive.file_download.create", itemId: "item-1" }),
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "/tmp/project.zip",
+      context: expect.objectContaining({ driveAction: "drive.folder_zip.create", itemId: "folder-1" }),
+    }))
+    expect(accountService.downloadDriveFile).toHaveBeenCalledWith({ itemId: "item-1", outputPath: "/tmp/report.md" })
+    expect(accountService.downloadDriveFolderZip).toHaveBeenCalledWith({ itemId: "folder-1", outputPath: "/tmp/project.zip" })
   })
 
   it("uploads a local file without returning the presigned URL", async () => {
@@ -526,11 +677,24 @@ function createAccountService(overrides: Partial<DriveAccountService> = {}): Dri
     completeDriveUpload: vi.fn(async () => driveItem({ id: "item-1", name: "report.md" })),
     cancelDriveUpload: vi.fn(async () => ({ ok: true })),
     createDriveFolder: vi.fn(),
+    getDriveItem: vi.fn(),
+    renameDriveItem: vi.fn(),
     moveDriveItem: vi.fn(),
     deleteDriveItem: vi.fn(),
     shareDriveItem: vi.fn(),
     disableDriveShare: vi.fn(),
     getDriveUsage: vi.fn(),
+    getDriveDeleteImpact: vi.fn(),
+    listDriveShares: vi.fn(),
+    listDrivePublications: vi.fn(),
+    publishDrivePage: vi.fn(),
+    publishDriveSite: vi.fn(),
+    redeployDrivePublication: vi.fn(),
+    disableDrivePublication: vi.fn(),
+    getDriveItemPreview: vi.fn(),
+    readDriveFileContent: vi.fn(),
+    downloadDriveFile: vi.fn(),
+    downloadDriveFolderZip: vi.fn(),
     ...overrides,
   } as unknown as DriveAccountService
 }
@@ -579,6 +743,85 @@ function driveShare(overrides: Partial<DriveShare>): DriveShare {
     password: "secret",
     expiresAt: "2026-06-10T00:00:00.000Z",
     createdAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+type DrivePublication = Awaited<ReturnType<DriveAccountService["publishDrivePage"]>>
+
+function drivePublication(overrides: Partial<DrivePublication>): DrivePublication {
+  return {
+    id: "publication-1",
+    publishId: "pub_1",
+    type: "page",
+    name: "page.html",
+    status: "active",
+    sourceItemId: "item-1",
+    sourceDeleted: false,
+    url: "https://synapse.test/pages/pub_1",
+    urlWithPassword: "https://synapse.test/pages/pub_1?password=secret",
+    passwordEnabled: true,
+    password: "secret",
+    expiresAt: "2026-06-10T00:00:00.000Z",
+    currentDeploymentId: "deployment-1",
+    createdAt: "2026-06-07T00:00:00.000Z",
+    updatedAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+type DriveShareListItem = Awaited<ReturnType<DriveAccountService["listDriveShares"]>>["items"][number]
+
+function driveShareListItem(overrides: Partial<DriveShareListItem>): DriveShareListItem {
+  return {
+    id: "share-row-1",
+    shareId: "shr_1",
+    itemId: "item-1",
+    itemName: "report.md",
+    itemType: "file",
+    sourceDeleted: false,
+    url: "https://synapse.test/files/shr_1",
+    urlWithPassword: "https://synapse.test/files/shr_1?password=secret",
+    passwordEnabled: true,
+    password: "secret",
+    expiresAt: "2026-06-10T00:00:00.000Z",
+    createdAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+function drivePage() {
+  return {
+    offset: 0,
+    limit: 20,
+    hasMore: false,
+    nextOffset: null,
+  }
+}
+
+type DrivePreviewSnapshot = Awaited<ReturnType<DriveAccountService["getDriveItemPreview"]>>
+
+function drivePreviewSnapshot(overrides: Partial<DrivePreviewSnapshot>): DrivePreviewSnapshot {
+  return {
+    context: "owner",
+    surface: "standalone",
+    current: {
+      id: "item-1",
+      name: "note.md",
+      type: "file",
+      size: "6",
+      mimeType: "text/markdown",
+      updatedAt: "2026-06-07T00:00:00.000Z",
+      previewKind: "markdown",
+      browserUrl: "https://synapse.test/drive/items/item-1",
+      downloadUrl: "https://synapse.test/drive/items/item-1/download",
+    },
+    breadcrumbs: [],
+    children: [],
+    childrenPage: drivePage(),
+    preview: null,
+    canDownload: true,
+    canZip: false,
     ...overrides,
   }
 }

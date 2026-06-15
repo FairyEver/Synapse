@@ -5,9 +5,14 @@ import { readdir, stat } from "node:fs/promises"
 import type {
   DriveAccessExpiresIn,
   DriveAccessSettingsInput,
+  DriveBrowserSnapshotDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
+  DrivePublicationDto,
+  DrivePublicationListPageDto,
+  DrivePublicLinksPageInput,
   DriveShareDto,
+  DriveShareListPageDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -17,6 +22,7 @@ import { checkCapabilityPermission } from "./permission-audit"
 
 type DriveAccountServicePort = {
   readonly listDriveItems: (parentId: string | null) => Promise<DriveItemDto[]>
+  readonly getDriveItem: (itemId: string) => Promise<DriveItemDto>
   readonly prepareDriveUpload: (input: {
     readonly parentId?: string | null
     readonly name: string
@@ -31,6 +37,7 @@ type DriveAccountServicePort = {
   readonly completeDriveUpload: (sessionId: string) => Promise<DriveItemDto>
   readonly cancelDriveUpload: (sessionId: string) => Promise<{ ok: true }>
   readonly createDriveFolder: (input: { readonly parentId?: string | null; readonly name: string }) => Promise<DriveItemDto>
+  readonly renameDriveItem: (itemId: string, name: string) => Promise<DriveItemDto>
   readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<DriveItemDto>
   readonly deleteDriveItem: (
     itemId: string,
@@ -39,6 +46,25 @@ type DriveAccountServicePort = {
   readonly shareDriveItem: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DriveShareDto>
   readonly disableDriveShare: (shareId: string) => Promise<{ ok: true }>
   readonly getDriveUsage: () => Promise<DriveUsageDto>
+  readonly getDriveDeleteImpact: (itemId: string) => Promise<unknown>
+  readonly listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
+  readonly listDrivePublications: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicationListPageDto>
+  readonly publishDrivePage: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DrivePublicationDto>
+  readonly publishDriveSite: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DrivePublicationDto>
+  readonly redeployDrivePublication: (publicationId: string) => Promise<DrivePublicationDto>
+  readonly disableDrivePublication: (publicationId: string) => Promise<{ ok: true }>
+  readonly getDriveItemPreview: (input: {
+    readonly itemId: string
+    readonly surface?: "standalone" | "console"
+    readonly childrenOffset?: number
+    readonly childrenLimit?: number
+  }) => Promise<DriveBrowserSnapshotDto>
+  readonly readDriveFileContent: (input: {
+    readonly itemId: string
+    readonly maxBytes?: number
+  }) => Promise<unknown>
+  readonly downloadDriveFile: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
+  readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
 }
 
 type FileSystemPort = {
@@ -86,6 +112,11 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             const items = await deps.accountService.listDriveItems(parentId)
             return { ok: true, data: items, total: items.length }
           })
+        case "drive.item.get":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.getDriveItem(requireString(params, "itemId")),
+          }))
         case "drive.file.upload":
           return dispatchDriveMutation(deps, action, params, context, () =>
             uploadFile(deps, fileSystem, fetchImpl, params, context))
@@ -100,6 +131,14 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             })
             return { ok: true, data: item }
           })
+        case "drive.item.rename":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.renameDriveItem(
+              requireString(params, "itemId"),
+              requireString(params, "name"),
+            ),
+          }))
         case "drive.item.move":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const item = await deps.accountService.moveDriveItem(
@@ -108,6 +147,11 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             )
             return { ok: true, data: item }
           })
+        case "drive.delete_impact.get":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.getDriveDeleteImpact(requireString(params, "itemId")),
+          }))
         case "drive.item.delete":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const disablePublications = optionalBoolean(params.disablePublications)
@@ -119,6 +163,53 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               ),
             }
           })
+        case "drive.item_preview.get":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const childrenOffset = optionalNumber(params.childrenOffset)
+            const childrenLimit = optionalNumber(params.childrenLimit)
+            return {
+              ok: true,
+              data: await deps.accountService.getDriveItemPreview({
+                itemId: requireString(params, "itemId"),
+                surface: optionalDrivePreviewSurface(params.surface) ?? "standalone",
+                ...(childrenOffset === undefined ? {} : { childrenOffset }),
+                ...(childrenLimit === undefined ? {} : { childrenLimit }),
+              }),
+            }
+          })
+        case "drive.file_content.read":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.readDriveFileContent({
+              itemId: requireString(params, "itemId"),
+              maxBytes: optionalNumber(params.maxBytes),
+            }),
+          }))
+        case "drive.file_download.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const itemId = requireString(params, "itemId")
+            const outputPath = requireString(params, "outputPath")
+            await authorizeFileWrite(deps, action, itemId, outputPath, context)
+            return {
+              ok: true,
+              data: await deps.accountService.downloadDriveFile({ itemId, outputPath }),
+            }
+          })
+        case "drive.folder_zip.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const itemId = requireString(params, "itemId")
+            const outputPath = requireString(params, "outputPath")
+            await authorizeFileWrite(deps, action, itemId, outputPath, context)
+            return {
+              ok: true,
+              data: await deps.accountService.downloadDriveFolderZip({ itemId, outputPath }),
+            }
+          })
+        case "drive.share.list":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.listDriveShares(parsePublicLinksPageInput(params)),
+          }))
         case "drive.share.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
@@ -135,6 +226,43 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.disableDriveShare(requireString(params, "shareId")),
+          }))
+        case "drive.publication.list":
+          return dispatchDriveRead(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.listDrivePublications(parsePublicLinksPageInput(params)),
+          }))
+        case "drive.page_publication.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
+            return {
+              ok: true,
+              data: await deps.accountService.publishDrivePage(
+                requireString(params, "itemId"),
+                parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS),
+              ),
+            }
+          })
+        case "drive.site_publication.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
+            return {
+              ok: true,
+              data: await deps.accountService.publishDriveSite(
+                requireString(params, "itemId"),
+                parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS),
+              ),
+            }
+          })
+        case "drive.publication_deployment.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.redeployDrivePublication(requireString(params, "publicationId")),
+          }))
+        case "drive.publication.disable":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.disableDrivePublication(requireString(params, "publicationId")),
           }))
         case "drive.usage.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
@@ -396,7 +524,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "disablePublications"]) {
+  for (const key of ["itemId", "shareId", "publicationId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "disablePublications"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
   }
@@ -505,6 +633,46 @@ async function authorizeFileRead(
   })
 }
 
+async function authorizeFileWrite(
+  deps: DriveCapabilityDispatcherDeps,
+  action: string,
+  itemId: string,
+  outputPath: string,
+  context: DispatchContext,
+): Promise<void> {
+  const actor = context.actor ?? deps.actor ?? DEFAULT_ACTOR
+  const metadata = {
+    source: context.source ?? "api",
+    driveAction: action,
+    itemId,
+  }
+  const permission = await checkCapabilityPermission({
+    permissionGuard: deps.permissionGuard,
+    auditSink: deps.auditSink,
+    action: "fs.write",
+    actor,
+    resource: outputPath,
+    context: metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "fs.write",
+      actor,
+      resource: outputPath,
+      outcome: "denied",
+      metadata: { ...metadata, reason: permission.reason, policyId: permission.policyId },
+    })
+    throw new Error(permission.reason)
+  }
+  deps.auditSink?.record({
+    action: "fs.write",
+    actor,
+    resource: outputPath,
+    outcome: "allowed",
+    metadata,
+  })
+}
+
 function requireString(params: Record<string, unknown>, key: string): string {
   const value = params[key]
   if (typeof value !== "string" || value.trim() === "") {
@@ -521,6 +689,28 @@ function optionalBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value !== "boolean") throw new Error("Expected boolean parameter.")
   return value
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error("Expected non-negative number parameter.")
+  return value
+}
+
+function optionalDrivePreviewSurface(value: unknown): "standalone" | "console" | undefined {
+  if (value === undefined || value === null) return undefined
+  if (value === "standalone" || value === "console") return value
+  throw new Error("Expected surface to be standalone or console.")
+}
+
+function parsePublicLinksPageInput(params: Record<string, unknown>): DrivePublicLinksPageInput | undefined {
+  const offset = optionalNumber(params.offset)
+  const limit = optionalNumber(params.limit)
+  if (offset === undefined && limit === undefined) return undefined
+  return {
+    ...(offset === undefined ? {} : { offset }),
+    ...(limit === undefined ? {} : { limit }),
+  }
 }
 
 function optionalDriveAccessExpiresIn(value: unknown): DriveAccessExpiresIn | undefined {

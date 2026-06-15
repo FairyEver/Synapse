@@ -319,24 +319,38 @@ Canonical capabilities and MCP tools:
 | --- | --- | --- | --- |
 | `drive.item.list` | `drive_item_list` | false | List items under a folder. |
 | `drive.item.get` | `drive_item_get` | false | Get one item summary. |
-| `drive.item.upload` | `drive_item_upload` | true | Upload a local file to the user's drive. |
+| `drive.file.upload` | `drive_file_upload` | true | Upload a local file to the user's drive. |
+| `drive.folder.upload` | `drive_folder_upload` | true | Upload a local folder while preserving relative paths. |
 | `drive.folder.create` | `drive_folder_create` | true | Create a folder. |
-| `drive.item.move` | `drive_item_move` | true | Move an item to another folder. |
 | `drive.item.rename` | `drive_item_rename` | true | Rename an item. |
+| `drive.item.move` | `drive_item_move` | true | Move an item to another folder. |
+| `drive.delete_impact.get` | `drive_delete_impact_get` | false | Check affected page or site publications before deletion. |
 | `drive.item.delete` | `drive_item_delete` | true | Delete a file or folder. |
+| `drive.item_preview.get` | `drive_item_preview_get` | false | Get the owner preview snapshot and available browser URLs. |
+| `drive.file_content.read` | `drive_file_content_read` | false | Read previewable small text content. |
+| `drive.file_download.create` | `drive_file_download_create` | true | Save one Drive file to a local path. |
+| `drive.folder_zip.create` | `drive_folder_zip_create` | true | Save one Drive folder as a local zip file. |
+| `drive.share.list` | `drive_share_list` | false | List current user's `/files/...` share links. |
 | `drive.share.create` | `drive_share_create` | true | Create or return an enabled share link. |
 | `drive.share.disable` | `drive_share_disable` | true | Disable a share. |
+| `drive.publication.list` | `drive_publication_list` | false | List current user's `/pages/...` and `/sites/...` publication links. |
+| `drive.page_publication.create` | `drive_page_publication_create` | true | Publish an HTML file as a page. |
+| `drive.site_publication.create` | `drive_site_publication_create` | true | Publish a folder with root `index.html` as a site. |
+| `drive.publication_deployment.create` | `drive_publication_deployment_create` | true | Create a new deployment snapshot for an existing publication. |
+| `drive.publication.disable` | `drive_publication_disable` | true | Disable a page or site publication. |
 | `drive.usage.get` | `drive_usage_get` | false | Return quota and usage summary. |
 
 MCP responses must not include COS credentials, AK/SK, signed URLs with long lifetime, password hashes, or private admin-only metadata.
 
-Mutating tools must use the existing permission and audit patterns for agent-driven operations. Deletion should require a clear user confirmation before the Agent proceeds.
+Mutating tools must use the existing permission and audit patterns for agent-driven operations. Deletion should require a clear user confirmation before the Agent proceeds. Tools that save Drive content to a local path must pass filesystem write permission before writing.
 
 Add a built-in skill template named `synapse-drive-mcp`. The skill should guide Agents to:
 
 - Resolve target folders through `drive_item_list` or `drive_item_get`.
 - Upload to root when no target folder is specified.
-- Create a share only when the user asks for a link or handoff.
+- Use share tools only for `/files/...` browse/download links.
+- Use publication tools only when the user wants an HTML page or site online under `/pages/...` or `/sites/...`.
+- Use preview and text-read tools for inspection, and download or zip tools when the user asks to save Drive content locally.
 - Never guess ids from names when duplicates may exist.
 - Confirm before deleting or moving many items.
 - Report partial failures from folder upload.
