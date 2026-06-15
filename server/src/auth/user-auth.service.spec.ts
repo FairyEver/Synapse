@@ -15,6 +15,7 @@ function createPrismaMock() {
     user: {
       create: vi.fn().mockResolvedValue({ id: "user-1", email: "u@example.com", status: "active" }),
       update: vi.fn().mockResolvedValue({ id: "user-1" }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
@@ -887,8 +888,8 @@ describe("UserAuthService", () => {
       },
       data: { usedAt: expect.any(Date) },
     })
-    expect(prisma.__tx.user.update).toHaveBeenCalledWith({
-      where: { id: "user-1" },
+    expect(prisma.__tx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "user-1", status: "active" },
       data: {
         passwordHash: expect.any(String),
         passwordChangedAt: expect.any(Date),
@@ -932,8 +933,8 @@ describe("UserAuthService", () => {
         password: "NewPassword123!",
       }, "203.0.113.42")).resolves.toEqual({ ok: true })
 
-      expect(prisma.__tx.user.update).toHaveBeenCalledWith({
-        where: { id: "user-1" },
+      expect(prisma.__tx.user.updateMany).toHaveBeenCalledWith({
+        where: { id: "user-1", status: "active" },
         data: {
           passwordHash: expect.any(String),
           passwordChangedAt: expect.any(Date),
@@ -953,6 +954,45 @@ describe("UserAuthService", () => {
     } finally {
       warnSpy.mockRestore()
     }
+  })
+
+  it("rejects password reset when the user is disabled during the reset transaction", async () => {
+    const prisma = createPrismaMock()
+    const token = "reset-token"
+    prisma.userPasswordResetToken.findUnique.mockResolvedValue({
+      id: "reset-1",
+      tokenHash: hashToken(token),
+      userId: "user-1",
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      usedAt: null,
+      user: { id: "user-1", email: "u@example.com", status: "active" },
+    })
+    prisma.__tx.user.updateMany.mockResolvedValue({ count: 0 })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.resetPassword({
+      token,
+      password: "NewPassword123!",
+    }, "203.0.113.44"))
+      .rejects
+      .toThrow("重置链接无效或已过期。")
+
+    expect(prisma.__tx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "user-1", status: "active" },
+      data: {
+        passwordHash: expect.any(String),
+        passwordChangedAt: expect.any(Date),
+      },
+    })
+    expect(prisma.__tx.userSession.updateMany).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.password_reset.failure",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.44",
+    })
   })
 
   it("rejects expired or reused password reset tokens", async () => {
