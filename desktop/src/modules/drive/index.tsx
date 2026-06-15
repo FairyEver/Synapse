@@ -82,6 +82,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
@@ -842,20 +843,15 @@ function DriveUsageIndicator({ state }: { readonly state: DriveUsageState }) {
   const usage = getDriveUsageViewModel(state.usage)
   return (
     <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground" aria-busy={state.status === "loading" || undefined}>
-      <div
+      <Progress
         aria-label="云盘容量"
         aria-valuemax={100}
         aria-valuemin={0}
-        aria-valuenow={usage.percentRounded}
-        className="h-2 w-40 overflow-hidden rounded-full bg-green-100"
-        role="progressbar"
-      >
-        <div
-          className="h-full rounded-full bg-green-700"
-          style={{ width: `${usage.percent}%` }}
-        />
-      </div>
-      <span className="shrink-0">已占用 {usage.occupiedLabel} / {usage.quotaLabel}</span>
+        aria-valuenow={Math.round(usage.percent)}
+        className="h-2 w-40 shrink-0"
+        value={usage.percent}
+      />
+      <span className="shrink-0">{usage.occupiedLabel} / {usage.quotaLabel}</span>
     </div>
   )
 }
@@ -2848,7 +2844,6 @@ function getDriveUsageViewModel(usage: DriveUsageDto): {
   readonly occupiedLabel: string
   readonly quotaLabel: string
   readonly percent: number
-  readonly percentRounded: number
 } {
   const usedBytes = parseDriveUsageBytes(usage.usedBytes)
   const reservedBytes = parseDriveUsageBytes(usage.reservedBytes)
@@ -2860,7 +2855,6 @@ function getDriveUsageViewModel(usage: DriveUsageDto): {
     occupiedLabel: formatBytes(String(occupiedBytes)),
     quotaLabel: quotaBytes > 0 ? formatBytes(String(quotaBytes)) : "-",
     percent,
-    percentRounded: Math.round(percent),
   }
 }
 

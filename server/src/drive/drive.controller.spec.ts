@@ -693,8 +693,11 @@ describe("DriveController", () => {
 
   it("returns the same public not found text for missing publications", async () => {
     const response = await request(app!.getHttpServer()).get("/pages/pub_missing").expect(404)
-    expect(response.text).toBe("网页未找到")
-    expect(response.headers["content-type"]).toContain("text/plain")
+    expect(response.text).toContain("drive-public-status-shell")
+    expect(response.text).toContain("网页未找到")
+    expect(response.text).not.toContain("pub_missing")
+    expect(response.text).not.toContain("publication")
+    expect(response.headers["content-type"]).toContain("text/html")
   })
 
   it("returns public not found when published page password unlock cannot resolve access", async () => {
@@ -705,8 +708,11 @@ describe("DriveController", () => {
       .send({ password: "letmein" })
       .expect(404)
 
-    expect(response.text).toBe("网页未找到")
-    expect(response.headers["content-type"]).toContain("text/plain")
+    expect(response.text).toContain("drive-public-status-shell")
+    expect(response.text).toContain("网页未找到")
+    expect(response.text).not.toContain("pub_missing")
+    expect(response.text).not.toContain("letmein")
+    expect(response.headers["content-type"]).toContain("text/html")
     expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
       publishId: "pub_missing",
       type: "page",
@@ -724,8 +730,11 @@ describe("DriveController", () => {
       .send({ password: "letmein" })
       .expect(404)
 
-    expect(response.text).toBe("网页未找到")
-    expect(response.headers["content-type"]).toContain("text/plain")
+    expect(response.text).toContain("drive-public-status-shell")
+    expect(response.text).toContain("网页未找到")
+    expect(response.text).not.toContain("pub_site")
+    expect(response.text).not.toContain("private")
+    expect(response.headers["content-type"]).toContain("text/html")
     expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
       publishId: "pub_site",
       type: "site",
@@ -752,7 +761,9 @@ describe("DriveController", () => {
 
     const response = await request(app!.getHttpServer()).get("/pages/pub_broken").expect(404)
 
-    expect(response.text).toBe("网页未找到")
+    expect(response.text).toContain("drive-public-status-shell")
+    expect(response.text).toContain("网页未找到")
+    expect(response.text).not.toContain("stream failed")
     expect(drive.resolvePublishedAssetAccess).toHaveBeenCalledWith({
       publishId: "pub_broken",
       type: "page",
@@ -767,11 +778,32 @@ describe("DriveController", () => {
 
     const page = await request(app!.getHttpServer()).get("/pages/pub_locked").expect(200)
     expect(page.text).toContain("drive-password-shell")
-    expect(page.text).toContain("密码")
+    expect(page.text).toContain("访问密码")
+    expect(page.text).toContain('name="password"')
+    expect(page.text).toContain('action="/pages/pub_locked"')
+    expect(page.text).toContain(">打开</button>")
 
     const site = await request(app!.getHttpServer()).get("/sites/pub_locked/").expect(200)
     expect(site.text).toContain("drive-password-shell")
-    expect(site.text).toContain("密码")
+    expect(site.text).toContain("访问密码")
+    expect(site.text).toContain('name="password"')
+    expect(site.text).toContain('action="/sites/pub_locked/"')
+    expect(site.text).toContain(">打开</button>")
+  })
+
+  it("renders password errors when posted published passwords are wrong", async () => {
+    drive.resolvePublishedAssetAccess.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer())
+      .post("/pages/pub_locked")
+      .send({ password: "wrong" })
+      .expect(200)
+
+    expect(response.text).toContain("密码错误")
+    expect(response.text).toContain('aria-invalid="true"')
+    expect(response.text).toContain('aria-describedby="drive-password-error"')
+    expect(response.text).toContain('id="drive-password-error"')
+    expect(response.text).toContain('action="/pages/pub_locked"')
   })
 
   it("reads published access cookies from resource scoped slots", async () => {
@@ -1112,6 +1144,8 @@ describe("DriveController", () => {
 
     expect(response.text).toContain("密码错误")
     expect(response.text).toContain("drive-password-shell")
+    expect(response.text).toContain('aria-invalid="true"')
+    expect(response.text).toContain('aria-describedby="drive-password-error"')
   })
 
   it("renders password errors on direct download password posts", async () => {
@@ -1125,6 +1159,8 @@ describe("DriveController", () => {
     expect(response.text).toContain("密码错误")
     expect(response.text).toContain("drive-password-shell")
     expect(response.text).toContain('action="/files/shr_file/download"')
+    expect(response.text).toContain('aria-invalid="true"')
+    expect(response.text).toContain('aria-describedby="drive-password-error"')
   })
 
   it("streams canonical and legacy public file downloads", async () => {

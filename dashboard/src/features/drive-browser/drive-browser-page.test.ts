@@ -155,6 +155,33 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('7.2 KB')
   })
 
+  it('aligns shared markdown reader toolbar with the content column', () => {
+    const snapshot = createSnapshot({
+      context: 'share',
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+        browserUrl: '/files/shr_public',
+        downloadUrl: '/files/shr_public/download',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+
+    expect(html).toContain('max-w-4xl px-4 md:px-6 flex flex-col')
+    expect(html).toContain('min-h-0 gap-0 mx-auto w-full max-w-4xl px-4 md:px-6 py-6')
+    expect(html).toContain('data-renderer-toolbar="markdown" class="shrink-0 flex justify-end pb-4"')
+  })
+
   it('renders the resizable panel group in fixed layout mode', () => {
     const snapshot = createSnapshot()
 

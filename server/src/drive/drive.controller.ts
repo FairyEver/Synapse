@@ -1118,7 +1118,10 @@ function createResponseWritable(response: Response): Writable {
 }
 
 function sendPublicNotFound(response: Response) {
-  response.status(404).type("text/plain; charset=utf-8").send("网页未找到")
+  response.status(404).type("html").send(renderDrivePublicStatusPage({
+    title: "网页未找到",
+    message: "请检查链接，或联系分享方确认访问地址。",
+  }))
 }
 
 function escapeHtml(value: string): string {
@@ -1135,9 +1138,37 @@ function escapeAttribute(value: string): string {
   return escapeHtml(value)
 }
 
+function renderDrivePublicStatusPage(input: { readonly title: string; readonly message: string }): string {
+  const title = escapeHtml(input.title)
+  const message = escapeHtml(input.message)
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+${renderDrivePublicPageCss()}
+</style>
+</head>
+<body>
+<main class="drive-public-page">
+  <section class="drive-public-shell drive-public-status-shell" aria-labelledby="drive-public-status-title">
+    <div class="drive-public-panel">
+      <p class="drive-public-meta">404</p>
+      <h1 class="drive-public-title" id="drive-public-status-title">${title}</h1>
+      <p class="drive-public-description">${message}</p>
+    </div>
+  </section>
+</main>
+</body>
+</html>`
+}
+
 function renderDrivePasswordPage(input: { readonly actionPath: string; readonly error?: boolean }): string {
   const actionPath = escapeAttribute(input.actionPath)
-  const error = input.error ? `<p class="drive-password-error">密码错误</p>` : ""
+  const error = input.error ? `<p class="drive-password-error" id="drive-password-error">密码错误</p>` : ""
+  const inputErrorAttributes = input.error ? ` aria-invalid="true" aria-describedby="drive-password-error"` : ""
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -1145,64 +1176,195 @@ function renderDrivePasswordPage(input: { readonly actionPath: string; readonly 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>输入密码</title>
 <style>
-* {
-  box-sizing: border-box;
-}
-body {
-  min-height: 100vh;
-  margin: 0;
-  display: grid;
-  place-items: center;
-  background: Canvas;
-  color: CanvasText;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-.drive-password-shell {
-  width: min(100% - 32px, 360px);
-}
-.drive-password-form {
-  display: grid;
-  gap: 12px;
-}
-.drive-password-label {
-  font-size: 14px;
-  font-weight: 600;
-}
-.drive-password-input {
-  width: 100%;
-  min-height: 40px;
-  border: 1px solid ButtonBorder;
-  border-radius: 6px;
-  padding: 8px 10px;
-  background: Field;
-  color: FieldText;
-  font: inherit;
-}
-.drive-password-button {
-  min-height: 40px;
-  border: 1px solid ButtonBorder;
-  border-radius: 6px;
-  background: ButtonFace;
-  color: ButtonText;
-  font: inherit;
-  font-weight: 600;
-}
-.drive-password-error {
-  margin: 0;
-  color: Mark;
-  font-size: 13px;
-}
+${renderDrivePublicPageCss()}
 </style>
 </head>
 <body>
-<main class="drive-password-shell">
-  <form class="drive-password-form" method="post" action="${actionPath}">
-    <label class="drive-password-label" for="drive-password">密码</label>
-    <input class="drive-password-input" id="drive-password" name="password" type="password" autocomplete="current-password" required>
-    ${error}
-    <button class="drive-password-button" type="submit">确定</button>
-  </form>
+<main class="drive-public-page">
+  <section class="drive-public-shell drive-password-shell" aria-labelledby="drive-password-title">
+    <form class="drive-public-panel drive-password-form" method="post" action="${actionPath}">
+      <div class="drive-public-header">
+        <h1 class="drive-public-title" id="drive-password-title">输入密码</h1>
+      </div>
+      <div class="drive-password-field">
+        <label class="drive-password-label" for="drive-password">访问密码</label>
+        <input class="drive-password-input" id="drive-password" name="password" type="password" autocomplete="current-password" required${inputErrorAttributes}>
+        ${error}
+      </div>
+      <button class="drive-password-button" type="submit">打开</button>
+    </form>
+  </section>
 </main>
 </body>
 </html>`
+}
+
+function renderDrivePublicPageCss(): string {
+  return `
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+  }
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  font-family: "Geist Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+.drive-public-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+.drive-public-shell {
+  width: min(100%, 24rem);
+}
+.drive-public-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+.drive-public-header {
+  display: grid;
+  gap: 0.25rem;
+}
+.drive-public-meta {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.drive-public-title {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.drive-public-description {
+  margin: 0;
+  max-width: 30rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+.drive-password-form {
+  gap: 1rem;
+}
+.drive-password-field {
+  display: grid;
+  gap: 0.5rem;
+}
+.drive-password-label {
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+.drive-password-input {
+  width: 100%;
+  min-height: 2rem;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  padding: 0.25rem 0.625rem;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  outline: none;
+}
+.drive-password-input:focus-visible {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+}
+.drive-password-input[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+.drive-password-input[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 20%, transparent);
+}
+.drive-password-button {
+  min-height: 2rem;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 0.25rem 0.625rem;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+.drive-password-button:hover {
+  opacity: 0.9;
+}
+.drive-password-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+}
+.drive-password-button:active {
+  opacity: 0.85;
+}
+.drive-password-button:disabled,
+.drive-password-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.drive-password-error {
+  margin: 0;
+  color: var(--destructive);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+@media (max-width: 480px) {
+  .drive-public-page {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+  .drive-public-panel {
+    padding: 0.875rem;
+  }
+}
+`
 }

@@ -245,7 +245,8 @@ describe("DriveModule", () => {
     await flushAct()
 
     expect(mocks.getDriveUsage).toHaveBeenCalledTimes(1)
-    expect(document.body.textContent).toContain("已占用 4 B / 100 B")
+    expect(document.body.textContent).toContain("4 B / 100 B")
+    expect(document.body.textContent).not.toContain("已占用")
     expect(document.querySelector('[aria-label="云盘容量"]')?.getAttribute("aria-valuenow")).toBe("4")
   })
 
@@ -255,7 +256,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(document.body.textContent).toContain("已占用 50 B / 100 B")
+    expect(document.body.textContent).toContain("50 B / 100 B")
     expect(document.querySelector('[aria-label="云盘容量"]')?.getAttribute("aria-valuenow")).toBe("50")
   })
 

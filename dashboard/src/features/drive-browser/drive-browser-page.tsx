@@ -57,6 +57,9 @@ export type DriveBrowserPageProps =
 type DriveBrowserLayoutMode = 'auto' | 'fixed'
 type DriveFileRendererMode = DriveBrowserLayoutMode | 'reader'
 
+const DRIVE_READER_TEXT_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-4xl px-4 md:px-6'
+const DRIVE_READER_MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
+
 export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const state = useDriveBrowser(props)
   const initialPassword = props.context === 'share' ? props.initialPassword : undefined
@@ -197,10 +200,11 @@ export function DriveBrowserView({
 
 export function DriveSingleFileReaderView({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
   const actions = getDriveBrowserActions(snapshot)
+  const readerContainerClassName = getDriveReaderContainerClassName(snapshot.preview)
   return (
     <main className='min-h-svh bg-background'>
       <header data-reader-toolbar='true' className='sticky top-0 z-10 border-b bg-background'>
-        <div className='mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6'>
+        <div className={cn(readerContainerClassName, 'flex flex-col gap-3 py-3 md:flex-row md:items-center md:justify-between')}>
           <div className='flex min-w-0 flex-col gap-1'>
             <div className='flex min-w-0 items-center gap-2 text-sm font-medium'>
               <DriveBrowserItemIcon item={snapshot.current} />
@@ -486,7 +490,7 @@ function DriveBrowserPreview({
           'flex flex-col items-start gap-3 p-4 text-sm',
           fixed && 'h-full min-h-0',
           !fixed && !reader && 'min-h-72',
-          reader && 'mx-auto w-full max-w-4xl px-4 py-8 md:px-6'
+          reader && cn(DRIVE_READER_TEXT_CONTAINER_CLASSNAME, 'py-8')
         )}
       >
         <div className='font-medium'>{current.name}</div>
@@ -509,7 +513,7 @@ function DriveBrowserPreview({
           'flex items-center justify-center p-4',
           fixed && 'h-full min-h-0',
           !fixed && !reader && 'min-h-72',
-          reader && 'mx-auto w-full max-w-6xl px-4 py-6 md:px-6'
+          reader && cn(DRIVE_READER_MEDIA_CONTAINER_CLASSNAME, 'py-6')
         )}
       >
         {preview.imageUrl ? (
@@ -572,14 +576,14 @@ function DriveBrowserMarkdownPreview({
       className={cn(
         'min-h-0 gap-0',
         fixed && 'flex h-full flex-col',
-        reader && 'mx-auto w-full max-w-4xl px-4 py-6 md:px-6'
+        reader && cn(DRIVE_READER_TEXT_CONTAINER_CLASSNAME, 'py-6')
       )}
     >
       <div
         data-renderer-toolbar='markdown'
         className={cn(
           'shrink-0',
-          reader ? 'pb-4' : 'border-b px-4 py-2'
+          reader ? 'flex justify-end pb-4' : 'border-b px-4 py-2'
         )}
       >
         <TabsList>
@@ -613,7 +617,7 @@ function DriveBrowserTextPreview({
 
   if (reader) {
     return (
-      <div className='mx-auto w-full max-w-4xl px-4 py-6 md:px-6'>
+      <div className={cn(DRIVE_READER_TEXT_CONTAINER_CLASSNAME, 'py-6')}>
         <pre className='whitespace-pre-wrap break-words font-mono text-sm leading-6'>
           {preview.text}
         </pre>
@@ -634,6 +638,12 @@ function DriveBrowserTextPreview({
       ) : null}
     </ScrollArea>
   )
+}
+
+function getDriveReaderContainerClassName(preview: DriveBrowserPreviewDto | null): string {
+  return preview?.kind === 'image'
+    ? DRIVE_READER_MEDIA_CONTAINER_CLASSNAME
+    : DRIVE_READER_TEXT_CONTAINER_CLASSNAME
 }
 
 function DriveBrowserPasswordForm({
