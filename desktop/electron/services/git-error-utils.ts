@@ -2,6 +2,7 @@ import type {
   SynapseRepositorySyncFailureCategory,
   SynapseRepositorySyncPrimaryAction,
 } from "../../src/types/repository"
+import { sanitizeErrorPreservingPaths } from "./error-sanitize"
 
 export type GitFailureInfo = {
   category: SynapseRepositorySyncFailureCategory
@@ -34,7 +35,9 @@ export function isNonFastForwardError(output: string): boolean {
 export function classifyGitFailure(output: string, fallbackMessage: string): GitFailureInfo {
   const normalizedOutput = output.trim()
   const loweredOutput = normalizedOutput.toLowerCase()
-  const detail = firstUsefulLine(normalizedOutput)
+  const rawDetail = firstUsefulLine(normalizedOutput)
+  const detail = rawDetail ? sanitizeErrorPreservingPaths(rawDetail) : undefined
+  const safeFallbackMessage = sanitizeErrorPreservingPaths(fallbackMessage)
 
   if (
     loweredOutput.includes("could not resolve host")
@@ -155,7 +158,7 @@ export function classifyGitFailure(output: string, fallbackMessage: string): Git
 
   return {
     category: "unknown",
-    message: detail ? `${fallbackMessage}\n${detail}` : fallbackMessage,
+    message: detail ? `${safeFallbackMessage}\n${detail}` : safeFallbackMessage,
     detail,
     recoverable: false,
     primaryAction: null,

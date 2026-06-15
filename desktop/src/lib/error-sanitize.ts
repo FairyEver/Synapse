@@ -15,14 +15,19 @@ export interface ErrorLogMetaOptions {
 }
 
 export function sanitizeError(value: string): string {
+  return sanitizeErrorPreservingPaths(value)
+    .replace(WIN_PATH_PATTERN, "[path]")
+    .replace(POSIX_PATH_PATTERN, "$1[path]")
+    .trim()
+}
+
+export function sanitizeErrorPreservingPaths(value: string): string {
   return value
     .replace(URL_USERINFO_PATTERN, "$1[redacted]@")
     .replace(BEARER_PATTERN, "Bearer [redacted]")
     .replace(SENSITIVE_KEY_PATTERN, "$1=[redacted]")
     .replace(PLATFORM_TOKEN_PATTERN, "[key]")
     .replace(SK_KEY_PATTERN, "[key]")
-    .replace(WIN_PATH_PATTERN, "[path]")
-    .replace(POSIX_PATH_PATTERN, "$1[path]")
     .trim()
 }
 

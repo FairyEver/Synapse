@@ -44,6 +44,37 @@ describe("git-error-utils", () => {
       .toBe("当前目录不是 Git 仓库。")
   })
 
+  it("redacts credentials from git failure detail while preserving local paths", () => {
+    const output = [
+      "fatal: unable to access 'https://ghp_secret123456@example.com/repo.git': Authentication failed",
+      "hint: token=ghp_token123456 at /Users/liyang/project/repo",
+    ].join("\n")
+
+    const result = classifyGitFailure(output, "fallback")
+
+    expect(result.category).toBe("auth")
+    expect(result.detail).toContain("https://[redacted]@example.com/repo.git")
+    expect(result.detail).not.toContain("ghp_secret123456")
+    expect(result.detail).not.toContain("ghp_token123456")
+    expect(result.detail).not.toContain("token=")
+    expect(result.detail).not.toContain("[path]")
+  })
+
+  it("redacts unknown git failure messages before they enter snapshots", () => {
+    const result = classifyGitFailure(
+      "remote: Bearer ghp_secret123456 failed in /Users/liyang/project/repo",
+      "同步失败 token=ghp_fallback123456",
+    )
+
+    expect(result.category).toBe("unknown")
+    expect(result.message).toContain("同步失败 token=[redacted]")
+    expect(result.message).toContain("/Users/liyang/project/repo")
+    expect(result.message).not.toContain("ghp_secret123456")
+    expect(result.message).not.toContain("ghp_fallback123456")
+    expect(result.message).not.toContain("[path]")
+    expect(result.detail).not.toContain("ghp_secret123456")
+  })
+
   it.each([
     "fatal: Not possible to fast-forward, aborting.",
     "Updates were rejected because the tip of your current branch is behind",
