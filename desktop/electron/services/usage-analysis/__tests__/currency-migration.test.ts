@@ -32,8 +32,8 @@ describe("migrateUsageAnalysisCostsToCny", () => {
       rate: USD_TO_CNY_RATE,
       affectedRows: {
         usageEvents: { cc: 1, cx: 1 },
-        dailyUsage: { cc: 1, cx: 0 },
-        hourlyUsage: { cc: 1, cx: 0 },
+        dailyUsage: { cc: 1, cx: 1 },
+        hourlyUsage: { cc: 1, cx: 1 },
       },
     })
     db.close()

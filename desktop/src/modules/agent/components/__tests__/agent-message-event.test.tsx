@@ -497,7 +497,7 @@ describe("AgentMessageEvent", () => {
       "agent.external-link.open.failed",
       expect.objectContaining({
         hrefLength: href.length,
-        url: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/path?token=%5Bredacted%5D&query=ok&code=%5Bredacted%5D",
+        url: "https://example.com/path?token=%5Bredacted%5D&query=ok&code=%5Bredacted%5D",
       }),
     )
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret-value")

@@ -76,6 +76,9 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @synapse/shared run build
 
+      - name: Generate deployment config
+        run: pnpm --filter @synapse/desktop run generate:deployment-config
+
       - name: Generate definitions registry
         run: pnpm --filter @synapse/desktop run generate:definitions-registry
 

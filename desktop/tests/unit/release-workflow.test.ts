@@ -28,6 +28,13 @@ describe("desktop release workflow", () => {
       .toBeLessThan(workflowText.indexOf("pnpm --filter @synapse/desktop run build:renderer"))
   })
 
+  it("generates deployment config before building the renderer", () => {
+    const workflowText = readFileSync(releaseWorkflowPath, "utf8")
+
+    expect(workflowText.indexOf("pnpm --filter @synapse/desktop run generate:deployment-config"))
+      .toBeLessThan(workflowText.indexOf("pnpm --filter @synapse/desktop run build:renderer"))
+  })
+
   it("verifies COSCLI checksum before executing the downloaded binary", () => {
     const workflowText = readFileSync(releaseWorkflowPath, "utf8")
 

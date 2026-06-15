@@ -48,7 +48,7 @@ describe("shellIpcModule", () => {
     const { harness, auditSink, permissionGuard } = createHarness()
     electronMock.shell.openExternal.mockResolvedValue(undefined)
     const rawUrl = "https://user:pass@example.com/path?token=secret-value&query=ok&code=oauth-code"
-    const redactedUrl = "https://%5Bredacted%5D:%5Bredacted%5D@example.com/path?token=%5Bredacted%5D&query=ok&code=%5Bredacted%5D"
+    const redactedUrl = "https://example.com/path?token=%5Bredacted%5D&query=ok&code=%5Bredacted%5D"
 
     await harness.invoke("synapse:shell:open-external", { url: rawUrl })
 

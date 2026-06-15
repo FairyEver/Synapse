@@ -92,6 +92,7 @@ describe("CheatCodeStateService", () => {
       previousActive: false,
       errorName: "Error",
       errorMessage: "write failed",
+      errorLength: 12,
     })
   })
 })
