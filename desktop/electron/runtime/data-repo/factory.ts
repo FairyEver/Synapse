@@ -85,17 +85,35 @@ export function createFileBackedDataRepository(
   return repo
 }
 
-function sqliteIndexesFor(namespace: string): readonly string[] {
+export function sqliteIndexesFor(namespace: string): readonly string[] {
   switch (namespace) {
     case "conversations":
+      return [
+        "json_extract(value, '$.projectId')",
+        "json_extract(value, '$.projectId'), json_extract(value, '$.sessionKey'), json_extract(value, '$.workspaceKey'), json_extract(value, '$.active'), id",
+      ]
     case "outbox":
+      return [
+        "json_extract(value, '$.projectId')",
+        "json_extract(value, '$.projectId'), json_extract(value, '$.status'), id",
+      ]
     case "repo.pending-pushes":
     case "webhook.runs":
     case "relay.runs":
       return ["json_extract(value, '$.projectId')"]
-    case "agent.events":
     case "agent.usage":
-      return ["json_extract(value, '$.projectId'), json_extract(value, '$.conversationId')"]
+      return [
+        "json_extract(value, '$.projectId'), json_extract(value, '$.conversationId')",
+        "json_extract(value, '$.projectId'), json_extract(value, '$.conversationId'), id",
+        "json_extract(value, '$.projectId'), json_extract(value, '$.workflowRunId'), id",
+        "json_extract(value, '$.projectId'), json_extract(value, '$.taskRunId'), id",
+      ]
+    case "agent.events":
+      return [
+        "json_extract(value, '$.projectId'), json_extract(value, '$.conversationId')",
+        "json_extract(value, '$.projectId'), json_extract(value, '$.conversationId'), id",
+        "json_extract(value, '$.conversationId'), id",
+      ]
     default:
       return []
   }

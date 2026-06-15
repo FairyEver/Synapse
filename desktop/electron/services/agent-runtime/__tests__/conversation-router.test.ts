@@ -377,7 +377,7 @@ describe("ConversationRouter", () => {
     ])
   })
 
-  it("emits stream events without coalescing so token deltas are not dropped", async () => {
+  it("emits stream events through a bounded non-blocking queue", async () => {
     const { eventBus, emits } = createEventBusRecorder()
     const { router } = createRouter({
       eventBus,
@@ -397,9 +397,37 @@ describe("ConversationRouter", () => {
       expect.objectContaining({ text: "lo" }),
     ])
     expect(streamEmits.map(({ options }) => options)).toEqual([
-      { backpressure: "block" },
-      { backpressure: "block" },
+      { backpressure: "drop-oldest", maxQueueSize: 20 },
+      { backpressure: "drop-oldest", maxQueueSize: 20 },
     ])
+  })
+
+  it("does not persist high-frequency stream deltas to agent.events", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { router } = createRouter({
+      agentEvents,
+      session: new ScriptedSession([
+        {
+          type: "stream",
+          text: "hel",
+          deltaType: "text_delta",
+          sdkSessionId: "sdk-1",
+          event: { type: "content_block_delta" },
+        },
+        {
+          type: "stream",
+          thinking: "thinking",
+          deltaType: "thinking_delta",
+          sdkSessionId: "sdk-1",
+          event: { type: "content_block_delta" },
+        },
+        { type: "result", content: "hello", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    await router.send(baseMessage("hello"))
+
+    expect((await agentEvents.list()).map((entry) => entry.eventType)).toEqual(["result"])
   })
 
   it("persists a terminal error when the SDK session ends without result or error", async () => {
@@ -1469,7 +1497,7 @@ describe("ConversationRouter", () => {
         }),
       }),
     ])
-    expect(persisted.map((entry) => entry.eventType)).toEqual(["stream", "error"])
+    expect(persisted.map((entry) => entry.eventType)).toEqual(["error"])
     expect(saved?.history).toEqual([
       expect.objectContaining({ role: "user", content: "relay" }),
       expect.objectContaining({

@@ -187,7 +187,15 @@ function useChatEvents(
           selectedUpdate,
         })
 
-        void refreshConversationSnapshot(domainEvent.payload)
+        const pendingConversation = domainEvent.payload.conversationId
+          ? pendingConversationIdsRef.current.has(domainEvent.payload.conversationId)
+          : false
+        const shouldRefreshSnapshot = selectedUpdate
+          || pendingConversation
+          || domainEvent.payload.platform !== "workflow"
+        if (shouldRefreshSnapshot) {
+          void refreshConversationSnapshot(domainEvent.payload)
+        }
         if (selectedUpdate) {
           dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(
             current,

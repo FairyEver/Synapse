@@ -97,6 +97,7 @@ const DEFAULT_LIVE_EVENT_TIMEOUT_MS = 60 * 60 * 1000
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
 const MAX_HISTORY_CONTENT_LENGTH = 10_000
+const STREAM_EVENT_QUEUE_SIZE = 20
 
 export class ConversationRouter {
   private readonly deps: ConversationRouterDeps
@@ -110,6 +111,7 @@ export class ConversationRouter {
     object,
     Extract<AgentCommandRouterResult, { kind: "nativeSlash" }>
   >()
+  private readonly savedSdkSessions = new Map<string, string>()
 
   constructor(input: {
     readonly deps: ConversationRouterDeps
@@ -1172,7 +1174,9 @@ export class ConversationRouter {
   ): Promise<void> {
     const sdkSessionId = event.sdkSessionId ?? liveSession.currentSessionId()
     if (!sdkSessionId) return
+    if (this.savedSdkSessions.get(conversationId) === sdkSessionId) return
     await this.repository.saveSdkSession({ conversationId, sdkSessionId })
+    this.savedSdkSessions.set(conversationId, sdkSessionId)
   }
 
   private async saveExecutionResult(
@@ -1187,6 +1191,7 @@ export class ConversationRouter {
         conversationId: conversation.id,
         sdkSessionId,
       })
+      this.savedSdkSessions.set(conversation.id, sdkSessionId)
     }
     if (resultText) {
       saved = await this.repository.appendHistory(saved.id, "assistant", resultText, metadata)
@@ -1344,6 +1349,7 @@ export class ConversationRouter {
     event: AgentEvent,
   ): Promise<void> {
     if (!this.deps.agentEvents) return
+    if (isAgentStreamDeltaEvent(event)) return
     try {
       await this.deps.agentEvents.upsert({
         id: `${conversationId}:${turnId}:${sequence}`,
@@ -1408,6 +1414,9 @@ export class ConversationRouter {
     event: AgentEvent,
   ): void {
     const target = replyTargetFromMessage(message, conversationId, event)
+    const options = isAgentStreamEvent(event)
+      ? { backpressure: "drop-oldest" as const, maxQueueSize: STREAM_EVENT_QUEUE_SIZE }
+      : { backpressure: "block" as const }
     this.deps.eventBus?.emit({
       domain: "agent",
       type: event.type,
@@ -1419,8 +1428,9 @@ export class ConversationRouter {
       },
       scope: { sessionId: conversationId },
       timestamp: this.isoNow(),
-    }, { backpressure: "block" })
+    }, options)
     if (shouldSuppressReply(message)) return
+    if (isAgentStreamDeltaEvent(event)) return
     // Record outbox entry as pending before dispatch. After dispatch completes
     // (or fails), update the status to "sent" or "failed" so outbox accurately
     // reflects delivery outcome rather than pre-emptively marking as "sent".
@@ -1703,6 +1713,16 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
       return exhaustive
     }
   }
+}
+
+function isAgentStreamEvent(event: AgentEvent): event is Extract<AgentEvent, { type: "stream" }> {
+  return event.type === "stream"
+}
+
+function isAgentStreamDeltaEvent(event: AgentEvent): event is Extract<AgentEvent, { type: "stream" }> {
+  if (!isAgentStreamEvent(event)) return false
+  if (event.deltaType?.endsWith("_delta")) return true
+  return event.event.type === "content_block_delta"
 }
 
 function resultHistoryMetadata(

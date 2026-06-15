@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { SqliteNamespace, openSqliteDatabase } from "../backends/sqlite"
 import { InvalidNamespaceDataError } from "../errors"
+import { sqliteIndexesFor } from "../factory"
 
 interface Conversation extends Record<string, unknown> {
   id: string
@@ -153,6 +154,68 @@ describe("SqliteNamespace (T2.5)", () => {
         .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='ns_conversations'`)
         .all() as Array<{ name: string }>
       expect(indexes.some((i) => i.name.startsWith("idx_ns_conversations_"))).toBe(true)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("indexes agent events by conversation without scanning the whole event table", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const _ns = new SqliteNamespace<Conversation>({
+        name: "agent.events",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+        indexes: sqliteIndexesFor("agent.events"),
+      })
+      void _ns
+
+      const plan = db
+        .prepare(`
+          EXPLAIN QUERY PLAN
+          SELECT value FROM ns_agent_events
+          WHERE id != ? AND json_extract(value, '$.conversationId') = ?
+          ORDER BY id;
+        `)
+        .all("__singleton", "conversation-1") as Array<{ detail: string }>
+
+      expect(plan.some((row) => row.detail.includes("USING INDEX"))).toBe(true)
+      expect(plan.some((row) => row.detail.includes("SCAN ns_agent_events"))).toBe(false)
+      db.close()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("indexes outbox by project and status without scanning the whole outbox table", async () => {
+    const dir = await tempDir()
+    try {
+      const db = openSqliteDatabase(path.join(dir, "data.db"))
+      const _ns = new SqliteNamespace<Conversation>({
+        name: "outbox",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: db,
+        indexes: sqliteIndexesFor("outbox"),
+      })
+      void _ns
+
+      const plan = db
+        .prepare(`
+          EXPLAIN QUERY PLAN
+          SELECT value FROM ns_outbox
+          WHERE id != ?
+            AND json_extract(value, '$.projectId') = ?
+            AND json_extract(value, '$.status') = ?
+          ORDER BY id;
+        `)
+        .all("__singleton", "project-1", "sent") as Array<{ detail: string }>
+
+      expect(plan.some((row) => row.detail.includes("USING INDEX"))).toBe(true)
+      expect(plan.some((row) => row.detail.includes("SCAN ns_outbox"))).toBe(false)
       db.close()
     } finally {
       await rm(dir, { recursive: true, force: true })

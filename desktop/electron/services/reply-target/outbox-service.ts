@@ -40,6 +40,7 @@ export interface ReplyOutboxServiceDeps {
 export class ReplyOutboxService {
   private readonly deps: ReplyOutboxServiceDeps
   private readonly sentRetentionLimit: number
+  private readonly retainedSentIdsByDestination = new Map<string, string[]>()
   private pendingWrite: Promise<void> = Promise.resolve()
 
   constructor(deps: ReplyOutboxServiceDeps) {
@@ -156,15 +157,12 @@ export class ReplyOutboxService {
   }
 
   private async pruneSentEntries(entry: OutboxEntryV1): Promise<void> {
-    const entries = await this.deps.outbox.list({
-      projectId: entry.projectId,
-      status: "sent",
-    })
-    const matchingSentEntries = entries
-      .filter((candidate) => sameDestination(candidate.destination, entry.destination))
-      .sort((left, right) => outboxUpdatedAt(right) - outboxUpdatedAt(left))
-    const staleEntries = matchingSentEntries.slice(this.sentRetentionLimit)
-    await Promise.all(staleEntries.map((candidate) => this.deps.outbox.remove(candidate.id)))
+    const destinationKey = outboxDestinationKey(entry)
+    const retainedIds = this.retainedSentIdsByDestination.get(destinationKey) ?? []
+    const nextRetainedIds = [entry.id, ...retainedIds.filter((id) => id !== entry.id)]
+    const staleIds = nextRetainedIds.slice(this.sentRetentionLimit)
+    this.retainedSentIdsByDestination.set(destinationKey, nextRetainedIds.slice(0, this.sentRetentionLimit))
+    await Promise.all(staleIds.map((id) => this.deps.outbox.remove(id)))
   }
 
   private nextId(): string {
@@ -242,17 +240,13 @@ function outboxErrorSummary(message: string): string {
   return `Error (${message.length} chars)`
 }
 
-function sameDestination(
-  left: OutboxEntryV1["destination"],
-  right: OutboxEntryV1["destination"],
-): boolean {
-  return left.platform === right.platform
-    && left.connectorId === right.connectorId
-    && left.sessionKey === right.sessionKey
-}
-
-function outboxUpdatedAt(entry: OutboxEntryV1): number {
-  return Date.parse(entry.updatedAt || entry.createdAt)
+function outboxDestinationKey(entry: OutboxEntryV1): string {
+  return [
+    entry.projectId,
+    entry.destination.platform,
+    entry.destination.connectorId ?? "",
+    entry.destination.sessionKey,
+  ].join("\u0000")
 }
 
 function normalizePositiveLimit(value: number | undefined, fallback: number): number {

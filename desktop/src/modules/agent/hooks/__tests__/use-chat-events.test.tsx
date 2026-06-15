@@ -124,6 +124,48 @@ describe("useChatEvents", () => {
       .not.toContain("secret IPC failure detail")
   })
 
+  it("does not refresh the full session snapshot for inactive workflow conversations", async () => {
+    const loadTimeline = vi.fn(async () => {})
+    const refreshConversationSnapshot = vi.fn(async () => {})
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          dispatch={dispatch}
+          loadTimeline={loadTimeline}
+          refreshConversationSnapshot={refreshConversationSnapshot}
+        />,
+      )
+    })
+
+    const event: SynapseAgentDomainEvent = {
+      domain: "agent",
+      type: "conversationUpdated",
+      timestamp: "2026-05-14T00:00:00.000Z",
+      payload: {
+        projectId: "project-1",
+        conversationId: "workflow-conversation-1",
+        sessionKey: "workflow:run-1",
+        platform: "workflow",
+      },
+    }
+
+    await act(async () => {
+      bridgeState.listener?.(event)
+      await Promise.resolve()
+    })
+
+    expect(refreshConversationSnapshot).not.toHaveBeenCalled()
+    expect(loadTimeline).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_UNREAD",
+      updater: expect.any(Function),
+    })
+  })
+
   it("logs pending permission refresh failures after stream events", async () => {
     const refreshPendingPermissions = vi.fn(async () => {
       throw new Error("secret permission refresh detail")
@@ -445,6 +487,7 @@ describe("useChatEvents", () => {
 function HookProbe({
   dispatch,
   loadTimeline,
+  refreshConversationSnapshot,
   refreshPendingPermissions,
   updateTimeline,
 }: {
@@ -455,6 +498,11 @@ function HookProbe({
     readonly conversationId?: string
   }) => Promise<void>
   readonly refreshPendingPermissions?: () => Promise<void>
+  readonly refreshConversationSnapshot?: (target: {
+    readonly projectId: string
+    readonly sessionKey: string
+    readonly conversationId?: string
+  }) => Promise<void>
   readonly updateTimeline?: (updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[]) => void
 }): ReactNode {
   const projectIdsRef = useRef(["project-1"])
@@ -473,10 +521,10 @@ function HookProbe({
   }), [])
   const connection = useMemo(() => ({
     loadTimeline: loadTimeline ?? vi.fn(async () => {}),
-    refreshConversationSnapshot: vi.fn(async () => {}),
+    refreshConversationSnapshot: refreshConversationSnapshot ?? vi.fn(async () => {}),
     refreshPendingPermissions: refreshPendingPermissions ?? vi.fn(async () => {}),
     updateTimeline: updateTimeline ?? vi.fn(),
-  }), [loadTimeline, refreshPendingPermissions, updateTimeline])
+  }), [loadTimeline, refreshConversationSnapshot, refreshPendingPermissions, updateTimeline])
 
   useChatEvents(state, dispatch, {
     projectIdsRef,

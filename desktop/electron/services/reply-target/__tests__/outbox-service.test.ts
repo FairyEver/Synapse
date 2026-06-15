@@ -119,6 +119,7 @@ describe("ReplyOutboxService", () => {
 
   it("prunes old sent entries for the same reply target", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const listSpy = vi.spyOn(outbox, "list")
     let nextId = 0
     let clock = Date.parse("2026-04-26T00:00:00.000Z")
     const service = new ReplyOutboxService({
@@ -158,6 +159,7 @@ describe("ReplyOutboxService", () => {
     }
     await service.flushForTests()
 
+    expect(listSpy).not.toHaveBeenCalled()
     expect((await outbox.list()).map((entry) => entry.id).sort()).toEqual([
       "outbox-0",
       "outbox-1",
