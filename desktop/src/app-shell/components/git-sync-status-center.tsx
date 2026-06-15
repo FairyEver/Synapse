@@ -76,7 +76,9 @@ function GitSyncStatusCenter({
   onOpenSettings,
 }: GitSyncStatusCenterProps) {
   const message = getStatusMessage(snapshot, status, pendingCount)
-  const canRetry = snapshot?.canRetryNow === true || status === "pending" || status === "offline"
+  const canRetry = snapshot
+    ? snapshot.primaryAction === "retry" && snapshot.canRetryNow === true
+    : status === "pending" || status === "offline"
   const pendingItems = snapshot?.pendingItems ?? []
   const visiblePendingItems = pendingItems.slice(0, PENDING_ITEMS_RENDER_LIMIT)
   const hiddenPendingCount = Math.max(0, pendingCount - visiblePendingItems.length)
