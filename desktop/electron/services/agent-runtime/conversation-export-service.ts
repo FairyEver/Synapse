@@ -20,6 +20,7 @@ import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 import { REDACTED, redactSensitiveValue } from "./redaction"
 
 const EXPORT_SOURCE = "agent.exportConversationBundle"
+const MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH = 80
 
 export interface AgentConversationExportRequest {
   readonly projectId: string
@@ -467,12 +468,23 @@ function finiteNumber(value: unknown): number {
 }
 
 function createDefaultFileName(rawName: string, now: Date): string {
-  const safeName = rawName.replace(/[\\/:*?"<>|]/g, "-").trim() || "conversation"
+  const safeName = createSafeFileNameSegment(rawName)
   const timestamp = now.toISOString()
     .replace(/\.\d{3}Z$/, "Z")
     .replace(/[-:]/g, "")
     .replace("T", "-")
   return `synapse-agent-conversation-${safeName}-${timestamp}.zip`
+}
+
+function createSafeFileNameSegment(rawName: string): string {
+  const safeName = rawName
+    .replace(/[\\/:*?"<>|\u0000-\u001F]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    || "conversation"
+  const chars = Array.from(safeName)
+  if (chars.length <= MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH) return safeName
+  return chars.slice(0, MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH).join("").trim() || "conversation"
 }
 
 function sanitizeExportValue<T>(value: T): unknown {

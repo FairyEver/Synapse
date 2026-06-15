@@ -158,10 +158,10 @@ export function initUsageAnalysisSchema(database: DatabaseSync, options: UsageAn
 
   for (const prefix of ["cc", "cx"] as const) {
     ensureColumn(database, `${prefix}_scan_files`, "line_count", "INTEGER NOT NULL DEFAULT 0")
+    ensureColumn(database, `${prefix}_scan_files`, "pricing_rules_hash", "TEXT NOT NULL DEFAULT ''")
     if (prefix === "cc") {
       ensureColumn(database, "cc_scan_files", "parsed_offset", "INTEGER NOT NULL DEFAULT 0")
       ensureColumn(database, "cc_scan_files", "parser_version", "INTEGER NOT NULL DEFAULT 0")
-      ensureColumn(database, "cc_scan_files", "pricing_rules_hash", "TEXT NOT NULL DEFAULT ''")
       ensureColumn(database, "cc_scan_files", "first_seen_at", "TEXT NOT NULL DEFAULT ''")
       ensureColumn(database, "cc_scan_files", "last_changed_at", "TEXT NOT NULL DEFAULT ''")
     }

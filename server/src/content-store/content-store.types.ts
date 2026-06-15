@@ -1,4 +1,5 @@
 import type { ContentStoreFileKind, ContentStoreType } from "@synapse/shared"
+import type { Readable } from "node:stream"
 
 export type ContentStoreFileInput = {
   readonly path: string
@@ -22,4 +23,8 @@ export type ContentStorePackageInput = {
   readonly type: Extract<ContentStoreType, "skill" | "rule">
   readonly title: string
   readonly files: readonly NormalizedContentStoreFile[]
+}
+
+export type ContentStorePackageStreamFile = Omit<NormalizedContentStoreFile, "bytes"> & {
+  readonly stream: Readable
 }

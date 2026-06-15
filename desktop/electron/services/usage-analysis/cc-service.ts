@@ -70,6 +70,7 @@ interface LegacyScanFileRow {
   readonly mtime_ms: number
   readonly line_count: number
   readonly parse_status: string
+  readonly pricing_rules_hash: string
 }
 
 interface ScanFileStateRow {
@@ -1153,6 +1154,7 @@ async function refreshLegacyUsageNamespace(options: {
   const scan = collectRefreshJsonlFiles(options.roots, options.scope)
   const files = scan.files
   const priceRules = listModelPriceRules(options.db)
+  const pricingRulesHash = hashUsagePriceRules(priceRules)
   const pricedAt = new Date().toISOString()
   let parsedFiles = 0
   let skippedFiles = 0
@@ -1171,8 +1173,13 @@ async function refreshLegacyUsageNamespace(options: {
     let fp: ReturnType<typeof fingerprintFile> | null = null
     try {
       fp = fingerprintFile(file)
-      const existing = options.db.prepare(`SELECT size, mtime_ms, line_count, parse_status FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as LegacyScanFileRow | undefined
-      if (existing?.size === fp.size && existing.mtime_ms === fp.mtimeMs && existing.parse_status === "parsed") {
+      const existing = options.db.prepare(`SELECT size, mtime_ms, line_count, parse_status, pricing_rules_hash FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as LegacyScanFileRow | undefined
+      if (
+        existing?.size === fp.size
+        && existing.mtime_ms === fp.mtimeMs
+        && existing.parse_status === "parsed"
+        && existing.pricing_rules_hash === pricingRulesHash
+      ) {
         skippedFiles += 1
         continue
       }
@@ -1180,13 +1187,15 @@ async function refreshLegacyUsageNamespace(options: {
       const canAppend = options.prefix === "cc" && existing?.parse_status === "parsed" && fp.size >= existing.size && existing.line_count > 0
       const parsed = await options.parseFile(file, canAppend ? { startLine: existing.line_count, priceRules } : { priceRules })
       if (canAppend && parsed.lineCount <= existing.line_count) {
-        markScanFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed.lineCount)
+        markScanFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed.lineCount, pricingRulesHash)
         skippedFiles += 1
         continue
       }
       const fingerprint = fp
       await runWithUsageDatabaseLockRetry(() => {
-        persistParsedFile(options.db, options.prefix, file, fingerprint.size, fingerprint.mtimeMs, parsed, canAppend ? "append" : "replace", pricedAt)
+        persistParsedFile(options.db, options.prefix, file, fingerprint.size, fingerprint.mtimeMs, parsed, canAppend ? "append" : "replace", pricedAt, {
+          pricingRulesHash,
+        })
       })
       parsedFiles += 1
       usageEvents += parsed.usageEvents.length
@@ -1361,7 +1370,7 @@ function persistParsedFile(
         saveCcFileParserState(db, filePath, scanOptions.parserState)
       }
     } else {
-      markScanFile(db, prefix, filePath, size, mtimeMs, parsed.lineCount)
+      markScanFile(db, prefix, filePath, size, mtimeMs, parsed.lineCount, scanOptions.pricingRulesHash ?? "")
     }
     db.exec("COMMIT")
   } catch (error) {
@@ -1370,18 +1379,19 @@ function persistParsedFile(
   }
 }
 
-function markScanFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, size: number, mtimeMs: number, lineCount: number): void {
+function markScanFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, size: number, mtimeMs: number, lineCount: number, pricingRulesHash = ""): void {
   db.prepare(`
-    INSERT INTO ${prefix}_scan_files (file_path, size, mtime_ms, line_count, parse_status, error_kind, last_scanned_at)
-    VALUES (?, ?, ?, ?, 'parsed', NULL, ?)
+    INSERT INTO ${prefix}_scan_files (file_path, size, mtime_ms, line_count, parse_status, error_kind, last_scanned_at, pricing_rules_hash)
+    VALUES (?, ?, ?, ?, 'parsed', NULL, ?, ?)
     ON CONFLICT(file_path) DO UPDATE SET
       size = excluded.size,
       mtime_ms = excluded.mtime_ms,
       line_count = excluded.line_count,
       parse_status = excluded.parse_status,
       error_kind = excluded.error_kind,
-      last_scanned_at = excluded.last_scanned_at
-  `).run(filePath, size, mtimeMs, lineCount, new Date().toISOString())
+      last_scanned_at = excluded.last_scanned_at,
+      pricing_rules_hash = excluded.pricing_rules_hash
+  `).run(filePath, size, mtimeMs, lineCount, new Date().toISOString(), pricingRulesHash)
 }
 
 function markCcScanFile(

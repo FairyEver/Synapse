@@ -32,7 +32,7 @@ export function getLiveClientSummary(
   const onlineCount = matchingClients.filter(
     (client) => client.status === 'online'
   ).length
-  const isUnknown = matchingClients.length === 0 && options.isSnapshotUnavailable
+  const isUnknown = matchingClients.length === 0 && options.isSnapshotUnavailable === true
 
   return {
     label: isUnknown

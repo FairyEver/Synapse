@@ -241,6 +241,49 @@ describe("AgentConversationExportService", () => {
     })).resolves.toEqual({ success: false })
   })
 
+  it("bounds default bundle and staging directory names for long conversation names", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-long-name-test-"))
+    tempRoots.push(tempRoot)
+    const outputPath = path.join(tempRoot, "short.zip")
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert({
+      ...createConversation(),
+      name: `Debug ${"x".repeat(180)}`,
+    })
+    const createZipArchive = vi.fn(async (sourceDirectoryPath: string, targetPath: string) => {
+      expect(targetPath).toBe(outputPath)
+      expect(path.basename(sourceDirectoryPath).length).toBeLessThanOrEqual(160)
+    })
+
+    const service = new AgentConversationExportService({
+      conversations,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: vi.fn(async (defaultFileName: string) => {
+        expect(defaultFileName.length).toBeLessThanOrEqual(160)
+        return outputPath
+      }),
+      createZipArchive,
+      makeTempDir: async () => {
+        const staging = await mkdtemp(path.join(tempRoot, "staging-"))
+        tempRoots.push(staging)
+        return staging
+      },
+      now: () => new Date("2026-06-08T08:30:00.000Z"),
+      removePath: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    await expect(service.exportBundle({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: TEST_SESSION_KEY,
+    })).resolves.toMatchObject({
+      success: true,
+      filePath: outputPath,
+    })
+    expect(createZipArchive).toHaveBeenCalledTimes(1)
+  })
+
   it("serializes cyclic runtime timeline values without blocking export", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-cycle-test-"))
     tempRoots.push(tempRoot)

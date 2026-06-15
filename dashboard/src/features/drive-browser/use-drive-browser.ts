@@ -68,8 +68,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     mutationFn: async (password: string) => {
       if (input.context !== 'share') throw new Error('当前文件不需要密码。')
       const result = await driveBrowserApi.unlockShare(input.shareId, password, input.itemId)
-      if (isDriveBrowserPasswordRequired(result)) throw new Error(result.message)
-      return result
+      return requireDriveBrowserSnapshot(result)
     },
     onSuccess: (snapshot) => {
       setUnlockedSnapshot(snapshot)
@@ -84,8 +83,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
         childrenOffset: nextOffset,
         childrenLimit: snapshot.childrenPage?.limit,
       })
-      if (isDriveBrowserPasswordRequired(result)) throw new Error(result.message)
-      return result
+      return requireDriveBrowserSnapshot(result)
     },
     onSuccess: (nextSnapshot) => {
       if (unlockedSnapshot) {
@@ -93,13 +91,13 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
         return
       }
       setPagedSnapshot((current) => {
-        const baseSnapshot = current ?? (isDriveBrowserPasswordRequired(query.data) ? null : query.data) ?? nextSnapshot
+        const baseSnapshot = current ?? toDriveBrowserSnapshot(query.data) ?? nextSnapshot
         return mergeDriveBrowserSnapshots(baseSnapshot, nextSnapshot)
       })
     },
   })
 
-  const querySnapshot = isDriveBrowserPasswordRequired(query.data) ? null : query.data
+  const querySnapshot = toDriveBrowserSnapshot(query.data)
   const snapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
   if (snapshot) {
     return {
@@ -165,6 +163,20 @@ export function isDriveBrowserPasswordRequired(
   value: DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto | undefined
 ): value is DriveBrowserPasswordRequiredDto {
   return Boolean(value && 'passwordRequired' in value && value.passwordRequired)
+}
+
+function toDriveBrowserSnapshot(
+  value: DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto | undefined
+): DriveBrowserSnapshotDto | null {
+  if (!value || isDriveBrowserPasswordRequired(value)) return null
+  return value
+}
+
+function requireDriveBrowserSnapshot(
+  value: DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto
+): DriveBrowserSnapshotDto {
+  if (isDriveBrowserPasswordRequired(value)) throw new Error(value.message)
+  return value
 }
 
 function getErrorMessage(error: unknown) {

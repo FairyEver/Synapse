@@ -186,6 +186,7 @@ describe("App workflow entry visibility", () => {
       "规则",
       "提示词",
       "对话",
+      "数据库",
       "定时",
       "自动化",
       "云盘",
@@ -211,6 +212,19 @@ describe("App workflow entry visibility", () => {
     expect(document.body.textContent).toContain("本机模块")
   })
 
+  it("opens the database module from the top navigation", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      findTopNavigationButton("数据库").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("数据模块")
+  })
+
   it("places workflow between automation and drive when the workflow entry is visible", async () => {
     mocks.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
 
@@ -221,6 +235,7 @@ describe("App workflow entry visibility", () => {
       "规则",
       "提示词",
       "对话",
+      "数据库",
       "定时",
       "自动化",
       "工作流",

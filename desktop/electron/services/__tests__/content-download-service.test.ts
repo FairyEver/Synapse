@@ -5,10 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseSkillDetail } from "../../../src/types/content"
 
 const mocks = vi.hoisted(() => ({
+  copyAttachmentToPath: vi.fn(async () => true),
   createZipArchive: vi.fn(async (_sourceDirectoryPath: string, outputFilePath: string) => {
     await writeFile(outputFilePath, "zip-by-runtime-archive", "utf8")
   }),
   getDetail: vi.fn(),
+  getRepositoryState: vi.fn(async () => ({ gitRootPath: "/repo-root" })),
+  loadConfig: vi.fn(async () => ({
+    activeRepoUuid: "repo-1",
+    repositories: [{
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: "/repo",
+      contentDirs: {},
+    }],
+  })),
 }))
 
 vi.mock("electron", () => ({
@@ -29,6 +40,24 @@ vi.mock("../content-service", () => ({
   contentService: {
     getContent: vi.fn(),
     getDetail: mocks.getDetail,
+  },
+}))
+
+vi.mock("../attachments-pool-service", () => ({
+  attachmentsPoolService: {
+    copyAttachmentToPath: mocks.copyAttachmentToPath,
+  },
+}))
+
+vi.mock("../config-store", () => ({
+  configStore: {
+    load: mocks.loadConfig,
+  },
+}))
+
+vi.mock("../repository-store", () => ({
+  repositoryStore: {
+    getRepositoryState: mocks.getRepositoryState,
   },
 }))
 
@@ -94,5 +123,27 @@ describe("ContentDownloadService", () => {
       }),
     )
     expect(await readFile(targetPath, "utf8")).toBe("zip-by-runtime-archive")
+  })
+
+  it("rejects repository skill downloads when an attachment cannot be copied", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skill.zip")
+    mocks.copyAttachmentToPath.mockResolvedValue(false)
+    mocks.getDetail.mockResolvedValue({
+      ...createSkillDetail("skill-1"),
+      attachmentCount: 1,
+      attachments: [{
+        originalName: "references/guide.md",
+        sha256: "a".repeat(64),
+        size: 5,
+      }],
+      source: "repository",
+    })
+
+    await expect(contentDownloadService.downloadSkill("skill-1", targetPath))
+      .rejects.toThrow("Skill 附件复制失败：references/guide.md")
+
+    expect(mocks.createZipArchive).not.toHaveBeenCalled()
+    await expect(readFile(targetPath, "utf8")).rejects.toThrow()
   })
 })

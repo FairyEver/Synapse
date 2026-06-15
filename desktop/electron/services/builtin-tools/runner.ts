@@ -29,27 +29,42 @@ export async function runBuiltinTool(request: BuiltinToolRunRequest): Promise<Bu
   try {
     const permissions = resolveBuiltinToolPermissions(descriptor, parsedInput.data as Record<string, unknown>)
     for (const permission of permissions) {
-      const guardResult = await request.permissionGuard.check({
-        action: permission.action,
-        actor: request.context.actor,
-        resource: permission.resource,
-        context: {
-          source: "tools.builtinTool.run",
-          toolId: descriptor.id,
-          entryPoint: request.context.entryPoint,
-        },
-      })
+      const permissionMetadata = {
+        source: "tools.builtinTool.run",
+        toolId: descriptor.id,
+        entryPoint: request.context.entryPoint,
+      }
+      let guardResult
+      try {
+        guardResult = await request.permissionGuard.check({
+          action: permission.action,
+          actor: request.context.actor,
+          resource: permission.resource,
+          context: permissionMetadata,
+        })
+      } catch (error) {
+        request.auditSink.record({
+          action: permission.action,
+          actor: request.context.actor,
+          resource: permission.resource,
+          outcome: "failed",
+          metadata: {
+            ...permissionMetadata,
+            boundary: "permissionGuard.check",
+            errorType: getErrorType(error),
+          },
+        })
+        throw error
+      }
       request.auditSink.record({
         action: permission.action,
         actor: request.context.actor,
         resource: permission.resource,
         outcome: guardResult.allowed ? "allowed" : "denied",
         metadata: guardResult.allowed
-          ? { source: "tools.builtinTool.run", toolId: descriptor.id, entryPoint: request.context.entryPoint }
+          ? permissionMetadata
           : {
-              source: "tools.builtinTool.run",
-              toolId: descriptor.id,
-              entryPoint: request.context.entryPoint,
+              ...permissionMetadata,
               reason: guardResult.reason,
               policyId: guardResult.policyId,
             },
@@ -78,6 +93,11 @@ export async function runBuiltinTool(request: BuiltinToolRunRequest): Promise<Bu
   } catch (error) {
     return failure(descriptor.id, error)
   }
+}
+
+function getErrorType(error: unknown): string {
+  if (error instanceof Error && error.name) return error.name
+  return typeof error
 }
 
 function failure(toolId: string, error: unknown): BuiltinToolRunResult {

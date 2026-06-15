@@ -393,6 +393,49 @@ describe("TaskCard", () => {
     })
     expect(onToggleEnabled).not.toHaveBeenCalled()
   })
+
+  it("disables manual run for enabled needs-update tasks", async () => {
+    const onRun = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TooltipProvider>
+          <TaskCard
+            busy={false}
+            projects={projects}
+            task={createTask({
+              enabled: true,
+              validation: {
+                status: "needs_update",
+                issues: [{ field: "action.config.providerId", message: "选择供应商" }],
+              },
+            })}
+            onDelete={vi.fn()}
+            onEdit={vi.fn()}
+            onHistory={vi.fn()}
+            onMigrate={vi.fn()}
+            onRun={onRun}
+            onStop={vi.fn()}
+            onToggleEnabled={vi.fn()}
+          />
+        </TooltipProvider>,
+      )
+    })
+
+    const runButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("运行"))
+
+    expect(runButton?.disabled).toBe(true)
+
+    await act(async () => {
+      runButton?.click()
+    })
+    expect(onRun).not.toHaveBeenCalled()
+  })
 })
 
 const projects: SynapseProjectConfig[] = [

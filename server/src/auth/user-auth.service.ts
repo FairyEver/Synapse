@@ -319,13 +319,16 @@ export class UserAuthService {
           throw new UnauthorizedException("重置链接无效或已过期。")
         }
 
-        await tx.user.update({
-          where: { id: record.userId },
+        const userUpdate = await tx.user.updateMany({
+          where: { id: record.userId, status: "active" },
           data: {
             passwordHash: await hashPassword(input.password),
             passwordChangedAt: now,
           },
         })
+        if (userUpdate.count !== 1) {
+          throw new UnauthorizedException("重置链接无效或已过期。")
+        }
         await tx.userSession.updateMany({
           where: { userId: record.userId, revokedAt: null },
           data: { revokedAt: now },

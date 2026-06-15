@@ -743,6 +743,69 @@ describe("preload bridge", () => {
     expect(serializedLog).not.toContain("root.txt")
   })
 
+  it("redacts Agent message content when send IPC fails", async () => {
+    const bridge = await loadPreloadBridge()
+    const failure = new Error("send unavailable")
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if (channel === "synapse:agent:send") {
+        return Promise.reject(failure)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    await expect(bridge.agent.send({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      content: "请分析客户资料 token=agent-content-secret",
+    })).rejects.toThrow("send unavailable")
+
+    const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
+      channel === "synapse:log:write")
+    const serializedLog = JSON.stringify(logCall?.[1])
+    expect(serializedLog).toContain("synapse:agent:send")
+    expect(serializedLog).not.toContain("客户资料")
+    expect(serializedLog).not.toContain("agent-content-secret")
+  })
+
+  it("redacts workflow definition and params content when runDefinition IPC fails", async () => {
+    const bridge = await loadPreloadBridge()
+    const failure = new Error("workflow unavailable")
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if (channel === "synapse:workflow:run-definition") {
+        return Promise.reject(failure)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    await expect(bridge.workflow.runDefinition({
+      id: "workflow-1",
+      name: "Workflow",
+      version: "1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [],
+      nodes: [{
+        id: "node-1",
+        name: "Prompt",
+        type: "prompt",
+        position: { x: 0, y: 0 },
+        config: { prompt: "总结内部合同 workflow-prompt-secret" },
+      }],
+      edges: [],
+    }, {
+      body: "客户输入 workflow-param-secret",
+    })).rejects.toThrow("workflow unavailable")
+
+    const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
+      channel === "synapse:log:write")
+    const serializedLog = JSON.stringify(logCall?.[1])
+    expect(serializedLog).toContain("synapse:workflow:run-definition")
+    expect(serializedLog).not.toContain("内部合同")
+    expect(serializedLog).not.toContain("workflow-prompt-secret")
+    expect(serializedLog).not.toContain("客户输入")
+    expect(serializedLog).not.toContain("workflow-param-secret")
+  })
+
   it("passes direct update event payloads through", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

@@ -334,6 +334,74 @@ test('runWorker calls onOutput for each stdout line', async () => {
   }
 })
 
+test('runWorker flushes stdout output without trailing newline', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-output-no-newline-'))
+  try {
+    const command = join(dir, 'output.sh')
+    await writeFile(command, '#!/bin/sh\nprintf "final status"\n', 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      provider: 'codex',
+      codex: {
+        command,
+        model: '',
+        sandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+        json: true,
+        disableMcp: true,
+      },
+    }
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const outputLines: OutputLine[] = []
+    const result = await runWorker(config, 1, logger.createWorkerLogger(1), undefined, line => {
+      outputLines.push(line)
+    })
+
+    assert.ok(outputLines.some(l => l.stream === 'stdout' && l.text === 'final status'))
+    assert.equal(result.lastMessage, 'final status')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runWorker flushes stderr output without trailing newline', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-stderr-no-newline-'))
+  try {
+    const command = join(dir, 'stderr.sh')
+    await writeFile(command, '#!/bin/sh\nprintf "final error" >&2\nexit 1\n', 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      provider: 'codex',
+      codex: {
+        command,
+        model: '',
+        sandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+        json: true,
+        disableMcp: true,
+      },
+    }
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const outputLines: OutputLine[] = []
+    const result = await runWorker(config, 1, logger.createWorkerLogger(1), undefined, line => {
+      outputLines.push(line)
+    })
+
+    assert.ok(outputLines.some(l => l.stream === 'stderr' && l.text === 'final error'))
+    assert.equal(result.lastMessage, 'final error')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('runWorker splits multi-line readable events before publishing output', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'auto-runner-output-multiline-'))
   try {

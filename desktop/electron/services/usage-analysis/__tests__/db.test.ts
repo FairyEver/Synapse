@@ -54,6 +54,18 @@ describe("usage analysis db", () => {
     }
   })
 
+  it("adds Codex scan pricing hash column", () => {
+    const db = new DatabaseSync(":memory:")
+    try {
+      initUsageAnalysisSchema(db)
+
+      const columns = db.prepare("PRAGMA table_info(cx_scan_files)").all() as { name: string }[]
+      expect(columns.map((column) => column.name)).toContain("pricing_rules_hash")
+    } finally {
+      db.close()
+    }
+  })
+
   it("creates CC scan file parser state table", () => {
     const db = new DatabaseSync(":memory:")
     try {

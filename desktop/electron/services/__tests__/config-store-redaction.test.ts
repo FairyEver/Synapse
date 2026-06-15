@@ -63,4 +63,28 @@ describe("ConfigStore log redaction", () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it("summarizes quick input content before logging config update patches", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-redaction-"))
+    mocks.userDataPath = dir
+
+    try {
+      await configStore.update({
+        global: {
+          quickInputs: [{ id: "quick-1", content: "token=secret-value\n内部资料", directSend: true }],
+        },
+      })
+
+      const updatingCall = mocks.logger.info.mock.calls.find(([message]) => message === "Updating config.")
+      expect(updatingCall).toBeDefined()
+
+      const loggedPatch = JSON.stringify(updatingCall?.[1])
+      expect(loggedPatch).toContain("quick-1")
+      expect(loggedPatch).toContain("contentLength")
+      expect(loggedPatch).not.toContain("token=secret-value")
+      expect(loggedPatch).not.toContain("内部资料")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

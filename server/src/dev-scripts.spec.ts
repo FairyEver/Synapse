@@ -33,7 +33,7 @@ describe("server dev scripts", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
-      "docker compose --env-file server/.env -f server/compose.yml up -d postgres",
+      "docker compose --env-file server/.env.local -f server/compose.yml up -d postgres",
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/server run dev",
@@ -52,7 +52,7 @@ describe("server dev scripts", () => {
       "node scripts/dev/quit-processes.mjs dev:server",
     )
     expect(workspacePackage.scripts?.["quit:server"]).toContain(
-      "docker compose --env-file server/.env -f server/compose.yml down",
+      "docker compose --env-file server/.env.local -f server/compose.yml down",
     )
     expect(workspacePackage.scripts?.["quit:docker"]).toBeUndefined()
   })

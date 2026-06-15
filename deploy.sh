@@ -4,10 +4,8 @@ set -euo pipefail
 
 SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse"
-LOCAL_ENV_FILE="server/.env"
+LOCAL_ENV_FILE="server/.env.server"
 REMOTE_ENV_FILE="$REMOTE_DIR/server/.env"
-PROTECTED_ENV_KEYS="POSTGRES_PASSWORD POSTGRES_USER POSTGRES_DB DATABASE_URL"
-DEFAULT_APP_PUBLIC_URL="https://synapse.d2.pub"
 DEPLOY_ID=$(date +%Y%m%d_%H%M%S)
 NEW_IMAGE_TAG="deploy-${DEPLOY_ID}"
 ROLLBACK_IMAGE_TAG="rollback-${DEPLOY_ID}"
@@ -41,47 +39,44 @@ ensure_remote_dirs() {
   ssh "$SERVER" "mkdir -p '$REMOTE_DIR/server' '$BACKUP_DIR/env' '$BACKUP_DIR/globals' '$BACKUP_DIR/drive' '$REMOTE_DIR/server/data/drive'"
 }
 
-ensure_remote_env() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && DEFAULT_APP_PUBLIC_URL='$DEFAULT_APP_PUBLIC_URL' bash -s" <<'REMOTE_SCRIPT'
+validate_remote_env() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
-
-ensure_env() {
-  local key=$1
-  local value=$2
-
-  if grep -q "^${key}=" .env; then
-    local current
-    current=$(sed -n "s/^${key}=//p" .env | tail -n 1)
-    if [ -n "$current" ]; then
-      printf "%s ok\n" "$key"
-      return
-    fi
-    sed -i "/^${key}=/d" .env
-  fi
-
-  printf "\n%s=%s\n" "$key" "$value" >> .env
-  printf "%s added\n" "$key"
-}
 
 if [ ! -f .env ]; then
   echo ".env not found"
   exit 1
 fi
 
-ensure_env "USER_ACCESS_JWT_SECRET" "$(openssl rand -hex 32)"
-ensure_env "USER_ACCESS_TOKEN_MINUTES" "15"
-ensure_env "USER_REFRESH_TOKEN_DAYS" "30"
-ensure_env "APP_PUBLIC_URL" "$DEFAULT_APP_PUBLIC_URL"
-ensure_env "DATABASE_POOL_SIZE" "10"
+read_env_value() {
+  sed -n "s/^${1}=//p" .env | tail -n 1
+}
+
+database_url=$(read_env_value DATABASE_URL)
+case "$database_url" in
+  *"@localhost:"*|*"@localhost/"*|*"@127.0.0.1:"*|*"@127.0.0.1/"*)
+    echo "DATABASE_URL must use the compose service host postgres:5432 in production"
+    exit 1
+    ;;
+esac
 
 docker compose --env-file .env config >/dev/null
+
+for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
+  value=$(read_env_value "$key")
+  if [ -z "$value" ]; then
+    echo "$key missing"
+    exit 1
+  fi
+  printf "%s ok\n" "$key"
+done
 REMOTE_SCRIPT
 }
 
 sync_remote_env() {
   if ! test -f "$LOCAL_ENV_FILE"; then
     echo "本机 $LOCAL_ENV_FILE 不存在，已停止部署。"
-    echo "请先创建本机 server/.env，并在其中维护 COS、JWT、公开访问地址等配置。"
+    echo "请先创建本机 server/.env.server，并在其中维护生产数据库、COS、JWT、公开访问地址等配置。"
     exit 1
   fi
 
@@ -89,15 +84,11 @@ sync_remote_env() {
 
   ssh "$SERVER" "mkdir -p '$REMOTE_DIR/server'"
   scp "$LOCAL_ENV_FILE" "$SERVER:$remote_tmp" >/dev/null
-  ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' ENV_BACKUP_FILE='$ENV_BACKUP_FILE' DEPLOY_ID='$DEPLOY_ID' PROTECTED_ENV_KEYS='$PROTECTED_ENV_KEYS' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "REMOTE_ENV_FILE='$REMOTE_ENV_FILE' remote_tmp='$remote_tmp' ENV_BACKUP_FILE='$ENV_BACKUP_FILE' LOCAL_ENV_FILE='$LOCAL_ENV_FILE' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-merged_tmp=""
 cleanup_env_sync_tmp() {
   rm -f "$remote_tmp"
-  if [ -n "$merged_tmp" ]; then
-    rm -f "$merged_tmp"
-  fi
 }
 trap cleanup_env_sync_tmp EXIT
 
@@ -108,71 +99,40 @@ count_env_keys() {
   sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' "$1" | sort -u | wc -l | tr -d ' '
 }
 
-if [ ! -f "$REMOTE_ENV_FILE" ]; then
-  docker compose --env-file "$remote_tmp" config >/dev/null
-  cp "$remote_tmp" "$REMOTE_ENV_FILE"
-  chmod 600 "$REMOTE_ENV_FILE"
-  rm -f "$remote_tmp"
-  printf ".env created from local file (%s keys)\n" "$(count_env_keys "$REMOTE_ENV_FILE")"
-  exit 0
+validate_env_file() {
+  local env_file=$1
+  local database_url
+
+  database_url=$(sed -n 's/^DATABASE_URL=//p' "$env_file" | tail -n 1)
+  if [ -z "$database_url" ]; then
+    echo "DATABASE_URL missing in $env_file"
+    exit 1
+  fi
+
+  case "$database_url" in
+    *"@localhost:"*|*"@localhost/"*|*"@127.0.0.1:"*|*"@127.0.0.1/"*)
+      echo "DATABASE_URL must use the compose service host postgres:5432 in production"
+      exit 1
+      ;;
+  esac
+
+  docker compose --env-file "$env_file" config >/dev/null
+}
+
+validate_env_file "$remote_tmp"
+
+if [ -f "$REMOTE_ENV_FILE" ]; then
+  mkdir -p "$(dirname "$ENV_BACKUP_FILE")"
+  cp "$REMOTE_ENV_FILE" "$ENV_BACKUP_FILE"
+  chmod 600 "$ENV_BACKUP_FILE"
+  printf "remote env backup: %s\n" "$ENV_BACKUP_FILE"
 fi
 
-backup_file="$ENV_BACKUP_FILE"
-merged_tmp="$(dirname "$REMOTE_ENV_FILE")/.env.merged-${DEPLOY_ID}"
+cp "$remote_tmp" "$REMOTE_ENV_FILE"
+chmod 600 "$REMOTE_ENV_FILE"
+rm -f "$remote_tmp"
 
-mkdir -p "$(dirname "$backup_file")"
-cp "$REMOTE_ENV_FILE" "$backup_file"
-chmod 600 "$backup_file"
-
-awk -v protected="$PROTECTED_ENV_KEYS" '
-BEGIN {
-  split(protected, keys, " ")
-  for (idx in keys) {
-    protected_key[keys[idx]] = 1
-  }
-}
-function env_key(line, parts) {
-  if (line ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
-    split(line, parts, "=")
-    return parts[1]
-  }
-  return ""
-}
-FNR == NR {
-  key = env_key($0)
-  if (key != "" && protected_key[key] && !(key in protected_line)) {
-    protected_line[key] = $0
-    protected_order[++protected_count] = key
-  }
-  next
-}
-{
-  key = env_key($0)
-  if (key != "" && protected_key[key]) {
-    if (!(key in protected_line)) {
-      protected_line[key] = $0
-      protected_order[++protected_count] = key
-    }
-    next
-  }
-  print
-}
-END {
-  for (idx = 1; idx <= protected_count; idx++) {
-    key = protected_order[idx]
-    print protected_line[key]
-  }
-}
-' "$backup_file" "$remote_tmp" > "$merged_tmp"
-
-chmod 600 "$merged_tmp"
-docker compose --env-file "$merged_tmp" config >/dev/null
-cp "$merged_tmp" "$REMOTE_ENV_FILE"
-rm -f "$remote_tmp" "$merged_tmp"
-
-printf ".env synced and validated (%s keys)\n" "$(count_env_keys "$REMOTE_ENV_FILE")"
-printf "protected env keys kept from remote: %s\n" "$PROTECTED_ENV_KEYS"
-printf "remote env backup: %s\n" "$backup_file"
+printf ".env replaced from %s and validated (%s keys)\n" "$LOCAL_ENV_FILE" "$(count_env_keys "$REMOTE_ENV_FILE")"
 REMOTE_SCRIPT
 }
 
@@ -289,6 +249,8 @@ sync_remote_code() {
   rsync -avz --delete \
     --exclude='server/node_modules' \
     --exclude='server/.env' \
+    --exclude='server/.env.local' \
+    --exclude='server/.env.server' \
     --exclude='server/.env.backup-*' \
     --exclude='server/.env.password-rotation-*' \
     --exclude='server/.env.merged-*' \
@@ -630,7 +592,7 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
     sync_remote_env
 
   echo ""
-  echo "首次部署已同步本机 server/.env，请 SSH 登录服务器启动服务："
+  echo "首次部署已同步本机 server/.env.server，请 SSH 登录服务器启动服务："
   echo "  cd $REMOTE_DIR/server && docker compose --env-file .env up -d --build"
   exit 0
 fi
@@ -639,9 +601,9 @@ fi
 step 2 "同步本机环境变量到服务器" \
   sync_remote_env
 
-# [3/18] 检查并补齐旧环境变量
+# [3/18] 检查远程环境变量
 step 3 "检查远程环境变量" \
-  ensure_remote_env
+  validate_remote_env
 
 # [4/18] 检查数据库网络认证
 step 4 "检查数据库网络认证" \

@@ -232,4 +232,44 @@ describe("GitSyncStatusCenter", () => {
     expect(container.textContent).not.toContain("Rule 101")
     expect(container.textContent).toContain("还有 20 项")
   })
+
+  it("does not render retry when a blocked snapshot requires another primary action", async () => {
+    const onRetry = vi.fn()
+    const onOpenSettings = vi.fn()
+    const container = render(
+      <GitSyncStatusCenter
+        repository={{
+          uuid: "repo-1",
+          name: "Team Repo",
+          localPath: "/repo",
+          contentDirs: {},
+        }}
+        status="attention"
+        pendingCount={1}
+        snapshot={{
+          repositoryUuid: "repo-1",
+          status: "attention",
+          operation: null,
+          phase: "blocked",
+          pendingCount: 1,
+          pendingItems: [],
+          message: "本地目录不是 Git 仓库",
+          retryCount: 1,
+          canRetryNow: true,
+          primaryAction: "open-settings",
+        }}
+        onRetry={onRetry}
+        onOpenSettings={onOpenSettings}
+      />,
+    )
+
+    await act(async () => {
+      getButtonByName(container, /需要处理/).click()
+    })
+
+    expect(container.textContent).toContain("仓库设置")
+    expect(container.textContent).not.toContain("立即同步")
+    expect(onRetry).not.toHaveBeenCalled()
+    expect(onOpenSettings).not.toHaveBeenCalled()
+  })
 })

@@ -12,6 +12,7 @@ import path from "node:path"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { SynapseConfigPatch } from "../../../src/types/config"
+import { sanitizeConfigPatchForLog } from "../../../src/lib/config-log-redaction"
 import { configBackupService } from "../../services/config-backup-service"
 import { configStore } from "../../services/config-store"
 import { createMainLogger, logStore } from "../../services/log-store"
@@ -93,7 +94,7 @@ export const configIpcModule: IpcModule = {
       request: configPatchSchema,
       response: configSchema,
       handler: async (_ctx, patch: SynapseConfigPatch) => {
-        logger.info(`Handling config.update request. patch: ${JSON.stringify(sanitizePatchForLog(patch))}`)
+        logger.info(`Handling config.update request. patch: ${JSON.stringify(sanitizeConfigPatchForLog(patch))}`)
         const config = await configStore.update(patch)
 
         logger.info(
@@ -372,15 +373,4 @@ function writeResetAppSystemLog(message: string, details: Record<string, unknown
     timestamp: new Date().toISOString(),
     ...details,
   })}\n`)
-}
-
-function sanitizePatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
-  if (!patch.global?.variables) return patch
-  return {
-    ...patch,
-    global: {
-      ...patch.global,
-      variables: patch.global.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })),
-    },
-  }
 }

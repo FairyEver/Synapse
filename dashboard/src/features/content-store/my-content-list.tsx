@@ -41,6 +41,10 @@ type MyContentListPageProps = {
 }
 
 const allTypesValue = 'all'
+type VisibilityTarget = {
+  item: ContentStoreItemDto
+  visibility: 'private' | 'public'
+}
 
 export default function MyContentListPage({
   search = {},
@@ -57,6 +61,8 @@ export default function MyContentListPage({
   const [deleteTarget, setDeleteTarget] = useState<ContentStoreItemDto | null>(
     null
   )
+  const [visibilityTarget, setVisibilityTarget] =
+    useState<VisibilityTarget | null>(null)
   const [sorting, setSorting] = useState<SortingState>(
     parsedSearch.sortBy
       ? [{ id: parsedSearch.sortBy, desc: parsedSearch.sortOrder !== 'asc' }]
@@ -85,6 +91,7 @@ export default function MyContentListPage({
       visibility: 'private' | 'public'
     }) => dashboardApi.setContentStoreVisibility(id, visibility),
     onSuccess: () => {
+      setVisibilityTarget(null)
       void queryClient.invalidateQueries({ queryKey: ['my-content-store-items'] })
       toast.success('已更新')
     },
@@ -205,8 +212,8 @@ export default function MyContentListPage({
                 disabled={isVisibilityDisabled}
                 onClick={(event) => {
                   event.stopPropagation()
-                  visibilityMutation.mutate({
-                    id: row.original.id,
+                  setVisibilityTarget({
+                    item: row.original,
                     visibility: nextVisibility,
                   })
                 }}
@@ -312,6 +319,31 @@ export default function MyContentListPage({
           />
         )}
         <ConfirmDialog
+          open={Boolean(visibilityTarget)}
+          onOpenChange={(open) => {
+            if (!open) setVisibilityTarget(null)
+          }}
+          title={visibilityTarget
+            ? getVisibilityDialogTitle(visibilityTarget.visibility)
+            : '更新可见性'}
+          desc={visibilityTarget
+            ? `${visibilityTarget.item.title} 将变为${getVisibilityLabel(visibilityTarget.visibility)}。`
+            : ''}
+          confirmText={visibilityTarget
+            ? getVisibilityDialogConfirmText(visibilityTarget.visibility)
+            : '确认'}
+          cancelBtnText='取消'
+          destructive={visibilityTarget?.visibility === 'private'}
+          isLoading={visibilityMutation.isPending}
+          handleConfirm={() => {
+            if (!visibilityTarget) return
+            visibilityMutation.mutate({
+              id: visibilityTarget.item.id,
+              visibility: visibilityTarget.visibility,
+            })
+          }}
+        />
+        <ConfirmDialog
           open={Boolean(deleteTarget)}
           onOpenChange={(open) => {
             if (!open) setDeleteTarget(null)
@@ -335,4 +367,16 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message.trim()
     ? error.message
     : fallback
+}
+
+function getVisibilityLabel(visibility: 'private' | 'public') {
+  return visibility === 'public' ? '公开' : '私有'
+}
+
+function getVisibilityDialogTitle(visibility: 'private' | 'public') {
+  return visibility === 'public' ? '公开内容' : '取消公开'
+}
+
+function getVisibilityDialogConfirmText(visibility: 'private' | 'public') {
+  return visibility === 'public' ? '公开' : '取消公开'
 }
