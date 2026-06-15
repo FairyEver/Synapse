@@ -390,6 +390,32 @@ describe("usage analysis reports", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM cx_hourly_usage").get()).toEqual({ count: 0 })
   })
 
+  it("reparses unchanged Codex usage files when pricing rules change", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".codex", "sessions")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "rollout-test.jsonl")
+    fs.writeFileSync(file, [
+      JSON.stringify({ type: "session_meta", timestamp: "2026-05-19T01:00:00.000Z", payload: { type: "session_meta", id: "s1", cwd: "/tmp/project", model_provider: "openai", source: "cli", cli_version: "1.0.0" } }),
+      JSON.stringify({ type: "turn_context", timestamp: "2026-05-19T01:00:01.000Z", payload: { type: "turn_context", model: "local-codex-model" } }),
+      JSON.stringify({ type: "event_msg", timestamp: "2026-05-19T01:00:03.000Z", payload: { type: "token_count", info: { last_token_usage: { input_tokens: 1_000_000, cached_input_tokens: 0, output_tokens: 0 } } } }),
+    ].join("\n"))
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CodexUsageAnalysisService({ db, roots: [path.join(dir, ".codex", "sessions")] })
+    await service.refresh()
+    expect(db.prepare("SELECT total_cost, price_known FROM cx_usage_events").get()).toEqual({ total_cost: 0, price_known: 0 })
+
+    service.savePricingRules([{ modelPattern: "local-codex-model", inputPer1M: 14.4, outputPer1M: 0 }])
+    const refresh = await service.refresh()
+
+    expect(refresh).toMatchObject({ parsedFiles: 1, skippedFiles: 0, usageEvents: 1 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_usage_events").get()).toEqual({ count: 1 })
+    expect(db.prepare("SELECT total_cost, price_known FROM cx_usage_events").get()).toEqual({ total_cost: 14.4, price_known: 1 })
+    expect(service.getOverview({ preset: "all" }).totals.estimatedCost).toBe(14.4)
+  })
+
   it("keeps historical event costs stable after saving model-only price rules", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)
