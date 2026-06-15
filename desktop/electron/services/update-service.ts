@@ -563,14 +563,14 @@ class UpdateService {
         window.focus()
       }
 
+      if (!hasVisibleWindow) {
+        this.windowManager.open("main")
+      }
+
       this.windowManager.broadcast(
         UPDATE_CHANNELS.openUpdatePage,
         {},
       )
-
-      if (!hasVisibleWindow) {
-        app.emit("activate")
-      }
     })
 
     notification.show()

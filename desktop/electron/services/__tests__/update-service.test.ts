@@ -56,8 +56,14 @@ const updaterMock = vi.hoisted(() => {
   }
 
   return {
+    appEmit: vi.fn(),
     autoUpdater: new MockAutoUpdater(),
     MockCancellationToken,
+    notificationInstances: [] as Array<{
+      readonly click: () => void
+      readonly show: ReturnType<typeof vi.fn>
+    }>,
+    notificationSupported: false,
   }
 })
 
@@ -70,14 +76,26 @@ vi.mock("electron", () => ({
   app: {
     getVersion: () => "0.2.28",
     isPackaged: true,
-    emit: vi.fn(),
+    emit: updaterMock.appEmit,
   },
   Notification: class {
-    static isSupported() {
-      return false
+    private readonly listeners = new Map<string, () => void>()
+    readonly show = vi.fn()
+
+    constructor() {
+      updaterMock.notificationInstances.push({
+        click: () => this.listeners.get("click")?.(),
+        show: this.show,
+      })
     }
-    on() {}
-    show() {}
+
+    static isSupported() {
+      return updaterMock.notificationSupported
+    }
+
+    on(eventName: string, listener: () => void) {
+      this.listeners.set(eventName, listener)
+    }
   },
 }))
 
@@ -108,6 +126,9 @@ describe("UpdateService", () => {
     updaterMock.autoUpdater.downloadUpdate.mockClear()
     updaterMock.autoUpdater.checkForUpdates.mockClear()
     updaterMock.autoUpdater.quitAndInstall.mockClear()
+    updaterMock.appEmit.mockClear()
+    updaterMock.notificationInstances.length = 0
+    updaterMock.notificationSupported = false
     Object.defineProperty(process, "platform", {
       configurable: true,
       value: "darwin",
@@ -278,6 +299,57 @@ describe("UpdateService", () => {
       error: null,
       canCheck: true,
     }))
+  })
+
+  it("opens a main window before broadcasting the update page from notification clicks with no live windows", async () => {
+    vi.useFakeTimers()
+    updaterMock.notificationSupported = true
+    const { updateService } = await importUpdateService()
+    const calls: string[] = []
+    const windowManager = {
+      attach: vi.fn(),
+      broadcast: vi.fn((channel: string) => {
+        calls.push(`broadcast:${channel}`)
+        return 1
+      }),
+      close: vi.fn(),
+      getAllWindows: vi.fn(() => []),
+      list: vi.fn(() => []),
+      open: vi.fn(() => {
+        calls.push("open:main")
+        return {
+          id: 1,
+          role: "main" as const,
+          isDestroyed: () => false,
+          isVisible: () => true,
+          isMinimized: () => false,
+          show: vi.fn(),
+          focus: vi.fn(),
+          restore: vi.fn(),
+          send: vi.fn(),
+          close: vi.fn(),
+        }
+      }),
+      register: vi.fn(),
+    }
+
+    updateService.setWindowManager(windowManager)
+    updateService.initialize()
+    updateService.startAutoCheck()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(updaterMock.notificationInstances).toHaveLength(1)
+
+    updaterMock.notificationInstances[0]?.click()
+
+    expect(windowManager.open).toHaveBeenCalledWith("main")
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:update:open-update-page",
+      {},
+    )
+    expect(calls).toEqual([
+      "open:main",
+      "broadcast:synapse:update:open-update-page",
+    ])
   })
 
   it("sanitizes manual update errors before exposing renderer state", async () => {
