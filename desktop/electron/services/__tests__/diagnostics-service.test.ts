@@ -211,6 +211,54 @@ describe("DiagnosticsService.collect", () => {
     ]))
   })
 
+  it("records Codex process and config timing in MCP diagnostics", async () => {
+    const service = createService({
+      getMcpHttpStatus: vi.fn(() => ({
+        running: true,
+        port: 23578,
+        url: "http://127.0.0.1:23578/mcp",
+      })),
+      getMcpServers: vi.fn(() => [{
+        target: "codex",
+        settingsPath: "/Users/lcj/.codex/config.toml",
+        settingsFileExists: true,
+        registered: true,
+        mode: "http" as const,
+        url: "http://127.0.0.1:23578/mcp",
+      }]),
+      probeMcpHttp: vi.fn(async () => ({ ok: true, method: "ping", status: 200 })),
+      collectCodexRuntimeDiagnostics: vi.fn(async () => ({
+        settingsPath: "/Users/lcj/.codex/config.toml",
+        settingsFileExists: true,
+        settingsModifiedAt: "2026-06-15T00:42:59.000Z",
+        settingsModifiedMs: 1781484179000,
+        processes: [{
+          pid: 19501,
+          command: "/Applications/Codex.app/Contents/MacOS/Codex",
+          startedAt: "2026-06-14T07:00:00.000Z",
+          startedAtMs: 1781420400000,
+        }],
+        processStartedBeforeConfigModified: true,
+        warning: "Codex 进程/会话早于 MCP 配置修改，旧会话可能未加载 Synapse MCP。",
+      })),
+    })
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "database.mcp")
+
+    expect(check).toMatchObject({
+      status: "ok",
+      details: {
+        codexRuntime: {
+          settingsPath: "/Users/lcj/.codex/config.toml",
+          settingsModifiedAt: "2026-06-15T00:42:59.000Z",
+          processStartedBeforeConfigModified: true,
+          warning: "Codex 进程/会话早于 MCP 配置修改，旧会话可能未加载 Synapse MCP。",
+        },
+      },
+    })
+  })
+
   it("reports App PATH, login shell PATH, and node visibility", async () => {
     const service = createService({
       collectShellEnvironment: vi.fn(() => ({

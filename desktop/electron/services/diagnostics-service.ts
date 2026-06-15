@@ -119,6 +119,26 @@ type GitVersionProbeResult =
   | { ok: true; version: string }
   | { ok: false; error: string }
 
+type CodexRuntimeProcessDiagnostics = {
+  pid: number
+  command: string
+  startedAtText?: string
+  startedAt?: string
+  startedAtMs?: number
+}
+
+type CodexRuntimeDiagnostics = {
+  settingsPath: string
+  settingsFileExists: boolean
+  settingsModifiedAt?: string
+  settingsModifiedMs?: number
+  settingsStatError?: string
+  processes: CodexRuntimeProcessDiagnostics[]
+  processStartedBeforeConfigModified: boolean
+  warning?: string
+  processListError?: string
+}
+
 type DiagnosticsServiceDeps = {
   appInfo: AppInfo
   configStore: ConfigStoreLike
@@ -152,6 +172,7 @@ type DiagnosticsServiceDeps = {
   collectShellEnvironment?: () => ShellEnvironmentSnapshot
   probeGitVersion?: (input: { gitPath: string; effectivePath: string }) => Promise<GitVersionProbeResult>
   inspectClaudeRuntime?: () => PackagedClaudeRuntimeStatus
+  collectCodexRuntimeDiagnostics?: (input: { settingsPath: string }) => Promise<CodexRuntimeDiagnostics>
 }
 
 const RECENT_LOG_FILE_LIMIT = 3
@@ -1008,6 +1029,10 @@ class DiagnosticsService {
     await this.capture(checks, "database.mcp", "Database", "MCP", async () => {
       const http = this.deps.getMcpHttpStatus()
       const registrations = await Promise.resolve(this.deps.getMcpServers())
+      const codexRegistration = registrations.find((server) => server.target === "codex")
+      const codexRuntime = await this.collectCodexRuntimeDiagnostics(
+        codexRegistration?.settingsPath ?? path.join(os.homedir(), ".codex", "config.toml"),
+      )
       const probe = http.running && http.url
         ? await this.probeMcpHttp(http.url)
         : { ok: false, method: "ping", error: "MCP HTTP 未运行" }
@@ -1016,6 +1041,7 @@ class DiagnosticsService {
         http,
         probe,
         registrations,
+        codexRuntime,
         unregisteredTargets: unregistered.map((server) => server.target),
       }
 
@@ -1028,6 +1054,13 @@ class DiagnosticsService {
 
       return this.ok("database.mcp", "Database", "MCP", "MCP 可用", details)
     })
+  }
+
+  private async collectCodexRuntimeDiagnostics(settingsPath: string): Promise<CodexRuntimeDiagnostics> {
+    if (this.deps.collectCodexRuntimeDiagnostics) {
+      return this.deps.collectCodexRuntimeDiagnostics({ settingsPath })
+    }
+    return collectCodexRuntimeDiagnostics(settingsPath)
   }
 
   private async addInspectChecks(checks: SynapseDiagnosticsCheck[]): Promise<void> {
@@ -1416,6 +1449,95 @@ function probeGitVersion(input: { gitPath: string; effectivePath: string }): Pro
       })
     })
   })
+}
+
+async function collectCodexRuntimeDiagnostics(settingsPath: string): Promise<CodexRuntimeDiagnostics> {
+  const diagnostics: CodexRuntimeDiagnostics = {
+    settingsPath,
+    settingsFileExists: false,
+    processes: [],
+    processStartedBeforeConfigModified: false,
+  }
+
+  try {
+    const stats = await stat(settingsPath)
+    diagnostics.settingsFileExists = true
+    diagnostics.settingsModifiedAt = stats.mtime.toISOString()
+    diagnostics.settingsModifiedMs = stats.mtimeMs
+  } catch (error) {
+    diagnostics.settingsStatError = truncateDiagnosticError(errorLogMessage(error, "Codex config stat failed"))
+  }
+
+  const processList = await collectCodexProcesses()
+  diagnostics.processes = processList.processes
+  if (processList.error) {
+    diagnostics.processListError = processList.error
+  }
+
+  if (diagnostics.settingsModifiedMs !== undefined) {
+    diagnostics.processStartedBeforeConfigModified = diagnostics.processes.some((processInfo) =>
+      processInfo.startedAtMs !== undefined && processInfo.startedAtMs < diagnostics.settingsModifiedMs!,
+    )
+  }
+
+  if (diagnostics.processStartedBeforeConfigModified) {
+    diagnostics.warning = "Codex 进程/会话早于 MCP 配置修改，旧会话可能未加载 Synapse MCP。"
+  }
+
+  return diagnostics
+}
+
+function collectCodexProcesses(): Promise<{ processes: CodexRuntimeProcessDiagnostics[]; error?: string }> {
+  return new Promise((resolve) => {
+    execFile("ps", ["-axo", "pid=,lstart=,command="], {
+      timeout: 3000,
+      env: {
+        ...process.env,
+        LANG: "C",
+        LC_ALL: "C",
+      },
+    }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({
+          processes: [],
+          error: truncateDiagnosticError(firstLine(stderr) || firstLine(stdout) || error.message),
+        })
+        return
+      }
+
+      resolve({ processes: parseCodexProcessList(String(stdout)) })
+    })
+  })
+}
+
+function parseCodexProcessList(stdout: string): CodexRuntimeProcessDiagnostics[] {
+  const processes: CodexRuntimeProcessDiagnostics[] = []
+
+  for (const rawLine of stdout.split(/\r?\n/u)) {
+    const line = rawLine.trim()
+    if (!line || !isCodexProcessLine(line)) continue
+
+    const match = /^(\d+)\s+([A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(.+)$/u.exec(line)
+    if (!match) continue
+
+    const startedAtText = match[2]
+    const startedAtMs = Date.parse(startedAtText)
+    processes.push({
+      pid: Number(match[1]),
+      command: redactSensitiveText(match[3]),
+      startedAtText,
+      ...(Number.isFinite(startedAtMs)
+        ? { startedAt: new Date(startedAtMs).toISOString(), startedAtMs }
+        : {}),
+    })
+  }
+
+  return processes
+}
+
+function isCodexProcessLine(line: string): boolean {
+  return line.includes("/Applications/Codex.app/")
+    || /\bcodex(?:\s+app-server|\s+exec|\s|$)/i.test(line)
 }
 
 function firstLine(value: string | Buffer | undefined): string {
