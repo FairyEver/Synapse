@@ -465,6 +465,8 @@ function createRawPayloadSubscription<TPayload>(
 
 const SENSITIVE_IPC_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
+const SENSITIVE_IPC_TEXT_FIELD_PATTERN =
+  /(content|prompt|message|body|text|params|definition|payload)/i
 const SENSITIVE_ERROR_VALUE_PATTERN =
   /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
@@ -477,12 +479,19 @@ function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unkno
   if (typeof value === "number" || typeof value === "boolean") return value
   if (typeof value === "string") {
     if (SENSITIVE_IPC_FIELD_PATTERN.test(fieldName)) return "[redacted]"
+    if (SENSITIVE_IPC_TEXT_FIELD_PATTERN.test(fieldName)) return textFieldSummary(value)
     return value.length > 300 ? `${value.slice(0, 120)}...[truncated ${value.length} chars]` : value
   }
   if (Array.isArray(value)) {
+    if (SENSITIVE_IPC_TEXT_FIELD_PATTERN.test(fieldName)) {
+      return { type: "array", itemCount: value.length }
+    }
     return value.slice(0, 20).map((item) => sanitizeIpcPayload(fieldName, item, depth + 1))
   }
   if (typeof value === "object") {
+    if (SENSITIVE_IPC_TEXT_FIELD_PATTERN.test(fieldName)) {
+      return { type: "object", keyCount: Object.keys(value as Record<string, unknown>).length }
+    }
     if (depth >= 3) return "[object]"
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
@@ -492,6 +501,10 @@ function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unkno
     )
   }
   return String(value)
+}
+
+function textFieldSummary(value: string): { type: "text"; length: number } {
+  return { type: "text", length: value.length }
 }
 
 function describeIpcError(error: unknown): string {
