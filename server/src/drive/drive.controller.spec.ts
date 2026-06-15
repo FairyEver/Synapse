@@ -337,6 +337,7 @@ describe("DriveController", () => {
     const userApp = moduleRef.createNestApplication()
     await userApp.init()
     try {
+      process.env.APP_PUBLIC_URL = "https://app.example"
       drive.prepareFolderUpload.mockResolvedValue({ root: { id: "folder-1" }, entries: [] })
       await request(userApp.getHttpServer())
         .post("/api/drive/uploads/folder/prepare")
