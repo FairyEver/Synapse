@@ -8,7 +8,7 @@ All tools are accessed via the `synapse-mcp` MCP server.
 
 ### workflow_node_type_list
 
-List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `codex`, and `end`.
+List available node types with summaries. Current built-in node types include `prompt`, `switch`, `http_request`, `script`, `workflow_call`, `codex`, `claude_code`, and `end`.
 
 **Params:** none
 **Returns:** `[{ type, title, subtitle, color }]`
@@ -19,7 +19,7 @@ Get full manifest and config JSON Schema for a node type.
 
 **Params:** `nodeType` (string, required)
 **Returns:** `{ type, title, color, ports, configFields, configSchema, availableProviders? }`
-**Notes:** Always call this before configuring a node to get the current schema. For `prompt` and `switch` nodes, the response also includes `availableProviders` — an array of `{ id, name, models: { default?, haiku?, sonnet?, opus? } }`. Use this to discover valid `providerId` values. `codex` nodes do not use `providerId` or `modelTier`; inspect `nodeType: "codex"` for Codex CLI fields. If the user provides a copied reference such as `synapse-provider-model://local-claude-code/sonnet`, parse it as `providerId = "local-claude-code"` and `modelTier = "sonnet"`.
+**Notes:** Always call this before configuring a node to get the current schema. For `prompt` and `switch` nodes, the response also includes `availableProviders` — an array of `{ id, name, models: { default?, haiku?, sonnet?, opus? } }`. Use this to discover valid `providerId` values. `codex` and `claude_code` nodes do not use `providerId` or `modelTier`; inspect `nodeType: "codex"` for Codex CLI fields and `nodeType: "claude_code"` for Claude Code CLI fields. If the user provides a copied reference such as `synapse-provider-model://local-claude-code/sonnet`, parse it as `providerId = "local-claude-code"` and `modelTier = "sonnet"`.
 
 ---
 
@@ -79,7 +79,7 @@ No provider needed on the call node. It invokes another saved workflow and retur
 - `variables` (array) — variable bindings from parent workflow params, upstream node outputs, or static values
 - `paramTemplates` (object) — child param name to template string map. Values may use `{{variable}}` placeholders declared in `variables`.
 
-Before configuring `paramTemplates`, call `workflow_definition_get` for the child workflow and read its current `params`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
+Before configuring `paramTemplates`, call `workflow_definition_get` for the child workflow and read its current `params`. Child prompt/switch nodes still need provider/model/project through the child workflow defaults or child node overrides; child codex/claude_code nodes still need an effective project. The parent workflow_call node does not lock a child version; each run uses the child workflow's latest saved definition.
 
 ### codex
 
@@ -126,6 +126,55 @@ Minimal valid config:
 ```
 
 The node passes the prompt through stdin and returns only Codex's final reply text as `output`. By default it runs with `--cd` set to the resolved project workspace. If `workingDirectory` is set, Synapse interpolates and trims it, requires an existing directory, then uses it as both process cwd and Codex `--cd`; with `workspace-write`, Codex's current workspace is the actual working directory plus any `additionalWritableDirs`. Debug metadata is available in `outputs.codexDebug`, but downstream `node_output` bindings receive the final reply text only.
+
+### claude_code
+
+Runs local `claude -p` in an execution project. No Synapse provider needed; do not set `providerId` or `modelTier`.
+
+- `prompt` (string) — Claude Code instruction template with `{{variable}}` placeholders
+- `variables` (array) — variable bindings from workflow params, upstream node outputs, or static values
+- `projectId?` (string) — execution project override; inherits workflow `defaultProjectId` when omitted
+- `workingDirectory?` (string) — per-task working directory. Supports `{{variable}}` interpolation, must already exist, and becomes process cwd.
+- `timeoutMins?` (number) — node timeout in minutes; inherits workflow `defaultNodeTimeoutMins` when omitted, then falls back to 60 minutes
+- `permissionMode` (enum: default/acceptEdits/plan/auto/dontAsk/bypassPermissions, default "acceptEdits")
+- `model?` (string) — optional Claude Code CLI model
+- `maxTurns?` (number) — optional maximum turns
+- `outputFormat` (enum: text/json/stream-json, default "stream-json")
+- `verbose` (boolean, default true)
+- `safeMode` (boolean, default false)
+- `bareMode` (boolean, default false)
+- `noSessionPersistence` (boolean, default false)
+- `settingSources` (array of user/project/local, default `["user", "project", "local"]`) — must contain at least one value and no duplicates
+- `settingsPath?` (string) — optional Claude Code settings file; supports `{{variable}}` interpolation and must exist
+- `mcpConfigPath?` (string) — optional Claude Code MCP config file; supports `{{variable}}` interpolation and must exist
+- `strictMcpConfig` (boolean, default false)
+- `additionalDirectories` (string[]) — repeated `--add-dir` values; each must resolve to an existing directory
+- `allowedTools` (string[]) — repeated Claude Code allowed tool rules
+- `disallowedTools` (string[]) — repeated Claude Code disallowed tool rules
+- `captureDebugArtifacts` (boolean, default true)
+
+Minimal valid config:
+
+```json
+{
+  "prompt": "Summarize {{input}}",
+  "variables": [],
+  "permissionMode": "acceptEdits",
+  "outputFormat": "stream-json",
+  "verbose": true,
+  "safeMode": false,
+  "bareMode": false,
+  "noSessionPersistence": false,
+  "settingSources": ["user", "project", "local"],
+  "strictMcpConfig": false,
+  "additionalDirectories": [],
+  "allowedTools": [],
+  "disallowedTools": [],
+  "captureDebugArtifacts": true
+}
+```
+
+The node passes the prompt as the `claude -p` query argument and returns only Claude Code's final reply text as `output`. If `workingDirectory` is set, Synapse interpolates and trims it, requires an existing directory, then uses it as process cwd. Debug metadata is available in `outputs.claudeCodeDebug`, but downstream `node_output` bindings receive the final reply text only.
 
 ### end
 
@@ -183,7 +232,7 @@ Create a new empty workflow with a default end node.
 
 **Params:** `name?` (string), `defaultProjectId?` (string), `defaultProviderId?` (string), `defaultModelTier?` (`"default"|"haiku"|"sonnet"|"opus"`), `defaultNodeTimeoutMins?` (number)
 **Returns:** `{ id, versionHash }`
-**Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Codex nodes require an effective project but no provider/model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node and `projectId` on each codex node.
+**Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Codex and Claude Code nodes require an effective project but no provider/model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node and `projectId` on each codex/claude_code node.
 
 ### workflow_definition_update
 

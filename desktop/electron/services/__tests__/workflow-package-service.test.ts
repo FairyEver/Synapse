@@ -90,6 +90,40 @@ function codexOnlyPackage(): SynapseWorkflowPackageV1 {
   }
 }
 
+function claudeCodeOnlyPackage(): SynapseWorkflowPackageV1 {
+  return {
+    format: "synapse-workflow-package-v1",
+    exportedAt: nowIso,
+    modelReferences: [],
+    workflow: {
+      id: "claude-code-source",
+      name: "Claude Code Workflow",
+      version: "v_old",
+      createdAt: 1,
+      updatedAt: 2,
+      defaultProjectId: "exporter-project",
+      params: [],
+      nodes: [
+        {
+          id: "claude-code-1",
+          name: "Claude Code",
+          type: "claude_code",
+          position: { x: 0, y: 0 },
+          config: { prompt: "Run Claude Code", projectId: "exporter-claude-code-project" },
+        },
+        {
+          id: "end",
+          name: "结束",
+          type: "end",
+          position: { x: 200, y: 0 },
+          config: { outputType: "text", template: "", variables: [] },
+        },
+      ],
+      edges: [{ id: "e1", from: "claude-code-1", to: "end" }],
+    },
+  }
+}
+
 function createService() {
   const saved: WorkflowDefinition[] = []
   const workflowService = {
@@ -316,6 +350,35 @@ describe("WorkflowPackageService", () => {
     expect(saved).toHaveLength(1)
     expect(saved[0]?.defaultProjectId).toBe("local-project")
     expect(saved[0]?.nodes.find((node) => node.id === "codex-1")?.config.projectId).toBeUndefined()
+  })
+
+  it("requires project mapping and clears Claude Code project ids when importing Claude Code-only workflows", async () => {
+    const { service, saved } = createService()
+    const preview = await service.buildImportPreview("/tmp/claude-code.synapse-workflow.json", claudeCodeOnlyPackage())
+
+    expect(preview.workflow).toEqual({
+      id: "claude-code-source",
+      name: "Claude Code Workflow",
+      nodeCount: 2,
+      modelReferenceCount: 0,
+      requiresProjectMapping: true,
+    })
+
+    await expect(service.importPackage(claudeCodeOnlyPackage(), [])).resolves.toEqual({
+      errors: [{
+        type: "invalid_config",
+        field: "defaultProjectId",
+        message: "请选择项目。",
+        retryable: true,
+      }],
+    })
+
+    const result = await service.importPackage(claudeCodeOnlyPackage(), [], { targetProjectId: "local-project" })
+
+    expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v_imported" })
+    expect(saved).toHaveLength(1)
+    expect(saved[0]?.defaultProjectId).toBe("local-project")
+    expect(saved[0]?.nodes.find((node) => node.id === "claude-code-1")?.config.projectId).toBeUndefined()
   })
 
   it("blocks importing Code X-only workflows without a local project mapping", async () => {

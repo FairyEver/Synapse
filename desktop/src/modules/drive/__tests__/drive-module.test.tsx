@@ -260,12 +260,13 @@ describe("DriveModule", () => {
     expect(document.querySelector('[aria-label="云盘容量"]')?.getAttribute("aria-valuenow")).toBe("50")
   })
 
-  it("keeps file actions in the list toolbar after search", () => {
+  it("keeps file actions in the list toolbar without local search", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
-    expect(html.indexOf("搜索")).toBeLessThan(html.indexOf("上传文件"))
-    expect(html.indexOf("搜索")).toBeLessThan(html.indexOf("上传文件夹"))
-    expect(html.indexOf("搜索")).toBeLessThan(html.indexOf("新建文件夹"))
+    expect(html).not.toContain('aria-label="搜索"')
+    expect(html).toContain("上传文件")
+    expect(html).toContain("上传文件夹")
+    expect(html).toContain("新建文件夹")
   })
 
   it("shows an account login state without listing drive items when unauthenticated", async () => {
@@ -428,7 +429,7 @@ describe("DriveModule", () => {
     expect(getTableRow("site").textContent).toContain("已发布")
   })
 
-  it("filters the file list through the compact search input", async () => {
+  it("renders the full current folder without a local search input", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "chart_watermark.png", type: "file" }),
       createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
@@ -436,16 +437,9 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    const input = document.querySelector('input[aria-label="搜索"]')
-    if (!(input instanceof HTMLInputElement)) throw new Error("Search input not found")
-    await act(async () => {
-      setInputValue(input, "chart")
-      input.dispatchEvent(new Event("input", { bubbles: true }))
-      await flushPromises()
-    })
-
+    expect(document.querySelector('input[aria-label="搜索"]')).toBeNull()
     expect(document.body.textContent).toContain("chart_watermark.png")
-    expect(document.body.textContent).not.toContain("作业范文")
+    expect(document.body.textContent).toContain("作业范文")
   })
 
   it("opens folders from the file table", async () => {
@@ -1838,12 +1832,6 @@ function queryButton(name: string): HTMLButtonElement | null {
   const button = Array.from(document.querySelectorAll("button"))
     .find((element) => element.textContent?.includes(name))
   return button instanceof HTMLButtonElement ? button : null
-}
-
-function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
-  if (!setter) throw new Error("Input value setter not found")
-  setter.call(input, value)
 }
 
 function menuItemTexts(): string[] {

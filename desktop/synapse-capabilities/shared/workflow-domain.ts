@@ -108,7 +108,7 @@ const codexConfigOverrideSchema = {
 
 const workflowDefinitionSchema = {
   type: "object",
-  description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex/claude_code nodes inherit it, and defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
+  description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex/claude_code nodes inherit it, defaultProviderId and defaultModelTier when prompt/switch nodes inherit them, and defaultNodeTimeoutMins when prompt/switch/codex/claude_code nodes inherit it.",
   properties: {
     id: { type: "string", minLength: 1 },
     name: { type: "string" },
@@ -119,7 +119,7 @@ const workflowDefinitionSchema = {
     defaultProjectId: { type: "string", description: "Workflow-level default project/repository id. Prompt, switch, codex, and claude_code nodes need this unless their config sets projectId." },
     defaultProviderId: { type: "string", description: "Workflow-level default providerId. Prompt and switch nodes need this unless their config sets providerId." },
     defaultModelTier: modelTierSchema,
-    defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt and switch nodes." },
+    defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt, switch, codex, and claude_code nodes." },
     params: {
       type: "array",
       items: {
@@ -150,7 +150,7 @@ const workflowDefinitionSchema = {
               modelTier: modelTierSchema,
               projectId: { type: "string" },
               timeoutMins: { type: "number" },
-              prompt: { type: "string", description: "prompt/switch/codex/claude_code only: prompt or instruction template. Local CLI prompts are sent to codex exec or claude -p via stdin." },
+              prompt: { type: "string", description: "prompt/switch/codex/claude_code only: prompt or instruction template. Local CLI prompts are sent to codex exec via stdin and to claude -p as the print query argument." },
               variables: { type: "array", items: variableBindingSchema },
               workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
               paramTemplates: { type: "object", description: "workflow_call only: child parameter name to template string map." },
@@ -284,7 +284,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
           defaultProjectId: { type: "string", description: "Workflow-level default project/repository id for prompt, switch, codex, and claude_code nodes." },
           defaultProviderId: { type: "string", description: "Workflow-level default providerId for prompt and switch nodes. Discover with workflow_node_type_describe." },
           defaultModelTier: modelTierSchema,
-          defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt and switch nodes." },
+          defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt, switch, codex, and claude_code nodes." },
         },
       },
     },

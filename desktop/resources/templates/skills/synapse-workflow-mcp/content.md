@@ -18,15 +18,16 @@ If a user asks for another Synapse MCP domain while this skill is active, switch
 - **script** — Executes a shell script (posix/cmd/powershell) and returns stdout as output. Supports env vars, timeout, and login shell mode. No provider needed.
 - **workflow_call** — Calls another saved workflow, maps parent context into the child workflow params, and returns the child workflow End output. No provider needed on the call node.
 - **codex** — Runs local `codex exec` in the selected project or an optional task working directory, passes the prompt through stdin, and returns Codex's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
+- **claude_code** — Runs local `claude -p` in the selected project or an optional task working directory, passes the prompt as the print query, and returns Claude Code's final reply text. Requires an execution project, but does not use Synapse provider/model fields.
 - **end** — Terminal node (every workflow has exactly one). Defines the final output template. Cannot be deleted.
 
 ## Provider / Model Configuration
 
-Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **codex** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **script**, and **workflow_call** nodes execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child codex nodes still need an effective project. Configure project/provider/model with these exact field names:
+Only **prompt** and **switch** nodes require a provider (AI service), model tier, and execution project. **codex** and **claude_code** nodes require an execution project but do not use `providerId` or `modelTier`. **http_request**, **script**, and **workflow_call** nodes execute without provider configuration on that node. Inside a workflow called by **workflow_call**, child prompt/switch nodes still need effective project/provider/model settings, and child codex/claude_code nodes still need an effective project. Configure project/provider/model with these exact field names:
 
-- **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override; when no timeout is configured, the default is 60 minutes. Codex nodes inherit only `defaultProjectId`; set `timeoutMins` directly on the codex node when needed.
-- **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. For codex config, set Codex CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `enableSearch`, `additionalWritableDirs`, `images`, `configOverrides`, and debug or safety flags; do not set `providerId` or `modelTier`.
-- **Project validity** — Any effective Codex `projectId` (node override or inherited `defaultProjectId`) must refer to a currently configured Synapse project or repository. If a project was deleted, update the workflow default or the codex node before saving or running.
+- **Workflow defaults** — Set `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optionally `defaultNodeTimeoutMins` on the workflow definition. Prompt/switch nodes inherit project/provider/model/timeout defaults unless they override; codex/claude_code nodes inherit project and timeout defaults unless they override. When no timeout is configured, the default is 60 minutes.
+- **Node overrides** — Set `projectId`, `providerId`, `modelTier`, and optionally `timeoutMins` directly on prompt/switch config. For codex config, set Codex CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `enableSearch`, `additionalWritableDirs`, `images`, `configOverrides`, and debug or safety flags. For claude_code config, set Claude Code CLI fields such as `projectId`, `workingDirectory`, `timeoutMins`, `permissionMode`, `model`, `settingSources`, `settingsPath`, `mcpConfigPath`, `allowedTools`, `disallowedTools`, `additionalDirectories`, and debug flags. Do not set `providerId` or `modelTier` on codex or claude_code nodes.
+- **Project validity** — Any effective codex/claude_code `projectId` (node override or inherited `defaultProjectId`) must refer to a currently configured Synapse project or repository. If a project was deleted, update the workflow default or the local CLI node before saving or running.
 
 To discover available providers, call `workflow_node_type_describe` with `nodeType: "prompt"` (or `"switch"`). The response includes an `availableProviders` array:
 ```json
@@ -46,7 +47,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
 ## Creating a Workflow (Standard Flow)
 
 1. Call `workflow_node_type_list` to see available node types.
-2. Call `workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node; use `nodeType: "codex"` before setting Codex CLI options.
+2. Call `workflow_node_type_describe` for every node type you will configure. Use `nodeType: "prompt"` or `"switch"` before choosing any AI node config; use `nodeType: "workflow_call"` before creating a nested workflow call node; use `nodeType: "codex"` before setting Codex CLI options; use `nodeType: "claude_code"` before setting Claude Code CLI options.
 3. Call `workflow_definition_create` with `name`, `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` when known. This returns `{ id, versionHash }` and creates a workflow with a default end node.
 4. If defaults were not set during create, call `workflow_definition_get`, update the full definition with `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins`, then call `workflow_definition_update`.
 5. Call `workflow_param_update` to define input parameters.
@@ -55,7 +56,7 @@ When you see this URI, parse it as `providerId = <providerId>` and `modelTier = 
    - For incremental edits, create each new node already connected by passing `incomingEdges` and/or `outgoingEdges` to `workflow_node_create`. This keeps strict validation intact because disconnected intermediate nodes are not saved.
    - A useful incremental pattern is to build from the existing End node backward: create the node with `outgoingEdges: [{ "to": "end-node-id" }]`, then add or update upstream connected nodes.
 7. Use `workflow_edge_create` for extra structural edges only when the graph remains valid after that single edge is saved. For switch nodes, include a `branch` field matching a branch id.
-8. Update node configs with `workflow_node_update`: add final prompt templates, Codex CLI options, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings only after the referenced upstream path exists.
+8. Update node configs with `workflow_node_update`: add final prompt templates, Codex/Claude Code CLI options, workflow_call `paramTemplates`, and `variables`, including `node_output` bindings only after the referenced upstream path exists.
 9. Call `workflow_layout_update` after node/edge changes.
 10. Call `workflow_definition_inspect` and fix errors before executing.
 11. Call `workflow_run_execute` with params to start execution. Returns `{ runId }`.
@@ -76,7 +77,7 @@ Nodes declare a `variables` array. Each binding has:
 
 ## Template Fields
 
-Use `{{variableName}}` to interpolate bound variables into prompt text, codex prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text. All referenced template variables must be declared in the node's `variables` array.
+Use `{{variableName}}` to interpolate bound variables into prompt text, codex/claude_code prompt text, end output templates, HTTP request text fields, and workflow_call child parameter templates. Script node variables are injected as environment variables instead of template text. All referenced template variables must be declared in the node's `variables` array.
 
 Script node `node_output` is the exact stdout string. If a downstream node needs a path, ID, JSON scalar, or other single value, write scripts with `printf` or strip inside the producing script so the output does not include an accidental trailing newline.
 
@@ -161,6 +162,53 @@ Do not set `providerId` or `modelTier` on codex nodes. They run local `codex exe
 
 At runtime, the node passes the interpolated prompt through stdin and returns only Codex's final reply as the node output. By default it runs in the resolved project via `--cd`. If `workingDirectory` is set, Synapse interpolates and trims it, requires an existing directory, then uses it as both process cwd and Codex `--cd`; with `workspace-write`, Codex's current workspace is the actual working directory plus any `additionalWritableDirs`. Debug metadata is stored under `outputs.codexDebug`; downstream `node_output` bindings receive the final reply text, not stdout/stderr or debug JSON.
 
+## Running Claude Code
+
+Use a **claude_code** node when the workflow should run the user's local Claude Code CLI in a project directory.
+
+Minimal valid config:
+
+```json
+{
+  "prompt": "Summarize {{input}}",
+  "variables": [],
+  "permissionMode": "acceptEdits",
+  "outputFormat": "stream-json",
+  "verbose": true,
+  "safeMode": false,
+  "bareMode": false,
+  "noSessionPersistence": false,
+  "settingSources": ["user", "project", "local"],
+  "strictMcpConfig": false,
+  "additionalDirectories": [],
+  "allowedTools": [],
+  "disallowedTools": [],
+  "captureDebugArtifacts": true
+}
+```
+
+Config fields:
+
+- `prompt` — Claude Code instruction template. Use `{{variableName}}` placeholders declared in `variables`.
+- `variables` — bindings from workflow params, upstream node outputs, or static values.
+- `projectId?` — execution project. If omitted, the node inherits workflow `defaultProjectId`. The effective project must exist in the current Synapse project or repository configuration.
+- `workingDirectory?` — per-task working directory. Supports `{{variableName}}`, must already exist, and becomes the Claude Code process cwd.
+- `timeoutMins?` — optional node timeout in minutes. If omitted, the node inherits `defaultNodeTimeoutMins`, then falls back to 60 minutes.
+- `permissionMode` — `"default"`, `"acceptEdits"`, `"plan"`, `"auto"`, `"dontAsk"`, or `"bypassPermissions"`. Default is `"acceptEdits"`.
+- `model?` / `maxTurns?` — optional Claude Code CLI model and turn limit.
+- `outputFormat` — `"stream-json"`, `"json"`, or `"text"`. Default is `"stream-json"`.
+- `verbose`, `safeMode`, `bareMode`, `noSessionPersistence` — Claude Code print-mode flags.
+- `settingSources` — array of `"user"`, `"project"`, and/or `"local"`; must contain at least one value and no duplicates.
+- `settingsPath?` / `mcpConfigPath?` — optional files. Values support `{{variableName}}`, resolve relative to the effective working directory, and must already exist.
+- `strictMcpConfig` — passes `--strict-mcp-config`.
+- `additionalDirectories` — extra directories passed as repeated `--add-dir`. Values support `{{variableName}}` and must resolve to existing directories before run.
+- `allowedTools` / `disallowedTools` — repeated Claude Code tool allow/deny rules.
+- `captureDebugArtifacts` — stores sanitized debug artifacts and paths when true.
+
+Do not set `providerId` or `modelTier` on claude_code nodes. They run local `claude -p`, not a Synapse provider. The local `claude` executable is resolved from the user's merged PATH; Synapse does not install or select Claude Code for this node.
+
+At runtime, the node passes the interpolated prompt as the `claude -p` query argument and returns only Claude Code's final reply as the node output. If `workingDirectory` is set, Synapse interpolates and trims it, requires an existing directory, then uses it as process cwd. Debug metadata is stored under `outputs.claudeCodeDebug`; downstream `node_output` bindings receive the final reply text, not stdout/stderr or debug JSON.
+
 ## Switch Branching
 
 A switch node's config includes `branches: [{ id, label }]` and an optional `defaultBranch`. The AI evaluates the prompt and returns one branch id. Only edges with matching `branch` field activate downstream nodes.
@@ -176,8 +224,9 @@ Switch branches are mutually exclusive paths:
 - Always store returned `nodeId` and `edgeId` after creation — you cannot retrieve them later without fetching the full definition.
 - Call `workflow_node_type_describe` with a node type to get its full config JSON Schema and available providers before configuring.
 - Always query available providers before setting `providerId` — do not guess provider IDs.
-- Prefer setting `defaultProjectId`/`defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every prompt/switch node. Codex nodes inherit only `defaultProjectId`.
+- Prefer setting `defaultProjectId`/`defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every prompt/switch node. Codex and Claude Code nodes inherit `defaultProjectId` and `defaultNodeTimeoutMins`, but not provider/model defaults.
 - For codex nodes, use `workflow_node_type_describe` and configure Codex CLI fields directly; do not set `providerId` or `modelTier`.
+- For claude_code nodes, use `workflow_node_type_describe` and configure Claude Code CLI fields directly; do not set `providerId` or `modelTier`.
 - For workflow_call nodes, configure child workflow params explicitly from the child workflow's current `params`; do not invent param names without reading the child definition.
 - Validate with `workflow_definition_inspect` before executing.
 - Treat `duplicate_switch_branch_targets` warnings as a likely wiring mistake unless the workflow intentionally merges branches immediately.
@@ -186,7 +235,7 @@ Switch branches are mutually exclusive paths:
 - After creating, deleting, or reconnecting nodes, call `workflow_layout_update` before the final validation or handoff. This method recalculates node positions without opening the UI.
 - Avoid long chains of large prompt nodes. Independent prompt nodes run in parallel; use that when possible.
 - Do not satisfy a requested node count by making every step a serial AI call. Use `script` nodes for deterministic formatting/filtering, pass summaries instead of full upstream output, and keep the final prompt's input small.
-- If a run waits longer than expected, inspect `workflow_run_get` for the running/failed node, `durationMs`, configured `timeoutMins`/`defaultNodeTimeoutMins`, and upstream input size. Prompt/switch default to 60 minutes unless configured otherwise. For tests or short jobs, set an explicit shorter timeout; for real failures, shorten the prompt/context, split work into parallel branches, or move non-AI transformation into a `script` node before increasing timeout.
+- If a run waits longer than expected, inspect `workflow_run_get` for the running/failed node, `durationMs`, configured `timeoutMins`/`defaultNodeTimeoutMins`, and upstream input size. Prompt/switch/codex/claude_code default to 60 minutes unless configured otherwise. For tests or short jobs, set an explicit shorter timeout; for real failures, shorten the prompt/context, split work into parallel branches, or move non-AI transformation into a `script` node before increasing timeout.
 
 ## API Reference
 

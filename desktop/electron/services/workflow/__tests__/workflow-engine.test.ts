@@ -113,6 +113,26 @@ describe("WorkflowEngine", () => {
     expect(result.status).toBe("completed")
     expect(result.nodeResults.end?.output).toBe("claude done")
   })
+
+  it("applies workflow default timeout to claude code nodes with blank timeout", async () => {
+    const receivedConfigs: ClaudeCodeNodeConfig[] = []
+    const claudeExecutor: NodeExecutor<ClaudeCodeNodeConfig> = {
+      execute: vi.fn(async (input) => {
+        receivedConfigs.push(input.config)
+        return { status: "success" as const, output: "claude done", durationMs: 1 }
+      }),
+    }
+    nodeTypeRegistry.register(claudeCodeNodeManifest, claudeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine({
+      sendToAgent: vi.fn(),
+    })
+
+    const result = await engine.run(workflowWithClaudeCodeNode(), {}, "run-1", vi.fn(), undefined, "project-1")
+
+    expect(result.status).toBe("completed")
+    expect(receivedConfigs[0]?.timeoutMins).toBe(30)
+  })
 })
 
 function workflowWithCodexNode(): WorkflowDefinition {

@@ -256,7 +256,7 @@ function isModelNode(node: WorkflowNode): boolean {
 }
 
 function isProjectBoundNode(node: WorkflowNode): boolean {
-  return isModelNode(node) || node.type === "codex" || node.type === "script"
+  return isModelNode(node) || node.type === "codex" || node.type === "claude_code" || node.type === "script"
 }
 
 function isModelTier(value: unknown): value is WorkflowPackageModelTier {

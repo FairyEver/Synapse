@@ -13,7 +13,7 @@ Scope: `desktop/`, `dashboard/`, `server/`, `shared/`, `docs/`
 
 当前 Drive 主页面同时承载四类任务：
 
-- 文件管理：上传、新建文件夹、搜索、重命名、移动、删除。
+- 文件管理：上传、新建文件夹、重命名、移动、删除。
 - 内容查看：打开文件夹、预览文件、下载、HTML owner-only 访问。
 - 分享访问：生成分享链接、密码、有效期、复制、取消分享。
 - 发布上线：HTML 发布网页、文件夹发布站点、重新发布、取消发布。
@@ -54,7 +54,6 @@ Scope: `desktop/`, `dashboard/`, `server/`, `shared/`, `docs/`
 - `上传文件`
 - `上传文件夹`
 - `新建文件夹`
-- `搜索`
 - `公开链接`
 - `刷新`
 
@@ -200,7 +199,7 @@ type DriveAccessCapabilities = {
 
 `DriveModule`：
 
-- 负责主网盘管理状态、上传、搜索、当前目录和文件操作。
+- 负责主网盘管理状态、上传、当前目录和文件操作。
 - 不实现文件内容预览。
 
 `DriveFileBrowser`：

@@ -14,7 +14,6 @@ import {
   MoreHorizontal,
   RefreshCw,
   RotateCw,
-  Search,
   Upload,
   X,
 } from "lucide-react"
@@ -80,7 +79,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -191,7 +189,6 @@ function DriveModule() {
   const [usageState, setUsageState] = useState<DriveUsageState>({ status: "idle", usage: null })
   const [openingFolderId, setOpeningFolderId] = useState<string | null>(null)
   const [error, setError] = useState<DriveLoadError | null>(null)
-  const [query, setQuery] = useState("")
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moveTarget, setMoveTarget] = useState<DriveItemDto | null>(null)
   const [moveParentId, setMoveParentId] = useState<string>("root")
@@ -288,12 +285,6 @@ function DriveModule() {
     }
     return result
   }, [publications])
-
-  const visibleItems = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    if (!keyword) return items
-    return items.filter((item) => item.name.toLowerCase().includes(keyword))
-  }, [items, query])
 
   const openFolder = useCallback(async (item: DriveItemDto) => {
     if (item.type !== "folder") return
@@ -631,12 +622,10 @@ function DriveModule() {
     }
     return (
       <DriveFileList
-        items={visibleItems}
+        items={items}
         loading={loading}
         openingFolderId={openingFolderId}
         path={path}
-        query={query}
-        onQueryChange={setQuery}
         onJumpToPath={jumpToPath}
         onOpenFolder={openFolder}
         onRename={handleRename}
@@ -1144,8 +1133,6 @@ function DriveFileList({
   loading,
   openingFolderId,
   path,
-  query,
-  onQueryChange,
   onJumpToPath,
   onOpenFolder,
   onRename,
@@ -1168,8 +1155,6 @@ function DriveFileList({
   readonly loading: boolean
   readonly openingFolderId: string | null
   readonly path: readonly DrivePathEntry[]
-  readonly query: string
-  readonly onQueryChange: (value: string) => void
   readonly onJumpToPath: (index: number) => void
   readonly onOpenFolder: (item: DriveItemDto) => void
   readonly onRename: (item: DriveItemDto) => void
@@ -1189,7 +1174,6 @@ function DriveFileList({
   readonly onDisablePublication: (publicationId: string) => void
 }) {
   const [dragDepth, setDragDepth] = useState(0)
-  const emptyTitle = query.trim() ? "没有匹配项" : "暂无文件"
   const currentFolderName = path.at(-1)?.name ?? "根目录"
   const dragActive = dragDepth > 0 && !uploadDisabled
 
@@ -1233,17 +1217,6 @@ function DriveFileList({
         <DriveBreadcrumbs path={path} onJumpToPath={onJumpToPath} />
         <div className="flex flex-wrap items-center justify-end gap-2">
           {uploading ? <Badge variant="outline">{uploadItemCount === null ? "上传中" : `正在上传 ${uploadItemCount} 项`}</Badge> : null}
-          <InputGroup className="w-56">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="搜索"
-              aria-label="搜索"
-            />
-          </InputGroup>
           {actions ? <div className="flex flex-wrap items-center justify-end gap-1">{actions}</div> : null}
         </div>
       </div>
@@ -1255,7 +1228,7 @@ function DriveFileList({
       ) : items.length === 0 ? (
         <Empty className="min-h-64 border">
           <EmptyHeader>
-            <EmptyTitle>{emptyTitle}</EmptyTitle>
+            <EmptyTitle>暂无文件</EmptyTitle>
           </EmptyHeader>
         </Empty>
       ) : (
