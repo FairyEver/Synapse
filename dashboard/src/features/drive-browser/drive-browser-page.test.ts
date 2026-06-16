@@ -107,17 +107,52 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('# Notes')
   })
 
-  it('uses the single file reader for shared files only', () => {
+  it('uses the single file reader for owner and shared files', () => {
     const sharedFile = createSnapshot({ context: 'share' })
     const sharedFolder = createSnapshot({
       context: 'share',
       current: { ...baseCurrent(), type: 'folder' },
     })
     const ownerFile = createSnapshot({ context: 'owner' })
+    const ownerFolder = createSnapshot({
+      context: 'owner',
+      current: { ...baseCurrent(), type: 'folder' },
+    })
 
     expect(shouldRenderDriveSingleFileReader(sharedFile)).toBe(true)
     expect(shouldRenderDriveSingleFileReader(sharedFolder)).toBe(false)
-    expect(shouldRenderDriveSingleFileReader(ownerFile)).toBe(false)
+    expect(shouldRenderDriveSingleFileReader(ownerFile)).toBe(true)
+    expect(shouldRenderDriveSingleFileReader(ownerFolder)).toBe(false)
+  })
+
+  it('renders owner markdown files as a reader with header metadata', () => {
+    const snapshot = createSnapshot({
+      context: 'owner',
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        size: '7372',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+
+    expect(html).toContain('data-reader-toolbar="true"')
+    expect(html).toContain('notes.md')
+    expect(html).toContain('7.2 KB')
+    expect(html).toContain('Markdown')
+    expect(html).toContain('href="/drive/items/root/items/file/download"')
+    expect(html).toContain('<h1>Notes</h1>')
+    expect(html).not.toContain('data-slot="resizable-panel-group"')
   })
 
   it('renders shared markdown files as a reader without browser chrome', () => {
@@ -151,8 +186,6 @@ describe('drive browser view model', () => {
     expect(html).toContain('源码')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).not.toContain('data-slot="resizable-panel-group"')
-    expect(html).not.toContain('Markdown</span>')
-    expect(html).not.toContain('7.2 KB')
   })
 
   it('aligns shared markdown reader toolbar with the content column', () => {

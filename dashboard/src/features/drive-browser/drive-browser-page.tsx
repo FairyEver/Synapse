@@ -76,7 +76,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
   const shouldCenterState = framed && state.status !== 'ready'
   if (state.status === 'ready' && shouldRenderDriveSingleFileReader(state.snapshot)) {
-    return <DriveSingleFileReaderView snapshot={state.snapshot} />
+    return <DriveSingleFileReaderView snapshot={state.snapshot} embedded={!framed} />
   }
 
   const content = (
@@ -198,17 +198,31 @@ export function DriveBrowserView({
   )
 }
 
-export function DriveSingleFileReaderView({ snapshot }: { readonly snapshot: DriveBrowserSnapshotDto }) {
+export function DriveSingleFileReaderView({
+  snapshot,
+  embedded = false,
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly embedded?: boolean
+}) {
   const actions = getDriveBrowserActions(snapshot)
   const readerContainerClassName = getDriveReaderContainerClassName(snapshot.preview)
   return (
-    <main className='min-h-svh bg-background'>
-      <header data-reader-toolbar='true' className='sticky top-0 z-10 border-b bg-background'>
+    <section className={cn('bg-background', embedded ? 'flex h-full min-h-0 flex-col' : 'min-h-svh')}>
+      <header
+        data-reader-toolbar='true'
+        className={cn('border-b bg-background', embedded ? 'shrink-0' : 'sticky top-0 z-10')}
+      >
         <div className={cn(readerContainerClassName, 'flex flex-col gap-3 py-3 md:flex-row md:items-center md:justify-between')}>
           <div className='flex min-w-0 flex-col gap-1'>
             <div className='flex min-w-0 items-center gap-2 text-sm font-medium'>
               <DriveBrowserItemIcon item={snapshot.current} />
               <span className='min-w-0 truncate'>{snapshot.current.name}</span>
+            </div>
+            <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+              <span>{formatDriveBrowserSize(snapshot.current)}</span>
+              <span>{driveBrowserKindLabel(snapshot.current.previewKind)}</span>
+              <span>{formatDriveBrowserDate(snapshot.current.updatedAt)}</span>
             </div>
             {snapshot.breadcrumbs.length > 1 ? (
               <DriveBrowserBreadcrumbs snapshot={snapshot} />
@@ -239,7 +253,7 @@ export function DriveSingleFileReaderView({ snapshot }: { readonly snapshot: Dri
         current={snapshot.current}
         layoutMode='reader'
       />
-    </main>
+    </section>
   )
 }
 
@@ -742,7 +756,7 @@ export function getDriveBrowserChildUrls(snapshot: DriveBrowserSnapshotDto) {
 }
 
 export function shouldRenderDriveSingleFileReader(snapshot: DriveBrowserSnapshotDto): boolean {
-  return snapshot.context === 'share' && snapshot.current.type === 'file'
+  return snapshot.current.type === 'file'
 }
 
 function driveBrowserKindLabel(kind: DriveBrowserItemDto['previewKind']) {
