@@ -45,9 +45,9 @@ console 网盘进入目录且当前 item 是文件夹时，页面保留 console 
 - 文件名。
 - `下载`。
 - `新窗口打开`。
-- `切换显示` 下拉菜单。
+- `打开方式` 下拉菜单。
 
-`切换显示` 用于选择当前文件可用的 Renderer。Finder 负责根据 Renderer Registry 提供可选项，Renderer 只负责实际显示。
+`打开方式` 用于选择当前文件可用的 Renderer。Finder 负责根据 Renderer Registry 提供可选项，Renderer 只负责实际显示。console 分栏文件 header 中按钮已说明语义，菜单内不重复显示分组标题。
 
 ### Single File Window And Shared File
 
@@ -65,7 +65,8 @@ Renderer 自己决定内容宽度：
 - 文件名。
 - 文件信息。
 - 下载。
-- 切换显示。
+- 在云盘中查看。
+- 打开方式。
 
 悬浮菜单不承担分享、发布、重命名、移动或删除等管理动作。
 
@@ -238,7 +239,7 @@ View model tests:
 - 没有选中文件时 Finder 文件列表占满内容区。
 - 选中文件时 Finder 在左，Renderer 在右。
 - 单文件新窗口和分享文件页不显示 finder 外框，Renderer 占满 body。
-- 右下角悬浮菜单提供文件信息、下载和切换显示。
+- 右下角悬浮菜单提供文件信息、下载、owner 文件的在云盘中查看入口和打开方式。
 - renderer 切换由注册表驱动，不散落在 Finder JSX 中。
 - 文件承接页不出现分享或发布管理动作。
 - UI 遵守现有 shadcn/Radix 和 token 规范。

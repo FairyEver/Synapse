@@ -136,6 +136,8 @@ function DriveRendererFloatingMenu({
   readonly selected: DriveRendererOption
   readonly onSelect: (id: DriveRendererId) => void
 }) {
+  const driveBrowserUrl = snapshot.context === 'owner' ? snapshot.current.browserUrl : null
+
   return (
     <div className='fixed right-5 bottom-5 z-50'>
       <DropdownMenu>
@@ -158,6 +160,14 @@ function DriveRendererFloatingMenu({
               <a href={snapshot.current.downloadUrl}>
                 <Download data-icon='inline-start' />
                 下载
+              </a>
+            </DropdownMenuItem>
+          ) : null}
+          {driveBrowserUrl ? (
+            <DropdownMenuItem asChild>
+              <a href={driveBrowserUrl}>
+                <ExternalLink data-icon='inline-start' />
+                在云盘中查看
               </a>
             </DropdownMenuItem>
           ) : null}

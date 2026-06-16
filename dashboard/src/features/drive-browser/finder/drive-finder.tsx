@@ -6,7 +6,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
@@ -149,7 +148,6 @@ function DriveFinderFileHeader({
               <Button type='button' variant='outline' size='sm'>打开方式</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
-              <DropdownMenuLabel>打开方式</DropdownMenuLabel>
               {rendererOptions.map((option) => (
                 <DropdownMenuCheckboxItem
                   key={option.id}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { readFileSync } from 'node:fs'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import {
   DriveBrowserView,
@@ -364,6 +365,13 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('class="min-h-0 flex-1 overflow-auto"')
   })
 
+  it('does not render a duplicate display-mode title in the split file header menu', () => {
+    const source = readFileSync(new URL('./finder/drive-finder.tsx', import.meta.url), 'utf8')
+
+    expect(source).toContain("<Button type='button' variant='outline' size='sm'>打开方式</Button>")
+    expect(source).not.toContain('<DropdownMenuLabel>打开方式</DropdownMenuLabel>')
+  })
+
   it('uses the single file reader for owner and shared files', () => {
     const sharedFile = createSnapshot({ context: 'share' })
     const sharedFolder = createSnapshot({
@@ -416,8 +424,12 @@ describe('drive browser view model', () => {
     })
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const source = readFileSync(new URL('./renderers/drive-renderer-shell.tsx', import.meta.url), 'utf8')
 
     expect(html).toContain('文件操作')
+    expect(source).toContain("const driveBrowserUrl = snapshot.context === 'owner' ? snapshot.current.browserUrl : null")
+    expect(source).toContain('href={driveBrowserUrl}')
+    expect(source).toContain('在云盘中查看')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).not.toContain('data-reader-toolbar="true"')
   })
@@ -446,6 +458,7 @@ describe('drive browser view model', () => {
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
     expect(html).toContain('文件操作')
+    expect(html).not.toContain('在云盘中查看')
     expect(html).not.toContain('预览')
     expect(html).not.toContain('源码')
     expect(html).toContain('<h1>Notes</h1>')
