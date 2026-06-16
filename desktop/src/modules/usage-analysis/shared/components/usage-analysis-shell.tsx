@@ -7,7 +7,6 @@ import { RangePicker } from "./range-picker"
 import type { UsageRangePreset, UsageViewId } from "../types"
 
 interface UsageAnalysisShellProps {
-  title: string
   view: UsageViewId
   views?: readonly UsageViewOption[]
   range: UsageRangePreset
@@ -48,7 +47,6 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
     <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-surface">
       <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <h2 className="shrink-0 text-sm font-medium">{props.title}</h2>
           <Tabs value={props.view} onValueChange={(next) => props.onViewChange(next as UsageViewId)}>
             <TabsList>
               {views.map((view) => (

@@ -110,6 +110,22 @@ describe("ModelPriceModule", () => {
     expect(document.querySelector('[data-view="rules"]')).toBeTruthy()
     expect(document.querySelector('[data-view="coverage"]')).toBeNull()
   })
+
+  it("keeps module content constrained to the window width", async () => {
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<ModelPriceModule />)
+    })
+
+    expect(document.querySelector("[data-model-price-scroll-area]")?.className).toContain("min-w-0")
+    expect(document.querySelector("[data-model-price-scroll-area]")?.className).toContain("max-w-full")
+    expect(document.querySelector("[data-slot='scroll-area-viewport']")?.className).toContain("min-w-0")
+    expect(document.querySelector("[data-model-price-content]")?.className).toContain("overflow-x-hidden")
+  })
 })
 
 function clickButton(label: string): void {

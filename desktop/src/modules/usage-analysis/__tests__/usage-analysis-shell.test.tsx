@@ -3,10 +3,26 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { CC_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 
 describe("UsageAnalysisShell", () => {
+  it("does not render a redundant source heading before the view tabs", () => {
+    const html = renderToStaticMarkup(
+      <UsageAnalysisShell
+        view="today"
+        range="30d"
+        refreshing={false}
+        onViewChange={() => undefined}
+        onRangeChange={() => undefined}
+        onRefresh={() => undefined}
+      >
+        <div>content</div>
+      </UsageAnalysisShell>,
+    )
+
+    expect(html).not.toContain("<h2")
+  })
+
   it("shows today before overview", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="CC"
         view="today"
         range="30d"
         refreshing={false}
@@ -25,7 +41,6 @@ describe("UsageAnalysisShell", () => {
   it("hides the historical range picker on today", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="CC"
         view="today"
         range="30d"
         refreshing={false}
@@ -45,7 +60,6 @@ describe("UsageAnalysisShell", () => {
   it("shows the historical range picker on overview", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="CC"
         view="overview"
         range="30d"
         refreshing={false}
@@ -64,7 +78,6 @@ describe("UsageAnalysisShell", () => {
   it("does not show pricing rules in usage pages", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="CC"
         view="overview"
         range="30d"
         refreshing={false}
@@ -82,7 +95,6 @@ describe("UsageAnalysisShell", () => {
   it("shows records tab for CC analysis without separate details and conversation tabs", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="CC"
         view="records"
         views={CC_USAGE_VIEWS}
         range="30d"
@@ -103,7 +115,6 @@ describe("UsageAnalysisShell", () => {
   it("shows a disabled loading refresh button while refreshing", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="CC"
         view="overview"
         range="30d"
         refreshing
@@ -124,7 +135,6 @@ describe("UsageAnalysisShell", () => {
   it("keeps today refresh text unchanged while loading", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="CC"
         view="today"
         range="30d"
         refreshing
@@ -143,7 +153,6 @@ describe("UsageAnalysisShell", () => {
   it("keeps report padding inside the scroll viewport content", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
-        title="Codex"
         view="today"
         range="30d"
         refreshing={false}

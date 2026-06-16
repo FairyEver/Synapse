@@ -196,10 +196,10 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-2">
-      <div className="flex shrink-0 items-center justify-between gap-2">
+    <div data-price-rules-root className="flex min-h-0 min-w-0 max-w-full flex-col gap-2 overflow-hidden">
+      <div data-price-rules-toolbar className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="text-sm text-muted-foreground">人民币 / 1M token</div>
-        <div className="flex items-center gap-2">
+        <div data-price-rules-actions className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
             <DialogTrigger asChild>
               <Button type="button" variant="outline" size="sm" disabled={busy}>
@@ -263,68 +263,70 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
           </Button>
         </div>
       </div>
-      <ModuleContentPanel className="overflow-x-auto">
-        <Table className="min-w-[60rem] table-fixed">
-          <colgroup>
-            <col className="w-20" />
-            <col className="w-auto" />
-            <col className="w-28" />
-            <col className="w-28" />
-            <col className="w-28" />
-            <col className="w-28" />
-            <col className="w-28" />
-            <col className="w-20" />
-          </colgroup>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>启用</TableHead>
-              {PRICE_COLUMNS.map((column) => (
-                <TableHead key={column.key} className={column.key === "modelPattern" ? undefined : "text-right"}>{column.label}</TableHead>
-              ))}
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.clientId}>
-                <TableCell>
-                  <Checkbox
-                    checked={row.enabled}
-                    disabled={busy}
-                    aria-label="启用"
-                    onCheckedChange={(checked) => updateEnabled(row.clientId, checked === true)}
-                  />
-                </TableCell>
+      <ModuleContentPanel className="min-w-0 max-w-full overflow-hidden">
+        <div data-price-rules-table-panel className="min-w-0 max-w-full overflow-hidden">
+          <Table containerClassName="min-w-0 max-w-full overflow-x-auto" className="min-w-[60rem] table-fixed">
+            <colgroup>
+              <col className="w-20" />
+              <col className="w-auto" />
+              <col className="w-28" />
+              <col className="w-28" />
+              <col className="w-28" />
+              <col className="w-28" />
+              <col className="w-28" />
+              <col className="w-20" />
+            </colgroup>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>启用</TableHead>
                 {PRICE_COLUMNS.map((column) => (
-                  <TableCell key={column.key}>
-                    <Input
-                      value={row[column.key]}
-                      type={column.key === "modelPattern" ? "text" : "number"}
-                      min={column.key === "modelPattern" ? undefined : 0}
-                      step={column.key === "modelPattern" ? undefined : "0.0001"}
-                      aria-label={column.label}
-                      className={column.key === "modelPattern" ? "min-w-48" : "min-w-24 text-right tabular-nums"}
+                  <TableHead key={column.key} className={column.key === "modelPattern" ? undefined : "text-right"}>{column.label}</TableHead>
+                ))}
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.clientId}>
+                  <TableCell>
+                    <Checkbox
+                      checked={row.enabled}
                       disabled={busy}
-                      onChange={(event) => updateRow(row.clientId, column.key, event.target.value)}
+                      aria-label="启用"
+                      onCheckedChange={(checked) => updateEnabled(row.clientId, checked === true)}
                     />
                   </TableCell>
-                ))}
-                <TableCell className="text-right">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="删除"
-                    disabled={busy}
-                    onClick={() => removeRow(row.clientId)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  {PRICE_COLUMNS.map((column) => (
+                    <TableCell key={column.key}>
+                      <Input
+                        value={row[column.key]}
+                        type={column.key === "modelPattern" ? "text" : "number"}
+                        min={column.key === "modelPattern" ? undefined : 0}
+                        step={column.key === "modelPattern" ? undefined : "0.0001"}
+                        aria-label={column.label}
+                        className={column.key === "modelPattern" ? "min-w-48" : "min-w-24 text-right tabular-nums"}
+                        disabled={busy}
+                        onChange={(event) => updateRow(row.clientId, column.key, event.target.value)}
+                      />
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="删除"
+                      disabled={busy}
+                      onClick={() => removeRow(row.clientId)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </ModuleContentPanel>
     </div>
   )

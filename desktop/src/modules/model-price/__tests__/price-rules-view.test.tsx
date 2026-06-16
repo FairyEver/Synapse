@@ -288,6 +288,35 @@ describe("PriceRulesView", () => {
       await flushPromises()
     })
   })
+
+  it("keeps narrow-window overflow inside toolbar wrapping and table scrolling bounds", async () => {
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PriceRulesView
+          state={{
+            data: [priceRule({ id: "local", modelPattern: "local-model", inputPer1M: 99 })],
+            loading: false,
+            error: null,
+            reload: vi.fn(),
+          }}
+          presetState={presetState([])}
+          onSaved={vi.fn()}
+        />,
+      )
+      await flushPromises()
+    })
+
+    expect(document.querySelector("[data-price-rules-root]")?.className).toContain("min-w-0")
+    expect(document.querySelector("[data-price-rules-toolbar]")?.className).toContain("flex-wrap")
+    expect(document.querySelector("[data-price-rules-actions]")?.className).toContain("flex-wrap")
+    expect(document.querySelector("[data-price-rules-table-panel]")?.className).toContain("overflow-hidden")
+    expect(document.querySelector("[data-slot='table-container']")?.className).toContain("overflow-x-auto")
+  })
 })
 
 function clickButton(label: string): void {

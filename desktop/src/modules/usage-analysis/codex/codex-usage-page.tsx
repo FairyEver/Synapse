@@ -44,7 +44,6 @@ export function CodexUsagePage() {
 
   return (
     <UsageAnalysisShell
-      title="Codex"
       view={view}
       views={CODEX_USAGE_VIEWS}
       range={range}

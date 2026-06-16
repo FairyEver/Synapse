@@ -44,7 +44,6 @@ export function CcUsagePage() {
 
   return (
     <UsageAnalysisShell
-      title="CC"
       view={view}
       views={CC_USAGE_VIEWS}
       range={range}

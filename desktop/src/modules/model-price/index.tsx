@@ -93,8 +93,12 @@ export function ModelPriceModule() {
         </>
       )}
     >
-      <ScrollArea className="h-full min-h-0">
-        <div className="min-h-full px-3 py-3">
+      <ScrollArea
+        data-model-price-scroll-area
+        className="h-full min-h-0 min-w-0 max-w-full"
+        viewportClassName="min-w-0 max-w-full overflow-x-hidden"
+      >
+        <div data-model-price-content className="min-h-full min-w-0 max-w-full overflow-x-hidden px-3 py-3">
           {view === "coverage" ? <ModelCoverageView state={coverageState} /> : null}
           {view === "rules" ? (
             <PriceRulesView
