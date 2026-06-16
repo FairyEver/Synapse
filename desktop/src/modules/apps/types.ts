@@ -27,8 +27,16 @@ export type SynapseSystemAppManifest = SynapseSystemAppDefinition & {
   readonly icon: string
 }
 
+export type SynapseSystemAppContentOpenRequest = {
+  readonly kind: "create" | "detail" | "edit-overwrite"
+  readonly requestId: string
+  readonly contentType: "rule" | "skill"
+  readonly contentId?: string
+  readonly [key: string]: unknown
+}
+
 export type SynapseSystemAppOpenOptions = {
-  readonly contentOpenRequest?: import("@/app-shell/content-navigation").ContentOpenRequest | null
+  readonly contentOpenRequest?: SynapseSystemAppContentOpenRequest | null
 }
 
 export function isSystemAppId(value: string): value is SynapseSystemAppId {

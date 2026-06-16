@@ -1,8 +1,8 @@
-import { databaseAppDefinition } from "@/modules/database/app-definition"
-import { editorScanAppDefinition } from "@/modules/editor-scan/app-definition"
-import { modelPriceAppDefinition } from "@/modules/model-price/app-definition"
-import { resourceRepositoryAppDefinition } from "@/modules/resource-repository/app-definition"
-import { usageMonitorAppDefinition } from "@/modules/usage-analysis/app-definition"
+import { databaseAppDefinition } from "../database/app-definition"
+import { editorScanAppDefinition } from "../editor-scan/app-definition"
+import { modelPriceAppDefinition } from "../model-price/app-definition"
+import { resourceRepositoryAppDefinition } from "../resource-repository/app-definition"
+import { usageMonitorAppDefinition } from "../usage-analysis/app-definition"
 import type { SynapseSystemAppDefinition, SynapseSystemAppId } from "./types"
 import { isSystemAppId } from "./types"
 

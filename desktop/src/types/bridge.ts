@@ -242,6 +242,11 @@ import type {
   WorkflowRunListItem,
   WorkflowRunStatus,
 } from "./workflow"
+import type {
+  SynapseSystemAppContentOpenRequest,
+  SynapseSystemAppId,
+  SynapseSystemAppOpenOptions,
+} from "../modules/apps/types"
 
 export type SynapseOpsDiagnostics = {
   appVersion: string
@@ -712,6 +717,15 @@ export type SynapseBridge = {
     node: string
   }
   isPackaged: boolean
+  apps: {
+    openSystemApp: (
+      appId: SynapseSystemAppId,
+      options?: SynapseSystemAppOpenOptions,
+    ) => Promise<void>
+    onContentOpenRequest: (
+      listener: (request: SynapseSystemAppContentOpenRequest) => void,
+    ) => () => void
+  }
   account: {
     getState: () => Promise<SynapseAccountState>
     startLogin: () => Promise<SynapseAccountState>

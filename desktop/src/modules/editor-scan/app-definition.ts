@@ -1,4 +1,4 @@
-import type { SynapseSystemAppDefinition } from "@/modules/apps/types"
+import type { SynapseSystemAppDefinition } from "../apps/types"
 
 export const editorScanAppDefinition = {
   id: "editor-scan",
