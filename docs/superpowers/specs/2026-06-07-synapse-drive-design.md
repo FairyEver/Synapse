@@ -17,7 +17,7 @@ The first version is a complete drive MVP, not only a file-link MVP.
 - If an Agent uploads without a target folder, the uploaded item lands in the user's root folder.
 - Admins can view all files and folders across users and delete any item.
 - Admins do not move, rename, or create files on behalf of users in the first version.
-- Default quota is 10 GB per user and 1 GB per file.
+- Default quota is 5 GB per user and 100 MB per file.
 - Tencent Cloud COS stores file bytes. COS object keys use internal item ids, not filenames or folder paths.
 - The database owns user ownership, folder path, filename, size, mime type, share state, quota, and storage metadata.
 - Uploads use a server-issued upload session and short-lived COS upload credential. The desktop client uploads bytes directly to COS; Synapse server never exposes permanent AK/SK.
@@ -154,7 +154,7 @@ model DriveUsage {
 }
 ```
 
-Default `quotaBytes` is 10 GB. Upload preparation must reserve quota transactionally by increasing `reservedBytes`; upload completion moves reserved bytes into `usedBytes`; cancellation, expiry, or failed verification releases the reservation. The server must enforce `usedBytes + reservedBytes + requestedBytes <= quotaBytes` so concurrent uploads cannot exceed quota.
+Default `quotaBytes` is 5 GB. Upload preparation must reserve quota transactionally by increasing `reservedBytes`; upload completion moves reserved bytes into `usedBytes`; cancellation, expiry, or failed verification releases the reservation. The server must enforce `usedBytes + reservedBytes + requestedBytes <= quotaBytes` so concurrent uploads cannot exceed quota.
 
 ### DriveUploadSession
 
@@ -439,7 +439,7 @@ Server tests:
 - Same-name folders in one parent are rejected.
 - Moving an item does not change its id or share link.
 - Disabled or deleted shares return the public not-found page.
-- Upload enforces 1 GB single-file limit and 10 GB user quota.
+- Upload enforces 100 MB single-file limit and 5 GB user quota.
 - Concurrent uploads cannot exceed quota.
 - Upload prepare returns only scoped temporary upload credentials or pre-signed URLs.
 - Upload completion rejects wrong key, wrong size, expired sessions, and missing COS objects.

@@ -10,6 +10,7 @@ import {
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_MAX_FILE_SIZE_LABEL,
   type DriveDeleteImpactDto,
   type DriveAccessSettingsInput,
   type DriveFolderPathEnsureInput,
@@ -224,7 +225,7 @@ export class DriveService implements OnApplicationBootstrap {
   async prepareUpload(userId: string, input: DrivePrepareUploadInput): Promise<DriveUploadPrepareResult> {
     const name = normalizeDriveName(input.name)
     const requestedSize = parseRequestedSize(input.size)
-    if (requestedSize > driveMaxFileBytes) throw new BadRequestException("文件超过 1GB 限制。")
+    if (requestedSize > driveMaxFileBytes) throw new BadRequestException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
 
     const result = await this.prisma.$transaction(async (tx) => {

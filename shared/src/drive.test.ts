@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
+  DRIVE_DEFAULT_QUOTA_BYTES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
   DRIVE_OWNER_BROWSER_PATH_PREFIX,
   DRIVE_PUBLIC_PATH_PREFIX,
@@ -137,6 +139,11 @@ describe("drive URL helpers", () => {
 
   it("defines the default drive access settings", () => {
     expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({ passwordEnabled: true, expiresIn: "3d" })
+  })
+
+  it("defines office-oriented drive upload limits", () => {
+    expect(DRIVE_MAX_FILE_BYTES).toBe(100 * 1024 * 1024)
+    expect(DRIVE_DEFAULT_QUOTA_BYTES).toBe(5 * 1024 * 1024 * 1024)
   })
 
   it("allows markdown as a drive browser preview kind", () => {

@@ -1,5 +1,7 @@
-export const driveDefaultQuotaBytes = 10n * 1024n * 1024n * 1024n
-export const driveMaxFileBytes = 1n * 1024n * 1024n * 1024n
+import { DRIVE_DEFAULT_QUOTA_BYTES, DRIVE_MAX_FILE_BYTES } from "@synapse/shared"
+
+export const driveDefaultQuotaBytes = BigInt(DRIVE_DEFAULT_QUOTA_BYTES)
+export const driveMaxFileBytes = BigInt(DRIVE_MAX_FILE_BYTES)
 export const driveUploadUrlTtlSeconds = 15 * 60
 export const driveDownloadUrlTtlSeconds = 5 * 60
 

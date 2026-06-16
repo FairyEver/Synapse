@@ -82,10 +82,10 @@ describe("DriveService", () => {
     await expect(service.prepareUpload("user-1", {
       parentId: null,
       name: "large.bin",
-      size: "1073741825",
+      size: "104857601",
       mimeType: "application/octet-stream",
       publicAppUrl: "https://synapse.test",
-    })).rejects.toBeInstanceOf(BadRequestException)
+    })).rejects.toThrow("文件超过 100MB 限制。")
   })
 
   it("completes uploads only after storage verification", async () => {
@@ -2243,7 +2243,7 @@ describe("DriveService", () => {
       folderCount: 2,
       usedBytes: "22",
       reservedBytes: "0",
-      quotaBytes: "10737418240",
+      quotaBytes: "5368709120",
     })
 
     const tree = await service.listItemTree("user-1", { parentId: null, offset: 1, limit: 2 })

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -44,7 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
-import type { DashboardWebhookDto, DriveItemDto, DriveUploadPrepareResult } from "@synapse/shared"
+import { DRIVE_MAX_FILE_BYTES, type DashboardWebhookDto, type DriveItemDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -227,6 +227,28 @@ describe("AccountService", () => {
     })
     expect(service.completeDriveUpload).toHaveBeenCalledWith("session-file-1")
     expect(service.cancelDriveUpload).not.toHaveBeenCalled()
+  })
+
+  it("rejects local files over the shared single file limit before preparing upload", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-local-too-large-"))
+    const filePath = path.join(dir, "large.bin")
+    await writeFile(filePath, "")
+    await truncate(filePath, DRIVE_MAX_FILE_BYTES + 1)
+
+    const { service } = await createTestAccountService()
+    vi.spyOn(service, "prepareDriveUpload")
+
+    await expect(service.uploadDriveLocalItems({
+      parentId: null,
+      items: [{ kind: "file", path: filePath, name: "large.bin", mimeType: "application/octet-stream" }],
+    })).resolves.toEqual({
+      completed: 0,
+      failed: 1,
+      skipped: 0,
+      message: "文件超过 100MB 限制。",
+    })
+
+    expect(service.prepareDriveUpload).not.toHaveBeenCalled()
   })
 
   it("preserves existing prepared upload content-length headers", async () => {

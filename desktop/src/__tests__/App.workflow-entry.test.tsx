@@ -181,13 +181,13 @@ describe("App workflow entry visibility", () => {
     await renderApp()
 
     expect(topNavigationLabels()).toEqual([
+      "对话",
+      "自动化",
+      "云盘",
       "技能",
       "规则",
       "提示词",
-      "对话",
       "数据库",
-      "自动化",
-      "云盘",
       "工具",
       "IDE",
       "CC",
@@ -229,14 +229,14 @@ describe("App workflow entry visibility", () => {
     await renderApp()
 
     expect(topNavigationLabels()).toEqual([
-      "技能",
-      "规则",
-      "提示词",
       "对话",
-      "数据库",
       "自动化",
       "工作流",
       "云盘",
+      "技能",
+      "规则",
+      "提示词",
+      "数据库",
       "工具",
       "IDE",
       "CC",

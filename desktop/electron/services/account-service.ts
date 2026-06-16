@@ -584,6 +584,10 @@ export class AccountService {
       logger.warn("Drive local upload skipped.", { operation: "uploadDriveLocalFile", reason: "not-file" })
       return { completed: 0, failed: 0, skipped: 1 }
     }
+    const uploadLimits = await getDriveUploadLimits()
+    if (fileStat.size > uploadLimits.maxFileBytes) {
+      return { completed: 0, failed: 1, skipped: 0, message: driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel) }
+    }
 
     let prepared: DriveUploadPrepareResult
     try {
@@ -658,6 +662,10 @@ export class AccountService {
     }
 
     if (files.length === 0) return { completed: 0, failed: 0, skipped }
+    const uploadLimits = await getDriveUploadLimits()
+    if (files.some((file) => file.sizeBytes > uploadLimits.maxFileBytes)) {
+      return { completed: 0, failed: files.length, skipped, message: driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel) }
+    }
 
     let prepared: DriveFolderUploadPrepareResult
     try {
@@ -1500,6 +1508,18 @@ async function writeResponseBodyToFile(response: Response, outputPath: string): 
 
 function localUploadErrorMessage(): string {
   return "上传失败。"
+}
+
+async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; readonly maxFileSizeLabel: string }> {
+  const shared = await sharedUrlsPromise
+  return {
+    maxFileBytes: shared.DRIVE_MAX_FILE_BYTES,
+    maxFileSizeLabel: shared.DRIVE_MAX_FILE_SIZE_LABEL,
+  }
+}
+
+function driveMaxFileSizeMessage(label: string): string {
+  return `文件超过 ${label} 限制。`
 }
 
 function errorCode(error: unknown): string | undefined {

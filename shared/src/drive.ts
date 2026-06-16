@@ -4,6 +4,10 @@ export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/drive"
 export const DRIVE_SHARE_BROWSER_PATH_PREFIX = DRIVE_PUBLIC_PATH_PREFIX
 export const DRIVE_PAGE_PUBLIC_PATH_PREFIX = "/pages"
 export const DRIVE_SITE_PUBLIC_PATH_PREFIX = "/sites"
+export const DRIVE_MAX_FILE_BYTES = 100 * 1024 * 1024
+export const DRIVE_DEFAULT_QUOTA_BYTES = 5 * 1024 * 1024 * 1024
+export const DRIVE_MAX_FILE_SIZE_LABEL = "100MB"
+export const DRIVE_DEFAULT_QUOTA_LABEL = "5GB"
 
 export type DriveItemType = "file" | "folder"
 export type DrivePublicationType = "page" | "site"

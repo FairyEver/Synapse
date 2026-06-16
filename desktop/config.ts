@@ -6,14 +6,14 @@ export const CONVERSATION_IDLE_ROLLOVER_PROMPT_MS = ONE_HOUR_MS
 
 // 顶部导航菜单：定义每个菜单的内部英文标识、中文显示文案和显示顺序，调整这里即可改变主窗口顶部 tab。
 export const APP_NAVIGATION_TABS = [
+  { id: "agent", label: "对话" },
+  { id: "workflow", label: "工作流", requiresWorkflowEntry: true },
+  { id: "drive", label: "云盘" },
+  { id: "automation", label: "自动化" },
   { id: "skill", label: "技能" },
   { id: "rule", label: "规则" },
   { id: "prompt", label: "提示词" },
-  { id: "agent", label: "对话" },
   { id: "database", label: "数据库" },
-  { id: "automation", label: "自动化" },
-  { id: "workflow", label: "工作流", requiresWorkflowEntry: true },
-  { id: "drive", label: "云盘" },
   { id: "tools", label: "工具" },
   { id: "editor-scan", label: "IDE" },
   { id: "usage-cc", label: "CC" },
