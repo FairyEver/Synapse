@@ -5,6 +5,7 @@ import {
   getServerDataTableBoundedPage,
   getServerDataTableErrorMessage,
   getServerDataTablePageCount,
+  getServerDataTablePinnedColumnClass,
 } from './server-data-table'
 
 describe('data table defaults', () => {
@@ -43,5 +44,13 @@ describe('server table pagination bounds', () => {
   it('normalizes invalid page and page size values', () => {
     expect(getServerDataTablePageCount(5, 0)).toBe(5)
     expect(getServerDataTableBoundedPage(0, 25, 10)).toBe(1)
+  })
+})
+
+describe('server table pinned columns', () => {
+  it('pins the actions column to the right edge', () => {
+    expect(getServerDataTablePinnedColumnClass('actions')).toContain('sticky')
+    expect(getServerDataTablePinnedColumnClass('actions')).toContain('right-0')
+    expect(getServerDataTablePinnedColumnClass('name')).toBe('')
   })
 })

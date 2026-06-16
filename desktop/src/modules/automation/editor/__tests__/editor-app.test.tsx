@@ -414,7 +414,7 @@ describe("AutomationEditorApp", () => {
       button.textContent === "确认")?.disabled).toBe(true)
   })
 
-  it("switches selected trigger back to list with reselect", async () => {
+  it("switches selected trigger back to list from the panel header change action", async () => {
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
     const rootElement = document.createElement("div")
     document.body.appendChild(rootElement)
@@ -426,11 +426,28 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       Array.from(document.querySelectorAll("button")).find((button) => button.textContent?.includes("Cron"))?.click()
     })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent?.includes("命令"))?.click()
+    })
 
     expect(document.body.textContent).toContain("Cron 表达式")
 
+    const triggerHeader = document.querySelector('[data-layout="automation-editor-trigger-header"]')
+    const executorHeader = document.querySelector('[data-layout="automation-editor-executor-header"]')
+    const triggerSummary = document.querySelector('[data-layout="automation-editor-trigger-summary"]')
+    const executorSummary = document.querySelector('[data-layout="automation-editor-executor-summary"]')
+
+    expect(triggerHeader).not.toBeNull()
+    expect(executorHeader).not.toBeNull()
+    expect(triggerHeader?.textContent ?? "").toContain("更换")
+    expect(executorHeader?.textContent ?? "").toContain("更换")
+    expect(triggerSummary?.textContent ?? "").not.toContain("更换")
+    expect(triggerSummary?.textContent ?? "").not.toContain("重新选择")
+    expect(executorSummary?.textContent ?? "").not.toContain("更换")
+    expect(executorSummary?.textContent ?? "").not.toContain("重新选择")
+
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "重新选择")?.click()
+      document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')?.click()
     })
 
     expect(document.body.textContent).toContain("固定间隔")

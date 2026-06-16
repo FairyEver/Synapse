@@ -1,4 +1,5 @@
 import { type ReactNode } from "react"
+import { RefreshCw } from "lucide-react"
 
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
@@ -45,13 +46,34 @@ function safeExecutorSummary(type: string, config: ActionConfig): string {
 }
 
 function BuilderHeader({
+  actionAriaLabel,
+  actionLabel,
+  layout,
+  onAction,
   title,
 }: {
+  readonly actionAriaLabel?: string
+  readonly actionLabel?: string
+  readonly layout: string
+  readonly onAction?: () => void
   readonly title: string
 }) {
   return (
-    <div className="mb-5 min-w-0">
+    <div data-layout={layout} className="mb-5 flex min-w-0 items-center justify-between gap-3">
       <h2 className="text-base font-semibold">{title}</h2>
+      {onAction && actionLabel ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="-mr-2 shrink-0"
+          aria-label={actionAriaLabel}
+          onClick={onAction}
+        >
+          <RefreshCw />
+          {actionLabel}
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -61,13 +83,11 @@ function SelectedSummary({
   title,
   summary,
   extraAction,
-  onClear,
 }: {
   readonly layout: string
   readonly title: string
   readonly summary: string
   readonly extraAction?: ReactNode
-  readonly onClear: () => void
 }) {
   return (
     <Item data-layout={layout} variant="muted" size="sm" className="min-w-0 flex-nowrap">
@@ -79,9 +99,6 @@ function SelectedSummary({
       </ItemContent>
       <ItemActions className="shrink-0">
         {extraAction}
-        <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onClear}>
-          重新选择
-        </Button>
       </ItemActions>
     </Item>
   )
@@ -155,6 +172,10 @@ export function TriggerExecutorBuilder({
     >
       <section data-layout="automation-editor-trigger-panel" className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-5">
         <BuilderHeader
+          actionAriaLabel={selectedTrigger ? "更换触发条件" : undefined}
+          actionLabel={selectedTrigger ? "更换" : undefined}
+          layout="automation-editor-trigger-header"
+          onAction={selectedTrigger ? () => onTriggerChange(null, {}) : undefined}
           title="当以下情况发生时"
         />
         {selectedTrigger ? (
@@ -169,7 +190,6 @@ export function TriggerExecutorBuilder({
                   variables={selectedTrigger.manifest.variables ?? []}
                 />
               )}
-              onClear={() => onTriggerChange(null, {})}
             />
             {TriggerConfigForm ? (
               <div
@@ -198,6 +218,10 @@ export function TriggerExecutorBuilder({
 
       <section data-layout="automation-editor-executor-panel" className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-5">
         <BuilderHeader
+          actionAriaLabel={selectedExecutor ? "更换执行操作" : undefined}
+          actionLabel={selectedExecutor ? "更换" : undefined}
+          layout="automation-editor-executor-header"
+          onAction={selectedExecutor ? () => onExecutorChange(null, {}) : undefined}
           title="就执行以下操作"
         />
         {selectedExecutor ? (
@@ -206,7 +230,6 @@ export function TriggerExecutorBuilder({
               layout="automation-editor-executor-summary"
               title={selectedExecutor.manifest.title}
               summary={safeExecutorSummary(selectedExecutor.manifest.id, executorConfig)}
-              onClear={() => onExecutorChange(null, {})}
             />
             {ExecutorConfigForm ? (
               <div

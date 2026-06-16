@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { DataTablePagination } from './pagination'
 
 type ServerDataTableProps<TData, TValue> = {
@@ -36,6 +37,9 @@ type ServerDataTableProps<TData, TValue> = {
   className?: string
   getRowProps?: (row: Row<TData>) => HTMLAttributes<HTMLTableRowElement>
   showPagination?: boolean
+  isLoading?: boolean
+  loadingRowCount?: number
+  emptyMessage?: ReactNode
 }
 
 export function getServerDataTableErrorMessage(error: unknown) {
@@ -74,6 +78,18 @@ export function getServerDataTableBoundedPage(
   return Math.min(safePage, pageCount)
 }
 
+export function getServerDataTablePinnedColumnClass(
+  columnId: string,
+  options: { interactiveRow?: boolean } = {}
+) {
+  if (columnId !== 'actions') return ''
+
+  return cn(
+    'sticky right-0 z-10 bg-background',
+    options.interactiveRow && 'group-hover/row:bg-muted/50'
+  )
+}
+
 export function ServerDataTable<TData, TValue>({
   columns,
   data,
@@ -90,6 +106,9 @@ export function ServerDataTable<TData, TValue>({
   className,
   getRowProps,
   showPagination = true,
+  isLoading = false,
+  loadingRowCount = 8,
+  emptyMessage = '暂无数据',
 }: ServerDataTableProps<TData, TValue>) {
   const pageCount = getServerDataTablePageCount(total, pageSize)
   const boundedPage = getServerDataTableBoundedPage(page, total, pageSize)
@@ -151,7 +170,8 @@ export function ServerDataTable<TData, TValue>({
                     colSpan={header.colSpan}
                     className={cn(
                       header.column.columnDef.meta?.className,
-                      header.column.columnDef.meta?.thClassName
+                      header.column.columnDef.meta?.thClassName,
+                      getServerDataTablePinnedColumnClass(header.column.id)
                     )}
                   >
                     {header.isPlaceholder
@@ -166,7 +186,26 @@ export function ServerDataTable<TData, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            {errorMessage ? (
+            {isLoading ? (
+              Array.from({ length: loadingRowCount }).map((_, rowIndex) => (
+                <TableRow key={rowIndex} className='group/row'>
+                  {columns.map((column, columnIndex) => (
+                    <TableCell
+                      key={column.id ?? columnIndex}
+                      className={cn(
+                        column.meta?.className,
+                        column.meta?.tdClassName,
+                        getServerDataTablePinnedColumnClass(column.id ?? '', {
+                          interactiveRow: true,
+                        })
+                      )}
+                    >
+                      <Skeleton className='h-4 w-full' />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : errorMessage ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className='h-24 text-center'>
                   <div className='flex flex-col items-center gap-2'>
@@ -188,14 +227,17 @@ export function ServerDataTable<TData, TValue>({
                   <TableRow
                     key={row.id}
                     {...rowProps}
-                    className={cn(rowProps?.className)}
+                    className={cn('group/row', rowProps?.className)}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell
                         key={cell.id}
                         className={cn(
                           cell.column.columnDef.meta?.className,
-                          cell.column.columnDef.meta?.tdClassName
+                          cell.column.columnDef.meta?.tdClassName,
+                          getServerDataTablePinnedColumnClass(cell.column.id, {
+                            interactiveRow: true,
+                          })
                         )}
                       >
                         {flexRender(
@@ -210,14 +252,14 @@ export function ServerDataTable<TData, TValue>({
             ) : (
               <TableRow>
                 <TableCell colSpan={columns.length} className='h-24 text-center'>
-                  暂无数据
+                  {emptyMessage}
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
-      {errorMessage || !showPagination ? null : (
+      {isLoading || errorMessage || !showPagination ? null : (
         <DataTablePagination table={table} className='mt-auto' />
       )}
     </div>
