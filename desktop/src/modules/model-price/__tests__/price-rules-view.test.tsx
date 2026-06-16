@@ -312,8 +312,10 @@ describe("PriceRulesView", () => {
     })
 
     expect(document.querySelector("[data-price-rules-root]")?.className).toContain("min-w-0")
-    expect(document.querySelector("[data-price-rules-toolbar]")?.className).toContain("flex-wrap")
+    expect(document.querySelector("[data-price-rules-toolbar]")?.className).toContain("grid-cols-1")
+    expect(document.querySelector("[data-price-rules-toolbar]")?.className).toContain("sm:grid-cols-[auto_minmax(0,1fr)]")
     expect(document.querySelector("[data-price-rules-actions]")?.className).toContain("flex-wrap")
+    expect(document.querySelector("[data-price-rules-actions]")?.className).toContain("max-w-full")
     expect(document.querySelector("[data-price-rules-table-panel]")?.className).toContain("overflow-hidden")
     expect(document.querySelector("[data-slot='table-container']")?.className).toContain("overflow-x-auto")
   })
