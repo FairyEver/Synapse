@@ -14,7 +14,6 @@ export const APP_NAVIGATION_TABS = [
   { id: "rule", label: "规则" },
   { id: "prompt", label: "提示词" },
   { id: "database", label: "数据库" },
-  { id: "tools", label: "工具" },
   { id: "editor-scan", label: "IDE" },
   { id: "usage-cc", label: "CC" },
   { id: "usage-codex", label: "Codex" },

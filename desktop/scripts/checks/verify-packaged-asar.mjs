@@ -305,24 +305,6 @@ function verifyResources(resourcesPath, label) {
     }
   }
 
-  verifyPackedNode(
-    header,
-    "dist-electron/electron/workers/builtin-tool-worker.js",
-    failures,
-    "builtin tool worker is missing from packed app.asar",
-  )
-  verifyPackedNode(
-    header,
-    "dist-electron/electron/workers/builtin-tool-worker.js.map",
-    failures,
-    "builtin tool worker sourcemap is missing from packed app.asar",
-  )
-  verifyPackedNode(
-    header,
-    "dist-electron/electron/services/file-conversion/index.js",
-    failures,
-    "file conversion service is missing from packed app.asar",
-  )
   verifyPackedTextIncludes(
     buffer,
     dataOffset,
@@ -337,20 +319,6 @@ function verifyResources(resourcesPath, label) {
     "node_modules/@synapse/shared/dist/index.js",
     failures,
     "shared workspace package is missing from packed app.asar",
-  )
-  verifyUnpackedNode(
-    header,
-    unpackedPath,
-    "dist-electron/electron/worker-bootstraps/builtin-tool-worker-bootstrap.js",
-    failures,
-    "builtin tool worker bootstrap is missing from app.asar.unpacked",
-  )
-  verifyUnpackedNode(
-    header,
-    unpackedPath,
-    "dist-electron/electron/worker-bootstraps/builtin-tool-worker-bootstrap.js.map",
-    failures,
-    "builtin tool worker bootstrap sourcemap is missing from app.asar.unpacked",
   )
   verifyPackedTextIncludes(
     buffer,

@@ -56,11 +56,6 @@ export type SynapseKnowledgeBaseAddUrlSourcePayload = {
   url: string
 }
 
-export type SynapseKnowledgeBaseFileConversionWarning = {
-  readonly code: string
-  readonly message: string
-}
-
 export type SynapseKnowledgeBaseUploadedSource = {
   originalPath: string
   relativePath: string
@@ -69,7 +64,6 @@ export type SynapseKnowledgeBaseUploadedSource = {
   readonly sourceKind?: "file" | "url"
   readonly sourceUrl?: string
   readonly originalRelativePath?: string
-  readonly conversionWarnings?: readonly SynapseKnowledgeBaseFileConversionWarning[]
 }
 
 export type SynapseKnowledgeBaseUrlSkipReason =
@@ -87,7 +81,7 @@ export type SynapseKnowledgeBaseUploadSourcesResult = {
   uploaded: SynapseKnowledgeBaseUploadedSource[]
   skipped: Array<{
     path: string
-    reason: "not-file" | "read-error" | "conversion-error" | "unsupported" | SynapseKnowledgeBaseUrlSkipReason
+    reason: "not-file" | "read-error" | "unsupported" | SynapseKnowledgeBaseUrlSkipReason
   }>
 }
 

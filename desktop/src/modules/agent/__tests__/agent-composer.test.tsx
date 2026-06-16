@@ -525,7 +525,7 @@ describe("AgentComposer", () => {
   })
 
   it("renders pasted non-image files as full path attachments", async () => {
-    const filePathForDroppedFile = installToolsBridge((file) =>
+    const filePathForDroppedFile = installShellBridge((file) =>
       file.name === "课堂内容.md" ? "/Users/liyang/Desktop/课堂内容.md" : null)
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -572,7 +572,7 @@ describe("AgentComposer", () => {
   })
 
   it("submits pasted non-image files with their resolved full paths", async () => {
-    installToolsBridge((file) =>
+    installShellBridge((file) =>
       file.name === "课堂内容.md" ? "/Users/liyang/Desktop/课堂内容.md" : null)
     const onSubmit = vi.fn((
       event: FormEvent,
@@ -634,7 +634,7 @@ describe("AgentComposer", () => {
   })
 
   it("does not create pasted file attachments when the full path cannot be resolved", async () => {
-    const filePathForDroppedFile = installToolsBridge(() => null)
+    const filePathForDroppedFile = installShellBridge(() => null)
     const onSubmit = vi.fn((
       event: FormEvent,
       _attachments: readonly AgentDraftAttachment[],
@@ -687,7 +687,7 @@ describe("AgentComposer", () => {
   })
 
   it("renders dropped path files and folders as path context", async () => {
-    const filePathForDroppedFile = installToolsBridge()
+    const filePathForDroppedFile = installShellBridge()
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -727,7 +727,7 @@ describe("AgentComposer", () => {
   })
 
   it("resolves dropped file paths through the bridge before legacy file path fallback", async () => {
-    const filePathForDroppedFile = installToolsBridge((file) =>
+    const filePathForDroppedFile = installShellBridge((file) =>
       file.name === "bridge.md" ? "/Users/liyang/Bridge/bridge.md" : null)
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -2351,19 +2351,19 @@ function createDropEvent(files: readonly File[]): Event {
   return event
 }
 
-function installToolsBridge(
+function installShellBridge(
   filePathForDroppedFile: (file: File) => string | null = (file) =>
     (file as File & { readonly path?: string }).path ?? null,
 ) {
   const filePathForDroppedFileMock = vi.fn(filePathForDroppedFile)
   ;(window as unknown as {
     synapse?: {
-      tools: {
+      shell: {
         filePathForDroppedFile: typeof filePathForDroppedFileMock
       }
     }
   }).synapse = {
-    tools: {
+    shell: {
       filePathForDroppedFile: filePathForDroppedFileMock,
     },
   }

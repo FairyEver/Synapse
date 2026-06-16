@@ -144,7 +144,6 @@ vi.mock("@/modules/usage-analysis", () => ({
 }))
 vi.mock("@/modules/model-price", () => ({ ModelPriceModule: () => <div>价格模块</div> }))
 vi.mock("@/modules/workflow", () => ({ WorkflowModule: () => <div>工作流模块</div> }))
-vi.mock("@/modules/tools", () => ({ ToolsModule: () => <div>工具模块</div> }))
 vi.mock("@/modules/content/components/content-window-page", () => ({
   ContentWindowPage: () => <div>内容窗口</div>,
 }))
@@ -182,13 +181,12 @@ describe("App workflow entry visibility", () => {
 
     expect(topNavigationLabels()).toEqual([
       "对话",
-      "自动化",
       "云盘",
+      "自动化",
       "技能",
       "规则",
       "提示词",
       "数据库",
-      "工具",
       "IDE",
       "CC",
       "Codex",
@@ -223,21 +221,20 @@ describe("App workflow entry visibility", () => {
     expect(document.body.textContent).toContain("数据模块")
   })
 
-  it("places workflow between automation and drive when the workflow entry is visible", async () => {
+  it("places workflow in the configured order when the workflow entry is visible", async () => {
     mocks.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: true })
 
     await renderApp()
 
     expect(topNavigationLabels()).toEqual([
       "对话",
-      "自动化",
       "工作流",
       "云盘",
+      "自动化",
       "技能",
       "规则",
       "提示词",
       "数据库",
-      "工具",
       "IDE",
       "CC",
       "Codex",

@@ -680,7 +680,7 @@ function pathAttachmentsFromPastedFiles(files: readonly File[]): {
   const attachments: AgentDraftAttachment[] = []
   let unresolvedCount = 0
   for (const file of files) {
-    const path = requireSynapseBridge().tools.filePathForDroppedFile(file)
+    const path = requireSynapseBridge().shell.filePathForDroppedFile(file)
     if (!path || !isAbsolutePathLine(path)) {
       unresolvedCount += 1
       continue
@@ -706,7 +706,7 @@ async function createImageAttachmentFromFile(file: File): Promise<AgentDraftImag
 }
 
 function droppedFilePath(file: File): string {
-  return requireSynapseBridge().tools.filePathForDroppedFile(file) || legacyFilePath(file)
+  return requireSynapseBridge().shell.filePathForDroppedFile(file) || legacyFilePath(file)
 }
 
 function legacyFilePath(file: File): string {

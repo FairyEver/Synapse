@@ -128,17 +128,12 @@ const uploadSourcesResultSchema = z.object({
     sourceKind: z.enum(["file", "url"]).optional(),
     sourceUrl: z.string().optional(),
     originalRelativePath: z.string().optional(),
-    conversionWarnings: z.array(z.object({
-      code: z.string(),
-      message: z.string(),
-    })).optional(),
   })),
   skipped: z.array(z.object({
     path: z.string(),
     reason: z.enum([
       "not-file",
       "read-error",
-      "conversion-error",
       "unsupported",
       "invalid_url",
       "unsupported_protocol",
