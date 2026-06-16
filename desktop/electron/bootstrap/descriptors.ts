@@ -50,8 +50,6 @@ import {
   type KnowledgeBaseStorageMigrationState,
 } from "../services/knowledge-base/storage-migration-service"
 import { knowledgeBaseSourceManagerWindowService } from "../services/knowledge-base/source-manager-window-service"
-import { runBuiltinTool } from "../services/builtin-tools/runner"
-import { toolWindowService, type ToolWindowService } from "../services/tools/tool-window-service"
 import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
@@ -310,22 +308,6 @@ function storageMigrationEventPayload(state: KnowledgeBaseStorageMigrationState)
     ...(state.warningCode ? { warningCode: state.warningCode } : {}),
     ...(state.errorMessage ? { errorMessage: state.errorMessage } : {}),
   }
-}
-
-export const coreToolsWindowDescriptor: ServiceDescriptor<ToolWindowService> = {
-  id: "tools.window-service",
-  criticality: "degraded",
-  create() {
-    return toolWindowService
-  },
-}
-
-export const coreBuiltinToolRunnerDescriptor: ServiceDescriptor<typeof runBuiltinTool> = {
-  id: "tools.builtin-tool-runner",
-  criticality: "degraded",
-  create() {
-    return runBuiltinTool
-  },
 }
 
 export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> = {

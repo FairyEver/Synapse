@@ -8,20 +8,6 @@ import { describe, expect, it } from "vitest"
 
 const execFileAsync = promisify(execFile)
 const redactionUnpackedSegments = ["app.asar.unpacked", "dist-electron", "src", "lib", "agent-redaction.js"]
-const builtinToolBootstrapSegments = [
-  "app.asar.unpacked",
-  "dist-electron",
-  "electron",
-  "worker-bootstraps",
-  "builtin-tool-worker-bootstrap.js",
-]
-const builtinToolBootstrapMapSegments = [
-  "app.asar.unpacked",
-  "dist-electron",
-  "electron",
-  "worker-bootstraps",
-  "builtin-tool-worker-bootstrap.js.map",
-]
 
 function nativeClaudePackageNames(platform: NodeJS.Platform, arch: string): readonly string[] {
   if (platform === "linux") {
@@ -54,9 +40,6 @@ function hash(value: Buffer): string {
 }
 
 interface CreateAsarBufferOptions {
-  readonly includeBuiltinToolWorker?: boolean
-  readonly includeFileConversionService?: boolean
-  readonly unpackBuiltinToolWorker?: boolean
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
   readonly includeSharedPackage?: boolean
@@ -74,9 +57,6 @@ function createPackedFileNode(offset: number, content: Buffer, unpacked = false)
 
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
-    includeBuiltinToolWorker = true,
-    includeFileConversionService = true,
-    unpackBuiltinToolWorker = false,
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
     includeSharedPackage = true,
@@ -84,9 +64,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   } = options
   const packageJson = Buffer.from(JSON.stringify({ main: "dist-electron/electron/main.js" }), "utf8")
   const mainJs = Buffer.from("require('./bootstrap/descriptors.js')\n", "utf8")
-  const builtinToolWorker = Buffer.from("require('../services/builtin-tools/worker-execute')\n", "utf8")
-  const builtinToolWorkerMap = Buffer.from("{}\n", "utf8")
-  const fileConversionService = Buffer.from("module.exports = {}\n", "utf8")
   const diagnosticsService = Buffer.from("const id = 'app.claude-runtime'; const message = '内置 Claude Code runtime';\n", "utf8")
   const claudeRuntimeBinary = Buffer.from("export function inspectPackagedClaudeRuntime() {} // 内置 Claude Code runtime\n", "utf8")
   const claudeSdkSession = Buffer.from("inspectPackagedClaudeRuntime(); queryOptions.pathToClaudeCodeExecutable = executablePath;\n", "utf8")
@@ -97,18 +74,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   offset += packageJson.length
   const mainNode = createPackedFileNode(offset, mainJs)
   offset += mainJs.length
-  const workerNode = createPackedFileNode(offset, builtinToolWorker, unpackBuiltinToolWorker)
-  if (includeBuiltinToolWorker && !unpackBuiltinToolWorker) {
-    offset += builtinToolWorker.length
-  }
-  const workerMapNode = createPackedFileNode(offset, builtinToolWorkerMap, unpackBuiltinToolWorker)
-  if (includeBuiltinToolWorker && !unpackBuiltinToolWorker) {
-    offset += builtinToolWorkerMap.length
-  }
-  const serviceNode = createPackedFileNode(offset, fileConversionService)
-  if (includeFileConversionService) {
-    offset += fileConversionService.length
-  }
   const diagnosticsNode = createPackedFileNode(offset, diagnosticsService)
   if (includeClaudeRuntimeGuard) {
     offset += diagnosticsService.length
@@ -137,30 +102,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
           electron: {
             files: {
               "main.js": mainNode,
-              workers: {
-                files: {
-                  ...(includeBuiltinToolWorker
-                    ? {
-                        "builtin-tool-worker.js": workerNode,
-                        "builtin-tool-worker.js.map": workerMapNode,
-                      }
-                    : {}),
-                },
-              },
-              "worker-bootstraps": {
-                files: {
-                  "builtin-tool-worker-bootstrap.js": {
-                    size: 1,
-                    offset: "0",
-                    unpacked: true,
-                  },
-                  "builtin-tool-worker-bootstrap.js.map": {
-                    size: 1,
-                    offset: "0",
-                    unpacked: true,
-                  },
-                },
-              },
               generated: {
                 files: {
                   ...(includeDeploymentConfig
@@ -179,15 +120,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                           files: {
                             "claude-runtime-binary.js": claudeRuntimeBinaryNode,
                             "claude-sdk-session.js": claudeSdkSessionNode,
-                          },
-                        },
-                      }
-                    : {}),
-                  ...(includeFileConversionService
-                    ? {
-                        "file-conversion": {
-                          files: {
-                            "index.js": serviceNode,
                           },
                         },
                       }
@@ -284,9 +216,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     header,
     packageJson,
     mainJs,
-    ...(includeBuiltinToolWorker && !unpackBuiltinToolWorker ? [builtinToolWorker] : []),
-    ...(includeBuiltinToolWorker && !unpackBuiltinToolWorker ? [builtinToolWorkerMap] : []),
-    ...(includeFileConversionService ? [fileConversionService] : []),
     ...(includeClaudeRuntimeGuard ? [diagnosticsService] : []),
     ...(includeClaudeRuntimeGuard ? [claudeRuntimeBinary] : []),
     ...(includeClaudeRuntimeGuard ? [claudeSdkSession] : []),
@@ -310,8 +239,6 @@ describe("packaged asar verification", () => {
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
 
       const result = await execFileAsync(process.execPath, [
@@ -332,8 +259,6 @@ describe("packaged asar verification", () => {
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
@@ -353,8 +278,6 @@ describe("packaged asar verification", () => {
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeClaudeRuntimeGuard: false }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
 
       await expect(execFileAsync(process.execPath, [
@@ -368,95 +291,6 @@ describe("packaged asar verification", () => {
     }
   })
 
-  it("rejects packages missing the builtin tool bootstrap worker", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
-    try {
-      const resourcesPath = path.join(root, "resources")
-      await mkdir(resourcesPath, { recursive: true })
-      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
-      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-
-      await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
-        root,
-      ])).rejects.toMatchObject({
-        stderr: expect.stringContaining("builtin-tool-worker-bootstrap.js"),
-      })
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it("rejects packages that unpack the real builtin tool worker", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
-    try {
-      const resourcesPath = path.join(root, "resources")
-      const builtinToolWorker = path.join(
-        resourcesPath,
-        "app.asar.unpacked",
-        "dist-electron",
-        "electron",
-        "workers",
-        "builtin-tool-worker.js",
-      )
-      const builtinToolWorkerMap = `${builtinToolWorker}.map`
-      const builtinToolBootstrap = path.join(
-        resourcesPath,
-        "app.asar.unpacked",
-        "dist-electron",
-        "electron",
-        "worker-bootstraps",
-        "builtin-tool-worker-bootstrap.js",
-      )
-      await mkdir(path.dirname(builtinToolWorker), { recursive: true })
-      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ unpackBuiltinToolWorker: true }))
-      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeFile(builtinToolWorker, "x")
-      await writeFile(builtinToolWorkerMap, "x")
-      await mkdir(path.dirname(builtinToolBootstrap), { recursive: true })
-      await writeFile(builtinToolBootstrap, "x")
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
-
-      await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
-        root,
-      ])).rejects.toMatchObject({
-        stderr: expect.stringContaining("builtin-tool-worker.js must stay packed"),
-      })
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it("rejects packages missing the packed file conversion service", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
-    try {
-      const resourcesPath = path.join(root, "resources")
-      const builtinToolBootstrap = path.join(
-        resourcesPath,
-        "app.asar.unpacked",
-        "dist-electron",
-        "electron",
-        "worker-bootstraps",
-        "builtin-tool-worker-bootstrap.js",
-      )
-      await mkdir(path.dirname(builtinToolBootstrap), { recursive: true })
-      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeFileConversionService: false }))
-      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeFile(builtinToolBootstrap, "x")
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
-
-      await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
-        root,
-      ])).rejects.toMatchObject({
-        stderr: expect.stringContaining("dist-electron/electron/services/file-conversion/index.js"),
-      })
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
   it("rejects packages missing the shared workspace runtime package", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
@@ -464,8 +298,6 @@ describe("packaged asar verification", () => {
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeSharedPackage: false }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
 
       await expect(execFileAsync(process.execPath, [
@@ -486,8 +318,6 @@ describe("packaged asar verification", () => {
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
       await writeUnpackedFixture(
         resourcesPath,
@@ -528,8 +358,6 @@ describe("packaged asar verification", () => {
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapSegments)
-      await writeUnpackedFixture(resourcesPath, builtinToolBootstrapMapSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
       await writeUnpackedFixture(
         resourcesPath,

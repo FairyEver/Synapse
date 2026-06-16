@@ -266,15 +266,6 @@ export const IPC_CHANNELS = {
     "checkCanSync": "synapse:workflow:check-can-sync",
     "event": "synapse:workflow:event",
   },
-  "tools": {
-    "listTools": "synapse:tools:list",
-    "openTool": "synapse:tools:open",
-    "getToolDescriptor": "synapse:tools:descriptor",
-    "runTool": "synapse:tools:run",
-    "cancelRun": "synapse:tools:cancel-run",
-    "selectFile": "synapse:tools:select-file",
-    "selectDirectory": "synapse:tools:select-directory",
-  },
   "usage-analysis": {
     "ccRefresh": "synapse:usage-analysis:cc:refresh",
     "ccOverview": "synapse:usage-analysis:cc:overview",

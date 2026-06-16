@@ -271,6 +271,7 @@ describe("preload bridge", () => {
     })
     const droppedFile = new File(["report"], "report.txt", { type: "text/plain" })
     expect(bridge.account.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
+    expect(bridge.shell.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
     await bridge.account.deleteDriveItem({ itemId: "item-1", disablePublications: true })
     await bridge.account.shareDriveItem({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d" })

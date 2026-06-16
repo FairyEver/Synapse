@@ -77,32 +77,6 @@ void (async () => {
         </AppErrorBoundary>
       </StrictMode>,
     )
-  } else if (windowType === "tool") {
-    const toolId = new URLSearchParams(window.location.search).get("toolId")
-    if (toolId) {
-      const { BuiltinToolWindow } = await import("@/modules/tools/builtin-tools/shared/tool-window")
-      createRoot(document.getElementById("root")!).render(
-        <StrictMode>
-          <AppErrorBoundary>
-            <AppNotificationsProvider>
-              <BuiltinToolWindow toolId={toolId} />
-            </AppNotificationsProvider>
-          </AppErrorBoundary>
-        </StrictMode>,
-      )
-      return
-    }
-    createRoot(document.getElementById("root")!).render(
-      <StrictMode>
-        <AppErrorBoundary>
-          <AppNotificationsProvider>
-            <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
-              工具不可用
-            </div>
-          </AppNotificationsProvider>
-        </AppErrorBoundary>
-      </StrictMode>,
-    )
   } else {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

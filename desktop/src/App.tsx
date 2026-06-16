@@ -50,7 +50,6 @@ import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/comp
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
 import { ModelPriceModule } from "@/modules/model-price"
 import { WorkflowModule } from "@/modules/workflow"
-import { ToolsModule } from "@/modules/tools"
 import type { SynapseContentType } from "@/types/content"
 import {
   APP_NAVIGATION_TABS,
@@ -381,11 +380,6 @@ function MainApp() {
           {activeTab === "automation" ? (
             <ErrorBoundary fallbackTitle="自动化模块出现问题">
               <AutomationModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "tools" ? (
-            <ErrorBoundary fallbackTitle="工具模块出现问题">
-              <ToolsModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "editor-scan" ? (

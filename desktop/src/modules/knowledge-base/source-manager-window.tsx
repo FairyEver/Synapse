@@ -244,8 +244,6 @@ function skippedReasonLabel(reason: string): string {
       return "不是文件夹"
     case "read-error":
       return "读取失败"
-    case "conversion-error":
-      return "转换失败"
     case "unsupported":
       return "不支持"
     case "invalid-path":

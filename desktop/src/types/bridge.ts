@@ -234,18 +234,6 @@ import type {
   AutomationUpdateInput,
 } from "./automation"
 import type {
-  SynapseToolDefinition,
-  SynapseToolCancelRunPayload,
-  SynapseToolCancelRunResult,
-  SynapseToolDirectorySelectionPayload,
-  SynapseToolDirectorySelectionResult,
-  SynapseToolFileSelectionPayload,
-  SynapseToolFileSelectionResult,
-  SynapseToolId,
-  SynapseToolRunPayload,
-  SynapseToolRunResult,
-} from "./tools"
-import type {
   WorkflowDefinition,
   WorkflowMeta,
   ValidationError,
@@ -930,6 +918,7 @@ export type SynapseBridge = {
   shell: {
     openExternal: (url: string) => Promise<void>
     showItemInFolder: (filePath: string) => Promise<void>
+    filePathForDroppedFile: (file: File) => string | null
   }
   repository: {
     checkInitializationPreview: (
@@ -1030,16 +1019,6 @@ export type SynapseBridge = {
     stopRun: (runId: string) => Promise<AutomationStopRunResult>
     listRuns: (automationId: string, options?: { limit?: number }) => Promise<AutomationRun[]>
     onChanged: (listener: (event: AutomationChangedEvent) => void) => () => void
-  }
-  tools: {
-    listTools: () => Promise<{ tools: readonly SynapseToolDefinition[] }>
-    openTool: (toolId: SynapseToolId) => Promise<void>
-    getToolDescriptor: (toolId: SynapseToolId | string) => Promise<SynapseToolDefinition>
-    runTool: (payload: SynapseToolRunPayload) => Promise<SynapseToolRunResult>
-    cancelRun: (payload: SynapseToolCancelRunPayload) => Promise<SynapseToolCancelRunResult>
-    selectFile: (payload: SynapseToolFileSelectionPayload) => Promise<SynapseToolFileSelectionResult>
-    selectDirectory: (payload: SynapseToolDirectorySelectionPayload) => Promise<SynapseToolDirectorySelectionResult>
-    filePathForDroppedFile: (file: File) => string | null
   }
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>

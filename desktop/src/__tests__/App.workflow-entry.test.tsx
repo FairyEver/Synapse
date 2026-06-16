@@ -144,7 +144,6 @@ vi.mock("@/modules/usage-analysis", () => ({
 }))
 vi.mock("@/modules/model-price", () => ({ ModelPriceModule: () => <div>价格模块</div> }))
 vi.mock("@/modules/workflow", () => ({ WorkflowModule: () => <div>工作流模块</div> }))
-vi.mock("@/modules/tools", () => ({ ToolsModule: () => <div>工具模块</div> }))
 vi.mock("@/modules/content/components/content-window-page", () => ({
   ContentWindowPage: () => <div>内容窗口</div>,
 }))
@@ -188,7 +187,6 @@ describe("App workflow entry visibility", () => {
       "数据库",
       "自动化",
       "云盘",
-      "工具",
       "IDE",
       "CC",
       "Codex",
@@ -237,7 +235,6 @@ describe("App workflow entry visibility", () => {
       "自动化",
       "工作流",
       "云盘",
-      "工具",
       "IDE",
       "CC",
       "Codex",

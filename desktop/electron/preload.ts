@@ -255,15 +255,6 @@ const IPC_CHANNELS = {
     "importPackage": "synapse:workflow:import-package",
     "event": "synapse:workflow:event",
   },
-  "tools": {
-    "listTools": "synapse:tools:list",
-    "openTool": "synapse:tools:open",
-    "getToolDescriptor": "synapse:tools:descriptor",
-    "runTool": "synapse:tools:run",
-    "cancelRun": "synapse:tools:cancel-run",
-    "selectFile": "synapse:tools:select-file",
-    "selectDirectory": "synapse:tools:select-directory",
-  },
   "usage-analysis": {
     "ccRefresh": "synapse:usage-analysis:cc:refresh",
     "ccOverview": "synapse:usage-analysis:cc:overview",
@@ -773,6 +764,7 @@ const synapseBridge: SynapseBridge = {
     showItemInFolder: (filePath: string) => {
       return invoke(IPC_CHANNELS.shell.showItemInFolder)({ fullPath: filePath })
     },
+    filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
   },
   repository: {
     checkInitializationPreview: (repositoryUuid) =>
@@ -913,16 +905,6 @@ const synapseBridge: SynapseBridge = {
       "automation",
       "automation.itemChanged",
     ),
-  },
-  tools: {
-    listTools: () => invoke(IPC_CHANNELS.tools.listTools)({}),
-    openTool: (toolId) => invoke(IPC_CHANNELS.tools.openTool)({ toolId }),
-    getToolDescriptor: (toolId) => invoke(IPC_CHANNELS.tools.getToolDescriptor)({ toolId }),
-    runTool: (payload) => invoke(IPC_CHANNELS.tools.runTool)(payload),
-    cancelRun: (payload) => invoke(IPC_CHANNELS.tools.cancelRun)(payload),
-    selectFile: (payload) => invoke(IPC_CHANNELS.tools.selectFile)(payload),
-    selectDirectory: (payload) => invoke(IPC_CHANNELS.tools.selectDirectory)(payload),
-    filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
   },
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
