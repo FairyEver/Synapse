@@ -53,6 +53,13 @@ describe("AppsModule", () => {
     expect(document.body.textContent).not.toContain("更换图标")
   })
 
+  it("uses an external-link icon for app launch actions", async () => {
+    await renderAppsModule(roots)
+
+    expect(document.querySelectorAll(".lucide-external-link")).toHaveLength(5)
+    expect(document.querySelector(".lucide-chevron-right")).toBeNull()
+  })
+
   it("opens the clicked app through the bridge", async () => {
     await renderAppsModule(roots)
 
