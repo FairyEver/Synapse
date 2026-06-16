@@ -4,8 +4,9 @@ import { Download, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
@@ -65,7 +66,7 @@ export function DriveFinder({
                 rendererId={selectedRenderer?.id ?? null}
                 onRendererChange={setRendererId}
               />
-              <div className='min-h-0 flex-1 overflow-auto'>
+              <div className='min-h-0 flex-1 overflow-hidden'>
                 <DriveRendererShell
                   snapshot={snapshot}
                   rendererId={selectedRenderer?.id ?? null}
@@ -145,13 +146,18 @@ function DriveFinderFileHeader({
         {rendererOptions.length > 1 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type='button' variant='outline' size='sm'>切换显示</Button>
+              <Button type='button' variant='outline' size='sm'>打开方式</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
+              <DropdownMenuLabel>打开方式</DropdownMenuLabel>
               {rendererOptions.map((option) => (
-                <DropdownMenuItem key={option.id} onClick={() => onRendererChange(option.id)}>
-                  {option.id === rendererId ? '当前：' : null}{option.label}
-                </DropdownMenuItem>
+                <DropdownMenuCheckboxItem
+                  key={option.id}
+                  checked={option.id === rendererId}
+                  onCheckedChange={() => onRendererChange(option.id)}
+                >
+                  {option.label}
+                </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
