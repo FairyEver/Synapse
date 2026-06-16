@@ -1,0 +1,36 @@
+export const SYSTEM_APP_IDS = [
+  "resource-repository",
+  "database",
+  "editor-scan",
+  "usage-monitor",
+  "model-price",
+] as const
+
+export type SynapseSystemAppId = (typeof SYSTEM_APP_IDS)[number]
+export type SynapseAppType = "system"
+export type ResourceRepositoryViewId = "skill" | "rule" | "prompt"
+export type UsageMonitorViewId = "cc" | "codex"
+export type SynapseSystemAppDefaultView = ResourceRepositoryViewId | UsageMonitorViewId
+
+export type SynapseSystemAppDefinition = {
+  readonly id: SynapseSystemAppId
+  readonly type: "system"
+  readonly name: string
+  readonly windowTitle: string
+  readonly defaultView?: SynapseSystemAppDefaultView
+  readonly removable: false
+  readonly renameable: false
+  readonly iconEditable: false
+}
+
+export type SynapseSystemAppManifest = SynapseSystemAppDefinition & {
+  readonly icon: string
+}
+
+export type SynapseSystemAppOpenOptions = {
+  readonly contentOpenRequest?: import("@/app-shell/content-navigation").ContentOpenRequest | null
+}
+
+export function isSystemAppId(value: string): value is SynapseSystemAppId {
+  return (SYSTEM_APP_IDS as readonly string[]).includes(value)
+}
