@@ -77,6 +77,27 @@ void (async () => {
         </AppErrorBoundary>
       </StrictMode>,
     )
+  } else if (windowType === "system-app") {
+    const { SystemAppWindowApp } = await import("@/modules/apps/system-app-window-app")
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <AppConfigProvider>
+            <RepositoryManagerProvider>
+              <IdentityProvider>
+                <AppNotificationsProvider>
+                  <AccountProvider>
+                    <ActiveRepositorySwitchProvider>
+                      <SystemAppWindowApp />
+                    </ActiveRepositorySwitchProvider>
+                  </AccountProvider>
+                </AppNotificationsProvider>
+              </IdentityProvider>
+            </RepositoryManagerProvider>
+          </AppConfigProvider>
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
   } else {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
