@@ -310,7 +310,7 @@ describe("DriveService", () => {
     await service.completeUpload("user-1", prepared.sessionId)
 
     const share = await service.createShare("user-1", prepared.item.id, "https://synapse.test")
-    expect(share.url).toMatch(/^https:\/\/synapse\.test\/files\/shr_/u)
+    expect(share.url).toMatch(/^https:\/\/synapse\.test\/share\/shr_/u)
     await service.disableShare("user-1", share.id)
     await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
@@ -437,1020 +437,6 @@ describe("DriveService", () => {
     expect(unchanged.name).toBe("report.txt")
   })
 
-  it("audits share and publication changes without secrets", async () => {
-    const prisma = createPrismaMemory()
-    const auditLog = { record: vi.fn(async () => undefined) }
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock, auditLog as never)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    auditLog.record.mockClear()
-
-    const auditContext = { ipAddress: "127.0.0.1" }
-    const share = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" }, auditContext)
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" }, auditContext)
-    const redeployed = await service.redeployPublication("user-1", publication.id, "https://synapse.test", auditContext)
-    await service.disablePublication("user-1", publication.id, auditContext)
-    await service.disableShare("user-1", share.id, auditContext)
-
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "drive.share.create",
-      targetType: "drive.share",
-      targetId: share.id,
-      adminEmail: "user@example.com",
-      ipAddress: "127.0.0.1",
-      detail: expect.objectContaining({ userId: "user-1", itemId: file.id, shareId: share.shareId, passwordEnabled: true }),
-    }))
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "drive.publication.publish",
-      targetType: "drive.publication",
-      targetId: publication.id,
-      detail: expect.objectContaining({ userId: "user-1", itemId: file.id, type: "page", publishId: publication.publishId }),
-    }))
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "drive.publication.redeploy",
-      targetType: "drive.publication",
-      targetId: publication.id,
-      detail: expect.objectContaining({ userId: "user-1", publicationId: publication.id, currentDeploymentId: redeployed.currentDeploymentId }),
-    }))
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "drive.publication.disable",
-      targetType: "drive.publication",
-      targetId: publication.id,
-      detail: expect.objectContaining({ userId: "user-1", publicationId: publication.id }),
-    }))
-    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "drive.share.disable",
-      targetType: "drive.share",
-      targetId: share.id,
-      detail: expect.objectContaining({ userId: "user-1", shareRecordId: share.id }),
-    }))
-    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain(share.password ?? "")
-    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain(publication.url)
-  })
-
-  it("publishes an html file as a snapshot page", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
-
-    expect(publication.type).toBe("page")
-    expect(publication.url).toMatch(/^https:\/\/synapse\.test\/pages\/pub_/u)
-    expect(publication.passwordEnabled).toBe(true)
-    expect(publication.password).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{8}$/u)
-    expect(publication.urlWithPassword).toBe(`${publication.url}?password=${publication.password}`)
-    expect(publication.expiresAt).not.toBeNull()
-    const assets = await prisma.drivePublicationAsset.findMany({ where: { publicationId: publication.id } })
-    expect(assets).toMatchObject([{ relativePath: "index.html", sourceItemId: file.id, contentType: "text/html" }])
-    expect(publication.currentDeploymentId).toBe(assets[0]?.deploymentId)
-    const stored = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
-    expect(stored.passwordHash).toEqual(expect.any(String))
-    expect(stored.passwordEncrypted).toEqual(expect.any(String))
-    expect(stored.accessSettingsAppliedAt).toBeInstanceOf(Date)
-  })
-
-  it("overwrites active publication settings without changing the publication identity", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const first = await service.publishPage("user-1", file.id, "https://synapse.test")
-
-    const second = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
-
-    expect(second.id).toBe(first.id)
-    expect(second.publishId).toBe(first.publishId)
-    expect(second.url).toBe(first.url)
-    expect(second.password).not.toBe(first.password)
-    expect(second.expiresAt).not.toBe(first.expiresAt)
-    const active = await prisma.drivePublication.findMany({
-      where: { userId: "user-1", sourceItemId: file.id, type: "page", status: "active" },
-    })
-    expect(active).toHaveLength(1)
-    expect(active[0]?.accessSettingsAppliedAt).toBeInstanceOf(Date)
-  })
-
-  it("keeps existing publication access settings when republish deployment fails", async () => {
-    const prisma = createPrismaMemory()
-    const failingStorage: DriveStoragePort = {
-      ...storageMock,
-      copyObject: vi.fn(async () => undefined),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, failingStorage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const first = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "7d" })
-    const storedBefore = await prisma.drivePublication.findUniqueOrThrow({ where: { id: first.id } })
-    const accessBefore = {
-      passwordHash: storedBefore.passwordHash,
-      passwordEncrypted: storedBefore.passwordEncrypted,
-      expiresAt: storedBefore.expiresAt,
-      accessSettingsAppliedAt: storedBefore.accessSettingsAppliedAt,
-    }
-    vi.mocked(failingStorage.copyObject).mockRejectedValueOnce(new Error("copy failed"))
-
-    await expect(service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" }))
-      .rejects.toThrow("copy failed")
-
-    const storedAfter = await prisma.drivePublication.findUniqueOrThrow({ where: { id: first.id } })
-    expect({
-      passwordHash: storedAfter.passwordHash,
-      passwordEncrypted: storedAfter.passwordEncrypted,
-      expiresAt: storedAfter.expiresAt,
-      accessSettingsAppliedAt: storedAfter.accessSettingsAppliedAt,
-    }).toEqual(accessBefore)
-  })
-
-  it("lists publication access settings with readable passwords", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
-
-    const publications = await service.listPublications("user-1", "https://synapse.test")
-
-    expect(publications.items).toHaveLength(1)
-    expect(publications.page).toEqual({ offset: 0, limit: 20, hasMore: false, nextOffset: null })
-    expect(publications.items[0]).toMatchObject({
-      id: publication.id,
-      password: publication.password,
-      urlWithPassword: publication.urlWithPassword,
-      passwordEnabled: true,
-      expiresAt: publication.expiresAt,
-    })
-  })
-
-  it("preserves publication protection during redeploy", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "7d" })
-    const markerBefore = (await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })).accessSettingsAppliedAt
-
-    const redeployed = await service.redeployPublication("user-1", publication.id, "https://synapse.test")
-    const markerAfter = (await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })).accessSettingsAppliedAt
-
-    expect(redeployed.passwordEnabled).toBe(true)
-    expect(redeployed.password).toBe(publication.password)
-    expect(redeployed.expiresAt).toBe(publication.expiresAt)
-    expect(redeployed.urlWithPassword).toBe(publication.urlWithPassword)
-    expect(redeployed.currentDeploymentId).not.toBe(publication.currentDeploymentId)
-    expect(markerAfter).toEqual(markerBefore)
-  })
-
-  it("does not serve assets from an inactive current deployment", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
-    await prisma.drivePublicationDeployment.update({
-      where: { id: publication.currentDeploymentId },
-      data: { status: "failed" },
-    })
-
-    await expect(service.resolvePublishedAsset({
-      publishId: publication.publishId,
-      type: "page",
-      relativePath: "index.html",
-    })).rejects.toThrow("网页未找到")
-    expect(storageMock.getObjectStream).not.toHaveBeenCalledWith(expect.objectContaining({
-      key: expect.stringContaining(publication.currentDeploymentId ?? ""),
-    }))
-  })
-
-  it("denies protected published static assets before deployment and asset lookup", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
-    const findDeployment = vi.fn(prisma.drivePublicationDeployment.findFirst)
-    const findAsset = vi.fn(prisma.drivePublicationAsset.findUnique)
-    prisma.drivePublicationDeployment.findFirst = findDeployment
-    prisma.drivePublicationAsset.findUnique = findAsset
-    vi.mocked(storageMock.getObjectStream).mockClear()
-
-    const access = await service.resolvePublishedAssetAccess({
-      publishId: publication.publishId,
-      type: "site",
-      relativePath: "missing.css",
-    })
-
-    expect(access).toEqual({ status: "static_denied" })
-    expect(findDeployment).not.toHaveBeenCalled()
-    expect(findAsset).not.toHaveBeenCalled()
-    expect(storageMock.getObjectStream).not.toHaveBeenCalled()
-  })
-
-  it("uses asset content type before storage content type for published assets", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "asset.bin",
-      mimeType: "application/x-synapse-asset",
-    })
-    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
-    vi.mocked(storageMock.getObjectStream).mockResolvedValueOnce({
-      stream: Readable.from(["payload"]),
-      size: 7n,
-      contentType: "text/plain",
-    })
-
-    const asset = await service.resolvePublishedAssetAccess({
-      publishId: publication.publishId,
-      type: "site",
-      relativePath: "asset.bin",
-      password: publication.password ?? undefined,
-    })
-
-    expect(asset.status).toBe("ok")
-    if (asset.status === "ok") expect(asset.value.contentType).toBe("application/x-synapse-asset")
-  })
-
-  it("returns the existing active publication when source uniqueness races", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const existing = await prisma.drivePublication.create({
-      data: {
-        userId: "user-1",
-        sourceItemId: file.id,
-        type: "page",
-        name: "report.html",
-        status: "active",
-        publishId: "pub_existing",
-      },
-    })
-    const findFirst = prisma.drivePublication.findFirst
-    let activeLookupCount = 0
-    prisma.drivePublication.findFirst = async (args: any) => {
-      if (args.where?.sourceItemId === file.id && args.where?.type === "page" && args.where?.status === "active") {
-        activeLookupCount += 1
-        if (activeLookupCount === 1) return null
-      }
-      return findFirst(args)
-    }
-    const create = prisma.drivePublication.create
-    prisma.drivePublication.create = async (args: any) => {
-      if (args.data?.sourceItemId === file.id && args.data?.type === "page") {
-        throw uniqueConstraintError(["userId", "sourceItemId", "type"])
-      }
-      return create(args)
-    }
-
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
-
-    expect(publication.id).toBe(existing.id)
-    expect(publication.publishId).toBe("pub_existing")
-    const publications = await prisma.drivePublication.findMany({ where: { userId: "user-1", sourceItemId: file.id, type: "page" } })
-    expect(publications).toHaveLength(1)
-  })
-
-  it("returns the existing active share when active share uniqueness races", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "handoff.txt",
-      mimeType: "text/plain",
-    })
-    const findFirst = prisma.driveShare.findFirst
-    let activeLookupCount = 0
-    prisma.driveShare.findFirst = async (args: any) => {
-      if (args.where?.itemId === file.id && args.where?.userId === "user-1" && args.where?.enabled === true) {
-        activeLookupCount += 1
-        if (activeLookupCount === 1) return null
-      }
-      return findFirst(args)
-    }
-    const create = prisma.driveShare.create
-    let createdConcurrentShare = false
-    prisma.driveShare.create = async (args: any) => {
-      if (!createdConcurrentShare) {
-        createdConcurrentShare = true
-        await create(args)
-      }
-      throw uniqueConstraintError(["itemId", "userId"])
-    }
-
-    const share = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: true, expiresIn: "30d" })
-
-    expect(share.shareId).toMatch(/^shr_/u)
-    expect(share.passwordEnabled).toBe(true)
-    expect(share.password).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789]{8}$/u)
-    expect(await prisma.driveShare.findMany({ where: { itemId: file.id, userId: "user-1", enabled: true } })).toHaveLength(1)
-  })
-
-  it("retries publication creation when only the publish id collides", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const create = prisma.drivePublication.create
-    let createCount = 0
-    prisma.drivePublication.create = async (args: any) => {
-      createCount += 1
-      if (createCount === 1) throw uniqueConstraintError(["publishId"])
-      return create(args)
-    }
-
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
-
-    expect(publication.id).toMatch(/^publication-/u)
-    expect(createCount).toBe(2)
-  })
-
-  it("rejects non-html page publication", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "notes.txt",
-      mimeType: "text/plain",
-    })
-
-    await expect(service.publishPage("user-1", file.id, "https://synapse.test"))
-      .rejects.toThrow("只能发布 HTML 文件。")
-  })
-
-  it("publishes a folder with index html as a snapshot site", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    const index = await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    const assetsFolder = await service.createFolder("user-1", { parentId: folder.id, name: "assets" })
-    const css = await createCompletedUpload(service, "user-1", {
-      parentId: assetsFolder.id,
-      name: "style.css",
-      mimeType: "text/css",
-    })
-
-    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
-    const assets = await prisma.drivePublicationAsset.findMany({
-      where: { publicationId: publication.id },
-      orderBy: { relativePath: "asc" },
-    })
-
-    expect(publication.url).toMatch(/^https:\/\/synapse\.test\/sites\/pub_.+\/$/u)
-    expect(assets.map((asset: any) => [asset.relativePath, asset.sourceItemId])).toEqual([
-      ["assets/style.css", css.id],
-      ["index.html", index.id],
-    ])
-  })
-
-  it("rejects oversized site redeploys before copying and keeps the active deployment", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    const index = await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
-    const currentDeploymentId = publication.currentDeploymentId
-    const indexRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: index.id } })
-    const oversizedChildren = [
-      indexRecord,
-      ...Array.from({ length: 1000 }, (_, index) => ({
-        ...indexRecord,
-        id: `oversized-${index}`,
-        name: `asset-${index}.txt`,
-        storageKey: `drive/oversized-${index}`,
-        mimeType: "text/plain",
-      })),
-    ]
-    const findMany = prisma.driveItem.findMany
-    prisma.driveItem.findMany = vi.fn(async (args: any) => {
-      if (args?.where?.parentId === folder.id) return oversizedChildren
-      return findMany(args)
-    })
-    vi.mocked(storageMock.copyObject).mockClear()
-
-    await expect(service.redeployPublication("user-1", publication.id, "https://synapse.test"))
-      .rejects.toThrow("站点文件数量过多，最多发布 1000 个文件。")
-
-    expect(prisma.driveItem.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1201 }))
-    expect(storageMock.copyObject).not.toHaveBeenCalled()
-    const stored = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
-    expect(stored.currentDeploymentId).toBe(currentDeploymentId)
-  })
-
-  it("requires root index html for site publication", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-
-    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
-      .rejects.toThrow("站点根目录需要 index.html。")
-  })
-
-  it("rejects inactive folder root for site publication", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await prisma.driveItem.update({
-      where: { id: folder.id },
-      data: { storageStatus: "pending" },
-    })
-
-    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
-      .rejects.toThrow("站点文件夹不可发布。")
-  })
-
-  it("requires lowercase root index html for site publication", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "INDEX.HTML",
-      mimeType: "text/html",
-    })
-
-    await expect(service.publishSite("user-1", folder.id, "https://synapse.test"))
-      .rejects.toThrow("站点根目录需要 index.html。")
-  })
-
-  it("disables first publication records when initial deployment copy fails", async () => {
-    const prisma = createPrismaMemory()
-    const rawError = [
-      "copy failed",
-      "token=copy-secret",
-      "Authorization: Bearer copy-bearer",
-      "https://user:pass@example.test/private?signature=secret",
-      "/Users/example/site",
-    ].join(" ")
-    const storage: DriveStoragePort = {
-      ...storageMock,
-      copyObject: vi.fn(async () => { throw new Error(rawError) }),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-
-    await expect(service.publishPage("user-1", file.id, "https://synapse.test")).rejects.toThrow("copy failed")
-
-    const [publication] = await prisma.drivePublication.findMany()
-    expect(publication).toMatchObject({
-      sourceItemId: file.id,
-      status: "disabled",
-      currentDeploymentId: null,
-    })
-    expect(publication.disabledAt).toBeInstanceOf(Date)
-    const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: publication.id } })
-    expect(deployments).toHaveLength(1)
-    expect(deployments[0]).toMatchObject({
-      status: "failed",
-      error: expect.stringContaining("copy failed"),
-    })
-    expect(deployments[0]?.error).toContain("token=[REDACTED]")
-    expect(deployments[0]?.error).toContain("Authorization: [REDACTED]")
-    expect(deployments[0]?.error).toContain("[URL]")
-    expect(deployments[0]?.error).toContain("[PATH]")
-    expect(deployments[0]?.error).not.toContain("copy-secret")
-    expect(deployments[0]?.error).not.toContain("copy-bearer")
-    expect(deployments[0]?.error).not.toContain("user:pass")
-    expect(deployments[0]?.error).not.toContain("/Users/example/site")
-    const publications = await service.listPublications("user-1", "https://synapse.test")
-    expect(publications.items).toHaveLength(1)
-    expect(publications.items[0]).toMatchObject({ id: publication.id, status: "disabled", currentDeploymentId: null })
-  })
-
-  it("deletes copied publication objects when a later site copy fails", async () => {
-    const prisma = createPrismaMemory()
-    const copiedKeys: string[] = []
-    const storage: DriveStoragePort = {
-      ...storageMock,
-      copyObject: vi.fn(async ({ toKey }) => {
-        copiedKeys.push(toKey)
-        if (copiedKeys.length === 2) throw new Error("copy failed")
-      }),
-      deleteObject: vi.fn(async () => undefined),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "app.js",
-      mimeType: "application/javascript",
-    })
-
-    await expect(service.publishSite("user-1", folder.id, "https://synapse.test")).rejects.toThrow("copy failed")
-
-    expect(copiedKeys).toHaveLength(2)
-    expect(storage.deleteObject).toHaveBeenCalledTimes(1)
-    expect(storage.deleteObject).toHaveBeenCalledWith(copiedKeys[0])
-    expect(await prisma.drivePublicationAsset.findMany()).toHaveLength(0)
-  })
-
-  it("redacts copied publication cleanup failure logs", async () => {
-    const prisma = createPrismaMemory()
-    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
-    const copiedKeys: string[] = []
-    const storage: DriveStoragePort = {
-      ...storageMock,
-      copyObject: vi.fn(async ({ toKey }) => {
-        copiedKeys.push(toKey)
-        if (copiedKeys.length === 2) {
-          throw new Error("copy failed token=copy-secret Authorization: Bearer copy-bearer /Users/example/site")
-        }
-      }),
-      deleteObject: vi.fn(async () => {
-        throw new Error("cleanup failed apiKey=cleanup-secret Cookie: session=cleanup-cookie /tmp/site")
-      }),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "app.js",
-      mimeType: "application/javascript",
-    })
-
-    try {
-      await expect(service.publishSite("user-1", folder.id, "https://synapse.test")).rejects.toThrow("copy failed")
-
-      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
-        failureName: "Error",
-        failureMessage: expect.stringContaining("token=[REDACTED]"),
-        cleanupErrorName: "Error",
-        cleanupErrorMessage: expect.stringContaining("apiKey=[REDACTED]"),
-      }), "Drive publication copied object cleanup failed")
-      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("copy-secret")
-      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("copy-bearer")
-      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("cleanup-secret")
-      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("cleanup-cookie")
-      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("/Users/example/site")
-      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("/tmp/site")
-    } finally {
-      warnSpy.mockRestore()
-    }
-  })
-
-  it("deletes copied publication objects when deployment asset persistence fails", async () => {
-    const prisma = createPrismaMemory()
-    const copiedKeys: string[] = []
-    const storage: DriveStoragePort = {
-      ...storageMock,
-      copyObject: vi.fn(async ({ toKey }) => {
-        copiedKeys.push(toKey)
-      }),
-      deleteObject: vi.fn(async () => undefined),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "app.js",
-      mimeType: "application/javascript",
-    })
-    prisma.drivePublicationAsset.createMany = async () => {
-      throw new Error("asset persistence failed")
-    }
-
-    await expect(service.publishSite("user-1", folder.id, "https://synapse.test")).rejects.toThrow("asset persistence failed")
-
-    expect(copiedKeys).toHaveLength(2)
-    expect(storage.deleteObject).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(storage.deleteObject).mock.calls.map(([key]) => key)).toEqual(copiedKeys)
-    expect(await prisma.drivePublicationAsset.findMany()).toHaveLength(0)
-  })
-
-  it("keeps the previous deployment active when redeploy copy fails", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const first = await service.publishPage("user-1", file.id, "https://synapse.test")
-    const firstDeploymentId = first.currentDeploymentId
-    vi.mocked(storageMock.copyObject).mockRejectedValueOnce(new Error("copy failed"))
-
-    await expect(service.redeployPublication("user-1", first.id, "https://synapse.test")).rejects.toThrow("copy failed")
-    const current = await prisma.drivePublication.findUniqueOrThrow({ where: { id: first.id } })
-    const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: first.id } })
-    expect(current.currentDeploymentId).toBe(firstDeploymentId)
-    expect(deployments.map((deployment: any) => deployment.status).sort()).toEqual(["active", "failed"])
-  })
-
-  it("cleans old publication deployment assets after a successful redeploy", async () => {
-    const prisma = createPrismaMemory()
-    const storage: DriveStoragePort = {
-      ...storageMock,
-      copyObject: vi.fn(async () => undefined),
-      deleteObject: vi.fn(async () => undefined),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const first = await service.publishPage("user-1", file.id, "https://synapse.test")
-    const firstDeploymentId = first.currentDeploymentId
-    const firstAssets = await prisma.drivePublicationAsset.findMany({
-      where: { deploymentId: firstDeploymentId ?? "" },
-    })
-    const firstAsset = firstAssets[0]
-    if (!firstAsset) throw new Error("missing first publication asset")
-
-    const second = await service.redeployPublication("user-1", first.id, "https://synapse.test")
-
-    expect(second.currentDeploymentId).not.toBe(firstDeploymentId)
-    expect(storage.deleteObject).toHaveBeenCalledWith(firstAsset.storageKey)
-    const deployments = await prisma.drivePublicationDeployment.findMany({ where: { publicationId: first.id } })
-    expect(deployments).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: firstDeploymentId, status: "superseded" }),
-      expect.objectContaining({ id: second.currentDeploymentId, status: "active" }),
-    ]))
-    const remainingOldAssets = await prisma.drivePublicationAsset.findMany({
-      where: { storageKey: firstAsset.storageKey },
-    })
-    expect(remainingOldAssets).toHaveLength(0)
-  })
-
-  it("detects a published site child resource when deleting one file", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "site" })
-    await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "index.html",
-      mimeType: "text/html",
-    })
-    const logo = await createCompletedUpload(service, "user-1", {
-      parentId: folder.id,
-      name: "logo.png",
-      mimeType: "image/png",
-    })
-    const publication = await service.publishSite("user-1", folder.id, "https://synapse.test")
-
-    const impact = await service.getDeleteImpact("user-1", logo.id, "https://synapse.test")
-
-    expect(impact.publications.map((item) => item.id)).toEqual([publication.id])
-  })
-
-  it("disables affected publications when deleting with disablePublications", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test")
-
-    await service.deleteItem("user-1", file.id, "user-1", "127.0.0.1", {
-      disablePublications: true,
-      publicAppUrl: "https://synapse.test",
-    })
-
-    const updatedPublication = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
-    const deletedItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: file.id } })
-    expect(updatedPublication).toMatchObject({ status: "disabled" })
-    expect(updatedPublication.disabledAt).toEqual(deletedItem.deletedAt)
-  })
-
-  it("lists enabled shares with source metadata", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const share = await service.createShare("user-1", file.id, "https://synapse.test")
-
-    const shares = await service.listShares("user-1", "https://synapse.test")
-
-    expect(shares).toEqual({
-      items: [{
-      id: share.id,
-      shareId: share.shareId,
-      itemId: file.id,
-      itemName: "report.html",
-      itemType: "file",
-      sourceDeleted: false,
-      url: share.url,
-      urlWithPassword: share.urlWithPassword,
-      passwordEnabled: true,
-      password: share.password,
-      expiresAt: share.expiresAt,
-      createdAt: share.createdAt,
-      }],
-      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
-    })
-  })
-
-  it("paginates public link share and publication lists", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const firstFile = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "first.html",
-      mimeType: "text/html",
-    })
-    const secondFile = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "second.html",
-      mimeType: "text/html",
-    })
-    await service.createShare("user-1", firstFile.id, "https://synapse.test")
-    await service.publishPage("user-1", firstFile.id, "https://synapse.test")
-    await service.createShare("user-1", secondFile.id, "https://synapse.test")
-    await service.publishPage("user-1", secondFile.id, "https://synapse.test")
-
-    const shares = await service.listShares("user-1", "https://synapse.test", { offset: 0, limit: 1 })
-    const publications = await service.listPublications("user-1", "https://synapse.test", { offset: 0, limit: 1 })
-
-    expect(shares.items).toHaveLength(1)
-    expect(shares.page).toEqual({ offset: 0, limit: 1, hasMore: true, nextOffset: 1 })
-    expect(publications.items).toHaveLength(1)
-    expect(publications.page).toEqual({ offset: 0, limit: 1, hasMore: true, nextOffset: 1 })
-  })
-
-  it("backfills legacy active shares and publications on application bootstrap", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const share = await prisma.driveShare.create({
-      data: {
-        itemId: file.id,
-        userId: "user-1",
-        type: "file",
-        shareId: "shr_legacy",
-        enabled: true,
-        passwordEnabled: false,
-        passwordHash: null,
-        passwordEncrypted: null,
-        expiresAt: null,
-      },
-    })
-    const publication = await prisma.drivePublication.create({
-      data: {
-        userId: "user-1",
-        sourceItemId: file.id,
-        type: "page",
-        name: "report.html",
-        status: "active",
-        publishId: "pub_legacy",
-        passwordEnabled: false,
-        passwordHash: null,
-        passwordEncrypted: null,
-        expiresAt: null,
-      },
-    })
-
-    const backfilledAt = new Date("2026-06-09T12:00:00.000Z")
-    const first = await service.backfillLegacyDriveAccessProtection(backfilledAt)
-    const second = await service.backfillLegacyDriveAccessProtection(new Date("2026-06-10T00:00:00.000Z"))
-
-    expect(first).toEqual({ shares: 1, publications: 1 })
-    expect(second).toEqual({ shares: 0, publications: 0 })
-    const updatedShare = await prisma.driveShare.findFirst({ where: { id: share.id } })
-    const updatedPublication = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
-    expect(updatedShare).toMatchObject({
-      passwordEnabled: true,
-      passwordHash: expect.any(String),
-      passwordEncrypted: expect.any(String),
-      accessSettingsAppliedAt: backfilledAt,
-    })
-    expect(updatedShare.expiresAt).toBeInstanceOf(Date)
-    expect(updatedPublication).toMatchObject({
-      passwordEnabled: true,
-      passwordHash: expect.any(String),
-      passwordEncrypted: expect.any(String),
-      accessSettingsAppliedAt: backfilledAt,
-    })
-    expect(updatedPublication.expiresAt).toBeInstanceOf(Date)
-  })
-
-  it("does not backfill explicit no-password share and publication settings", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-
-    const share = await service.createShare("user-1", file.id, "https://synapse.test", { passwordEnabled: false, expiresIn: "forever" })
-    const publication = await service.publishPage("user-1", file.id, "https://synapse.test", { passwordEnabled: false, expiresIn: "forever" })
-
-    const storedShareBefore = await prisma.driveShare.findFirst({ where: { id: share.id } })
-    const storedPublicationBefore = await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })
-    expect(storedShareBefore).toMatchObject({
-      passwordEnabled: false,
-      passwordHash: null,
-      passwordEncrypted: null,
-      expiresAt: null,
-    })
-    expect(storedShareBefore.accessSettingsAppliedAt).toBeInstanceOf(Date)
-    expect(storedPublicationBefore).toMatchObject({
-      passwordEnabled: false,
-      passwordHash: null,
-      passwordEncrypted: null,
-      expiresAt: null,
-    })
-    expect(storedPublicationBefore.accessSettingsAppliedAt).toBeInstanceOf(Date)
-
-    const result = await service.backfillLegacyDriveAccessProtection(new Date("2026-06-10T00:00:00.000Z"))
-
-    expect(result).toEqual({ shares: 0, publications: 0 })
-    expect(await prisma.driveShare.findFirst({ where: { id: share.id } })).toMatchObject({
-      passwordEnabled: false,
-      passwordHash: null,
-      passwordEncrypted: null,
-      expiresAt: null,
-      accessSettingsAppliedAt: storedShareBefore.accessSettingsAppliedAt,
-    })
-    expect(await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })).toMatchObject({
-      passwordEnabled: false,
-      passwordHash: null,
-      passwordEncrypted: null,
-      expiresAt: null,
-      accessSettingsAppliedAt: storedPublicationBefore.accessSettingsAppliedAt,
-    })
-  })
-
-  it("skips legacy access backfill rows that changed after selection", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "report.html",
-      mimeType: "text/html",
-    })
-    const share = await prisma.driveShare.create({
-      data: {
-        itemId: file.id,
-        userId: "user-1",
-        type: "file",
-        shareId: "shr_legacy_race",
-        enabled: true,
-        passwordEnabled: false,
-        passwordHash: null,
-        passwordEncrypted: null,
-        expiresAt: null,
-      },
-    })
-    const publication = await prisma.drivePublication.create({
-      data: {
-        userId: "user-1",
-        sourceItemId: file.id,
-        type: "page",
-        name: "report.html",
-        status: "active",
-        publishId: "pub_legacy_race",
-        passwordEnabled: false,
-        passwordHash: null,
-        passwordEncrypted: null,
-        expiresAt: null,
-      },
-    })
-    const newerExpiresAt = new Date("2026-07-01T00:00:00.000Z")
-    const findShares = prisma.driveShare.findMany
-    prisma.driveShare.findMany = async (args: any) => {
-      const rows = await findShares(args)
-      if (args.where?.enabled === true && args.where?.passwordEnabled === false && args.where?.passwordHash === null && args.select?.id) {
-        await prisma.driveShare.update({
-          where: { id: share.id },
-          data: { passwordEnabled: true, passwordHash: "fresh-share-hash", passwordEncrypted: "fresh-share-secret", expiresAt: newerExpiresAt },
-        })
-      }
-      return rows
-    }
-    const findPublications = prisma.drivePublication.findMany
-    prisma.drivePublication.findMany = async (args: any) => {
-      const rows = await findPublications(args)
-      if (args.where?.status === "active" && args.where?.passwordEnabled === false && args.where?.passwordHash === null && args.select?.id) {
-        await prisma.drivePublication.update({
-          where: { id: publication.id },
-          data: { passwordEnabled: true, passwordHash: "fresh-publication-hash", passwordEncrypted: "fresh-publication-secret", expiresAt: newerExpiresAt },
-        })
-      }
-      return rows
-    }
-
-    const result = await service.backfillLegacyDriveAccessProtection(new Date("2026-06-10T00:00:00.000Z"))
-
-    expect(result).toEqual({ shares: 0, publications: 0 })
-    expect(await prisma.driveShare.findFirst({ where: { id: share.id } })).toMatchObject({
-      passwordHash: "fresh-share-hash",
-      passwordEncrypted: "fresh-share-secret",
-      expiresAt: newerExpiresAt,
-    })
-    expect(await prisma.drivePublication.findUniqueOrThrow({ where: { id: publication.id } })).toMatchObject({
-      passwordHash: "fresh-publication-hash",
-      passwordEncrypted: "fresh-publication-secret",
-      expiresAt: newerExpiresAt,
-    })
-  })
-
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -1533,37 +519,6 @@ describe("DriveService", () => {
     expect(items.every((item: any) => item.deletedAt instanceof Date)).toBe(true)
   })
 
-  it("lists public folder share children and keeps file share downloads scoped", async () => {
-    const prisma = createPrismaMemory()
-    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const folder = await service.createFolder("user-1", { parentId: null, name: "交接材料" })
-    const prepared = await service.prepareUpload("user-1", {
-      parentId: folder.id,
-      name: "brief.txt",
-      size: "11",
-      mimeType: "text/plain",
-      publicAppUrl: "https://synapse.test",
-    })
-    await service.completeUpload("user-1", prepared.sessionId)
-    const share = await service.createShare("user-1", folder.id, "https://synapse.test")
-
-    const publicFolder = await service.listPublicFolderChildren({
-      shareId: share.shareId,
-      password: share.password ?? undefined,
-    })
-
-    expect(publicFolder.item.name).toBe("交接材料")
-    expect(publicFolder.children).toHaveLength(1)
-    expect(publicFolder.children[0]?.name).toBe("brief.txt")
-    const download = await service.createDownloadUrlForShareChild({
-      shareId: share.shareId,
-      itemId: prepared.item.id,
-      password: share.password ?? undefined,
-    })
-    expect(download.url).toBe("https://cos.example/download")
-  })
-
   it("streams public share browser downloads without minting storage urls", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -1587,10 +542,60 @@ describe("DriveService", () => {
       password: share.password ?? undefined,
     })
 
+    expect(download.kind).toBe("file")
+    if (download.kind !== "file") throw new Error("expected file download")
     expect(download.fileName).toBe("brief.txt")
     expect(download.size).toBe(5n)
     expect(download.contentType).toBe("text/plain")
     expect(storageMock.getObjectStream).toHaveBeenCalledWith({ key: `drive/${file.id}` })
+    expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
+  })
+
+  it("uses authenticated owner download routes for image previews", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "photo.png",
+      mimeType: "image/png",
+    })
+    vi.mocked(storageMock.createDownloadUrl).mockClear()
+    vi.mocked(storageMock.getObjectStream).mockClear()
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      itemId: file.id,
+      surface: "standalone",
+    })
+
+    expect(snapshot.preview?.kind).toBe("image")
+    expect(snapshot.preview?.imageUrl).toBe(`/drive/items/${file.id}/download`)
+    expect(storageMock.getObjectStream).not.toHaveBeenCalled()
+    expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
+  })
+
+  it("uses share download routes for public image previews", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "photo.png",
+      mimeType: "image/png",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+    vi.mocked(storageMock.createDownloadUrl).mockClear()
+    vi.mocked(storageMock.getObjectStream).mockClear()
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+
+    expect(snapshot.preview?.kind).toBe("image")
+    expect(snapshot.preview?.imageUrl).toBe(`/share/${share.shareId}/download`)
+    expect(storageMock.getObjectStream).not.toHaveBeenCalled()
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
@@ -1616,7 +621,7 @@ describe("DriveService", () => {
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
-  it("rejects protected share direct access before storage download urls", async () => {
+  it("rejects protected share direct access before reading storage", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -1634,14 +639,16 @@ describe("DriveService", () => {
     const fileShare = await service.createShare("user-1", file.id, "https://synapse.test")
     const folderShare = await service.createShare("user-1", folder.id, "https://synapse.test")
     vi.mocked(storageMock.createDownloadUrl).mockClear()
+    vi.mocked(storageMock.getObjectStream).mockClear()
 
-    await expect(service.createDownloadUrlForShare({ shareId: fileShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
-    await expect(service.listPublicFolderChildren({ shareId: folderShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
-    await expect(service.createDownloadUrlForShareChild({
+    await expect(service.openShareBrowserItemDownload({ shareId: fileShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.getShareBrowserSnapshot({ shareId: folderShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.openShareBrowserItemDownload({
       shareId: folderShare.shareId,
       itemId: child.id,
     })).rejects.toBeInstanceOf(NotFoundException)
-    await expect(service.createFolderZipEntriesForShare({ shareId: folderShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.openShareBrowserItemDownload({ shareId: folderShare.shareId })).rejects.toBeInstanceOf(NotFoundException)
+    expect(storageMock.getObjectStream).not.toHaveBeenCalled()
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
@@ -1659,12 +666,16 @@ describe("DriveService", () => {
     const share = await service.createShare("user-1", prepared.root.id, "https://synapse.test")
     vi.mocked(storageMock.createDownloadUrl).mockClear()
 
-    const entries = await service.createFolderZipEntriesForShare({
+    const archive = await service.openShareBrowserItemDownload({
       shareId: share.shareId,
       password: share.password ?? undefined,
     })
 
-    expect(entries).toEqual([{ path: "docs/spec.txt", storageKey: `drive/${prepared.entries[0]!.item.id}` }])
+    expect(archive).toEqual({
+      kind: "zip",
+      filename: "交接材料.zip",
+      entries: [{ path: "docs/spec.txt", storageKey: `drive/${prepared.entries[0]!.item.id}` }],
+    })
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
@@ -1684,13 +695,13 @@ describe("DriveService", () => {
       mimeType: "application/pdf",
     })
 
-    const archive = await service.createFolderZipEntriesForOwnerBrowserItem({
+    const archive = await service.openOwnerBrowserItemDownload({
       userId: "user-1",
-      rootItemId: folder.id,
+      itemId: folder.id,
     })
 
-    expect(archive.filename).toBe("交接材料.zip")
-    expect(archive.entries).toEqual([
+    expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
+    expect(archive.kind === "zip" ? archive.entries : []).toEqual([
       { path: "report.pdf", storageKey: `drive/${first.id}` },
       { path: "report (2).pdf", storageKey: `drive/${second.id}` },
     ])
@@ -1714,14 +725,14 @@ describe("DriveService", () => {
     })
     const share = await service.createShare("user-1", root.id, "https://synapse.test")
 
-    const archive = await service.createFolderZipEntriesForShareBrowserItem({
+    const archive = await service.openShareBrowserItemDownload({
       shareId: share.shareId,
       itemId: docs.id,
       password: share.password ?? undefined,
     })
 
-    expect(archive.filename).toBe("docs.zip")
-    expect(archive.entries).toEqual([
+    expect(archive).toMatchObject({ kind: "zip", filename: "docs.zip" })
+    expect(archive.kind === "zip" ? archive.entries : []).toEqual([
       { path: "report.pdf", storageKey: `drive/${first.id}` },
       { path: "report (2).pdf", storageKey: `drive/${second.id}` },
     ])
@@ -1744,18 +755,17 @@ describe("DriveService", () => {
 
     const snapshot = await service.getOwnerBrowserSnapshot({
       userId: "user-1",
-      rootItemId: folder.id,
-      currentItemId: page.id,
+      itemId: page.id,
       surface: "standalone",
     })
 
     expect(snapshot.context).toBe("owner")
-    expect(snapshot.current.browserUrl).toBe(`/drive/items/${folder.id}/items/${page.id}`)
+    expect(snapshot.current.browserUrl).toBe(`/drive/items/${page.id}`)
     expect(snapshot.breadcrumbs.map((item) => item.name)).toEqual(["site", "index.html"])
     expect(snapshot.preview).toMatchObject({
       kind: "html-source",
       text: "<html></html>",
-      visitUrl: `/drive/items/${folder.id}/items/${page.id}/render`,
+      visitUrl: `/drive/items/${page.id}/render`,
     })
   })
 
@@ -1770,7 +780,7 @@ describe("DriveService", () => {
 
     const snapshot = await service.getOwnerBrowserSnapshot({
       userId: "user-1",
-      rootItemId: folder.id,
+      itemId: folder.id,
       surface: "standalone",
       childrenPage: { limit: 2 },
     })
@@ -1800,7 +810,7 @@ describe("DriveService", () => {
 
     const snapshot = await service.getOwnerBrowserSnapshot({
       userId: "user-1",
-      rootItemId: file.id,
+      itemId: file.id,
       surface: "standalone",
     })
 
@@ -1813,7 +823,7 @@ describe("DriveService", () => {
     })
   })
 
-  it("renders owner markdown files as html documents", async () => {
+  it("rejects markdown direct render requests", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -1827,38 +837,11 @@ describe("DriveService", () => {
       mimeType: "text/markdown",
     })
 
-    const asset = await service.resolveOwnerRenderAccess({
-      userId: "user-1",
-      rootItemId: file.id,
-    })
-
-    expect(asset.contentType).toBe("text/html; charset=utf-8")
-    expect(asset.csp).toContain("default-src 'none'")
-    await expect(readTestStream(asset.stream)).resolves.toContain("<h1>Notes</h1>")
-  })
-
-  it("rejects markdown render requests above the in-memory render limit", async () => {
-    const prisma = createPrismaMemory()
-    const storage: DriveStoragePort = {
-      ...storageMock,
-      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Large"), size: 10_485_761n, contentType: "text/markdown" })),
-    }
-    const service = new DriveService(prisma as unknown as PrismaService, storage)
-    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
-    const file = await createCompletedUpload(service, "user-1", {
-      parentId: null,
-      name: "large.md",
-      mimeType: "text/markdown",
-    })
-    await prisma.driveItem.update({
-      where: { id: file.id },
-      data: { size: 10_485_761n },
-    })
-
     await expect(service.resolveOwnerRenderAccess({
       userId: "user-1",
-      rootItemId: file.id,
+      itemId: file.id,
     })).rejects.toBeInstanceOf(BadRequestException)
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
   })
 
   it("builds console root browser snapshots for user drive roots", async () => {
@@ -1869,12 +852,31 @@ describe("DriveService", () => {
 
     const snapshot = await service.getOwnerConsoleRootBrowserSnapshot("user-1")
 
-    expect(snapshot.current.browserUrl).toBe("/drive")
-    expect(snapshot.breadcrumbs).toEqual([{ id: "root", name: "网盘", browserUrl: "/drive" }])
+    expect(snapshot.current.browserUrl).toBe("/console/drive")
+    expect(snapshot.breadcrumbs).toEqual([{ id: "root", name: "网盘", browserUrl: "/console/drive" }])
     expect(snapshot.children).toEqual([expect.objectContaining({
       id: folder.id,
-      browserUrl: `/drive/items/${folder.id}`,
-      downloadUrl: `/drive/items/${folder.id}/zip`,
+      browserUrl: `/console/drive/folders/${folder.id}`,
+      downloadUrl: `/drive/items/${folder.id}/download`,
+    })])
+  })
+
+  it("builds console root file children as standalone owner item links", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "notes.md",
+      mimeType: "text/markdown",
+    })
+
+    const snapshot = await service.getOwnerConsoleRootBrowserSnapshot("user-1")
+
+    expect(snapshot.children).toEqual([expect.objectContaining({
+      id: file.id,
+      browserUrl: `/drive/items/${file.id}`,
+      downloadUrl: `/drive/items/${file.id}/download`,
     })])
   })
 
@@ -1897,7 +899,7 @@ describe("DriveService", () => {
     })
   })
 
-  it("builds share browser html source previews without visit urls", async () => {
+  it("builds share browser html source previews with render visit urls", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -1917,11 +919,11 @@ describe("DriveService", () => {
       password: share.password ?? undefined,
     })
 
-    expect(snapshot.current.browserUrl).toBe(`/files/${share.shareId}`)
+    expect(snapshot.current.browserUrl).toBe(`/share/${share.shareId}`)
     expect(snapshot.preview).toMatchObject({
       kind: "html-source",
       text: "<html></html>",
-      visitUrl: null,
+      visitUrl: `/share/${share.shareId}/render`,
     })
   })
 
@@ -1951,6 +953,30 @@ describe("DriveService", () => {
       html: "<h1>Notes</h1>",
       visitUrl: null,
     })
+  })
+
+  it("builds share folder child image previews with child download routes", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "shared" })
+    const image = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "photo.png",
+      mimeType: "image/png",
+    })
+    const share = await service.createShare("user-1", folder.id, "https://synapse.test")
+    vi.mocked(storageMock.createDownloadUrl).mockClear()
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      itemId: image.id,
+      password: share.password ?? undefined,
+    })
+
+    expect(snapshot.preview?.kind).toBe("image")
+    expect(snapshot.preview?.imageUrl).toBe(`/share/${share.shareId}/items/${image.id}/download`)
+    expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
   it("rejects share browser access outside the shared subtree", async () => {
@@ -2344,9 +1370,6 @@ function createPrismaMemory() {
   const usages = new Map<string, any>()
   const sessions = new Map<string, any>()
   const shares = new Map<string, any>()
-  const publications = new Map<string, any>()
-  const publicationDeployments = new Map<string, any>()
-  const publicationAssets = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
@@ -2354,24 +1377,6 @@ function createPrismaMemory() {
     user: users.get(item.userId) ? { email: users.get(item.userId)!.email } : null,
     shares: [...shares.values()].filter((share) => share.itemId === item.id && share.enabled).map((share) => ({ enabled: share.enabled })),
   })
-  const withSourceItem = (publication: any) => ({
-    ...publication,
-    sourceItem: publication.sourceItemId ? { deletedAt: items.get(publication.sourceItemId)?.deletedAt ?? null } : null,
-  })
-  const withPublicationIncludes = (publication: any, include: any) => {
-    let result = publication
-    if (include?.sourceItem) result = withSourceItem(result)
-    if (include?.assets) {
-      const assetWhere = include.assets.where ?? {}
-      result = {
-        ...result,
-        assets: [...publicationAssets.values()]
-          .filter((asset) => asset.publicationId === publication.id && matchesWhere(asset, assetWhere))
-          .map((asset) => include.assets.select ? selectFields(asset, include.assets.select) : asset),
-      }
-    }
-    return result
-  }
   const withShareIncludes = (share: any, include: any) => {
     if (!include?.item) return share
     const item = items.get(share.itemId)
@@ -2389,9 +1394,6 @@ function createPrismaMemory() {
           [usages, cloneMap(usages)],
           [sessions, cloneMap(sessions)],
           [shares, cloneMap(shares)],
-          [publications, cloneMap(publications)],
-          [publicationDeployments, cloneMap(publicationDeployments)],
-          [publicationAssets, cloneMap(publicationAssets)],
         ] as const
         try {
           return await input(prisma)
@@ -2574,114 +1576,6 @@ function createPrismaMemory() {
         return { count }
       },
     },
-    drivePublication: {
-      create: async ({ data }: any) => {
-        const publication = {
-          id: id("publication"),
-          currentDeploymentId: null,
-          disabledAt: null,
-          passwordEnabled: false,
-          passwordHash: null,
-          passwordEncrypted: null,
-          expiresAt: null,
-          accessSettingsAppliedAt: null,
-          createdAt: now(),
-          updatedAt: now(),
-          ...data,
-        }
-        publications.set(publication.id, publication)
-        return publication
-      },
-      findFirst: async ({ where, include, select }: any) => {
-        const publication = [...publications.values()].find((item) => matchesWhere(item, where))
-        if (!publication) return null
-        if (select) return selectFields(publication, select)
-        return withPublicationIncludes(publication, include)
-      },
-      findMany: async ({ where, include, orderBy, select }: any = {}) => {
-        let found = [...publications.values()].filter((publication) => matchesWhere(publication, where ?? {}))
-        found = orderRows(found, orderBy)
-        if (select) return found.map((publication) => selectFields(publication, select))
-        return found.map((publication) => withPublicationIncludes(publication, include))
-      },
-      findUniqueOrThrow: async ({ where, include }: any) => {
-        const publication = publications.get(where.id)
-        if (!publication) throw new Error("publication not found")
-        return withPublicationIncludes(publication, include)
-      },
-      update: async ({ where, data, include }: any) => {
-        const publication = publications.get(where.id)
-        if (!publication) throw new Error("publication not found")
-        Object.assign(publication, data, { updatedAt: now() })
-        return withPublicationIncludes(publication, include)
-      },
-      updateMany: async ({ where, data }: any) => {
-        let count = 0
-        for (const publication of publications.values()) {
-          if (matchesWhere(publication, where)) {
-            Object.assign(publication, data, { updatedAt: now() })
-            count += 1
-          }
-        }
-        return { count }
-      },
-    },
-    drivePublicationDeployment: {
-      create: async ({ data }: any) => {
-        const deployment = {
-          id: id("deployment"),
-          activatedAt: null,
-          error: null,
-          createdAt: now(),
-          ...data,
-        }
-        publicationDeployments.set(deployment.id, deployment)
-        return deployment
-      },
-      findFirst: async ({ where }: any) => [...publicationDeployments.values()].find((deployment) => matchesWhere(deployment, where)) ?? null,
-      findMany: async ({ where, orderBy }: any = {}) => orderRows(
-        [...publicationDeployments.values()].filter((deployment) => matchesWhere(deployment, where ?? {})),
-        orderBy,
-      ),
-      update: async ({ where, data }: any) => {
-        const deployment = publicationDeployments.get(where.id)
-        if (!deployment) throw new Error("deployment not found")
-        Object.assign(deployment, data)
-        return deployment
-      },
-    },
-    drivePublicationAsset: {
-      createMany: async ({ data }: any) => {
-        for (const row of data) {
-          const asset = { id: id("asset"), sha256: null, ...row }
-          publicationAssets.set(asset.id, asset)
-        }
-        return { count: data.length }
-      },
-      findUnique: async ({ where }: any) => {
-        if (where.deploymentId_relativePath) {
-          return [...publicationAssets.values()].find((asset) => (
-            asset.deploymentId === where.deploymentId_relativePath.deploymentId
-            && asset.relativePath === where.deploymentId_relativePath.relativePath
-          )) ?? null
-        }
-        return publicationAssets.get(where.id) ?? null
-      },
-      findMany: async ({ where, orderBy }: any = {}) => orderRows(
-        [...publicationAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})),
-        orderBy,
-      ),
-      deleteMany: async ({ where }: any) => {
-        let count = 0
-        for (const [assetId, asset] of publicationAssets.entries()) {
-          if (matchesWhere(asset, where ?? {})) {
-            publicationAssets.delete(assetId)
-            count += 1
-          }
-        }
-        return { count }
-      },
-    },
   }
   return prisma
 }
@@ -2736,14 +1630,6 @@ function paginateRows(rows: any[], options: { readonly skip?: number; readonly t
   const start = options.skip ?? 0
   const end = options.take === undefined ? undefined : start + options.take
   return rows.slice(start, end)
-}
-
-async function readTestStream(stream: NodeJS.ReadableStream): Promise<string> {
-  const chunks: Buffer[] = []
-  for await (const chunk of stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-  return Buffer.concat(chunks).toString("utf8")
 }
 
 function uniqueConstraintError(target: readonly string[]): Prisma.PrismaClientKnownRequestError {

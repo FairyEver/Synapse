@@ -1190,32 +1190,15 @@ describe("AccountService", () => {
     })).rejects.toThrow(/SKILL\.md 是必需文件/)
   })
 
-  it("calls drive publication, share list, and delete impact APIs with the authenticated desktop token", async () => {
+  it("calls drive share and preview APIs with the authenticated desktop token", async () => {
     const calls: Array<{ url: string; method: string; body?: unknown }> = []
-    const publication = {
-      id: "pub-row-1",
-      publishId: "pub_public",
-      type: "page",
-      name: "report.html",
-      status: "active",
-      sourceItemId: "item-1",
-      sourceDeleted: false,
-      url: "https://synapse.d2.pub/pages/pub_public",
-      urlWithPassword: "https://synapse.d2.pub/pages/pub_public?password=server-secret",
-      passwordEnabled: true,
-      password: "AbC234xy",
-      expiresAt: "2026-06-16T00:00:00.000Z",
-      currentDeploymentId: "dep-1",
-      createdAt: "2026-06-09T00:00:00.000Z",
-      updatedAt: "2026-06-09T00:00:00.000Z",
-    }
     const shareResult = {
       id: "share-result-1",
       shareId: "share_direct",
       itemId: "item-1",
       enabled: true,
-      url: "https://synapse.d2.pub/files/share_direct",
-      urlWithPassword: "https://synapse.d2.pub/files/share_direct?password=server-secret",
+      url: "https://synapse.d2.pub/share/share_direct",
+      urlWithPassword: "https://synapse.d2.pub/share/share_direct?password=server-secret",
       passwordEnabled: true,
       password: "SharePw1",
       expiresAt: "2026-06-16T00:00:00.000Z",
@@ -1228,37 +1211,24 @@ describe("AccountService", () => {
       itemName: "report.html",
       itemType: "file",
       sourceDeleted: false,
-      url: "https://synapse.d2.pub/files/share_public",
-      urlWithPassword: "https://synapse.d2.pub/files/share_public?password=server-secret",
+      url: "https://synapse.d2.pub/share/share_public",
+      urlWithPassword: "https://synapse.d2.pub/share/share_public?password=server-secret",
       passwordEnabled: true,
       password: "ListPw1",
       expiresAt: "2026-06-16T00:00:00.000Z",
       createdAt: "2026-06-09T00:00:00.000Z",
     }
-    const expectedPagePublication = {
-      ...publication,
-      url: `${expectedPublicAppUrl}/pages/pub_public`,
-      urlWithPassword: `${expectedPublicAppUrl}/pages/pub_public?password=AbC234xy`,
-    }
-    const expectedSitePublication = {
-      ...publication,
-      type: "site",
-      url: `${expectedPublicAppUrl}/sites/pub_public/`,
-      urlWithPassword: `${expectedPublicAppUrl}/sites/pub_public/?password=AbC234xy`,
-    }
     const expectedShareResult = {
       ...shareResult,
-      url: `${expectedPublicAppUrl}/files/share_direct`,
-      urlWithPassword: `${expectedPublicAppUrl}/files/share_direct?password=SharePw1`,
+      url: `${expectedPublicAppUrl}/share/share_direct`,
+      urlWithPassword: `${expectedPublicAppUrl}/share/share_direct?password=SharePw1`,
     }
     const expectedShare = {
       ...share,
-      url: `${expectedPublicAppUrl}/files/share_public`,
-      urlWithPassword: `${expectedPublicAppUrl}/files/share_public?password=ListPw1`,
+      url: `${expectedPublicAppUrl}/share/share_public`,
+      urlWithPassword: `${expectedPublicAppUrl}/share/share_public?password=ListPw1`,
     }
     const shareSettings = { passwordEnabled: true, expiresIn: "30d" } as const
-    const pageSettings = { passwordEnabled: true, expiresIn: "1y" } as const
-    const siteSettings = { passwordEnabled: false, expiresIn: "forever" } as const
     const driveItemDto = driveItem({ id: "item-1", name: "report.html", mimeType: "text/html" })
     const previewSnapshot = {
       context: "owner",
@@ -1306,18 +1276,7 @@ describe("AccountService", () => {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
         if (String(url).endsWith("/drive/items/item-1") && method === "GET") return jsonResponse(driveItemDto)
         if (String(url).endsWith("/drive/browser/owner/items/item-1?surface=standalone")) return jsonResponse(previewSnapshot)
-        if (String(url).endsWith("/drive/publications")) {
-          return jsonResponse({
-            items: [publication],
-            page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
-          })
-        }
         if (String(url).endsWith("/drive/items/item-1/share")) return jsonResponse(shareResult)
-        if (String(url).endsWith("/drive/items/item-1/publications/page")) return jsonResponse(publication)
-        if (String(url).endsWith("/drive/items/folder-1/publications/site")) return jsonResponse({ ...publication, type: "site" })
-        if (String(url).endsWith("/drive/publications/pub-row-1/redeploy")) return jsonResponse(publication)
-        if (String(url).endsWith("/drive/publications/pub-row-1")) return jsonResponse({ ok: true })
-        if (String(url).endsWith("/drive/items/item-1/delete-impact")) return jsonResponse({ publications: [publication] })
         if (String(url).endsWith("/drive/shares")) {
           return jsonResponse({
             items: [share],
@@ -1333,10 +1292,6 @@ describe("AccountService", () => {
     expect(attempt).toBeTruthy()
     await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
 
-    await expect(service.listDrivePublications()).resolves.toEqual({
-      items: [expectedPagePublication],
-      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
-    })
     await expect(service.getDriveItem("item-1")).resolves.toEqual(driveItemDto)
     await expect(service.getDriveItemPreview({ itemId: "item-1" })).resolves.toEqual(previewSnapshot)
     await expect(service.readDriveFileContent({ itemId: "item-1", maxBytes: 8 })).resolves.toEqual({
@@ -1348,35 +1303,24 @@ describe("AccountService", () => {
       truncated: true,
     })
     await expect(service.shareDriveItem("item-1", shareSettings)).resolves.toEqual(expectedShareResult)
-    await expect(service.publishDrivePage("item-1", pageSettings)).resolves.toEqual(expectedPagePublication)
-    await expect(service.publishDriveSite("folder-1", siteSettings)).resolves.toEqual(expectedSitePublication)
-    await expect(service.redeployDrivePublication("pub-row-1")).resolves.toEqual(expectedPagePublication)
-    await expect(service.disableDrivePublication("pub-row-1")).resolves.toEqual({ ok: true })
-    await expect(service.getDriveDeleteImpact("item-1")).resolves.toEqual({ publications: [expectedPagePublication] })
     await expect(service.listDriveShares()).resolves.toEqual({
       items: [expectedShare],
       page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
     })
-    await expect(service.deleteDriveItem("item-1", { disablePublications: true })).resolves.toEqual({ ok: true })
+    await expect(service.deleteDriveItem("item-1")).resolves.toEqual({ ok: true })
 
     expect(calls).toEqual([
       { url: expectedApiUrl("/auth/desktop/token"), method: "POST", body: expect.any(Object) },
       { url: expectedApiUrl("/auth/me"), method: "GET", body: undefined },
-      { url: expectedApiUrl("/drive/publications"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/share"), method: "POST", body: shareSettings },
-      { url: expectedApiUrl("/drive/items/item-1/publications/page"), method: "POST", body: pageSettings },
-      { url: expectedApiUrl("/drive/items/folder-1/publications/site"), method: "POST", body: siteSettings },
-      { url: expectedApiUrl("/drive/publications/pub-row-1/redeploy"), method: "POST", body: undefined },
-      { url: expectedApiUrl("/drive/publications/pub-row-1"), method: "DELETE", body: undefined },
-      { url: expectedApiUrl("/drive/items/item-1/delete-impact"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/shares"), method: "GET", body: undefined },
       {
         url: expectedApiUrl("/drive/items/item-1"),
         method: "DELETE",
-        body: { disablePublications: true },
+        body: undefined,
       },
     ])
   })

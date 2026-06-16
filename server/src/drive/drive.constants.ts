@@ -25,22 +25,3 @@ export const DRIVE_UPLOAD_STATUS = {
   expired: "expired",
   failed: "failed",
 } as const
-
-export const DRIVE_PUBLICATION_TYPE = {
-  page: "page",
-  site: "site",
-} as const
-
-export const DRIVE_PUBLICATION_STATUS = {
-  active: "active",
-  disabled: "disabled",
-} as const
-
-export const DRIVE_PUBLICATION_DEPLOYMENT_STATUS = {
-  pending: "pending",
-  active: "active",
-  failed: "failed",
-  superseded: "superseded",
-} as const
-
-export const DRIVE_PUBLICATION_INDEX_PATH = "index.html"

@@ -13,7 +13,6 @@ describe("Drive capability domain", () => {
       "drive_folder_create",
       "drive_item_rename",
       "drive_item_move",
-      "drive_delete_impact_get",
       "drive_item_delete",
       "drive_item_preview_get",
       "drive_file_content_read",
@@ -22,11 +21,6 @@ describe("Drive capability domain", () => {
       "drive_share_list",
       "drive_share_create",
       "drive_share_disable",
-      "drive_publication_list",
-      "drive_page_publication_create",
-      "drive_site_publication_create",
-      "drive_publication_deployment_create",
-      "drive_publication_disable",
       "drive_usage_get",
       "drive_stats_get",
       "drive_item_tree_list",
@@ -36,7 +30,6 @@ describe("Drive capability domain", () => {
     ])
     expect(MCP_TOOL_ACTIONS.drive_file_upload).toBe("drive.file.upload")
     expect(MCP_TOOL_ACTIONS.drive_reorganization_apply).toBe("drive.reorganization.apply")
-    expect(MCP_TOOL_ACTIONS.drive_page_publication_create).toBe("drive.page_publication.create")
     expect(getActionDomainId("drive.item.list")).toBe("drive")
   })
 })

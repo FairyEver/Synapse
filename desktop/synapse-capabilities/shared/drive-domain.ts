@@ -10,7 +10,6 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
   { id: "drive.item.rename" as CapabilityId, title: "Rename item", description: "Rename a Synapse Drive file or folder.", mutates: true },
   { id: "drive.item.move" as CapabilityId, title: "Move item", description: "Move a Synapse Drive file or folder.", mutates: true },
-  { id: "drive.delete_impact.get" as CapabilityId, title: "Get delete impact", description: "Get active publications affected by deleting a Synapse Drive item.", mutates: false },
   { id: "drive.item.delete" as CapabilityId, title: "Delete item", description: "Delete a Synapse Drive file or folder.", mutates: true, risk: "high" },
   { id: "drive.item_preview.get" as CapabilityId, title: "Get item preview", description: "Get the owner browser preview snapshot for a Synapse Drive item.", mutates: false },
   { id: "drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
@@ -19,11 +18,6 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
   { id: "drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link.", mutates: true },
   { id: "drive.share.disable" as CapabilityId, title: "Disable share", description: "Disable a Synapse Drive share link.", mutates: true },
-  { id: "drive.publication.list" as CapabilityId, title: "List publications", description: "List public Synapse Drive page and site publication links for the current user.", mutates: false },
-  { id: "drive.page_publication.create" as CapabilityId, title: "Create page publication", description: "Publish an HTML Drive file as a public page.", mutates: true },
-  { id: "drive.site_publication.create" as CapabilityId, title: "Create site publication", description: "Publish a Drive folder containing root index.html as a public site.", mutates: true },
-  { id: "drive.publication_deployment.create" as CapabilityId, title: "Create publication deployment", description: "Create a new deployment snapshot for an existing Drive publication.", mutates: true },
-  { id: "drive.publication.disable" as CapabilityId, title: "Disable publication", description: "Disable a Synapse Drive page or site publication.", mutates: true },
   { id: "drive.usage.get" as CapabilityId, title: "Get usage", description: "Get Synapse Drive quota usage for the current user.", mutates: false },
   { id: "drive.stats.get" as CapabilityId, title: "Get stats", description: "Get Synapse Drive item counts and quota usage for the current user.", mutates: false },
   { id: "drive.item_tree.list" as CapabilityId, title: "List item tree", description: "List recursive Synapse Drive file and folder metadata without reading file contents.", mutates: false },
@@ -67,7 +61,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_item_get",
-      description: "Get metadata for one Synapse Drive file or folder. This does not open, download, share, or publish the item.",
+      description: "Get metadata for one Synapse Drive file or folder. This does not open, download, or share the item.",
       inputSchema: {
         type: "object",
         properties: {
@@ -117,7 +111,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_item_rename",
-      description: "Rename a Synapse Drive file or folder. Renaming does not change the item id, existing share links, or existing publication snapshots.",
+      description: "Rename a Synapse Drive file or folder. Renaming does not change the item id or existing share links.",
       inputSchema: {
         type: "object",
         properties: {
@@ -140,34 +134,19 @@ export function buildDriveTools(): McpToolDefinition[] {
       },
     },
     {
-      name: "drive_delete_impact_get",
-      description: "Check which active page or site publications would be affected by deleting a Drive item. Call this before drive_item_delete when the user asks about publication impact.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          itemId: stringField("Drive item id to evaluate before deletion."),
-        },
-        required: ["itemId"],
-      },
-    },
-    {
       name: "drive_item_delete",
-      description: "Delete a Synapse Drive file or folder. Set disablePublications to true to disable affected page/site publications during deletion.",
+      description: "Delete a Synapse Drive file or folder.",
       inputSchema: {
         type: "object",
         properties: {
           itemId: stringField("Drive item id."),
-          disablePublications: {
-            type: "boolean",
-            description: "Whether to disable affected page/site publications while deleting. Defaults to false.",
-          },
         },
         required: ["itemId"],
       },
     },
     {
       name: "drive_item_preview_get",
-      description: "Get the owner open/preview snapshot for a Drive item. This returns browser state and available URLs; it does not create a share or publication.",
+      description: "Get the owner open/preview snapshot for a Drive item. This returns browser state and available URLs; it does not create a share.",
       inputSchema: {
         type: "object",
         properties: {
@@ -217,7 +196,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_list",
-      description: "List current user's Drive share links for /files/... access. Shares let others browse or download shared files and folders.",
+      description: "List current user's Drive share links for /share/... access. Shares let others browse, render previewable HTML, or download shared files and folders.",
       inputSchema: {
         type: "object",
         properties: pageInputProperties,
@@ -225,7 +204,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_share_create",
-      description: "Create or reuse a public Synapse Drive share link and return the /files/... URL. Shares let others browse or download files and folders, not publish HTML as a page or site.",
+      description: "Create or reuse a public Synapse Drive share link and return the /share/... URL. Shares let others browse, render previewable HTML, or download files and folders.",
       inputSchema: {
         type: "object",
         properties: {
@@ -244,60 +223,6 @@ export function buildDriveTools(): McpToolDefinition[] {
           shareId: stringField("Drive share record id returned by drive_share_create or item activeShareId."),
         },
         required: ["shareId"],
-      },
-    },
-    {
-      name: "drive_publication_list",
-      description: "List current user's Drive publication links for /pages/... and /sites/... access. Publications serve HTML pages or static sites from deployment snapshots.",
-      inputSchema: {
-        type: "object",
-        properties: pageInputProperties,
-      },
-    },
-    {
-      name: "drive_page_publication_create",
-      description: "Publish an HTML Drive file as a public /pages/... web page. This creates or updates a publication snapshot; use share tools for browse/download links.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          itemId: stringField("Drive HTML file item id."),
-          ...accessSettingsProperties,
-        },
-        required: ["itemId"],
-      },
-    },
-    {
-      name: "drive_site_publication_create",
-      description: "Publish a Drive folder containing a root index.html as a public /sites/... static site. This creates or updates a publication snapshot; use share tools for browse/download links.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          itemId: stringField("Drive folder item id."),
-          ...accessSettingsProperties,
-        },
-        required: ["itemId"],
-      },
-    },
-    {
-      name: "drive_publication_deployment_create",
-      description: "Create a new deployment snapshot for an existing Drive publication. This is the MCP equivalent of redeploying a page or site.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          publicationId: stringField("Drive publication record id."),
-        },
-        required: ["publicationId"],
-      },
-    },
-    {
-      name: "drive_publication_disable",
-      description: "Disable a Drive page or site publication link. This stops public /pages/... or /sites/... access for that publication.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          publicationId: stringField("Drive publication record id."),
-        },
-        required: ["publicationId"],
       },
     },
     {

@@ -4,13 +4,13 @@ import { cn } from '@/lib/utils'
 const driveConsoleHomeBreadcrumb = {
   id: '__drive_console_home__',
   name: '我的空间',
-  browserUrl: '/drive',
+  browserUrl: '/console/drive',
 }
 
 export function getDriveFinderBreadcrumbs(snapshot: DriveBrowserSnapshotDto) {
   if (snapshot.context !== 'owner' || snapshot.surface !== 'console') return snapshot.breadcrumbs
   const [firstBreadcrumb, ...remainingBreadcrumbs] = snapshot.breadcrumbs
-  if (firstBreadcrumb?.browserUrl === '/drive') {
+  if (firstBreadcrumb?.browserUrl === driveConsoleHomeBreadcrumb.browserUrl) {
     return [{ ...firstBreadcrumb, name: driveConsoleHomeBreadcrumb.name }, ...remainingBreadcrumbs]
   }
   return [driveConsoleHomeBreadcrumb, ...snapshot.breadcrumbs]

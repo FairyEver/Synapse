@@ -20,8 +20,7 @@ export type DriveBrowserPageProps =
   | {
       context: 'owner'
       surface: DriveBrowserSurface
-      rootItemId: string
-      itemId?: string
+      itemId: string
     }
   | {
       context: 'share'

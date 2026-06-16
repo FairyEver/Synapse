@@ -23,7 +23,8 @@ import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePor
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
 const DRIVE_OWNER_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'self';"
-type DriveAccessCookieKind = "share" | "page" | "site"
+const DRIVE_SHARE_RENDER_CSP = DRIVE_OWNER_RENDER_CSP
+type DriveAccessCookieKind = "share"
 
 const prepareUploadSchema = z.object({
   parentId: z.string().nullable().optional(),
@@ -65,7 +66,6 @@ const reorganizationApplySchema = z.object({
 
 const renameSchema = z.object({ name: z.string().min(1).max(255) }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
-const deleteItemSchema = z.object({ disablePublications: z.boolean().optional() }).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
@@ -100,11 +100,6 @@ export class DriveUserController {
   @Get("/items/:id")
   getItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.getItem(request.user!.id, id)
-  }
-
-  @Get("/items/:id/delete-impact")
-  getDeleteImpact(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.getDeleteImpact(request.user!.id, id, resolveRequestPagesPublicUrl(request))
   }
 
   @Post("/uploads/prepare")
@@ -162,49 +157,12 @@ export class DriveUserController {
 
   @Delete("/items/:id")
   deleteItem(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    const parsed = body === undefined ? { disablePublications: false } : parseBody(deleteItemSchema, body, "删除请求无效。")
-    return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip, {
-      disablePublications: parsed.disablePublications ?? false,
-      publicAppUrl: resolveRequestPagesPublicUrl(request),
-    })
+    return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip)
   }
 
   @Post("/items/:id/share")
   createShare(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     return this.drive.createShare(request.user!.id, id, resolveRequestPublicAppUrl(request), parseAccessSettings(body), driveAuditContext(request))
-  }
-
-  @Get("/publications")
-  listPublications(
-    @Query("offset") offset: string | undefined,
-    @Query("limit") limit: string | undefined,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    return this.drive.listPublications(
-      request.user!.id,
-      resolveRequestPagesPublicUrl(request),
-      parseDrivePublicLinksPageQuery(offset, limit),
-    )
-  }
-
-  @Post("/items/:id/publications/page")
-  publishPage(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.publishPage(request.user!.id, id, resolveRequestPagesPublicUrl(request), parseAccessSettings(body), driveAuditContext(request))
-  }
-
-  @Post("/items/:id/publications/site")
-  publishSite(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.publishSite(request.user!.id, id, resolveRequestPagesPublicUrl(request), parseAccessSettings(body), driveAuditContext(request))
-  }
-
-  @Post("/publications/:id/redeploy")
-  redeployPublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.redeployPublication(request.user!.id, id, resolveRequestPagesPublicUrl(request), driveAuditContext(request))
-  }
-
-  @Delete("/publications/:id")
-  disablePublication(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
-    return this.drive.disablePublication(request.user!.id, id, driveAuditContext(request))
   }
 
   @Delete("/shares/:id")
@@ -268,25 +226,8 @@ export class DriveUserController {
     )
   }
 
-  @Get("/browser/owner/items/:rootItemId")
-  getOwnerRootSnapshot(
-    @Param("rootItemId") rootItemId: string,
-    @Query("surface") surface: string | undefined,
-    @Query("childrenOffset") childrenOffset: string | undefined,
-    @Query("childrenLimit") childrenLimit: string | undefined,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    return this.drive.getOwnerBrowserSnapshot({
-      userId: request.user!.id,
-      rootItemId,
-      surface: parseBrowserSurface(surface),
-      childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
-    })
-  }
-
-  @Get("/browser/owner/items/:rootItemId/items/:itemId")
-  getOwnerChildSnapshot(
-    @Param("rootItemId") rootItemId: string,
+  @Get("/browser/owner/items/:itemId")
+  getOwnerItemSnapshot(
     @Param("itemId") itemId: string,
     @Query("surface") surface: string | undefined,
     @Query("childrenOffset") childrenOffset: string | undefined,
@@ -295,8 +236,7 @@ export class DriveUserController {
   ) {
     return this.drive.getOwnerBrowserSnapshot({
       userId: request.user!.id,
-      rootItemId,
-      currentItemId: itemId,
+      itemId,
       surface: parseBrowserSurface(surface),
       childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
     })
@@ -458,183 +398,59 @@ export class DrivePublicController {
       password,
       cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
     })
-    if (access.status !== "ok" || !access.cookie) return driveBrowserPasswordRequired()
-    setDriveAccessCookie(input.response, access.cookie, { kind: "share", publicId: input.shareId })
+    if (access.status !== "ok") return driveBrowserPasswordRequired()
+    if (access.cookie) setDriveAccessCookie(input.response, access.cookie, { kind: "share", publicId: input.shareId })
     return this.drive.getShareBrowserSnapshot({
       shareId: input.shareId,
       itemId: input.itemId,
       password,
-      cookie: access.cookie,
+      cookie: access.cookie ?? readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
       childrenPage: input.childrenPage,
     })
   }
 
   @UseGuards(UserAuthGuard)
-  @Get("/drive/items/:rootItemId/download")
-  async downloadOwnerItem(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
-    const download = await this.drive.createDownloadUrlForOwnerBrowserItem({
+  @Get("/drive/items/:itemId/download")
+  async downloadOwnerItem(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
+    const transfer = await this.drive.openOwnerBrowserItemDownload({
       userId: request.user!.id,
-      rootItemId,
+      itemId,
     })
-    response.redirect(302, download.url)
+    await sendDriveTransfer(response, transfer, this.storage)
   }
 
   @UseGuards(UserAuthGuard)
-  @Get("/drive/items/:rootItemId/items/:itemId/download")
-  async downloadOwnerChildItem(
-    @Param("rootItemId") rootItemId: string,
-    @Param("itemId") itemId: string,
-    @Req() request: AuthenticatedUserRequest,
-    @Res() response: Response,
-  ) {
-    const download = await this.drive.createDownloadUrlForOwnerBrowserItem({
-      userId: request.user!.id,
-      rootItemId,
-      currentItemId: itemId,
-    })
-    response.redirect(302, download.url)
-  }
-
-  @UseGuards(UserAuthGuard)
-  @Get("/drive/items/:rootItemId/zip")
-  async downloadOwnerFolderZip(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
-    const archive = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
-      userId: request.user!.id,
-      rootItemId,
-    })
-    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
-  }
-
-  @UseGuards(UserAuthGuard)
-  @Get("/drive/items/:rootItemId/items/:itemId/zip")
-  async downloadOwnerChildFolderZip(
-    @Param("rootItemId") rootItemId: string,
-    @Param("itemId") itemId: string,
-    @Req() request: AuthenticatedUserRequest,
-    @Res() response: Response,
-  ) {
-    const archive = await this.drive.createFolderZipEntriesForOwnerBrowserItem({
-      userId: request.user!.id,
-      rootItemId,
-      currentItemId: itemId,
-    })
-    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
-  }
-
-  @UseGuards(UserAuthGuard)
-  @Get("/drive/items/:rootItemId/render")
-  async renderOwnerHtmlItem(@Param("rootItemId") rootItemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
+  @Get("/drive/items/:itemId/render")
+  async renderOwnerHtmlItem(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
     const asset = await this.drive.resolveOwnerRenderAccess({
       userId: request.user!.id,
-      rootItemId,
+      itemId,
     })
     await sendOwnerRenderedAsset(response, asset)
   }
 
-  @UseGuards(UserAuthGuard)
-  @Get("/drive/items/:rootItemId/items/:itemId/render")
-  async renderOwnerChildHtmlItem(
-    @Param("rootItemId") rootItemId: string,
-    @Param("itemId") itemId: string,
-    @Req() request: AuthenticatedUserRequest,
-    @Res() response: Response,
-  ) {
-    const asset = await this.drive.resolveOwnerRenderAccess({
-      userId: request.user!.id,
-      rootItemId,
-      currentItemId: itemId,
-    })
-    await sendOwnerRenderedAsset(response, asset)
-  }
-
-  @Get("/pages/:publishId")
-  async openPublishedPage(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
-    await this.sendPublishedAsset(response, {
-      publishId,
-      type: "page",
-      relativePath: "index.html",
-      request,
-    })
-  }
-
-  @Post("/pages/:publishId")
-  async unlockPublishedPage(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
-    await this.unlockPublishedAsset(request, response, {
-      publishId,
-      type: "page",
-      relativePath: "index.html",
-    })
-  }
-
-  @Get("/sites/:publishId")
-  async openPublishedSiteRoot(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
-    if (request.path.endsWith("/")) {
-      await this.sendPublishedAsset(response, {
-        publishId,
-        type: "site",
-        relativePath: "index.html",
-        request,
-      })
-      return
-    }
-    if (readPasswordQuery(request)) {
-      await this.sendPublishedAsset(response, {
-        publishId,
-        type: "site",
-        relativePath: "index.html",
-        request,
-        cleanRedirectUrl: buildSiteRootCleanRedirect(request, publishId),
-      })
-      return
-    }
-    response.redirect(302, buildSiteRootRedirect(request, publishId))
-  }
-
-  @Get(["/sites/:publishId/", "/sites/:publishId/*path"])
-  async openPublishedSiteAsset(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
-    const prefix = `/sites/${encodeURIComponent(publishId)}/`
-    const relativePath = safeDecodeURIComponent(request.path.startsWith(prefix) ? request.path.slice(prefix.length) : "")
-    await this.sendPublishedAsset(response, {
-      publishId,
-      type: "site",
-      relativePath: relativePath || "index.html",
-      request,
-    })
-  }
-
-  @Post(["/sites/:publishId", "/sites/:publishId/", "/sites/:publishId/*path"])
-  async unlockPublishedSite(@Param("publishId") publishId: string, @Req() request: Request, @Res() response: Response) {
-    const prefix = `/sites/${encodeURIComponent(publishId)}/`
-    const relativePath = safeDecodeURIComponent(request.path.startsWith(prefix) ? request.path.slice(prefix.length) : "")
-    await this.unlockPublishedAsset(request, response, {
-      publishId,
-      type: "site",
-      relativePath: relativePath || "index.html",
-    })
-  }
-
-  @Post("/files/:shareId")
+  @Post("/share/:shareId")
   async unlockShare(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
     await this.unlockShareToPath(shareId, request, response)
   }
 
-  @Post("/files/:shareId/download")
+  @Post("/share/:shareId/download")
   async unlockShareDownload(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
     await this.unlockShareToPath(shareId, request, response)
   }
 
-  @Post(["/files/:shareId/items/:itemId/download", "/files/:shareId/:itemId/download"])
+  @Post("/share/:shareId/items/:itemId/download")
   async unlockShareChildDownload(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
     await this.unlockShareToPath(shareId, request, response)
   }
 
-  @Post("/files/:shareId/zip")
-  async unlockShareZip(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+  @Post("/share/:shareId/render")
+  async unlockShareRender(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
     await this.unlockShareToPath(shareId, request, response)
   }
 
-  @Post("/files/:shareId/items/:itemId/zip")
-  async unlockShareChildZip(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+  @Post("/share/:shareId/items/:itemId/render")
+  async unlockShareChildRender(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
     await this.unlockShareToPath(shareId, request, response)
   }
 
@@ -644,11 +460,11 @@ export class DrivePublicController {
       password: readBodyPassword(request),
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
-    if (access.status !== "ok" || !access.cookie) {
+    if (access.status !== "ok") {
       response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
       return
     }
-    setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
+    if (access.cookie) setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
     response.redirect(302, request.path)
   }
 
@@ -665,7 +481,6 @@ export class DrivePublicController {
       cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
     })
     if (access.status === "password_required") return driveBrowserPasswordRequired()
-    if (access.status === "static_denied") throw new NotFoundException("文件未找到")
     if (access.cookie) setDriveAccessCookie(input.response, access.cookie, { kind: "share", publicId: input.shareId })
     return this.drive.getShareBrowserSnapshot({
       shareId: input.shareId,
@@ -676,176 +491,81 @@ export class DrivePublicController {
     })
   }
 
-  @Get("/files/:shareId/download")
+  @Get("/share/:shareId/download")
   async downloadShare(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
-    const password = readPasswordQuery(request)
-    if (password) {
-      const access = await this.drive.resolvePublicShareAccess({
-        shareId,
-        password,
-        cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-      })
-      if (access.status !== "ok") throw new NotFoundException("文件未找到")
-      if (access.cookie) {
-        setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
-      }
-      response.redirect(302, cleanPasswordUrl(request))
-      return
-    }
-    const download = await this.drive.openShareBrowserItemDownload({
-      shareId,
-      password,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-    })
-    await sendDriveFileDownload(response, download)
+    await this.sendShareDownload(response, request, { shareId })
   }
 
-  @Get(["/files/:shareId/items/:itemId/download", "/files/:shareId/:itemId/download"])
+  @Get("/share/:shareId/items/:itemId/download")
   async downloadShareChild(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Req() request: Request, @Res() response: Response) {
-    const password = readPasswordQuery(request)
-    if (password) {
-      const access = await this.drive.resolvePublicShareAccess({
-        shareId,
-        password,
-        cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-      })
-      if (access.status !== "ok") throw new NotFoundException("文件未找到")
-      if (access.cookie) {
-        setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
-      }
-      response.redirect(302, cleanPasswordUrl(request))
-      return
-    }
-    const download = await this.drive.openShareBrowserItemDownload({
-      shareId,
-      itemId,
-      password,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-    })
-    await sendDriveFileDownload(response, download)
+    await this.sendShareDownload(response, request, { shareId, itemId })
   }
 
-  @Get("/files/:shareId/zip")
-  async downloadFolderZip(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+  @Get("/share/:shareId/render")
+  async renderShare(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
+    await this.sendShareRenderedAsset(response, request, { shareId })
+  }
+
+  @Get("/share/:shareId/items/:itemId/render")
+  async renderShareChild(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Req() request: Request, @Res() response: Response) {
+    await this.sendShareRenderedAsset(response, request, { shareId, itemId })
+  }
+
+  private async sendShareDownload(response: Response, request: Request, input: {
+    readonly shareId: string
+    readonly itemId?: string
+  }): Promise<void> {
     const password = readPasswordQuery(request)
     const access = await this.drive.resolvePublicShareAccess({
-      shareId,
+      shareId: input.shareId,
       password,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
     })
     if (access.status !== "ok") throw new NotFoundException("文件未找到")
     if (access.cookie) {
-      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
+      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
     }
     if (password) {
       response.redirect(302, cleanPasswordUrl(request))
       return
     }
-    const archive = await this.drive.createFolderZipEntriesForShareBrowserItem({
-      shareId,
-      password,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    const transfer = await this.drive.openShareBrowserItemDownload({
+      shareId: input.shareId,
+      itemId: input.itemId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
     })
-    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
+    await sendDriveTransfer(response, transfer, this.storage)
   }
 
-  @Get("/files/:shareId/items/:itemId/zip")
-  async downloadShareChildFolderZip(
-    @Param("shareId") shareId: string,
-    @Param("itemId") itemId: string,
-    @Req() request: Request,
-    @Res() response: Response,
-  ) {
+  private async sendShareRenderedAsset(response: Response, request: Request, input: {
+    readonly shareId: string
+    readonly itemId?: string
+  }): Promise<void> {
     const password = readPasswordQuery(request)
-    const access = await this.drive.resolvePublicShareAccess({
-      shareId,
-      password,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    const cookie = readDriveAccessCookie(request, { kind: "share", publicId: input.shareId })
+    if (password) {
+      const shareAccess = await this.drive.resolvePublicShareAccess({
+        shareId: input.shareId,
+        password,
+        cookie,
+      })
+      if (shareAccess.status !== "ok") throw new NotFoundException("文件未找到")
+      if (shareAccess.cookie) {
+        setDriveAccessCookie(response, shareAccess.cookie, { kind: "share", publicId: input.shareId })
+      }
+      response.redirect(302, cleanPasswordUrl(request))
+      return
+    }
+    const access = await this.drive.resolveShareRenderAccess({
+      shareId: input.shareId,
+      itemId: input.itemId,
+      cookie,
     })
     if (access.status !== "ok") throw new NotFoundException("文件未找到")
     if (access.cookie) {
-      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
+      setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
     }
-    if (password) {
-      response.redirect(302, cleanPasswordUrl(request))
-      return
-    }
-    const archive = await this.drive.createFolderZipEntriesForShareBrowserItem({
-      shareId,
-      itemId,
-      password,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-    })
-    await sendDriveZip(response, archive.filename, archive.entries, this.storage)
-  }
-
-  private async sendPublishedAsset(response: Response, input: {
-    readonly publishId: string
-    readonly type: "page" | "site"
-    readonly relativePath: string
-    readonly request: Request
-    readonly cleanRedirectUrl?: string
-  }): Promise<void> {
-    try {
-      const password = readPasswordQuery(input.request)
-      const access = await this.drive.resolvePublishedAssetAccess({
-        publishId: input.publishId,
-        type: input.type,
-        relativePath: input.relativePath,
-        password,
-        cookie: readDriveAccessCookie(input.request, { kind: input.type, publicId: input.publishId }),
-      })
-      if (access.status === "password_required") {
-        response.type("html").send(renderDrivePasswordPage({ actionPath: input.request.path }))
-        return
-      }
-      if (access.status === "static_denied") {
-        response.status(403).type("text/plain; charset=utf-8").send("访问受限")
-        return
-      }
-      if (access.cookie) {
-        setDriveAccessCookie(response, access.cookie, { kind: input.type, publicId: input.publishId })
-      }
-      if (password) {
-        response.redirect(302, input.cleanRedirectUrl ?? cleanPasswordUrl(input.request))
-        return
-      }
-      await sendPublishedAsset(response, access.value)
-    } catch (error) {
-      if (response.headersSent) {
-        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
-        return
-      }
-      if (response.destroyed) return
-      sendPublicNotFound(response)
-    }
-  }
-
-  private async unlockPublishedAsset(request: Request, response: Response, input: {
-    readonly publishId: string
-    readonly type: "page" | "site"
-    readonly relativePath: string
-  }): Promise<void> {
-    try {
-      const access = await this.drive.resolvePublishedAssetAccess({
-        ...input,
-        password: readBodyPassword(request),
-        cookie: readDriveAccessCookie(request, { kind: input.type, publicId: input.publishId }),
-      })
-      if (access.status !== "ok" || !access.cookie) {
-        response.status(200).type("html").send(renderDrivePasswordPage({ actionPath: request.path, error: true }))
-        return
-      }
-      setDriveAccessCookie(response, access.cookie, { kind: input.type, publicId: input.publishId })
-      response.redirect(302, request.path)
-    } catch (error) {
-      if (response.headersSent) {
-        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
-        return
-      }
-      if (response.destroyed) return
-      sendPublicNotFound(response)
-    }
+    await sendDriveRenderedAsset(response, { ...access.value, csp: DRIVE_SHARE_RENDER_CSP })
   }
 }
 
@@ -976,24 +696,8 @@ function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
   return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
 }
 
-function resolveRequestPagesPublicUrl(request: AuthenticatedUserRequest): string {
-  return resolvePublicAppUrl({ configuredPublicAppUrl: firstConfiguredUrl(process.env.PAGES_PUBLIC_URL, process.env.APP_PUBLIC_URL), request })
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
-}
-
-function firstConfiguredUrl(...values: Array<string | undefined>): string | undefined {
-  return values.find((value) => value !== undefined && value.trim().length > 0)
-}
-
-function safeDecodeURIComponent(value: string): string {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return ""
-  }
 }
 
 function readPasswordQuery(request: Request): string | undefined {
@@ -1056,17 +760,6 @@ function cleanPasswordUrl(request: Request): string {
   return `${url.pathname}${url.search}`
 }
 
-function buildSiteRootRedirect(request: Request, publishId: string): string {
-  const url = new URL(request.originalUrl || request.url, "http://synapse.local")
-  return `/sites/${encodeURIComponent(publishId)}/${url.search}`
-}
-
-function buildSiteRootCleanRedirect(request: Request, publishId: string): string {
-  const url = new URL(request.originalUrl || request.url, "http://synapse.local")
-  url.searchParams.delete("password")
-  return `/sites/${encodeURIComponent(publishId)}/${url.search}`
-}
-
 function decodeCookieValue(value: string): string | undefined {
   if (!value) return undefined
   try {
@@ -1117,7 +810,21 @@ async function sendDriveFileDownload(response: Response, download: {
   await pipeline(download.stream, response)
 }
 
-async function sendPublishedAsset(response: Response, asset: {
+async function sendDriveTransfer(
+  response: Response,
+  transfer:
+    | ({ readonly kind: "file" } & Parameters<typeof sendDriveFileDownload>[1])
+    | { readonly kind: "zip"; readonly filename: string; readonly entries: readonly { readonly path: string; readonly storageKey: string }[] },
+  storage: DriveStoragePort,
+): Promise<void> {
+  if (transfer.kind === "zip") {
+    await sendDriveZip(response, transfer.filename, transfer.entries, storage)
+    return
+  }
+  await sendDriveFileDownload(response, transfer)
+}
+
+async function sendDriveRenderedAsset(response: Response, asset: {
   readonly stream: NodeJS.ReadableStream
   readonly contentType: string
   readonly size?: bigint
@@ -1140,7 +847,7 @@ async function sendOwnerRenderedAsset(response: Response, asset: {
   readonly size?: bigint
   readonly csp?: string
 }) {
-  await sendPublishedAsset(response, {
+  await sendDriveRenderedAsset(response, {
     ...asset,
     csp: asset.csp ?? DRIVE_OWNER_RENDER_CSP,
   })
@@ -1167,7 +874,7 @@ function createResponseWritable(response: Response): Writable {
         cleanup()
         callback(error ?? undefined)
       }
-      const onClose = () => settle(new Error("Response closed before published asset finished streaming."))
+      const onClose = () => settle(new Error("Response closed before drive asset finished streaming."))
       const onDrain = () => settle()
       const onError = (error: Error) => settle(error)
       response.once("close", onClose)
@@ -1184,13 +891,6 @@ function createResponseWritable(response: Response): Writable {
       callback(error)
     },
   })
-}
-
-function sendPublicNotFound(response: Response) {
-  response.status(404).type("html").send(renderDrivePublicStatusPage({
-    title: "网页未找到",
-    message: "请检查链接，或联系分享方确认访问地址。",
-  }))
 }
 
 function escapeHtml(value: string): string {

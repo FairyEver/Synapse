@@ -5,11 +5,11 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 
 export function isDriveBrowserSpaPath(pathname: string) {
-  if (pathname === '/drive') return true
+  if (pathname === '/console/drive') return true
+  if (/^\/console\/drive\/folders\/[^/]+$/u.test(pathname)) return true
   if (/^\/drive\/items\/[^/]+$/u.test(pathname)) return true
-  if (/^\/drive\/items\/[^/]+\/items\/[^/]+$/u.test(pathname)) return true
-  if (/^\/files\/[^/]+$/u.test(pathname)) return true
-  return /^\/files\/[^/]+\/items\/[^/]+$/u.test(pathname)
+  if (/^\/share\/[^/]+$/u.test(pathname)) return true
+  return /^\/share\/[^/]+\/items\/[^/]+$/u.test(pathname)
 }
 
 export function resolveLegacyDashboardDevRedirect(pathname: string) {
@@ -78,31 +78,15 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '^/drive/items/[^/]+/(download|zip|render)$': {
+      '^/drive/items/[^/]+/(download|render)$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$': {
+      '^/share/[^/]+/(download|render)$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '^/files/[^/]+/(download|zip)$': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '^/files/[^/]+/items/[^/]+/(download|zip)$': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '^/files/[^/]+/[^/]+/download$': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/pages': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-      '/sites': {
+      '^/share/[^/]+/items/[^/]+/(download|render)$': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

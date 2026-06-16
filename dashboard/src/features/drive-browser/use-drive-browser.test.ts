@@ -7,8 +7,7 @@ import { loadDriveBrowser, toDriveBrowserQueryKey } from './use-drive-browser'
 vi.mock('@/lib/api', () => ({
   driveBrowserApi: {
     getConsoleRoot: vi.fn(),
-    getOwnerChild: vi.fn(),
-    getOwnerRoot: vi.fn(),
+    getOwnerItem: vi.fn(),
     getShareItem: vi.fn(),
     getShareRoot: vi.fn(),
     unlockShare: vi.fn(),
@@ -57,17 +56,15 @@ describe('toDriveBrowserQueryKey', () => {
 
   it('passes child pagination options to owner browser requests', async () => {
     const snapshot = createSnapshot()
-    vi.mocked(driveBrowserApi.getOwnerChild).mockResolvedValue(snapshot)
+    vi.mocked(driveBrowserApi.getOwnerItem).mockResolvedValue(snapshot)
 
     await expect(loadDriveBrowser({
       context: 'owner',
       surface: 'console',
-      rootItemId: 'root-1',
       itemId: 'folder-1',
     }, { childrenOffset: 100, childrenLimit: 50 })).resolves.toBe(snapshot)
 
-    expect(driveBrowserApi.getOwnerChild).toHaveBeenCalledWith(
-      'root-1',
+    expect(driveBrowserApi.getOwnerItem).toHaveBeenCalledWith(
       'folder-1',
       'console',
       { childrenOffset: 100, childrenLimit: 50 }
@@ -86,8 +83,8 @@ function createSnapshot(): DriveBrowserSnapshotDto {
       size: '1',
       mimeType: 'text/plain',
       updatedAt: '2026-06-13T00:00:00.000Z',
-      browserUrl: '/files/share-1/items/item-1',
-      downloadUrl: '/files/share-1/items/item-1/download',
+      browserUrl: '/share/share-1/items/item-1',
+      downloadUrl: '/share/share-1/items/item-1/download',
       previewKind: 'text',
     },
     breadcrumbs: [],

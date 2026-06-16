@@ -42,7 +42,7 @@ describe('drive browser view model', () => {
         id: 'folder',
         type: 'folder',
         browserUrl: '/drive/items/folder',
-        downloadUrl: '/drive/items/folder/zip',
+        downloadUrl: '/drive/items/folder/download',
       },
     })
     const file = createSnapshot({
@@ -50,22 +50,22 @@ describe('drive browser view model', () => {
         ...baseCurrent(),
         id: 'file',
         type: 'file',
-        browserUrl: '/drive/items/folder/items/file',
-        downloadUrl: '/drive/items/folder/items/file/download',
+        browserUrl: '/drive/items/file',
+        downloadUrl: '/drive/items/file/download',
       },
     })
 
     expect(getDriveFinderActions(folder)).toEqual({
-      directoryDownloadUrl: '/drive/items/folder/zip',
+      directoryDownloadUrl: '/drive/items/folder/download',
       fileDownloadUrl: null,
       fileOpenUrl: null,
       visitUrl: null,
     })
     expect(getDriveFinderActions(file)).toEqual({
       directoryDownloadUrl: null,
-      fileDownloadUrl: '/drive/items/folder/items/file/download',
-      fileOpenUrl: '/drive/items/folder/items/file',
-      visitUrl: '/drive/items/root/items/file/render',
+      fileDownloadUrl: '/drive/items/file/download',
+      fileOpenUrl: '/drive/items/file',
+      visitUrl: '/drive/items/file/render',
     })
   })
 
@@ -76,31 +76,31 @@ describe('drive browser view model', () => {
         ...baseCurrent(),
         id: 'file',
         type: 'file',
-        browserUrl: '/drive/items/folder/items/file',
-        downloadUrl: '/drive/items/folder/items/file/download',
+        browserUrl: '/drive/items/file',
+        downloadUrl: '/drive/items/file/download',
       },
     })
 
-    expect(getDriveFinderActions(file).fileOpenUrl).toBe('/drive/items/folder/items/file?surface=standalone')
+    expect(getDriveFinderActions(file).fileOpenUrl).toBe('/drive/items/file?surface=standalone')
   })
 
   it('prepends the console home breadcrumb for drive item pages', () => {
     const snapshot = createSnapshot({
       surface: 'console',
       breadcrumbs: [
-        { id: 'folder', name: '文档', browserUrl: '/drive/items/folder' },
-        { id: 'file', name: '记录.md', browserUrl: '/drive/items/folder/items/file' },
+        { id: 'folder', name: '文档', browserUrl: '/console/drive/folders/folder' },
+        { id: 'file', name: '记录.md', browserUrl: '/drive/items/file' },
       ],
     })
 
     expect(getDriveFinderBreadcrumbs(snapshot).map((item) => item.name)).toEqual(['我的空间', '文档', '记录.md'])
-    expect(getDriveFinderBreadcrumbs(snapshot)[0]?.browserUrl).toBe('/drive')
+    expect(getDriveFinderBreadcrumbs(snapshot)[0]?.browserUrl).toBe('/console/drive')
   })
 
   it('renames the console root breadcrumb without changing standalone pages', () => {
     const consoleRoot = createSnapshot({
       surface: 'console',
-      breadcrumbs: [{ id: 'root', name: '网盘', browserUrl: '/drive' }],
+      breadcrumbs: [{ id: 'root', name: '网盘', browserUrl: '/console/drive' }],
     })
     const standalone = createSnapshot({
       surface: 'standalone',
@@ -133,21 +133,22 @@ describe('drive browser view model', () => {
     expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('markdown')
   })
 
-  it('only exposes iframe renderer for owner html files with visit urls', () => {
+  it('uses iframe as the default renderer for html files with visit urls', () => {
     const owner = createSnapshot({
       context: 'owner',
       current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
-      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/root/items/file/render' },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/file/render' },
     })
     const shared = createSnapshot({
       context: 'share',
       current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
-      preview: { ...basePreview(), kind: 'html-source', visitUrl: null },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/share/shr_public/items/file/render' },
     })
 
-    expect(getDriveRendererOptions(owner).map((option) => option.id)).toEqual(['code', 'iframe'])
-    expect(getDriveRendererOptions(shared).map((option) => option.id)).toEqual(['code'])
-    expect(getDriveRendererOptions(shared)[0]?.container).toBe('full')
+    expect(getDriveRendererOptions(owner).map((option) => option.id)).toEqual(['iframe', 'code'])
+    expect(getDriveRendererOptions(shared).map((option) => option.id)).toEqual(['iframe', 'code'])
+    expect(selectDefaultDriveRenderer(owner)?.id).toBe('iframe')
+    expect(selectDefaultDriveRenderer(shared)?.id).toBe('iframe')
   })
 
   it('renders code previews with the shared code editor shell', () => {
@@ -222,27 +223,27 @@ describe('drive browser view model', () => {
   it('shows visit for owner html previews', () => {
     const snapshot = createSnapshot({
       context: 'owner',
-      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/root/items/file/render' },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/file/render' },
     })
 
     expect(getDriveBrowserActions(snapshot)).toMatchObject({
-      downloadUrl: '/drive/items/root/items/file/download',
-      visitUrl: '/drive/items/root/items/file/render',
+      downloadUrl: '/drive/items/file/download',
+      visitUrl: '/drive/items/file/render',
     })
   })
 
-  it('does not show visit for share html previews', () => {
+  it('shows visit for share html previews', () => {
     const snapshot = createSnapshot({
       context: 'share',
       current: {
         ...baseCurrent(),
-        browserUrl: '/files/shr_public/items/file',
-        downloadUrl: '/files/shr_public/items/file/download',
+        browserUrl: '/share/shr_public/items/file',
+        downloadUrl: '/share/shr_public/items/file/download',
       },
-      preview: { ...basePreview(), kind: 'html-source', visitUrl: null },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/share/shr_public/items/file/render' },
     })
 
-    expect(getDriveBrowserActions(snapshot).visitUrl).toBeNull()
+    expect(getDriveBrowserActions(snapshot).visitUrl).toBe('/share/shr_public/items/file/render')
   })
 
   it('does not show visit for owner markdown previews', () => {
@@ -263,7 +264,7 @@ describe('drive browser view model', () => {
     })
 
     expect(getDriveBrowserActions(snapshot)).toMatchObject({
-      downloadUrl: '/drive/items/root/items/file/download',
+      downloadUrl: '/drive/items/file/download',
       visitUrl: null,
     })
   })
@@ -276,8 +277,8 @@ describe('drive browser view model', () => {
         name: 'notes.md',
         mimeType: 'text/markdown',
         previewKind: 'markdown',
-        browserUrl: '/files/shr_public/items/file',
-        downloadUrl: '/files/shr_public/items/file/download',
+        browserUrl: '/share/shr_public/items/file',
+        downloadUrl: '/share/shr_public/items/file/download',
       },
       preview: {
         ...basePreview(),
@@ -328,10 +329,10 @@ describe('drive browser view model', () => {
         id: 'folder',
         type: 'folder',
         browserUrl: '/drive/items/folder',
-        downloadUrl: '/drive/items/folder/zip',
+        downloadUrl: '/drive/items/folder/download',
       },
       children: [
-        { ...baseCurrent(), id: 'file', name: 'notes.md', browserUrl: '/drive/items/folder/items/file' },
+        { ...baseCurrent(), id: 'file', name: 'notes.md', browserUrl: '/drive/items/file' },
       ],
       preview: null,
     })
@@ -372,7 +373,7 @@ describe('drive browser view model', () => {
 
   it('DriveBrowserView delegates folder pages to full finder layout', () => {
     const snapshot = createSnapshot({
-      current: { ...baseCurrent(), id: 'folder', type: 'folder', downloadUrl: '/drive/items/folder/zip' },
+      current: { ...baseCurrent(), id: 'folder', type: 'folder', downloadUrl: '/drive/items/folder/download' },
       preview: null,
       children: [{ ...baseCurrent(), id: 'file', name: 'notes.md' }],
     })
@@ -458,8 +459,8 @@ describe('drive browser view model', () => {
         size: '7372',
         mimeType: 'text/markdown',
         previewKind: 'markdown',
-        browserUrl: '/files/shr_public',
-        downloadUrl: '/files/shr_public/download',
+        browserUrl: '/share/shr_public',
+        downloadUrl: '/share/shr_public/download',
       },
       preview: {
         ...basePreview(),
@@ -511,33 +512,33 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'download-only', text: null },
     })
 
-    expect(getDriveBrowserActions(snapshot).downloadUrl).toBe('/drive/items/root/items/file/download')
+    expect(getDriveBrowserActions(snapshot).downloadUrl).toBe('/drive/items/file/download')
   })
 
-  it('keeps owner and share child urls in the same drilldown shape', () => {
+  it('keeps owner and share child urls in their canonical shapes', () => {
     const owner = createSnapshot({
-      current: { ...baseCurrent(), id: 'root', type: 'folder', browserUrl: '/drive/items/root', downloadUrl: '/drive/items/root/zip' },
+      current: { ...baseCurrent(), id: 'root', type: 'folder', browserUrl: '/drive/items/root', downloadUrl: '/drive/items/root/download' },
       children: [
-        { ...baseCurrent(), id: 'child', browserUrl: '/drive/items/root/items/child' },
+        { ...baseCurrent(), id: 'child', browserUrl: '/drive/items/child' },
       ],
     })
     const share = createSnapshot({
       context: 'share',
-      current: { ...baseCurrent(), id: 'root', type: 'folder', browserUrl: '/files/shr_public', downloadUrl: '/files/shr_public/zip' },
+      current: { ...baseCurrent(), id: 'root', type: 'folder', browserUrl: '/share/shr_public', downloadUrl: '/share/shr_public/download' },
       children: [
-        { ...baseCurrent(), id: 'child', browserUrl: '/files/shr_public/items/child' },
+        { ...baseCurrent(), id: 'child', browserUrl: '/share/shr_public/items/child' },
       ],
     })
 
-    expect(getDriveBrowserChildUrls(owner)).toEqual(['/drive/items/root/items/child'])
-    expect(getDriveBrowserChildUrls(share)).toEqual(['/files/shr_public/items/child'])
+    expect(getDriveBrowserChildUrls(owner)).toEqual(['/drive/items/child'])
+    expect(getDriveBrowserChildUrls(share)).toEqual(['/share/shr_public/items/child'])
   })
 
   it('shows a load more action when folder children have another page', () => {
     const snapshot = createSnapshot({
-      current: { ...baseCurrent(), id: 'root', type: 'folder', browserUrl: '/drive/items/root', downloadUrl: '/drive/items/root/zip' },
+      current: { ...baseCurrent(), id: 'root', type: 'folder', browserUrl: '/drive/items/root', downloadUrl: '/drive/items/root/download' },
       children: [
-        { ...baseCurrent(), id: 'child', browserUrl: '/drive/items/root/items/child' },
+        { ...baseCurrent(), id: 'child', browserUrl: '/drive/items/child' },
       ],
       childrenPage: {
         offset: 0,
@@ -581,8 +582,8 @@ function baseCurrent(): DriveBrowserSnapshotDto['current'] {
     mimeType: 'text/html',
     updatedAt: '2026-06-09T00:00:00.000Z',
     previewKind: 'html-source',
-    browserUrl: '/drive/items/root/items/file',
-    downloadUrl: '/drive/items/root/items/file/download',
+    browserUrl: '/drive/items/file',
+    downloadUrl: '/drive/items/file/download',
   }
 }
 
@@ -592,7 +593,7 @@ function basePreview(): NonNullable<DriveBrowserSnapshotDto['preview']> {
     text: '<html></html>',
     truncated: false,
     imageUrl: null,
-    visitUrl: '/drive/items/root/items/file/render',
+    visitUrl: '/drive/items/file/render',
     html: null,
   }
 }

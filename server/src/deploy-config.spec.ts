@@ -251,7 +251,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("http://127.0.0.1:3000/healthz")
     expect(deployScript).toContain("http://127.0.0.1:3000/console/")
     expect(deployScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
-    expect(deployScript).toContain("http://127.0.0.1:3000/files/shr_not_found")
+    expect(deployScript).toContain("http://127.0.0.1:3000/share/shr_not_found")
     expect(deployScript).toContain("Location: /console/")
     expect(deployScript).toContain("webhook route")
     expect(deployScript).toContain("drive share route")
@@ -261,7 +261,7 @@ describe("server deployment configuration", () => {
 
     expect(restartScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
     expect(restartScript).toContain("webhook route")
-    expect(restartScript).toContain("http://127.0.0.1:3000/files/shr_not_found")
+    expect(restartScript).toContain("http://127.0.0.1:3000/share/shr_not_found")
     expect(restartScript).toContain("drive share route")
   })
 
@@ -275,34 +275,35 @@ describe("server deployment configuration", () => {
   it("serves drive browser pages from the console bundle and proxies direct file responses", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
-    expect(nginx).toContain("location ~ ^/drive/items/[^/]+/(download|zip|render)$")
-    expect(nginx).toContain("location ~ ^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$")
-    expect(nginx).toContain("location ~ ^/files/[^/]+/(download|zip)$")
-    expect(nginx).toContain("location ~ ^/files/[^/]+/items/[^/]+/(download|zip)$")
-    expect(nginx).toContain("location ~ ^/files/[^/]+/[^/]+/download$")
+    expect(nginx).toContain("location ~ ^/drive/items/[^/]+/(download|render)$")
+    expect(nginx).toContain("location ~ ^/share/[^/]+/(download|render)$")
+    expect(nginx).toContain("location ~ ^/share/[^/]+/items/[^/]+/(download|render)$")
     expect(nginx).toContain("location /drive/items/")
-    expect(nginx).toContain("location /files/")
+    expect(nginx).toContain("location /share/")
+    expect(nginx).not.toContain("location /files/")
+    expect(nginx).not.toContain("location /pages/")
+    expect(nginx).not.toContain("location /sites/")
+    expect(nginx).not.toContain("download|zip")
     expect(nginx).toContain("alias /app/dashboard/dist/;")
     expect(nginx).toContain("try_files $uri $uri/ /console/index.html;")
   })
 
-  it("routes public drive publication pages and sites through nginx instead of dashboard redirects", () => {
+  it("does not keep retired drive publication routes in nginx", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
-    expect(nginx).toContain("location /pages/")
-    expect(nginx).toContain("location /sites/")
-    expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
+    expect(nginx).not.toContain("location /pages/")
+    expect(nginx).not.toContain("location /sites/")
+    expect(nginx).toContain("location /share/")
   })
 
   it("keeps drive browser pages inside the Vite SPA while proxying direct responses", () => {
     const viteConfig = readRepoFile("dashboard/vite.config.ts")
 
-    expect(viteConfig).toContain("'^/drive/items/[^/]+/(download|zip|render)$'")
-    expect(viteConfig).toContain("'^/drive/items/[^/]+/items/[^/]+/(download|zip|render)$'")
-    expect(viteConfig).toContain("'^/files/[^/]+/(download|zip)$'")
-    expect(viteConfig).toContain("'^/files/[^/]+/items/[^/]+/(download|zip)$'")
-    expect(viteConfig).toContain("'^/files/[^/]+/[^/]+/download$'")
+    expect(viteConfig).toContain("'^/drive/items/[^/]+/(download|render)$'")
+    expect(viteConfig).toContain("'^/share/[^/]+/(download|render)$'")
+    expect(viteConfig).toContain("'^/share/[^/]+/items/[^/]+/(download|render)$'")
     expect(viteConfig).not.toContain("'/files':")
+    expect(viteConfig).not.toContain("download|zip")
   })
 
   it("serves the console bundle and redirects legacy dashboard paths", () => {

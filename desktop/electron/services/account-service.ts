@@ -21,15 +21,12 @@ import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
   DriveBrowserSnapshotDto,
-  DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveFolderPathEnsureInput,
   DriveFolderPathEnsureResultDto,
   DriveItemDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
-  DrivePublicationListPageDto,
-  DrivePublicationDto,
   DrivePublicLinksPageInput,
   DriveReorganizationApplyInput,
   DriveReorganizationApplyResultDto,
@@ -195,16 +192,6 @@ async function withCurrentDriveShareUrl<T extends {
   }
 }
 
-async function withCurrentDrivePublicationUrl<T extends DrivePublicationDto>(item: T): Promise<T> {
-  const { buildDrivePublicationUrl, buildDriveUrlWithPassword } = await sharedUrlsPromise
-  const url = buildDrivePublicationUrl({ publicAppUrl: publicAppUrl(), publishId: item.publishId, type: item.type })
-  return {
-    ...item,
-    url,
-    urlWithPassword: buildDriveUrlWithPassword(url, item.password),
-  }
-}
-
 async function currentOwnerDriveBrowserUrl(itemId: string): Promise<string> {
   const { buildOwnerDriveBrowserUrl } = await sharedUrlsPromise
   return `${publicAppUrl().trim().replace(/\/+$/u, "")}${buildOwnerDriveBrowserUrl(itemId)}`
@@ -212,10 +199,6 @@ async function currentOwnerDriveBrowserUrl(itemId: string): Promise<string> {
 
 function currentOwnerDriveDownloadUrl(itemId: string): string {
   return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/download`
-}
-
-function currentOwnerDriveZipUrl(itemId: string): string {
-  return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/zip`
 }
 
 type DriveFileContentReadResult = {
@@ -428,7 +411,7 @@ export class AccountService {
   }
 
   async downloadDriveFolderZip(input: { readonly itemId: string; readonly outputPath: string }): Promise<{ readonly ok: true; readonly path: string }> {
-    const response = await this.fetchAuthenticated(currentOwnerDriveZipUrl(input.itemId), {}, "文件夹下载失败。")
+    const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), {}, "文件夹下载失败。")
     await writeResponseBodyToFile(response, input.outputPath)
     return { ok: true, path: input.outputPath }
   }
@@ -515,8 +498,8 @@ export class AccountService {
     return this.requestAuthenticatedJson<DriveItemDto>("PATCH", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, { parentId }, "移动失败。")
   }
 
-  async deleteDriveItem(itemId: string, input: { readonly disablePublications?: boolean } = {}): Promise<{ ok: true }> {
-    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, input, "删除失败。")
+  async deleteDriveItem(itemId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, undefined, "删除失败。")
   }
 
   async shareDriveItem(itemId: string, settings: DriveAccessSettingsInput): Promise<DriveShareDto> {
@@ -742,43 +725,6 @@ export class AccountService {
         errorName: error instanceof Error ? error.name : typeof error,
       })
     })
-  }
-
-  async listDrivePublications(input?: DrivePublicLinksPageInput): Promise<DrivePublicationListPageDto> {
-    const result = await this.getAuthenticatedJson<DrivePublicationListPageDto>(
-      `${apiBaseUrl()}/drive/publications${drivePublicLinksPageQuery(input)}`,
-      "发布列表加载失败。",
-    )
-    return {
-      ...result,
-      items: await Promise.all(result.items.map(withCurrentDrivePublicationUrl)),
-    }
-  }
-
-  async publishDrivePage(itemId: string, settings: DriveAccessSettingsInput): Promise<DrivePublicationDto> {
-    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/page`, settings, "发布网页失败。")
-    return withCurrentDrivePublicationUrl(publication)
-  }
-
-  async publishDriveSite(itemId: string, settings: DriveAccessSettingsInput): Promise<DrivePublicationDto> {
-    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/publications/site`, settings, "发布站点失败。")
-    return withCurrentDrivePublicationUrl(publication)
-  }
-
-  async redeployDrivePublication(publicationId: string): Promise<DrivePublicationDto> {
-    const publication = await this.requestAuthenticatedJson<DrivePublicationDto>("POST", `${apiBaseUrl()}/drive/publications/${encodeURIComponent(publicationId)}/redeploy`, undefined, "重新发布失败。")
-    return withCurrentDrivePublicationUrl(publication)
-  }
-
-  async disableDrivePublication(publicationId: string): Promise<{ ok: true }> {
-    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/publications/${encodeURIComponent(publicationId)}`, undefined, "取消发布失败。")
-  }
-
-  async getDriveDeleteImpact(itemId: string): Promise<DriveDeleteImpactDto> {
-    const impact = await this.getAuthenticatedJson<DriveDeleteImpactDto>(`${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/delete-impact`, "删除影响加载失败。")
-    return {
-      publications: await Promise.all(impact.publications.map(withCurrentDrivePublicationUrl)),
-    }
   }
 
   async listDriveShares(input?: DrivePublicLinksPageInput): Promise<DriveShareListPageDto> {

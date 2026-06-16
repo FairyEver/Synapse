@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback } from 'react'
 import { DriveBrowserPage } from '@/features/drive-browser/drive-browser-page'
 
-export const Route = createFileRoute('/files/$shareId')({
+export const Route = createFileRoute('/share/$shareId')({
   validateSearch: parseSharePasswordSearch,
   component: RouteComponent,
 })

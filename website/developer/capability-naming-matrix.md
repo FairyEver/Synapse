@@ -85,7 +85,6 @@
 | `drive.folder.create` | `drive_folder_create` | `drive.folder.create` | `driveFolderCreate` |
 | `drive.item.rename` | `drive_item_rename` | `drive.item.rename` | `driveItemRename` |
 | `drive.item.move` | `drive_item_move` | `drive.item.move` | `driveItemMove` |
-| `drive.delete_impact.get` | `drive_delete_impact_get` | `drive.delete_impact.get` | `driveDeleteImpactGet` |
 | `drive.item.delete` | `drive_item_delete` | `drive.item.delete` | `driveItemDelete` |
 | `drive.item_preview.get` | `drive_item_preview_get` | `drive.item_preview.get` | `driveItemPreviewGet` |
 | `drive.file_content.read` | `drive_file_content_read` | `drive.file_content.read` | `driveFileContentRead` |
@@ -94,11 +93,6 @@
 | `drive.share.list` | `drive_share_list` | `drive.share.list` | `driveShareList` |
 | `drive.share.create` | `drive_share_create` | `drive.share.create` | `driveShareCreate` |
 | `drive.share.disable` | `drive_share_disable` | `drive.share.disable` | `driveShareDisable` |
-| `drive.publication.list` | `drive_publication_list` | `drive.publication.list` | `drivePublicationList` |
-| `drive.page_publication.create` | `drive_page_publication_create` | `drive.page_publication.create` | `drivePagePublicationCreate` |
-| `drive.site_publication.create` | `drive_site_publication_create` | `drive.site_publication.create` | `driveSitePublicationCreate` |
-| `drive.publication_deployment.create` | `drive_publication_deployment_create` | `drive.publication_deployment.create` | `drivePublicationDeploymentCreate` |
-| `drive.publication.disable` | `drive_publication_disable` | `drive.publication.disable` | `drivePublicationDisable` |
 | `drive.usage.get` | `drive_usage_get` | `drive.usage.get` | `driveUsageGet` |
 | `drive.stats.get` | `drive_stats_get` | `drive.stats.get` | `driveStatsGet` |
 | `drive.item_tree.list` | `drive_item_tree_list` | `drive.item_tree.list` | `driveItemTreeList` |

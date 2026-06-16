@@ -3,6 +3,20 @@
 Date: 2026-06-11
 Scope: `server/`, `dashboard/`, `desktop/`, `shared/`, `docs/`
 
+## 2026-06-16 Current URL Baseline
+
+The route model below was revised after this design:
+
+- `/console/drive` is the console Drive manager; `/console/drive/folders/:folderId` browses a user's folder inside the console.
+- `/drive/items/:itemId` is the owner standalone browser for any owned file or folder.
+- `/drive/items/:itemId/render` renders an owned HTML file after owner permission checks.
+- `/drive/items/:itemId/download` downloads an owned file or returns a folder zip.
+- `/share/:shareId` and `/share/:shareId/items/:itemId` are the public share browser routes.
+- `/share/:shareId/render` and `/share/:shareId/items/:itemId/render` render shared HTML after the same share, expiry, password, and descendant checks.
+- `/share/:shareId/download` and `/share/:shareId/items/:itemId/download` download files or return folder zip.
+- `/files/*`, `/pages/*`, `/sites/*`, owner nested `rootItemId/items/:itemId`, and explicit `/zip` URLs are no longer canonical.
+- Page/site publication and DrivePublication snapshot semantics are removed; HTML rendering is a live Drive share/owner preview capability.
+
 ## Goal
 
 重构 Synapse Drive 的文件承接页，让用户不需要先创建分享链接也能查看自己上传的文件。文件承接页统一负责文件夹浏览、文件预览和下载；分享访问复用同一套浏览器体验；发布网页和发布站点继续走独立的直出渲染链路。同时把 Web 管理入口从 `dashboard` 规范为 `console`，并把本次新增的 owner 文件访问路由命名为资源集合式路径。
@@ -213,13 +227,12 @@ console 内新增用户网盘入口：
 
 ```text
 GET /console/drive
-GET /console/drive/items/:rootItemId
-GET /console/drive/items/:rootItemId/items/:browserItemId
+GET /console/drive/folders/:folderId
 ```
 
 `/console/drive` 表示登录用户自己的 Drive 虚拟根目录，列出 `parentId = null` 的文件和文件夹。
 
-`/console/drive/items/:rootItemId` 和 `/console/drive/items/:rootItemId/items/:browserItemId` 复用 owner browser 的下钻模型，只是页面带 console 布局和侧边栏。普通用户侧边栏文案为 `网盘`。现有 admin 全局云盘管理页需要避免与用户 `网盘` 语义冲突，可迁移为 admin 区域内的 `云盘管理`。
+`/console/drive/folders/:folderId` 只用于控制台内浏览文件夹。文件独立查看统一走 `/drive/items/:itemId`，普通用户侧边栏文案为 `网盘`。现有 admin 全局云盘管理页需要避免与用户 `网盘` 语义冲突，可迁移为 admin 区域内的 `云盘管理`。
 
 ### Console API
 
@@ -311,12 +324,12 @@ context root URL + /items/:browserItemId
 
 区别只在 context root 的表达：
 
-- owner standalone root：`/drive/items/:rootItemId`
-- share root：`/files/:shareId`
+- owner standalone item：`/drive/items/:itemId`
+- share root：`/share/:shareId`
 - console virtual root：`/console/drive`
-- console item root：`/console/drive/items/:rootItemId`
+- console folder：`/console/drive/folders/:folderId`
 
-### Published Render
+### Shared Render
 
 ```text
 GET /pages/:publishId

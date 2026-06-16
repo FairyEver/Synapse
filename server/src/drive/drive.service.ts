@@ -6,12 +6,10 @@ import { Readable } from "node:stream"
 import {
   type DriveBrowserChildrenPageDto,
   type DriveBrowserSnapshotDto,
-  type DrivePublicationListPageDto,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_MAX_FILE_SIZE_LABEL,
-  type DriveDeleteImpactDto,
   type DriveAccessSettingsInput,
   type DriveFolderPathEnsureInput,
   type DriveFolderPathEnsureResultDto,
@@ -20,7 +18,6 @@ import {
   type DriveItemTreeEntryDto,
   type DriveItemTreeListInput,
   type DriveItemTreeListPageDto,
-  type DrivePublicationDto,
   type DriveReorganizationApplyInput,
   type DriveReorganizationApplyResultDto,
   type DriveReorganizationPlannedMoveDto,
@@ -45,13 +42,9 @@ import {
   verifyDrivePasswordInput,
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
-import { renderDriveMarkdownDocument, renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 import {
   DRIVE_ITEM_TYPE,
-  DRIVE_PUBLICATION_DEPLOYMENT_STATUS,
-  DRIVE_PUBLICATION_INDEX_PATH,
-  DRIVE_PUBLICATION_STATUS,
-  DRIVE_PUBLICATION_TYPE,
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_STATUS,
   driveDefaultQuotaBytes,
@@ -59,12 +52,9 @@ import {
   driveUploadUrlTtlSeconds,
 } from "./drive.constants"
 import {
-  createDrivePublishId,
   createDriveShareId,
-  drivePublicationStorageKey,
   driveStorageKeyForItem,
   isValidDriveItemName,
-  normalizePublicationRelativePath,
 } from "./drive-token"
 import type { DriveStoragePort } from "./drive-storage"
 import {
@@ -81,25 +71,15 @@ import {
   type DriveBrowserSourceItem,
 } from "./drive-browser"
 import {
-  toDrivePublicationDto,
   toDriveItemDto,
   type DriveAdminFilters,
   type DriveAdminItemDto,
   type DriveItemRecord,
-  type DrivePublicationRecord,
   type DrivePrepareFolderUploadInput,
   type DrivePrepareUploadInput,
 } from "./drive.types"
 
 type DrivePrismaClient = PrismaService | Prisma.TransactionClient
-
-type PublicationSourceAsset = {
-  readonly sourceItemId: string
-  readonly sourceStorageKey: string
-  readonly relativePath: string
-  readonly contentType: string | null
-  readonly size: bigint
-}
 
 type DriveReorganizationPlan = {
   readonly userId: string
@@ -109,14 +89,9 @@ type DriveReorganizationPlan = {
   readonly skipped: readonly { readonly itemId: string; readonly reason: string }[]
 }
 
-type DrivePublicationWithImpactAssets = DrivePublicationRecord & {
-  readonly assets?: readonly { readonly deploymentId: string }[]
-}
-
 type DrivePublicAccessResult<T> =
   | { readonly status: "ok"; readonly value: T; readonly cookie?: string }
   | { readonly status: "password_required" }
-  | { readonly status: "static_denied" }
 
 type DrivePublicShareValue = {
   readonly item: DriveItemDto
@@ -125,7 +100,7 @@ type DrivePublicShareValue = {
   readonly type: "file" | "folder"
 }
 
-type DrivePublishedAssetValue = {
+type DriveRenderedAssetValue = {
   readonly stream: NodeJS.ReadableStream
   readonly contentType: string
   readonly size?: bigint
@@ -148,6 +123,10 @@ type DriveBrowserDownloadResult = {
   readonly size?: bigint
   readonly contentType?: string | null
 }
+
+type DriveBrowserTransferResult =
+  | ({ readonly kind: "file" } & DriveBrowserDownloadResult)
+  | ({ readonly kind: "zip" } & DriveFolderZipBrowserResult)
 
 type DriveBrowserChildrenPageInput = {
   readonly offset?: number
@@ -180,17 +159,11 @@ const driveItemWithShares = {
   },
 } as const
 
-const DRIVE_MARKDOWN_RENDER_MAX_BYTES = 10 * 1024 * 1024
-const DRIVE_MARKDOWN_RENDER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; font-src data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none';"
 const DRIVE_BROWSER_CHILDREN_DEFAULT_LIMIT = 100
 const DRIVE_BROWSER_CHILDREN_MAX_LIMIT = 200
 const DRIVE_ITEM_TREE_DEFAULT_LIMIT = 500
 const DRIVE_ITEM_TREE_MAX_LIMIT = 2000
 const DRIVE_REORGANIZATION_PLAN_TTL_MS = 5 * 60 * 1000
-const DRIVE_SITE_PUBLICATION_MAX_FILES = 1000
-const DRIVE_SITE_PUBLICATION_MAX_PATHS = 1200
-const DRIVE_SITE_PUBLICATION_MAX_DEPTH = 12
-const DRIVE_SITE_PUBLICATION_MAX_TOTAL_BYTES = 512n * 1024n * 1024n
 
 @Injectable()
 export class DriveService implements OnApplicationBootstrap {
@@ -519,7 +492,6 @@ export class DriveService implements OnApplicationBootstrap {
     itemId: string,
     actorEmail = userId,
     ipAddress = "system",
-    options: { readonly disablePublications?: boolean; readonly publicAppUrl?: string } = {},
   ): Promise<{ readonly ok: true }> {
     const resolvedActorEmail = actorEmail === userId
       ? await this.resolveDriveAuditActorEmail(userId)
@@ -530,8 +502,6 @@ export class DriveService implements OnApplicationBootstrap {
       actorEmail: resolvedActorEmail,
       ipAddress,
       admin: false,
-      disablePublications: options.disablePublications ?? false,
-      publicAppUrl: options.publicAppUrl,
     })
     return { ok: true }
   }
@@ -624,249 +594,6 @@ export class DriveService implements OnApplicationBootstrap {
     return {
       items,
       page: buildDrivePublicLinksPage(pageInput, shares.length),
-    }
-  }
-
-  async listPublications(userId: string, publicAppUrl: string, page?: DrivePublicLinksPageInput): Promise<DrivePublicationListPageDto> {
-    const pageInput = normalizeDrivePublicLinksPage(page)
-    const publications = await this.prisma.drivePublication.findMany({
-      where: { userId },
-      include: { sourceItem: { select: { deletedAt: true } } },
-      orderBy: { updatedAt: "desc" },
-      skip: pageInput.offset,
-      take: pageInput.limit + 1,
-    })
-    return {
-      items: publications.slice(0, pageInput.limit).map((publication) => toDrivePublicationDto(
-        publication,
-        publicAppUrl,
-        this.decryptStoredPassword(publication.passwordEncrypted),
-      )),
-      page: buildDrivePublicLinksPage(pageInput, publications.length),
-    }
-  }
-
-  async getDeleteImpact(userId: string, itemId: string, publicAppUrl: string): Promise<DriveDeleteImpactDto> {
-    const root = await this.requireOwnedItem(userId, itemId)
-    const items = root.type === DRIVE_ITEM_TYPE.folder ? await this.collectSubtree(root.id) : [root]
-    const itemIds = items.map((item) => item.id)
-    const publications = await this.findActivePublicationsReferencingItems(userId, itemIds)
-    return {
-      publications: publications.map((publication) => toDrivePublicationDto(
-        publication,
-        publicAppUrl,
-        this.decryptStoredPassword(publication.passwordEncrypted),
-      )),
-    }
-  }
-
-  async publishPage(
-    userId: string,
-    itemId: string,
-    publicAppUrl: string,
-    settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
-    auditContext: DriveAuditContext = {},
-  ): Promise<DrivePublicationDto> {
-    const item = await this.requireOwnedItem(userId, itemId)
-    if (item.type !== DRIVE_ITEM_TYPE.file || item.storageStatus !== DRIVE_STORAGE_STATUS.active || !item.storageKey) {
-      throw new BadRequestException("只能发布 HTML 文件。")
-    }
-    if (!isHtmlDriveItem(item.name, item.mimeType)) throw new BadRequestException("只能发布 HTML 文件。")
-
-    const material = await createDrivePasswordMaterial(settings, this.accessSecret)
-    const publication = await this.findOrCreatePublication(userId, item.id, DRIVE_PUBLICATION_TYPE.page, item.name, material)
-    const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
-      sourceItemId: item.id,
-      sourceStorageKey: item.storageKey,
-      relativePath: DRIVE_PUBLICATION_INDEX_PATH,
-      contentType: "text/html",
-      size: item.size,
-    }], material)
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.publication.publish",
-      targetType: "drive.publication",
-      targetId: result.id,
-      detail: this.publicationAuditDetail(userId, item.id, result),
-      ipAddress: auditContext.ipAddress,
-    })
-    return result
-  }
-
-  async publishSite(
-    userId: string,
-    itemId: string,
-    publicAppUrl: string,
-    settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
-    auditContext: DriveAuditContext = {},
-  ): Promise<DrivePublicationDto> {
-    const folder = await this.requireOwnedFolder(userId, itemId)
-    if (folder.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new BadRequestException("站点文件夹不可发布。")
-    const files = await this.collectPublicationSiteFiles(userId, folder.id)
-    if (!files.some((file) => file.relativePath === DRIVE_PUBLICATION_INDEX_PATH)) {
-      throw new BadRequestException("站点根目录需要 index.html。")
-    }
-
-    const material = await createDrivePasswordMaterial(settings, this.accessSecret)
-    const publication = await this.findOrCreatePublication(userId, folder.id, DRIVE_PUBLICATION_TYPE.site, folder.name, material)
-    const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files, material)
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.publication.publish",
-      targetType: "drive.publication",
-      targetId: result.id,
-      detail: this.publicationAuditDetail(userId, folder.id, result),
-      ipAddress: auditContext.ipAddress,
-    })
-    return result
-  }
-
-  async redeployPublication(userId: string, publicationId: string, publicAppUrl: string, auditContext: DriveAuditContext = {}): Promise<DrivePublicationDto> {
-    const publication = await this.prisma.drivePublication.findFirst({
-      where: { id: publicationId, userId, status: DRIVE_PUBLICATION_STATUS.active },
-    })
-    if (!publication?.sourceItemId) throw new NotFoundException("发布不存在。")
-
-    if (publication.type === DRIVE_PUBLICATION_TYPE.site) {
-      const folder = await this.requireOwnedFolder(userId, publication.sourceItemId)
-      if (folder.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new BadRequestException("站点文件夹不可发布。")
-      const files = await this.collectPublicationSiteFiles(userId, folder.id)
-      if (!files.some((file) => file.relativePath === DRIVE_PUBLICATION_INDEX_PATH)) {
-        throw new BadRequestException("站点根目录需要 index.html。")
-      }
-      const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, files)
-      await this.recordDriveAudit({
-        userId,
-        action: "drive.publication.redeploy",
-        targetType: "drive.publication",
-        targetId: result.id,
-        detail: this.publicationAuditDetail(userId, publication.sourceItemId, result),
-        ipAddress: auditContext.ipAddress,
-      })
-      return result
-    }
-
-    const item = await this.requireOwnedItem(userId, publication.sourceItemId)
-    if (item.type !== DRIVE_ITEM_TYPE.file || item.storageStatus !== DRIVE_STORAGE_STATUS.active || !item.storageKey) {
-      throw new BadRequestException("只能发布 HTML 文件。")
-    }
-    if (!isHtmlDriveItem(item.name, item.mimeType)) throw new BadRequestException("只能发布 HTML 文件。")
-    const result = await this.createDeploymentFromAssets(userId, publication.id, publicAppUrl, [{
-      sourceItemId: item.id,
-      sourceStorageKey: item.storageKey,
-      relativePath: DRIVE_PUBLICATION_INDEX_PATH,
-      contentType: "text/html",
-      size: item.size,
-    }])
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.publication.redeploy",
-      targetType: "drive.publication",
-      targetId: result.id,
-      detail: this.publicationAuditDetail(userId, publication.sourceItemId, result),
-      ipAddress: auditContext.ipAddress,
-    })
-    return result
-  }
-
-  async disablePublication(userId: string, publicationId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
-    const result = await this.prisma.drivePublication.updateMany({
-      where: { id: publicationId, userId, status: DRIVE_PUBLICATION_STATUS.active },
-      data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: new Date() },
-    })
-    if (result.count === 0) throw new NotFoundException("发布不存在。")
-    await this.recordDriveAudit({
-      userId,
-      action: "drive.publication.disable",
-      targetType: "drive.publication",
-      targetId: publicationId,
-      detail: { userId, publicationId, disabledCount: result.count },
-      ipAddress: auditContext.ipAddress,
-    })
-    return { ok: true }
-  }
-
-  async resolvePublishedAsset(input: {
-    readonly publishId: string
-    readonly type: "page" | "site"
-    readonly relativePath: string
-  }): Promise<DrivePublishedAssetValue> {
-    const result = await this.resolvePublishedAssetAccess(input)
-    if (result.status !== "ok") throw new NotFoundException("网页未找到")
-    return result.value
-  }
-
-  async resolvePublishedAssetAccess(input: {
-    readonly publishId: string
-    readonly type: "page" | "site"
-    readonly relativePath: string
-    readonly password?: string
-    readonly cookie?: string
-    readonly now?: Date
-  }): Promise<DrivePublicAccessResult<DrivePublishedAssetValue>> {
-    const now = input.now ?? new Date()
-    const relativePath = normalizePublicationRelativePath(input.relativePath || DRIVE_PUBLICATION_INDEX_PATH)
-    const publication = await this.prisma.drivePublication.findFirst({
-      where: {
-        publishId: input.publishId,
-        type: input.type,
-        status: DRIVE_PUBLICATION_STATUS.active,
-        currentDeploymentId: { not: null },
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      },
-    })
-    if (!publication?.currentDeploymentId) throw new NotFoundException("网页未找到")
-
-    let cookie: string | undefined
-    if (publication.passwordEnabled) {
-      const cookieOk = verifyDriveAccessCookie(input.cookie, {
-        kind: input.type,
-        publicId: publication.publishId,
-        now,
-        passwordHash: publication.passwordHash,
-        resourceExpiresAt: publication.expiresAt,
-        secret: this.accessSecret,
-      })
-      const passwordOk = await verifyDrivePasswordInput(input.password, publication.passwordHash)
-      if (!cookieOk && !passwordOk) {
-        return isPublicationPasswordPagePath(input.type, relativePath)
-          ? { status: "password_required" }
-          : { status: "static_denied" }
-      }
-      if (passwordOk) {
-        cookie = buildDriveAccessCookie({
-          kind: input.type,
-          publicId: publication.publishId,
-          expiresAt: publication.expiresAt,
-          passwordHash: publication.passwordHash,
-          secret: this.accessSecret,
-        })
-      }
-    }
-
-    const deployment = await this.prisma.drivePublicationDeployment.findFirst({
-      where: {
-        id: publication.currentDeploymentId,
-        publicationId: publication.id,
-        status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.active,
-      },
-    })
-    if (!deployment) throw new NotFoundException("网页未找到")
-
-    const asset = await this.prisma.drivePublicationAsset.findUnique({
-      where: { deploymentId_relativePath: { deploymentId: publication.currentDeploymentId, relativePath } },
-    })
-    if (!asset) throw new NotFoundException("网页未找到")
-
-    const object = await this.storage.getObjectStream({ key: asset.storageKey })
-    return {
-      status: "ok",
-      value: {
-        stream: object.stream,
-        size: object.size ?? asset.size,
-        contentType: resolvePublicationContentType(asset.relativePath, asset.contentType ?? object.contentType),
-      },
-      ...(cookie ? { cookie } : {}),
     }
   }
 
@@ -1034,13 +761,12 @@ export class DriveService implements OnApplicationBootstrap {
 
   async getOwnerBrowserSnapshot(input: {
     readonly userId: string
-    readonly rootItemId: string
-    readonly currentItemId?: string | null
+    readonly itemId: string
     readonly surface: "standalone" | "console"
     readonly childrenPage?: DriveBrowserChildrenPageInput
   }): Promise<DriveBrowserSnapshotDto> {
     const { root, current } = await this.resolveOwnedBrowserCurrent(input)
-    const route: DriveBrowserRouteContext = { context: "owner", surface: input.surface, rootItemId: root.id }
+    const route: DriveBrowserRouteContext = { context: "owner", surface: input.surface }
     const children = current.type === DRIVE_ITEM_TYPE.folder
       ? await this.listActiveChildrenPage(root.userId, current.id, input.childrenPage)
       : emptyDriveBrowserChildrenPage(input.childrenPage)
@@ -1077,7 +803,7 @@ export class DriveService implements OnApplicationBootstrap {
       breadcrumbs: [buildConsoleDriveRootBreadcrumb()],
       children: pageItems.map((item) => buildDriveBrowserItemDto({
         item: toDriveBrowserSourceItem(item),
-        route: { context: "owner", surface: "console", rootItemId: item.id },
+        route: { context: "owner", surface: "console" },
       })),
       childrenPage: page,
       preview: null,
@@ -1086,69 +812,42 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
-  async createDownloadUrlForOwnerBrowserItem(input: {
+  async openOwnerBrowserItemDownload(input: {
     readonly userId: string
-    readonly rootItemId: string
-    readonly currentItemId?: string | null
-  }): Promise<{ readonly url: string; readonly fileName: string }> {
+    readonly itemId: string
+  }): Promise<DriveBrowserTransferResult> {
     const { current } = await this.resolveOwnedBrowserCurrent(input)
+    if (current.type === DRIVE_ITEM_TYPE.folder) {
+      return {
+        kind: "zip",
+        filename: `${current.name}.zip`,
+        entries: await this.createFolderZipEntries(current.userId, current.id),
+      }
+    }
     const storageKey = this.requireActiveFileStorage(current)
-    const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
-    return { url: download.url, fileName: current.name }
-  }
-
-  async createFolderZipEntriesForOwnerBrowserItem(input: {
-    readonly userId: string
-    readonly rootItemId: string
-    readonly currentItemId?: string | null
-  }): Promise<DriveFolderZipBrowserResult> {
-    const { current } = await this.resolveOwnedBrowserCurrent(input)
-    if (current.type !== DRIVE_ITEM_TYPE.folder) throw new NotFoundException("文件未找到")
+    const object = await this.storage.getObjectStream({ key: storageKey })
     return {
-      filename: `${current.name}.zip`,
-      entries: await this.createFolderZipEntries(current.userId, current.id),
+      kind: "file",
+      stream: object.stream,
+      fileName: current.name,
+      size: object.size ?? current.size,
+      contentType: object.contentType ?? current.mimeType,
     }
   }
 
   async resolveOwnerRenderAccess(input: {
     readonly userId: string
-    readonly rootItemId: string
-    readonly currentItemId?: string | null
-  }): Promise<DrivePublishedAssetValue> {
+    readonly itemId: string
+  }): Promise<DriveRenderedAssetValue> {
     const { current } = await this.resolveOwnedBrowserCurrent(input)
     const storageKey = this.requireActiveFileStorage(current)
-    if (!isHtmlDriveItem(current.name, current.mimeType) && !isMarkdownDriveItem(current.name, current.mimeType)) {
-      throw new BadRequestException("只能访问 HTML 或 Markdown 文件。")
-    }
-    if (isMarkdownDriveItem(current.name, current.mimeType)) {
-      if (current.size > BigInt(DRIVE_MARKDOWN_RENDER_MAX_BYTES)) {
-        throw new BadRequestException("Markdown 文件超过 10MB，无法渲染。")
-      }
-      const object = await this.storage.getObjectStream({ key: storageKey })
-      const markdown = await readStreamTextPrefix(object.stream, DRIVE_MARKDOWN_RENDER_MAX_BYTES + 1)
-      if (markdown.truncated) throw new BadRequestException("Markdown 文件超过 10MB，无法渲染。")
-      const html = await renderDriveMarkdownDocument({ title: current.name, markdown: markdown.text })
-      return {
-        stream: Readable.from(html),
-        size: BigInt(Buffer.byteLength(html, "utf8")),
-        contentType: "text/html; charset=utf-8",
-        csp: DRIVE_MARKDOWN_RENDER_CSP,
-      }
-    }
+    if (!isHtmlDriveItem(current.name, current.mimeType)) throw new BadRequestException("只能访问 HTML 文件。")
     const object = await this.storage.getObjectStream({ key: storageKey })
     return {
       stream: object.stream,
       size: object.size ?? current.size,
       contentType: "text/html; charset=utf-8",
     }
-  }
-
-  async resolveOwnerHtmlRenderAccess(input: {
-    readonly userId: string
-    readonly rootItemId: string
-    readonly currentItemId?: string | null
-  }): Promise<DrivePublishedAssetValue> {
-    return this.resolveOwnerRenderAccess(input)
   }
 
   async getShareBrowserSnapshot(input: {
@@ -1188,40 +887,30 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
-  async createDownloadUrlForShareBrowserItem(input: {
-    readonly shareId: string
-    readonly itemId?: string | null
-    readonly password?: string
-    readonly cookie?: string
-    readonly accessCookie?: string
-  }): Promise<{ readonly url: string; readonly fileName: string }> {
-    const share = await this.resolvePublicShare({
-      shareId: input.shareId,
-      password: input.password,
-      cookie: input.cookie ?? input.accessCookie,
-    })
-    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
-    const storageKey = this.requireActiveFileStorage(current)
-    const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
-    return { url: download.url, fileName: current.name }
-  }
-
   async openShareBrowserItemDownload(input: {
     readonly shareId: string
     readonly itemId?: string | null
     readonly password?: string
     readonly cookie?: string
     readonly accessCookie?: string
-  }): Promise<DriveBrowserDownloadResult> {
+  }): Promise<DriveBrowserTransferResult> {
     const share = await this.resolvePublicShare({
       shareId: input.shareId,
       password: input.password,
       cookie: input.cookie ?? input.accessCookie,
     })
     const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    if (current.type === DRIVE_ITEM_TYPE.folder) {
+      return {
+        kind: "zip",
+        filename: `${current.name}.zip`,
+        entries: await this.createFolderZipEntries(share.ownerId, current.id),
+      }
+    }
     const storageKey = this.requireActiveFileStorage(current)
     const object = await this.storage.getObjectStream({ key: storageKey })
     return {
+      kind: "file",
       stream: object.stream,
       fileName: current.name,
       size: object.size ?? current.size,
@@ -1229,23 +918,33 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
-  async createFolderZipEntriesForShareBrowserItem(input: {
+  async resolveShareRenderAccess(input: {
     readonly shareId: string
     readonly itemId?: string | null
     readonly password?: string
     readonly cookie?: string
     readonly accessCookie?: string
-  }): Promise<DriveFolderZipBrowserResult> {
-    const share = await this.resolvePublicShare({
+  }): Promise<DrivePublicAccessResult<DriveRenderedAssetValue>> {
+    const access = await this.resolvePublicShareAccess({
       shareId: input.shareId,
       password: input.password,
       cookie: input.cookie ?? input.accessCookie,
     })
-    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
-    if (current.type !== DRIVE_ITEM_TYPE.folder) throw new NotFoundException("文件未找到")
+    if (access.status !== "ok") return access
+    const { current } = await this.resolveShareBrowserCurrent(access.value, input.itemId)
+    const storageKey = this.requireActiveFileStorage(current)
+    if (!isHtmlDriveItem(current.name, current.mimeType)) {
+      throw new BadRequestException("只能访问 HTML 文件。")
+    }
+    const object = await this.storage.getObjectStream({ key: storageKey })
     return {
-      filename: `${current.name}.zip`,
-      entries: await this.createFolderZipEntries(share.ownerId, current.id),
+      status: "ok",
+      value: {
+        stream: object.stream,
+        size: object.size ?? current.size,
+        contentType: "text/html; charset=utf-8",
+      },
+      ...(access.cookie ? { cookie: access.cookie } : {}),
     }
   }
 
@@ -1305,63 +1004,6 @@ export class DriveService implements OnApplicationBootstrap {
     return result.value
   }
 
-  async createDownloadUrlForShare(input: {
-    readonly shareId: string
-    readonly password?: string
-    readonly cookie?: string
-  }): Promise<{ readonly url: string }> {
-    const share = await this.resolvePublicShare(input)
-    if (share.type !== "file" || !share.storageKey) throw new NotFoundException("文件未找到")
-    const download = await this.storage.createDownloadUrl({ key: share.storageKey, filename: share.item.name })
-    return { url: download.url }
-  }
-
-  async listPublicFolderChildren(input: {
-    readonly shareId: string
-    readonly password?: string
-    readonly cookie?: string
-  }): Promise<{ readonly item: DriveItemDto; readonly children: DriveItemDto[] }> {
-    const share = await this.resolvePublicShare(input)
-    if (share.type !== "folder") throw new NotFoundException("文件未找到")
-    const { items: children } = await this.listActiveChildrenPage(share.ownerId, share.item.id)
-    return { item: share.item, children: children.map(toDriveItemDto) }
-  }
-
-  async createDownloadUrlForShareChild(input: {
-    readonly shareId: string
-    readonly itemId: string
-    readonly password?: string
-    readonly cookie?: string
-  }): Promise<{ readonly url: string }> {
-    const share = await this.resolvePublicShare(input)
-    if (share.type !== "folder") throw new NotFoundException("文件未找到")
-    const child = await this.prisma.driveItem.findFirst({
-      where: {
-        id: input.itemId,
-        userId: share.ownerId,
-        type: DRIVE_ITEM_TYPE.file,
-        storageStatus: DRIVE_STORAGE_STATUS.active,
-        deletedAt: null,
-      },
-      include: driveItemWithShares,
-    })
-    if (!child || !child.storageKey || !await this.isDescendantOf(child.id, share.item.id)) {
-      throw new NotFoundException("文件未找到")
-    }
-    const download = await this.storage.createDownloadUrl({ key: child.storageKey, filename: child.name })
-    return { url: download.url }
-  }
-
-  async createFolderZipEntriesForShare(input: {
-    readonly shareId: string
-    readonly password?: string
-    readonly cookie?: string
-  }): Promise<DriveFolderZipEntry[]> {
-    const share = await this.resolvePublicShare(input)
-    if (share.type !== "folder") throw new NotFoundException("文件未找到")
-    return this.createFolderZipEntries(share.ownerId, share.item.id)
-  }
-
   async listAdminItems(options: { pagination: PaginationQuery; filters: DriveAdminFilters }): Promise<PaginatedResponse<DriveAdminItemDto>> {
     const where = buildAdminWhere(options.filters)
     const [data, total] = await this.prisma.$transaction([
@@ -1416,18 +1058,13 @@ export class DriveService implements OnApplicationBootstrap {
     return { expired: sessions.length }
   }
 
-  async backfillLegacyDriveAccessProtection(now = new Date()): Promise<{ readonly shares: number; readonly publications: number }> {
+  async backfillLegacyDriveAccessProtection(now = new Date()): Promise<{ readonly shares: number }> {
     const legacyShares = await this.prisma.driveShare.findMany({
       where: { enabled: true, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
       select: { id: true },
     })
-    const legacyPublications = await this.prisma.drivePublication.findMany({
-      where: { status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
-      select: { id: true },
-    })
 
     let shares = 0
-    let publications = 0
     for (const share of legacyShares) {
       const material = await createDrivePasswordMaterial(DRIVE_DEFAULT_ACCESS_SETTINGS, this.accessSecret, now)
       const result = await this.prisma.driveShare.updateMany({
@@ -1436,16 +1073,8 @@ export class DriveService implements OnApplicationBootstrap {
       })
       if (result.count === 1) shares += 1
     }
-    for (const publication of legacyPublications) {
-      const material = await createDrivePasswordMaterial(DRIVE_DEFAULT_ACCESS_SETTINGS, this.accessSecret, now)
-      const result = await this.prisma.drivePublication.updateMany({
-        where: { id: publication.id, status: DRIVE_PUBLICATION_STATUS.active, passwordEnabled: false, passwordHash: null, accessSettingsAppliedAt: null },
-        data: toDrivePasswordUpdateData(material, now),
-      })
-      if (result.count === 1) publications += 1
-    }
 
-    return { shares, publications }
+    return { shares }
   }
 
   private async resolveReorganizationMoves(
@@ -1563,17 +1192,22 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async resolveOwnedBrowserCurrent(input: {
     readonly userId: string
-    readonly rootItemId: string
-    readonly currentItemId?: string | null
+    readonly itemId: string
   }): Promise<{ readonly root: DriveItemRecordWithStorage; readonly current: DriveItemRecordWithStorage }> {
-    const root = await this.requireOwnedItem(input.userId, input.rootItemId) as DriveItemRecordWithStorage
-    this.assertActiveBrowserItem(root)
-    if (!input.currentItemId || input.currentItemId === root.id) return { root, current: root }
-
-    const current = await this.requireOwnedItem(input.userId, input.currentItemId) as DriveItemRecordWithStorage
+    const current = await this.requireOwnedItem(input.userId, input.itemId) as DriveItemRecordWithStorage
     this.assertActiveBrowserItem(current)
-    if (!await this.isDescendantOf(current.id, root.id)) throw new NotFoundException("文件未找到")
+    const root = await this.findOwnerBrowserRoot(input.userId, current)
     return { root, current }
+  }
+
+  private async findOwnerBrowserRoot(userId: string, item: DriveItemRecordWithStorage): Promise<DriveItemRecordWithStorage> {
+    let cursor = item
+    while (cursor.parentId) {
+      const parent = await this.findActiveDriveItem(userId, cursor.parentId)
+      if (!parent) throw new NotFoundException("文件未找到")
+      cursor = parent
+    }
+    return cursor
   }
 
   private async resolveShareBrowserCurrent(
@@ -1675,8 +1309,8 @@ export class DriveService implements OnApplicationBootstrap {
       return buildDriveBrowserPreview({ item, route, text: preview.text, html, truncated: preview.truncated })
     }
     if (shouldCreateDriveBrowserImagePreview(kind)) {
-      const download = await this.storage.createDownloadUrl({ key: storageKey, filename: current.name })
-      return buildDriveBrowserPreview({ item, route, imageUrl: download.url })
+      const imageUrl = buildDriveBrowserItemDto({ item, route }).downloadUrl
+      return buildDriveBrowserPreview({ item, route, imageUrl })
     }
     return buildDriveBrowserPreview({ item, route })
   }
@@ -1827,223 +1461,6 @@ export class DriveService implements OnApplicationBootstrap {
     throw new Error("Unable to create unique drive share id.")
   }
 
-  private async findOrCreatePublication(
-    userId: string,
-    sourceItemId: string,
-    type: string,
-    name: string,
-    material: DrivePasswordMaterial,
-  ): Promise<DrivePublicationRecord> {
-    const activeSourceWhere = { userId, sourceItemId, type, status: DRIVE_PUBLICATION_STATUS.active }
-    const existing = await this.prisma.drivePublication.findFirst({ where: activeSourceWhere })
-    if (existing) return existing
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      try {
-        return await this.prisma.drivePublication.create({
-          data: {
-            userId,
-            sourceItemId,
-            type,
-            name,
-            status: DRIVE_PUBLICATION_STATUS.active,
-            publishId: createDrivePublishId(),
-            ...toDrivePasswordUpdateData(material),
-          },
-        })
-      } catch (error) {
-        if (!isUniqueConstraintError(error)) throw error
-        const racedPublication = await this.prisma.drivePublication.findFirst({ where: activeSourceWhere })
-        if (racedPublication) return racedPublication
-      }
-    }
-    throw new Error("Unable to create unique drive publish id.")
-  }
-
-  private async createDeploymentFromAssets(
-    userId: string,
-    publicationId: string,
-    publicAppUrl: string,
-    assets: readonly PublicationSourceAsset[],
-    material?: DrivePasswordMaterial,
-  ): Promise<DrivePublicationDto> {
-    const publication = await this.prisma.drivePublication.findFirst({ where: { id: publicationId, userId } })
-    if (!publication) throw new NotFoundException("发布不存在。")
-    const previousDeploymentId = publication.currentDeploymentId
-    const previousAssets = previousDeploymentId
-      ? await this.prisma.drivePublicationAsset.findMany({
-        where: { publicationId, deploymentId: previousDeploymentId },
-        select: { storageKey: true },
-      })
-      : []
-    const deployment = await this.prisma.drivePublicationDeployment.create({
-      data: { publicationId, status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.pending },
-    })
-    const copiedStorageKeys: string[] = []
-
-    try {
-      const assetRows: Prisma.DrivePublicationAssetCreateManyInput[] = []
-      const seenPaths = new Set<string>()
-      for (const asset of assets) {
-        const relativePath = normalizePublicationRelativePath(asset.relativePath)
-        const pathKey = relativePath.toLowerCase()
-        if (seenPaths.has(pathKey)) throw new BadRequestException("站点文件路径重复。")
-        seenPaths.add(pathKey)
-        const storageKey = drivePublicationStorageKey({ publicationId, deploymentId: deployment.id, relativePath })
-        await this.storage.copyObject({
-          fromKey: asset.sourceStorageKey,
-          toKey: storageKey,
-          contentType: asset.contentType,
-        })
-        copiedStorageKeys.push(storageKey)
-        assetRows.push({
-          publicationId,
-          deploymentId: deployment.id,
-          sourceItemId: asset.sourceItemId,
-          relativePath,
-          storageKey,
-          contentType: asset.contentType,
-          size: asset.size,
-        })
-      }
-
-      const updated = await this.prisma.$transaction(async (tx) => {
-        await tx.drivePublicationAsset.createMany({ data: assetRows })
-        await tx.drivePublicationDeployment.update({
-          where: { id: deployment.id },
-          data: { status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.active, activatedAt: new Date() },
-        })
-        if (previousDeploymentId) {
-          await tx.drivePublicationDeployment.update({
-            where: { id: previousDeploymentId },
-            data: { status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.superseded },
-          })
-        }
-        return tx.drivePublication.update({
-          where: { id: publicationId },
-          data: {
-            currentDeploymentId: deployment.id,
-            status: DRIVE_PUBLICATION_STATUS.active,
-            ...(material ? toDrivePasswordUpdateData(material) : {}),
-          },
-          include: { sourceItem: { select: { deletedAt: true } } },
-        })
-      })
-      if (previousDeploymentId && previousAssets.length > 0) {
-        await this.cleanupSupersededPublicationObjects({
-          publicationId,
-          deploymentId: previousDeploymentId,
-          replacementDeploymentId: deployment.id,
-          storageKeys: previousAssets.map((asset) => asset.storageKey),
-        })
-      }
-      return toDrivePublicationDto(updated, publicAppUrl, this.decryptStoredPassword(updated.passwordEncrypted))
-    } catch (error) {
-      await this.cleanupCopiedPublicationObjects({
-        publicationId,
-        deploymentId: deployment.id,
-        storageKeys: copiedStorageKeys,
-        failure: error,
-      })
-      const failedAt = new Date()
-      await this.prisma.$transaction([
-        this.prisma.drivePublicationDeployment.update({
-          where: { id: deployment.id },
-          data: {
-            status: DRIVE_PUBLICATION_DEPLOYMENT_STATUS.failed,
-            error: formatAuditError(error) || "Publication failed.",
-          },
-        }),
-        ...(publication.currentDeploymentId
-          ? []
-          : [this.prisma.drivePublication.update({
-            where: { id: publicationId },
-            data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: failedAt },
-          })]),
-      ])
-      throw error
-    }
-  }
-
-  private async cleanupSupersededPublicationObjects(input: {
-    readonly publicationId: string
-    readonly deploymentId: string
-    readonly replacementDeploymentId: string
-    readonly storageKeys: readonly string[]
-  }): Promise<void> {
-    let failed = false
-    for (const storageKey of input.storageKeys) {
-      try {
-        await this.storage.deleteObject(storageKey)
-      } catch (error) {
-        failed = true
-        this.logger.warn({
-          publicationId: input.publicationId,
-          deploymentId: input.deploymentId,
-          replacementDeploymentId: input.replacementDeploymentId,
-          storageKey,
-          cleanupErrorName: error instanceof Error ? error.name : typeof error,
-          cleanupErrorMessage: formatAuditError(error),
-        }, "Drive superseded publication object cleanup failed")
-      }
-    }
-    if (failed) return
-
-    try {
-      await this.prisma.drivePublicationAsset.deleteMany({
-        where: { publicationId: input.publicationId, deploymentId: input.deploymentId },
-      })
-    } catch (error) {
-      this.logger.warn({
-        publicationId: input.publicationId,
-        deploymentId: input.deploymentId,
-        replacementDeploymentId: input.replacementDeploymentId,
-        cleanupErrorName: error instanceof Error ? error.name : typeof error,
-        cleanupErrorMessage: formatAuditError(error),
-      }, "Drive superseded publication asset row cleanup failed")
-    }
-  }
-
-  private async cleanupCopiedPublicationObjects(input: {
-    readonly publicationId: string
-    readonly deploymentId: string
-    readonly storageKeys: readonly string[]
-    readonly failure: unknown
-  }): Promise<void> {
-    for (const storageKey of input.storageKeys) {
-      try {
-        await this.storage.deleteObject(storageKey)
-      } catch (error) {
-        this.logger.warn({
-          publicationId: input.publicationId,
-          deploymentId: input.deploymentId,
-          storageKey,
-          failureName: input.failure instanceof Error ? input.failure.name : typeof input.failure,
-          failureMessage: formatAuditError(input.failure),
-          cleanupErrorName: error instanceof Error ? error.name : typeof error,
-          cleanupErrorMessage: formatAuditError(error),
-        }, "Drive publication copied object cleanup failed")
-      }
-    }
-  }
-
-  private publicationAuditDetail(
-    userId: string,
-    itemId: string | null,
-    publication: DrivePublicationDto,
-  ): Record<string, unknown> {
-    return {
-      userId,
-      itemId,
-      publicationId: publication.id,
-      publishId: publication.publishId,
-      type: publication.type,
-      currentDeploymentId: publication.currentDeploymentId,
-      passwordEnabled: publication.passwordEnabled,
-      expiresAt: publication.expiresAt,
-    }
-  }
-
   private async recordDriveAudit(input: {
     readonly userId: string
     readonly action: string
@@ -2069,60 +1486,6 @@ export class DriveService implements OnApplicationBootstrap {
       select: { email: true },
     })
     return user?.email ?? userId
-  }
-
-  private async collectPublicationSiteFiles(userId: string, rootId: string): Promise<PublicationSourceAsset[]> {
-    const result: PublicationSourceAsset[] = []
-    const queue: Array<{ readonly parentId: string; readonly prefix: string; readonly depth: number }> = [{ parentId: rootId, prefix: "", depth: 0 }]
-    const seenPaths = new Set<string>()
-    let pathCount = 0
-    let totalBytes = 0n
-
-    while (queue.length > 0) {
-      const current = queue.shift()!
-      if (current.depth > DRIVE_SITE_PUBLICATION_MAX_DEPTH) {
-        throw new BadRequestException(`站点文件夹层级最多 ${DRIVE_SITE_PUBLICATION_MAX_DEPTH} 层。`)
-      }
-      const remainingPaths = DRIVE_SITE_PUBLICATION_MAX_PATHS - pathCount
-      if (remainingPaths <= 0) throw new BadRequestException(`站点路径数量过多，最多发布 ${DRIVE_SITE_PUBLICATION_MAX_PATHS} 个文件或文件夹。`)
-      const children = await this.prisma.driveItem.findMany({
-        where: { userId, parentId: current.parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
-        orderBy: [{ type: "asc" }, { name: "asc" }],
-        take: remainingPaths + 1,
-      })
-      if (children.length > remainingPaths) {
-        throw new BadRequestException(`站点路径数量过多，最多发布 ${DRIVE_SITE_PUBLICATION_MAX_PATHS} 个文件或文件夹。`)
-      }
-      pathCount += children.length
-      for (const child of children) {
-        const relativePath = current.prefix ? `${current.prefix}/${child.name}` : child.name
-        const normalized = normalizePublicationRelativePath(relativePath)
-        if (child.type === DRIVE_ITEM_TYPE.folder) {
-          queue.push({ parentId: child.id, prefix: normalized, depth: current.depth + 1 })
-          continue
-        }
-        if (!child.storageKey) continue
-        if (result.length >= DRIVE_SITE_PUBLICATION_MAX_FILES) {
-          throw new BadRequestException(`站点文件数量过多，最多发布 ${DRIVE_SITE_PUBLICATION_MAX_FILES} 个文件。`)
-        }
-        totalBytes += child.size
-        if (totalBytes > DRIVE_SITE_PUBLICATION_MAX_TOTAL_BYTES) {
-          throw new BadRequestException("站点文件总大小超过 512MB。")
-        }
-        const pathKey = normalized.toLowerCase()
-        if (seenPaths.has(pathKey)) throw new BadRequestException("站点文件路径重复。")
-        seenPaths.add(pathKey)
-        result.push({
-          sourceItemId: child.id,
-          sourceStorageKey: child.storageKey,
-          relativePath: normalized,
-          contentType: child.mimeType,
-          size: child.size,
-        })
-      }
-    }
-
-    return result
   }
 
   private async createFolderZipEntries(userId: string, folderId: string): Promise<DriveFolderZipEntry[]> {
@@ -2152,33 +1515,12 @@ export class DriveService implements OnApplicationBootstrap {
     return decryptDrivePassword(value, this.accessSecret)
   }
 
-  private async findActivePublicationsReferencingItems(userId: string, itemIds: readonly string[]): Promise<DrivePublicationWithImpactAssets[]> {
-    if (itemIds.length === 0) return []
-    const publications = await this.prisma.drivePublication.findMany({
-      where: {
-        userId,
-        status: DRIVE_PUBLICATION_STATUS.active,
-      },
-      include: {
-        sourceItem: { select: { deletedAt: true } },
-        assets: { where: { sourceItemId: { in: [...itemIds] } }, select: { deploymentId: true } },
-      },
-      orderBy: { updatedAt: "desc" },
-    })
-    return publications.filter((publication) => (
-      itemIds.includes(publication.sourceItemId ?? "")
-      || publication.assets.some((asset) => asset.deploymentId === publication.currentDeploymentId)
-    ))
-  }
-
   private async deleteItemInternal(input: {
     readonly itemId: string
     readonly userId?: string
     readonly actorEmail: string
     readonly ipAddress: string
     readonly admin: boolean
-    readonly disablePublications?: boolean
-    readonly publicAppUrl?: string
   }): Promise<void> {
     const root = input.userId
       ? await this.requireOwnedItem(input.userId, input.itemId)
@@ -2191,9 +1533,6 @@ export class DriveService implements OnApplicationBootstrap {
     let cancelledUploadSessions = 0
     let releasedReservedBytes = 0n
     let pendingUploadCleanup: Array<{ readonly itemId: string; readonly storageKey: string }> = []
-    const impactedPublications = input.disablePublications
-      ? await this.findActivePublicationsReferencingItems(root.userId, itemIds)
-      : []
     await this.prisma.$transaction(async (tx) => {
       const pendingUploadSessions = await tx.driveUploadSession.findMany({
         where: { userId: root.userId, itemId: { in: itemIds }, status: DRIVE_UPLOAD_STATUS.pending },
@@ -2211,12 +1550,6 @@ export class DriveService implements OnApplicationBootstrap {
         await tx.driveUploadSession.updateMany({
           where: { id: { in: pendingSessionIds }, userId: root.userId, status: DRIVE_UPLOAD_STATUS.pending },
           data: { status: DRIVE_UPLOAD_STATUS.cancelled, failedAt: deletedAt },
-        })
-      }
-      if (impactedPublications.length > 0) {
-        await tx.drivePublication.updateMany({
-          where: { id: { in: impactedPublications.map((publication) => publication.id) } },
-          data: { status: DRIVE_PUBLICATION_STATUS.disabled, disabledAt: deletedAt },
         })
       }
       await tx.driveItem.updateMany({
@@ -2424,21 +1757,6 @@ function isMarkdownDriveItem(name: string, mimeType: string | null): boolean {
     || lowerName.endsWith(".markdown")
     || normalizedMimeType === "text/markdown"
     || normalizedMimeType === "text/x-markdown"
-}
-
-function resolvePublicationContentType(relativePath: string, stored: string | null | undefined): string {
-  const lowerPath = relativePath.toLowerCase()
-  if (lowerPath.endsWith(".html") || lowerPath.endsWith(".htm")) return "text/html; charset=utf-8"
-  if (lowerPath.endsWith(".css")) return "text/css; charset=utf-8"
-  if (lowerPath.endsWith(".js") || lowerPath.endsWith(".mjs")) return "application/javascript; charset=utf-8"
-  if (lowerPath.endsWith(".json")) return "application/json; charset=utf-8"
-  return stored || "application/octet-stream"
-}
-
-function isPublicationPasswordPagePath(type: "page" | "site", relativePath: string): boolean {
-  if (type === "page") return relativePath === DRIVE_PUBLICATION_INDEX_PATH
-  const lowerPath = relativePath.toLowerCase()
-  return lowerPath === DRIVE_PUBLICATION_INDEX_PATH || lowerPath.endsWith(".html") || lowerPath.endsWith(".htm")
 }
 
 function toDrivePublicShareValue(share: {

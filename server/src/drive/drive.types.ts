@@ -1,9 +1,6 @@
 import {
-  buildDrivePublicationUrl,
-  buildDriveUrlWithPassword,
   type DriveFolderUploadPrepareFileInput,
   type DriveItemDto,
-  type DrivePublicationDto,
   type DriveStorageStatus,
 } from "@synapse/shared"
 
@@ -49,23 +46,6 @@ export type DriveItemRecord = {
   readonly shares?: readonly { readonly id?: string; readonly enabled: boolean }[]
 }
 
-export type DrivePublicationRecord = {
-  readonly id: string
-  readonly publishId: string
-  readonly type: string
-  readonly name: string
-  readonly status: string
-  readonly sourceItemId: string | null
-  readonly currentDeploymentId: string | null
-  readonly passwordEnabled?: boolean
-  readonly passwordHash?: string | null
-  readonly passwordEncrypted?: string | null
-  readonly expiresAt?: Date | null
-  readonly createdAt: Date
-  readonly updatedAt: Date
-  readonly sourceItem?: { readonly deletedAt: Date | null } | null
-}
-
 export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
   return {
     id: item.id,
@@ -77,29 +57,6 @@ export function toDriveItemDto(item: DriveItemRecord): DriveItemDto {
     storageStatus: item.storageStatus as DriveStorageStatus,
     shared: item.shares?.some((share) => share.enabled) ?? false,
     activeShareId: item.shares?.find((share) => share.enabled)?.id ?? null,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString(),
-  }
-}
-
-export function toDrivePublicationDto(item: DrivePublicationRecord, publicAppUrl: string, password: string | null = null): DrivePublicationDto {
-  const type = item.type === "site" ? "site" : "page"
-  const url = buildDrivePublicationUrl({ publicAppUrl, publishId: item.publishId, type })
-  const passwordEnabled = item.passwordEnabled ?? false
-  return {
-    id: item.id,
-    publishId: item.publishId,
-    type,
-    name: item.name,
-    status: item.status === "active" && item.currentDeploymentId ? "active" : "disabled",
-    sourceItemId: item.sourceItemId,
-    sourceDeleted: item.sourceItem?.deletedAt !== null && item.sourceItem?.deletedAt !== undefined,
-    url,
-    urlWithPassword: buildDriveUrlWithPassword(url, passwordEnabled ? password : null),
-    passwordEnabled,
-    password: passwordEnabled ? password : null,
-    expiresAt: item.expiresAt?.toISOString() ?? null,
-    currentDeploymentId: item.currentDeploymentId,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   }

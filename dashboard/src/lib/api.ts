@@ -729,22 +729,13 @@ function driveBrowserQuerySuffix(
 }
 
 export const driveBrowserApi = {
-  getOwnerRoot: (
-    rootItemId: string,
-    surface: DriveBrowserSurface = 'standalone',
-    options: DriveBrowserChildrenOptions = {}
-  ) =>
-    request<DriveBrowserSnapshotDto>(
-      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}${driveBrowserQuerySuffix(surface, options)}`
-    ),
-  getOwnerChild: (
-    rootItemId: string,
+  getOwnerItem: (
     itemId: string,
     surface: DriveBrowserSurface = 'standalone',
     options: DriveBrowserChildrenOptions = {}
   ) =>
     request<DriveBrowserSnapshotDto>(
-      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(rootItemId)}/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix(surface, options)}`
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}${driveBrowserQuerySuffix(surface, options)}`
     ),
   getConsoleRoot: (options: DriveBrowserChildrenOptions = {}) =>
     request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root${driveBrowserQuerySuffix('standalone', options)}`),

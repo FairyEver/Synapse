@@ -13,7 +13,7 @@ import {
   LoaderCircle,
   MoreHorizontal,
   RefreshCw,
-  RotateCw,
+  Search,
   Upload,
   X,
 } from "lucide-react"
@@ -21,9 +21,7 @@ import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveAccessSettingsInput,
   type DriveBrowserChildrenPageDto,
-  type DriveDeleteImpactDto,
   type DriveItemDto,
-  type DrivePublicationDto,
   type DrivePublicLinksPageInput,
   type DriveShareDto,
   type DriveShareListItemDto,
@@ -53,7 +51,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -92,7 +89,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -122,18 +118,12 @@ type DriveUsageState =
   | { readonly status: "ready"; readonly usage: DriveUsageDto }
   | { readonly status: "error"; readonly usage: null }
 
-type DriveItemPublicationActions = {
-  readonly page: DrivePublicationDto | null
-  readonly site: DrivePublicationDto | null
-}
-
 type DriveAccessSettingsTarget = {
-  readonly kind: "share" | "page" | "site"
+  readonly kind: "share"
   readonly item: DriveItemDto
 }
 
-type DriveAccessResultState = Pick<DrivePublicationDto, "url" | "urlWithPassword" | "passwordEnabled" | "password" | "expiresAt">
-type DrivePublicationSuccessState = Pick<DrivePublicationDto, "name" | "type"> & DriveAccessResultState
+type DriveAccessResultState = Pick<DriveShareDto, "url" | "urlWithPassword" | "passwordEnabled" | "password" | "expiresAt">
 type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
   readonly url: DriveShareDto["url"]
   readonly urlWithPassword: DriveShareDto["urlWithPassword"]
@@ -168,22 +158,9 @@ function driveMoveTreeKey(parentId: string | null): string {
   return parentId ?? DRIVE_ROOT_PARENT_VALUE
 }
 
-async function listAllDrivePublications(): Promise<DrivePublicationDto[]> {
-  const bridge = requireSynapseBridge()
-  const publications: DrivePublicationDto[] = []
-  let pageInput: DrivePublicLinksPageInput = { offset: 0, limit: DRIVE_PUBLIC_LINKS_FULL_LOAD_PAGE_SIZE }
-  while (true) {
-    const page = await bridge.account.listDrivePublications(pageInput)
-    publications.push(...page.items)
-    if (!page.page.hasMore || page.page.nextOffset === null) return publications
-    pageInput = { offset: page.page.nextOffset, limit: DRIVE_PUBLIC_LINKS_FULL_LOAD_PAGE_SIZE }
-  }
-}
-
 function DriveModule() {
   const { pendingAction, startLogin, state: accountState } = useAccount()
   const [items, setItems] = useState<DriveItemDto[]>([])
-  const [publications, setPublications] = useState<DrivePublicationDto[]>([])
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
   const [loading, setLoading] = useState(false)
   const [usageState, setUsageState] = useState<DriveUsageState>({ status: "idle", usage: null })
@@ -193,10 +170,7 @@ function DriveModule() {
   const [moveTarget, setMoveTarget] = useState<DriveItemDto | null>(null)
   const [moveParentId, setMoveParentId] = useState<string>("root")
   const [deleteTarget, setDeleteTarget] = useState<DriveItemDto | null>(null)
-  const [deleteImpact, setDeleteImpact] = useState<DriveDeleteImpactDto | null>(null)
-  const [disablePublicationsOnDelete, setDisablePublicationsOnDelete] = useState(false)
   const [publicLinksOpen, setPublicLinksOpen] = useState(false)
-  const [publicationSuccess, setPublicationSuccess] = useState<DrivePublicationSuccessState | null>(null)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [accessSettingsTarget, setAccessSettingsTarget] = useState<DriveAccessSettingsTarget | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -221,12 +195,6 @@ function DriveModule() {
       const bridge = requireSynapseBridge()
       const nextItems = await bridge.account.listDriveItems({ parentId })
       setItems(nextItems)
-      try {
-        setPublications(await listAllDrivePublications())
-      } catch {
-        setPublications([])
-        toast("发布状态加载失败")
-      }
     } catch (rawError) {
       setError(driveLoadError(rawError))
     } finally {
@@ -255,7 +223,6 @@ function DriveModule() {
   useEffect(() => {
     if (!accountAuthenticated) {
       setItems([])
-      setPublications([])
       setUsageState({ status: "idle", usage: null })
       setLoading(false)
       setOpeningFolderId(null)
@@ -273,18 +240,11 @@ function DriveModule() {
   const actionsDisabled = !accountAuthenticated || loading || openingFolderId !== null || error !== null
   const uploadActionsDisabled = actionsDisabled || uploading
 
-  const activePublicationsBySourceItemId = useMemo(() => {
-    const result = new Map<string, DriveItemPublicationActions>()
-    for (const publication of publications) {
-      if (publication.status !== "active" || publication.sourceDeleted || !publication.sourceItemId) continue
-      const current = result.get(publication.sourceItemId) ?? { page: null, site: null }
-      result.set(publication.sourceItemId, {
-        page: publication.type === "page" ? publication : current.page,
-        site: publication.type === "site" ? publication : current.site,
-      })
-    }
-    return result
-  }, [publications])
+  const visibleItems = useMemo(() => {
+    const keyword = query.trim().toLowerCase()
+    if (!keyword) return items
+    return items.filter((item) => item.name.toLowerCase().includes(keyword))
+  }, [items, query])
 
   const openFolder = useCallback(async (item: DriveItemDto) => {
     if (item.type !== "folder") return
@@ -425,13 +385,6 @@ function DriveModule() {
 
   const handleDelete = useCallback(async (item: DriveItemDto) => {
     setDeleteTarget(item)
-    setDeleteImpact(null)
-    setDisablePublicationsOnDelete(false)
-    try {
-      setDeleteImpact(await requireSynapseBridge().account.getDriveDeleteImpact({ itemId: item.id }))
-    } catch (rawError) {
-      toast(errorMessage(rawError, "删除影响加载失败"))
-    }
   }, [])
 
   const confirmDelete = useCallback(async () => {
@@ -440,12 +393,9 @@ function DriveModule() {
     try {
       await requireSynapseBridge().account.deleteDriveItem({
         itemId: deleteTarget.id,
-        disablePublications: disablePublicationsOnDelete,
       })
       toast("已删除")
       setDeleteTarget(null)
-      setDeleteImpact(null)
-      setDisablePublicationsOnDelete(false)
       await loadItems()
       await loadDriveUsage()
     } catch (rawError) {
@@ -453,7 +403,7 @@ function DriveModule() {
     } finally {
       setSubmitting(false)
     }
-  }, [deleteTarget, disablePublicationsOnDelete, loadDriveUsage, loadItems])
+  }, [deleteTarget, loadDriveUsage, loadItems])
 
   const handleShare = useCallback((item: DriveItemDto) => {
     setAccessSettingsTarget({ kind: "share", item })
@@ -475,55 +425,26 @@ function DriveModule() {
     setSubmitting(true)
     try {
       const bridge = requireSynapseBridge()
-      if (target.kind === "share") {
-        const share = await bridge.account.shareDriveItem({
-          itemId: target.item.id,
-          ...settings,
-        })
-        setAccessSettingsTarget(null)
-        setShareSuccess({
-          name: target.item.name,
-          type: target.item.type,
-          url: share.url,
-          urlWithPassword: share.urlWithPassword,
-          passwordEnabled: share.passwordEnabled,
-          password: share.password,
-          expiresAt: share.expiresAt,
-        })
-        afterCreate = async () => {
-          await copySharedUrlAfterShare(getDriveAccessUrl(share))
-          await reloadDriveItemsAfterAccessChange(loadItems)
-        }
-      } else if (target.kind === "page") {
-        const publication = await bridge.account.publishDrivePage({
-          itemId: target.item.id,
-          ...settings,
-        })
-        setAccessSettingsTarget(null)
-        setPublicationSuccess(publication)
-        afterCreate = async () => {
-          await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
-          await reloadDriveItemsAfterAccessChange(loadItems)
-        }
-      } else {
-        const publication = await bridge.account.publishDriveSite({
-          itemId: target.item.id,
-          ...settings,
-        })
-        setAccessSettingsTarget(null)
-        setPublicationSuccess(publication)
-        afterCreate = async () => {
-          await copyPublishedUrlAfterPublish(getDriveAccessUrl(publication))
-          await reloadDriveItemsAfterAccessChange(loadItems)
-        }
+      const share = await bridge.account.shareDriveItem({
+        itemId: target.item.id,
+        ...settings,
+      })
+      setAccessSettingsTarget(null)
+      setShareSuccess({
+        name: target.item.name,
+        type: target.item.type,
+        url: share.url,
+        urlWithPassword: share.urlWithPassword,
+        passwordEnabled: share.passwordEnabled,
+        password: share.password,
+        expiresAt: share.expiresAt,
+      })
+      afterCreate = async () => {
+        await copySharedUrlAfterShare(getDriveAccessUrl(share))
+        await reloadDriveItemsAfterAccessChange(loadItems)
       }
     } catch (rawError) {
-      const fallback = target.kind === "share"
-        ? "分享失败"
-        : target.kind === "page"
-          ? "发布网页失败"
-          : "发布站点失败"
-      toast(errorMessage(rawError, fallback))
+      toast(errorMessage(rawError, "分享失败"))
     } finally {
       setSubmitting(false)
     }
@@ -539,27 +460,6 @@ function DriveModule() {
     } catch (rawError) {
       toast(errorMessage(rawError, "取消分享失败"))
     }
-  }, [loadItems])
-
-  const handlePublishPage = useCallback((item: DriveItemDto) => {
-    setAccessSettingsTarget({ kind: "page", item })
-  }, [])
-
-  const handlePublishSite = useCallback(async (item: DriveItemDto) => {
-    try {
-      const children = await requireSynapseBridge().account.listDriveItems({ parentId: item.id })
-      if (!hasRootIndexHtml(children)) {
-        toast("站点根目录需要 index.html。")
-        return
-      }
-      setAccessSettingsTarget({ kind: "site", item })
-    } catch (_rawError) {
-      toast("检查站点文件失败")
-    }
-  }, [])
-
-  const handleDisablePublication = useCallback(async (publicationId: string) => {
-    await disableDrivePublication(publicationId, loadItems)
   }, [loadItems])
 
   const content = (() => {
@@ -654,10 +554,6 @@ function DriveModule() {
         uploadDisabled={uploadActionsDisabled}
         uploadItemCount={uploadItemCount}
         uploading={uploading}
-        publicationActionsByItemId={activePublicationsBySourceItemId}
-        onPublishPage={handlePublishPage}
-        onPublishSite={handlePublishSite}
-        onDisablePublication={handleDisablePublication}
       />
     )
   })()
@@ -750,8 +646,6 @@ function DriveModule() {
             <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
               if (!open) {
                 setDeleteTarget(null)
-                setDeleteImpact(null)
-                setDisablePublicationsOnDelete(false)
               }
             }}>
               <AlertDialogContent>
@@ -760,18 +654,6 @@ function DriveModule() {
                   <AlertDialogDescription asChild>
                     <div>
                       <div>删除后无法在云盘中继续访问「{deleteTarget?.name}」。</div>
-                      {deleteImpact?.publications.length ? (
-                        <div className="mt-3 flex flex-col gap-2">
-                          <div>会影响 {deleteImpact.publications.length} 个已发布内容</div>
-                          <label className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                              checked={disablePublicationsOnDelete}
-                              onCheckedChange={(checked) => setDisablePublicationsOnDelete(checked === true)}
-                            />
-                            <span>同时取消相关发布</span>
-                          </label>
-                        </div>
-                      ) : null}
                     </div>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -784,7 +666,6 @@ function DriveModule() {
             <DrivePublicLinksDialog
               open={publicLinksOpen}
               onOpenChange={setPublicLinksOpen}
-              onPublicationDeployed={setPublicationSuccess}
               onDriveItemsChanged={loadItems}
             />
             <DriveAccessSettingsDialog
@@ -792,12 +673,6 @@ function DriveModule() {
               submitting={submitting}
               onCancel={() => setAccessSettingsTarget(null)}
               onConfirm={handleAccessSettingsConfirm}
-            />
-            <DrivePublicationSuccessDialog
-              publication={publicationSuccess}
-              onOpenChange={(open) => {
-                if (!open) setPublicationSuccess(null)
-              }}
             />
             <DriveShareSuccessDialog
               share={shareSuccess}
@@ -1146,10 +1021,6 @@ function DriveFileList({
   uploadDisabled,
   uploadItemCount,
   uploading,
-  publicationActionsByItemId,
-  onPublishPage,
-  onPublishSite,
-  onDisablePublication,
 }: {
   readonly items: readonly DriveItemDto[]
   readonly loading: boolean
@@ -1168,10 +1039,6 @@ function DriveFileList({
   readonly uploadDisabled: boolean
   readonly uploadItemCount: number | null
   readonly uploading: boolean
-  readonly publicationActionsByItemId: ReadonlyMap<string, DriveItemPublicationActions>
-  readonly onPublishPage: (item: DriveItemDto) => void
-  readonly onPublishSite: (item: DriveItemDto) => void
-  readonly onDisablePublication: (publicationId: string) => void
 }) {
   const [dragDepth, setDragDepth] = useState(0)
   const currentFolderName = path.at(-1)?.name ?? "根目录"
@@ -1248,10 +1115,6 @@ function DriveFileList({
                   onOpenItem={onOpenItem}
                   onShare={onShare}
                   onDisableShare={onDisableShare}
-                  publicationActions={publicationActionsByItemId.get(item.id) ?? { page: null, site: null }}
-                  onPublishPage={onPublishPage}
-                  onPublishSite={onPublishSite}
-                  onDisablePublication={onDisablePublication}
                 />
               ))}
             </TableBody>
@@ -1373,10 +1236,6 @@ function DriveFileListRow({
   onOpenItem,
   onShare,
   onDisableShare,
-  publicationActions,
-  onPublishPage,
-  onPublishSite,
-  onDisablePublication,
 }: {
   readonly item: DriveItemDto
   readonly opening: boolean
@@ -1387,13 +1246,9 @@ function DriveFileListRow({
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
-  readonly publicationActions: DriveItemPublicationActions
-  readonly onPublishPage: (item: DriveItemDto) => void
-  readonly onPublishSite: (item: DriveItemDto) => void
-  readonly onDisablePublication: (publicationId: string) => void
 }) {
   const isFolder = item.type === "folder"
-  const statusBadges = getDriveStatusBadges(item, publicationActions)
+  const statusBadges = getDriveStatusBadges(item)
   const canShare = canShareDriveItem(item)
 
   return (
@@ -1470,10 +1325,6 @@ function DriveFileListRow({
             onMove={onMove}
             onDelete={onDelete}
             onDisableShare={onDisableShare}
-            publicationActions={publicationActions}
-            onPublishPage={onPublishPage}
-            onPublishSite={onPublishSite}
-            onDisablePublication={onDisablePublication}
           />
         </div>
       </TableCell>
@@ -1487,25 +1338,13 @@ function DriveItemMenu({
   onMove,
   onDelete,
   onDisableShare,
-  publicationActions,
-  onPublishPage,
-  onPublishSite,
-  onDisablePublication,
 }: {
   readonly item: DriveItemDto
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
-  readonly publicationActions: DriveItemPublicationActions
-  readonly onPublishPage: (item: DriveItemDto) => void
-  readonly onPublishSite: (item: DriveItemDto) => void
-  readonly onDisablePublication: (publicationId: string) => void
 }) {
-  const pagePublication = publicationActions.page
-  const sitePublication = publicationActions.site
-  const activePublication = item.type === "folder" ? sitePublication : pagePublication
-  const hasPublicationItems = isHtmlDriveItem(item) || item.type === "folder" || Boolean(activePublication)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -1514,28 +1353,6 @@ function DriveItemMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {hasPublicationItems ? (
-          <>
-            <DropdownMenuGroup>
-              {isHtmlDriveItem(item) ? (
-                <DropdownMenuItem onClick={() => onPublishPage(item)}>
-                  {pagePublication ? "重新发布网页" : "发布网页"}
-                </DropdownMenuItem>
-              ) : null}
-              {item.type === "folder" ? (
-                <DropdownMenuItem onClick={() => onPublishSite(item)}>
-                  {sitePublication ? "重新发布站点" : "发布站点"}
-                </DropdownMenuItem>
-              ) : null}
-              {activePublication ? (
-                <DropdownMenuItem onClick={() => onDisablePublication(activePublication.id)}>
-                  取消发布
-                </DropdownMenuItem>
-              ) : null}
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-          </>
-        ) : null}
         {item.activeShareId ? (
           <>
             <DropdownMenuGroup>
@@ -1576,7 +1393,7 @@ function DriveAccessSettingsDialog({
     if (target) setSettings(DRIVE_DEFAULT_ACCESS_SETTINGS)
   }, [target])
 
-  const title = target?.kind === "share" ? "分享设置" : "发布设置"
+  const title = "分享设置"
 
   return (
     <Dialog open={target !== null} onOpenChange={(open) => {
@@ -1642,7 +1459,6 @@ function DriveAccessSettingsDialog({
   )
 }
 
-type DrivePublicLinkTab = "shares" | "publications"
 type DrivePublicLinksPageState<TItem> = {
   readonly items: TItem[]
   readonly page: DriveBrowserChildrenPageDto | null
@@ -1666,17 +1482,13 @@ function createEmptyDrivePublicLinksPageState<TItem>(): DrivePublicLinksPageStat
 function DrivePublicLinksDialog({
   open,
   onOpenChange,
-  onPublicationDeployed,
   onDriveItemsChanged,
 }: {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
-  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
   readonly onDriveItemsChanged: () => Promise<void>
 }) {
-  const [tab, setTab] = useState<DrivePublicLinkTab>("shares")
   const [shareState, setShareState] = useState<DrivePublicLinksPageState<DriveShareListItemDto>>(() => createEmptyDrivePublicLinksPageState())
-  const [publicationState, setPublicationState] = useState<DrivePublicLinksPageState<DrivePublicationDto>>(() => createEmptyDrivePublicLinksPageState())
 
   const loadShares = useCallback(async (input: { readonly offset?: number; readonly append?: boolean } = {}) => {
     const append = input.append ?? false
@@ -1707,67 +1519,17 @@ function DrivePublicLinksDialog({
     }
   }, [])
 
-  const loadPublications = useCallback(async (input: { readonly offset?: number; readonly append?: boolean } = {}) => {
-    const append = input.append ?? false
-    setPublicationState((current) => ({ ...current, loading: !append, loadingMore: append, error: null }))
-    try {
-      const result = await requireSynapseBridge().account.listDrivePublications({
-        offset: input.offset ?? 0,
-        limit: DRIVE_PUBLIC_LINKS_PAGE_SIZE,
-      })
-      setPublicationState((current) => ({
-        items: append ? [...current.items, ...result.items] : [...result.items],
-        page: result.page,
-        loading: false,
-        loadingMore: false,
-        error: null,
-        loaded: true,
-      }))
-    } catch (rawError) {
-      const message = errorMessage(rawError, "公开链接加载失败")
-      setPublicationState((current) => ({
-        ...current,
-        loading: false,
-        loadingMore: false,
-        error: message,
-        loaded: true,
-      }))
-      toast(message)
-    }
-  }, [])
-
   useEffect(() => {
     if (open) {
-      setTab("shares")
       setShareState(createEmptyDrivePublicLinksPageState<DriveShareListItemDto>())
-      setPublicationState(createEmptyDrivePublicLinksPageState<DrivePublicationDto>())
       void loadShares()
     }
   }, [loadShares, open])
 
-  const handleTabChange = useCallback((value: string) => {
-    const nextTab = value as DrivePublicLinkTab
-    setTab(nextTab)
-    if (nextTab === "publications" && !publicationState.loaded && !publicationState.loading) {
-      void loadPublications()
-    }
-    if (nextTab === "shares" && !shareState.loaded && !shareState.loading) {
-      void loadShares()
-    }
-  }, [loadPublications, loadShares, publicationState.loaded, publicationState.loading, shareState.loaded, shareState.loading])
-
-  const reloadActiveTab = useCallback(async () => {
-    if (tab === "shares") {
-      await loadShares()
-      return
-    }
-    await loadPublications()
-  }, [loadPublications, loadShares, tab])
-
   const reloadAfterPublicLinkChange = useCallback(async () => {
-    await reloadActiveTab()
+    await loadShares()
     await onDriveItemsChanged()
-  }, [onDriveItemsChanged, reloadActiveTab])
+  }, [loadShares, onDriveItemsChanged])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1775,72 +1537,38 @@ function DrivePublicLinksDialog({
         aria-describedby={undefined}
         className="max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-4xl"
       >
-        <Tabs
-          value={tab}
-          onValueChange={handleTabChange}
-          className="h-full min-h-0 max-h-[calc(100vh-2rem)] overflow-hidden"
+        <form
+          className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden"
+          onSubmit={(event) => event.preventDefault()}
         >
-          <form
-            className="flex h-full min-h-0 max-h-[calc(100vh-2rem)] flex-col overflow-hidden"
-            onSubmit={(event) => event.preventDefault()}
+          <DialogHeader
+            className="px-5 pt-5"
+            data-testid="drive-public-links-dialog-header"
           >
-            <DialogHeader
-              className="px-5 pt-5 sm:grid sm:min-h-8 sm:grid-cols-3 sm:items-start"
-              data-testid="drive-public-links-dialog-header"
-            >
-              <DialogTitle className="pr-10 sm:pr-0">公开链接</DialogTitle>
-              <div className="mt-3 sm:mt-0 sm:justify-self-center" data-testid="drive-public-links-tabs-header">
-                <TabsList>
-                  <TabsTrigger type="button" value="shares" onClick={() => handleTabChange("shares")}>分享</TabsTrigger>
-                  <TabsTrigger type="button" value="publications" onClick={() => handleTabChange("publications")}>发布</TabsTrigger>
-                </TabsList>
-              </div>
-            </DialogHeader>
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="px-5 py-4">
-                <TabsContent value="shares">
-                  <DrivePublicLinkList
-                    emptyTitle="暂无分享"
-                    error={shareState.error}
-                    loading={shareState.loading}
-                    loadingMore={shareState.loadingMore}
-                    page={shareState.page}
-                    publications={[]}
-                    shares={shareState.items}
-                    onPublicationDeployed={onPublicationDeployed}
-                    onLoadMore={async () => {
-                      if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
-                      await loadShares({ offset: shareState.page.nextOffset, append: true })
-                    }}
-                    onRetry={reloadActiveTab}
-                    onReload={reloadAfterPublicLinkChange}
-                  />
-                </TabsContent>
-                <TabsContent value="publications">
-                  <DrivePublicLinkList
-                    emptyTitle="暂无发布"
-                    error={publicationState.error}
-                    loading={publicationState.loading}
-                    loadingMore={publicationState.loadingMore}
-                    page={publicationState.page}
-                    publications={publicationState.items}
-                    shares={[]}
-                    onPublicationDeployed={onPublicationDeployed}
-                    onLoadMore={async () => {
-                      if (publicationState.page?.nextOffset === null || publicationState.page?.nextOffset === undefined) return
-                      await loadPublications({ offset: publicationState.page.nextOffset, append: true })
-                    }}
-                    onRetry={reloadActiveTab}
-                    onReload={reloadAfterPublicLinkChange}
-                  />
-                </TabsContent>
-              </div>
-            </ScrollArea>
-            <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-            </DialogFooter>
-          </form>
-        </Tabs>
+            <DialogTitle className="pr-10 sm:pr-0">公开链接</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="px-5 py-4">
+              <DrivePublicLinkList
+                emptyTitle="暂无分享"
+                error={shareState.error}
+                loading={shareState.loading}
+                loadingMore={shareState.loadingMore}
+                page={shareState.page}
+                shares={shareState.items}
+                onLoadMore={async () => {
+                  if (shareState.page?.nextOffset === null || shareState.page?.nextOffset === undefined) return
+                  await loadShares({ offset: shareState.page.nextOffset, append: true })
+                }}
+                onRetry={loadShares}
+                onReload={reloadAfterPublicLinkChange}
+              />
+            </div>
+          </ScrollArea>
+          <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )
@@ -1852,10 +1580,8 @@ function DrivePublicLinkList({
   loading,
   loadingMore,
   page,
-  publications,
   shares,
   onLoadMore,
-  onPublicationDeployed,
   onRetry,
   onReload,
 }: {
@@ -1864,37 +1590,18 @@ function DrivePublicLinkList({
   readonly loading: boolean
   readonly loadingMore: boolean
   readonly page: DriveBrowserChildrenPageDto | null
-  readonly publications: readonly DrivePublicationDto[]
   readonly shares: readonly DriveShareListItemDto[]
   readonly onLoadMore: () => Promise<void>
-  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
   readonly onRetry: () => Promise<void>
   readonly onReload: () => Promise<void>
 }) {
-  if (loading) return <DrivePublicationTableSkeleton />
+  if (loading) return <DrivePublicLinkTableSkeleton />
   if (error) return <DriveDialogErrorState message={error} onRetry={onRetry} />
-  if (publications.length === 0 && shares.length === 0) return <DriveDialogEmptyState title={emptyTitle} />
+  if (shares.length === 0) return <DriveDialogEmptyState title={emptyTitle} />
 
   return (
     <div className="grid gap-3">
-      {shares.length > 0 ? (
-        <section className="grid gap-2">
-          <h3 className="text-sm font-medium">分享</h3>
-          <DriveShareList error={null} items={shares} loading={false} onReload={onReload} />
-        </section>
-      ) : null}
-      {publications.length > 0 ? (
-        <section className="grid gap-2">
-          <h3 className="text-sm font-medium">发布</h3>
-          <DrivePublicationList
-            error={null}
-            items={publications}
-            loading={false}
-            onPublicationDeployed={onPublicationDeployed}
-            onReload={onReload}
-          />
-        </section>
-      ) : null}
+      <DriveShareList error={null} items={shares} loading={false} onReload={onReload} />
       {page?.hasMore ? (
         <div className="flex justify-center pt-1">
           <Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={() => { void onLoadMore() }}>
@@ -1907,70 +1614,6 @@ function DrivePublicLinkList({
   )
 }
 
-function DrivePublicationList({
-  error,
-  items,
-  loading,
-  onPublicationDeployed,
-  onReload,
-}: {
-  readonly error: string | null
-  readonly items: readonly DrivePublicationDto[]
-  readonly loading: boolean
-  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
-  readonly onReload: () => Promise<void>
-}) {
-  if (loading) return <DrivePublicationTableSkeleton />
-  if (error) return <DriveDialogErrorState message={error} onRetry={onReload} />
-  if (items.length === 0) return <DriveDialogEmptyState title="暂无发布" />
-
-  return (
-    <Table className="table-fixed" containerClassName="overflow-x-hidden">
-      <DrivePublicLinkTableHeader />
-      <TableBody>
-        {items.map((item) => (
-          <TableRow key={item.id}>
-            <TableCell className="min-w-0 whitespace-normal align-top">
-              <div className="grid gap-1">
-                <div className="truncate font-medium" title={item.name}>{item.name}</div>
-                <div className="truncate text-xs text-muted-foreground" title={formatDriveAccessPassword(item)}>
-                  密码 {formatDriveAccessPassword(item)}
-                </div>
-              </div>
-            </TableCell>
-            <TableCell className="min-w-0 whitespace-normal align-top">
-              <div className="grid gap-1.5">
-                <div className="flex min-w-0 flex-wrap items-center gap-1">
-                  <Badge variant="outline">{item.type === "site" ? "站点" : "网页"}</Badge>
-                  <Badge variant={item.status === "active" ? "secondary" : "outline"}>
-                    {item.status === "active" ? "已发布" : "已取消"}
-                  </Badge>
-                  <DriveSourceBadge sourceDeleted={item.sourceDeleted} />
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
-                  <span className="truncate" title={formatDriveAccessExpiresAt(item.expiresAt)}>
-                    到期 {formatDriveAccessExpiresAt(item.expiresAt)}
-                  </span>
-                  <span className="truncate" title={formatDriveDateTime(item.updatedAt)}>
-                    时间 {formatDriveDateTime(item.updatedAt)}
-                  </span>
-                </div>
-              </div>
-            </TableCell>
-            <TableCell className="align-top">
-              <DrivePublicationActions
-                item={item}
-                onPublicationDeployed={onPublicationDeployed}
-                onReload={onReload}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  )
-}
-
 function DrivePublicLinkTableHeader() {
   return (
     <TableHeader>
@@ -1980,68 +1623,6 @@ function DrivePublicLinkTableHeader() {
         <TableHead className="w-36 text-right">操作</TableHead>
       </TableRow>
     </TableHeader>
-  )
-}
-
-function DrivePublicationActions({
-  item,
-  onPublicationDeployed,
-  onReload,
-}: {
-  readonly item: DrivePublicationDto
-  readonly onPublicationDeployed: (publication: DrivePublicationSuccessState) => void
-  readonly onReload: () => Promise<void>
-}) {
-  const password = item.password
-  const active = item.status === "active"
-  return (
-    <div className="flex items-center justify-end gap-0.5">
-      {active ? (
-        <DriveIconAction
-          label={`复制 ${item.name}`}
-          tooltip="复制链接"
-          onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
-        >
-          <Copy />
-        </DriveIconAction>
-      ) : null}
-      {active && password ? (
-        <DriveIconAction
-          label={`复制 ${item.name} 密码`}
-          tooltip="复制密码"
-          onClick={() => { void copyDrivePassword(password) }}
-        >
-          <KeyRound />
-        </DriveIconAction>
-      ) : null}
-      {active && !item.sourceDeleted ? (
-        <DriveIconAction
-          label={`打开 ${item.name}`}
-          tooltip="打开"
-          onClick={() => { void openDriveUrl(getDriveAccessUrl(item)) }}
-        >
-          <ExternalLink />
-        </DriveIconAction>
-      ) : null}
-      {active && !item.sourceDeleted ? (
-        <DriveIconAction
-          label={`重新发布 ${item.name}`}
-          tooltip="重新发布"
-          onClick={() => { void redeployDrivePublication(item.id, onReload, onPublicationDeployed) }}
-        >
-          <RotateCw />
-        </DriveIconAction>
-      ) : null}
-      {active ? (
-        <DriveIconAction
-          label={`取消发布 ${item.name}`}
-          tooltip="取消发布"
-          onClick={() => { void disableDrivePublication(item.id, onReload) }}
-        >
-          <X />
-        </DriveIconAction>
-      ) : null}
-    </div>
   )
 }
 
@@ -2163,10 +1744,6 @@ function DriveDialogEmptyState({ title }: { readonly title: string }) {
   )
 }
 
-function DrivePublicationTableSkeleton() {
-  return <DrivePublicLinkTableSkeleton />
-}
-
 function DriveShareTableSkeleton() {
   return <DrivePublicLinkTableSkeleton />
 }
@@ -2195,70 +1772,6 @@ function DrivePublicLinkTableSkeleton() {
         ))}
       </TableBody>
     </Table>
-  )
-}
-
-function DrivePublicationSuccessDialog({
-  publication,
-  onOpenChange,
-}: {
-  readonly publication: DrivePublicationSuccessState | null
-  readonly onOpenChange: (open: boolean) => void
-}) {
-  if (!publication) return null
-
-  const openLabel = publication.type === "site" ? "打开站点" : "打开网页"
-  const accessUrl = getDriveAccessUrl(publication)
-  const password = publication.password
-  return (
-    <Dialog open={true} onOpenChange={onOpenChange}>
-      <FormDialog
-        title={publication.type === "site" ? "站点已发布" : "网页已发布"}
-        description={<span className="block truncate">{publication.name}</span>}
-        contentClassName="sm:max-w-xl"
-        onSubmit={(event) => event.preventDefault()}
-        footer={(
-          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-            {password ? (
-              <Button type="button" variant="outline" onClick={() => { void copyDrivePassword(password) }}>
-                <KeyRound data-icon="inline-start" />
-                复制密码
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(accessUrl) }}>
-              <Copy data-icon="inline-start" />
-              复制链接
-            </Button>
-            <Button type="button" onClick={() => { void openDriveUrl(accessUrl) }}>
-              <ExternalLink data-icon="inline-start" />
-              {openLabel}
-            </Button>
-          </div>
-        )}
-      >
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="drive-publication-success-url">访问链接</Label>
-            <Input id="drive-publication-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
-          </div>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="font-medium">密码</dt>
-              <dd className="truncate text-muted-foreground" title={formatDriveAccessPassword(publication)}>
-                {formatDriveAccessPassword(publication)}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium">到期</dt>
-              <dd className="truncate text-muted-foreground tabular-nums" title={formatDriveAccessExpiresAt(publication.expiresAt)}>
-                {formatDriveAccessExpiresAt(publication.expiresAt)}
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </FormDialog>
-    </Dialog>
   )
 }
 
@@ -2711,15 +2224,6 @@ async function copyDrivePassword(password: string): Promise<void> {
   }
 }
 
-async function copyPublishedUrlAfterPublish(url: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(url)
-    toast("发布链接已复制")
-  } catch (_rawError) {
-    toast("发布成功，复制失败")
-  }
-}
-
 async function copySharedUrlAfterShare(url: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(url)
@@ -2749,31 +2253,6 @@ async function openDriveUrl(url: string): Promise<void> {
   }
 }
 
-async function redeployDrivePublication(
-  publicationId: string,
-  onReload: () => Promise<void>,
-  onPublicationDeployed?: (publication: DrivePublicationSuccessState) => void,
-): Promise<void> {
-  try {
-    const publication = await requireSynapseBridge().account.redeployDrivePublication({ publicationId })
-    onPublicationDeployed?.(publication)
-    toast("已重新发布")
-    await onReload()
-  } catch (rawError) {
-    toast(errorMessage(rawError, "重新发布失败"))
-  }
-}
-
-async function disableDrivePublication(publicationId: string, onReload: () => Promise<void>): Promise<void> {
-  try {
-    await requireSynapseBridge().account.disableDrivePublication({ publicationId })
-    toast("已取消发布")
-    await onReload()
-  } catch (rawError) {
-    toast(errorMessage(rawError, "取消发布失败"))
-  }
-}
-
 async function disableDriveShare(shareId: string, onReload: () => Promise<void>): Promise<void> {
   try {
     await requireSynapseBridge().account.disableDriveShare({ shareId })
@@ -2792,10 +2271,6 @@ function readRelativeFilePath(file: File): string {
 function isHtmlDriveItem(item: DriveItemDto): boolean {
   const name = item.name.toLowerCase()
   return item.type === "file" && (name.endsWith(".html") || name.endsWith(".htm") || item.mimeType === "text/html")
-}
-
-function hasRootIndexHtml(items: readonly DriveItemDto[]): boolean {
-  return items.some((item) => item.type === "file" && item.name === "index.html" && item.storageStatus === "active")
 }
 
 function formatBytes(value: string): string {
@@ -2837,13 +2312,10 @@ function parseDriveUsageBytes(value: string): number {
   return bytes
 }
 
-function getDriveStatusBadges(item: DriveItemDto, publicationActions: DriveItemPublicationActions): DriveStatusBadge[] {
+function getDriveStatusBadges(item: DriveItemDto): DriveStatusBadge[] {
   const badges: DriveStatusBadge[] = []
   const storageBadge = getDriveStorageStatusBadge(item.storageStatus)
   if (storageBadge) badges.push(storageBadge)
-  if (getActiveDrivePublication(item, publicationActions)) {
-    badges.push({ key: "published", label: "已发布", variant: "secondary" })
-  }
   if (item.shared || item.activeShareId) {
     badges.push({ key: "shared", label: "已分享", variant: "outline" })
   }
@@ -2859,11 +2331,6 @@ function getDriveStorageStatusBadge(storageStatus: DriveItemDto["storageStatus"]
 
 function canShareDriveItem(item: DriveItemDto): boolean {
   return item.storageStatus === "active"
-}
-
-function getActiveDrivePublication(item: DriveItemDto, publicationActions: DriveItemPublicationActions): DrivePublicationDto | null {
-  if (item.type === "folder") return publicationActions.site ?? publicationActions.page
-  return publicationActions.page ?? publicationActions.site
 }
 
 function formatDriveDateTime(value: string): string {
