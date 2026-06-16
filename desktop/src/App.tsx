@@ -43,7 +43,6 @@ import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
 import { DatabaseModule } from "@/modules/database"
 import { AgentModule } from "@/modules/agent"
-import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import { AutomationModule } from "@/modules/automation"
 import { DriveModule } from "@/modules/drive"
 import { EditorScanModule } from "@/modules/editor-scan"
@@ -377,11 +376,6 @@ function MainApp() {
           {activeTab === "database" ? (
             <ErrorBoundary fallbackTitle="数据库模块出现问题">
               <DatabaseModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "task-scheduler" ? (
-            <ErrorBoundary fallbackTitle="定时任务模块出现问题">
-              <TaskSchedulerModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "automation" ? (

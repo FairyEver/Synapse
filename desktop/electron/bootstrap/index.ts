@@ -17,7 +17,6 @@ export {
   coreLoggingDescriptor,
   coreModelPriceDescriptor,
   coreProcessEnvironmentDescriptor,
-  coreTaskSchedulerDescriptor,
   coreHttpTestDescriptor,
   coreUpdateDescriptor,
   coreWorkflowPackageDescriptor,

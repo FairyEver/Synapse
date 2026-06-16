@@ -1,6 +1,6 @@
 # MCP 能力维护指南
 
-<!-- Sources: desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/types.ts; desktop/database/shared/capability-registry.ts; desktop/database/shared/mcp-tools.ts; desktop/electron/database/dispatcher.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/synapse-capabilities/shared/workflow-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/types.ts; desktop/database/shared/capability-registry.ts; desktop/database/shared/mcp-tools.ts; desktop/electron/database/dispatcher.ts; desktop/synapse-capabilities/shared/automation-domain.ts; desktop/synapse-capabilities/shared/workflow-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
 
 新增或修改通过 MCP 工具、本地 HTTP API、服务方法暴露的 Synapse MCP 能力时，使用这份指南。
 
@@ -19,11 +19,6 @@ Database 领域：
 - `desktop/database/shared/capability-registry.ts`
 - `desktop/database/shared/mcp-tools.ts`
 - `desktop/electron/database/dispatcher.ts`
-
-Scheduler 领域：
-
-- `desktop/synapse-capabilities/shared/scheduler-domain.ts`
-- `desktop/electron/services/task-scheduler/external-capabilities.ts`
 
 Workflow 领域：
 
@@ -56,13 +51,13 @@ Routing and transport:
 | Helper | Output |
 | --- | --- |
 | `capabilityIdToMcpTool("database.table.list")` | `database_table_list` |
-| `capabilityIdToServiceMethod("scheduler.runtime.inspect")` | `schedulerRuntimeInspect` |
+| `capabilityIdToServiceMethod("automation.runtime.inspect")` | `automationRuntimeInspect` |
 
 规则：
 
 - domain 和 resource 这两个 token 使用完整英文词。
 - Database 能力使用 `database` 领域。
-- Scheduler 能力使用 `scheduler` 领域。
+- Automation 能力使用 `automation` 领域。
 - Workflow 能力使用 `workflow` 领域。
 - Content 能力使用 `content` 领域。
 - 默认使用单数 resource；只有语义需要时使用复数，例如 `database.rows.update`。
@@ -110,7 +105,7 @@ MCP 工具名称从规范能力 ID 派生：
 
 ```text
 database.row.create -> database_row_create
-scheduler.task.enable -> scheduler_task_enable
+automation.item.enable -> automation_item_enable
 workflow.definition.inspect -> workflow_definition_inspect
 ```
 
@@ -138,8 +133,8 @@ MCP schema 应满足：
 
 ```json
 {
-  "action": "scheduler.task.enable",
-  "taskId": "task:1"
+  "action": "automation.item.enable",
+  "itemId": "automation:1"
 }
 ```
 
@@ -218,18 +213,18 @@ HTTP body:
 databaseRowCreate
 ```
 
-### Scheduler 任务列表
+### Automation 项目列表
 
 规范能力 ID:
 
 ```text
-scheduler.task.list
+automation.item.list
 ```
 
 MCP 工具:
 
 ```text
-scheduler_task_list
+automation_item_list
 ```
 
 MCP 参数:
@@ -245,7 +240,7 @@ HTTP body:
 
 ```json
 {
-  "action": "scheduler.task.list",
+  "action": "automation.item.list",
   "enabled": true,
   "limit": 20
 }
@@ -254,7 +249,7 @@ HTTP body:
 服务方法:
 
 ```text
-schedulerTaskList
+automationItemList
 ```
 
 ### Workflow 定义检查

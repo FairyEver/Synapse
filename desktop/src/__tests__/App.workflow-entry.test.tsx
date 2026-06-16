@@ -137,7 +137,6 @@ vi.mock("@/modules/settings", () => ({ SettingsModule: () => <div>设置模块</
 vi.mock("@/modules/database", () => ({ DatabaseModule: () => <div>数据模块</div> }))
 vi.mock("@/modules/editor-scan", () => ({ EditorScanModule: () => <div>本机模块</div> }))
 vi.mock("@/modules/agent", () => ({ AgentModule: () => <div>对话模块</div> }))
-vi.mock("@/modules/task-scheduler", () => ({ TaskSchedulerModule: () => <div>定时模块</div> }))
 vi.mock("@/modules/automation", () => ({ AutomationModule: () => <div>自动化模块</div> }))
 vi.mock("@/modules/usage-analysis", () => ({
   CcUsageAnalysisModule: () => <div>CC 模块</div>,
@@ -187,7 +186,6 @@ describe("App workflow entry visibility", () => {
       "提示词",
       "对话",
       "数据库",
-      "定时",
       "自动化",
       "云盘",
       "工具",
@@ -236,7 +234,6 @@ describe("App workflow entry visibility", () => {
       "提示词",
       "对话",
       "数据库",
-      "定时",
       "自动化",
       "工作流",
       "云盘",

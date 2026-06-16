@@ -226,14 +226,6 @@ import type {
 } from "./repository"
 import type { SynapseAppUpdateState } from "./update"
 import type {
-  ScheduledTask,
-  ScheduledTaskChangedEvent,
-  ScheduledTaskCreateInput,
-  ScheduledTaskMigrationResult,
-  ScheduledTaskRun,
-  ScheduledTaskUpdateInput,
-} from "./task-scheduler"
-import type {
   AutomationChangedEvent,
   AutomationCreateInput,
   AutomationItem,
@@ -1025,21 +1017,6 @@ export type SynapseBridge = {
     databaseFolderReorder: (params: { folderId: number; tableNames: string[] }) => Promise<void>
     databaseFolderReorderFolders: (params: { folderIds: number[] }) => Promise<void>
   }
-  taskScheduler: {
-    listTasks: () => Promise<ScheduledTask[]>
-    getTask: (id: string) => Promise<ScheduledTask | null>
-    createTask: (input: ScheduledTaskCreateInput) => Promise<ScheduledTask>
-    updateTask: (payload: { id: string; patch: ScheduledTaskUpdateInput }) => Promise<ScheduledTask>
-    deleteTask: (id: string) => Promise<{ deleted: boolean }>
-    migrateTaskToAutomation: (id: string) => Promise<ScheduledTaskMigrationResult>
-    setTaskEnabled: (payload: { id: string; enabled: boolean }) => Promise<ScheduledTask>
-    runTask: (id: string) => Promise<ScheduledTaskRun | null>
-    stopRun: (runId: string) => Promise<{ stopped: boolean }>
-    listRuns: (taskId: string, options?: { limit?: number }) => Promise<ScheduledTaskRun[]>
-    exportTasksToFile: (json: string) => Promise<{ success: boolean; path?: string }>
-    importTasksFromFile: () => Promise<{ success: boolean; content?: string }>
-    onChanged: (listener: (event: ScheduledTaskChangedEvent) => void) => () => void
-  }
   automation: {
     openCreateEditorWindow: () => Promise<void>
     openEditorWindow: (id: string) => Promise<void>
@@ -1172,7 +1149,7 @@ export type SynapseBridge = {
     ) => Promise<{
       providerId: string
       references: Array<{
-        kind: "scheduled-task" | "workflow-node" | "conversation"
+        kind: "workflow-node" | "conversation"
         entityId: string
         entityName: string
         nodeId?: string
@@ -1180,7 +1157,6 @@ export type SynapseBridge = {
         providerId: string
         modelTier: string
       }>
-      taskCount: number
       workflowNodeCount: number
       conversationCount: number
     }>
@@ -1189,10 +1165,9 @@ export type SynapseBridge = {
         sourceProviderId: string
         targetProviderId: string
         targetModelTier: string
-        scope: ("scheduled-task" | "workflow-node")[]
+        scope: "workflow-node"[]
       },
     ) => Promise<{
-      migratedTasks: number
       migratedWorkflowNodes: number
       errors: Array<{ entityId: string; error: string }>
     }>

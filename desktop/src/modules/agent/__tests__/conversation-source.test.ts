@@ -25,6 +25,7 @@ describe("conversation source filtering", () => {
     expect(conversationSourceForSession(session(undefined))).toBe("user")
     expect(conversationSourceForSession(session("local"))).toBe("user")
     expect(conversationSourceForSession(session("local-renderer"))).toBe("user")
+    expect(conversationSourceForSession(session("automation"))).toBe("automation")
     expect(conversationSourceForSession(session("scheduled"))).toBe("scheduled")
     expect(conversationSourceForSession(session("workflow"))).toBe("workflow")
     expect(conversationSourceForSession(session("webhook"))).toBe("webhook")
@@ -42,12 +43,14 @@ describe("conversation source filtering", () => {
   it("filters sessions by selected source and preserves all mode", () => {
     const sessions = [
       session("local-renderer"),
+      session("automation"),
       session("scheduled"),
       session("workflow"),
       session("slack"),
     ]
 
     expect(filterSessionsBySource(sessions, "user").map((item) => item.platform)).toEqual(["local-renderer"])
+    expect(filterSessionsBySource(sessions, "automation").map((item) => item.platform)).toEqual(["automation"])
     expect(filterSessionsBySource(sessions, "scheduled").map((item) => item.platform)).toEqual(["scheduled"])
     expect(filterSessionsBySource(sessions, "workflow").map((item) => item.platform)).toEqual(["workflow"])
     expect(filterSessionsBySource(sessions, "bridge").map((item) => item.platform)).toEqual(["slack"])

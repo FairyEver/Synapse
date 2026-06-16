@@ -16,7 +16,7 @@ export function createScriptAction(deps: {
       actor: context.actor,
       resource: scriptActionManifest.id,
       context: {
-        source: "task-scheduler",
+        source: "automation",
         actionType: scriptActionManifest.id,
         taskId: context.taskId,
         runId: context.runId,

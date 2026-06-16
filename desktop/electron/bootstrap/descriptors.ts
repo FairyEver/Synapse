@@ -85,13 +85,6 @@ import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
 import { accountService } from "../services/account-service"
 import {
-  ScheduledTaskRepository,
-  ScheduledTaskRunRepository,
-  TaskSchedulerExecutionService,
-  TaskSchedulerService,
-  dispatchSchedulerAction,
-} from "../services/task-scheduler"
-import {
   AutomationExecutionService,
   AutomationItemRepository,
   AutomationRunRepository,
@@ -629,7 +622,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
   dependsOn: [
     "core.config",
     "core.event-bus",
-    "core.task-scheduler",
     "core.automation",
     "core.action-runtime",
     "core.workflow",
@@ -643,7 +635,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
   ],
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
-    const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
     const automation = ctx.registry.get<AutomationService>("core.automation")
     const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
 
@@ -774,14 +765,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(
-        action,
-        params,
-        context,
-        { permissionGuard, auditSink },
-      ),
-      schedulerDispatch: (action, params, context) => dispatchSchedulerAction(
-        taskScheduler,
-        actionRuntime,
         action,
         params,
         context,
@@ -1021,7 +1004,6 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
-    "core.task-scheduler",
     "core.workflow",
   ],
   create(ctx) {
@@ -1031,14 +1013,8 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       scanReferences: async (providerId) => {
-        const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
         const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
         const scanner = new ProviderReferenceScanner({
-          listTasks: async () => {
-            const tasks = await taskScheduler.schedulerTaskList()
-            return tasks.map((t) => ({ id: t.id, name: t.name, action: t.action }))
-          },
-          updateTaskAction: async () => {},
           listWorkflowNodes: async () => {
             const metas = await workflowService.list()
             const nodes: Array<{
@@ -1439,57 +1415,6 @@ export const coreAutomationIngressDescriptor: ServiceDescriptor<AutomationIngres
 function timeoutMinsToMs(value: number | undefined): number | undefined {
   if (value === undefined) return undefined
   return value * 60_000
-}
-
-export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService> = {
-  id: "core.task-scheduler",
-  criticality: "degraded",
-  dependsOn: [
-    "core.data-repository",
-    "core.permission-guard",
-    "core.audit-sink",
-    "core.action-runtime",
-    "core.event-bus",
-    "core.automation",
-  ],
-  create(ctx) {
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
-    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
-    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
-    const defaultCwd = app.getPath("userData")
-    const tasks = new ScheduledTaskRepository({
-      tasks: dataRepository.namespace("task-scheduler.tasks"),
-    })
-    const runs = new ScheduledTaskRunRepository({
-      runs: dataRepository.namespace("task-scheduler.runs"),
-    })
-    const actions = ctx.registry.get<MainActionRegistry>("core.action-runtime")
-    const execution = new TaskSchedulerExecutionService({
-      tasks,
-      runs,
-      actions,
-      permissionGuard,
-      auditSink,
-      defaultCwd,
-    })
-    return new TaskSchedulerService({
-      tasks,
-      runs,
-      actions,
-      execution,
-      defaultCwd,
-      automation: ctx.registry.get<AutomationService>("core.automation"),
-      eventBus,
-      logger: ctx.logger.child("task-scheduler"),
-    })
-  },
-  start(service) {
-    return service.start()
-  },
-  stop(service) {
-    service.stop()
-  },
 }
 
 export const coreAutomationDescriptor: ServiceDescriptor<AutomationService> = {

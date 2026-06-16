@@ -1691,13 +1691,12 @@ function summarizeAgentRuntimeLogSignals(content: string): {
 
 function isAgentRuntimeLogLine(line: string): boolean {
   return /\b(AgentRuntime|Claude SDK|claude-agent-sdk|sdkSessionId|agentSessionId|conversationId|messageId|taskId|runId)\b/i.test(line)
-    || /\b(service\.agent-runtime|service\.task-scheduler|side-channel|automation-ingress|Scheduled Agent|Agent action|SDK event)\b/i.test(line)
+    || /\b(service\.agent-runtime|side-channel|automation-ingress|Agent action|SDK event)\b/i.test(line)
 }
 
 function addAgentBoundaries(line: string, boundaries: Set<string>): void {
   if (/\b(service\.agent-runtime|AgentRuntime|Claude SDK|claude-agent-sdk)\b/i.test(line)) boundaries.add("agent-runtime")
   if (/\b(sdkSessionId|SDK event)\b/i.test(line)) boundaries.add("sdk-session")
-  if (/\b(service\.task-scheduler|Scheduled Agent|taskId|runId)\b/i.test(line)) boundaries.add("task-scheduler")
   if (/\b(side-channel)\b/i.test(line)) boundaries.add("side-channel")
   if (/\b(automation-ingress)\b/i.test(line)) boundaries.add("automation-ingress")
 }

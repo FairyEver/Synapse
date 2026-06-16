@@ -9,7 +9,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAgentConversationPlatform(value: unknown): value is SynapseAgentConversationTarget["platform"] {
-  return value === "workflow" || value === "scheduled"
+  return value === "automation" || value === "workflow" || value === "scheduled"
 }
 
 function targetFromRecord(raw: Record<string, unknown>): SynapseAgentConversationTarget | null {

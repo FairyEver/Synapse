@@ -1136,9 +1136,9 @@ describe("AgentRuntimeService", () => {
       "Scheduled agent send failed.",
       expect.objectContaining({
         boundary: "agent-runtime.scheduled-send",
-        source: "scheduled",
+        source: "workflow",
         projectId: "project-1",
-        sessionKey: expect.stringMatching(/^scheduled:project-1:/),
+        sessionKey: expect.stringMatching(/^workflow:project-1:/),
         conversationId: result.conversationId,
         sdkSessionId: "sdk-1",
         agentType: "claude-code",
@@ -1184,9 +1184,9 @@ describe("AgentRuntimeService", () => {
       "Scheduled agent send completed.",
       expect.objectContaining({
         boundary: "agent-runtime.scheduled-send",
-        source: "scheduled",
+        source: "workflow",
         projectId: "project-1",
-        sessionKey: expect.stringMatching(/^scheduled:project-1:/),
+        sessionKey: expect.stringMatching(/^workflow:project-1:/),
         conversationId: result.conversationId,
         sdkSessionId: "sdk-1",
         agentType: "claude-code",
@@ -1203,7 +1203,7 @@ describe("AgentRuntimeService", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("done from sensitive prompt")
   })
 
-  it("returns scheduled agent sessionKey with the conversation id", async () => {
+  it("returns automated agent sessionKey with the conversation id", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({
       projectId: "project-1",
@@ -1220,14 +1220,14 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       agentType: "claude-code",
       mode: "plan",
-      prompt: "scheduled prompt",
+      prompt: "automated prompt",
       sessionPolicy: "fresh",
       timeoutMs: 120_000,
     })
 
     expect(result.status).toBe("success")
     expect(result.conversationId).toBeTruthy()
-    expect(result.sessionKey).toMatch(/^scheduled:project-1:/)
+    expect(result.sessionKey).toMatch(/^workflow:project-1:/)
     const session = await conversations.get(result.conversationId)
     expect(session?.sessionKey).toBe(result.sessionKey)
   })
@@ -1494,7 +1494,7 @@ describe("AgentRuntimeService", () => {
     expect(session?.name).toBe("Workflow One / Prompt · 04-26 08:00")
   })
 
-  it("names scheduled conversations from task context", async () => {
+  it("names automation conversations from automation context", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({
       projectId: "project-1",
@@ -1511,12 +1511,13 @@ describe("AgentRuntimeService", () => {
       projectId: "project-1",
       agentType: "claude-code",
       mode: "bypassPermissions",
-      prompt: "scheduled prompt",
+      prompt: "automation prompt",
       sessionPolicy: "fresh",
       timeoutMs: 120_000,
+      sourcePlatform: "automation",
       userMeta: {
-        source: "scheduled",
-        taskName: "Daily Summary",
+        source: "automation",
+        automationName: "Daily Summary",
       },
     })
 
@@ -1524,7 +1525,7 @@ describe("AgentRuntimeService", () => {
     expect(session?.name).toBe("Daily Summary · 04-26 08:00")
   })
 
-  it("persists scheduled resumed permission mode for renderer summaries", async () => {
+  it("persists legacy scheduled resumed permission mode for renderer summaries", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({
       projectId: "project-1",
@@ -1552,6 +1553,7 @@ describe("AgentRuntimeService", () => {
       sessionPolicy: "resume",
       lastConversationId: existing.id,
       timeoutMs: 120_000,
+      sourcePlatform: "scheduled",
     })
 
     const session = await conversations.get(result.conversationId)
@@ -1658,9 +1660,9 @@ describe("AgentRuntimeService", () => {
       "Scheduled agent resume fallback.",
       expect.objectContaining({
         boundary: "agent-runtime.scheduled-resume",
-        source: "scheduled",
+        source: "workflow",
         projectId: "project-1",
-        sessionKey: expect.stringMatching(/^scheduled:project-1:/),
+        sessionKey: expect.stringMatching(/^workflow:project-1:/),
         resumeConversationId: "missing-conversation",
         agentType: "claude-code",
         mode: "plan",

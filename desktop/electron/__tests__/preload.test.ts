@@ -116,26 +116,6 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ table: "notes" })
   })
 
-  it("subscribes task scheduler change listeners to the EventBus domain channel", async () => {
-    const bridge = await loadPreloadBridge()
-    const listener = vi.fn()
-
-    bridge.taskScheduler.onChanged(listener)
-
-    expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
-    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0]).toBe("synapse:events:scheduler")
-
-    const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
-    wrapped?.({}, {
-      domain: "scheduler",
-      type: "scheduler.taskChanged",
-      payload: { taskId: "task-1", reason: "run-finished" },
-      timestamp: "2026-04-29T00:00:00.000Z",
-    })
-
-    expect(listener).toHaveBeenCalledWith({ taskId: "task-1", reason: "run-finished" })
-  })
-
   it("subscribes automation change listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

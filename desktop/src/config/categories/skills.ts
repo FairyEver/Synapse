@@ -10,7 +10,7 @@ export const skillsCategories = [
   {
     id: "automation",
     label: "自动化",
-    description: "批处理、脚本编排、定时任务、流水线。",
+    description: "批处理、脚本编排、定时触发、流水线。",
     order: 20,
   },
   {

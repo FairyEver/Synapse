@@ -32,7 +32,7 @@ import {
   type CronEditorTab,
   type CronTemplateDraft,
   type CronTemplateKind,
-} from "../cron-utils"
+} from "./cron-utils"
 
 type CronEditorDialogProps = {
   open: boolean
@@ -110,11 +110,11 @@ function CronEditorDialog({
     const currentValidation = validateCronExpression(draft)
     if (!currentValidation.ok) return
     track({
-      component: "task-scheduler",
-      name: "task-scheduler-cron-apply",
+      component: "automation",
+      name: "automation-cron-apply",
       action: "submit",
       metadata: {
-        boundary: "renderer.task-scheduler.cron-editor",
+        boundary: "renderer.automation.cron-editor",
         activeTab,
         expressionLength: draft.length,
         previewCount: previewRuns.length,

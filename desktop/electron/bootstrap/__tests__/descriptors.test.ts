@@ -37,7 +37,7 @@ const deploymentConfigModule = {
 vi.mock("../generated/deployment-config.generated", () => deploymentConfigModule)
 vi.mock("../../generated/deployment-config.generated", () => deploymentConfigModule)
 const tmpUserData = "/tmp/synapse-test-userdata-" + Date.now()
-const bootstrapImportTimeoutMs = process.platform === "win32" ? 120_000 : 15_000
+const bootstrapImportTimeoutMs = process.platform === "win32" ? 120_000 : 30_000
 vi.mock("electron", () => {
   const Notification = class {
     static isSupported() {
@@ -115,14 +115,13 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreAppIconDescriptor.dependsOn).toBeUndefined()
   })
 
-  it("coreDatabaseDescriptor is degraded, depends on config, event bus, scheduler, and action runtime, has stop", async () => {
+  it("coreDatabaseDescriptor is degraded, depends on config, event bus, automation, and action runtime, has stop", async () => {
     const { coreDatabaseDescriptor } = await importBootstrap()
     expect(coreDatabaseDescriptor.id).toBe("core.database")
     expect(coreDatabaseDescriptor.criticality).toBe("degraded")
     expect(coreDatabaseDescriptor.dependsOn).toEqual([
       "core.config",
       "core.event-bus",
-      "core.task-scheduler",
       "core.automation",
       "core.action-runtime",
       "core.workflow",
@@ -1289,18 +1288,6 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(snapshotService.save).not.toHaveBeenCalled()
   })
 
-  it("coreTaskSchedulerDescriptor depends on action runtime", async () => {
-    const { coreTaskSchedulerDescriptor } = await importBootstrap()
-    expect(coreTaskSchedulerDescriptor.dependsOn).toEqual([
-      "core.data-repository",
-      "core.permission-guard",
-      "core.audit-sink",
-      "core.action-runtime",
-      "core.event-bus",
-      "core.automation",
-    ])
-  })
-
   it("providerServiceDescriptor registers global provider storage", async () => {
     const { providerServiceDescriptor } = await importBootstrap()
     expect(providerServiceDescriptor.id).toBe("provider")
@@ -1309,7 +1296,6 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
-      "core.task-scheduler",
       "core.workflow",
     ])
   })

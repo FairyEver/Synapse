@@ -23,8 +23,6 @@ import {
   runAsConfigSchema,
   runAsPreflightSchema,
   secretsSchema,
-  taskSchedulerRunsSchema,
-  taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
 } from "../index"
@@ -57,8 +55,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "run_as.config",
         "run_as.preflight",
         "secrets",
-        "task-scheduler.runs",
-        "task-scheduler.tasks",
         "webhook.config",
         "webhook.runs",
         "workflows",
@@ -87,9 +83,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(outboxSchema.backend).toBe("sqlite")
     expect(repoPendingPushesSchema.backend).toBe("sqlite")
     expect(repoRepositoriesSchema.backend).toBe("json")
-    expect(taskSchedulerTasksSchema.backend).toBe("encrypted-json")
-    expect(taskSchedulerTasksSchema.encrypted).toBe(true)
-    expect(taskSchedulerRunsSchema.backend).toBe("json")
     expect(automationItemsSchema.backend).toBe("json")
     expect(automationRunsSchema.backend).toBe("json")
     expect(runAsConfigSchema.backend).toBe("json")
@@ -108,7 +101,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     for (const schema of allSchemas) {
       const expected = schema.name === "secrets"
         || schema.name === "webhook.config"
-        || schema.name === "task-scheduler.tasks"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }
   })
@@ -280,45 +272,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         createdAt: "2026-04-25",
         retryCount: 0,
         lastError: null,
-      }),
-    ).toBe(true)
-    expect(
-      taskSchedulerTasksSchema.validate({
-        id: "task:1",
-        schemaVersion: 2,
-        name: "Nightly backup",
-        scope: { type: "global" },
-        trigger: { type: "builtin.cron", config: { expr: "0 2 * * *" } },
-        action: {
-          type: "builtin.command",
-          config: {
-            command: "echo backup",
-            shell: "posix",
-            timeoutMins: 30,
-          },
-        },
-        enabled: true,
-        missedRunPolicy: "skip",
-        overlapPolicy: "skip",
-        createdAt: "2026-04-29T00:00:00.000Z",
-        updatedAt: "2026-04-29T00:00:00.000Z",
-        runCount: 0,
-      }),
-    ).toBe(true)
-    expect(
-      taskSchedulerRunsSchema.validate({
-        id: "run:1",
-        schemaVersion: 2,
-        taskId: "task:1",
-        startedAt: "2026-04-29T00:00:00.000Z",
-        finishedAt: "2026-04-29T00:00:01.000Z",
-        status: "success",
-        result: {
-          status: "success",
-          summary: "ok",
-          metrics: { exitCode: 0 },
-        },
-        triggeredBy: "manual",
       }),
     ).toBe(true)
     expect(

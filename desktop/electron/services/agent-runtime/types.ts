@@ -310,7 +310,7 @@ export interface AgentRuntimeRelayResult extends AgentRuntimeTurnResult {
   readonly partialText?: string
 }
 
-export type ScheduledAgentSourcePlatform = "scheduled" | "workflow"
+export type ScheduledAgentSourcePlatform = "automation" | "workflow" | "scheduled"
 
 export type ScheduledAgentSendInput = {
   readonly projectId: string

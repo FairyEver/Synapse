@@ -16,7 +16,7 @@ export function createCommandAction(deps: {
       actor: context.actor,
       resource: commandActionManifest.id,
       context: {
-        source: "task-scheduler",
+        source: "automation",
         actionType: commandActionManifest.id,
         taskId: context.taskId,
         runId: context.runId,

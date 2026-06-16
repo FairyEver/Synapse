@@ -94,7 +94,6 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.project-containers",
         "core.relay",
         "core.side-channel",
-        "core.task-scheduler",
         "core.update",
         "core.usage-analysis",
         "core.window-manager",
@@ -127,7 +126,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
-      "core.task-scheduler",
       "core.workflow",
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
@@ -174,14 +172,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
     ])
-    expect(byId.get("core.task-scheduler")?.dependsOn).toEqual([
-      "core.data-repository",
-      "core.permission-guard",
-      "core.audit-sink",
-      "core.action-runtime",
-      "core.event-bus",
-      "core.automation",
-    ])
     expect(byId.get("core.automation")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
@@ -212,7 +202,6 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.database")?.dependsOn).toEqual([
       "core.config",
       "core.event-bus",
-      "core.task-scheduler",
       "core.automation",
       "core.action-runtime",
       "core.workflow",
@@ -257,9 +246,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     // Each dependency precedes its dependent.
     const idx = (id: string) => order.indexOf(id)
     expect(idx("core.config")).toBeLessThan(idx("core.database"))
-    expect(idx("core.action-runtime")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.action-runtime")).toBeLessThan(idx("core.database"))
-    expect(idx("core.task-scheduler")).toBeLessThan(idx("core.database"))
     expect(idx("core.automation")).toBeLessThan(idx("core.database"))
     expect(idx("core.config")).toBeLessThan(idx("core.diagnostics"))
     expect(idx("core.config")).toBeLessThan(idx("repo.watch"))
@@ -270,10 +257,6 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.project-containers")).toBeLessThan(idx("core.side-channel"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
-    expect(idx("core.data-repository")).toBeLessThan(idx("core.task-scheduler"))
-    expect(idx("core.permission-guard")).toBeLessThan(idx("core.task-scheduler"))
-    expect(idx("core.audit-sink")).toBeLessThan(idx("core.task-scheduler"))
-    expect(idx("core.event-bus")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.automation"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.automation"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.automation"))

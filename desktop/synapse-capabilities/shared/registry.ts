@@ -1,11 +1,6 @@
 import { DATABASE_DOMAIN, buildMcpToolActions as buildDatabaseMcpToolActions } from "../../database/shared/capability-registry"
 import { buildTools as buildDatabaseTools } from "../../database/shared/mcp-tools"
 import {
-  SCHEDULER_DOMAIN,
-  SCHEDULER_MCP_TOOL_ACTIONS,
-  buildSchedulerTools,
-} from "./scheduler-domain"
-import {
   AUTOMATION_DOMAIN,
   AUTOMATION_MCP_TOOL_ACTIONS,
   buildAutomationTools,
@@ -46,7 +41,6 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   DATABASE_DOMAIN,
   MODEL_PRICE_DOMAIN,
   REPOSITORY_DOMAIN,
-  SCHEDULER_DOMAIN,
   AUTOMATION_DOMAIN,
   VARIABLE_DOMAIN,
   WORKFLOW_DOMAIN,
@@ -58,7 +52,6 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...buildDatabaseMcpToolActions(),
   ...MODEL_PRICE_MCP_TOOL_ACTIONS,
   ...REPOSITORY_MCP_TOOL_ACTIONS,
-  ...SCHEDULER_MCP_TOOL_ACTIONS,
   ...AUTOMATION_MCP_TOOL_ACTIONS,
   ...VARIABLE_MCP_TOOL_ACTIONS,
   ...WORKFLOW_MCP_TOOL_ACTIONS,
@@ -71,7 +64,6 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildDatabaseTools(),
     ...buildModelPriceTools(),
     ...buildRepositoryTools(),
-    ...buildSchedulerTools(),
     ...buildAutomationTools(),
     ...buildVariableTools(),
     ...buildWorkflowTools(),

@@ -6,8 +6,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { CronEditorDialog, CronEditorFields } from "../components/cron-editor-dialog"
-import { CronInput } from "../components/cron-input"
+import { CronEditorDialog, CronEditorFields } from "../cron-editor-dialog"
+import { CronInput } from "../cron-input"
 import {
   createDefaultCronTemplateDraft,
   validateCronExpression,
@@ -85,11 +85,11 @@ describe("CronEditorDialog", () => {
 
     expect(onApply).toHaveBeenCalledWith("0 9 * * *")
     expect(track).toHaveBeenCalledWith({
-      component: "task-scheduler",
-      name: "task-scheduler-cron-apply",
+      component: "automation",
+      name: "automation-cron-apply",
       action: "submit",
       metadata: {
-        boundary: "renderer.task-scheduler.cron-editor",
+        boundary: "renderer.automation.cron-editor",
         activeTab: "common",
         expressionLength: 9,
         previewCount: 5,

@@ -303,7 +303,7 @@ export class AgentRuntimeService {
 
   async sendScheduled(input: ScheduledAgentSendInput): Promise<ScheduledAgentSendResult> {
     const startMs = Date.now()
-    const sourcePlatform = input.sourcePlatform ?? "scheduled"
+    const sourcePlatform = input.sourcePlatform ?? "workflow"
     const sessionKey = `${sourcePlatform}:${input.projectId}:${Date.now()}`
     const message: AgentMessage = {
       projectId: input.projectId,
@@ -1192,8 +1192,8 @@ export class AgentRuntimeService {
   ): void {
     this.deps.logger?.warn("Scheduled agent send failed.", {
       boundary: "agent-runtime.scheduled-send",
-      source: input.sourcePlatform ?? "scheduled",
-      sourcePlatform: input.sourcePlatform ?? "scheduled",
+      source: input.sourcePlatform ?? "workflow",
+      sourcePlatform: input.sourcePlatform ?? "workflow",
       projectId: input.projectId,
       sessionKey: message.sessionKey,
       conversationId: result.conversationId || undefined,
@@ -1218,8 +1218,8 @@ export class AgentRuntimeService {
   ): void {
     this.deps.logger?.info("Scheduled agent send completed.", {
       boundary: "agent-runtime.scheduled-send",
-      source: input.sourcePlatform ?? "scheduled",
-      sourcePlatform: input.sourcePlatform ?? "scheduled",
+      source: input.sourcePlatform ?? "workflow",
+      sourcePlatform: input.sourcePlatform ?? "workflow",
       projectId: input.projectId,
       sessionKey: message.sessionKey,
       conversationId: result.conversationId || undefined,
@@ -1243,8 +1243,8 @@ export class AgentRuntimeService {
   ): void {
     this.deps.logger?.warn("Scheduled agent resume fallback.", {
       boundary: "agent-runtime.scheduled-resume",
-      source: input.sourcePlatform ?? "scheduled",
-      sourcePlatform: input.sourcePlatform ?? "scheduled",
+      source: input.sourcePlatform ?? "workflow",
+      sourcePlatform: input.sourcePlatform ?? "workflow",
       projectId: input.projectId,
       sessionKey: message.sessionKey,
       resumeConversationId: input.lastConversationId,
@@ -1417,7 +1417,7 @@ function formatScheduledSessionName(input: ScheduledAgentSendInput, now: Date): 
 }
 
 function scheduledSessionSubject(userMeta: Record<string, unknown> | undefined): string | undefined {
-  return stringMeta(userMeta, "taskName")
+  return stringMeta(userMeta, "automationName") ?? stringMeta(userMeta, "taskName")
 }
 
 function workflowSessionSubject(userMeta: Record<string, unknown> | undefined): string | undefined {

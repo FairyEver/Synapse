@@ -349,7 +349,7 @@ describe("mcp-installer", () => {
         allow: [
           "mcp__synapse-data__database_table_list",
           "mcp__synapse-database__database_row_list",
-          "mcp__synapse-services__scheduler_task_list",
+          "mcp__synapse-services__database_log_list",
           "mcp__other-server__tool",
           "Bash(ls:*)",
         ],

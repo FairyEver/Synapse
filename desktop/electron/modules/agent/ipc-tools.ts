@@ -27,7 +27,6 @@ import type {
 import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "../../services/provider"
 import { ProviderReferenceScanner } from "../../services/provider/provider-reference-scanner"
 import type { ProviderReferenceScannerDeps } from "../../services/provider/provider-reference-scanner"
-import type { TaskSchedulerService } from "../../services/task-scheduler/task-scheduler-service"
 import type { WorkflowService } from "../../services/workflow/workflow-service"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
@@ -661,7 +660,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     response: z.object({
       providerId: z.string(),
       references: z.array(z.object({
-        kind: z.enum(["scheduled-task", "workflow-node", "conversation"]),
+        kind: z.enum(["workflow-node", "conversation"]),
         entityId: z.string(),
         entityName: z.string(),
         nodeId: z.string().optional(),
@@ -669,7 +668,6 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
         providerId: z.string(),
         modelTier: z.string(),
       })),
-      taskCount: z.number(),
       workflowNodeCount: z.number(),
       conversationCount: z.number(),
     }),
@@ -685,10 +683,9 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       sourceProviderId: z.string().min(1),
       targetProviderId: z.string().min(1),
       targetModelTier: z.string().min(1),
-      scope: z.array(z.enum(["scheduled-task", "workflow-node"])),
+      scope: z.array(z.enum(["workflow-node"])),
     }),
     response: z.object({
-      migratedTasks: z.number(),
       migratedWorkflowNodes: z.number(),
       errors: z.array(z.object({ entityId: z.string(), error: z.string() })),
     }),
@@ -696,7 +693,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       sourceProviderId: string
       targetProviderId: string
       targetModelTier: string
-      scope: ("scheduled-task" | "workflow-node")[]
+      scope: "workflow-node"[]
     }) => {
       const scanner = new ProviderReferenceScanner(buildScannerDeps(ctx.resolve))
       return scanner.migrate({
@@ -950,15 +947,6 @@ function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; r
 
 function buildScannerDeps(resolve: <T>(id: string) => T): ProviderReferenceScannerDeps {
   return {
-    listTasks: async () => {
-      const scheduler = resolve<TaskSchedulerService>("core.task-scheduler")
-      const tasks = await scheduler.schedulerTaskList()
-      return tasks.map((t) => ({ id: t.id, name: t.name, action: t.action }))
-    },
-    updateTaskAction: async (id, action) => {
-      const scheduler = resolve<TaskSchedulerService>("core.task-scheduler")
-      await scheduler.schedulerTaskUpdate(id, { action })
-    },
     listWorkflowNodes: async () => {
       const workflowService = resolve<WorkflowService>("core.workflow")
       const metas = await workflowService.list()
