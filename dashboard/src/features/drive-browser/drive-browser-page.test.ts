@@ -6,6 +6,7 @@ import {
   DriveBrowserView,
   DriveSingleFileReaderView,
 } from './drive-browser-page'
+import { DriveFinder } from './finder/drive-finder'
 import {
   getDriveRendererOptions,
   selectDefaultDriveRenderer,
@@ -192,6 +193,58 @@ describe('drive browser view model', () => {
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('源码')
     expect(html).not.toContain('# Notes')
+  })
+
+  it('renders console folders as full-width finder without renderer chrome', () => {
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      current: {
+        ...baseCurrent(),
+        id: 'folder',
+        type: 'folder',
+        browserUrl: '/drive/items/folder',
+        downloadUrl: '/drive/items/folder/zip',
+      },
+      children: [
+        { ...baseCurrent(), id: 'file', name: 'notes.md', browserUrl: '/drive/items/folder/items/file' },
+      ],
+      preview: null,
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'console' }))
+
+    expect(html).toContain('data-drive-finder="full"')
+    expect(html).toContain('下载整个目录')
+    expect(html).toContain('notes.md')
+    expect(html).not.toContain('data-drive-renderer-region="true"')
+  })
+
+  it('renders console files as split finder and renderer layout', () => {
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'console',
+      current: {
+        ...baseCurrent(),
+        id: 'file',
+        name: 'notes.md',
+        browserUrl: '/drive/items/folder/items/file',
+        downloadUrl: '/drive/items/folder/items/file/download',
+        previewKind: 'markdown',
+      },
+      children: [
+        { ...baseCurrent(), id: 'file', name: 'notes.md', browserUrl: '/drive/items/folder/items/file', previewKind: 'markdown' },
+      ],
+      preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'console' }))
+
+    expect(html).toContain('data-drive-finder="split"')
+    expect(html).toContain('data-drive-renderer-region="true"')
+    expect(html).toContain('新窗口打开')
+    expect(html).toContain('切换显示')
+    expect(html).toContain('<h1>Notes</h1>')
   })
 
   it('uses the single file reader for owner and shared files', () => {
