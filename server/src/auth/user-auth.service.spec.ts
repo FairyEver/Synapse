@@ -13,6 +13,7 @@ function createPrismaMock() {
       findUnique: vi.fn().mockResolvedValue(null),
     },
     user: {
+      findUnique: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: "user-1", email: "u@example.com", status: "active" }),
       update: vi.fn().mockResolvedValue({ id: "user-1" }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -596,6 +597,10 @@ describe("UserAuthService", () => {
       where: { email: "u@example.com" },
       select: { id: true },
     })
+    expect(prisma.__tx.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "u@example.com" },
+      select: { id: true },
+    })
     expect(prisma.__tx.user.create).toHaveBeenCalledWith({
       data: {
         email: "u@example.com",
@@ -668,6 +673,40 @@ describe("UserAuthService", () => {
 
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
+      action: "user.register.failure",
+      targetType: "user",
+      targetId: "unknown",
+      detail: { reason: "duplicate_email" },
+      ipAddress: "203.0.113.26",
+    })
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
+    expect(prisma.__tx.user.create).not.toHaveBeenCalled()
+    expect(prisma.__tx.userSession.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects existing user emails during registration and records duplicate email audits", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.user.findUnique.mockResolvedValue({ id: "existing-user" })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.register({
+      email: "User@example.com",
+      password: "StrongPassword123!",
+    }, "203.0.113.26"))
+      .rejects
+      .toThrow("邮箱已注册。")
+
+    expect(prisma.__tx.adminUser.findUnique).toHaveBeenCalledWith({
+      where: { email: "user@example.com" },
+      select: { id: true },
+    })
+    expect(prisma.__tx.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "user@example.com" },
+      select: { id: true },
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "user@example.com",
       action: "user.register.failure",
       targetType: "user",
       targetId: "unknown",

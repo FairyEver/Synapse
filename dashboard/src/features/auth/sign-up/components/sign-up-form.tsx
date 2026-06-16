@@ -4,7 +4,7 @@ import { Loader2, UserPlus } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { userAuthApi } from '@/lib/api'
+import { ApiError, userAuthApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { PasswordInput } from '@/components/password-input'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { buildAuthRedirectSearch } from '../../auth-redirect-search'
 import { zodResolver } from '../../zod-resolver'
+
+const duplicateEmailMessage = '邮箱已注册。'
 
 const formSchema = z
   .object({
@@ -59,6 +61,17 @@ export function SignUpForm({
       form.reset()
       toast.success('账号已创建')
     } catch (err: unknown) {
+      if (
+        err instanceof ApiError &&
+        err.status === 400 &&
+        err.message === duplicateEmailMessage
+      ) {
+        form.setError('email', {
+          type: 'server',
+          message: duplicateEmailMessage,
+        }, { shouldFocus: true })
+        return
+      }
       const message = err instanceof Error ? err.message : '注册失败'
       toast.error(message)
     } finally {

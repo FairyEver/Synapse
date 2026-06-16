@@ -192,6 +192,11 @@ export class UserAuthService {
           select: { id: true },
         })
         if (existingAdmin) return { registered: false as const }
+        const existingUser = await tx.user.findUnique({
+          where: { email },
+          select: { id: true },
+        })
+        if (existingUser) return { registered: false as const }
 
         const user = await tx.user.create({
           data: {
