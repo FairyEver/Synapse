@@ -4,6 +4,7 @@ import { Download, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -65,10 +66,9 @@ export function DriveRendererShell({
   }, [initialRendererId, rendererId, snapshot])
 
   if (!selected) return null
-  const shellClassName = body ? null : 'h-full'
 
   return (
-    <section className={cn('min-h-0 bg-background', shellClassName)}>
+    <section className='h-full min-h-0 bg-background'>
       {body ? (
         <DriveRendererFloatingMenu
           snapshot={snapshot}
@@ -97,8 +97,15 @@ export function DriveRendererContent({
     : selected.container === 'reading'
       ? READING_CONTAINER_CLASSNAME
       : FULL_CONTAINER_CLASSNAME
-  const renderContent = (content: ReactNode) =>
-    body ? content : <div className={containerClassName}>{content}</div>
+  const contentHostClassName = cn(
+    'h-full min-h-0',
+    selected.container === 'full' ? 'overflow-hidden' : 'overflow-auto'
+  )
+  const renderContent = (content: ReactNode) => (
+    <div className={contentHostClassName}>
+      {body ? content : <div className={containerClassName}>{content}</div>}
+    </div>
+  )
 
   if (!preview || selected.id === 'download') {
     return renderContent(<DriveDownloadRenderer current={snapshot.current} />)
@@ -107,15 +114,15 @@ export function DriveRendererContent({
     return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} />)
   }
   if (selected.id === 'code') {
-    return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} body={body} />)
+    return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} />)
   }
   if (selected.id === 'image') {
     return renderContent(<DriveImageRenderer current={snapshot.current} preview={preview} />)
   }
   if (selected.id === 'iframe' && preview.visitUrl) {
-    return <DriveIframeRenderer current={snapshot.current} visitUrl={preview.visitUrl} />
+    return renderContent(<DriveIframeRenderer current={snapshot.current} visitUrl={preview.visitUrl} />)
   }
-  return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} body={body} />)
+  return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} />)
 }
 
 function DriveRendererFloatingMenu({
@@ -162,11 +169,20 @@ function DriveRendererFloatingMenu({
               </a>
             </DropdownMenuItem>
           ) : null}
-          {options.length > 1 ? <DropdownMenuSeparator /> : null}
+          {options.length > 1 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>打开方式</DropdownMenuLabel>
+            </>
+          ) : null}
           {options.length > 1 ? options.map((option) => (
-            <DropdownMenuItem key={option.id} onClick={() => onSelect(option.id)}>
-              {option.id === selected.id ? '当前：' : null}{option.label}
-            </DropdownMenuItem>
+            <DropdownMenuCheckboxItem
+              key={option.id}
+              checked={option.id === selected.id}
+              onCheckedChange={() => onSelect(option.id)}
+            >
+              {option.label}
+            </DropdownMenuCheckboxItem>
           )) : null}
         </DropdownMenuContent>
       </DropdownMenu>

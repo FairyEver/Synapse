@@ -156,7 +156,11 @@ export function DriveSingleFileReaderView({
   readonly initialRendererId?: DriveRendererId | null
 }) {
   void embedded
-  return <DriveRendererShell snapshot={snapshot} body initialRendererId={initialRendererId} />
+  return (
+    <div className='h-svh min-h-0 overflow-hidden bg-background'>
+      <DriveRendererShell snapshot={snapshot} body initialRendererId={initialRendererId} />
+    </div>
+  )
 }
 
 function DriveBrowserPasswordForm({

@@ -1,16 +1,13 @@
 import Editor from '@monaco-editor/react'
 import type { DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
-import { cn } from '@/lib/utils'
 
 export function DriveCodeRenderer({
   current,
   preview,
-  body = false,
 }: {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
-  readonly body?: boolean
 }) {
   const language = getCodeEditorLanguage(current.name)
 
@@ -18,7 +15,7 @@ export function DriveCodeRenderer({
     <div
       data-drive-code-renderer='true'
       data-drive-code-language={language}
-      className={cn('flex min-h-0 w-full flex-col overflow-hidden', body ? 'h-svh' : 'h-full')}
+      className='flex h-full min-h-0 w-full flex-col overflow-hidden'
     >
       <div className='min-h-0 flex-1'>
         <Editor

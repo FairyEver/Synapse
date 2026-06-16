@@ -164,11 +164,12 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('border')
     expect(html).not.toContain('bg-card')
     expect(html).not.toContain('min-h-96')
-    expect(html).toContain('class="flex min-h-0 w-full flex-col overflow-hidden h-svh"')
+    expect(html).toContain('class="flex h-full min-h-0 w-full flex-col overflow-hidden"')
+    expect(html).not.toContain('h-svh')
     expect(html).not.toContain('min-h-svh')
   })
 
-  it('does not add reader container classes in standalone renderer host', () => {
+  it('uses a fullscreen host without reader container classes in standalone renderer mode', () => {
     const snapshot = createSnapshot({
       context: 'owner',
       surface: 'standalone',
@@ -181,12 +182,33 @@ describe('drive browser view model', () => {
     )
 
     expect(html).toContain('data-drive-code-renderer="true"')
+    expect(html).toContain('class="h-svh min-h-0 overflow-hidden bg-background"')
+    expect(html).toContain('class="h-full min-h-0 bg-background"')
     expect(html).not.toContain('max-w-4xl')
+    expect(html).not.toContain('max-w-6xl')
     expect(html).not.toContain('px-4')
     expect(html).not.toContain('md:px-6')
-    expect(html).not.toContain('h-svh overflow-hidden')
-    expect(html).toContain('class="flex min-h-0 w-full flex-col overflow-hidden h-svh"')
-    expect(html).not.toContain('class="min-h-0 bg-background min-h-svh"')
+    expect(html).toContain('class="flex h-full min-h-0 w-full flex-col overflow-hidden"')
+    expect(html).not.toContain('class="flex min-h-0 w-full flex-col overflow-hidden h-svh"')
+    expect(html).not.toContain('min-h-svh')
+  })
+
+  it('keeps iframe renderers sized by the external host', () => {
+    const snapshot = createSnapshot({
+      context: 'owner',
+      current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
+      preview: { ...basePreview(), kind: 'html-source', text: '<h1>Notes</h1>', visitUrl: '/drive/render/page' },
+    })
+
+    const html = renderToStaticMarkup(
+      createElement(DriveRendererContent, {
+        snapshot,
+        selected: { id: 'iframe', label: '网页', container: 'full' },
+      })
+    )
+
+    expect(html).toContain('class="h-full min-h-0 w-full border-0 bg-background"')
+    expect(html).not.toContain('h-svh')
   })
 
   it('shows visit for owner html previews', () => {
@@ -334,8 +356,12 @@ describe('drive browser view model', () => {
     expect(html).toContain('data-drive-renderer-region="true"')
     expect(html).toContain('新标签页打开')
     expect(html).toContain('/drive/items/folder/items/file?surface=standalone')
-    expect(html).toContain('切换显示')
+    expect(html).toContain('打开方式')
+    expect(html).not.toContain('切换显示')
+    expect(html).not.toContain('当前：')
     expect(html).toContain('<h1>Notes</h1>')
+    expect(html).toContain('class="min-h-0 flex-1 overflow-hidden"')
+    expect(html).not.toContain('class="min-h-0 flex-1 overflow-auto"')
   })
 
   it('uses the single file reader for owner and shared files', () => {
