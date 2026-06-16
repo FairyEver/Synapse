@@ -72,6 +72,11 @@ export function shouldSuppressDriveFloatingMenuOpen(
   return Math.hypot(current.left - start.left, current.top - start.top) >= threshold
 }
 
+export function getDriveFloatingMenuNewWindowUrl(snapshot: DriveBrowserSnapshotDto): string | null {
+  if (snapshot.surface === 'standalone' || snapshot.context === 'share') return null
+  return snapshot.preview?.visitUrl ?? null
+}
+
 export function DriveRendererShell({
   snapshot,
   body = false,
@@ -179,6 +184,7 @@ function DriveRendererFloatingMenu({
   readonly onSelect: (id: DriveRendererId) => void
 }) {
   const driveBrowserUrl = snapshot.context === 'owner' ? snapshot.current.browserUrl : null
+  const newWindowUrl = getDriveFloatingMenuNewWindowUrl(snapshot)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<DriveFloatingMenuDragState | null>(null)
   const suppressClickRef = useRef(false)
@@ -300,9 +306,9 @@ function DriveRendererFloatingMenu({
               </a>
             </DropdownMenuItem>
           ) : null}
-          {snapshot.preview?.visitUrl ? (
+          {newWindowUrl ? (
             <DropdownMenuItem asChild>
-              <a href={snapshot.preview.visitUrl} target='_blank' rel='noreferrer'>
+              <a href={newWindowUrl} target='_blank' rel='noreferrer'>
                 <ExternalLink data-icon='inline-start' />
                 新窗口打开
               </a>
