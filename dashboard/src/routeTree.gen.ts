@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as FilesShareIdRouteImport } from './routes/files/$shareId'
+import { Route as ShareShareIdRouteImport } from './routes/share/$shareId'
 import { Route as authTeamInviteRouteImport } from './routes/(auth)/team-invite'
 import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
@@ -41,10 +41,10 @@ import { Route as AuthenticatedMyContentContentIdRouteImport } from './routes/_a
 import { Route as AuthenticatedContentStoreInstallRouteImport } from './routes/_authenticated/content-store/install'
 import { Route as AuthenticatedContentStoreContentIdRouteImport } from './routes/_authenticated/content-store/$contentId'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
-import { Route as FilesShareIdItemsBrowserItemIdRouteImport } from './routes/files/$shareId_/items/$browserItemId'
+import { Route as ShareShareIdItemsBrowserItemIdRouteImport } from './routes/share/$shareId_/items/$browserItemId'
 import { Route as AuthenticatedMyContentContentIdEditRouteImport } from './routes/_authenticated/my-content/$contentId_/edit'
-import { Route as AuthenticatedDriveItemsRootItemIdRouteImport } from './routes/_authenticated/drive/items/$rootItemId'
-import { Route as AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRouteImport } from './routes/_authenticated/drive/items/$rootItemId_/items/$browserItemId'
+import { Route as AuthenticatedDriveItemsBrowserItemIdRouteImport } from './routes/_authenticated/drive/items/$browserItemId'
+import { Route as AuthenticatedDriveFoldersFolderIdRouteImport } from './routes/_authenticated/drive/folders/$folderId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -55,9 +55,9 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const FilesShareIdRoute = FilesShareIdRouteImport.update({
-  id: '/files/$shareId',
-  path: '/files/$shareId',
+const ShareShareIdRoute = ShareShareIdRouteImport.update({
+  id: '/share/$shareId',
+  path: '/share/$shareId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const authTeamInviteRoute = authTeamInviteRouteImport.update({
@@ -224,10 +224,10 @@ const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
   path: '/auth/desktop',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FilesShareIdItemsBrowserItemIdRoute =
-  FilesShareIdItemsBrowserItemIdRouteImport.update({
-    id: '/files/$shareId_/items/$browserItemId',
-    path: '/files/$shareId/items/$browserItemId',
+const ShareShareIdItemsBrowserItemIdRoute =
+  ShareShareIdItemsBrowserItemIdRouteImport.update({
+    id: '/share/$shareId_/items/$browserItemId',
+    path: '/share/$shareId/items/$browserItemId',
     getParentRoute: () => rootRouteImport,
   } as any)
 const AuthenticatedMyContentContentIdEditRoute =
@@ -236,16 +236,16 @@ const AuthenticatedMyContentContentIdEditRoute =
     path: '/my-content/$contentId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedDriveItemsRootItemIdRoute =
-  AuthenticatedDriveItemsRootItemIdRouteImport.update({
-    id: '/drive/items/$rootItemId',
-    path: '/drive/items/$rootItemId',
+const AuthenticatedDriveItemsBrowserItemIdRoute =
+  AuthenticatedDriveItemsBrowserItemIdRouteImport.update({
+    id: '/drive/items/$browserItemId',
+    path: '/drive/items/$browserItemId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute =
-  AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRouteImport.update({
-    id: '/drive/items/$rootItemId_/items/$browserItemId',
-    path: '/drive/items/$rootItemId/items/$browserItemId',
+const AuthenticatedDriveFoldersFolderIdRoute =
+  AuthenticatedDriveFoldersFolderIdRouteImport.update({
+    id: '/drive/folders/$folderId',
+    path: '/drive/folders/$folderId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
@@ -257,7 +257,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
   '/team-invite': typeof authTeamInviteRoute
-  '/files/$shareId': typeof FilesShareIdRoute
+  '/share/$shareId': typeof ShareShareIdRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
   '/content-store/install': typeof AuthenticatedContentStoreInstallRoute
@@ -281,10 +281,10 @@ export interface FileRoutesByFullPath {
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
-  '/drive/items/$rootItemId': typeof AuthenticatedDriveItemsRootItemIdRoute
+  '/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
+  '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/my-content/$contentId/edit': typeof AuthenticatedMyContentContentIdEditRoute
-  '/files/$shareId/items/$browserItemId': typeof FilesShareIdItemsBrowserItemIdRoute
-  '/drive/items/$rootItemId/items/$browserItemId': typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
+  '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof authForgotPasswordRoute
@@ -292,7 +292,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
   '/team-invite': typeof authTeamInviteRoute
-  '/files/$shareId': typeof FilesShareIdRoute
+  '/share/$shareId': typeof ShareShareIdRoute
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
@@ -317,10 +317,10 @@ export interface FileRoutesByTo {
   '/users': typeof AuthenticatedUsersIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
-  '/drive/items/$rootItemId': typeof AuthenticatedDriveItemsRootItemIdRoute
+  '/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
+  '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/my-content/$contentId/edit': typeof AuthenticatedMyContentContentIdEditRoute
-  '/files/$shareId/items/$browserItemId': typeof FilesShareIdItemsBrowserItemIdRoute
-  '/drive/items/$rootItemId/items/$browserItemId': typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
+  '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -331,7 +331,7 @@ export interface FileRoutesById {
   '/(auth)/sign-in': typeof authSignInRoute
   '/(auth)/sign-up': typeof authSignUpRoute
   '/(auth)/team-invite': typeof authTeamInviteRoute
-  '/files/$shareId': typeof FilesShareIdRoute
+  '/share/$shareId': typeof ShareShareIdRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/content-store/$contentId': typeof AuthenticatedContentStoreContentIdRoute
@@ -356,10 +356,10 @@ export interface FileRoutesById {
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
-  '/_authenticated/drive/items/$rootItemId': typeof AuthenticatedDriveItemsRootItemIdRoute
+  '/_authenticated/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
+  '/_authenticated/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/_authenticated/my-content/$contentId_/edit': typeof AuthenticatedMyContentContentIdEditRoute
-  '/files/$shareId_/items/$browserItemId': typeof FilesShareIdItemsBrowserItemIdRoute
-  '/_authenticated/drive/items/$rootItemId_/items/$browserItemId': typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
+  '/share/$shareId_/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -371,7 +371,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/team-invite'
-    | '/files/$shareId'
+    | '/share/$shareId'
     | '/auth/desktop'
     | '/content-store/$contentId'
     | '/content-store/install'
@@ -395,10 +395,10 @@ export interface FileRouteTypes {
     | '/users/'
     | '/webhook-deliveries/'
     | '/webhooks/'
-    | '/drive/items/$rootItemId'
+    | '/drive/folders/$folderId'
+    | '/drive/items/$browserItemId'
     | '/my-content/$contentId/edit'
-    | '/files/$shareId/items/$browserItemId'
-    | '/drive/items/$rootItemId/items/$browserItemId'
+    | '/share/$shareId/items/$browserItemId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -406,7 +406,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/team-invite'
-    | '/files/$shareId'
+    | '/share/$shareId'
     | '/'
     | '/auth/desktop'
     | '/content-store/$contentId'
@@ -431,10 +431,10 @@ export interface FileRouteTypes {
     | '/users'
     | '/webhook-deliveries'
     | '/webhooks'
-    | '/drive/items/$rootItemId'
+    | '/drive/folders/$folderId'
+    | '/drive/items/$browserItemId'
     | '/my-content/$contentId/edit'
-    | '/files/$shareId/items/$browserItemId'
-    | '/drive/items/$rootItemId/items/$browserItemId'
+    | '/share/$shareId/items/$browserItemId'
   id:
     | '__root__'
     | '/_authenticated'
@@ -444,7 +444,7 @@ export interface FileRouteTypes {
     | '/(auth)/sign-in'
     | '/(auth)/sign-up'
     | '/(auth)/team-invite'
-    | '/files/$shareId'
+    | '/share/$shareId'
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
     | '/_authenticated/content-store/$contentId'
@@ -469,10 +469,10 @@ export interface FileRouteTypes {
     | '/_authenticated/users/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
-    | '/_authenticated/drive/items/$rootItemId'
+    | '/_authenticated/drive/folders/$folderId'
+    | '/_authenticated/drive/items/$browserItemId'
     | '/_authenticated/my-content/$contentId_/edit'
-    | '/files/$shareId_/items/$browserItemId'
-    | '/_authenticated/drive/items/$rootItemId_/items/$browserItemId'
+    | '/share/$shareId_/items/$browserItemId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -482,9 +482,9 @@ export interface RootRouteChildren {
   authSignInRoute: typeof authSignInRoute
   authSignUpRoute: typeof authSignUpRoute
   authTeamInviteRoute: typeof authTeamInviteRoute
-  FilesShareIdRoute: typeof FilesShareIdRoute
+  ShareShareIdRoute: typeof ShareShareIdRoute
   authAuthDesktopRoute: typeof authAuthDesktopRoute
-  FilesShareIdItemsBrowserItemIdRoute: typeof FilesShareIdItemsBrowserItemIdRoute
+  ShareShareIdItemsBrowserItemIdRoute: typeof ShareShareIdItemsBrowserItemIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -503,11 +503,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/files/$shareId': {
-      id: '/files/$shareId'
-      path: '/files/$shareId'
-      fullPath: '/files/$shareId'
-      preLoaderRoute: typeof FilesShareIdRouteImport
+    '/share/$shareId': {
+      id: '/share/$shareId'
+      path: '/share/$shareId'
+      fullPath: '/share/$shareId'
+      preLoaderRoute: typeof ShareShareIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/(auth)/team-invite': {
@@ -713,11 +713,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authAuthDesktopRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/files/$shareId_/items/$browserItemId': {
-      id: '/files/$shareId_/items/$browserItemId'
-      path: '/files/$shareId/items/$browserItemId'
-      fullPath: '/files/$shareId/items/$browserItemId'
-      preLoaderRoute: typeof FilesShareIdItemsBrowserItemIdRouteImport
+    '/share/$shareId_/items/$browserItemId': {
+      id: '/share/$shareId_/items/$browserItemId'
+      path: '/share/$shareId/items/$browserItemId'
+      fullPath: '/share/$shareId/items/$browserItemId'
+      preLoaderRoute: typeof ShareShareIdItemsBrowserItemIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/my-content/$contentId_/edit': {
@@ -727,18 +727,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMyContentContentIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/drive/items/$rootItemId': {
-      id: '/_authenticated/drive/items/$rootItemId'
-      path: '/drive/items/$rootItemId'
-      fullPath: '/drive/items/$rootItemId'
-      preLoaderRoute: typeof AuthenticatedDriveItemsRootItemIdRouteImport
+    '/_authenticated/drive/items/$browserItemId': {
+      id: '/_authenticated/drive/items/$browserItemId'
+      path: '/drive/items/$browserItemId'
+      fullPath: '/drive/items/$browserItemId'
+      preLoaderRoute: typeof AuthenticatedDriveItemsBrowserItemIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/drive/items/$rootItemId_/items/$browserItemId': {
-      id: '/_authenticated/drive/items/$rootItemId_/items/$browserItemId'
-      path: '/drive/items/$rootItemId/items/$browserItemId'
-      fullPath: '/drive/items/$rootItemId/items/$browserItemId'
-      preLoaderRoute: typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRouteImport
+    '/_authenticated/drive/folders/$folderId': {
+      id: '/_authenticated/drive/folders/$folderId'
+      path: '/drive/folders/$folderId'
+      fullPath: '/drive/folders/$folderId'
+      preLoaderRoute: typeof AuthenticatedDriveFoldersFolderIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
@@ -782,9 +782,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
-  AuthenticatedDriveItemsRootItemIdRoute: typeof AuthenticatedDriveItemsRootItemIdRoute
+  AuthenticatedDriveFoldersFolderIdRoute: typeof AuthenticatedDriveFoldersFolderIdRoute
+  AuthenticatedDriveItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsBrowserItemIdRoute
   AuthenticatedMyContentContentIdEditRoute: typeof AuthenticatedMyContentContentIdEditRoute
-  AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -814,12 +814,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
-  AuthenticatedDriveItemsRootItemIdRoute:
-    AuthenticatedDriveItemsRootItemIdRoute,
+  AuthenticatedDriveFoldersFolderIdRoute:
+    AuthenticatedDriveFoldersFolderIdRoute,
+  AuthenticatedDriveItemsBrowserItemIdRoute:
+    AuthenticatedDriveItemsBrowserItemIdRoute,
   AuthenticatedMyContentContentIdEditRoute:
     AuthenticatedMyContentContentIdEditRoute,
-  AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute:
-    AuthenticatedDriveItemsRootItemIdItemsBrowserItemIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -832,9 +832,9 @@ const rootRouteChildren: RootRouteChildren = {
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
   authTeamInviteRoute: authTeamInviteRoute,
-  FilesShareIdRoute: FilesShareIdRoute,
+  ShareShareIdRoute: ShareShareIdRoute,
   authAuthDesktopRoute: authAuthDesktopRoute,
-  FilesShareIdItemsBrowserItemIdRoute: FilesShareIdItemsBrowserItemIdRoute,
+  ShareShareIdItemsBrowserItemIdRoute: ShareShareIdItemsBrowserItemIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

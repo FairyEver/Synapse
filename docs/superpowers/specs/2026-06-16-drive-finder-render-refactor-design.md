@@ -3,6 +3,16 @@
 Date: 2026-06-16
 Scope: `dashboard/src/features/drive-browser/`, `RELEASE_NOTES_PENDING.md`
 
+## 2026-06-16 URL Update
+
+Use the revised Drive URL baseline while applying this refactor:
+
+- share host routes use `/share/:shareId` and `/share/:shareId/items/:itemId`.
+- owner standalone routes use `/drive/items/:itemId`.
+- console folder routes use `/console/drive/folders/:folderId`.
+- HTML render URLs are `/render` children of the corresponding owner/share route.
+- The old `/files/*`, `/pages/*`, `/sites/*`, and publication management flows are removed.
+
 ## Goal
 
 重构 console 网盘承接界面，把现有 `DriveBrowser` 拆成清晰的 Finder、Renderer Registry 和 Host 三层。Finder 负责浏览文件路径和当前目录内容，Renderer 负责显示某个文件，Host 负责把 Finder 或 Renderer 放进 console、分享页、owner 独立页或单文件新窗口。
@@ -82,7 +92,7 @@ Host 负责路由和外壳：
 
 - console host：保留 console sidebar、header、main content。
 - owner standalone host：登录用户通过 `/drive/...` 打开自己的文件或目录。
-- share host：通过 `/files/...` 访问分享内容。
+- share host：通过 `/share/...` 访问分享内容。
 - single file host：用于新窗口文件阅读。
 
 Host 不直接实现文件列表或文件渲染逻辑。

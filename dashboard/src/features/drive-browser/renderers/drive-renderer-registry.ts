@@ -24,8 +24,8 @@ export function getDriveRendererOptions(snapshot: DriveBrowserSnapshotDto): read
   if (preview.kind === 'markdown') return [RENDERERS.markdown, RENDERERS.code]
   if (preview.kind === 'image') return [RENDERERS.image]
   if (preview.kind === 'html-source') {
-    return snapshot.context === 'owner' && preview.visitUrl
-      ? [RENDERERS.code, RENDERERS.iframe]
+    return preview.visitUrl
+      ? [RENDERERS.iframe, RENDERERS.code]
       : [RENDERERS.code]
   }
   return [RENDERERS.code]

@@ -242,23 +242,23 @@ describe('driveBrowserApi', () => {
   it('uses owner and console browser endpoints', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 
-    await driveBrowserApi.getOwnerRoot('root/id')
-    await driveBrowserApi.getOwnerChild('root/id', 'child/id', 'console')
+    await driveBrowserApi.getOwnerItem('item/id')
     await driveBrowserApi.getConsoleRoot()
+    await driveBrowserApi.getOwnerItem('folder/id', 'console')
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/drive/browser/owner/items/root%2Fid',
+      '/api/drive/browser/owner/items/item%2Fid',
       expect.objectContaining({ credentials: 'include' })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/drive/browser/owner/items/root%2Fid/items/child%2Fid?surface=console',
+      '/api/drive/browser/owner/root',
       expect.objectContaining({ credentials: 'include' })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      '/api/drive/browser/owner/root',
+      '/api/drive/browser/owner/items/folder%2Fid?surface=console',
       expect.objectContaining({ credentials: 'include' })
     )
   })
@@ -266,7 +266,7 @@ describe('driveBrowserApi', () => {
   it('passes browser child pagination query parameters', async () => {
     const fetchMock = mockJsonResponse({ ok: true })
 
-    await driveBrowserApi.getOwnerChild('root/id', 'child/id', 'console', {
+    await driveBrowserApi.getOwnerItem('folder/id', 'console', {
       childrenOffset: 100,
       childrenLimit: 50,
     })
@@ -274,7 +274,7 @@ describe('driveBrowserApi', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/drive/browser/owner/items/root%2Fid/items/child%2Fid?surface=console&childrenOffset=100&childrenLimit=50',
+      '/api/drive/browser/owner/items/folder%2Fid?surface=console&childrenOffset=100&childrenLimit=50',
       expect.objectContaining({ credentials: 'include' })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(

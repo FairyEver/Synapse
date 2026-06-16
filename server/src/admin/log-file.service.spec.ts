@@ -140,7 +140,7 @@ describe("LogFileService", () => {
       msg: "request failed Authorization: Bearer raw-bearer ANTHROPIC_API_KEY=env-secret",
       req: {
         method: "GET",
-        url: "/drive/pages/page-1?password=plain-password&apiKey=plain-api-key&file=/Users/liyang/project/readme.md",
+        url: "/share/share-1?password=plain-password&apiKey=plain-api-key&file=/Users/liyang/project/readme.md",
       },
       err: {
         message: "{\"token\":\"json-token\",\"apiKey\":\"json-api-key\"}",
@@ -165,7 +165,7 @@ describe("LogFileService", () => {
       msg: "request failed Authorization: [REDACTED] ANTHROPIC_API_KEY=[REDACTED]",
       req: {
         method: "GET",
-        url: "/drive/pages/page-1?password=[REDACTED]&apiKey=[REDACTED]&file=/Users/liyang/project/readme.md",
+        url: "/share/share-1?password=[REDACTED]&apiKey=[REDACTED]&file=/Users/liyang/project/readme.md",
       },
       err: {
         message: "{\"token\":\"[REDACTED]\",\"apiKey\":\"[REDACTED]\"}",

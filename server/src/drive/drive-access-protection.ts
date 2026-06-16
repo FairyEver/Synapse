@@ -11,7 +11,7 @@ import { hashPassword, verifyPassword } from "../auth/password"
 
 export type { DriveAccessExpiresIn } from "@synapse/shared"
 
-export type DriveAccessCookieKind = "share" | "page" | "site"
+export type DriveAccessCookieKind = "share"
 
 export type DrivePasswordMaterial = {
   readonly passwordEnabled: boolean
@@ -224,7 +224,7 @@ function parseDriveAccessCookiePayload(encodedPayload: string): DriveAccessCooki
 }
 
 function isDriveAccessCookieKind(value: unknown): value is DriveAccessCookieKind {
-  return value === "share" || value === "page" || value === "site"
+  return value === "share"
 }
 
 function earliestExpiringMs(left: number, right: number): number {

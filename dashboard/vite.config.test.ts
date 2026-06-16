@@ -33,10 +33,13 @@ describe("dashboard Vite dev proxy", () => {
   it("keeps direct drive responses behind focused proxy rules", () => {
     const proxy = config.server?.proxy
     const ownerDownloadProxy = proxy && !Array.isArray(proxy)
-      ? proxy["^/drive/items/[^/]+/(download|zip|render)$"]
+      ? proxy["^/drive/items/[^/]+/(download|render)$"]
       : undefined
     const shareDownloadProxy = proxy && !Array.isArray(proxy)
-      ? proxy["^/files/[^/]+/items/[^/]+/(download|zip)$"]
+      ? proxy["^/share/[^/]+/(download|render)$"]
+      : undefined
+    const shareChildDownloadProxy = proxy && !Array.isArray(proxy)
+      ? proxy["^/share/[^/]+/items/[^/]+/(download|render)$"]
       : undefined
 
     expect(ownerDownloadProxy).toEqual(expect.objectContaining({
@@ -47,20 +50,24 @@ describe("dashboard Vite dev proxy", () => {
       target: "http://localhost:3001",
       changeOrigin: true,
     }))
-    expect(proxy && !Array.isArray(proxy) ? proxy["/files"] : undefined).toBeUndefined()
+    expect(shareChildDownloadProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
+    expect(proxy && !Array.isArray(proxy) ? proxy["/share"] : undefined).toBeUndefined()
   })
 
   it("serves drive browser page routes through the dashboard app in dev", () => {
-    expect(isDriveBrowserSpaPath("/drive")).toBe(true)
-    expect(isDriveBrowserSpaPath("/drive/items/root-id")).toBe(true)
-    expect(isDriveBrowserSpaPath("/drive/items/root-id/items/file-id")).toBe(true)
-    expect(isDriveBrowserSpaPath("/files/share-id")).toBe(true)
-    expect(isDriveBrowserSpaPath("/files/share-id/items/file-id")).toBe(true)
+    expect(isDriveBrowserSpaPath("/console/drive")).toBe(true)
+    expect(isDriveBrowserSpaPath("/console/drive/folders/root-id")).toBe(true)
+    expect(isDriveBrowserSpaPath("/drive/items/file-id")).toBe(true)
+    expect(isDriveBrowserSpaPath("/share/share-id")).toBe(true)
+    expect(isDriveBrowserSpaPath("/share/share-id/items/file-id")).toBe(true)
 
-    expect(isDriveBrowserSpaPath("/drive/items/root-id/download")).toBe(false)
-    expect(isDriveBrowserSpaPath("/drive/items/root-id/items/file-id/render")).toBe(false)
-    expect(isDriveBrowserSpaPath("/files/share-id/download")).toBe(false)
-    expect(isDriveBrowserSpaPath("/files/share-id/items/file-id/download")).toBe(false)
+    expect(isDriveBrowserSpaPath("/drive/items/file-id/download")).toBe(false)
+    expect(isDriveBrowserSpaPath("/drive/items/file-id/render")).toBe(false)
+    expect(isDriveBrowserSpaPath("/share/share-id/download")).toBe(false)
+    expect(isDriveBrowserSpaPath("/share/share-id/items/file-id/download")).toBe(false)
   })
 
   it("redirects legacy dashboard page routes to console paths in dev", () => {
@@ -73,25 +80,19 @@ describe("dashboard Vite dev proxy", () => {
   })
 
   it("keeps drive direct response routes out of the dashboard app fallback", () => {
-    expect(resolveDashboardDevSpaFallback("/drive")).toBe("/console/")
-    expect(resolveDashboardDevSpaFallback("/files/share-id")).toBe("/console/")
-    expect(resolveDashboardDevSpaFallback("/drive/items/root-id/items/file-id")).toBe("/console/")
-    expect(resolveDashboardDevSpaFallback("/files/share-id/items/file-id/download")).toBeNull()
-    expect(resolveDashboardDevSpaFallback("/drive/items/root-id/items/file-id/render")).toBeNull()
+    expect(resolveDashboardDevSpaFallback("/console/drive")).toBe("/console/")
+    expect(resolveDashboardDevSpaFallback("/share/share-id")).toBe("/console/")
+    expect(resolveDashboardDevSpaFallback("/drive/items/file-id")).toBe("/console/")
+    expect(resolveDashboardDevSpaFallback("/share/share-id/items/file-id/download")).toBeNull()
+    expect(resolveDashboardDevSpaFallback("/drive/items/file-id/render")).toBeNull()
   })
 
-  it("proxies public drive publication endpoints through /pages and /sites", () => {
+  it("does not proxy removed drive publication endpoints", () => {
     const proxy = config.server?.proxy
     const pagesProxy = proxy && !Array.isArray(proxy) ? proxy["/pages"] : undefined
     const sitesProxy = proxy && !Array.isArray(proxy) ? proxy["/sites"] : undefined
 
-    expect(pagesProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
-      changeOrigin: true,
-    }))
-    expect(sitesProxy).toEqual(expect.objectContaining({
-      target: "http://localhost:3001",
-      changeOrigin: true,
-    }))
+    expect(pagesProxy).toBeUndefined()
+    expect(sitesProxy).toBeUndefined()
   })
 })

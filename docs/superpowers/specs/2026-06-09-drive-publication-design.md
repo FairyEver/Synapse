@@ -3,6 +3,17 @@
 Date: 2026-06-09
 Scope: `server/`, `desktop/`, `shared/`, `dashboard/`, `docs/`
 
+## 2026-06-16 Status
+
+This design is superseded. Drive page publication and site publication are no longer product capabilities.
+
+Current Drive public access uses live share links only:
+
+- Share URLs use `/share/:shareId` and `/share/:shareId/items/:itemId`.
+- HTML share and owner access can render through `/render` routes after the same owner/share permission checks.
+- `/pages/*`, `/sites/*`, `DrivePublication`, `DrivePublicationDeployment`, and `DrivePublicationAsset` are removed.
+- Deleting Drive files affects live shares by source availability; no publication snapshot or delete-impact flow remains.
+
 ## Goal
 
 Extend Synapse Drive with a publication feature that is separate from existing share links.

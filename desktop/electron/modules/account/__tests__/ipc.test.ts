@@ -46,12 +46,6 @@ vi.mock("../../../services/account-service", () => ({
     shareDriveItem: vi.fn(async () => ({})),
     disableDriveShare: async () => ({ ok: true }),
     getDriveUsage: async () => ({}),
-    listDrivePublications: async () => [],
-    publishDrivePage: vi.fn(async () => ({})),
-    publishDriveSite: vi.fn(async () => ({})),
-    redeployDrivePublication: async () => ({}),
-    disableDrivePublication: async () => ({ ok: true }),
-    getDriveDeleteImpact: async () => ({ publications: [] }),
     listDriveShares: async () => [],
   },
 }))
@@ -464,38 +458,20 @@ describe("accountIpcModule", () => {
     ])
   })
 
-  it("passes drive access settings through share and publication handlers", async () => {
+  it("passes drive access settings through share handlers", async () => {
     await accountIpcModule.methods.shareDriveItem.handler({} as IpcHandlerContext, {
       itemId: "item-1",
       passwordEnabled: false,
       expiresIn: "30d",
-    })
-    await accountIpcModule.methods.publishDrivePage.handler({} as IpcHandlerContext, {
-      itemId: "page-1",
-      passwordEnabled: true,
-      expiresIn: "1y",
-    })
-    await accountIpcModule.methods.publishDriveSite.handler({} as IpcHandlerContext, {
-      itemId: "site-1",
-      passwordEnabled: true,
-      expiresIn: "forever",
     })
 
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
       passwordEnabled: false,
       expiresIn: "30d",
     })
-    expect(accountService.publishDrivePage).toHaveBeenCalledWith("page-1", {
-      passwordEnabled: true,
-      expiresIn: "1y",
-    })
-    expect(accountService.publishDriveSite).toHaveBeenCalledWith("site-1", {
-      passwordEnabled: true,
-      expiresIn: "forever",
-    })
   })
 
-  it("validates drive publication and share bridge schemas", () => {
+  it("validates drive share bridge schemas", () => {
     expect(accountIpcModule.methods.shareDriveItem.request?.parse({
       itemId: "share-1",
       passwordEnabled: false,
@@ -505,74 +481,19 @@ describe("accountIpcModule", () => {
       passwordEnabled: false,
       expiresIn: "3d",
     })
-    expect(accountIpcModule.methods.publishDrivePage.request?.parse({
-      itemId: "item-1",
-      passwordEnabled: true,
-      expiresIn: "1y",
-    })).toEqual({
-      itemId: "item-1",
-      passwordEnabled: true,
-      expiresIn: "1y",
-    })
-    expect(accountIpcModule.methods.publishDriveSite.request?.parse({
-      itemId: "folder-1",
-      passwordEnabled: true,
-      expiresIn: "forever",
-    })).toEqual({
-      itemId: "folder-1",
-      passwordEnabled: true,
-      expiresIn: "forever",
-    })
     expect(() => accountIpcModule.methods.shareDriveItem.request?.parse({
       itemId: "share-1",
       passwordEnabled: true,
       expiresIn: "14d",
     })).toThrow()
-    expect(accountIpcModule.methods.redeployDrivePublication.request?.parse({ publicationId: "pub-row-1" }))
-      .toEqual({ publicationId: "pub-row-1" })
-    expect(accountIpcModule.methods.disableDrivePublication.request?.parse({ publicationId: "pub-row-1" }))
-      .toEqual({ publicationId: "pub-row-1" })
-    expect(accountIpcModule.methods.getDriveDeleteImpact.request?.parse({ itemId: "item-1" }))
-      .toEqual({ itemId: "item-1" })
     expect(accountIpcModule.methods.deleteDriveItem.request?.parse({
       itemId: "item-1",
-      disablePublications: true,
-    })).toEqual({ itemId: "item-1", disablePublications: true })
-    const listDrivePublicationsResponse = accountIpcModule.methods.listDrivePublications.response
-    const getDriveDeleteImpactResponse = accountIpcModule.methods.getDriveDeleteImpact.response
+    })).toEqual({ itemId: "item-1" })
     const listDriveSharesResponse = accountIpcModule.methods.listDriveShares.response
-    if (!listDrivePublicationsResponse || !getDriveDeleteImpactResponse || !listDriveSharesResponse) {
+    if (!listDriveSharesResponse) {
       throw new Error("Expected drive IPC response schemas to be registered")
     }
 
-    const publication = {
-      id: "pub-row-1",
-      publishId: "pub_public",
-      type: "page",
-      name: "report.html",
-      status: "active",
-      sourceItemId: "item-1",
-      sourceDeleted: false,
-      url: "https://synapse.test/pages/pub_public",
-      urlWithPassword: "https://synapse.test/pages/pub_public?password=AbC234xy",
-      passwordEnabled: true,
-      password: "AbC234xy",
-      expiresAt: "2026-06-16T00:00:00.000Z",
-      currentDeploymentId: "dep-1",
-      createdAt: "2026-06-09T00:00:00.000Z",
-      updatedAt: "2026-06-09T00:00:00.000Z",
-    }
-    expect(accountIpcModule.methods.listDrivePublications.request?.parse({ offset: 20, limit: 20 }))
-      .toEqual({ offset: 20, limit: 20 })
-    expect(listDrivePublicationsResponse.parse({
-      items: [publication],
-      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
-    })).toEqual({
-      items: [publication],
-      page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
-    })
-    expect(getDriveDeleteImpactResponse.parse({ publications: [publication] }))
-      .toEqual({ publications: [publication] })
     expect(listDriveSharesResponse.parse({
       items: [{
       id: "share-row-1",

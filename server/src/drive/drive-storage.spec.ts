@@ -124,8 +124,8 @@ describe("LocalDriveStorage", () => {
     if (!token) throw new Error("missing upload token")
 
     await storage.acceptUpload(token, Readable.from("<h1>Hello</h1>"))
-    await storage.copyObject({ fromKey: "drive/item-1", toKey: "drive-publications/pub-1/dep-1/index.html", contentType: "text/html" })
-    const object = await storage.getObjectStream({ key: "drive-publications/pub-1/dep-1/index.html" })
+    await storage.copyObject({ fromKey: "drive/item-1", toKey: "drive-copies/copy-1/index.html", contentType: "text/html" })
+    const object = await storage.getObjectStream({ key: "drive-copies/copy-1/index.html" })
 
     expect(object.size).toBe(14n)
     expect(object.contentType).toBe("text/html")

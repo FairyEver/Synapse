@@ -49,7 +49,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   )
 }
 
-function isStandaloneDriveReaderHref(href: string): boolean {
+export function isStandaloneDriveReaderHref(href: string): boolean {
   const url = new URL(href, 'http://synapse.local')
-  return url.pathname.startsWith('/drive/items/') && url.searchParams.get('surface') === 'standalone'
+  return url.pathname.startsWith('/drive/items/') && url.searchParams.get('surface') !== 'console'
 }

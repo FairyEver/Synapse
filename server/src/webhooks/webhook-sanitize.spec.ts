@@ -35,10 +35,10 @@ describe("webhook sanitize", () => {
 
   it("redacts sensitive query values before request logs are serialized", () => {
     const sanitized = sanitizeWebhookLogUrl(
-      "/drive/pages/page-1?password=plain-password&page=2&apiKey=plain-api-key#section",
+      "/share/share-1?password=plain-password&page=2&apiKey=plain-api-key#section",
     )
 
-    expect(sanitized).toBe("/drive/pages/page-1?password=[redacted]&page=2&apiKey=[redacted]#section")
+    expect(sanitized).toBe("/share/share-1?password=[redacted]&page=2&apiKey=[redacted]#section")
     expect(sanitized).not.toContain("plain-password")
     expect(sanitized).not.toContain("plain-api-key")
   })

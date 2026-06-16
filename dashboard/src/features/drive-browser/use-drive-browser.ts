@@ -11,8 +11,7 @@ export type DriveBrowserInput =
   | {
       context: 'owner'
       surface: DriveBrowserSurface
-      rootItemId: string
-      itemId?: string
+      itemId: string
     }
   | {
       context: 'share'
@@ -147,9 +146,7 @@ function fingerprintInitialPassword(value: string | undefined) {
 export async function loadDriveBrowser(input: DriveBrowserInput, options: DriveBrowserLoadOptions = {}) {
   if (input.context === 'console-root') return driveBrowserApi.getConsoleRoot(options)
   if (input.context === 'owner') {
-    return input.itemId
-      ? driveBrowserApi.getOwnerChild(input.rootItemId, input.itemId, input.surface, options)
-      : driveBrowserApi.getOwnerRoot(input.rootItemId, input.surface, options)
+    return driveBrowserApi.getOwnerItem(input.itemId, input.surface, options)
   }
   if (input.initialPassword) {
     return driveBrowserApi.unlockShare(input.shareId, input.initialPassword, input.itemId, options)

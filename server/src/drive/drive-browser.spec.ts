@@ -39,19 +39,19 @@ describe("drive browser helpers", () => {
     expect(resolveDriveBrowserPreviewKind({ ...baseItem, name: "archive.zip", mimeType: "application/zip" })).toBe("download-only")
   })
 
-  it("adds owner-only visit url for html previews", () => {
+  it("adds owner visit url for html previews", () => {
     const item = { ...baseItem, id: "child-1", name: "index.html", mimeType: "text/html" }
     const preview = buildDriveBrowserPreview({
       item,
-      route: { context: "owner", surface: "standalone", rootItemId: "root-1" },
+      route: { context: "owner", surface: "standalone" },
       text: "<html></html>",
     })
 
     expect(preview.kind).toBe("html-source")
-    expect(preview.visitUrl).toBe("/drive/items/root-1/items/child-1/render")
+    expect(preview.visitUrl).toBe("/drive/items/child-1/render")
   })
 
-  it("keeps share html previews as source without visit url", () => {
+  it("adds share visit url for html previews", () => {
     const item = { ...baseItem, id: "child-1", name: "index.html", mimeType: "text/html" }
     const preview = buildDriveBrowserPreview({
       item,
@@ -60,14 +60,14 @@ describe("drive browser helpers", () => {
     })
 
     expect(preview.kind).toBe("html-source")
-    expect(preview.visitUrl).toBeNull()
+    expect(preview.visitUrl).toBe("/share/shr-1/items/child-1/render")
   })
 
   it("builds owner markdown previews with rendered html instead of visit urls", () => {
     const item = { ...baseItem, id: "child-1", name: "notes.md", mimeType: "text/markdown" }
     const preview = buildDriveBrowserPreview({
       item,
-      route: { context: "owner", surface: "standalone", rootItemId: "root-1" },
+      route: { context: "owner", surface: "standalone" },
       text: "# Notes",
       html: "<h1>Notes</h1>",
     })
@@ -92,23 +92,33 @@ describe("drive browser helpers", () => {
     expect(preview.visitUrl).toBeNull()
   })
 
-  it("builds owner child browser urls", () => {
+  it("builds owner item browser urls", () => {
     const item = buildDriveBrowserItemDto({
       item: { ...baseItem, id: "child-1" },
-      route: { context: "owner", surface: "standalone", rootItemId: "root-1" },
+      route: { context: "owner", surface: "standalone" },
     })
 
-    expect(item.browserUrl).toBe("/drive/items/root-1/items/child-1")
-    expect(item.downloadUrl).toBe("/drive/items/root-1/items/child-1/download")
+    expect(item.browserUrl).toBe("/drive/items/child-1")
+    expect(item.downloadUrl).toBe("/drive/items/child-1/download")
   })
 
-  it("builds console child browser urls", () => {
+  it("builds console folder browser urls", () => {
     const item = buildDriveBrowserItemDto({
-      item: { ...baseItem, id: "child-1" },
-      route: { context: "owner", surface: "console", rootItemId: "root-1" },
+      item: { ...baseItem, id: "child-1", type: "folder" },
+      route: { context: "owner", surface: "console" },
     })
 
-    expect(item.browserUrl).toBe("/drive/items/root-1/items/child-1")
-    expect(item.downloadUrl).toBe("/drive/items/root-1/items/child-1/download")
+    expect(item.browserUrl).toBe("/console/drive/folders/child-1")
+    expect(item.downloadUrl).toBe("/drive/items/child-1/download")
+  })
+
+  it("builds console file browser urls as standalone owner item links", () => {
+    const item = buildDriveBrowserItemDto({
+      item: { ...baseItem, id: "child-1", type: "file" },
+      route: { context: "owner", surface: "console" },
+    })
+
+    expect(item.browserUrl).toBe("/drive/items/child-1")
+    expect(item.downloadUrl).toBe("/drive/items/child-1/download")
   })
 })

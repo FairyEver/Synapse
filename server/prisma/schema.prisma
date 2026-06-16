@@ -66,7 +66,6 @@ model User {
   driveItems                  DriveItem[]
   driveUsage                  DriveUsage?
   driveUploadSessions         DriveUploadSession[]
-  drivePublications           DrivePublication[]
   contentStoreItems           ContentStoreItem[]
   contentStoreDrafts          ContentStoreDraft[]
   contentStoreInstallSessions ContentStoreInstallSession[]
@@ -286,8 +285,6 @@ model DriveItem {
   updatedAt            DateTime                @updatedAt
   shares               DriveShare[]
   uploadSessions       DriveUploadSession[]
-  publications         DrivePublication[]
-  publicationAssets    DrivePublicationAsset[]
 
   @@index([userId, parentId, deletedAt, createdAt])
   @@index([userId, deletedAt, updatedAt])
@@ -344,70 +341,6 @@ model DriveUploadSession {
   @@index([userId, status, createdAt])
   @@index([expiresAt, status])
   @@index([itemId])
-}
-
-model DrivePublication {
-  id                  String                       @id @default(cuid())
-  publishId           String                       @unique
-  userId              String
-  user                User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceItemId        String?
-  sourceItem          DriveItem?                   @relation(fields: [sourceItemId], references: [id], onDelete: SetNull)
-  type                String                       @db.VarChar(16)
-  name                String                       @db.VarChar(255)
-  status              String                       @db.VarChar(32)
-  passwordEnabled     Boolean                      @default(false)
-  passwordHash        String?
-  passwordEncrypted   String?
-  expiresAt           DateTime?
-  accessSettingsAppliedAt DateTime?
-  currentDeploymentId     String?
-  currentDeployment       DrivePublicationDeployment?  @relation("CurrentPublicationDeployment", fields: [currentDeploymentId, id], references: [id, publicationId], onDelete: NoAction)
-  createdAt               DateTime                     @default(now())
-  updatedAt               DateTime                     @updatedAt
-  disabledAt              DateTime?
-  deployments             DrivePublicationDeployment[] @relation("PublicationDeployments")
-  assets                  DrivePublicationAsset[]
-
-  @@index([userId, createdAt])
-  @@index([sourceItemId, status])
-  @@index([status])
-  @@index([status, passwordEnabled])
-}
-
-model DrivePublicationDeployment {
-  id                     String                  @id @default(cuid())
-  publicationId          String
-  publication            DrivePublication        @relation("PublicationDeployments", fields: [publicationId], references: [id], onDelete: Cascade)
-  currentForPublications DrivePublication[]      @relation("CurrentPublicationDeployment")
-  status                 String                  @db.VarChar(32)
-  createdAt              DateTime                @default(now())
-  activatedAt            DateTime?
-  error                  String?
-  assets                 DrivePublicationAsset[]
-
-  @@unique([id, publicationId])
-  @@index([publicationId, createdAt])
-  @@index([status])
-}
-
-model DrivePublicationAsset {
-  id            String                     @id @default(cuid())
-  publicationId String
-  publication   DrivePublication           @relation(fields: [publicationId], references: [id], onDelete: Cascade)
-  deploymentId  String
-  deployment    DrivePublicationDeployment @relation(fields: [deploymentId, publicationId], references: [id, publicationId], onDelete: Cascade)
-  sourceItemId  String?
-  sourceItem    DriveItem?                 @relation(fields: [sourceItemId], references: [id], onDelete: SetNull)
-  relativePath  String                     @db.VarChar(1024)
-  storageKey    String                     @unique
-  contentType   String?                    @db.VarChar(255)
-  size          BigInt
-  sha256        String?                    @db.VarChar(64)
-
-  @@unique([deploymentId, relativePath])
-  @@index([sourceItemId])
-  @@index([publicationId, deploymentId])
 }
 
 model AuditLog {

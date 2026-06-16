@@ -12,8 +12,6 @@ import type {
   DriveItemDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
-  DrivePublicationDto,
-  DrivePublicationListPageDto,
   DrivePublicLinksPageInput,
   DriveReorganizationApplyInput,
   DriveReorganizationApplyResultDto,
@@ -48,10 +46,7 @@ type DriveAccountServicePort = {
   readonly createDriveFolder: (input: { readonly parentId?: string | null; readonly name: string }) => Promise<DriveItemDto>
   readonly renameDriveItem: (itemId: string, name: string) => Promise<DriveItemDto>
   readonly moveDriveItem: (itemId: string, parentId: string | null) => Promise<DriveItemDto>
-  readonly deleteDriveItem: (
-    itemId: string,
-    input?: { readonly disablePublications?: boolean },
-  ) => Promise<{ ok: true }>
+  readonly deleteDriveItem: (itemId: string) => Promise<{ ok: true }>
   readonly shareDriveItem: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DriveShareDto>
   readonly disableDriveShare: (shareId: string) => Promise<{ ok: true }>
   readonly getDriveUsage: () => Promise<DriveUsageDto>
@@ -60,13 +55,7 @@ type DriveAccountServicePort = {
   readonly ensureDriveFolderPath: (input: DriveFolderPathEnsureInput) => Promise<DriveFolderPathEnsureResultDto>
   readonly previewDriveReorganization: (input: DriveReorganizationPreviewInput) => Promise<DriveReorganizationPreviewDto>
   readonly applyDriveReorganization: (input: DriveReorganizationApplyInput) => Promise<DriveReorganizationApplyResultDto>
-  readonly getDriveDeleteImpact: (itemId: string) => Promise<unknown>
   readonly listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
-  readonly listDrivePublications: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicationListPageDto>
-  readonly publishDrivePage: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DrivePublicationDto>
-  readonly publishDriveSite: (itemId: string, settings: DriveAccessSettingsInput) => Promise<DrivePublicationDto>
-  readonly redeployDrivePublication: (publicationId: string) => Promise<DrivePublicationDto>
-  readonly disableDrivePublication: (publicationId: string) => Promise<{ ok: true }>
   readonly getDriveItemPreview: (input: {
     readonly itemId: string
     readonly surface?: "standalone" | "console"
@@ -161,22 +150,11 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             )
             return { ok: true, data: item }
           })
-        case "drive.delete_impact.get":
-          return dispatchDriveRead(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.getDriveDeleteImpact(requireString(params, "itemId")),
-          }))
         case "drive.item.delete":
-          return dispatchDriveMutation(deps, action, params, context, async () => {
-            const disablePublications = optionalBoolean(params.disablePublications)
-            return {
-              ok: true,
-              data: await deps.accountService.deleteDriveItem(
-                requireString(params, "itemId"),
-                disablePublications === undefined ? {} : { disablePublications },
-              ),
-            }
-          })
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.deleteDriveItem(requireString(params, "itemId")),
+          }))
         case "drive.item_preview.get":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const childrenOffset = optionalNumber(params.childrenOffset)
@@ -240,43 +218,6 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.disableDriveShare(requireString(params, "shareId")),
-          }))
-        case "drive.publication.list":
-          return dispatchDriveRead(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.listDrivePublications(parsePublicLinksPageInput(params)),
-          }))
-        case "drive.page_publication.create":
-          return dispatchDriveMutation(deps, action, params, context, async () => {
-            const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
-            return {
-              ok: true,
-              data: await deps.accountService.publishDrivePage(
-                requireString(params, "itemId"),
-                parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS),
-              ),
-            }
-          })
-        case "drive.site_publication.create":
-          return dispatchDriveMutation(deps, action, params, context, async () => {
-            const { DRIVE_DEFAULT_ACCESS_SETTINGS } = await import("@synapse/shared")
-            return {
-              ok: true,
-              data: await deps.accountService.publishDriveSite(
-                requireString(params, "itemId"),
-                parseDriveAccessSettings(params, DRIVE_DEFAULT_ACCESS_SETTINGS),
-              ),
-            }
-          })
-        case "drive.publication_deployment.create":
-          return dispatchDriveMutation(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.redeployDrivePublication(requireString(params, "publicationId")),
-          }))
-        case "drive.publication.disable":
-          return dispatchDriveMutation(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.disableDrivePublication(requireString(params, "publicationId")),
           }))
         case "drive.usage.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
@@ -563,7 +504,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "shareId", "publicationId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "disablePublications", "planId"]) {
+  for (const key of ["itemId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
   }

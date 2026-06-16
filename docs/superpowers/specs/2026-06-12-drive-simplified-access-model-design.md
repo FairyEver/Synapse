@@ -3,6 +3,18 @@
 Date: 2026-06-12
 Scope: `desktop/`, `dashboard/`, `server/`, `shared/`, `docs/`
 
+## 2026-06-16 Current Product Baseline
+
+Drive public access has been simplified further:
+
+- 分享 is the only public access model. It uses `/share/...`, not `/files/...`.
+- HTML files default to rendered webpage view in both owner and share contexts when a `visitUrl` is available; users can still switch to source/code view and download.
+- 网页发布 and 站点发布 are removed, including `/pages/*`, `/sites/*`, `DrivePublication*` tables, redeploy, cancel publication, and delete-impact flows.
+- `公开链接` now manages share links only. It still supports copy link, copy password, open, and cancel share.
+- Folder shares remain file-browser shares; they do not promise static-site hosting semantics for relative assets.
+
+The original design text below is kept as historical context. When it conflicts with this baseline, this baseline is authoritative.
+
 ## Goal
 
 简化 Synapse Drive 的主工作流，把“管理自己的文件”和“给别人访问或发布”从同一个拥挤列表中拆开。

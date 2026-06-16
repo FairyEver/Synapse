@@ -26,11 +26,8 @@ import type {
 import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
-  DriveDeleteImpactDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
-  DrivePublicationDto,
-  DrivePublicationListPageDto,
   DrivePublicLinksPageInput,
   DriveShareDto,
   DriveShareListPageDto,
@@ -744,16 +741,10 @@ export type SynapseBridge = {
     getDriveItemPreviewUrl: (input: { itemId: string }) => Promise<{ url: string }>
     renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
     moveDriveItem: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
-    deleteDriveItem: (input: { itemId: string; disablePublications?: boolean }) => Promise<{ ok: true }>
+    deleteDriveItem: (input: { itemId: string }) => Promise<{ ok: true }>
     shareDriveItem: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
     disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
     getDriveUsage: () => Promise<DriveUsageDto>
-    listDrivePublications: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicationListPageDto>
-    publishDrivePage: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DrivePublicationDto>
-    publishDriveSite: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DrivePublicationDto>
-    redeployDrivePublication: (input: { publicationId: string }) => Promise<DrivePublicationDto>
-    disableDrivePublication: (input: { publicationId: string }) => Promise<{ ok: true }>
-    getDriveDeleteImpact: (input: { itemId: string }) => Promise<DriveDeleteImpactDto>
     listDriveShares: (input?: DrivePublicLinksPageInput) => Promise<DriveShareListPageDto>
     onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
   }

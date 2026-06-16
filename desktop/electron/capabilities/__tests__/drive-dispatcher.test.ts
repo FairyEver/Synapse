@@ -18,11 +18,10 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
-  it("exposes publication disable option on item deletion", () => {
+  it("exposes item id on item deletion", () => {
     const deleteTool = buildDriveTools().find((tool) => tool.name === "drive_item_delete")
-    expect(deleteTool?.inputSchema.properties).toMatchObject({
-      itemId: { type: "string" },
-      disablePublications: { type: "boolean" },
+    expect(deleteTool?.inputSchema.properties).toEqual({
+      itemId: { type: "string", description: expect.any(String) },
     })
   })
 
@@ -35,7 +34,6 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_folder_create",
       "drive_item_rename",
       "drive_item_move",
-      "drive_delete_impact_get",
       "drive_item_delete",
       "drive_item_preview_get",
       "drive_file_content_read",
@@ -44,11 +42,6 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_share_list",
       "drive_share_create",
       "drive_share_disable",
-      "drive_publication_list",
-      "drive_page_publication_create",
-      "drive_site_publication_create",
-      "drive_publication_deployment_create",
-      "drive_publication_disable",
       "drive_usage_get",
       "drive_stats_get",
       "drive_item_tree_list",
@@ -271,49 +264,19 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.renameDriveItem).toHaveBeenCalledWith("item-1", "after.md")
   })
 
-  it("routes publication and public link management tools", async () => {
-    const publication = drivePublication({ id: "publication-1", type: "page" })
+  it("routes public share link management tools", async () => {
     const accountService = createAccountService({
-      getDriveDeleteImpact: vi.fn(async () => ({ publications: [publication] })),
       listDriveShares: vi.fn(async () => ({ items: [driveShareListItem({ id: "share-1" })], page: drivePage() })),
-      listDrivePublications: vi.fn(async () => ({ items: [publication], page: drivePage() })),
-      publishDrivePage: vi.fn(async () => publication),
-      publishDriveSite: vi.fn(async () => drivePublication({ id: "publication-2", type: "site" })),
-      redeployDrivePublication: vi.fn(async () => publication),
-      disableDrivePublication: vi.fn(async () => ({ ok: true as const })),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
-    await expect(dispatcher.dispatch("drive.delete_impact.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
-      .resolves.toEqual({ ok: true, data: { publications: [publication] } })
     await expect(dispatcher.dispatch("drive.share.list", { offset: 10, limit: 5 }, { source: "mcp-stdio" }))
       .resolves.toMatchObject({ ok: true, data: { items: [expect.objectContaining({ id: "share-1" })] } })
-    await expect(dispatcher.dispatch("drive.publication.list", {}, { source: "mcp-stdio" }))
-      .resolves.toMatchObject({ ok: true, data: { items: [publication] } })
-    await expect(dispatcher.dispatch("drive.page_publication.create", {
-      itemId: "item-1",
-      passwordEnabled: false,
-      expiresIn: "30d",
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: publication })
-    await expect(dispatcher.dispatch("drive.site_publication.create", { itemId: "folder-1" }, { source: "mcp-stdio" }))
-      .resolves.toMatchObject({ ok: true, data: { type: "site" } })
-    await expect(dispatcher.dispatch("drive.publication_deployment.create", { publicationId: "publication-1" }, { source: "mcp-stdio" }))
-      .resolves.toEqual({ ok: true, data: publication })
-    await expect(dispatcher.dispatch("drive.publication.disable", { publicationId: "publication-1" }, { source: "mcp-stdio" }))
-      .resolves.toEqual({ ok: true, data: { ok: true } })
 
     expect(accountService.listDriveShares).toHaveBeenCalledWith({ offset: 10, limit: 5 })
-    expect(accountService.publishDrivePage).toHaveBeenCalledWith("item-1", {
-      passwordEnabled: false,
-      expiresIn: "30d",
-    })
-    expect(accountService.publishDriveSite).toHaveBeenCalledWith("folder-1", {
-      passwordEnabled: true,
-      expiresIn: "3d",
-    })
   })
 
-  it("returns preview snapshots and text content without creating shares or publications", async () => {
+  it("returns preview snapshots and text content without creating shares", async () => {
     const snapshot = drivePreviewSnapshot({
       preview: { kind: "markdown", text: "# Note", html: "<h1>Note</h1>", truncated: false, imageUrl: null, visitUrl: null },
     })
@@ -607,7 +570,7 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
-  it("deletes Drive items without disabling publications by default", async () => {
+  it("deletes Drive items", async () => {
     const accountService = createAccountService({
       deleteDriveItem: vi.fn(async () => ({ ok: true as const })),
     })
@@ -617,34 +580,7 @@ describe("createDriveCapabilityDispatcher", () => {
       itemId: "item-1",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
 
-    expect(accountService.deleteDriveItem).toHaveBeenCalledWith("item-1", {})
-  })
-
-  it("passes publication disable option when deleting Drive items", async () => {
-    const accountService = createAccountService({
-      deleteDriveItem: vi.fn(async () => ({ ok: true as const })),
-    })
-    const auditSink = createAuditSink()
-    const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
-
-    await expect(dispatcher.dispatch("drive.item.delete", {
-      itemId: "item-1",
-      disablePublications: true,
-    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
-
-    expect(accountService.deleteDriveItem).toHaveBeenCalledWith("item-1", {
-      disablePublications: true,
-    })
-    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "network.connect",
-      outcome: "allowed",
-      resource: "synapse-drive:item-1",
-      metadata: expect.objectContaining({
-        driveAction: "drive.item.delete",
-        itemId: "item-1",
-        disablePublications: true,
-      }),
-    }))
+    expect(accountService.deleteDriveItem).toHaveBeenCalledWith("item-1")
   })
 
   it("creates shares with custom no-password access settings", async () => {
@@ -757,13 +693,7 @@ function createAccountService(overrides: Partial<DriveAccountService> = {}): Dri
     shareDriveItem: vi.fn(),
     disableDriveShare: vi.fn(),
     getDriveUsage: vi.fn(),
-    getDriveDeleteImpact: vi.fn(),
     listDriveShares: vi.fn(),
-    listDrivePublications: vi.fn(),
-    publishDrivePage: vi.fn(),
-    publishDriveSite: vi.fn(),
-    redeployDrivePublication: vi.fn(),
-    disableDrivePublication: vi.fn(),
     getDriveStats: vi.fn(),
     listDriveItemTree: vi.fn(),
     ensureDriveFolderPath: vi.fn(),
@@ -815,35 +745,12 @@ function driveShare(overrides: Partial<DriveShare>): DriveShare {
     shareId: "shr_1",
     itemId: "item-1",
     enabled: true,
-    url: "https://synapse.test/files/shr_1",
-    urlWithPassword: "https://synapse.test/files/shr_1?password=secret",
+    url: "https://synapse.test/share/shr_1",
+    urlWithPassword: "https://synapse.test/share/shr_1?password=secret",
     passwordEnabled: true,
     password: "secret",
     expiresAt: "2026-06-10T00:00:00.000Z",
     createdAt: "2026-06-07T00:00:00.000Z",
-    ...overrides,
-  }
-}
-
-type DrivePublication = Awaited<ReturnType<DriveAccountService["publishDrivePage"]>>
-
-function drivePublication(overrides: Partial<DrivePublication>): DrivePublication {
-  return {
-    id: "publication-1",
-    publishId: "pub_1",
-    type: "page",
-    name: "page.html",
-    status: "active",
-    sourceItemId: "item-1",
-    sourceDeleted: false,
-    url: "https://synapse.test/pages/pub_1",
-    urlWithPassword: "https://synapse.test/pages/pub_1?password=secret",
-    passwordEnabled: true,
-    password: "secret",
-    expiresAt: "2026-06-10T00:00:00.000Z",
-    currentDeploymentId: "deployment-1",
-    createdAt: "2026-06-07T00:00:00.000Z",
-    updatedAt: "2026-06-07T00:00:00.000Z",
     ...overrides,
   }
 }
@@ -858,8 +765,8 @@ function driveShareListItem(overrides: Partial<DriveShareListItem>): DriveShareL
     itemName: "report.md",
     itemType: "file",
     sourceDeleted: false,
-    url: "https://synapse.test/files/shr_1",
-    urlWithPassword: "https://synapse.test/files/shr_1?password=secret",
+    url: "https://synapse.test/share/shr_1",
+    urlWithPassword: "https://synapse.test/share/shr_1?password=secret",
     passwordEnabled: true,
     password: "secret",
     expiresAt: "2026-06-10T00:00:00.000Z",

@@ -111,26 +111,6 @@ const driveShareSchema = z.object({
   createdAt: z.string(),
 })
 
-const drivePublicationSchema = z.object({
-  id: z.string(),
-  publishId: z.string(),
-  type: z.enum(["page", "site"]),
-  name: z.string(),
-  status: z.enum(["active", "disabled"]),
-  sourceItemId: z.string().nullable(),
-  sourceDeleted: z.boolean(),
-  url: z.string(),
-  urlWithPassword: z.string(),
-  passwordEnabled: z.boolean(),
-  password: z.string().nullable(),
-  expiresAt: z.string().nullable(),
-  currentDeploymentId: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-})
-
-const driveDeleteImpactSchema = z.object({ publications: z.array(drivePublicationSchema) })
-
 const driveShareListItemSchema = z.object({
   id: z.string(),
   shareId: z.string(),
@@ -252,9 +232,8 @@ const driveAccessSettingsSchema = z.object({
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
 })
 const driveAccessItemSchema = driveItemIdSchema.extend(driveAccessSettingsSchema.shape)
-const driveDeleteItemSchema = z.object({ itemId: z.string(), disablePublications: z.boolean().optional() })
+const driveDeleteItemSchema = z.object({ itemId: z.string() })
 const driveShareIdSchema = z.object({ shareId: z.string() })
-const drivePublicationIdSchema = z.object({ publicationId: z.string() })
 const okSchema = z.object({ ok: z.literal(true) })
 
 const accountStateSchema = z.discriminatedUnion("status", [
@@ -556,9 +535,7 @@ export const accountIpcModule: IpcModule = {
       response: okSchema,
       handler: async (_ctx, input) => {
         const parsed = driveDeleteItemSchema.parse(input)
-        return accountService.deleteDriveItem(parsed.itemId, {
-          disablePublications: parsed.disablePublications,
-        })
+        return accountService.deleteDriveItem(parsed.itemId)
       },
     },
     shareDriveItem: {
@@ -587,64 +564,6 @@ export const accountIpcModule: IpcModule = {
       request: z.void(),
       response: driveUsageSchema,
       handler: async () => accountService.getDriveUsage(),
-    },
-    listDrivePublications: {
-      kind: "invoke",
-      channel: "synapse:account:drive:publications:list",
-      request: drivePublicLinksPageInputSchema,
-      response: drivePublicLinksPageSchema(drivePublicationSchema),
-      handler: async (_ctx, input) => accountService.listDrivePublications(drivePublicLinksPageInputSchema.parse(input)),
-    },
-    publishDrivePage: {
-      kind: "invoke",
-      channel: "synapse:account:drive:publications:page",
-      request: driveAccessItemSchema,
-      response: drivePublicationSchema,
-      handler: async (_ctx, input) => {
-        const parsed = driveAccessItemSchema.parse(input)
-        return accountService.publishDrivePage(parsed.itemId, {
-          passwordEnabled: parsed.passwordEnabled,
-          expiresIn: parsed.expiresIn,
-        })
-      },
-    },
-    publishDriveSite: {
-      kind: "invoke",
-      channel: "synapse:account:drive:publications:site",
-      request: driveAccessItemSchema,
-      response: drivePublicationSchema,
-      handler: async (_ctx, input) => {
-        const parsed = driveAccessItemSchema.parse(input)
-        return accountService.publishDriveSite(parsed.itemId, {
-          passwordEnabled: parsed.passwordEnabled,
-          expiresIn: parsed.expiresIn,
-        })
-      },
-    },
-    redeployDrivePublication: {
-      kind: "invoke",
-      channel: "synapse:account:drive:publications:redeploy",
-      request: drivePublicationIdSchema,
-      response: drivePublicationSchema,
-      handler: async (_ctx, input) => accountService.redeployDrivePublication(
-        drivePublicationIdSchema.parse(input).publicationId,
-      ),
-    },
-    disableDrivePublication: {
-      kind: "invoke",
-      channel: "synapse:account:drive:publications:disable",
-      request: drivePublicationIdSchema,
-      response: okSchema,
-      handler: async (_ctx, input) => accountService.disableDrivePublication(
-        drivePublicationIdSchema.parse(input).publicationId,
-      ),
-    },
-    getDriveDeleteImpact: {
-      kind: "invoke",
-      channel: "synapse:account:drive:items:delete-impact",
-      request: driveItemIdSchema,
-      response: driveDeleteImpactSchema,
-      handler: async (_ctx, input) => accountService.getDriveDeleteImpact(driveItemIdSchema.parse(input).itemId),
     },
     listDriveShares: {
       kind: "invoke",

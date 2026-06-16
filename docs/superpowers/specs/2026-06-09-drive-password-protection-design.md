@@ -3,6 +3,12 @@
 日期：2026-06-09
 范围：`server/`、`desktop/`、`shared/`
 
+## 2026-06-16 当前基线
+
+本设计中关于网页发布、网站发布、`DrivePublication`、`/pages`、`/sites` 和旧 `/files` 分享路径的内容已经被新版 Drive URL 基线取代。当前 Drive 只保留分享访问，不再支持网页发布或网站发布；公开分享路径统一为 `/share/:shareId` 和 `/share/:shareId/items/:itemId`，下载统一走 `/download`，HTML 渲染统一走 `/render`。
+
+密码、有效期和 cookie 保护仍适用于分享访问，但不再适用于已下线的发布模型。
+
 ## 目标
 
 为 Synapse Drive 的文件分享、文件夹分享、网页发布和网站发布增加统一的密码与有效期保护。

@@ -1,19 +1,12 @@
 import {
   buildConsoleDriveBrowserUrl,
-  buildConsoleDriveChildBrowserUrl,
   buildConsoleDriveRootUrl,
   buildOwnerDriveBrowserUrl,
-  buildOwnerDriveChildBrowserUrl,
-  buildOwnerDriveChildDownloadUrl,
-  buildOwnerDriveChildRenderUrl,
-  buildOwnerDriveChildZipUrl,
   buildOwnerDriveDownloadUrl,
   buildOwnerDriveRenderUrl,
-  buildOwnerDriveZipUrl,
   buildShareDriveBrowserUrl,
-  buildShareDriveChildZipUrl,
   buildShareDriveDownloadUrl,
-  buildShareDriveZipUrl,
+  buildShareDriveRenderUrl,
   type DriveBrowserBreadcrumbDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
@@ -38,7 +31,6 @@ export type DriveBrowserRouteContext =
   | {
     readonly context: "owner"
     readonly surface: DriveBrowserSurface
-    readonly rootItemId: string
   }
   | {
     readonly context: "share"
@@ -73,7 +65,7 @@ export function buildDriveBrowserItemDto(input: {
     mimeType: input.item.mimeType,
     updatedAt: input.item.updatedAt,
     previewKind,
-    browserUrl: buildBrowserUrl(input.route, input.item.id),
+    browserUrl: buildBrowserUrl(input.route, input.item),
     downloadUrl: buildDownloadUrl(input.route, input.item),
   }
 }
@@ -99,7 +91,7 @@ export function buildDriveBrowserBreadcrumb(input: {
   return {
     id: input.item.id,
     name: input.item.name,
-    browserUrl: buildBrowserUrl(input.route, input.item.id),
+    browserUrl: buildBrowserUrl(input.route, input.item),
   }
 }
 
@@ -127,7 +119,7 @@ export function buildDriveBrowserPreview(input: {
     html: kind === "markdown" ? input.html ?? null : null,
     truncated: textPreview ? input.truncated ?? false : false,
     imageUrl: kind === "image" ? input.imageUrl ?? null : null,
-    visitUrl: input.route.context === "owner" && kind === "html-source"
+    visitUrl: kind === "html-source"
       ? buildRenderUrl(input.route, input.item.id)
       : null,
   }
@@ -142,45 +134,32 @@ export function shouldCreateDriveBrowserImagePreview(kind: DriveBrowserPreviewKi
 }
 
 export function buildDriveBrowserZipUrl(input: DriveBrowserRouteContext & { readonly itemId: string }): string | null {
-  if (input.context === "owner") {
-    return input.itemId === input.rootItemId
-      ? buildOwnerDriveZipUrl(input.rootItemId)
-      : buildOwnerDriveChildZipUrl(input.rootItemId, input.itemId)
-  }
-  return input.itemId === input.rootItemId
-    ? buildShareDriveZipUrl(input.shareId)
-    : buildShareDriveChildZipUrl(input.shareId, input.itemId)
+  return input.context === "owner"
+    ? buildOwnerDriveDownloadUrl(input.itemId)
+    : buildShareDriveDownloadUrl(input.shareId, input.itemId === input.rootItemId ? null : input.itemId)
 }
 
-function buildBrowserUrl(route: DriveBrowserRouteContext, itemId: string): string {
+function buildBrowserUrl(route: DriveBrowserRouteContext, item: DriveBrowserSourceItem): string {
   if (route.context === "owner") {
-    if (route.surface === "console") {
-      return itemId === route.rootItemId
-        ? buildConsoleDriveBrowserUrl(route.rootItemId)
-        : buildConsoleDriveChildBrowserUrl(route.rootItemId, itemId)
-    }
-    return itemId === route.rootItemId
-      ? buildOwnerDriveBrowserUrl(route.rootItemId)
-      : buildOwnerDriveChildBrowserUrl(route.rootItemId, itemId)
+    return route.surface === "console" && item.type === "folder"
+      ? buildConsoleDriveBrowserUrl(item.id)
+      : buildOwnerDriveBrowserUrl(item.id)
   }
-  return buildShareDriveBrowserUrl(route.shareId, itemId === route.rootItemId ? null : itemId)
+  return buildShareDriveBrowserUrl(route.shareId, item.id === route.rootItemId ? null : item.id)
 }
 
 function buildDownloadUrl(route: DriveBrowserRouteContext, item: DriveBrowserSourceItem): string | null {
   if (item.type === "folder") return buildDriveBrowserZipUrl({ ...route, itemId: item.id })
   if (route.context === "owner") {
-    return item.id === route.rootItemId
-      ? buildOwnerDriveDownloadUrl(route.rootItemId)
-      : buildOwnerDriveChildDownloadUrl(route.rootItemId, item.id)
+    return buildOwnerDriveDownloadUrl(item.id)
   }
   return buildShareDriveDownloadUrl(route.shareId, item.id === route.rootItemId ? null : item.id)
 }
 
 function buildRenderUrl(route: DriveBrowserRouteContext, itemId: string): string | null {
-  if (route.context !== "owner") return null
-  return itemId === route.rootItemId
-    ? buildOwnerDriveRenderUrl(route.rootItemId)
-    : buildOwnerDriveChildRenderUrl(route.rootItemId, itemId)
+  return route.context === "owner"
+    ? buildOwnerDriveRenderUrl(itemId)
+    : buildShareDriveRenderUrl(route.shareId, itemId === route.rootItemId ? null : itemId)
 }
 
 function isKnownTextName(lowerName: string): boolean {

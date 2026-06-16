@@ -273,14 +273,8 @@ describe("preload bridge", () => {
     expect(bridge.account.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     expect(bridge.shell.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
-    await bridge.account.deleteDriveItem({ itemId: "item-1", disablePublications: true })
+    await bridge.account.deleteDriveItem({ itemId: "item-1" })
     await bridge.account.shareDriveItem({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d" })
-    await bridge.account.listDrivePublications()
-    await bridge.account.publishDrivePage({ itemId: "item-1", passwordEnabled: false, expiresIn: "30d" })
-    await bridge.account.publishDriveSite({ itemId: "folder-1", passwordEnabled: true, expiresIn: "forever" })
-    await bridge.account.redeployDrivePublication({ publicationId: "pub-row-1" })
-    await bridge.account.disableDrivePublication({ publicationId: "pub-row-1" })
-    await bridge.account.getDriveDeleteImpact({ itemId: "item-1" })
     await bridge.account.listDriveShares()
 
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
@@ -318,35 +312,11 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:delete",
-      { itemId: "item-1", disablePublications: true },
+      { itemId: "item-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:share",
       { itemId: "item-1", passwordEnabled: true, expiresIn: "7d" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:publications:list",
-      undefined,
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:publications:page",
-      { itemId: "item-1", passwordEnabled: false, expiresIn: "30d" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:publications:site",
-      { itemId: "folder-1", passwordEnabled: true, expiresIn: "forever" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:publications:redeploy",
-      { publicationId: "pub-row-1" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:publications:disable",
-      { publicationId: "pub-row-1" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:account:drive:items:delete-impact",
-      { itemId: "item-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:shares:list",
