@@ -28,6 +28,9 @@ describe("createSystemAppWindowService", () => {
     await service.open("database")
 
     expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Synapse AI Studio 本地数据库",
+    }))
     expect(windowManager.attach).toHaveBeenCalledWith(
       { id: "system-app:database", role: "detail" },
       expect.objectContaining({ id: window.webContents.id }),
@@ -76,6 +79,12 @@ describe("createSystemAppWindowService", () => {
     await service.open("model-price")
 
     expect(createWindow).toHaveBeenCalledTimes(2)
+    expect(createWindow).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      title: "Synapse AI Studio 本地数据库",
+    }))
+    expect(createWindow).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      title: "Synapse AI Studio 价格管理",
+    }))
   })
 
   it("removes closed windows so the app can reopen", async () => {

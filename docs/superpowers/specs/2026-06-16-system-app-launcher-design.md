@@ -225,7 +225,8 @@ Responsibilities:
 - Focus and restore an existing window when the same app is opened again.
 - Remove the map entry when the window closes.
 - Use existing renderer loading patterns from content, automation, and usage detail windows.
-- Use pure app definition `windowTitle` for the window title.
+- Use a branded native window title in the form `Synapse AI Studio ${definition.name}` so each independent app
+  window shows the opened app name automatically.
 
 The service should expose:
 
