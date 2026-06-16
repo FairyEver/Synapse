@@ -12,7 +12,7 @@ export function DriveIframeRenderer({
       title={current.name}
       src={visitUrl}
       className='h-full min-h-0 w-full border-0 bg-background'
-      sandbox='allow-same-origin allow-scripts'
+      sandbox='allow-scripts'
     />
   )
 }

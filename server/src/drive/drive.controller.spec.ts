@@ -234,7 +234,6 @@ describe("DriveController", () => {
         .mockResolvedValueOnce({
           stream: Readable.from("<!doctype html><html><body>Notes</body></html>"),
           contentType: "text/html; charset=utf-8",
-          csp: "default-src 'none'; style-src 'unsafe-inline'; img-src data: https:; frame-ancestors 'none';",
         })
 
       const download = await request(userApp.getHttpServer()).get("/drive/items/root-1/items/file-1/download").expect(302)
@@ -251,7 +250,7 @@ describe("DriveController", () => {
         .get("/drive/items/root-1/items/file-1/render")
         .expect(200)
       expect(render.headers["content-type"]).toContain("text/html; charset=utf-8")
-      expect(render.headers["content-security-policy"]).toContain("default-src 'none'")
+      expect(render.headers["content-security-policy"]).toContain("frame-ancestors 'self'")
       expect(render.text).toContain("Notes")
       expect(drive.resolveOwnerRenderAccess).toHaveBeenLastCalledWith({
         userId: "user-1",
