@@ -5,12 +5,67 @@ import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import {
   DriveBrowserView,
   DriveSingleFileReaderView,
+} from './drive-browser-page'
+import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
+import {
   getDriveBrowserActions,
   getDriveBrowserChildUrls,
+  getDriveFinderActions,
+  shouldRenderDriveBodyRenderer,
   shouldRenderDriveSingleFileReader,
-} from './drive-browser-page'
+} from './shared/drive-view-model'
 
 describe('drive browser view model', () => {
+  it('formats drive file metadata from shared helpers', () => {
+    expect(formatDriveBrowserSize({ ...baseCurrent(), size: '7372' })).toBe('7.2 KB')
+    expect(formatDriveBrowserSize({ ...baseCurrent(), type: 'folder' })).toBe('-')
+    expect(driveBrowserKindLabel('markdown')).toBe('Markdown')
+  })
+
+  it('keeps finder actions limited to browser actions', () => {
+    const folder = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        id: 'folder',
+        type: 'folder',
+        browserUrl: '/drive/items/folder',
+        downloadUrl: '/drive/items/folder/zip',
+      },
+    })
+    const file = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        id: 'file',
+        type: 'file',
+        browserUrl: '/drive/items/folder/items/file',
+        downloadUrl: '/drive/items/folder/items/file/download',
+      },
+    })
+
+    expect(getDriveFinderActions(folder)).toEqual({
+      directoryDownloadUrl: '/drive/items/folder/zip',
+      fileDownloadUrl: null,
+      fileOpenUrl: null,
+      visitUrl: null,
+    })
+    expect(getDriveFinderActions(file)).toEqual({
+      directoryDownloadUrl: null,
+      fileDownloadUrl: '/drive/items/folder/items/file/download',
+      fileOpenUrl: '/drive/items/folder/items/file',
+      visitUrl: '/drive/items/root/items/file/render',
+    })
+  })
+
+  it('uses body renderer for standalone and shared files but not console files or folders', () => {
+    expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'share' }))).toBe(true)
+    expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'owner', surface: 'standalone' }))).toBe(true)
+    expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'owner', surface: 'console' }))).toBe(false)
+    expect(shouldRenderDriveBodyRenderer(createSnapshot({
+      context: 'share',
+      current: { ...baseCurrent(), type: 'folder' },
+    }))).toBe(false)
+  })
+
   it('shows visit for owner html previews', () => {
     const snapshot = createSnapshot({
       context: 'owner',

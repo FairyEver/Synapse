@@ -6,13 +6,8 @@ import type {
   DriveBrowserSurface,
 } from '@synapse/shared'
 import {
-  Archive,
   Download,
   ExternalLink,
-  File,
-  FileText,
-  Folder,
-  Image,
   Loader2,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -37,6 +32,13 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from './shared/drive-format'
+import { DriveBrowserItemIcon } from './shared/drive-icons'
+import {
+  getDriveBrowserActions,
+  getDriveBrowserChildUrls,
+  shouldRenderDriveSingleFileReader,
+} from './shared/drive-view-model'
 import { useDriveBrowser } from './use-drive-browser'
 
 export type DriveBrowserPageProps =
@@ -119,6 +121,12 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
 export function DriveConsoleBrowserPage(props: Omit<Extract<DriveBrowserPageProps, { context: 'owner' }>, 'context' | 'surface'>) {
   return <DriveBrowserPage {...props} context='owner' surface='console' />
 }
+
+export {
+  getDriveBrowserActions,
+  getDriveBrowserChildUrls,
+  shouldRenderDriveSingleFileReader,
+} from './shared/drive-view-model'
 
 export function DriveConsoleRootBrowser() {
   const state = useDriveBrowser({ context: 'console-root' })
@@ -651,12 +659,6 @@ function DriveBrowserTextPreview({
   )
 }
 
-function getDriveReaderContainerClassName(preview: DriveBrowserPreviewDto | null): string {
-  return preview?.kind === 'image'
-    ? DRIVE_READER_MEDIA_CONTAINER_CLASSNAME
-    : DRIVE_READER_TEXT_CONTAINER_CLASSNAME
-}
-
 function DriveBrowserPasswordForm({
   message,
   unlocking,
@@ -731,54 +733,4 @@ function DriveBrowserError({ message }: { readonly message: string }) {
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   )
-}
-
-function DriveBrowserItemIcon({ item }: { readonly item: DriveBrowserItemDto }) {
-  if (item.type === 'folder') return <Folder className='size-4 shrink-0 text-muted-foreground' />
-  if (item.previewKind === 'image') return <Image className='size-4 shrink-0 text-muted-foreground' />
-  if (item.previewKind === 'text' || item.previewKind === 'html-source' || item.previewKind === 'markdown') return <FileText className='size-4 shrink-0 text-muted-foreground' />
-  if (item.previewKind === 'download-only') return <Archive className='size-4 shrink-0 text-muted-foreground' />
-  return <File className='size-4 shrink-0 text-muted-foreground' />
-}
-
-export function getDriveBrowserActions(snapshot: DriveBrowserSnapshotDto) {
-  return {
-    downloadUrl: snapshot.current.downloadUrl,
-    visitUrl: snapshot.preview?.visitUrl ?? null,
-  }
-}
-
-export function getDriveBrowserChildUrls(snapshot: DriveBrowserSnapshotDto) {
-  return snapshot.children.map((item) => item.browserUrl)
-}
-
-export function shouldRenderDriveSingleFileReader(snapshot: DriveBrowserSnapshotDto): boolean {
-  return snapshot.current.type === 'file'
-}
-
-function driveBrowserKindLabel(kind: DriveBrowserItemDto['previewKind']) {
-  const labels: Record<DriveBrowserItemDto['previewKind'], string> = {
-    image: '图片',
-    text: '文本',
-    'html-source': 'HTML',
-    markdown: 'Markdown',
-    'download-only': '下载',
-  }
-  return labels[kind]
-}
-
-function formatDriveBrowserSize(item: DriveBrowserItemDto) {
-  if (item.type === 'folder') return '-'
-  const bytes = Number(item.size)
-  if (!Number.isFinite(bytes)) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
-}
-
-function formatDriveBrowserDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('zh-CN')
 }
