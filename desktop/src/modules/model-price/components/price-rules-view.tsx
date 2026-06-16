@@ -197,9 +197,9 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
 
   return (
     <div data-price-rules-root className="flex min-h-0 min-w-0 max-w-full flex-col gap-2 overflow-hidden">
-      <div data-price-rules-toolbar className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+      <div data-price-rules-toolbar className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
         <div className="text-sm text-muted-foreground">人民币 / 1M token</div>
-        <div data-price-rules-actions className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <div data-price-rules-actions className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:justify-end">
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
             <DialogTrigger asChild>
               <Button type="button" variant="outline" size="sm" disabled={busy}>
