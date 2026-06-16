@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { Download, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,48 @@ import { DriveMarkdownRenderer } from './markdown-renderer'
 const READING_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
 const FULL_CONTAINER_CLASSNAME = 'h-full min-h-0 w-full'
+const FLOATING_MENU_MARGIN = 20
+const FLOATING_MENU_FALLBACK_SIZE = 36
+const FLOATING_MENU_DRAG_THRESHOLD_PX = 4
+
+type DriveFloatingMenuPoint = {
+  readonly left: number
+  readonly top: number
+}
+
+type DriveFloatingMenuSize = {
+  readonly width: number
+  readonly height: number
+}
+
+type DriveFloatingMenuDragState = {
+  readonly pointerId: number
+  readonly startPointer: DriveFloatingMenuPoint
+  readonly startPosition: DriveFloatingMenuPoint
+  moved: boolean
+}
+
+export function clampDriveFloatingMenuPosition(
+  position: DriveFloatingMenuPoint,
+  viewport: DriveFloatingMenuSize,
+  menuSize: DriveFloatingMenuSize,
+  margin = FLOATING_MENU_MARGIN
+): DriveFloatingMenuPoint {
+  const maxLeft = Math.max(margin, viewport.width - menuSize.width - margin)
+  const maxTop = Math.max(margin, viewport.height - menuSize.height - margin)
+  return {
+    left: Math.min(Math.max(position.left, margin), maxLeft),
+    top: Math.min(Math.max(position.top, margin), maxTop),
+  }
+}
+
+export function shouldSuppressDriveFloatingMenuOpen(
+  start: DriveFloatingMenuPoint,
+  current: DriveFloatingMenuPoint,
+  threshold = FLOATING_MENU_DRAG_THRESHOLD_PX
+): boolean {
+  return Math.hypot(current.left - start.left, current.top - start.top) >= threshold
+}
 
 export function DriveRendererShell({
   snapshot,
@@ -137,12 +179,99 @@ function DriveRendererFloatingMenu({
   readonly onSelect: (id: DriveRendererId) => void
 }) {
   const driveBrowserUrl = snapshot.context === 'owner' ? snapshot.current.browserUrl : null
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef<DriveFloatingMenuDragState | null>(null)
+  const suppressClickRef = useRef(false)
+  const [open, setOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<DriveFloatingMenuPoint | null>(null)
+
+  const menuStyle: CSSProperties | undefined = menuPosition
+    ? { left: `${menuPosition.left}px`, top: `${menuPosition.top}px` }
+    : undefined
+
+  const getMenuSize = (): DriveFloatingMenuSize => {
+    const rect = menuRef.current?.getBoundingClientRect()
+    return {
+      width: rect?.width ?? FLOATING_MENU_FALLBACK_SIZE,
+      height: rect?.height ?? FLOATING_MENU_FALLBACK_SIZE,
+    }
+  }
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    const rect = menuRef.current?.getBoundingClientRect()
+    if (!rect) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startPointer: { left: event.clientX, top: event.clientY },
+      startPosition: { left: rect.left, top: rect.top },
+      moved: false,
+    }
+  }
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const currentPointer = { left: event.clientX, top: event.clientY }
+    const moved = drag.moved || shouldSuppressDriveFloatingMenuOpen(drag.startPointer, currentPointer)
+    if (!moved) return
+    drag.moved = true
+    const nextPosition = {
+      left: drag.startPosition.left + currentPointer.left - drag.startPointer.left,
+      top: drag.startPosition.top + currentPointer.top - drag.startPointer.top,
+    }
+    setMenuPosition(clampDriveFloatingMenuPosition(
+      nextPosition,
+      { width: window.innerWidth, height: window.innerHeight },
+      getMenuSize()
+    ))
+  }
+
+  const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture(event.pointerId)
+    event.preventDefault()
+    suppressClickRef.current = true
+    if (!drag.moved) setOpen((current) => !current)
+  }
+
+  const handlePointerCancel = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  const handleClick = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!suppressClickRef.current) return
+    suppressClickRef.current = false
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
   return (
-    <div className='fixed right-5 bottom-5 z-50'>
-      <DropdownMenu>
+    <div
+      ref={menuRef}
+      className={cn('fixed top-5 right-5 z-50', menuPosition && 'top-auto right-auto')}
+      style={menuStyle}
+    >
+      <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button type='button' size='icon' className='rounded-full' aria-label='文件操作'>
+          <Button
+            type='button'
+            size='icon'
+            className='touch-none rounded-full cursor-grab active:cursor-grabbing'
+            aria-label='文件操作'
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            onClick={handleClick}
+          >
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>

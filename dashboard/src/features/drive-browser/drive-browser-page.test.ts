@@ -12,7 +12,11 @@ import {
   getDriveRendererOptions,
   selectDefaultDriveRenderer,
 } from './renderers/drive-renderer-registry'
-import { DriveRendererContent } from './renderers/drive-renderer-shell'
+import {
+  clampDriveFloatingMenuPosition,
+  DriveRendererContent,
+  shouldSuppressDriveFloatingMenuOpen,
+} from './renderers/drive-renderer-shell'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
   getDriveBrowserActions,
@@ -428,12 +432,33 @@ describe('drive browser view model', () => {
     const source = readFileSync(new URL('./renderers/drive-renderer-shell.tsx', import.meta.url), 'utf8')
 
     expect(html).toContain('文件操作')
+    expect(source).toContain("'fixed top-5 right-5 z-50'")
+    expect(source).not.toContain("'fixed right-5 bottom-5 z-50'")
     expect(source).toContain("const driveBrowserUrl = snapshot.context === 'owner' ? snapshot.current.browserUrl : null")
     expect(source).toContain('href={driveBrowserUrl}')
     expect(source).toContain('在云盘中查看')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('data-reader-toolbar="true"')
+  })
+
+  it('clamps the floating file menu inside the viewport', () => {
+    expect(clampDriveFloatingMenuPosition(
+      { left: -50, top: -10 },
+      { width: 320, height: 240 },
+      { width: 36, height: 36 }
+    )).toEqual({ left: 20, top: 20 })
+
+    expect(clampDriveFloatingMenuPosition(
+      { left: 400, top: 300 },
+      { width: 320, height: 240 },
+      { width: 36, height: 36 }
+    )).toEqual({ left: 264, top: 184 })
+  })
+
+  it('suppresses menu opening only after a real floating menu drag', () => {
+    expect(shouldSuppressDriveFloatingMenuOpen({ left: 20, top: 20 }, { left: 22, top: 23 })).toBe(false)
+    expect(shouldSuppressDriveFloatingMenuOpen({ left: 20, top: 20 }, { left: 25, top: 20 })).toBe(true)
   })
 
   it('renders shared markdown files as a reader without browser chrome', () => {
