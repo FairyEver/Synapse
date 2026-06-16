@@ -115,6 +115,9 @@ vi.mock("@/lib/electron-bridge", () => ({
     agent: {
       onOpenConversation: () => () => undefined,
     },
+    apps: {
+      openSystemApp: vi.fn(async () => undefined),
+    },
     cheatCodes: {
       getStates: mocks.getStates,
       onStateChanged: (listener: (state: { name: string; active: boolean }) => void) => {
@@ -130,19 +133,10 @@ vi.mock("@/lib/electron-bridge", () => ({
   }),
 }))
 
-vi.mock("@/modules/rules", () => ({ RulesModule: () => <div>规则模块</div> }))
-vi.mock("@/modules/skills", () => ({ SkillsModule: () => <div>技能模块</div> }))
-vi.mock("@/modules/prompts", () => ({ PromptsModule: () => <div>提示词模块</div> }))
+vi.mock("@/modules/apps", () => ({ AppsModule: () => <div>应用模块</div> }))
 vi.mock("@/modules/settings", () => ({ SettingsModule: () => <div>设置模块</div> }))
-vi.mock("@/modules/database", () => ({ DatabaseModule: () => <div>数据模块</div> }))
-vi.mock("@/modules/editor-scan", () => ({ EditorScanModule: () => <div>本机模块</div> }))
 vi.mock("@/modules/agent", () => ({ AgentModule: () => <div>对话模块</div> }))
 vi.mock("@/modules/automation", () => ({ AutomationModule: () => <div>自动化模块</div> }))
-vi.mock("@/modules/usage-analysis", () => ({
-  CcUsageAnalysisModule: () => <div>CC 模块</div>,
-  CodexUsageAnalysisModule: () => <div>Codex 模块</div>,
-}))
-vi.mock("@/modules/model-price", () => ({ ModelPriceModule: () => <div>价格模块</div> }))
 vi.mock("@/modules/workflow", () => ({ WorkflowModule: () => <div>工作流模块</div> }))
 vi.mock("@/modules/content/components/content-window-page", () => ({
   ContentWindowPage: () => <div>内容窗口</div>,
@@ -183,42 +177,22 @@ describe("App workflow entry visibility", () => {
       "对话",
       "云盘",
       "自动化",
-      "技能",
-      "规则",
-      "提示词",
-      "数据库",
-      "IDE",
-      "CC",
-      "Codex",
-      "价格",
+      "应用",
       "设置",
     ])
   })
 
-  it("opens the IDE scan module from the top navigation", async () => {
+  it("opens the Apps module from the top navigation", async () => {
     mocks.getStates.mockResolvedValue({})
 
     await renderApp()
 
     await act(async () => {
-      findTopNavigationButton("IDE").click()
+      findTopNavigationButton("应用").click()
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("本机模块")
-  })
-
-  it("opens the database module from the top navigation", async () => {
-    mocks.getStates.mockResolvedValue({})
-
-    await renderApp()
-
-    await act(async () => {
-      findTopNavigationButton("数据库").click()
-      await Promise.resolve()
-    })
-
-    expect(document.body.textContent).toContain("数据模块")
+    expect(document.body.textContent).toContain("应用模块")
   })
 
   it("places workflow in the configured order when the workflow entry is visible", async () => {
@@ -231,14 +205,7 @@ describe("App workflow entry visibility", () => {
       "工作流",
       "云盘",
       "自动化",
-      "技能",
-      "规则",
-      "提示词",
-      "数据库",
-      "IDE",
-      "CC",
-      "Codex",
-      "价格",
+      "应用",
       "设置",
     ])
   })
