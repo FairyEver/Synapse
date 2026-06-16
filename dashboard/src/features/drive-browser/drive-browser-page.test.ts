@@ -265,7 +265,21 @@ describe('drive browser view model', () => {
     expect(shouldRenderDriveSingleFileReader(ownerFolder)).toBe(false)
   })
 
-  it('renders owner markdown files as a reader with header metadata', () => {
+  it('DriveBrowserView delegates folder pages to full finder layout', () => {
+    const snapshot = createSnapshot({
+      current: { ...baseCurrent(), id: 'folder', type: 'folder', downloadUrl: '/drive/items/folder/zip' },
+      preview: null,
+      children: [{ ...baseCurrent(), id: 'file', name: 'notes.md' }],
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot, layoutMode: 'fixed' }))
+
+    expect(html).toContain('data-drive-finder="full"')
+    expect(html).toContain('下载整个目录')
+    expect(html).not.toContain('data-slot="resizable-panel-group"')
+  })
+
+  it('DriveSingleFileReaderView delegates to body renderer and floating menu', () => {
     const snapshot = createSnapshot({
       context: 'owner',
       current: {
@@ -286,13 +300,9 @@ describe('drive browser view model', () => {
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
-    expect(html).toContain('data-reader-toolbar="true"')
-    expect(html).toContain('notes.md')
-    expect(html).toContain('7.2 KB')
-    expect(html).toContain('Markdown')
-    expect(html).toContain('href="/drive/items/root/items/file/download"')
+    expect(html).toContain('文件操作')
     expect(html).toContain('<h1>Notes</h1>')
-    expect(html).not.toContain('data-slot="resizable-panel-group"')
+    expect(html).not.toContain('data-reader-toolbar="true"')
   })
 
   it('renders shared markdown files as a reader without browser chrome', () => {
@@ -318,73 +328,12 @@ describe('drive browser view model', () => {
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
-    expect(html).toContain('data-reader-toolbar="true"')
-    expect(html).toContain('notes.md')
-    expect(html).toContain('href="/files/shr_public/download"')
+    expect(html).toContain('文件操作')
     expect(html).toContain('data-renderer-toolbar="markdown"')
     expect(html).toContain('预览')
     expect(html).toContain('源码')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).not.toContain('data-slot="resizable-panel-group"')
-  })
-
-  it('uses browser toolbar layout for the file header while keeping renderer content aligned', () => {
-    const snapshot = createSnapshot({
-      context: 'share',
-      current: {
-        ...baseCurrent(),
-        name: 'notes.md',
-        mimeType: 'text/markdown',
-        previewKind: 'markdown',
-        browserUrl: '/files/shr_public',
-        downloadUrl: '/files/shr_public/download',
-      },
-      preview: {
-        ...basePreview(),
-        kind: 'markdown',
-        text: '# Notes',
-        html: '<h1>Notes</h1>',
-        visitUrl: null,
-      },
-    })
-
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
-
-    expect(html).toContain('data-reader-toolbar="true" class="flex shrink-0 flex-col gap-3 border-b bg-background px-4 py-3 md:flex-row md:items-center md:justify-between"')
-    expect(html).not.toContain('data-reader-toolbar="true" class="border-b bg-background sticky top-0 z-10"')
-    expect(html).toContain('min-h-0 gap-0 mx-auto w-full max-w-4xl px-4 md:px-6 py-6')
-    expect(html).toContain('data-renderer-toolbar="markdown" class="shrink-0 flex justify-end pb-4"')
-  })
-
-  it('renders the resizable panel group in fixed layout mode', () => {
-    const snapshot = createSnapshot()
-
-    const html = renderToStaticMarkup(
-      createElement(DriveBrowserView, { snapshot, layoutMode: 'fixed' })
-    )
-
-    expect(html).toContain('data-slot="resizable-panel-group"')
-    expect(html).toContain('data-slot="resizable-handle"')
-  })
-
-  it('uses a one-third detail panel and two-thirds preview panel by default', () => {
-    const snapshot = createSnapshot()
-
-    const html = renderToStaticMarkup(
-      createElement(DriveBrowserView, { snapshot, layoutMode: 'fixed' })
-    )
-
-    expect(html).toContain('flex-basis:33%')
-    expect(html).toContain('flex-basis:67%')
-  })
-
-  it('keeps auto layout mode free of the resizable panel group', () => {
-    const snapshot = createSnapshot()
-
-    const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot }))
-
-    expect(html).not.toContain('data-slot="resizable-panel-group"')
-    expect(html).not.toContain('data-slot="resizable-handle"')
   })
 
   it('does not render the old fixed preview heights in fixed layout mode', () => {
