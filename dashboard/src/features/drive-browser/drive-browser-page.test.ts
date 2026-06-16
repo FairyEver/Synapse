@@ -6,6 +6,10 @@ import {
   DriveBrowserView,
   DriveSingleFileReaderView,
 } from './drive-browser-page'
+import {
+  getDriveRendererOptions,
+  selectDefaultDriveRenderer,
+} from './renderers/drive-renderer-registry'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
   getDriveBrowserActions,
@@ -64,6 +68,34 @@ describe('drive browser view model', () => {
       context: 'share',
       current: { ...baseCurrent(), type: 'folder' },
     }))).toBe(false)
+  })
+
+  it('returns markdown renderer options with rendered preview as default', () => {
+    const snapshot = createSnapshot({
+      current: { ...baseCurrent(), name: 'notes.md', previewKind: 'markdown' },
+      preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
+    })
+
+    const options = getDriveRendererOptions(snapshot)
+
+    expect(options.map((option) => option.id)).toEqual(['markdown', 'source'])
+    expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('markdown')
+  })
+
+  it('only exposes iframe renderer for owner html files with visit urls', () => {
+    const owner = createSnapshot({
+      context: 'owner',
+      current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/root/items/file/render' },
+    })
+    const shared = createSnapshot({
+      context: 'share',
+      current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: null },
+    })
+
+    expect(getDriveRendererOptions(owner).map((option) => option.id)).toEqual(['source', 'iframe'])
+    expect(getDriveRendererOptions(shared).map((option) => option.id)).toEqual(['source'])
   })
 
   it('shows visit for owner html previews', () => {
