@@ -65,8 +65,9 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
     ? sanitizeWorkflowResultValue(structuredOutputs) as Record<string, unknown>
     : undefined
   const codexDebug = isRecord(displayStructuredOutputs?.codexDebug) ? displayStructuredOutputs.codexDebug : undefined
+  const claudeCodeDebug = isRecord(displayStructuredOutputs?.claudeCodeDebug) ? displayStructuredOutputs.claudeCodeDebug : undefined
   const displayGenericStructuredOutputs = displayStructuredOutputs
-    ? omitRecordKey(displayStructuredOutputs, "codexDebug")
+    ? omitRecordKeys(displayStructuredOutputs, ["codexDebug", "claudeCodeDebug"])
     : undefined
   const agentConversation = agentConversationTargetFromOutputs(result.outputs)
 
@@ -177,7 +178,20 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
             <ContentSection title="Codex 调试" trackingName="workflow-runner-codex-debug-render-mode">
               {(mode) => (
                 <FieldList>
-                  {renderCodexDebugFields(codexDebug).map(({ label, value, monoLabel }) => (
+                  {renderCliDebugFields(codexDebug).map(({ label, value, monoLabel }) => (
+                    <FieldBlock key={label} label={label} monoLabel={monoLabel}>
+                      <TextContent content={value} mode={mode} />
+                    </FieldBlock>
+                  ))}
+                </FieldList>
+              )}
+            </ContentSection>
+          )}
+          {claudeCodeDebug && (
+            <ContentSection title="Claude Code 调试" trackingName="workflow-runner-claude-code-debug-render-mode">
+              {(mode) => (
+                <FieldList>
+                  {renderCliDebugFields(claudeCodeDebug).map(({ label, value, monoLabel }) => (
                     <FieldBlock key={label} label={label} monoLabel={monoLabel}>
                       <TextContent content={value} mode={mode} />
                     </FieldBlock>
@@ -349,25 +363,25 @@ function formatOutputValue(value: unknown): string {
   return String(value)
 }
 
-function renderCodexDebugFields(value: Record<string, unknown>): Array<{ label: string, value: string, monoLabel?: boolean }> {
+function renderCliDebugFields(value: Record<string, unknown>): Array<{ label: string, value: string, monoLabel?: boolean }> {
   const fields: Array<{ label: string, value: string, monoLabel?: boolean }> = []
-  appendCodexDebugField(fields, "command", value.command)
-  appendCodexDebugField(fields, "args", formatCodexArgs(value.args))
-  appendCodexDebugField(fields, "cwd", value.cwd)
-  appendCodexDebugField(fields, "exitCode", value.exitCode)
-  appendCodexDebugField(fields, "signal", value.signal)
-  appendCodexDebugField(fields, "durationMs", value.durationMs)
-  appendCodexDebugField(fields, "stdoutPath", value.stdoutPath)
-  appendCodexDebugField(fields, "stderrPath", value.stderrPath)
-  appendCodexDebugField(fields, "promptPath", value.promptPath)
-  appendCodexDebugField(fields, "lastMessagePath", value.lastMessagePath)
-  appendCodexDebugField(fields, "stdoutPreview", value.stdoutPreview)
-  appendCodexDebugField(fields, "stderrPreview", value.stderrPreview)
-  appendCodexDebugField(fields, "sessionHints", value.sessionHints)
+  appendCliDebugField(fields, "command", value.command)
+  appendCliDebugField(fields, "args", formatCliArgs(value.args))
+  appendCliDebugField(fields, "cwd", value.cwd)
+  appendCliDebugField(fields, "exitCode", value.exitCode)
+  appendCliDebugField(fields, "signal", value.signal)
+  appendCliDebugField(fields, "durationMs", value.durationMs)
+  appendCliDebugField(fields, "stdoutPath", value.stdoutPath)
+  appendCliDebugField(fields, "stderrPath", value.stderrPath)
+  appendCliDebugField(fields, "promptPath", value.promptPath)
+  appendCliDebugField(fields, "lastMessagePath", value.lastMessagePath)
+  appendCliDebugField(fields, "stdoutPreview", value.stdoutPreview)
+  appendCliDebugField(fields, "stderrPreview", value.stderrPreview)
+  appendCliDebugField(fields, "sessionHints", value.sessionHints)
   return fields
 }
 
-function appendCodexDebugField(
+function appendCliDebugField(
   fields: Array<{ label: string, value: string, monoLabel?: boolean }>,
   label: string,
   value: unknown,
@@ -380,7 +394,7 @@ function appendCodexDebugField(
   })
 }
 
-function formatCodexArgs(value: unknown): string | undefined {
+function formatCliArgs(value: unknown): string | undefined {
   if (!Array.isArray(value) || value.length === 0) return undefined
   if (value.every((entry) => typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean")) {
     return value.map((entry) => String(entry)).join(" ")
@@ -397,8 +411,9 @@ function resolveStructuredOutputs(result: NodeRunResult): Record<string, unknown
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
-function omitRecordKey(record: Record<string, unknown>, keyToOmit: string): Record<string, unknown> | undefined {
-  const entries = Object.entries(record).filter(([key]) => key !== keyToOmit)
+function omitRecordKeys(record: Record<string, unknown>, keysToOmit: readonly string[]): Record<string, unknown> | undefined {
+  const omittedKeys = new Set(keysToOmit)
+  const entries = Object.entries(record).filter(([key]) => !omittedKeys.has(key))
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 

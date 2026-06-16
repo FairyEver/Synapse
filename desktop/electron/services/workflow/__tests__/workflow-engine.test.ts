@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../../src/types/workflow"
 import type { NodeExecutor } from "../../../../workflow-nodes/types"
 import { defaultCodexNodeConfig, type CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
+import { defaultClaudeCodeNodeConfig, type ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import { codexNodeManifest } from "../../../../workflow-nodes/codex/manifest"
+import { claudeCodeNodeManifest } from "../../../../workflow-nodes/claude-code/manifest"
 import { endNodeExecutor } from "../../../../workflow-nodes/end/executor.main"
 import { endNodeManifest } from "../../../../workflow-nodes/end/manifest"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
@@ -82,6 +84,35 @@ describe("WorkflowEngine", () => {
       durationMs: 9,
     })
   })
+
+  it("passes claude code final output to downstream node bindings", async () => {
+    const claudeExecutor: NodeExecutor<ClaudeCodeNodeConfig> = {
+      execute: vi.fn(async () => ({
+        status: "success" as const,
+        output: "claude done",
+        outputs: {
+          claudeCodeDebug: {
+            command: "claude -p",
+            args: ["-p", "[prompt]"],
+            cwd: "/tmp",
+            exitCode: 0,
+            durationMs: 1,
+          },
+        },
+        durationMs: 1,
+      })),
+    }
+    nodeTypeRegistry.register(claudeCodeNodeManifest, claudeExecutor)
+    nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+    const engine = new WorkflowEngine({
+      sendToAgent: vi.fn(),
+    })
+
+    const result = await engine.run(workflowWithClaudeCodeNode(), {}, "run-1", vi.fn(), undefined, "project-1")
+
+    expect(result.status).toBe("completed")
+    expect(result.nodeResults.end?.output).toBe("claude done")
+  })
 })
 
 function workflowWithCodexNode(): WorkflowDefinition {
@@ -114,5 +145,38 @@ function workflowWithCodexNode(): WorkflowDefinition {
       },
     ],
     edges: [{ id: "edge-1", from: "codex-1", to: "end" }],
+  }
+}
+
+function workflowWithClaudeCodeNode(): WorkflowDefinition {
+  return {
+    id: "workflow-1",
+    name: "Claude Code workflow",
+    version: "v1",
+    createdAt: 1,
+    updatedAt: 1,
+    defaultProjectId: "project-1",
+    defaultNodeTimeoutMins: 30,
+    params: [],
+    nodes: [
+      {
+        id: "claude-code-1",
+        name: "Claude Code",
+        type: "claude_code",
+        position: { x: 0, y: 0 },
+        config: {
+          ...defaultClaudeCodeNodeConfig,
+          prompt: "Run",
+        },
+      },
+      {
+        id: "end",
+        name: "End",
+        type: "end",
+        position: { x: 200, y: 0 },
+        config: { outputType: "text", template: "{{result}}", variables: [{ name: "result", source: { type: "node_output", node: "claude-code-1" } }] },
+      },
+    ],
+    edges: [{ id: "edge-1", from: "claude-code-1", to: "end" }],
   }
 }

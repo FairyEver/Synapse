@@ -514,6 +514,51 @@ describe("NodeResultPanel", () => {
       root.unmount()
     })
   })
+
+  it("renders sanitized claude code debug output without duplicating raw keys", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            error: undefined,
+            output: "",
+            outputs: {
+              claudeCodeDebug: {
+                command: "claude -p",
+                args: ["-p", "[prompt]"],
+                cwd: "/Users/liyang/project",
+                exitCode: 0,
+                durationMs: 12,
+                stdoutPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/stdout.log",
+                stdoutPreview: "Authorization: Bearer sk-raw-secret\n/path=/Users/liyang/project/file.ts",
+              },
+            },
+          }}
+          nodeName="Claude Code node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const renderedText = container.textContent ?? ""
+    expect(renderedText).toContain("Claude Code 调试")
+    expect(renderedText).toContain("claude -p")
+    expect(renderedText).toContain("/Users/liyang/project")
+    expect(renderedText).toContain("/workflow-runs/run-1/nodes/claude-code-1/claude-code/stdout.log")
+    expect(renderedText).toContain("[redacted]")
+    expect(renderedText).toContain("[path]")
+    expect(renderedText).not.toContain("claudeCodeDebug")
+    expect(renderedText).not.toContain("sk-raw-secret")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
 })
 
 function nodeResult(): NodeRunResult {
