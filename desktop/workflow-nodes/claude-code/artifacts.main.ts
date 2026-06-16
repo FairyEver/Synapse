@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import { assertSafeWorkflowId, assertSafeWorkflowNodeId } from "../../electron/services/workflow/workflow-id"
+import { assertSafeWorkflowNodeId, assertSafeWorkflowRunId } from "../../electron/services/workflow/workflow-id"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
-import { sanitizeErrorPreservingPaths } from "../../electron/services/error-sanitize"
+import { sanitizeError, sanitizeErrorPreservingPaths } from "../../electron/services/error-sanitize"
 import { sanitizeClaudeCodeArgsForDebug } from "./command"
 import type { ClaudeCodeOutputFormat } from "./schema"
 
@@ -49,7 +49,7 @@ export interface BuildClaudeCodeDebugOutputInput {
 }
 
 export function claudeCodeArtifactPaths(baseDir: string, runId: string, nodeId: string): ClaudeCodeArtifactPaths {
-  const safeRunId = assertSafeWorkflowId(runId)
+  const safeRunId = assertSafeWorkflowRunId(runId)
   const safeNodeId = assertSafeWorkflowNodeId(nodeId)
   const directory = path.join(baseDir, "workflow-runs", safeRunId, "nodes", safeNodeId, "claude-code")
 

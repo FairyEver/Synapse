@@ -19,6 +19,10 @@ describe("claude code artifacts", () => {
     expect(paths.lastMessagePath).toBe(path.join(paths.directory, "last-message.txt"))
   })
 
+  it("rejects unsafe workflow run ids", () => {
+    expect(() => claudeCodeArtifactPaths("/tmp/synapse", "../run-1", "node-1")).toThrow("Invalid workflow run id")
+  })
+
   it("extracts final output from stream-json, json, and text output", () => {
     const streamJson = [
       JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "draft" }] } }),

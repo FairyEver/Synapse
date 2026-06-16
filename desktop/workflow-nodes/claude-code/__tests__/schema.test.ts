@@ -25,6 +25,7 @@ describe("claudeCodeNodeConfigSchema", () => {
     const parsed = claudeCodeNodeConfigSchema.parse({
       ...defaultClaudeCodeNodeConfig,
       prompt: "  Run tests  ",
+      projectId: "  repo-1  ",
       model: "  sonnet  ",
       workingDirectory: "  packages/app  ",
       settingsPath: "  .claude/settings.json  ",
@@ -35,6 +36,7 @@ describe("claudeCodeNodeConfigSchema", () => {
     })
 
     expect(parsed.prompt).toBe("Run tests")
+    expect(parsed.projectId).toBe("repo-1")
     expect(parsed.model).toBe("sonnet")
     expect(parsed.workingDirectory).toBe("packages/app")
     expect(parsed.settingsPath).toBe(".claude/settings.json")

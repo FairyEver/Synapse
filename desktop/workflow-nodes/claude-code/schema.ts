@@ -29,7 +29,7 @@ export const claudeCodeNodeConfigSchema = z
   .object({
     variables: z.array(variableBindingSchema),
     prompt: z.string().trim().min(1, "指令不能为空"),
-    projectId: z.string().optional(),
+    projectId: optionalTrimmedStringSchema,
     workingDirectory: optionalTrimmedStringSchema,
     timeoutMins: z.number().int().min(1).optional(),
     permissionMode: claudeCodePermissionModeSchema,
