@@ -188,7 +188,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-slot="resizable-panel-group"')
   })
 
-  it('aligns shared markdown reader toolbar with the content column', () => {
+  it('uses browser toolbar layout for the file header while keeping renderer content aligned', () => {
     const snapshot = createSnapshot({
       context: 'share',
       current: {
@@ -210,7 +210,8 @@ describe('drive browser view model', () => {
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
-    expect(html).toContain('max-w-4xl px-4 md:px-6 flex flex-col')
+    expect(html).toContain('data-reader-toolbar="true" class="flex shrink-0 flex-col gap-3 border-b bg-background px-4 py-3 md:flex-row md:items-center md:justify-between"')
+    expect(html).not.toContain('data-reader-toolbar="true" class="border-b bg-background sticky top-0 z-10"')
     expect(html).toContain('min-h-0 gap-0 mx-auto w-full max-w-4xl px-4 md:px-6 py-6')
     expect(html).toContain('data-renderer-toolbar="markdown" class="shrink-0 flex justify-end pb-4"')
   })

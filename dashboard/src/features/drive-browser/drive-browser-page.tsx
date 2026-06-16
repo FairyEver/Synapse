@@ -206,46 +206,43 @@ export function DriveSingleFileReaderView({
   readonly embedded?: boolean
 }) {
   const actions = getDriveBrowserActions(snapshot)
-  const readerContainerClassName = getDriveReaderContainerClassName(snapshot.preview)
   return (
     <section className={cn('bg-background', embedded ? 'flex h-full min-h-0 flex-col' : 'min-h-svh')}>
       <header
         data-reader-toolbar='true'
-        className={cn('border-b bg-background', embedded ? 'shrink-0' : 'sticky top-0 z-10')}
+        className='flex shrink-0 flex-col gap-3 border-b bg-background px-4 py-3 md:flex-row md:items-center md:justify-between'
       >
-        <div className={cn(readerContainerClassName, 'flex flex-col gap-3 py-3 md:flex-row md:items-center md:justify-between')}>
-          <div className='flex min-w-0 flex-col gap-1'>
-            <div className='flex min-w-0 items-center gap-2 text-sm font-medium'>
-              <DriveBrowserItemIcon item={snapshot.current} />
-              <span className='min-w-0 truncate'>{snapshot.current.name}</span>
-            </div>
-            <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
-              <span>{formatDriveBrowserSize(snapshot.current)}</span>
-              <span>{driveBrowserKindLabel(snapshot.current.previewKind)}</span>
-              <span>{formatDriveBrowserDate(snapshot.current.updatedAt)}</span>
-            </div>
-            {snapshot.breadcrumbs.length > 1 ? (
-              <DriveBrowserBreadcrumbs snapshot={snapshot} />
-            ) : null}
+        <div className='flex min-w-0 flex-col gap-1'>
+          <div className='flex min-w-0 items-center gap-2 text-sm font-medium'>
+            <DriveBrowserItemIcon item={snapshot.current} />
+            <span className='min-w-0 truncate'>{snapshot.current.name}</span>
           </div>
-          <div className='flex shrink-0 flex-wrap gap-2'>
-            {actions.downloadUrl ? (
-              <Button asChild variant='outline' size='sm'>
-                <a href={actions.downloadUrl}>
-                  <Download data-icon='inline-start' />
-                  下载
-                </a>
-              </Button>
-            ) : null}
-            {actions.visitUrl ? (
-              <Button asChild size='sm'>
-                <a href={actions.visitUrl} target='_blank' rel='noreferrer'>
-                  <ExternalLink data-icon='inline-start' />
-                  访问
-                </a>
-              </Button>
-            ) : null}
+          <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+            <span>{formatDriveBrowserSize(snapshot.current)}</span>
+            <span>{driveBrowserKindLabel(snapshot.current.previewKind)}</span>
+            <span>{formatDriveBrowserDate(snapshot.current.updatedAt)}</span>
           </div>
+          {snapshot.breadcrumbs.length > 1 ? (
+            <DriveBrowserBreadcrumbs snapshot={snapshot} />
+          ) : null}
+        </div>
+        <div className='flex shrink-0 flex-wrap gap-2'>
+          {actions.downloadUrl ? (
+            <Button asChild variant='outline' size='sm'>
+              <a href={actions.downloadUrl}>
+                <Download data-icon='inline-start' />
+                下载
+              </a>
+            </Button>
+          ) : null}
+          {actions.visitUrl ? (
+            <Button asChild size='sm'>
+              <a href={actions.visitUrl} target='_blank' rel='noreferrer'>
+                <ExternalLink data-icon='inline-start' />
+                访问
+              </a>
+            </Button>
+          ) : null}
         </div>
       </header>
       <DriveBrowserPreview
