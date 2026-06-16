@@ -40,7 +40,7 @@ export const claudeCodeNodeConfigSchema = z
     safeMode: z.boolean(),
     bareMode: z.boolean(),
     noSessionPersistence: z.boolean(),
-    settingSources: z.array(claudeCodeSettingSourceSchema),
+    settingSources: z.array(claudeCodeSettingSourceSchema).min(1, "至少选择一个设置来源"),
     settingsPath: optionalTrimmedStringSchema,
     mcpConfigPath: optionalTrimmedStringSchema,
     strictMcpConfig: z.boolean(),

@@ -46,7 +46,7 @@ describe("claudeCodeNodeConfigSchema", () => {
     expect(parsed.disallowedTools).toEqual(["Bash(rm *)"])
   })
 
-  it("rejects empty prompt, invalid numbers, and duplicate setting sources", () => {
+  it("rejects empty prompt, invalid numbers, and invalid setting sources", () => {
     expect(claudeCodeNodeConfigSchema.safeParse({
       ...defaultClaudeCodeNodeConfig,
       prompt: " ",
@@ -68,6 +68,12 @@ describe("claudeCodeNodeConfigSchema", () => {
       ...defaultClaudeCodeNodeConfig,
       prompt: "Run",
       settingSources: ["user", "user"],
+    }).success).toBe(false)
+
+    expect(claudeCodeNodeConfigSchema.safeParse({
+      ...defaultClaudeCodeNodeConfig,
+      prompt: "Run",
+      settingSources: [],
     }).success).toBe(false)
   })
 })

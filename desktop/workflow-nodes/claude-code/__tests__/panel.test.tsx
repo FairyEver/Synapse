@@ -202,4 +202,26 @@ describe("ClaudeCodeNodePanel", () => {
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ model: "sonnet" }))
   })
+
+  it("keeps at least one setting source selected", () => {
+    const onChange = vi.fn()
+    render(
+      <ClaudeCodeNodePanel
+        config={{ ...defaultClaudeCodeNodeConfig, prompt: "Run tests", settingSources: ["user"] }}
+        onChange={onChange}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+        validationItems={[]}
+      />,
+    )
+
+    act(() => {
+      const userSource = getByLabelText("user") as HTMLButtonElement
+      userSource.click()
+    })
+
+    expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ settingSources: [] }))
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })

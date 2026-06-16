@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { formatContentStoreSize } from '../content-store-display'
 import type { SkillEditorFile } from './content-store-editor-types'
 import {
@@ -83,7 +84,7 @@ export function SkillFileEditor({
         <div className='min-h-0 flex-1 overflow-hidden'>
           <Editor
             height='100%'
-            language={languageForPath(selectedFile.path)}
+            language={getCodeEditorLanguage(selectedFile.path)}
             value={selectedFile.text}
             onChange={(value) => void handleTextChange(value)}
             options={{
@@ -105,16 +106,4 @@ export function SkillFileEditor({
       )}
     </div>
   )
-}
-
-function languageForPath(path: string): string {
-  if (path.endsWith('.json')) return 'json'
-  if (path.endsWith('.ts') || path.endsWith('.tsx')) return 'typescript'
-  if (path.endsWith('.js') || path.endsWith('.jsx') || path.endsWith('.mjs')) {
-    return 'javascript'
-  }
-  if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml'
-  if (path.endsWith('.css')) return 'css'
-  if (path.endsWith('.html')) return 'html'
-  return 'markdown'
 }

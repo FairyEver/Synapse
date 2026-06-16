@@ -1,6 +1,6 @@
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 
-export type DriveRendererId = 'markdown' | 'source' | 'image' | 'iframe' | 'download'
+export type DriveRendererId = 'markdown' | 'code' | 'image' | 'iframe' | 'download'
 export type DriveRendererContainer = 'reading' | 'media' | 'full'
 
 export type DriveRendererOption = {
@@ -11,7 +11,7 @@ export type DriveRendererOption = {
 
 const RENDERERS: Record<DriveRendererId, DriveRendererOption> = {
   markdown: { id: 'markdown', label: '预览', container: 'reading' },
-  source: { id: 'source', label: '源码', container: 'reading' },
+  code: { id: 'code', label: '代码', container: 'full' },
   image: { id: 'image', label: '图片', container: 'media' },
   iframe: { id: 'iframe', label: '网页', container: 'full' },
   download: { id: 'download', label: '下载', container: 'reading' },
@@ -21,14 +21,14 @@ export function getDriveRendererOptions(snapshot: DriveBrowserSnapshotDto): read
   if (snapshot.current.type === 'folder') return []
   const preview = snapshot.preview
   if (!preview || preview.kind === 'download-only') return [RENDERERS.download]
-  if (preview.kind === 'markdown') return [RENDERERS.markdown, RENDERERS.source]
+  if (preview.kind === 'markdown') return [RENDERERS.markdown, RENDERERS.code]
   if (preview.kind === 'image') return [RENDERERS.image]
   if (preview.kind === 'html-source') {
     return snapshot.context === 'owner' && preview.visitUrl
-      ? [RENDERERS.source, RENDERERS.iframe]
-      : [RENDERERS.source]
+      ? [RENDERERS.code, RENDERERS.iframe]
+      : [RENDERERS.code]
   }
-  return [RENDERERS.source]
+  return [RENDERERS.code]
 }
 
 export function selectDefaultDriveRenderer(snapshot: DriveBrowserSnapshotDto): DriveRendererOption | null {

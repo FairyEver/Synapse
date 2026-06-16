@@ -66,21 +66,23 @@ export function ClaudeCodeNodePanel({
       </CollapsibleSection>
 
       <CollapsibleSection title="项目">
-        <ProjectSelect
-          value={config.projectId}
-          onChange={(projectId) => updateConfig({ projectId })}
-          projects={projects}
-          placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
-        />
-        <FieldError message={errorFor("projectId")} />
-        <LabeledInput
-          id="claude-code-working-directory"
-          label="工作目录"
-          value={config.workingDirectory ?? ""}
-          placeholder="留空使用项目目录"
-          onChange={(value) => updateConfig({ workingDirectory: value === "" ? undefined : value })}
-        />
-        <FieldError message={errorFor("workingDirectory")} />
+        <div className="grid gap-2">
+          <ProjectSelect
+            value={config.projectId}
+            onChange={(projectId) => updateConfig({ projectId })}
+            projects={projects}
+            placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
+          />
+          <FieldError message={errorFor("projectId")} />
+          <LabeledInput
+            id="claude-code-working-directory"
+            label="工作目录"
+            value={config.workingDirectory ?? ""}
+            placeholder="留空使用项目目录"
+            onChange={(value) => updateConfig({ workingDirectory: value === "" ? undefined : value })}
+          />
+          <FieldError message={errorFor("workingDirectory")} />
+        </div>
       </CollapsibleSection>
 
       <CollapsibleSection title="指令" summary={promptSummary}>
@@ -96,20 +98,6 @@ export function ClaudeCodeNodePanel({
 
       <CollapsibleSection title="执行配置">
         <div className="grid gap-2">
-          <LabeledSelect
-            id="claude-code-permission-mode"
-            label="Permission mode"
-            value={config.permissionMode}
-            onValueChange={(value) => updateConfig({ permissionMode: value as ClaudeCodePermissionMode })}
-          >
-            {PERMISSION_MODES.map((mode) => <SelectItem key={mode} value={mode}>{mode}</SelectItem>)}
-          </LabeledSelect>
-          <LabeledInput
-            id="claude-code-model"
-            label="模型"
-            value={config.model ?? ""}
-            onChange={(value) => updateConfig({ model: value === "" ? undefined : value })}
-          />
           <LabeledInput
             id="claude-code-timeout"
             label="超时分钟"
@@ -117,14 +105,6 @@ export function ClaudeCodeNodePanel({
             min={1}
             value={config.timeoutMins?.toString() ?? ""}
             onChange={(value) => updateConfig({ timeoutMins: value === "" ? undefined : Number(value) })}
-          />
-          <LabeledInput
-            id="claude-code-max-turns"
-            label="Max turns"
-            type="number"
-            min={1}
-            value={config.maxTurns?.toString() ?? ""}
-            onChange={(value) => updateConfig({ maxTurns: value === "" ? undefined : Number(value) })}
           />
           <LabeledSelect
             id="claude-code-output-format"
@@ -134,9 +114,6 @@ export function ClaudeCodeNodePanel({
           >
             {OUTPUT_FORMATS.map((format) => <SelectItem key={format} value={format}>{format}</SelectItem>)}
           </LabeledSelect>
-          <BooleanRow id="claude-code-verbose" label="Verbose" checked={config.verbose} onChange={(verbose) => updateConfig({ verbose })} />
-          <BooleanRow id="claude-code-safe-mode" label="Safe mode" checked={config.safeMode} onChange={(safeMode) => updateConfig({ safeMode })} />
-          <BooleanRow id="claude-code-bare-mode" label="Bare mode" checked={config.bareMode} onChange={(bareMode) => updateConfig({ bareMode })} />
           <BooleanRow
             id="claude-code-no-session-persistence"
             label="不保存会话"
@@ -148,6 +125,23 @@ export function ClaudeCodeNodePanel({
 
       <CollapsibleSection title="Claude Code 配置">
         <div className="grid gap-2">
+          <LabeledInput
+            id="claude-code-model"
+            label="模型"
+            value={config.model ?? ""}
+            onChange={(value) => updateConfig({ model: value === "" ? undefined : value })}
+          />
+          <LabeledInput
+            id="claude-code-max-turns"
+            label="Max turns"
+            type="number"
+            min={1}
+            value={config.maxTurns?.toString() ?? ""}
+            onChange={(value) => updateConfig({ maxTurns: value === "" ? undefined : Number(value) })}
+          />
+          <BooleanRow id="claude-code-verbose" label="Verbose" checked={config.verbose} onChange={(verbose) => updateConfig({ verbose })} />
+          <BooleanRow id="claude-code-safe-mode" label="Safe mode" checked={config.safeMode} onChange={(safeMode) => updateConfig({ safeMode })} />
+          <BooleanRow id="claude-code-bare-mode" label="Bare mode" checked={config.bareMode} onChange={(bareMode) => updateConfig({ bareMode })} />
           <SettingSourcesEditor
             values={config.settingSources}
             onChange={(settingSources) => updateConfig({ settingSources })}
@@ -175,6 +169,14 @@ export function ClaudeCodeNodePanel({
 
       <CollapsibleSection title="权限规则">
         <div className="grid gap-2">
+          <LabeledSelect
+            id="claude-code-permission-mode"
+            label="Permission mode"
+            value={config.permissionMode}
+            onValueChange={(value) => updateConfig({ permissionMode: value as ClaudeCodePermissionMode })}
+          >
+            {PERMISSION_MODES.map((mode) => <SelectItem key={mode} value={mode}>{mode}</SelectItem>)}
+          </LabeledSelect>
           <StringListEditor
             label="额外目录"
             values={config.additionalDirectories}
@@ -309,6 +311,7 @@ function SettingSourcesEditor({
       onChange(SETTING_SOURCES.filter((item) => item === source || values.includes(item)))
       return
     }
+    if (values.length <= 1 && values.includes(source)) return
     onChange(values.filter((item) => item !== source))
   }
 

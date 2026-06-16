@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { Download, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
+import { DriveCodeRenderer } from './code-renderer'
 import {
   findDriveRendererOption,
   getDriveRendererOptions,
@@ -23,24 +24,29 @@ import { DriveDownloadRenderer } from './download-renderer'
 import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
 import { DriveMarkdownRenderer } from './markdown-renderer'
-import { DriveSourceRenderer } from './source-renderer'
 
 const READING_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
+const FULL_CONTAINER_CLASSNAME = 'h-full min-h-0 w-full'
 
 export function DriveRendererShell({
   snapshot,
   body = false,
+  initialRendererId = null,
   rendererId,
   onRendererChange,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly body?: boolean
+  readonly initialRendererId?: DriveRendererId | null
   readonly rendererId?: DriveRendererId | null
   readonly onRendererChange?: (id: DriveRendererId) => void
 }) {
   const options = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
-  const [internalRendererId, setInternalRendererId] = useState<DriveRendererId | null>(options[0]?.id ?? null)
+  const initialRenderer = findDriveRendererOption(snapshot, initialRendererId)
+  const [internalRendererId, setInternalRendererId] = useState<DriveRendererId | null>(
+    initialRenderer?.id ?? options[0]?.id ?? null
+  )
   const activeRendererId = rendererId === undefined ? internalRendererId : rendererId
   const selected = findDriveRendererOption(snapshot, activeRendererId)
   const setRenderer = (id: DriveRendererId) => {
@@ -53,13 +59,16 @@ export function DriveRendererShell({
 
   useEffect(() => {
     if (rendererId !== undefined) return
-    setInternalRendererId((current) => findDriveRendererOption(snapshot, current)?.id ?? null)
-  }, [rendererId, snapshot])
+    setInternalRendererId((current) =>
+      findDriveRendererOption(snapshot, current)?.id ?? findDriveRendererOption(snapshot, initialRendererId)?.id ?? null
+    )
+  }, [initialRendererId, rendererId, snapshot])
 
   if (!selected) return null
+  const shellClassName = body ? null : 'h-full'
 
   return (
-    <section className={cn('min-h-0 bg-background', body ? 'min-h-svh' : 'h-full')}>
+    <section className={cn('min-h-0 bg-background', shellClassName)}>
       {body ? (
         <DriveRendererFloatingMenu
           snapshot={snapshot}
@@ -68,7 +77,7 @@ export function DriveRendererShell({
           onSelect={setRenderer}
         />
       ) : null}
-      <DriveRendererContent snapshot={snapshot} selected={selected} />
+      <DriveRendererContent snapshot={snapshot} selected={selected} body={body} />
     </section>
   )
 }
@@ -76,46 +85,37 @@ export function DriveRendererShell({
 export function DriveRendererContent({
   snapshot,
   selected,
+  body = false,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly selected: DriveRendererOption
+  readonly body?: boolean
 }) {
   const preview = snapshot.preview
   const containerClassName = selected.container === 'media'
     ? MEDIA_CONTAINER_CLASSNAME
     : selected.container === 'reading'
       ? READING_CONTAINER_CLASSNAME
-      : 'min-h-svh w-full px-4 md:px-6'
+      : FULL_CONTAINER_CLASSNAME
+  const renderContent = (content: ReactNode) =>
+    body ? content : <div className={containerClassName}>{content}</div>
 
   if (!preview || selected.id === 'download') {
-    return (
-      <div className={containerClassName}>
-        <DriveDownloadRenderer current={snapshot.current} />
-      </div>
-    )
+    return renderContent(<DriveDownloadRenderer current={snapshot.current} />)
   }
   if (selected.id === 'markdown') {
-    return (
-      <div className={containerClassName}>
-        <DriveMarkdownRenderer preview={preview} />
-      </div>
-    )
+    return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} />)
+  }
+  if (selected.id === 'code') {
+    return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} body={body} />)
   }
   if (selected.id === 'image') {
-    return (
-      <div className={containerClassName}>
-        <DriveImageRenderer current={snapshot.current} preview={preview} />
-      </div>
-    )
+    return renderContent(<DriveImageRenderer current={snapshot.current} preview={preview} />)
   }
   if (selected.id === 'iframe' && preview.visitUrl) {
     return <DriveIframeRenderer current={snapshot.current} visitUrl={preview.visitUrl} />
   }
-  return (
-    <div className={containerClassName}>
-      <DriveSourceRenderer preview={preview} />
-    </div>
-  )
+  return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} body={body} />)
 }
 
 function DriveRendererFloatingMenu({

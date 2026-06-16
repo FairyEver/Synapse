@@ -1,9 +1,15 @@
-import type { DriveBrowserPreviewDto } from '@synapse/shared'
-import { DriveSourceRenderer } from './source-renderer'
+import type { DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
+import { DriveCodeRenderer } from './code-renderer'
 
-export function DriveMarkdownRenderer({ preview }: { readonly preview: DriveBrowserPreviewDto }) {
+export function DriveMarkdownRenderer({
+  current,
+  preview,
+}: {
+  readonly current: DriveBrowserItemDto
+  readonly preview: DriveBrowserPreviewDto
+}) {
   const renderedHtml = preview.html?.trim()
-  if (!renderedHtml) return <DriveSourceRenderer preview={preview} />
+  if (!renderedHtml) return <DriveCodeRenderer current={current} preview={preview} />
 
   return (
     <div className='min-h-0 py-6'>

@@ -11,6 +11,7 @@ import {
   getDriveRendererOptions,
   selectDefaultDriveRenderer,
 } from './renderers/drive-renderer-registry'
+import { DriveRendererContent } from './renderers/drive-renderer-shell'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
   getDriveBrowserActions,
@@ -114,7 +115,7 @@ describe('drive browser view model', () => {
     }))).toBe(false)
   })
 
-  it('returns markdown preview and source renderer options with rendered preview as default', () => {
+  it('returns markdown preview and code renderer options with rendered preview as default', () => {
     const snapshot = createSnapshot({
       current: { ...baseCurrent(), name: 'notes.md', previewKind: 'markdown' },
       preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
@@ -122,7 +123,7 @@ describe('drive browser view model', () => {
 
     const options = getDriveRendererOptions(snapshot)
 
-    expect(options.map((option) => option.id)).toEqual(['markdown', 'source'])
+    expect(options.map((option) => option.id)).toEqual(['markdown', 'code'])
     expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('markdown')
   })
 
@@ -138,8 +139,54 @@ describe('drive browser view model', () => {
       preview: { ...basePreview(), kind: 'html-source', visitUrl: null },
     })
 
-    expect(getDriveRendererOptions(owner).map((option) => option.id)).toEqual(['source', 'iframe'])
-    expect(getDriveRendererOptions(shared).map((option) => option.id)).toEqual(['source'])
+    expect(getDriveRendererOptions(owner).map((option) => option.id)).toEqual(['code', 'iframe'])
+    expect(getDriveRendererOptions(shared).map((option) => option.id)).toEqual(['code'])
+    expect(getDriveRendererOptions(shared)[0]?.container).toBe('full')
+  })
+
+  it('renders code previews with the shared code editor shell', () => {
+    const snapshot = createSnapshot({
+      current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
+      preview: { ...basePreview(), kind: 'html-source', text: '<h1>Notes</h1>' },
+    })
+
+    const html = renderToStaticMarkup(
+      createElement(DriveRendererContent, {
+        snapshot,
+        selected: { id: 'code', label: '代码', container: 'full' },
+        body: true,
+      })
+    )
+
+    expect(html).toContain('data-drive-code-renderer="true"')
+    expect(html).toContain('data-drive-code-language="html"')
+    expect(html).not.toContain('rounded-lg')
+    expect(html).not.toContain('border')
+    expect(html).not.toContain('bg-card')
+    expect(html).not.toContain('min-h-96')
+    expect(html).toContain('class="flex min-h-0 w-full flex-col overflow-hidden h-svh"')
+    expect(html).not.toContain('min-h-svh')
+  })
+
+  it('does not add reader container classes in standalone renderer host', () => {
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'standalone',
+      current: { ...baseCurrent(), name: 'notes.md', previewKind: 'markdown' },
+      preview: { ...basePreview(), kind: 'markdown', text: '# Notes', html: '<h1>Notes</h1>' },
+    })
+
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'code' })
+    )
+
+    expect(html).toContain('data-drive-code-renderer="true"')
+    expect(html).not.toContain('max-w-4xl')
+    expect(html).not.toContain('px-4')
+    expect(html).not.toContain('md:px-6')
+    expect(html).not.toContain('h-svh overflow-hidden')
+    expect(html).toContain('class="flex min-h-0 w-full flex-col overflow-hidden h-svh"')
+    expect(html).not.toContain('class="min-h-0 bg-background min-h-svh"')
   })
 
   it('shows visit for owner html previews', () => {

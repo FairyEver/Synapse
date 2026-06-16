@@ -130,8 +130,8 @@ Renderer 只负责显示文件内容。
 
 第一版内置 Renderer：
 
-- Markdown Renderer：默认显示渲染结果，支持切换源码。
-- Source Renderer：显示文本、代码、HTML 源码。
+- Markdown Renderer：默认显示渲染结果，支持切换到代码视图。
+- Code Renderer：使用与 Skill 内容编辑器一致的只读代码编辑器显示文本、代码和 HTML 源码。
 - Image Renderer：显示图片。
 - Iframe Renderer：只在 owner context 且后端提供可访问 URL 时启用。
 - Download Renderer：用于压缩包、未知类型和不可预览文件。
@@ -154,7 +154,7 @@ Renderer 不做：
 - share context 不显示 owner-only iframe 或 `访问` 能力。
 - 文件浏览器 UI 不展示内部 item id、storage key、owner email、删除状态或管理元数据。
 
-HTML 的 iframe 渲染必须只使用服务端返回的安全 URL。没有安全 URL 时只能显示源码或下载。
+HTML 的 iframe 渲染必须只使用服务端返回的安全 URL。没有安全 URL 时只能显示代码视图或下载。
 
 ## UI Rules
 
@@ -200,7 +200,7 @@ dashboard/src/features/drive-browser/
     drive-renderer-registry.ts
     drive-renderer-shell.tsx
     markdown-renderer.tsx
-    source-renderer.tsx
+    code-renderer.tsx
     image-renderer.tsx
     iframe-renderer.tsx
     download-renderer.tsx
@@ -221,7 +221,7 @@ Renderer tests:
 - 单文件新窗口或分享文件页直接渲染 body-level Renderer。
 - 分享 HTML 文件不出现 iframe 或 owner-only 访问入口。
 - owner HTML 文件在存在 `visitUrl` 时出现 iframe 或访问类 Renderer 选项。
-- Markdown 默认显示渲染结果，并可切换源码。
+- Markdown 默认显示渲染结果，并可切换代码视图。
 - download-only 文件显示下载状态。
 - 目录下载按钮只在目录上下文显示。
 - 行点击进入对应 `browserUrl`。

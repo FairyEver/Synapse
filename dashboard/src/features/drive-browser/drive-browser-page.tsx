@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { DriveFinder } from './finder/drive-finder'
 import { DriveRendererShell } from './renderers/drive-renderer-shell'
+import type { DriveRendererId } from './renderers/drive-renderer-registry'
 import { shouldRenderDriveBodyRenderer } from './shared/drive-view-model'
 import { useDriveBrowser } from './use-drive-browser'
 
@@ -148,12 +149,14 @@ export function DriveBrowserView({
 export function DriveSingleFileReaderView({
   snapshot,
   embedded = false,
+  initialRendererId = null,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly embedded?: boolean
+  readonly initialRendererId?: DriveRendererId | null
 }) {
   void embedded
-  return <DriveRendererShell snapshot={snapshot} body />
+  return <DriveRendererShell snapshot={snapshot} body initialRendererId={initialRendererId} />
 }
 
 function DriveBrowserPasswordForm({

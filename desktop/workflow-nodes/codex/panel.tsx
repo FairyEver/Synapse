@@ -296,22 +296,24 @@ export function CodexNodePanel({
       </CollapsibleSection>
 
       <CollapsibleSection title="项目">
-        <ProjectSelect
-          value={config.projectId}
-          onChange={(projectId) => commit({ projectId })}
-          projects={projects}
-          placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
-        />
-        {errorFor("projectId") ? <p className="text-xs text-destructive">{errorFor("projectId")}</p> : null}
-        <LabeledInput
-          id="codex-working-directory"
-          label="工作目录"
-          help={CODEX_FIELD_HELP.workingDirectory}
-          value={config.workingDirectory ?? ""}
-          placeholder="留空使用项目目录"
-          onChange={(value) => commit({ workingDirectory: value === "" ? undefined : value })}
-        />
-        {errorFor("workingDirectory") ? <p className="text-xs text-destructive">{errorFor("workingDirectory")}</p> : null}
+        <div className="grid gap-2">
+          <ProjectSelect
+            value={config.projectId}
+            onChange={(projectId) => commit({ projectId })}
+            projects={projects}
+            placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
+          />
+          {errorFor("projectId") ? <p className="text-xs text-destructive">{errorFor("projectId")}</p> : null}
+          <LabeledInput
+            id="codex-working-directory"
+            label="工作目录"
+            help={CODEX_FIELD_HELP.workingDirectory}
+            value={config.workingDirectory ?? ""}
+            placeholder="留空使用项目目录"
+            onChange={(value) => commit({ workingDirectory: value === "" ? undefined : value })}
+          />
+          {errorFor("workingDirectory") ? <p className="text-xs text-destructive">{errorFor("workingDirectory")}</p> : null}
+        </div>
       </CollapsibleSection>
 
       <CollapsibleSection title="指令" summary={promptSummary}>

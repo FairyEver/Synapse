@@ -51,6 +51,7 @@ describe("dashboard Vite dev proxy", () => {
   })
 
   it("serves drive browser page routes through the dashboard app in dev", () => {
+    expect(isDriveBrowserSpaPath("/drive")).toBe(true)
     expect(isDriveBrowserSpaPath("/drive/items/root-id")).toBe(true)
     expect(isDriveBrowserSpaPath("/drive/items/root-id/items/file-id")).toBe(true)
     expect(isDriveBrowserSpaPath("/files/share-id")).toBe(true)
@@ -72,6 +73,7 @@ describe("dashboard Vite dev proxy", () => {
   })
 
   it("keeps drive direct response routes out of the dashboard app fallback", () => {
+    expect(resolveDashboardDevSpaFallback("/drive")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/files/share-id")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/drive/items/root-id/items/file-id")).toBe("/console/")
     expect(resolveDashboardDevSpaFallback("/files/share-id/items/file-id/download")).toBeNull()
