@@ -115,6 +115,43 @@ describe("sanitizeNodeResultsForSnapshot", () => {
     expect(raw).not.toContain("abc123")
     expect(codexDebug.stdoutPreview).not.toContain("/Users/liyang/project")
   })
+
+  it("sanitizes claude code debug previews while preserving artifact paths", () => {
+    const result: NodeRunResult = {
+      nodeId: "claude-code-1",
+      status: "failed",
+      input: { variables: {}, prompt: "run claude" },
+      outputs: {
+        claudeCodeDebug: {
+          cwd: "/Users/liyang/project",
+          stdoutPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/stdout.log",
+          stderrPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/stderr.log",
+          promptPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/prompt.txt",
+          lastMessagePath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/last-message.txt",
+          stdoutPreview: "Authorization: Bearer secret\nCookie: sid=abc123\n/Users/liyang/project",
+          stderrPreview: "ANTHROPIC_API_KEY=sk-raw-secret\n/Users/liyang/project",
+        },
+      },
+    }
+
+    const sanitized = sanitizeNodeResultsForSnapshot({ "claude-code-1": result })
+    const claudeCodeDebug = sanitized["claude-code-1"]?.outputs?.claudeCodeDebug as Record<string, string>
+    const raw = JSON.stringify(sanitized)
+
+    expect(claudeCodeDebug.stdoutPreview).toContain("[redacted]")
+    expect(claudeCodeDebug.stderrPreview).toContain("[redacted]")
+    expect(claudeCodeDebug.stdoutPreview).toContain("[path]")
+    expect(claudeCodeDebug.stderrPreview).toContain("[path]")
+    expect(claudeCodeDebug.cwd).toBe("/Users/liyang/project")
+    expect(claudeCodeDebug.stdoutPath).toContain("/workflow-runs/run-1/nodes/claude-code-1/claude-code/stdout.log")
+    expect(claudeCodeDebug.stderrPath).toContain("/workflow-runs/run-1/nodes/claude-code-1/claude-code/stderr.log")
+    expect(claudeCodeDebug.promptPath).toContain("/workflow-runs/run-1/nodes/claude-code-1/claude-code/prompt.txt")
+    expect(claudeCodeDebug.lastMessagePath).toContain("/workflow-runs/run-1/nodes/claude-code-1/claude-code/last-message.txt")
+    expect(raw).not.toContain("Bearer secret")
+    expect(raw).not.toContain("sid=abc123")
+    expect(raw).not.toContain("sk-raw-secret")
+    expect(claudeCodeDebug.stdoutPreview).not.toContain("/Users/liyang/project")
+  })
 })
 
 describe("sanitizeWorkflowDefinitionForSnapshot", () => {

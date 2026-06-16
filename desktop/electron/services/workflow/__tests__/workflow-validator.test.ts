@@ -4,6 +4,7 @@ import type { WorkflowDefinition } from "../../../../src/types/workflow"
 import { validateWorkflow } from "../workflow-validator"
 import "../../../../workflow-nodes/register.main"
 import { defaultCodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
+import { defaultClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 
 const logger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -56,6 +57,36 @@ describe("validateWorkflow", () => {
 
   it("accepts codex nodes with workflow default project and without provider/model defaults", () => {
     const result = validateWorkflow(definitionWithCodexNode({
+      defaultProjectId: "project-1",
+    }))
+
+    expect(result.valid).toBe(true)
+    expect(result.errors).toEqual([])
+  })
+
+  it("requires a project for claude code nodes when workflow default is missing", () => {
+    const result = validateWorkflow(definitionWithClaudeCodeNode())
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "claude-code-1",
+        field: "defaultProjectId",
+        details: expect.objectContaining({
+          missingField: "defaultProjectId",
+          nodeField: "projectId",
+        }),
+      }),
+    ]))
+    expect(result.errors).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "defaultProviderId" }),
+      expect.objectContaining({ field: "defaultModelTier" }),
+    ]))
+  })
+
+  it("accepts claude code nodes with workflow default project and without provider/model defaults", () => {
+    const result = validateWorkflow(definitionWithClaudeCodeNode({
       defaultProjectId: "project-1",
     }))
 
@@ -212,6 +243,88 @@ describe("validateWorkflow", () => {
     ]))
   })
 
+  it("checks template placeholders inside claude code prompts and paths", () => {
+    const result = validateWorkflow(definitionWithClaudeCodeNode({
+      defaultProjectId: "project-1",
+      nodes: [
+        claudeCodeNode({
+          prompt: "Use {{missingVar}}",
+          workingDirectory: "/Users/liyang/worktrees/{{missingDir}}",
+          settingsPath: "/Users/liyang/settings/{{missingSettings}}.json",
+          mcpConfigPath: "/Users/liyang/mcp/{{missingMcp}}.json",
+          additionalDirectories: ["/Users/liyang/worktrees/{{missingExtra}}"],
+        }),
+        endNode(),
+      ],
+    }))
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "claude-code-1",
+        type: "invalid_config",
+        message: expect.stringContaining("模板变量「missingVar」未绑定"),
+      }),
+      expect.objectContaining({
+        nodeId: "claude-code-1",
+        type: "invalid_config",
+        message: expect.stringContaining("模板变量「missingDir」未绑定"),
+      }),
+      expect.objectContaining({
+        nodeId: "claude-code-1",
+        type: "invalid_config",
+        message: expect.stringContaining("模板变量「missingSettings」未绑定"),
+      }),
+      expect.objectContaining({
+        nodeId: "claude-code-1",
+        type: "invalid_config",
+        message: expect.stringContaining("模板变量「missingMcp」未绑定"),
+      }),
+      expect.objectContaining({
+        nodeId: "claude-code-1",
+        type: "invalid_config",
+        message: expect.stringContaining("模板变量「missingExtra」未绑定"),
+      }),
+    ]))
+  })
+
+  it("rejects claude code nodes with stale configured project references", () => {
+    const result = validateWorkflow(definitionWithClaudeCodeNode({
+      defaultProjectId: "project-1",
+      nodes: [
+        claudeCodeNode({
+          prompt: "Run Claude Code",
+          projectId: "deleted-project",
+        }),
+        endNode(),
+      ],
+    }), { configuredProjectIds: ["project-1"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "claude-code-1",
+        field: "projectId",
+        message: expect.stringContaining("deleted-project"),
+      }),
+    ]))
+  })
+
+  it("rejects claude code nodes that inherit a stale workflow default project", () => {
+    const result = validateWorkflow(definitionWithClaudeCodeNode({
+      defaultProjectId: "deleted-default-project",
+    }), { configuredProjectIds: ["project-1"] })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        nodeId: "claude-code-1",
+        field: "defaultProjectId",
+        message: expect.stringContaining("deleted-default-project"),
+      }),
+    ]))
+  })
+
   it("rejects http request nodes with empty URLs before save", () => {
     const result = validateWorkflow(definitionWithHttpRequestNode({ url: "   " }))
 
@@ -301,6 +414,23 @@ function definitionWithCodexNode(overrides: Partial<WorkflowDefinition> = {}): W
   }
 }
 
+function definitionWithClaudeCodeNode(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+  return {
+    id: "workflow-claude-code",
+    name: "Workflow",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      claudeCodeNode(),
+      endNode(),
+    ],
+    edges: [{ id: "edge-1", from: "claude-code-1", to: "end" }],
+    ...overrides,
+  }
+}
+
 function definitionWithHttpRequestNode(config: { readonly url: string }): WorkflowDefinition {
   return {
     id: "workflow-http",
@@ -332,6 +462,20 @@ function codexNode(config: Partial<typeof defaultCodexNodeConfig> = {}): Workflo
     config: {
       ...defaultCodexNodeConfig,
       prompt: "Run codex",
+      ...config,
+    },
+  }
+}
+
+function claudeCodeNode(config: Partial<typeof defaultClaudeCodeNodeConfig> = {}): WorkflowDefinition["nodes"][number] {
+  return {
+    id: "claude-code-1",
+    name: "Claude Code",
+    type: "claude_code",
+    position: { x: 0, y: 0 },
+    config: {
+      ...defaultClaudeCodeNodeConfig,
+      prompt: "Run Claude Code",
       ...config,
     },
   }

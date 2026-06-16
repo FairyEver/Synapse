@@ -1046,6 +1046,31 @@ describe("createWorkflowDispatcher", () => {
     ]))
   })
 
+  it("workflow.node_type.describe returns claude code config schema without providers", async () => {
+    const listProviders = vi.fn(async () => [{ id: "p1", name: "P1", model: "m", haikuModel: "h", sonnetModel: "s", opusModel: "o" }])
+    const deps = makeDeps({ nodeTypeRegistry, listProviders })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch("workflow.node_type.describe", { nodeType: "claude_code" }, { source: "api" })
+    expect(result.ok).toBe(true)
+
+    const data = result.data as Record<string, unknown>
+    expect(data.type).toBe("claude_code")
+    expect(data).not.toHaveProperty("availableProviders")
+    expect(data.configFields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "workingDirectory" }),
+      expect.objectContaining({ name: "permissionMode" }),
+      expect.objectContaining({ name: "model" }),
+      expect.objectContaining({ name: "maxTurns" }),
+      expect.objectContaining({ name: "outputFormat" }),
+      expect.objectContaining({ name: "settingSources" }),
+      expect.objectContaining({ name: "additionalDirectories" }),
+      expect.objectContaining({ name: "allowedTools" }),
+      expect.objectContaining({ name: "disallowedTools" }),
+      expect.objectContaining({ name: "captureDebugArtifacts" }),
+      expect.objectContaining({ name: "prompt" }),
+    ]))
+  })
+
   it("workflow.layout.update repositions nodes with dagre LR", async () => {
     const deps = makeDeps({
       workflowService: {

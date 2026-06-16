@@ -14,6 +14,7 @@ import { httpRequestNodeManifest } from "./http-request/manifest"
 import { scriptNodeManifest } from "./script/manifest"
 import { workflowCallNodeManifest } from "./workflow-call/manifest"
 import { codexNodeManifest } from "./codex/manifest"
+import { claudeCodeNodeManifest } from "./claude-code/manifest"
 
 nodeTypeRegistry.registerManifest(promptNodeManifest)
 nodeTypeRegistry.registerManifest(switchNodeManifest)
@@ -22,3 +23,4 @@ nodeTypeRegistry.registerManifest(httpRequestNodeManifest)
 nodeTypeRegistry.registerManifest(scriptNodeManifest)
 nodeTypeRegistry.registerManifest(workflowCallNodeManifest)
 nodeTypeRegistry.registerManifest(codexNodeManifest)
+nodeTypeRegistry.registerManifest(claudeCodeNodeManifest)

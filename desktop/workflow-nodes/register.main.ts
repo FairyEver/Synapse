@@ -6,6 +6,7 @@ import { httpRequestNodeManifest, httpRequestNodeExecutor } from "./http-request
 import { scriptNodeManifest, scriptNodeExecutor } from "./script"
 import { workflowCallNodeManifest, workflowCallNodeExecutor } from "./workflow-call"
 import { codexNodeManifest, codexNodeExecutor } from "./codex"
+import { claudeCodeNodeManifest, claudeCodeNodeExecutor } from "./claude-code"
 
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
 nodeTypeRegistry.register(switchNodeManifest, switchNodeExecutor)
@@ -14,3 +15,4 @@ nodeTypeRegistry.register(httpRequestNodeManifest, httpRequestNodeExecutor)
 nodeTypeRegistry.register(scriptNodeManifest, scriptNodeExecutor)
 nodeTypeRegistry.register(workflowCallNodeManifest, workflowCallNodeExecutor)
 nodeTypeRegistry.register(codexNodeManifest, codexNodeExecutor)
+nodeTypeRegistry.register(claudeCodeNodeManifest, claudeCodeNodeExecutor)

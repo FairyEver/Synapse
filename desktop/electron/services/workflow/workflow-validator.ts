@@ -103,12 +103,17 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
     }
   }
 
-  if (node.type === "prompt" || node.type === "switch" || node.type === "codex") {
+  if (node.type === "prompt" || node.type === "switch" || node.type === "codex" || node.type === "claude_code") {
     pushString(cfg.prompt)
     if (node.type === "codex") {
       pushString(cfg.workingDirectory)
       pushStringArray(cfg.additionalWritableDirs)
       pushStringArray(cfg.images)
+    } else if (node.type === "claude_code") {
+      pushString(cfg.workingDirectory)
+      pushString(cfg.settingsPath)
+      pushString(cfg.mcpConfigPath)
+      pushStringArray(cfg.additionalDirectories)
     }
   } else if (node.type === "end") {
     pushString(cfg.template)
@@ -242,8 +247,8 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
     }
 
     // Provider resolution: prompt/switch nodes must have provider/model/project;
-    // codex/script nodes only require project resolution.
-    if (node.type === "prompt" || node.type === "switch" || node.type === "codex" || node.type === "script") {
+    // local CLI and script nodes only require project resolution.
+    if (node.type === "prompt" || node.type === "switch" || node.type === "codex" || node.type === "claude_code" || node.type === "script") {
       const cfg = node.config as Record<string, unknown>
       const hasProviderId = typeof cfg.providerId === "string" && cfg.providerId.length > 0
       const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0
@@ -268,7 +273,7 @@ export function validateWorkflow(def: WorkflowDefinition, options: WorkflowValid
           defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
         }))
       }
-      if (node.type === "codex" && configuredProjectIds) {
+      if ((node.type === "codex" || node.type === "claude_code") && configuredProjectIds) {
         const effectiveProjectId = nodeProjectId ?? defaultProjectId
         if (effectiveProjectId && !configuredProjectIds.has(effectiveProjectId)) {
           errors.push(missingConfiguredProjectError({

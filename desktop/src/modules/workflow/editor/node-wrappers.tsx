@@ -7,6 +7,7 @@ import { HttpRequestNodeCard } from "../../../../workflow-nodes/http-request/car
 import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
 import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/card"
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
+import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
@@ -15,6 +16,7 @@ import type { HttpRequestNodeConfig } from "../../../../workflow-nodes/http-requ
 import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
 import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow-call/schema"
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
+import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 
 export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -115,6 +117,19 @@ export function CodexNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function ClaudeCodeNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="claude_code">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <ClaudeCodeNodeCard config={data as ClaudeCodeNodeConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export const nodeTypes = {
   prompt: PromptNodeWrapper,
   switch: SwitchNodeWrapper,
@@ -123,4 +138,5 @@ export const nodeTypes = {
   script: ScriptNodeWrapper,
   workflow_call: WorkflowCallNodeWrapper,
   codex: CodexNodeWrapper,
+  claude_code: ClaudeCodeNodeWrapper,
 }

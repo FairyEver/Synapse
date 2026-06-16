@@ -74,4 +74,41 @@ describe("NodeTypeRegistry", () => {
     expect(nodeTypeRegistry.getManifest("codex").title).toBe("Codex")
     expect(nodeTypeRegistry.getExecutor("codex")).toBe(codexNodeExecutor)
   })
+
+  it("registers claude code manifest in renderer registry", async () => {
+    await import("../register.renderer")
+    const { nodeTypeRegistry } = await import("../registry")
+
+    const manifest = nodeTypeRegistry.getManifest("claude_code")
+
+    expect(manifest.title).toBe("Claude Code")
+    expect(manifest.type).toBe("claude_code")
+  })
+
+  it("registers claude code manifest and executor in main registry", async () => {
+    vi.doMock("electron", () => ({
+      app: {
+        getPath: () => "/tmp",
+        getAppPath: () => "/tmp",
+      },
+    }))
+
+    vi.doMock("../../electron/services/log-store", () => ({
+      createMainLogger: () => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      }),
+    }))
+
+    await import("../register.main")
+    const [{ nodeTypeRegistry }, { claudeCodeNodeExecutor }] = await Promise.all([
+      import("../registry"),
+      import("../claude-code/executor.main"),
+    ])
+
+    expect(nodeTypeRegistry.getManifest("claude_code").title).toBe("Claude Code")
+    expect(nodeTypeRegistry.getExecutor("claude_code")).toBe(claudeCodeNodeExecutor)
+  })
 })

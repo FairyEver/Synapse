@@ -2,7 +2,7 @@ import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunSnapsh
 import { sanitizeError } from "../error-sanitize"
 
 const SENSITIVE_OUTPUT_KEY_PATTERN = /^(authorization|cookie|set-cookie|.*(?:secret|token|password|credential|api[-_]?key|session[-_]?key).*)$/i
-const CODEX_DEBUG_PATH_KEYS = new Set(["cwd", "stdoutPath", "stderrPath", "promptPath", "lastMessagePath"])
+const DEBUG_PATH_KEYS = new Set(["cwd", "stdoutPath", "stderrPath", "promptPath", "lastMessagePath"])
 
 export function sanitizeNodeResultsForSnapshot(
   nodeResults: Record<string, NodeRunResult>,
@@ -92,7 +92,7 @@ function sanitizeSnapshotValue(
 ): unknown {
   if (typeof value === "string") {
     if (isSensitiveSnapshotKey(key) && value) return "[redacted]"
-    if (CODEX_DEBUG_PATH_KEYS.has(key)) return value
+    if (DEBUG_PATH_KEYS.has(key)) return value
     return sanitizeError(value)
   }
   if (typeof value === "bigint" || value === null || value === undefined) return value

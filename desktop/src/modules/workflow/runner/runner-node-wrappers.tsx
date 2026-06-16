@@ -15,6 +15,7 @@ import { HttpRequestNodeCard } from "../../../../workflow-nodes/http-request/car
 import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
 import { WorkflowCallNodeCard } from "../../../../workflow-nodes/workflow-call/card"
 import { CodexNodeCard } from "../../../../workflow-nodes/codex/card"
+import { ClaudeCodeNodeCard } from "../../../../workflow-nodes/claude-code/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
@@ -23,6 +24,7 @@ import type { HttpRequestNodeConfig } from "../../../../workflow-nodes/http-requ
 import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
 import type { WorkflowCallNodeConfig } from "../../../../workflow-nodes/workflow-call/schema"
 import type { CodexNodeConfig } from "../../../../workflow-nodes/codex/schema"
+import type { ClaudeCodeNodeConfig } from "../../../../workflow-nodes/claude-code/schema"
 import type { NodeRunResult } from "@/types/workflow"
 import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
@@ -214,6 +216,27 @@ function RunnerCodexNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+function RunnerClaudeCodeNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(RunnerNodeResultsContext)
+  const result = nodeResults[id]
+  const name = (data as { name?: string }).name
+  return (
+    <div className="relative">
+      <Handle type="target" position={Position.Left} />
+      <ClaudeCodeNodeCard
+        config={data as ClaudeCodeNodeConfig}
+        name={name}
+        selected={selected}
+        status={result?.status}
+        progressLabel={result?.progressLabel}
+        startedAt={result?.startedAt}
+      />
+      <AgentConversationNodeAction result={result} />
+      <Handle type="source" position={Position.Right} />
+    </div>
+  )
+}
+
 export const runnerNodeTypes = {
   prompt: RunnerPromptNodeWrapper,
   switch: RunnerSwitchNodeWrapper,
@@ -222,4 +245,5 @@ export const runnerNodeTypes = {
   script: RunnerScriptNodeWrapper,
   workflow_call: RunnerWorkflowCallNodeWrapper,
   codex: RunnerCodexNodeWrapper,
+  claude_code: RunnerClaudeCodeNodeWrapper,
 }
