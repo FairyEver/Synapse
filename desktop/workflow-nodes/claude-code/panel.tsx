@@ -96,34 +96,7 @@ export function ClaudeCodeNodePanel({
         <FieldError message={errorFor("prompt")} />
       </CollapsibleSection>
 
-      <CollapsibleSection title="执行配置">
-        <div className="grid gap-2">
-          <LabeledInput
-            id="claude-code-timeout"
-            label="超时分钟"
-            type="number"
-            min={1}
-            value={config.timeoutMins?.toString() ?? ""}
-            onChange={(value) => updateConfig({ timeoutMins: value === "" ? undefined : Number(value) })}
-          />
-          <LabeledSelect
-            id="claude-code-output-format"
-            label="输出格式"
-            value={config.outputFormat}
-            onValueChange={(value) => updateConfig({ outputFormat: value as ClaudeCodeOutputFormat })}
-          >
-            {OUTPUT_FORMATS.map((format) => <SelectItem key={format} value={format}>{format}</SelectItem>)}
-          </LabeledSelect>
-          <BooleanRow
-            id="claude-code-no-session-persistence"
-            label="不保存会话"
-            checked={config.noSessionPersistence}
-            onChange={(noSessionPersistence) => updateConfig({ noSessionPersistence })}
-          />
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Claude Code 配置">
+      <CollapsibleSection title="Claude Code 设置">
         <div className="grid gap-2">
           <LabeledInput
             id="claude-code-model"
@@ -139,9 +112,6 @@ export function ClaudeCodeNodePanel({
             value={config.maxTurns?.toString() ?? ""}
             onChange={(value) => updateConfig({ maxTurns: value === "" ? undefined : Number(value) })}
           />
-          <BooleanRow id="claude-code-verbose" label="Verbose" checked={config.verbose} onChange={(verbose) => updateConfig({ verbose })} />
-          <BooleanRow id="claude-code-safe-mode" label="Safe mode" checked={config.safeMode} onChange={(safeMode) => updateConfig({ safeMode })} />
-          <BooleanRow id="claude-code-bare-mode" label="Bare mode" checked={config.bareMode} onChange={(bareMode) => updateConfig({ bareMode })} />
           <SettingSourcesEditor
             values={config.settingSources}
             onChange={(settingSources) => updateConfig({ settingSources })}
@@ -167,16 +137,46 @@ export function ClaudeCodeNodePanel({
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="权限规则">
+      <CollapsibleSection title="执行配置">
         <div className="grid gap-2">
           <LabeledSelect
             id="claude-code-permission-mode"
-            label="Permission mode"
+            label="权限模式"
             value={config.permissionMode}
             onValueChange={(value) => updateConfig({ permissionMode: value as ClaudeCodePermissionMode })}
           >
             {PERMISSION_MODES.map((mode) => <SelectItem key={mode} value={mode}>{mode}</SelectItem>)}
           </LabeledSelect>
+          <LabeledInput
+            id="claude-code-timeout"
+            label="超时分钟"
+            type="number"
+            min={1}
+            value={config.timeoutMins?.toString() ?? ""}
+            onChange={(value) => updateConfig({ timeoutMins: value === "" ? undefined : Number(value) })}
+          />
+          <LabeledSelect
+            id="claude-code-output-format"
+            label="输出格式"
+            value={config.outputFormat}
+            onValueChange={(value) => updateConfig({ outputFormat: value as ClaudeCodeOutputFormat })}
+          >
+            {OUTPUT_FORMATS.map((format) => <SelectItem key={format} value={format}>{format}</SelectItem>)}
+          </LabeledSelect>
+          <BooleanRow id="claude-code-verbose" label="Verbose" checked={config.verbose} onChange={(verbose) => updateConfig({ verbose })} />
+          <BooleanRow id="claude-code-safe-mode" label="Safe mode" checked={config.safeMode} onChange={(safeMode) => updateConfig({ safeMode })} />
+          <BooleanRow id="claude-code-bare-mode" label="Bare mode" checked={config.bareMode} onChange={(bareMode) => updateConfig({ bareMode })} />
+          <BooleanRow
+            id="claude-code-no-session-persistence"
+            label="不保存会话"
+            checked={config.noSessionPersistence}
+            onChange={(noSessionPersistence) => updateConfig({ noSessionPersistence })}
+          />
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="权限与访问">
+        <div className="grid gap-2">
           <StringListEditor
             label="额外目录"
             values={config.additionalDirectories}

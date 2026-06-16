@@ -126,6 +126,22 @@ function allElements(): HTMLElement[] {
   return Array.from(document.body.querySelectorAll<HTMLElement>("*"))
 }
 
+function getByText(text: string): HTMLElement {
+  const match = allElements().find((element) => element.textContent?.trim() === text)
+  if (!match) throw new Error(`Unable to find text: ${text}`)
+  return match
+}
+
+function expectTextOrder(labels: string[]) {
+  const positions = labels.map((label) => allElements().indexOf(getByText(label)))
+  positions.forEach((position, index) => {
+    expect(position, `${labels[index]} should be rendered`).toBeGreaterThanOrEqual(0)
+    if (index > 0) {
+      expect(position, `${labels[index]} should render after ${labels[index - 1]}`).toBeGreaterThan(positions[index - 1])
+    }
+  })
+}
+
 function getByLabelText(label: string): HTMLElement {
   const byAria = allElements().find((element) => element.getAttribute("aria-label") === label)
   if (byAria) return byAria
@@ -173,13 +189,10 @@ describe("ClaudeCodeNodePanel", () => {
     )
 
     const text = document.body.textContent ?? ""
-    expect(text).toContain("执行配置")
-    expect(text).toContain("Permission mode")
+    expectTextOrder(["输入映射", "项目", "指令", "Claude Code 设置", "执行配置", "权限与访问", "调试记录"])
+    expect(text).toContain("权限模式")
     expect(text).toContain("模型")
     expect(text).toContain("Max turns")
-    expect(text).toContain("Claude Code 配置")
-    expect(text).toContain("权限规则")
-    expect(text).toContain("调试记录")
   })
 
   it("updates model input", () => {

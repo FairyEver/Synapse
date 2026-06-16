@@ -327,6 +327,60 @@ export function CodexNodePanel({
         {errorFor("prompt") ? <p className="text-xs text-destructive">{errorFor("prompt")}</p> : null}
       </CollapsibleSection>
 
+      <CollapsibleSection title="Codex 设置">
+        <div className="grid gap-2">
+          <ModelInput
+            id="codex-model"
+            label="模型"
+            help={CODEX_FIELD_HELP.model}
+            value={config.model}
+            onValueChange={(value) => commit({ model: value })}
+          />
+
+          <LabeledInput
+            id="codex-profile"
+            label="Profile"
+            help={CODEX_FIELD_HELP.profile}
+            value={config.profile ?? ""}
+            onChange={(value) => commit({ profile: value === "" ? undefined : value })}
+          />
+
+          <LabeledSelect
+            id="codex-goals"
+            label="Goals"
+            help={CODEX_FIELD_HELP.goals}
+            value={config.features.goals}
+            displayValue={codexFeatureStateLabel(config.features.goals)}
+            onValueChange={(value) => commit({
+              features: {
+                ...lastCommittedRef.current.features,
+                goals: value as CodexFeatureState,
+              },
+            })}
+          >
+            <SelectItem value="default" className="text-xs">默认</SelectItem>
+            <SelectItem value="enabled" className="text-xs">启用</SelectItem>
+            <SelectItem value="disabled" className="text-xs">禁用</SelectItem>
+          </LabeledSelect>
+
+          <BooleanRow
+            id="codex-strict-config"
+            label="严格配置"
+            help={CODEX_FIELD_HELP.strictConfig}
+            checked={config.strictConfig}
+            onChange={(checked) => commit({ strictConfig: checked })}
+          />
+
+          <ConfigOverrideEditor
+            help={CODEX_FIELD_HELP.configOverrides}
+            values={configOverrides}
+            onChange={updateConfigOverrides}
+            onBlur={normalizeOverrides}
+            error={configOverridesError}
+          />
+        </div>
+      </CollapsibleSection>
+
       <CollapsibleSection title="执行配置">
         <div className="grid gap-2">
           <LabeledSelect
@@ -351,22 +405,6 @@ export function CodexNodePanel({
             {CODEX_SANDBOX_OPTIONS.map(renderHelpSelectItem)}
           </LabeledSelect>
 
-          <ModelInput
-            id="codex-model"
-            label="模型"
-            help={CODEX_FIELD_HELP.model}
-            value={config.model}
-            onValueChange={(value) => commit({ model: value })}
-          />
-
-          <LabeledInput
-            id="codex-profile"
-            label="Profile"
-            help={CODEX_FIELD_HELP.profile}
-            value={config.profile ?? ""}
-            onChange={(value) => commit({ profile: value === "" ? undefined : value })}
-          />
-
           <LabeledInput
             id="codex-timeout"
             label="超时分钟"
@@ -385,38 +423,12 @@ export function CodexNodePanel({
             onChange={(checked) => commit({ enableSearch: checked })}
           />
 
-          <LabeledSelect
-            id="codex-goals"
-            label="Goals"
-            help={CODEX_FIELD_HELP.goals}
-            value={config.features.goals}
-            displayValue={codexFeatureStateLabel(config.features.goals)}
-            onValueChange={(value) => commit({
-              features: {
-                ...lastCommittedRef.current.features,
-                goals: value as CodexFeatureState,
-              },
-            })}
-          >
-            <SelectItem value="default" className="text-xs">默认</SelectItem>
-            <SelectItem value="enabled" className="text-xs">启用</SelectItem>
-            <SelectItem value="disabled" className="text-xs">禁用</SelectItem>
-          </LabeledSelect>
-
           <BooleanRow
             id="codex-skip-git-repo-check"
             label="跳过 Git 仓库检查"
             help={CODEX_FIELD_HELP.skipGitRepoCheck}
             checked={config.skipGitRepoCheck}
             onChange={(checked) => commit({ skipGitRepoCheck: checked })}
-          />
-
-          <BooleanRow
-            id="codex-strict-config"
-            label="严格配置"
-            help={CODEX_FIELD_HELP.strictConfig}
-            checked={config.strictConfig}
-            onChange={(checked) => commit({ strictConfig: checked })}
           />
 
           <BooleanRow
@@ -437,7 +449,7 @@ export function CodexNodePanel({
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="高级参数">
+      <CollapsibleSection title="权限与访问">
         <div className="grid gap-2">
           <StringListEditor
             label="可写目录"
@@ -457,14 +469,6 @@ export function CodexNodePanel({
             onChange={updateImages}
             onBlur={normalizeImages}
             error={imagesError}
-          />
-
-          <ConfigOverrideEditor
-            help={CODEX_FIELD_HELP.configOverrides}
-            values={configOverrides}
-            onChange={updateConfigOverrides}
-            onBlur={normalizeOverrides}
-            error={configOverridesError}
           />
         </div>
       </CollapsibleSection>

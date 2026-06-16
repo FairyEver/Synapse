@@ -264,7 +264,7 @@ describe("CodexNodePanel", () => {
       />,
     )
 
-    expectTextOrder(["输入映射", "项目", "指令", "执行配置", "高级参数", "调试记录"])
+    expectTextOrder(["输入映射", "项目", "指令", "Codex 设置", "执行配置", "权限与访问", "调试记录"])
     expect(getByLabelText("工作目录")).toBeTruthy()
     expect(getByLabelText("审批策略")).toBeTruthy()
     expect(getByLabelText("沙箱")).toBeTruthy()
