@@ -5,7 +5,11 @@ import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
 import type { WindowManager } from "../runtime/window"
 import { managedBrowserWindow } from "../runtime/window"
 import { getSystemAppDefinition } from "../../src/modules/apps/definitions"
-import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "../../src/modules/apps/types"
+import type {
+  SynapseSystemAppDefinition,
+  SynapseSystemAppId,
+  SynapseSystemAppOpenOptions,
+} from "../../src/modules/apps/types"
 import { createMainLogger } from "./log-store"
 
 const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:apps:content-open-request"
@@ -41,6 +45,10 @@ function resolveSystemAppWindowPreloadPath(baseDir: string): string {
 
 function systemAppWindowManagerId(appId: SynapseSystemAppId): string {
   return `system-app:${appId}`
+}
+
+function buildSystemAppWindowTitle(definition: SynapseSystemAppDefinition): string {
+  return `Synapse AI Studio ${definition.name}`
 }
 
 function sendToSystemAppWindow(
@@ -97,7 +105,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
       const window = deps.createWindow({
         ...SYSTEM_APP_WINDOW_BOUNDS,
-        title: definition.windowTitle,
+        title: buildSystemAppWindowTitle(definition),
         webPreferences: {
           preload: deps.getPreloadPath?.() ?? resolveSystemAppWindowPreloadPath(__dirname),
           contextIsolation: true,
