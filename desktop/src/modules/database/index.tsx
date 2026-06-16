@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import type { ReactNode } from "react"
 import { LoaderCircle, Package, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -37,14 +41,24 @@ import {
   databaseChoiceUpdate,
   databaseRowUpdate,
   useDatabaseQuery,
+  useDatabaseStatus,
   useDatabaseSchema,
   useDatabaseTables,
 } from "./hooks/use-database"
+import { DatabaseManagementCard, DatabaseServiceStatusCard } from "@/modules/settings/components/database-settings-panel"
+import { McpSettingsPanel } from "@/modules/settings/components/mcp-settings-panel"
 import type { Column, ColumnKind, DatabaseWhereGroup } from "@/types/database"
 import type { DatabaseTableImportInspection } from "@/types/database"
+import type { DatabaseAppViewId } from "@/modules/apps/types"
 
 const logger = createRendererLogger("database")
 const ROW_NOT_FOUND_MESSAGE = "该行已不存在，已刷新列表。"
+const DATABASE_APP_TABS: readonly { readonly id: DatabaseAppViewId; readonly label: string }[] = [
+  { id: "tables", label: "数据表" },
+  { id: "status", label: "服务状态" },
+  { id: "management", label: "管理" },
+  { id: "mcp", label: "MCP" },
+]
 
 function getStoredDisplayMode(): DisplayMode {
   const stored = localStorage.getItem("synapse:database:displayMode")
@@ -52,7 +66,7 @@ function getStoredDisplayMode(): DisplayMode {
   return "title+desc"
 }
 
-function DatabaseModule() {
+function DatabaseTablesView() {
   const { tables, loading: tablesLoading, error: tablesError, refresh: refreshTables } = useDatabaseTables()
   const { error: showError, success: showSuccess, promise } = useAppNotifications()
   const {
@@ -570,6 +584,69 @@ function DatabaseModule() {
         </AlertDialogContent>
       </AlertDialog>
     </SidebarContentLayout>
+  )
+}
+
+function DatabaseSettingsTabContent({ children }: { readonly children: ReactNode }) {
+  return (
+    <ScrollArea className="h-full min-h-0">
+      <div className="min-h-full px-3 py-3">
+        <div className="mx-auto flex max-w-3xl flex-col gap-2">
+          {children}
+        </div>
+      </div>
+    </ScrollArea>
+  )
+}
+
+function DatabaseServiceStatusView() {
+  const { status } = useDatabaseStatus()
+
+  return (
+    <DatabaseSettingsTabContent>
+      <DatabaseServiceStatusCard status={status} />
+    </DatabaseSettingsTabContent>
+  )
+}
+
+function DatabaseManagementView() {
+  const { status, refresh } = useDatabaseStatus()
+
+  return (
+    <DatabaseSettingsTabContent>
+      <DatabaseManagementCard status={status} onRefreshStatus={refresh} />
+    </DatabaseSettingsTabContent>
+  )
+}
+
+function DatabaseMcpView() {
+  return (
+    <DatabaseSettingsTabContent>
+      <McpSettingsPanel />
+    </DatabaseSettingsTabContent>
+  )
+}
+
+function DatabaseModule() {
+  const [view, setView] = useState<DatabaseAppViewId>("tables")
+
+  return (
+    <SystemAppWindowShell tabs={DATABASE_APP_TABS} value={view} onValueChange={setView}>
+      <Tabs value={view} className="contents">
+        <TabsContent value="tables" className="m-0 h-full data-[state=inactive]:hidden">
+          <DatabaseTablesView />
+        </TabsContent>
+        <TabsContent value="status" className="m-0 h-full data-[state=inactive]:hidden">
+          <DatabaseServiceStatusView />
+        </TabsContent>
+        <TabsContent value="management" className="m-0 h-full data-[state=inactive]:hidden">
+          <DatabaseManagementView />
+        </TabsContent>
+        <TabsContent value="mcp" className="m-0 h-full data-[state=inactive]:hidden">
+          <DatabaseMcpView />
+        </TabsContent>
+      </Tabs>
+    </SystemAppWindowShell>
   )
 }
 

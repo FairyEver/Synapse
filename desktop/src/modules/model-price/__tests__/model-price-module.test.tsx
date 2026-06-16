@@ -81,6 +81,7 @@ describe("ModelPriceModule", () => {
     expect(tabs).toEqual(["价格规则", "模型覆盖"])
     expect(document.querySelector('[data-view="rules"]')).toBeTruthy()
     expect(document.querySelector('[data-view="coverage"]')).toBeNull()
+    expect(document.querySelector("h2")?.textContent).not.toBe("价格")
   })
 
   it("disables refresh while rules view is busy", async () => {

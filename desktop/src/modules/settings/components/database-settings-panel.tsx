@@ -26,6 +26,7 @@ import {
   useDatabaseStatus,
 } from "@/modules/database/hooks/use-database"
 import { StatusPill } from "@/modules/settings/components/status-pill"
+import type { DatabaseStatus } from "@/types/database"
 
 const logger = createRendererLogger("settings.database")
 
@@ -51,8 +52,37 @@ function StatusRow({ label, value }: StatusRowProps) {
   )
 }
 
-function DatabaseSettingsPanel() {
-  const { status, refresh: refreshStatus } = useDatabaseStatus()
+type DatabaseStatusCardProps = {
+  readonly status: DatabaseStatus | null
+}
+
+type DatabaseManagementCardProps = DatabaseStatusCardProps & {
+  readonly onRefreshStatus: () => Promise<void>
+}
+
+function DatabaseServiceStatusCard({ status }: DatabaseStatusCardProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-0">
+        <CardTitle>服务状态</CardTitle>
+        <CardAction>
+          <StatusPill
+            active={Boolean(status?.running)}
+            activeLabel="运行中"
+            inactiveLabel="未启动"
+          />
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <StatusRow label="HTTP 端口" value={status?.port ?? "—"} />
+        <StatusRow label="数据库大小" value={status ? formatBytes(status.dbSize) : "—"} />
+        <StatusRow label="表数量" value={status?.tableCount ?? "—"} />
+      </CardContent>
+    </Card>
+  )
+}
+
+function DatabaseManagementCard({ status, onRefreshStatus }: DatabaseManagementCardProps) {
   const { error: notifyError, promise } = useAppNotifications()
 
   const handleExport = useCallback(async () => {
@@ -79,7 +109,7 @@ function DatabaseSettingsPanel() {
         async () => {
           const result = await databaseImport()
           if (!result.success) return null
-          await refreshStatus()
+          await onRefreshStatus()
           logger.info("Database imported.")
           return result
         },
@@ -90,7 +120,7 @@ function DatabaseSettingsPanel() {
         error: error instanceof Error ? error.name : typeof error,
       })
     }
-  }, [promise, refreshStatus])
+  }, [onRefreshStatus, promise])
 
   const handleOpenDbDirectory = useCallback(() => {
     if (!status?.dbDirectoryPath) return
@@ -110,76 +140,66 @@ function DatabaseSettingsPanel() {
   }, [notifyError, status?.dbDirectoryPath])
 
   return (
+    <Card>
+      <CardHeader className="pb-0">
+        <CardTitle>数据管理</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            导出数据库
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                导入数据库
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>导入数据库</AlertDialogTitle>
+                <AlertDialogDescription>
+                  导入将替换当前所有数据，请注意先导出备份。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction onClick={handleImport}>
+                  确认导入
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+        <div className="flex items-start gap-2 text-sm">
+          <span className="shrink-0 text-muted-foreground">数据库目录</span>
+          {status?.dbDirectoryPath ? (
+            <button
+              type="button"
+              className="min-w-0 flex-1 break-all text-right text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              title={status.dbDirectoryPath}
+              onClick={handleOpenDbDirectory}
+            >
+              {status.dbDirectoryPath}
+            </button>
+          ) : (
+            <span className="min-w-0 flex-1 break-all text-right text-muted-foreground">—</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DatabaseSettingsPanel() {
+  const { status, refresh: refreshStatus } = useDatabaseStatus()
+
+  return (
     <div className="flex flex-col gap-2">
-      <Card>
-        <CardHeader className="pb-0">
-          <CardTitle>服务状态</CardTitle>
-          <CardAction>
-            <StatusPill
-              active={Boolean(status?.running)}
-              activeLabel="运行中"
-              inactiveLabel="未启动"
-            />
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <StatusRow label="HTTP 端口" value={status?.port ?? "—"} />
-          <StatusRow label="数据库大小" value={status ? formatBytes(status.dbSize) : "—"} />
-          <StatusRow label="表数量" value={status?.tableCount ?? "—"} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-0">
-          <CardTitle>数据管理</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport}>
-              导出数据库
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  导入数据库
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>导入数据库</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    导入将替换当前所有数据，请注意先导出备份。
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>取消</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleImport}>
-                    确认导入
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-          <div className="flex items-start gap-2 text-sm">
-            <span className="shrink-0 text-muted-foreground">数据库目录</span>
-            {status?.dbDirectoryPath ? (
-              <button
-                type="button"
-                className="min-w-0 flex-1 break-all text-right text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                title={status.dbDirectoryPath}
-                onClick={handleOpenDbDirectory}
-              >
-                {status.dbDirectoryPath}
-              </button>
-            ) : (
-              <span className="min-w-0 flex-1 break-all text-right text-muted-foreground">—</span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
+      <DatabaseServiceStatusCard status={status} />
+      <DatabaseManagementCard status={status} onRefreshStatus={refreshStatus} />
     </div>
   )
 }
 
-export { DatabaseSettingsPanel }
+export { DatabaseManagementCard, DatabaseServiceStatusCard, DatabaseSettingsPanel }

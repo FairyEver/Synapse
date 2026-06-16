@@ -15,17 +15,16 @@ describe("settingsCategories", () => {
       "tools",
       "claude-code",
       "variables",
-      "services",
       "troubleshooting",
       "about",
       "admin",
     ])
   })
 
-  it("merges database and mcp into services", () => {
+  it("keeps migrated data services out of settings", () => {
     const ids = settingsCategories.map((c) => c.id)
 
-    expect(ids).toContain("services")
+    expect(ids).not.toContain("services")
     expect(ids).not.toContain("database")
     expect(ids).not.toContain("mcp")
   })
@@ -48,7 +47,6 @@ describe("settingsCategories", () => {
     expect(labels.get("tools")).toBe("本机IDE")
     expect(labels.get("claude-code")).toBe("模型与供应商")
     expect(labels.get("variables")).toBe("私人令牌")
-    expect(labels.get("services")).toBe("数据服务")
     expect(labels.get("troubleshooting")).toBe("诊断日志")
     expect(labels.get("about")).toBe("关于 Synapse")
     expect(labels.get("admin")).toBe("仓库维护")

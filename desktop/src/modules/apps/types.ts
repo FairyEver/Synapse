@@ -10,6 +10,7 @@ export type SynapseSystemAppId = (typeof SYSTEM_APP_IDS)[number]
 export type SynapseAppType = "system"
 export type ResourceRepositoryViewId = "skill" | "rule" | "prompt"
 export type UsageMonitorViewId = "cc" | "codex"
+export type DatabaseAppViewId = "tables" | "status" | "management" | "mcp"
 export type SynapseSystemAppDefaultView = ResourceRepositoryViewId | UsageMonitorViewId
 
 export type SynapseSystemAppDefinition = {

@@ -30,7 +30,6 @@ import { RepositoryMaintenancePanel } from "@/modules/settings/components/reposi
 import { SettingItemRow } from "@/modules/settings/components/setting-item-row"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SettingsCategorySidebar } from "@/modules/settings/components/settings-category-sidebar"
-import { ServicesPanel } from "@/modules/settings/components/services-panel"
 import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
 import { KnowledgeBaseStoragePanel } from "@/modules/settings/components/knowledge-base-storage-panel"
@@ -325,7 +324,6 @@ function SettingsModule() {
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}
         {isReady && activeCategory === "claude-code" ? <ClaudeCodePanel /> : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
-        {isReady && activeCategory === "services" ? <ServicesPanel /> : null}
         {isReady && activeCategory === "troubleshooting" ? <TroubleshootingPanel /> : null}
 
         {isReady && activeCategory === "admin" && activeRepository ? (

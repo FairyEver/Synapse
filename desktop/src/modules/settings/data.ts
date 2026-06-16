@@ -7,7 +7,6 @@ import {
   FolderOpen,
   Info,
   CircleUserRound,
-  Server,
   Settings2,
   Shield,
   TextCursorInput,
@@ -66,12 +65,6 @@ const settingsCategories: SettingsCategory[] = [
     icon: Braces,
     label: "私人令牌",
     description: "管理内容安装占位符。",
-  },
-  {
-    id: "services",
-    icon: Server,
-    label: "数据服务",
-    description: "数据库和 MCP Server。",
   },
   {
     id: "troubleshooting",

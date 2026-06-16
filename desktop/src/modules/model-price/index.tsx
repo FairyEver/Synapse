@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { RefreshCw } from "lucide-react"
-import { ModulePage } from "@/components/module-page"
+import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -9,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ModelCoverageView } from "./components/model-coverage-view"
 import { PriceRulesView } from "./components/price-rules-view"
 import { useModelPriceCoverage, useModelPricePresets, useModelPriceRules } from "./hooks"
@@ -49,17 +49,10 @@ export function ModelPriceModule() {
   }
 
   return (
-    <ModulePage
-      title="价格"
-      titleAddon={(
-        <Tabs value={view} onValueChange={(next) => setView(next as ModelPriceViewId)}>
-          <TabsList>
-            {MODEL_PRICE_VIEWS.map((item) => (
-              <TabsTrigger key={item.id} value={item.id} disabled={rulesBusy}>{item.label}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      )}
+    <SystemAppWindowShell
+      tabs={MODEL_PRICE_VIEWS.map((item) => ({ ...item, disabled: rulesBusy }))}
+      value={view}
+      onValueChange={setView}
       actions={(
         <>
           {view === "coverage" ? (
@@ -100,15 +93,19 @@ export function ModelPriceModule() {
         </>
       )}
     >
-      {view === "coverage" ? <ModelCoverageView state={coverageState} /> : null}
-      {view === "rules" ? (
-        <PriceRulesView
-          state={rulesState}
-          presetState={presetsState}
-          onBusyChange={setRulesBusy}
-          onSaved={refresh}
-        />
-      ) : null}
-    </ModulePage>
+      <ScrollArea className="h-full min-h-0">
+        <div className="min-h-full px-3 py-3">
+          {view === "coverage" ? <ModelCoverageView state={coverageState} /> : null}
+          {view === "rules" ? (
+            <PriceRulesView
+              state={rulesState}
+              presetState={presetsState}
+              onBusyChange={setRulesBusy}
+              onSaved={refresh}
+            />
+          ) : null}
+        </div>
+      </ScrollArea>
+    </SystemAppWindowShell>
   )
 }

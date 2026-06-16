@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { ResourceRepositoryViewId } from "@/modules/apps/types"
 import { PromptsModule } from "@/modules/prompts"
 import { RulesModule } from "@/modules/rules"
@@ -36,35 +37,24 @@ export function ResourceRepositoryModule({
   }, [initialContentOpenRequest])
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center border-b bg-background px-3 py-2">
-        <Tabs value={view} onValueChange={(next) => setView(next as ResourceRepositoryViewId)}>
-          <TabsList>
-            {RESOURCE_TABS.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id}>{tab.label}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
-      <div className="min-h-0 flex-1">
-        <Tabs value={view} className="contents">
-          <TabsContent value="skill" className="m-0 h-full data-[state=inactive]:hidden">
-            <SkillsModule
-              pendingContentOpenRequest={initialContentOpenRequest}
-              onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
-            />
-          </TabsContent>
-          <TabsContent value="rule" className="m-0 h-full data-[state=inactive]:hidden">
-            <RulesModule
-              pendingContentOpenRequest={initialContentOpenRequest}
-              onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
-            />
-          </TabsContent>
-          <TabsContent value="prompt" className="m-0 h-full data-[state=inactive]:hidden">
-            <PromptsModule />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+    <SystemAppWindowShell tabs={RESOURCE_TABS} value={view} onValueChange={setView}>
+      <Tabs value={view} className="contents">
+        <TabsContent value="skill" className="m-0 h-full data-[state=inactive]:hidden">
+          <SkillsModule
+            pendingContentOpenRequest={initialContentOpenRequest}
+            onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
+          />
+        </TabsContent>
+        <TabsContent value="rule" className="m-0 h-full data-[state=inactive]:hidden">
+          <RulesModule
+            pendingContentOpenRequest={initialContentOpenRequest}
+            onPendingContentOpenRequestConsumed={onInitialContentOpenRequestConsumed}
+          />
+        </TabsContent>
+        <TabsContent value="prompt" className="m-0 h-full data-[state=inactive]:hidden">
+          <PromptsModule />
+        </TabsContent>
+      </Tabs>
+    </SystemAppWindowShell>
   )
 }

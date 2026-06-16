@@ -52,10 +52,9 @@ describe("list page layout surfaces", () => {
     const coverageSource = await readModuleSource("../model-price/components/model-coverage-view.tsx")
     const rulesSource = await readModuleSource("../model-price/components/price-rules-view.tsx")
 
-    expect(moduleSource).toContain("<ModulePage")
-    expect(moduleSource).toContain('title="价格"')
-    expect(moduleSource).toContain("titleAddon={(")
-    expect(moduleSource).not.toContain("bg-surface")
+    expect(moduleSource).toContain("<SystemAppWindowShell")
+    expect(moduleSource).toContain("tabs={MODEL_PRICE_VIEWS.map")
+    expect(moduleSource).not.toContain('title="价格"')
     expect(coverageSource).toContain('<ModuleContentPanel className="overflow-hidden')
     expect(coverageSource).toContain('<Table className="table-fixed" containerClassName="overflow-x-hidden">')
     expect(coverageSource).not.toContain("min-w-[72rem]")
