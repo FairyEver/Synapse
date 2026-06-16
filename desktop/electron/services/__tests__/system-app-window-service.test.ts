@@ -7,6 +7,8 @@ const defaultLoggerMock = vi.hoisted(() => ({
 
 import { createSystemAppWindowService } from "../system-app-window-service"
 
+type BroadcastFilter = (window: { readonly id: number }) => boolean
+
 vi.mock("../log-store", () => ({
   createMainLogger: () => defaultLoggerMock,
 }))
@@ -15,12 +17,21 @@ describe("createSystemAppWindowService", () => {
   it("opens and focuses one window per app id", async () => {
     const window = createWindowMock()
     const createWindow = vi.fn(() => window as never)
-    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })
+    const windowManager = createWindowManagerMock()
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      windowManager,
+    })
 
     await service.open("database")
     await service.open("database")
 
     expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(windowManager.attach).toHaveBeenCalledWith(
+      { id: "system-app:database", role: "detail" },
+      expect.objectContaining({ id: window.webContents.id }),
+    )
     expect(window.focus).toHaveBeenCalledTimes(1)
     expect(window.loadURL).toHaveBeenCalledWith("app://index.html?window=system-app&appId=database")
   })
@@ -28,7 +39,12 @@ describe("createSystemAppWindowService", () => {
   it("delivers content open requests to an existing resource repository window", async () => {
     const window = createWindowMock()
     const createWindow = vi.fn(() => window as never)
-    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })
+    const windowManager = createWindowManagerMock()
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      windowManager,
+    })
     const contentOpenRequest = {
       kind: "detail",
       requestId: "request-1",
@@ -41,7 +57,14 @@ describe("createSystemAppWindowService", () => {
 
     expect(createWindow).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
-    expect(window.webContents.send).toHaveBeenCalledWith("synapse:apps:content-open-request", contentOpenRequest)
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:apps:content-open-request",
+      contentOpenRequest,
+      expect.any(Function),
+    )
+    const filter = windowManager.broadcast.mock.calls[0]?.[2] as BroadcastFilter | undefined
+    expect(filter?.({ id: window.webContents.id } as never)).toBe(true)
+    expect(filter?.({ id: window.webContents.id + 1 } as never)).toBe(false)
   })
 
   it("opens different windows for different app ids", async () => {
@@ -72,6 +95,7 @@ describe("createSystemAppWindowService", () => {
 })
 
 function createWindowMock() {
+  const webContentsId = Math.floor(Math.random() * 10_000) + 1
   let closedHandler: (() => void) | null = null
   return {
     isDestroyed: vi.fn(() => false),
@@ -80,11 +104,24 @@ function createWindowMock() {
     focus: vi.fn(),
     loadURL: vi.fn(async () => undefined),
     webContents: {
+      id: webContentsId,
       send: vi.fn(),
     },
     on: vi.fn((event: string, handler: () => void) => {
       if (event === "closed") closedHandler = handler
     }),
     emitClosed: () => closedHandler?.(),
+  }
+}
+
+function createWindowManagerMock() {
+  return {
+    register: vi.fn(),
+    attach: vi.fn(),
+    open: vi.fn(),
+    close: vi.fn(),
+    list: vi.fn(() => []),
+    getAllWindows: vi.fn(() => []),
+    broadcast: vi.fn((_channel: string, _payload: unknown, _filter?: BroadcastFilter) => 1),
   }
 }

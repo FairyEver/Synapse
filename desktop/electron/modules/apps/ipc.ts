@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
-import { systemAppWindowService } from "../../services/system-app-window-service"
+import type { WindowManager } from "../../runtime/window"
+import { createDefaultSystemAppWindowService } from "../../services/system-app-window-service"
 import { SYSTEM_APP_IDS } from "../../../src/modules/apps/types"
 
 const systemAppIdSchema = z.enum(SYSTEM_APP_IDS)
@@ -33,6 +34,18 @@ const openSystemAppRequestSchema = z.object({
 })
 
 type OpenSystemAppRequest = z.infer<typeof openSystemAppRequestSchema>
+type SystemAppWindowService = ReturnType<typeof createDefaultSystemAppWindowService>
+
+let cachedWindowManager: WindowManager | null = null
+let cachedSystemAppWindowService: SystemAppWindowService | null = null
+
+function getSystemAppWindowService(windowManager: WindowManager): SystemAppWindowService {
+  if (!cachedSystemAppWindowService || cachedWindowManager !== windowManager) {
+    cachedWindowManager = windowManager
+    cachedSystemAppWindowService = createDefaultSystemAppWindowService(windowManager)
+  }
+  return cachedSystemAppWindowService
+}
 
 export const appsIpcModule: IpcModule = {
   id: "apps",
@@ -42,8 +55,9 @@ export const appsIpcModule: IpcModule = {
       kind: "invoke",
       request: openSystemAppRequestSchema,
       response: z.void(),
-      handler: async (_ctx, request: OpenSystemAppRequest) => {
-        await systemAppWindowService.open(request.appId, request.options)
+      handler: async (ctx, request: OpenSystemAppRequest) => {
+        const service = getSystemAppWindowService(ctx.resolve<WindowManager>("core.window-manager"))
+        await service.open(request.appId, request.options)
       },
     },
   },

@@ -1,12 +1,16 @@
 import { describe, expect, it, vi } from "vitest"
+import type { IpcHandlerContext } from "../../../runtime/ipc/types"
 import { appsIpcModule } from "../ipc"
 
 const systemAppWindowServiceMock = vi.hoisted(() => ({
   open: vi.fn(async () => undefined),
 }))
+const createDefaultSystemAppWindowServiceMock = vi.hoisted(() =>
+  vi.fn(() => systemAppWindowServiceMock),
+)
 
 vi.mock("../../../services/system-app-window-service", () => ({
-  systemAppWindowService: systemAppWindowServiceMock,
+  createDefaultSystemAppWindowService: createDefaultSystemAppWindowServiceMock,
 }))
 
 describe("appsIpcModule", () => {
@@ -19,8 +23,11 @@ describe("appsIpcModule", () => {
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "database" }).success).toBe(true)
     expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: "missing" }).success).toBe(false)
 
-    await appsIpcModule.methods.openSystemApp.handler({} as never, { appId: "database" })
+    const windowManager = {}
 
+    await appsIpcModule.methods.openSystemApp.handler(createContext(windowManager), { appId: "database" })
+
+    expect(createDefaultSystemAppWindowServiceMock).toHaveBeenCalledWith(windowManager)
     expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("database", undefined)
   })
 
@@ -32,7 +39,7 @@ describe("appsIpcModule", () => {
       contentId: "skill-1",
     }
 
-    await appsIpcModule.methods.openSystemApp.handler({} as never, {
+    await appsIpcModule.methods.openSystemApp.handler(createContext({}), {
       appId: "resource-repository",
       options: { contentOpenRequest },
     })
@@ -42,3 +49,15 @@ describe("appsIpcModule", () => {
     })
   })
 })
+
+function createContext(windowManager: unknown): IpcHandlerContext {
+  const resolve = <T,>(serviceId: string): T => {
+    if (serviceId === "core.window-manager") return windowManager as T
+    throw new Error(`Unexpected service id: ${serviceId}`)
+  }
+
+  return {
+    moduleId: "apps",
+    resolve,
+  }
+}

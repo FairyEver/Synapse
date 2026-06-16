@@ -2,6 +2,8 @@ import { BrowserWindow } from "electron"
 import path from "node:path"
 
 import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
+import type { WindowManager } from "../runtime/window"
+import { managedBrowserWindow } from "../runtime/window"
 import { getSystemAppDefinition } from "../../src/modules/apps/definitions"
 import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "../../src/modules/apps/types"
 import { createMainLogger } from "./log-store"
@@ -16,6 +18,7 @@ type SystemAppWindowLogger = {
 type SystemAppWindowServiceDeps = {
   readonly createWindow: (options: Electron.BrowserWindowConstructorOptions) => BrowserWindow
   readonly baseUrl: () => string
+  readonly windowManager?: WindowManager
   readonly getPreloadPath?: () => string
   readonly logger?: SystemAppWindowLogger
 }
@@ -36,6 +39,23 @@ function resolveSystemAppWindowPreloadPath(baseDir: string): string {
   return path.join(baseDir, "../preload.js")
 }
 
+function systemAppWindowManagerId(appId: SynapseSystemAppId): string {
+  return `system-app:${appId}`
+}
+
+function sendToSystemAppWindow(
+  windowManager: WindowManager | undefined,
+  target: BrowserWindow,
+  channel: string,
+  payload: unknown,
+): number {
+  return windowManager?.broadcast(
+    channel,
+    payload,
+    (window) => window.id === target.webContents.id,
+  ) ?? 0
+}
+
 export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
   const windowsByAppId = new Map<SynapseSystemAppId, BrowserWindow>()
   const logger = deps.logger ?? createMainLogger("system-app.window")
@@ -52,7 +72,18 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       if (existing && !existing.isDestroyed()) {
         focusWindow(existing)
         if (options.contentOpenRequest) {
-          existing.webContents.send(SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL, options.contentOpenRequest)
+          const sent = sendToSystemAppWindow(
+            deps.windowManager,
+            existing,
+            SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL,
+            options.contentOpenRequest,
+          )
+          if (sent === 0) {
+            logger.warn("Skipped content open request for unmanaged system app window.", {
+              appId,
+              appType: definition.type,
+            })
+          }
         }
         logger.info("Focused existing system app window.", { appId, appType: definition.type })
         return
@@ -75,6 +106,10 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         },
       })
 
+      deps.windowManager?.attach(
+        { id: systemAppWindowManagerId(appId), role: "detail" },
+        managedBrowserWindow(window, "detail"),
+      )
       windowsByAppId.set(appId, window)
       window.on("closed", () => {
         windowsByAppId.delete(appId)
@@ -87,8 +122,11 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
   }
 }
 
-export const systemAppWindowService = createSystemAppWindowService({
-  createWindow: (options) => new BrowserWindow(options),
-  baseUrl: rendererBaseUrl,
-  getPreloadPath: () => resolveSystemAppWindowPreloadPath(__dirname),
-})
+export function createDefaultSystemAppWindowService(windowManager: WindowManager) {
+  return createSystemAppWindowService({
+    createWindow: (options) => new BrowserWindow(options),
+    baseUrl: rendererBaseUrl,
+    windowManager,
+    getPreloadPath: () => resolveSystemAppWindowPreloadPath(__dirname),
+  })
+}
