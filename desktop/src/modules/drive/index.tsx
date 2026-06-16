@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 import {
   ChevronRight,
@@ -13,7 +13,6 @@ import {
   LoaderCircle,
   MoreHorizontal,
   RefreshCw,
-  Search,
   Upload,
   X,
 } from "lucide-react"
@@ -239,12 +238,6 @@ function DriveModule() {
 
   const actionsDisabled = !accountAuthenticated || loading || openingFolderId !== null || error !== null
   const uploadActionsDisabled = actionsDisabled || uploading
-
-  const visibleItems = useMemo(() => {
-    const keyword = query.trim().toLowerCase()
-    if (!keyword) return items
-    return items.filter((item) => item.name.toLowerCase().includes(keyword))
-  }, [items, query])
 
   const openFolder = useCallback(async (item: DriveItemDto) => {
     if (item.type !== "folder") return
