@@ -19,6 +19,7 @@ import {
   shouldRenderDriveBodyRenderer,
   shouldRenderDriveSingleFileReader,
 } from './shared/drive-view-model'
+import { getDriveFinderBreadcrumbs } from './finder/drive-finder-breadcrumbs'
 
 describe('drive browser view model', () => {
   it('formats drive file metadata from shared helpers', () => {
@@ -61,6 +62,48 @@ describe('drive browser view model', () => {
     })
   })
 
+  it('opens console files in standalone reader mode from finder actions', () => {
+    const file = createSnapshot({
+      surface: 'console',
+      current: {
+        ...baseCurrent(),
+        id: 'file',
+        type: 'file',
+        browserUrl: '/drive/items/folder/items/file',
+        downloadUrl: '/drive/items/folder/items/file/download',
+      },
+    })
+
+    expect(getDriveFinderActions(file).fileOpenUrl).toBe('/drive/items/folder/items/file?surface=standalone')
+  })
+
+  it('prepends the console home breadcrumb for drive item pages', () => {
+    const snapshot = createSnapshot({
+      surface: 'console',
+      breadcrumbs: [
+        { id: 'folder', name: '文档', browserUrl: '/drive/items/folder' },
+        { id: 'file', name: '记录.md', browserUrl: '/drive/items/folder/items/file' },
+      ],
+    })
+
+    expect(getDriveFinderBreadcrumbs(snapshot).map((item) => item.name)).toEqual(['我的空间', '文档', '记录.md'])
+    expect(getDriveFinderBreadcrumbs(snapshot)[0]?.browserUrl).toBe('/drive')
+  })
+
+  it('renames the console root breadcrumb without changing standalone pages', () => {
+    const consoleRoot = createSnapshot({
+      surface: 'console',
+      breadcrumbs: [{ id: 'root', name: '网盘', browserUrl: '/drive' }],
+    })
+    const standalone = createSnapshot({
+      surface: 'standalone',
+      breadcrumbs: [{ id: 'folder', name: '文档', browserUrl: '/drive/items/folder' }],
+    })
+
+    expect(getDriveFinderBreadcrumbs(consoleRoot).map((item) => item.name)).toEqual(['我的空间'])
+    expect(getDriveFinderBreadcrumbs(standalone).map((item) => item.name)).toEqual(['文档'])
+  })
+
   it('uses body renderer for standalone and shared files but not console files or folders', () => {
     expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'share' }))).toBe(true)
     expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'owner', surface: 'standalone' }))).toBe(true)
@@ -71,7 +114,7 @@ describe('drive browser view model', () => {
     }))).toBe(false)
   })
 
-  it('returns markdown renderer options with rendered preview as default', () => {
+  it('returns markdown preview and source renderer options with rendered preview as default', () => {
     const snapshot = createSnapshot({
       current: { ...baseCurrent(), name: 'notes.md', previewKind: 'markdown' },
       preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
@@ -171,7 +214,7 @@ describe('drive browser view model', () => {
     expect(getDriveBrowserActions(snapshot).visitUrl).toBeNull()
   })
 
-  it('renders markdown html by default while keeping source hidden', () => {
+  it('renders markdown html without source controls', () => {
     const snapshot = createSnapshot({
       current: {
         ...baseCurrent(),
@@ -191,7 +234,7 @@ describe('drive browser view model', () => {
     const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot }))
 
     expect(html).toContain('<h1>Notes</h1>')
-    expect(html).toContain('源码')
+    expect(html).not.toContain('源码')
     expect(html).not.toContain('# Notes')
   })
 
@@ -242,7 +285,8 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-finder="split"')
     expect(html).toContain('data-drive-renderer-region="true"')
-    expect(html).toContain('新窗口打开')
+    expect(html).toContain('新标签页打开')
+    expect(html).toContain('/drive/items/folder/items/file?surface=standalone')
     expect(html).toContain('切换显示')
     expect(html).toContain('<h1>Notes</h1>')
   })
@@ -329,9 +373,8 @@ describe('drive browser view model', () => {
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
     expect(html).toContain('文件操作')
-    expect(html).toContain('data-renderer-toolbar="markdown"')
-    expect(html).toContain('预览')
-    expect(html).toContain('源码')
+    expect(html).not.toContain('预览')
+    expect(html).not.toContain('源码')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).not.toContain('data-slot="resizable-panel-group"')
   })

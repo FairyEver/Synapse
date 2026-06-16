@@ -28,7 +28,7 @@ export function DriveFinderList({
   if (snapshot.children.length === 0) {
     return (
       <div className='flex h-full min-h-72 items-center justify-center text-sm text-muted-foreground'>
-        暂无文件
+        暂无同级文件
       </div>
     )
   }

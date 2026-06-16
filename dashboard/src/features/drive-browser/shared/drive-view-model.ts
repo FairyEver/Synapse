@@ -14,9 +14,16 @@ export function getDriveFinderActions(snapshot: DriveBrowserSnapshotDto) {
   return {
     directoryDownloadUrl: isFolder ? snapshot.current.downloadUrl : null,
     fileDownloadUrl: isFolder ? null : snapshot.current.downloadUrl,
-    fileOpenUrl: isFolder ? null : snapshot.current.browserUrl,
+    fileOpenUrl: isFolder ? null : getDriveStandaloneOpenUrl(snapshot),
     visitUrl: isFolder ? null : snapshot.preview?.visitUrl ?? null,
   }
+}
+
+function getDriveStandaloneOpenUrl(snapshot: DriveBrowserSnapshotDto): string {
+  if (snapshot.context !== 'owner' || snapshot.surface !== 'console') return snapshot.current.browserUrl
+  const url = new URL(snapshot.current.browserUrl, 'http://synapse.local')
+  url.searchParams.set('surface', 'standalone')
+  return `${url.pathname}${url.search}${url.hash}`
 }
 
 export function getDriveBrowserChildUrls(snapshot: DriveBrowserSnapshotDto) {

@@ -138,7 +138,7 @@ function DriveFinderFileHeader({
           <Button asChild variant='outline' size='sm'>
             <a href={actions.fileOpenUrl} target='_blank' rel='noreferrer'>
               <ExternalLink data-icon='inline-start' />
-              新窗口打开
+              新标签页打开
             </a>
           </Button>
         ) : null}

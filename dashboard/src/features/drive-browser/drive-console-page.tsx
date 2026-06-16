@@ -1,6 +1,8 @@
+import type { DriveBrowserSurface } from '@synapse/shared'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import {
+  DriveBrowserPage,
   DriveConsoleBrowserPage,
   DriveConsoleRootBrowser,
   type DriveBrowserPageProps,
@@ -20,15 +22,22 @@ export function DriveConsolePage() {
 }
 
 export function DriveConsoleItemPage(
-  props: Omit<Extract<DriveBrowserPageProps, { context: 'owner' }>, 'context' | 'surface'>
+  props: Omit<Extract<DriveBrowserPageProps, { context: 'owner' }>, 'context' | 'surface'> & {
+    readonly surface?: DriveBrowserSurface
+  }
 ) {
+  const { surface = 'console', ...browserProps } = props
+  if (surface === 'standalone') {
+    return <DriveBrowserPage {...browserProps} context='owner' surface='standalone' />
+  }
+
   return (
     <>
       <Header fixed>
         <h1 className='text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
-        <DriveConsoleBrowserPage {...props} />
+        <DriveConsoleBrowserPage {...browserProps} />
       </Main>
     </>
   )

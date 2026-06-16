@@ -4,10 +4,18 @@ import { requireDashboardUser } from '@/lib/dashboard-route-guards'
 
 export const Route = createFileRoute('/_authenticated/drive/items/$rootItemId_/items/$browserItemId')({
   beforeLoad: requireDashboardUser,
+  validateSearch: validateDriveBrowserSearch,
   component: RouteComponent,
 })
 
 function RouteComponent() {
   const { rootItemId, browserItemId } = Route.useParams()
-  return <DriveConsoleItemPage rootItemId={rootItemId} itemId={browserItemId} />
+  const { surface } = Route.useSearch()
+  return <DriveConsoleItemPage rootItemId={rootItemId} itemId={browserItemId} surface={surface} />
+}
+
+function validateDriveBrowserSearch(search: Record<string, unknown>) {
+  return {
+    surface: search.surface === 'standalone' ? 'standalone' as const : 'console' as const,
+  }
 }

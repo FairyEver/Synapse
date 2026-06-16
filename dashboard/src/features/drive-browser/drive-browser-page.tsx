@@ -31,6 +31,7 @@ export type DriveBrowserPageProps =
     }
 
 type DriveBrowserLayoutMode = 'auto' | 'fixed'
+type DriveBrowserLoadingMode = 'card' | 'reader'
 
 export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const state = useDriveBrowser(props)
@@ -45,8 +46,11 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
   }, [initialPassword, onInitialPasswordAccepted, state.status])
 
   const framed = props.context === 'share' || props.surface === 'standalone'
+  const loadingMode: DriveBrowserLoadingMode = framed
+    ? 'reader'
+    : 'card'
   const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
-  const shouldCenterState = framed && state.status !== 'ready'
+  const shouldCenterState = framed && state.status !== 'ready' && state.status !== 'loading'
   if (state.status === 'ready' && shouldRenderDriveBodyRenderer(state.snapshot)) {
     return <DriveSingleFileReaderView snapshot={state.snapshot} />
   }
@@ -57,12 +61,14 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
         'mx-auto flex min-h-0 w-full flex-col gap-3',
         shouldCenterState
           ? 'max-w-md flex-1 justify-center'
-          : layoutMode === 'fixed'
-            ? 'flex-1 overflow-hidden'
-            : 'max-w-7xl'
+          : state.status === 'loading' && loadingMode === 'reader'
+            ? 'max-w-4xl flex-1'
+            : layoutMode === 'fixed'
+              ? 'flex-1 overflow-hidden'
+              : 'max-w-7xl'
       )}
     >
-      {state.status === 'loading' ? <DriveBrowserLoading /> : null}
+      {state.status === 'loading' ? <DriveBrowserLoading mode={loadingMode} /> : null}
       {state.status === 'error' ? <DriveBrowserError message={state.message} /> : null}
       {state.status === 'passwordRequired' ? (
         <DriveBrowserPasswordForm
@@ -100,7 +106,7 @@ export {
 
 export function DriveConsoleRootBrowser() {
   const state = useDriveBrowser({ context: 'console-root' })
-  if (state.status === 'loading') return <DriveBrowserLoading />
+  if (state.status === 'loading') return <DriveBrowserLoading mode='card' />
   if (state.status === 'error') return <DriveBrowserError message={state.message} />
   if (state.status !== 'ready') return null
   return (
@@ -204,7 +210,9 @@ function DriveBrowserPasswordForm({
   )
 }
 
-function DriveBrowserLoading() {
+function DriveBrowserLoading({ mode }: { readonly mode: DriveBrowserLoadingMode }) {
+  if (mode === 'reader') return <DriveReaderLoading />
+
   return (
     <div className='flex w-full flex-col gap-4 rounded-lg border bg-background p-5' aria-busy='true'>
       <div className='space-y-2'>
@@ -213,6 +221,25 @@ function DriveBrowserLoading() {
       </div>
       <Skeleton className='h-9 w-full' />
       <Skeleton className='h-40 w-full' />
+    </div>
+  )
+}
+
+function DriveReaderLoading() {
+  return (
+    <div className='w-full py-6' aria-busy='true'>
+      <div className='space-y-6'>
+        <div className='space-y-3'>
+          <Skeleton className='h-8 w-2/3' />
+          <Skeleton className='h-4 w-1/2' />
+        </div>
+        <div className='space-y-3'>
+          <Skeleton className='h-4 w-full' />
+          <Skeleton className='h-4 w-11/12' />
+          <Skeleton className='h-4 w-10/12' />
+        </div>
+        <Skeleton className='h-56 w-full' />
+      </div>
     </div>
   )
 }
