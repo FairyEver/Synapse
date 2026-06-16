@@ -985,7 +985,7 @@ describe("ProviderPanel dialog editor", () => {
     expect(listProviders).toHaveBeenCalledTimes(2)
   })
 
-  it("disables direct provider deletion when task or workflow references exist", async () => {
+  it("disables direct provider deletion when workflow references exist", async () => {
     const deleteProvider = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -996,10 +996,9 @@ describe("ProviderPanel dialog editor", () => {
           scanProviderReferences: vi.fn().mockResolvedValue({
             providerId: "custom-provider",
             references: [
-              { kind: "scheduled-task", entityId: "task-1", entityName: "日报", providerId: "custom-provider", modelTier: "default" },
+              { kind: "workflow-node", entityId: "workflow-1", entityName: "日报", nodeId: "node-1", nodeName: "总结", providerId: "custom-provider", modelTier: "default" },
             ],
-            taskCount: 1,
-            workflowNodeCount: 0,
+            workflowNodeCount: 1,
             conversationCount: 0,
           }),
           deleteProvider,
@@ -1035,7 +1034,6 @@ describe("ProviderPanel dialog editor", () => {
     })
     const deleteProvider = vi.fn().mockResolvedValue(undefined)
     const migrateProviderReferences = vi.fn().mockResolvedValue({
-      migratedTasks: 1,
       migratedWorkflowNodes: 0,
       errors: [{ entityId: "workflow-1", error: "write failed" }],
     })
@@ -1048,10 +1046,9 @@ describe("ProviderPanel dialog editor", () => {
           scanProviderReferences: vi.fn().mockResolvedValue({
             providerId: "custom-provider",
             references: [
-              { kind: "scheduled-task", entityId: "task-1", entityName: "日报", providerId: "custom-provider", modelTier: "default" },
+              { kind: "workflow-node", entityId: "workflow-1", entityName: "日报", nodeId: "node-1", nodeName: "总结", providerId: "custom-provider", modelTier: "default" },
             ],
-            taskCount: 1,
-            workflowNodeCount: 0,
+            workflowNodeCount: 1,
             conversationCount: 0,
           }),
           migrateProviderReferences,
@@ -1085,7 +1082,7 @@ describe("ProviderPanel dialog editor", () => {
       sourceProviderId: "custom-provider",
       targetProviderId: "target-provider",
       targetModelTier: "default",
-      scope: ["scheduled-task", "workflow-node"],
+      scope: ["workflow-node"],
     })
     expect(deleteProvider).not.toHaveBeenCalled()
     expect(toast).toHaveBeenCalledWith("迁移失败 1 项，已停止删除")
@@ -1094,7 +1091,6 @@ describe("ProviderPanel dialog editor", () => {
       boundary: "settings.providers.migrate",
       providerId: "custom-provider",
       errorCount: 1,
-      migratedTasks: 1,
       migratedWorkflowNodes: 0,
     })
   })

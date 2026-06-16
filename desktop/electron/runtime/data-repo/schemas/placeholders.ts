@@ -517,57 +517,18 @@ export const agentCommandSettingsSchema: NamespaceSchema<AgentCommandSettingsEnt
     && typeof (v as AgentCommandSettingsEntryV1).updatedAt === "string",
 }
 
-export type ScheduledTaskTriggerV1 =
-  | { type: "builtin.cron"; config: { expr: string; timezone?: string } }
-  | { type: "builtin.interval"; config: { everyMinutes: number; anchor?: "created_at" | "last_completed_at" } }
-
-export type ScheduledTaskScopeV1 =
+export type AutomationScopeV1 =
   | { type: "global" }
   | { type: "project"; projectId: string }
 
-export type ScheduledTaskActionV1 = {
+export type AutomationRefV1 = {
   type: string
   config: Record<string, unknown>
 }
 
-export type ScheduledTaskStatusV1 = "success" | "failed" | "timeout" | "cancelled" | "skipped"
-export type ScheduledTaskRunStatusV1 = "running" | ScheduledTaskStatusV1
-export type ScheduledTaskRunTriggerV1 = "schedule" | "manual" | "missed_run"
 export type AutomationRunStatusV1 = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type AutomationActiveRunStatusV1 = "running" | AutomationRunStatusV1
 export type AutomationRunTriggerV1 = "trigger" | "manual" | "missed_run"
-
-export interface ScheduledTaskEntryV1 extends Record<string, unknown> {
-  id: string
-  schemaVersion: 2
-  name: string
-  description?: string
-  scope: ScheduledTaskScopeV1
-  cwd?: string
-  trigger: ScheduledTaskTriggerV1
-  action: ScheduledTaskActionV1
-  enabled: boolean
-  missedRunPolicy: "skip" | "run_once"
-  overlapPolicy: "skip"
-  createdAt: string
-  updatedAt: string
-  nextRunAt?: string
-  lastRunAt?: string
-  lastStatus?: ScheduledTaskStatusV1
-  runCount: number
-}
-
-export interface ScheduledTaskRunEntryV1 extends Record<string, unknown> {
-  id: string
-  schemaVersion: 2
-  taskId: string
-  startedAt: string
-  finishedAt?: string
-  status: ScheduledTaskRunStatusV1
-  triggeredBy: ScheduledTaskRunTriggerV1
-  result?: Record<string, unknown>
-  error?: string
-}
 
 export interface AutomationItemEntryV1 extends Record<string, unknown> {
   id: string
@@ -575,10 +536,10 @@ export interface AutomationItemEntryV1 extends Record<string, unknown> {
   name: string
   description?: string
   enabled: boolean
-  scope: ScheduledTaskScopeV1
+  scope: AutomationScopeV1
   cwd?: string
-  trigger: ScheduledTaskActionV1
-  executor: ScheduledTaskActionV1
+  trigger: AutomationRefV1
+  executor: AutomationRefV1
   policy: {
     missedRunPolicy: "skip" | "run_once"
     overlapPolicy: "skip"
@@ -606,51 +567,6 @@ export interface AutomationRunEntryV1 extends Record<string, unknown> {
   error?: string
 }
 
-export const taskSchedulerTasksSchema: NamespaceSchema<ScheduledTaskEntryV1> = {
-  name: "task-scheduler.tasks",
-  backend: "encrypted-json",
-  currentVersion: 2,
-  migrations: noMigrations,
-  encrypted: true,
-  validate: (v): v is ScheduledTaskEntryV1 =>
-    isAnyRecord<ScheduledTaskEntryV1>(v)
-    && (v as ScheduledTaskEntryV1).schemaVersion === 2
-    && typeof (v as ScheduledTaskEntryV1).id === "string"
-    && typeof (v as ScheduledTaskEntryV1).name === "string"
-    && isOptionalString((v as ScheduledTaskEntryV1).description)
-    && isTaskScope((v as ScheduledTaskEntryV1).scope)
-    && isOptionalString((v as ScheduledTaskEntryV1).cwd)
-    && isTaskTrigger((v as ScheduledTaskEntryV1).trigger)
-    && isTaskAction((v as ScheduledTaskEntryV1).action)
-    && typeof (v as ScheduledTaskEntryV1).enabled === "boolean"
-    && ((v as ScheduledTaskEntryV1).missedRunPolicy === "skip" || (v as ScheduledTaskEntryV1).missedRunPolicy === "run_once")
-    && (v as ScheduledTaskEntryV1).overlapPolicy === "skip"
-    && typeof (v as ScheduledTaskEntryV1).createdAt === "string"
-    && typeof (v as ScheduledTaskEntryV1).updatedAt === "string"
-    && isOptionalString((v as ScheduledTaskEntryV1).nextRunAt)
-    && isOptionalString((v as ScheduledTaskEntryV1).lastRunAt)
-    && isOptionalTaskStatus((v as ScheduledTaskEntryV1).lastStatus)
-    && typeof (v as ScheduledTaskEntryV1).runCount === "number",
-}
-
-export const taskSchedulerRunsSchema: NamespaceSchema<ScheduledTaskRunEntryV1> = {
-  name: "task-scheduler.runs",
-  backend: "json",
-  currentVersion: 2,
-  migrations: noMigrations,
-  validate: (v): v is ScheduledTaskRunEntryV1 =>
-    isAnyRecord<ScheduledTaskRunEntryV1>(v)
-    && (v as ScheduledTaskRunEntryV1).schemaVersion === 2
-    && typeof (v as ScheduledTaskRunEntryV1).id === "string"
-    && typeof (v as ScheduledTaskRunEntryV1).taskId === "string"
-    && typeof (v as ScheduledTaskRunEntryV1).startedAt === "string"
-    && isOptionalString((v as ScheduledTaskRunEntryV1).finishedAt)
-    && isTaskRunStatus((v as ScheduledTaskRunEntryV1).status)
-    && isTaskRunTrigger((v as ScheduledTaskRunEntryV1).triggeredBy)
-    && ((v as ScheduledTaskRunEntryV1).result === undefined || isAnyRecord((v as ScheduledTaskRunEntryV1).result))
-    && isOptionalString((v as ScheduledTaskRunEntryV1).error),
-}
-
 export const automationItemsSchema: NamespaceSchema<AutomationItemEntryV1> = {
   name: "automation.items",
   backend: "json",
@@ -663,10 +579,10 @@ export const automationItemsSchema: NamespaceSchema<AutomationItemEntryV1> = {
     && typeof (v as AutomationItemEntryV1).name === "string"
     && isOptionalString((v as AutomationItemEntryV1).description)
     && typeof (v as AutomationItemEntryV1).enabled === "boolean"
-    && isTaskScope((v as AutomationItemEntryV1).scope)
+    && isAutomationScope((v as AutomationItemEntryV1).scope)
     && isOptionalString((v as AutomationItemEntryV1).cwd)
-    && isTaskAction((v as AutomationItemEntryV1).trigger)
-    && isTaskAction((v as AutomationItemEntryV1).executor)
+    && isAutomationRef((v as AutomationItemEntryV1).trigger)
+    && isAutomationRef((v as AutomationItemEntryV1).executor)
     && isAutomationPolicy((v as AutomationItemEntryV1).policy)
     && typeof (v as AutomationItemEntryV1).createdAt === "string"
     && typeof (v as AutomationItemEntryV1).updatedAt === "string"
@@ -1391,56 +1307,18 @@ function isOutboxPayload(value: unknown): value is OutboxPayloadV1 {
     && isOptionalRecord(value.metadata)
 }
 
-function isTaskScope(value: unknown): value is ScheduledTaskScopeV1 {
-  return isAnyRecord<ScheduledTaskScopeV1>(value)
+function isAutomationScope(value: unknown): value is AutomationScopeV1 {
+  return isAnyRecord<AutomationScopeV1>(value)
     && (
       value.type === "global"
       || (value.type === "project" && typeof value.projectId === "string")
     )
 }
 
-function isTaskTrigger(value: unknown): value is ScheduledTaskTriggerV1 {
-  return isAnyRecord<ScheduledTaskTriggerV1>(value)
-    && (
-      (
-        value.type === "builtin.cron"
-        && isAnyRecord(value.config)
-        && typeof value.config.expr === "string"
-        && isOptionalString(value.config.timezone)
-      )
-      || (
-        value.type === "builtin.interval"
-        && isAnyRecord(value.config)
-        && typeof value.config.everyMinutes === "number"
-        && (
-          value.config.anchor === undefined
-          || value.config.anchor === "created_at"
-          || value.config.anchor === "last_completed_at"
-        )
-      )
-    )
-}
-
-function isTaskAction(value: unknown): value is ScheduledTaskActionV1 {
-  return isAnyRecord<ScheduledTaskActionV1>(value)
+function isAutomationRef(value: unknown): value is AutomationRefV1 {
+  return isAnyRecord<AutomationRefV1>(value)
     && typeof value.type === "string"
     && isAnyRecord(value.config)
-}
-
-function isOptionalTaskStatus(value: unknown): boolean {
-  return value === undefined || isTaskStatus(value)
-}
-
-function isTaskStatus(value: unknown): value is ScheduledTaskStatusV1 {
-  return ["success", "failed", "timeout", "cancelled", "skipped"].includes(String(value))
-}
-
-function isTaskRunStatus(value: unknown): value is ScheduledTaskRunStatusV1 {
-  return value === "running" || isTaskStatus(value)
-}
-
-function isTaskRunTrigger(value: unknown): value is ScheduledTaskRunTriggerV1 {
-  return ["schedule", "manual", "missed_run"].includes(String(value))
 }
 
 function isAutomationRunStatus(value: unknown): value is AutomationRunStatusV1 {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { nextCronRun } from "../cron-expression"
 
-describe("task scheduler cron expression", () => {
+describe("automation cron expression", () => {
   it("matches either day-of-month or weekday when both fields are restricted", () => {
     const next = nextCronRun(
       "0 9 1 * mon",

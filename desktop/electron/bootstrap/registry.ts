@@ -40,7 +40,6 @@ import {
   coreProjectContainerRegistryDescriptor,
   coreRelayDescriptor,
   coreSideChannelDescriptor,
-  coreTaskSchedulerDescriptor,
   coreBuiltinToolRunnerDescriptor,
   coreToolsWindowDescriptor,
   coreUsageAnalysisDescriptor,
@@ -96,7 +95,6 @@ export function buildServiceRegistry(
   registry.register(coreRelayDescriptor)
   registry.register(coreAutomationIngressDescriptor)
   registry.register(coreActionRuntimeDescriptor)
-  registry.register(coreTaskSchedulerDescriptor)
   registry.register(coreAutomationDescriptor)
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDatabaseDescriptor)

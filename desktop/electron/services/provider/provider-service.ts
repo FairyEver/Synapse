@@ -460,12 +460,10 @@ export class ProviderService {
       const result = await this.scanReferences(id)
       if (result.references.length > 0) {
         const byKind = {
-          task: result.references.filter((r) => r.kind === "scheduled-task").map((r) => r.entityName),
           workflow: result.references.filter((r) => r.kind === "workflow-node").map((r) => r.entityName),
           conversation: result.references.filter((r) => r.kind === "conversation").map((r) => r.entityName),
         }
         const parts: string[] = []
-        if (byKind.task.length) parts.push(`${byKind.task.length} 个定时任务（${byKind.task.join("、")}）`)
         if (byKind.workflow.length) parts.push(`${byKind.workflow.length} 个工作流（${byKind.workflow.join("、")}）`)
         if (byKind.conversation.length) parts.push(`${byKind.conversation.length} 个会话（${byKind.conversation.join("、")}）`)
         throw new Error(`无法删除：该供应商正在被 ${parts.join("、")} 使用，请先迁移引用后再删除。`)

@@ -101,7 +101,7 @@ describe("PermissionGuard (T6.6)", () => {
     })).allowed).toBe(false)
     expect((await guard.check({
       ...systemMcpAutoRegisterReq,
-      actor: { kind: "system", id: "task-scheduler" },
+      actor: { kind: "system", id: "automation" },
     })).allowed).toBe(false)
     expect((await guard.check({
       ...systemMcpAutoRegisterReq,

@@ -170,7 +170,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [importingPackage, setImportingPackage] = useState(false)
   const [deletingProvider, setDeletingProvider] = useState<SynapseAgentProvider | null>(null)
   const [exportConfirm, setExportConfirm] = useState<SynapseAgentProvider | null>(null)
-  const [archiveConfirm, setArchiveConfirm] = useState<{ provider: SynapseAgentProvider; taskCount: number; workflowNodeCount: number } | null>(null)
+  const [archiveConfirm, setArchiveConfirm] = useState<{ provider: SynapseAgentProvider; workflowNodeCount: number } | null>(null)
   const [formValues, setFormValues] = useState<ProviderFormValues>(() => emptyProviderForm())
   const requestIdRef = useRef(0)
   const loadingRequestIdRef = useRef(0)
@@ -382,9 +382,9 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const handleArchive = useCallback(async (provider: SynapseAgentProvider) => {
     try {
       const scan = await requireSynapseBridge().agent.scanProviderReferences({ providerId: provider.id })
-      const total = scan.taskCount + scan.workflowNodeCount
+      const total = scan.workflowNodeCount
       if (total > 0) {
-        setArchiveConfirm({ provider, taskCount: scan.taskCount, workflowNodeCount: scan.workflowNodeCount })
+        setArchiveConfirm({ provider, workflowNodeCount: scan.workflowNodeCount })
         return
       }
       await requireSynapseBridge().agent.archiveProvider({ providerId: provider.id })
@@ -491,7 +491,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>归档供应商 &ldquo;{archiveConfirm?.provider.name}&rdquo;</AlertDialogTitle>
             <AlertDialogDescription>
-              该供应商被 {archiveConfirm?.taskCount ?? 0} 个定时任务和 {archiveConfirm?.workflowNodeCount ?? 0} 个工作流节点引用。归档后这些内容仍可正常执行，但无法在选择列表中看到该供应商。
+              该供应商被 {archiveConfirm?.workflowNodeCount ?? 0} 个工作流节点引用。归档后这些内容仍可正常执行，但无法在选择列表中看到该供应商。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

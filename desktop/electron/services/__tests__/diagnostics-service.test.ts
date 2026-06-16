@@ -617,7 +617,7 @@ describe("DiagnosticsService.collect", () => {
         readLogsByNames: vi.fn(async () => [
           "[2026-04-29T03:11:18.063Z] [WARN ] [main:service.agent-runtime] AgentRuntime queued turn failed.",
           "{ conversationId: 'conversation-1', sdkSessionId: 'sdk-1', taskId: 'task-1', runId: 'run-1', prompt: 'secret prompt', authorization: 'Bearer secret' }",
-          "[2026-04-29T03:11:19.000Z] [ERROR] [main:service.task-scheduler.execution] Scheduled Agent action failed. sdkSessionId=sdk-2",
+          "[2026-04-29T03:11:19.000Z] [ERROR] [main:automation-ingress] Automation Agent action failed. sdkSessionId=sdk-2",
         ].join("\n")),
         flush: vi.fn(async () => undefined),
       },
@@ -632,8 +632,8 @@ describe("DiagnosticsService.collect", () => {
         signalCount: 3,
         warningCount: 2,
         errorCount: 1,
-        boundaries: expect.arrayContaining(["agent-runtime", "task-scheduler"]),
-        components: expect.arrayContaining(["main:service.agent-runtime", "main:service.task-scheduler.execution"]),
+        boundaries: expect.arrayContaining(["agent-runtime", "automation-ingress"]),
+        components: expect.arrayContaining(["main:service.agent-runtime", "main:automation-ingress"]),
         correlation: {
           conversationId: 1,
           sdkSessionId: 2,

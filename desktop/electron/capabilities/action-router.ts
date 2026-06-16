@@ -21,7 +21,6 @@ export type SynapseActionRouterDeps = {
   readonly driveDispatch: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
-  readonly schedulerDispatch: DomainDispatch
   readonly variableDispatch: DomainDispatch
   readonly workflowDispatch: DomainDispatch
 }
@@ -36,7 +35,6 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "drive") return deps.driveDispatch(action, params, context)
       if (domainId === "model_price") return deps.modelPriceDispatch(action, params, context)
       if (domainId === "repository") return deps.repositoryDispatch(action, params, context)
-      if (domainId === "scheduler") return deps.schedulerDispatch(action, params, context)
       if (domainId === "variable") return deps.variableDispatch(action, params, context)
       if (domainId === "workflow") return deps.workflowDispatch(action, params, context)
       throw new Error(`Unknown action: ${action}`)

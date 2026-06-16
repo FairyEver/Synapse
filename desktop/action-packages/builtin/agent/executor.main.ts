@@ -18,7 +18,7 @@ export function createAgentAction(deps: {
       actor: context.actor,
       resource: `${config.agentType}:${config.mode}`,
       context: {
-        source: "task-scheduler",
+        source: "automation",
         actionType: agentActionManifest.id,
         taskId: context.taskId,
         runId: context.runId,
@@ -51,11 +51,11 @@ export function createAgentAction(deps: {
       const configChanged = previousConfigVersion !== undefined
         && previousConfigVersion !== currentConfigVersion
       const userMeta: Record<string, unknown> = {
-        source: "scheduled",
-        taskId: input.context.taskId,
-        taskRunId: input.context.runId,
+        source: "automation",
+        automationId: input.context.taskId,
+        automationRunId: input.context.runId,
       }
-      if (input.context.taskName) userMeta.taskName = input.context.taskName
+      if (input.context.taskName) userMeta.automationName = input.context.taskName
 
       try {
         const prompt = renderActionTemplate(input.config.prompt, input.context.templateVariables)
@@ -70,6 +70,7 @@ export function createAgentAction(deps: {
           abortSignal: input.context.abortSignal,
           providerId: input.config.providerId,
           modelTier: input.config.modelTier,
+          sourcePlatform: "automation",
           userMeta,
         })
         const status = result.status === "error"
@@ -83,7 +84,7 @@ export function createAgentAction(deps: {
           outputs: {
             conversationId: result.conversationId,
             projectId: input.config.projectId,
-            platform: "scheduled",
+            platform: "automation",
             configVersion: currentConfigVersion,
           },
           metrics: { durationMs: result.durationMs },

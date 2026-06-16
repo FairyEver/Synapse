@@ -11,7 +11,6 @@ export const APP_NAVIGATION_TABS = [
   { id: "prompt", label: "提示词" },
   { id: "agent", label: "对话" },
   { id: "database", label: "数据库" },
-  { id: "task-scheduler", label: "定时" },
   { id: "automation", label: "自动化" },
   { id: "workflow", label: "工作流", requiresWorkflowEntry: true },
   { id: "drive", label: "云盘" },
@@ -31,9 +30,6 @@ export const LOG_CLIPBOARD_MAX_BYTES = 2 * 1024 * 1024
 
 // 配置备份导入文件最大字节数：限制设置页从外部 JSON 恢复配置时主进程读取和解析的单文件体积。
 export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
-
-// 定时任务导入文件最大字节数：限制调度器从外部 JSON 导入任务时主进程读取和 IPC 传输的单文件体积。
-export const TASK_SCHEDULER_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 
 // Automation Ingress Webhook 运行记录持久化保留上限：限制 webhook.runs 本地历史无限增长。
 export const AUTOMATION_INGRESS_WEBHOOK_RUN_RETENTION_LIMIT = 1000

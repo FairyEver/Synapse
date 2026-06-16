@@ -58,7 +58,7 @@ const openConversationRequestSchema = z.object({
   projectId: z.string().min(1),
   conversationId: z.string().min(1),
   sessionKey: z.string().min(1),
-  platform: z.enum(["workflow", "scheduled"]),
+  platform: z.enum(["automation", "workflow", "scheduled"]),
 })
 
 // ─── Response schemas ─────────────────────────────────────────────────────────

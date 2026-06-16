@@ -391,13 +391,6 @@ export const installFormDefinition = {
 
 ---
 
-## 文档
-
-- [定时任务 PATH 与环境变量](../docs/scheduler/path-and-env.md) — 技术参考
-- [用户指南：定时任务环境变量](../website/advanced/scheduler-env.md) — 使用说明
-
----
-
 ## 内容分类
 
 规则、技能、提示词各自拥有独立的分类体系。`value` 为持久化标识，一经写入不可修改。
@@ -421,7 +414,7 @@ export const installFormDefinition = {
 | value | label | description |
 |-------|-------|-------------|
 | `development` | 编程开发 | 编码、调试、重构、测试、代码生成 |
-| `automation` | 自动化 | 批处理、脚本编排、定时任务、流水线 |
+| `automation` | 自动化 | 批处理、脚本编排、定时触发、流水线 |
 | `content` | 内容创作 | 写作、改写、翻译、摘要、文案 |
 | `data` | 数据与文件 | 数据分析、文件转换、媒体处理、结构化数据 |
 | `integration` | 集成连接 | 外部 API、插件、第三方服务对接 |

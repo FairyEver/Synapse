@@ -92,6 +92,7 @@ function sourceFilterForPlatform(
     case "local":
     case "local-renderer":
       return "user"
+    case "automation":
     case "scheduled":
     case "workflow":
     case "webhook":

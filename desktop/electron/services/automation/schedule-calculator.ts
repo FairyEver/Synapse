@@ -1,4 +1,4 @@
-import { nextCronRun } from "../task-scheduler/cron-expression"
+import { nextCronRun } from "./cron-expression"
 
 const MAX_ADVANCE_ITERATIONS = 7
 

@@ -10,7 +10,7 @@ import {
 describe("capability naming", () => {
   it("validates canonical ids", () => {
     expect(isCanonicalCapabilityId("database.table.list")).toBe(true)
-    expect(isCanonicalCapabilityId("scheduler.action_type.list")).toBe(true)
+    expect(isCanonicalCapabilityId("automation.trigger_type.list")).toBe(true)
     expect(isCanonicalCapabilityId("database.table.fetch")).toBe(false)
     expect(isCanonicalCapabilityId("database.table")).toBe(false)
     expect(isCanonicalCapabilityId("database.Table.list")).toBe(false)
@@ -18,7 +18,7 @@ describe("capability naming", () => {
 
   it("derives public names from canonical ids", () => {
     expect(capabilityIdToMcpTool("database.table.list")).toBe("database_table_list")
-    expect(capabilityIdToServiceMethod("scheduler.runtime.inspect")).toBe("schedulerRuntimeInspect")
+    expect(capabilityIdToServiceMethod("automation.runtime.inspect")).toBe("automationRuntimeInspect")
   })
 
   it("extracts domain and action tokens", () => {

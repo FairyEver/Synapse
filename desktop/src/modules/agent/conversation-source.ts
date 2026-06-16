@@ -5,7 +5,8 @@ type ConversationSourceFilter = SynapseAgentConversationSourceFilter
 
 const CONVERSATION_SOURCE_OPTIONS: Array<{ value: ConversationSourceFilter; label: string }> = [
   { value: "user", label: "用户对话" },
-  { value: "scheduled", label: "定时任务" },
+  { value: "automation", label: "自动化" },
+  { value: "scheduled", label: "历史计划" },
   { value: "workflow", label: "工作流" },
   { value: "webhook", label: "Webhook" },
   { value: "relay", label: "Relay" },
@@ -18,6 +19,7 @@ function conversationSourceForPlatform(
 ): Exclude<ConversationSourceFilter, "all"> {
   const normalized = platform?.trim()
   if (!normalized || normalized === "local" || normalized === "local-renderer") return "user"
+  if (normalized === "automation") return "automation"
   if (normalized === "scheduled") return "scheduled"
   if (normalized === "workflow") return "workflow"
   if (normalized === "webhook") return "webhook"

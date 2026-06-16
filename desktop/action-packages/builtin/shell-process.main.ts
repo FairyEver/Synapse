@@ -52,7 +52,7 @@ export async function runShellAction(input: {
       stderr: "buffer",
     },
     metadata: {
-      source: input.auditSource ?? "task-scheduler",
+      source: input.auditSource ?? "automation",
       actionType: input.auditActionType ?? "shell",
       taskId: input.context.taskId,
       runId: input.context.runId,

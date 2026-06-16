@@ -43,15 +43,6 @@
 | `variable.item.update` | `variable_item_update` | `variable.item.update` | `variableItemUpdate` |
 | `variable.item.upsert` | `variable_item_upsert` | `variable.item.upsert` | `variableItemUpsert` |
 | `variable.item.delete` | `variable_item_delete` | `variable.item.delete` | `variableItemDelete` |
-| `scheduler.task.list` | `scheduler_task_list` | `scheduler.task.list` | `schedulerTaskList` |
-| `scheduler.task.get` | `scheduler_task_get` | `scheduler.task.get` | `schedulerTaskGet` |
-| `scheduler.task.create` | `scheduler_task_create` | `scheduler.task.create` | `schedulerTaskCreate` |
-| `scheduler.task.enable` | `scheduler_task_enable` | `scheduler.task.enable` | `schedulerTaskEnable` |
-| `scheduler.task.disable` | `scheduler_task_disable` | `scheduler.task.disable` | `schedulerTaskDisable` |
-| `scheduler.run.list` | `scheduler_run_list` | `scheduler.run.list` | `schedulerRunList` |
-| `scheduler.runtime.inspect` | `scheduler_runtime_inspect` | `scheduler.runtime.inspect` | `schedulerRuntimeInspect` |
-| `scheduler.action_type.list` | `scheduler_action_type_list` | `scheduler.action_type.list` | `schedulerActionTypeList` |
-| `scheduler.task.update` | `scheduler_task_update` | `scheduler.task.update` | `schedulerTaskUpdate` |
 | `workflow.node_type.list` | `workflow_node_type_list` | `workflow.node_type.list` | `workflowNodeTypeList` |
 | `workflow.node_type.describe` | `workflow_node_type_describe` | `workflow.node_type.describe` | `workflowNodeTypeDescribe` |
 | `workflow.definition.list` | `workflow_definition_list` | `workflow.definition.list` | `workflowDefinitionList` |

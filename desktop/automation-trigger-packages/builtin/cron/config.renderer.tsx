@@ -5,7 +5,7 @@ import {
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
-import { CronInput } from "../../../src/modules/task-scheduler/components/cron-input"
+import { CronInput } from "../../../src/automation-triggers/cron-input"
 import type { CronTriggerConfig } from "./schema"
 
 const WEEKDAYS = [

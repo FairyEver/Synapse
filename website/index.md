@@ -31,8 +31,8 @@ features:
     details: 使用内置 Database 管理本地数据表，并将数据服务注册为 MCP Server。
   - title: 内容发布 MCP
     details: 通过 MCP 创建、更新和删除 Rule、Skill、Prompt，支持 Skill 附件与目录导入。
-  - title: 定时任务调度
-    details: 通过 cron 或 interval 表达式调度任务，支持启停控制和运行记录查看。
+  - title: 自动化定时触发
+    details: 在自动化中使用 cron 或 interval 触发器，支持启停控制和运行记录查看。
   - title: Token Usage（用量统计）
     details: 扫描本地 AI 编辑器日志，汇总 token 消耗与费用估算，支持按模型、日期、Agent 多维度查看。
   - title: 诊断工具

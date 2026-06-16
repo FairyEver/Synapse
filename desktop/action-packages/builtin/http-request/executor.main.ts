@@ -64,7 +64,7 @@ export function createHttpRequestAction(deps: {
         actor: context.actor,
         resource: sanitizeUrl(permissionUrl),
         context: {
-          source: "task-scheduler",
+          source: "automation",
           actionType: httpRequestActionManifest.id,
           taskId: context.taskId,
           runId: context.runId,

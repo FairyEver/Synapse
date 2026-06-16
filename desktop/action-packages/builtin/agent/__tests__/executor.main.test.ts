@@ -4,7 +4,7 @@ import type { AgentRuntimeService } from "../../../../electron/services/agent-ru
 import { createAgentAction } from "../executor.main"
 
 describe("builtin agent action executor", () => {
-  it("preserves scheduled agent timeout status", async () => {
+  it("preserves automation agent timeout status", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "conversation-1",
@@ -24,7 +24,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
         timeoutMins: 1,
       },
@@ -33,7 +33,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -46,11 +46,11 @@ describe("builtin agent action executor", () => {
     })
   })
 
-  it("persists scheduled Agent conversation target fields", async () => {
+  it("persists automation Agent conversation target fields", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "conversation-1",
-        sessionKey: "scheduled:project-1:123",
+        sessionKey: "automation:project-1:123",
         status: "success" as const,
         summary: "done",
         durationMs: 12,
@@ -67,7 +67,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
         timeoutMins: 1,
       },
@@ -76,7 +76,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
         configVersion: 2,
       },
@@ -85,13 +85,13 @@ describe("builtin agent action executor", () => {
     expect(result.outputs).toEqual({
       conversationId: "conversation-1",
       projectId: "project-1",
-      platform: "scheduled",
+      platform: "automation",
       configVersion: 2,
     })
     expect(result.outputs).not.toHaveProperty("sessionKey")
   })
 
-  it("passes null scheduled timeout as disabled", async () => {
+  it("passes null automation timeout as disabled", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "conversation-1",
@@ -111,7 +111,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
         timeoutMins: null,
       },
@@ -120,7 +120,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -130,7 +130,7 @@ describe("builtin agent action executor", () => {
     }))
   })
 
-  it("defaults scheduled Agent timeout to one hour", async () => {
+  it("defaults automation Agent timeout to one hour", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "conversation-1",
@@ -150,7 +150,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
       },
       context: {
@@ -158,7 +158,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -168,7 +168,7 @@ describe("builtin agent action executor", () => {
     }))
   })
 
-  it("passes task context for scheduled conversation names", async () => {
+  it("passes automation context for conversation names", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "conversation-1",
@@ -188,7 +188,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
         timeoutMins: 1,
       },
@@ -198,22 +198,22 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
       },
     })
 
     expect(runtime.sendScheduled).toHaveBeenCalledWith(expect.objectContaining({
       userMeta: {
-        source: "scheduled",
-        taskId: "task-1",
-        taskName: "Daily Summary",
-        taskRunId: "run-1",
+        source: "automation",
+        automationId: "task-1",
+        automationName: "Daily Summary",
+        automationRunId: "run-1",
       },
     }))
   })
 
-  it("persists scheduled Agent usage and cost on the action run result", async () => {
+  it("persists automation Agent usage and cost on the action run result", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "conversation-1",
@@ -240,7 +240,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
         timeoutMins: 1,
       },
@@ -249,7 +249,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -288,7 +288,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
         timeoutMins: 1,
       },
@@ -297,7 +297,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "manual",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: controller.signal,
       },
     })
@@ -313,7 +313,7 @@ describe("builtin agent action executor", () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "new-conversation",
-        sessionKey: "scheduled:project-1:new",
+        sessionKey: "automation:project-1:new",
         status: "success" as const,
         summary: "done",
         durationMs: 100,
@@ -339,7 +339,7 @@ describe("builtin agent action executor", () => {
         runId: "run-2",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
         configVersion: 3,
       },
@@ -358,7 +358,7 @@ describe("builtin agent action executor", () => {
     expect(result.outputs).toEqual({
       conversationId: "new-conversation",
       projectId: "project-1",
-      platform: "scheduled",
+      platform: "automation",
       configVersion: 3,
     })
     expect(result.outputs).not.toHaveProperty("sessionKey")
@@ -393,7 +393,7 @@ describe("builtin agent action executor", () => {
         runId: "run-2",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
         configVersion: 2,
       },
@@ -439,7 +439,7 @@ describe("builtin agent action executor", () => {
         runId: "run-2",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
         configVersion: 0,
       },
@@ -455,7 +455,7 @@ describe("builtin agent action executor", () => {
     )
   })
 
-  it("does not persist raw Agent runtime failure text in scheduler results", async () => {
+  it("does not persist raw Agent runtime failure text in automation results", async () => {
     const rawError = "SDK failed for prompt token=sk-test at /Users/liyang/private/repo"
     const runtime = {
       sendScheduled: vi.fn(async () => ({
@@ -476,7 +476,7 @@ describe("builtin agent action executor", () => {
         providerId: "anthropic",
         modelTier: "sonnet",
         mode: "default",
-        prompt: "Run scheduled work",
+        prompt: "Run automation work",
         sessionPolicy: "fresh",
         timeoutMins: 1,
       },
@@ -485,7 +485,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -527,7 +527,7 @@ describe("builtin agent action executor", () => {
         runId: "run-1",
         triggeredBy: "schedule",
         cwd: "/repo",
-        actor: { kind: "user", id: "task-scheduler" },
+        actor: { kind: "user", id: "automation" },
         abortSignal: new AbortController().signal,
       },
     })

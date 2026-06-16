@@ -1,8 +1,8 @@
 # Synapse MCP 能力
 
-<!-- Sources: docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/model-price-domain.ts; desktop/synapse-capabilities/shared/repository-domain.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/synapse-capabilities/shared/automation-domain.ts; desktop/synapse-capabilities/shared/variable-domain.ts; desktop/synapse-capabilities/shared/workflow-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/model-price-domain.ts; desktop/synapse-capabilities/shared/repository-domain.ts; desktop/synapse-capabilities/shared/automation-domain.ts; desktop/synapse-capabilities/shared/variable-domain.ts; desktop/synapse-capabilities/shared/workflow-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
 
-这里的“能力”指一项可被 MCP 或本地 HTTP API 调用的操作，例如列出数据库表、创建数据行、启用定时任务。
+这里的“能力”指一项可被 MCP 或本地 HTTP API 调用的操作，例如列出数据库表、创建数据行、启用自动化。
 
 Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个入口：
 
@@ -24,7 +24,6 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 - `desktop/database/shared/capability-registry.ts`
 - `desktop/synapse-capabilities/shared/model-price-domain.ts`
 - `desktop/synapse-capabilities/shared/repository-domain.ts`
-- `desktop/synapse-capabilities/shared/scheduler-domain.ts`
 - `desktop/synapse-capabilities/shared/automation-domain.ts`
 - `desktop/synapse-capabilities/shared/variable-domain.ts`
 - `desktop/synapse-capabilities/shared/workflow-domain.ts`
@@ -48,7 +47,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | 能力 ID | MCP 工具 | HTTP action | 服务方法 |
 | --- | --- | --- | --- |
 | `database.table.list` | `database_table_list` | `database.table.list` | `databaseTableList` |
-| `scheduler.runtime.inspect` | `scheduler_runtime_inspect` | `scheduler.runtime.inspect` | `schedulerRuntimeInspect` |
+| `automation.runtime.inspect` | `automation_runtime_inspect` | `automation.runtime.inspect` | `automationRuntimeInspect` |
 | `content.skill.create` | `content_skill_create` | `content.skill.create` | `contentSkillCreate` |
 
 公开 JSON 字段使用 camelCase。
@@ -60,7 +59,6 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | `database` | 本地表、文件夹、字段、行、选项、日志和 SQL 操作 | `desktop/database/shared/capability-registry.ts` |
 | `model_price` | 模型价格规则、已用模型价格覆盖状态和规则启停 | `desktop/synapse-capabilities/shared/model-price-domain.ts` |
 | `repository` | 已配置 Synapse 仓库发现 | `desktop/synapse-capabilities/shared/repository-domain.ts` |
-| `scheduler` | 定时任务、运行记录、运行时状态检查和 action type 查询 | `desktop/synapse-capabilities/shared/scheduler-domain.ts` |
 | `automation` | 自动化配置、启停、手动运行、运行记录、Webhook 和 runtime inspect | `desktop/synapse-capabilities/shared/automation-domain.ts` |
 | `variable` | 用户本机变量的查询、写入和删除 | `desktop/synapse-capabilities/shared/variable-domain.ts` |
 | `workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
@@ -77,7 +75,6 @@ MCP 是外部 Agent 和自动化的公开入口。工具名称由规范能力 ID
 
 ```text
 database.table.list -> database_table_list
-scheduler.run.list -> scheduler_run_list
 automation.item.list -> automation_item_list
 model_price.rule.list -> model_price_rule_list
 content.skill.create -> content_skill_create
@@ -98,8 +95,8 @@ drive.file.upload -> drive_file_upload
 
 ```json
 {
-  "action": "scheduler.run.list",
-  "taskId": "task:1",
+  "action": "automation.run.list",
+  "itemId": "automation:1",
   "limit": 5
 }
 ```
@@ -110,7 +107,7 @@ drive.file.upload -> drive_file_upload
 
 ```text
 database.choice_usage.get -> databaseChoiceUsageGet
-scheduler.action_type.list -> schedulerActionTypeList
+automation.trigger_type.list -> automationTriggerTypeList
 ```
 
 ## 当前矩阵

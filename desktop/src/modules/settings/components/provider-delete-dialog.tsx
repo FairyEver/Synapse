@@ -26,7 +26,7 @@ type ProviderDeleteDialogProps = {
 
 type ScanState =
   | { status: "loading" }
-  | { status: "loaded"; taskCount: number; workflowNodeCount: number; conversationCount: number; references: Array<{ kind: string; entityName: string; nodeName?: string }> }
+  | { status: "loaded"; workflowNodeCount: number; conversationCount: number; references: Array<{ kind: string; entityName: string; nodeName?: string }> }
   | { status: "error"; message: string }
 
 export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: ProviderDeleteDialogProps) {
@@ -45,7 +45,6 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
       if (scanRequestIdRef.current !== requestId) return
       setScan({
         status: "loaded",
-        taskCount: result.taskCount,
         workflowNodeCount: result.workflowNodeCount,
         conversationCount: result.conversationCount,
         references: result.references.map((r) => ({ kind: r.kind, entityName: r.entityName, nodeName: r.nodeName })),
@@ -87,14 +86,13 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
         sourceProviderId: provider.id,
         targetProviderId: selection.providerId,
         targetModelTier: selection.modelTier,
-        scope: ["scheduled-task", "workflow-node"],
+        scope: ["workflow-node"],
       })
       if (migrationResult.errors.length > 0) {
         logger.error("Provider reference migration returned errors.", {
           boundary: "settings.providers.migrate",
           providerId: provider.id,
           errorCount: migrationResult.errors.length,
-          migratedTasks: migrationResult.migratedTasks,
           migratedWorkflowNodes: migrationResult.migratedWorkflowNodes,
         })
         toast(`迁移失败 ${migrationResult.errors.length} 项，已停止删除`)
@@ -114,7 +112,7 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
     }
   }, [provider, onDeleted, onOpenChange])
 
-  const hasReferences = scan.status === "loaded" && (scan.taskCount + scan.workflowNodeCount + scan.conversationCount) > 0
+  const hasReferences = scan.status === "loaded" && (scan.workflowNodeCount + scan.conversationCount) > 0
   const hasConversationReferences = scan.status === "loaded" && scan.conversationCount > 0
   const excludedProviderIds = useMemo(() => provider ? [provider.id] : [], [provider])
 
@@ -137,16 +135,6 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
                 {scan.status === "loaded" && hasReferences && (
                   <>
                     <p>该供应商被以下内容引用：</p>
-                    {scan.taskCount > 0 && (
-                      <div>
-                        <p className="font-medium">定时任务 ({scan.taskCount})</p>
-                        <ul className="ml-4 list-disc text-sm text-muted-foreground">
-                          {scan.references.filter((r) => r.kind === "scheduled-task").map((r, i) => (
-                            <li key={i}>{r.entityName}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
                     {scan.workflowNodeCount > 0 && (
                       <div>
                         <p className="font-medium">工作流节点 ({scan.workflowNodeCount})</p>

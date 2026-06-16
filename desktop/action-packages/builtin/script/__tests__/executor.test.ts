@@ -28,7 +28,7 @@ describe("builtin.script executor", () => {
         runId: "run:1",
         triggeredBy: "manual",
         cwd: "/tmp",
-        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        actor: { kind: "user", id: "automation", display: "Automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -63,7 +63,7 @@ describe("builtin.script executor", () => {
         runId: "run:1",
         triggeredBy: "manual",
         cwd: "C:\\work",
-        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        actor: { kind: "user", id: "automation", display: "Automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -100,7 +100,7 @@ describe("builtin.script executor", () => {
         runId: "run:1",
         triggeredBy: "schedule",
         cwd: "/tmp",
-        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        actor: { kind: "user", id: "automation", display: "Automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -136,7 +136,7 @@ describe("builtin.script executor", () => {
         runId: "run:1",
         triggeredBy: "schedule",
         cwd: "/tmp",
-        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        actor: { kind: "user", id: "automation", display: "Automation" },
         abortSignal: new AbortController().signal,
       },
     })
@@ -171,7 +171,7 @@ describe("builtin.script executor", () => {
         runId: "run:1",
         triggeredBy: "schedule",
         cwd: "/tmp",
-        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        actor: { kind: "user", id: "automation", display: "Automation" },
         abortSignal: new AbortController().signal,
       },
     })
