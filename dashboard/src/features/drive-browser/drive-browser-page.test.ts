@@ -304,6 +304,7 @@ describe('drive browser view model', () => {
     const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot }))
 
     expect(html).toContain('<h1>Notes</h1>')
+    expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('源码')
     expect(html).not.toContain('# Notes')
   })
@@ -431,6 +432,7 @@ describe('drive browser view model', () => {
     expect(source).toContain('href={driveBrowserUrl}')
     expect(source).toContain('在云盘中查看')
     expect(html).toContain('<h1>Notes</h1>')
+    expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('data-reader-toolbar="true"')
   })
 

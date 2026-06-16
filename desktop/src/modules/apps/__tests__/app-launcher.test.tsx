@@ -41,6 +41,11 @@ describe("AppsModule", () => {
     expect(findButton("IDE 管理")).toBeTruthy()
     expect(findButton("用量监控")).toBeTruthy()
     expect(findButton("价格管理")).toBeTruthy()
+    expect(document.body.textContent).toContain("技能、规则、提示词")
+    expect(document.body.textContent).toContain("表、字段、数据记录")
+    expect(document.body.textContent).toContain("编辑器扫描与安装状态")
+    expect(document.body.textContent).toContain("CC 与 Codex 用量")
+    expect(document.body.textContent).toContain("模型价格规则")
 
     expect(document.querySelector("input[type='search']")).toBeNull()
     expect(document.body.textContent).not.toContain("删除")
@@ -74,7 +79,7 @@ async function renderAppsModule(roots: Root[]): Promise<void> {
 
 function findButton(label: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll("button"))
-    .find((item) => item.textContent?.trim() === label)
+    .find((item) => item.textContent?.includes(label))
 
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`Button not found: ${label}`)

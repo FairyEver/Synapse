@@ -103,7 +103,7 @@ export function DriveRendererContent({
   )
   const renderContent = (content: ReactNode) => (
     <div className={contentHostClassName}>
-      {body ? content : <div className={containerClassName}>{content}</div>}
+      {body || selected.id === 'markdown' ? content : <div className={containerClassName}>{content}</div>}
     </div>
   )
 

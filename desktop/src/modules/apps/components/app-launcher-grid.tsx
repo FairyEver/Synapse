@@ -1,27 +1,42 @@
-import type { SynapseSystemAppManifest } from "@/modules/apps/types"
+import { ChevronRight } from "lucide-react"
+import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
 
 type AppLauncherGridProps = {
   readonly apps: readonly SynapseSystemAppManifest[]
   readonly onOpenApp: (appId: SynapseSystemAppManifest["id"]) => void
 }
 
+const appDescriptions = {
+  "resource-repository": "技能、规则、提示词",
+  database: "表、字段、数据记录",
+  "editor-scan": "编辑器扫描与安装状态",
+  "usage-monitor": "CC 与 Codex 用量",
+  "model-price": "模型价格规则",
+} satisfies Record<SynapseSystemAppId, string>
+
 export function AppLauncherGrid({ apps, onOpenApp }: AppLauncherGridProps) {
   return (
-    <div className="mx-auto grid w-full max-w-5xl grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-x-8 gap-y-10 py-8">
+    <div className="divide-y divide-border">
       {apps.map((app) => (
         <button
           key={app.id}
           type="button"
-          className="group flex min-h-32 flex-col items-center justify-start gap-3 rounded-lg px-3 py-3 text-center outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-h-20 w-full items-center gap-4 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
           onClick={() => onOpenApp(app.id)}
         >
           <img
             src={app.icon}
             alt=""
-            className="size-20 rounded-2xl object-cover"
+            className="size-12 shrink-0 rounded-lg object-cover"
             draggable={false}
           />
-          <span className="text-sm font-medium leading-tight">{app.name}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium leading-tight">{app.name}</span>
+            <span className="mt-1 block truncate text-xs text-muted-foreground">
+              {appDescriptions[app.id]}
+            </span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       ))}
     </div>

@@ -17,10 +17,11 @@ function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) 
       <SwitchRepositoryOnboardingDialog />
       <div className="flex h-full flex-col">
         <header className="shrink-0 border-b border-sidebar-border/50">
-          <div className="flex min-h-10 items-center justify-between gap-2 px-3">
-            <div className="min-w-0 flex-1">{navigation}</div>
+          <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 px-3">
+            <div className="min-w-0" aria-hidden="true" />
+            <div className="min-w-0 justify-self-center">{navigation}</div>
             {actions && (
-              <div className="shrink-0">
+              <div className="min-w-0 justify-self-end">
                 {actions}
               </div>
             )}

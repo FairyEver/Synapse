@@ -14,7 +14,7 @@ type AppShellNavigationProps = {
 
 function AppShellNavigation({ tabs, value, onValueChange }: AppShellNavigationProps) {
   return (
-    <nav className="flex min-w-0 justify-start overflow-hidden">
+    <nav className="flex min-w-0 justify-center overflow-hidden">
       <ScrollArea className="min-w-0 max-w-full" scrollbars="horizontal">
         <Tabs
           data-track="app-shell-navigation"
