@@ -110,10 +110,10 @@ describe('drive browser view model', () => {
     expect(getDriveFinderBreadcrumbs(standalone).map((item) => item.name)).toEqual(['文档'])
   })
 
-  it('uses body renderer for standalone and shared files but not console files or folders', () => {
+  it('uses body renderer for all files but not folders', () => {
     expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'share' }))).toBe(true)
     expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'owner', surface: 'standalone' }))).toBe(true)
-    expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'owner', surface: 'console' }))).toBe(false)
+    expect(shouldRenderDriveBodyRenderer(createSnapshot({ context: 'owner', surface: 'console' }))).toBe(true)
     expect(shouldRenderDriveBodyRenderer(createSnapshot({
       context: 'share',
       current: { ...baseCurrent(), type: 'folder' },
@@ -307,12 +307,15 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveBrowserView, { snapshot }))
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('源码')
     expect(html).not.toContain('# Notes')
+    expect(html).not.toContain('data-drive-finder="split"')
+    expect(html).not.toContain('data-drive-renderer-region="true"')
+    expect(html).not.toContain('暂无同级文件')
   })
 
   it('renders console folders as full-width finder without renderer chrome', () => {
@@ -340,43 +343,12 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-renderer-region="true"')
   })
 
-  it('renders console files as split finder and renderer layout', () => {
-    const snapshot = createSnapshot({
-      context: 'owner',
-      surface: 'console',
-      current: {
-        ...baseCurrent(),
-        id: 'file',
-        name: 'notes.md',
-        browserUrl: '/drive/items/folder/items/file',
-        downloadUrl: '/drive/items/folder/items/file/download',
-        previewKind: 'markdown',
-      },
-      children: [
-        { ...baseCurrent(), id: 'file', name: 'notes.md', browserUrl: '/drive/items/folder/items/file', previewKind: 'markdown' },
-      ],
-      preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
-    })
-
-    const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'console' }))
-
-    expect(html).toContain('data-drive-finder="split"')
-    expect(html).toContain('data-drive-renderer-region="true"')
-    expect(html).toContain('新标签页打开')
-    expect(html).toContain('/drive/items/folder/items/file?surface=standalone')
-    expect(html).toContain('打开方式')
-    expect(html).not.toContain('切换显示')
-    expect(html).not.toContain('当前：')
-    expect(html).toContain('<h1>Notes</h1>')
-    expect(html).toContain('class="min-h-0 flex-1 overflow-hidden"')
-    expect(html).not.toContain('class="min-h-0 flex-1 overflow-auto"')
-  })
-
-  it('does not render a duplicate display-mode title in the split file header menu', () => {
+  it('does not keep the unsupported split finder file branch', () => {
     const source = readFileSync(new URL('./finder/drive-finder.tsx', import.meta.url), 'utf8')
 
-    expect(source).toContain("<Button type='button' variant='outline' size='sm'>打开方式</Button>")
-    expect(source).not.toContain('<DropdownMenuLabel>打开方式</DropdownMenuLabel>')
+    expect(source).not.toContain('DriveFinderSplitLayout')
+    expect(source).not.toContain('DriveFinderFileHeader')
+    expect(source).not.toContain("fileSelected")
   })
 
   it('uses the single file reader for owner and shared files', () => {

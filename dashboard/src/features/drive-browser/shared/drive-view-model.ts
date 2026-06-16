@@ -35,5 +35,5 @@ export function shouldRenderDriveSingleFileReader(snapshot: DriveBrowserSnapshot
 }
 
 export function shouldRenderDriveBodyRenderer(snapshot: DriveBrowserSnapshotDto): boolean {
-  return snapshot.current.type === 'file' && (snapshot.context === 'share' || snapshot.surface === 'standalone')
+  return snapshot.current.type === 'file'
 }
