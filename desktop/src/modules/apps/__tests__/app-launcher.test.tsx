@@ -35,7 +35,7 @@ describe("AppsModule", () => {
   it("renders the fixed system apps without management controls", async () => {
     await renderAppsModule(roots)
 
-    expect(document.querySelector("h2")?.textContent).toBe("应用")
+    expect(document.querySelector("h2")).toBeNull()
     expect(findButton("资源仓库")).toBeTruthy()
     expect(findButton("本地数据库")).toBeTruthy()
     expect(findButton("IDE 管理")).toBeTruthy()

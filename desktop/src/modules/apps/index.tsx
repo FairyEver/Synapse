@@ -1,5 +1,4 @@
 import { toast } from "sonner"
-import { ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { AppLauncherGrid } from "./components/app-launcher-grid"
 import { listSystemApps } from "./registry"
@@ -22,9 +21,5 @@ export function AppsModule() {
     }
   }
 
-  return (
-    <ModulePage title="应用">
-      <AppLauncherGrid apps={listSystemApps()} onOpenApp={(appId) => void openApp(appId)} />
-    </ModulePage>
-  )
+  return <AppLauncherGrid apps={listSystemApps()} onOpenApp={(appId) => void openApp(appId)} />
 }
