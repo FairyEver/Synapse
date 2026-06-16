@@ -10,14 +10,7 @@ export const APP_NAVIGATION_TABS = [
   { id: "workflow", label: "工作流", requiresWorkflowEntry: true },
   { id: "drive", label: "云盘" },
   { id: "automation", label: "自动化" },
-  { id: "skill", label: "技能" },
-  { id: "rule", label: "规则" },
-  { id: "prompt", label: "提示词" },
-  { id: "database", label: "数据库" },
-  { id: "editor-scan", label: "IDE" },
-  { id: "usage-cc", label: "CC" },
-  { id: "usage-codex", label: "Codex" },
-  { id: "model-price", label: "价格" },
+  { id: "apps", label: "应用" },
   { id: "settings", label: "设置" },
 ] as const
 
@@ -73,6 +66,6 @@ export const CC_SWITCH_IMPORT_JSON_MAX_BYTES = 2 * 1024 * 1024
 export const CC_SWITCH_IMPORT_MAX_PROVIDER_ROWS = 500
 
 // 默认激活的顶部导航菜单：主窗口有内容仓库时默认进入这个 tab。
-export const DEFAULT_APP_NAVIGATION_TAB_ID = "skill" satisfies AppNavigationTabId
+export const DEFAULT_APP_NAVIGATION_TAB_ID = "apps" satisfies AppNavigationTabId
 
 export type AppNavigationTabId = (typeof APP_NAVIGATION_TABS)[number]["id"]

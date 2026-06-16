@@ -325,6 +325,9 @@ const IPC_CHANNELS = {
     "getState": "synapse:live:get-state",
     "stateChanged": "synapse:events:live",
   },
+  "apps": {
+    "openSystemApp": "synapse:apps:open-system-app",
+  },
 } as const satisfies IpcChannelMap
 
 // Legacy event channels that are not declared by IpcModule descriptors yet.
@@ -345,6 +348,9 @@ const EVENT_CHANNELS = {
   diagnostics: {
     ping: "synapse:diagnostics:ping",
     pong: "synapse:diagnostics:pong",
+  },
+  apps: {
+    contentOpenRequest: "synapse:apps:content-open-request",
   },
 }
 
@@ -574,6 +580,13 @@ const synapseBridge: SynapseBridge = {
     node: process.versions.node,
   },
   isPackaged: !process.env.VITE_DEV_SERVER_URL,
+  apps: {
+    openSystemApp: (appId, options) => invoke(IPC_CHANNELS.apps.openSystemApp)({ appId, options }),
+    onContentOpenRequest: createRawPayloadSubscription(
+      subscribe,
+      EVENT_CHANNELS.apps.contentOpenRequest,
+    ),
+  },
   account: {
     getState: invoke(IPC_CHANNELS.account.getState),
     startLogin: invoke(IPC_CHANNELS.account.startLogin),

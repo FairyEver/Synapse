@@ -224,6 +224,9 @@ export const IPC_CHANNELS = {
     "listRuns": "synapse:automation:runs:list",
     "changed": "synapse:events:automation",
   },
+  "apps": {
+    "openSystemApp": "synapse:apps:open-system-app",
+  },
   "ops": {
     "diagnostics": "synapse:ops:diagnostics",
     "openLogDirectory": "synapse:ops:open-log-directory",

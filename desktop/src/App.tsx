@@ -1,4 +1,4 @@
-import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
@@ -6,7 +6,6 @@ import { KnowledgeBaseStorageMigrationDialog } from "@/app-shell/components/know
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
-import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { useKnowledgeBaseStorageMigration } from "@/app-shell/hooks/use-knowledge-base-storage-migration"
@@ -28,7 +27,6 @@ import {
   useRepositoryManager,
   useRepositoryState,
 } from "@/app-shell/use-repository-manager"
-import { getAllContentTypeIds } from "@/config/content-types"
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
@@ -37,20 +35,13 @@ import { parseContentStoreInstallWindowRequest } from "@/lib/content-store-insta
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentWindowPage } from "@/modules/content/components/content-window-page"
 import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
-import { RulesModule } from "@/modules/rules"
-import { SkillsModule } from "@/modules/skills"
-import { PromptsModule } from "@/modules/prompts"
 import { SettingsModule } from "@/modules/settings"
-import { DatabaseModule } from "@/modules/database"
+import { AppsModule } from "@/modules/apps"
 import { AgentModule } from "@/modules/agent"
 import { AutomationModule } from "@/modules/automation"
 import { DriveModule } from "@/modules/drive"
-import { EditorScanModule } from "@/modules/editor-scan"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
-import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
-import { ModelPriceModule } from "@/modules/model-price"
 import { WorkflowModule } from "@/modules/workflow"
-import type { SynapseContentType } from "@/types/content"
 import {
   APP_NAVIGATION_TABS,
   DEFAULT_APP_NAVIGATION_TAB_ID,
@@ -59,56 +50,16 @@ import {
 
 type AppTabId = AppNavigationTabId
 type AppTabChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
-type DialogKind = "install"
-type ContentDialogState = Record<DialogKind, boolean>
-type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
-type ContentDialogHandlerMap = Record<SynapseContentType, Record<DialogKind, (open: boolean) => void>>
 
 const logger = createRendererLogger("app")
 
-const TOP_LEVEL_CONTENT_TAB_ORDER = [
-  "skill",
-  "rule",
-  "prompt",
-] as const satisfies readonly SynapseContentType[]
-const CONTENT_TAB_LABELS = Object.fromEntries(
-  APP_NAVIGATION_TABS
-    .filter((tab) => TOP_LEVEL_CONTENT_TAB_ORDER.includes(tab.id as SynapseContentType))
-    .map((tab) => [tab.id, tab.label]),
-) as Record<SynapseContentType, string>
 const DEFAULT_APP_TAB: AppTabId = DEFAULT_APP_NAVIGATION_TAB_ID
-
-function createEmptyDialogStateMap(): ContentDialogStateMap {
-  return Object.fromEntries(
-    getAllContentTypeIds().map((contentType) => [contentType, {
-      install: false,
-    }]),
-  ) as ContentDialogStateMap
-}
-
-const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
-  hasBlockingModalOpen?: boolean
-  onInstallDialogOpenChange?: (open: boolean) => void
-  pendingContentOpenRequest?: ContentOpenRequest | null
-  onPendingContentOpenRequestConsumed?: (requestId: string) => void
-}>> = {
-  rule: RulesModule,
-  skill: SkillsModule,
-  prompt: PromptsModule,
-}
 
 function MainApp() {
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
   const manager = useRepositoryManager()
   const [activeTab, setActiveTabRaw] = useState<AppTabId>(() => hasRepositories ? DEFAULT_APP_TAB : "agent")
-  const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
-    createEmptyDialogStateMap,
-  )
-  const contentDialogStatesRef = useRef(contentDialogStates)
-  contentDialogStatesRef.current = contentDialogStates
-  const [pendingContentOpenRequest, setPendingContentOpenRequest] =
-    useState<ContentOpenRequest | null>(null)
   const [pendingAgentSession, setPendingAgentSession] =
     useState<OpenAgentSessionPayload | null>(null)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
@@ -199,48 +150,10 @@ function MainApp() {
     [workflowEntryVisible],
   )
 
-  const setContentDialogOpen = useCallback((
-    contentType: SynapseContentType,
-    kind: DialogKind,
-    open: boolean,
-  ) => {
-    const currentState = contentDialogStatesRef.current
-    if (currentState[contentType][kind] === open) {
-      return
-    }
-
-    logger.info("Content dialog visibility changed.", {
-      contentType,
-      dialogKind: kind,
-      open,
-    })
-
-    setContentDialogStates({
-      ...currentState,
-      [contentType]: {
-        ...currentState[contentType],
-        [kind]: open,
-      },
-    })
-  }, [])
-
-  const contentDialogHandlers = useMemo(
-    () => Object.fromEntries(
-      getAllContentTypeIds().map((contentType) => [contentType, {
-        install: (open: boolean) => setContentDialogOpen(contentType, "install", open),
-      }]),
-    ) as ContentDialogHandlerMap,
-    [setContentDialogOpen],
-  )
-
-  const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
-    state.install
-  ))
-
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
-    // 如果已经显示空状态页面，或有内容对话框打开（避免重置用户编辑状态），不需要再轮询
-    if (hasNoRepositories || isActiveRepositoryMissing || hasContentDialogOpen) {
+    // 如果已经显示空状态页面，不需要再轮询
+    if (hasNoRepositories || isActiveRepositoryMissing) {
       return
     }
 
@@ -260,7 +173,7 @@ function MainApp() {
       window.clearInterval(intervalId)
       window.removeEventListener("focus", handleFocus)
     }
-  }, [hasNoRepositories, isActiveRepositoryMissing, hasContentDialogOpen, manager])
+  }, [hasNoRepositories, isActiveRepositoryMissing, manager])
 
   useEffect(() => {
     logger.info("App mounted.", {
@@ -297,15 +210,16 @@ function MainApp() {
   useEffect(() => {
     return subscribeContentOpenRequest((request) => {
       ensureBodyInteractable()
-      setActiveTab(request.contentType, "shortcut")
-      setPendingContentOpenRequest(request)
+      void getSynapseBridge()?.apps.openSystemApp("resource-repository", {
+        contentOpenRequest: request,
+      }).catch((error) => {
+        logger.error("Failed to open resource repository app from content request.", {
+          contentType: request.contentType,
+          kind: request.kind,
+          error,
+        })
+      })
     })
-  }, [setActiveTab])
-
-  const handlePendingContentOpenRequestConsumed = useCallback((requestId: string) => {
-    setPendingContentOpenRequest((current) =>
-      current?.requestId === requestId ? null : current,
-    )
   }, [])
 
   useEffect(() => {
@@ -339,26 +253,6 @@ function MainApp() {
         ) : null}
       >
         <div className="flex h-full min-h-0 flex-col">
-          {TOP_LEVEL_CONTENT_TAB_ORDER.map((contentType) => {
-            if (activeTab !== contentType) {
-              return null
-            }
-
-            const ModuleComponent = CONTENT_MODULE_COMPONENTS[contentType]
-            const dialogHandlers = contentDialogHandlers[contentType]
-
-            return (
-              <ErrorBoundary key={contentType} fallbackTitle={`${CONTENT_TAB_LABELS[contentType]}模块出现问题`}>
-                <ModuleComponent
-                  key={contentType}
-                  hasBlockingModalOpen={hasContentDialogOpen}
-                  onInstallDialogOpenChange={dialogHandlers.install}
-                  pendingContentOpenRequest={pendingContentOpenRequest}
-                  onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}
-                />
-              </ErrorBoundary>
-            )
-          })}
           <div className={activeTab !== "agent" ? "hidden" : "contents"}>
             <ErrorBoundary fallbackTitle="Agent 模块出现问题">
               <AgentModule
@@ -372,34 +266,14 @@ function MainApp() {
               <DriveModule />
             </ErrorBoundary>
           ) : null}
-          {activeTab === "database" ? (
-            <ErrorBoundary fallbackTitle="数据库模块出现问题">
-              <DatabaseModule />
-            </ErrorBoundary>
-          ) : null}
           {activeTab === "automation" ? (
             <ErrorBoundary fallbackTitle="自动化模块出现问题">
               <AutomationModule />
             </ErrorBoundary>
           ) : null}
-          {activeTab === "editor-scan" ? (
-            <ErrorBoundary fallbackTitle="IDE 模块出现问题">
-              <EditorScanModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "usage-cc" ? (
-            <ErrorBoundary fallbackTitle="CC 使用分析出现问题">
-              <CcUsageAnalysisModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "usage-codex" ? (
-            <ErrorBoundary fallbackTitle="Codex 使用分析出现问题">
-              <CodexUsageAnalysisModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "model-price" ? (
-            <ErrorBoundary fallbackTitle="价格模块出现问题">
-              <ModelPriceModule />
+          {activeTab === "apps" ? (
+            <ErrorBoundary fallbackTitle="应用模块出现问题">
+              <AppsModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "workflow" && workflowEntryVisible ? (
