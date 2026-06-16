@@ -22,6 +22,7 @@ import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePor
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
+const DRIVE_OWNER_RENDER_CSP = "default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'self';"
 type DriveAccessCookieKind = "share" | "page" | "site"
 
 const prepareUploadSchema = z.object({
@@ -527,7 +528,7 @@ export class DrivePublicController {
       userId: request.user!.id,
       rootItemId,
     })
-    await sendPublishedAsset(response, asset)
+    await sendOwnerRenderedAsset(response, asset)
   }
 
   @UseGuards(UserAuthGuard)
@@ -543,7 +544,7 @@ export class DrivePublicController {
       rootItemId,
       currentItemId: itemId,
     })
-    await sendPublishedAsset(response, asset)
+    await sendOwnerRenderedAsset(response, asset)
   }
 
   @Get("/pages/:publishId")
@@ -1131,6 +1132,18 @@ async function sendPublishedAsset(response: Response, asset: {
   )
   if (asset.size !== undefined) response.setHeader("Content-Length", asset.size.toString())
   await pipeline(asset.stream, createResponseWritable(response))
+}
+
+async function sendOwnerRenderedAsset(response: Response, asset: {
+  readonly stream: NodeJS.ReadableStream
+  readonly contentType: string
+  readonly size?: bigint
+  readonly csp?: string
+}) {
+  await sendPublishedAsset(response, {
+    ...asset,
+    csp: asset.csp ?? DRIVE_OWNER_RENDER_CSP,
+  })
 }
 
 function createResponseWritable(response: Response): Writable {
