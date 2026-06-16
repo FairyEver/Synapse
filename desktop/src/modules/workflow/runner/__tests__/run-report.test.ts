@@ -252,6 +252,59 @@ describe("workflow run reports", () => {
     expect(report).not.toContain("raw-secret")
   })
 
+  it("includes Claude Code prompt and debug artifact paths in copied reports", () => {
+    const definition = workflowDefinition()
+    const claudeCodeNode: WorkflowNode = {
+      id: "claude-code-1",
+      name: "Claude Code",
+      type: "claude_code",
+      position: { x: 300, y: 0 },
+      config: {
+        prompt: "Run Claude Code",
+        variables: [],
+      },
+    }
+    const nextDefinition: WorkflowDefinition = {
+      ...definition,
+      nodes: [...definition.nodes, claudeCodeNode],
+    }
+    const result = nodeResult("claude-code-1", {
+      input: {
+        variables: {},
+        prompt: "Run Claude with token=secret-value",
+      },
+      outputs: {
+        claudeCodeDebug: {
+          command: "claude -p",
+          cwd: "/Users/liyang/project",
+          stdoutPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/stdout.log",
+          stderrPath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/stderr.log",
+          lastMessagePath: "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/last-message.txt",
+          stderrPreview: "Authorization: Bearer raw-secret at /Users/liyang/project",
+        },
+      },
+    })
+
+    const report = formatNodeRunReport({
+      definition: nextDefinition,
+      node: claudeCodeNode,
+      result,
+      orderIndex: 4,
+    })
+
+    expect(report).toContain("## 完整 Prompt")
+    expect(report).toContain("Run Claude with token=[redacted]")
+    expect(report).toContain('"command": "claude -p"')
+    expect(report).toContain('"cwd": "/Users/liyang/project"')
+    expect(report).toContain('"stdoutPath": "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/stdout.log"')
+    expect(report).toContain('"stderrPath": "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/stderr.log"')
+    expect(report).toContain('"lastMessagePath": "/Users/liyang/Library/Application Support/Synapse/workflow-runs/run-1/nodes/claude-code-1/claude-code/last-message.txt"')
+    expect(report).toContain("Authorization=[redacted] [redacted]")
+    expect(report).toContain("[path]")
+    expect(report).not.toContain("secret-value")
+    expect(report).not.toContain("raw-secret")
+  })
+
   it("does not include agent conversation session keys in copied reports", () => {
     const result = nodeResult("node-1", {
       outputs: {

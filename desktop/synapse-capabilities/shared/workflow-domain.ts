@@ -47,7 +47,7 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntr
 // MCP tool definitions (JSON Schema input schemas)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Available node types include prompt, switch, http_request, script, workflow_call, codex, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps its child params through paramTemplates, and returns the child workflow's End output. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
+const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Available node types include prompt, switch, http_request, script, workflow_call, codex, claude_code, and end. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in templates with {{variableName}}. A workflow_call node invokes another saved workflow, maps its child params through paramTemplates, and returns the child workflow's End output. A codex node runs local codex exec, needs an effective project, may set a per-task workingDirectory, and returns Codex's final reply text. A claude_code node runs the user's local Claude Code CLI via claude -p, needs an effective project, may set workingDirectory and Claude Code settings/MCP paths, and returns Claude Code's final reply text. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
 const modelTierSchema = {
   type: "string",
@@ -108,7 +108,7 @@ const codexConfigOverrideSchema = {
 
 const workflowDefinitionSchema = {
   type: "object",
-  description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex nodes inherit it, and defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
+  description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId when prompt/switch/codex/claude_code nodes inherit it, and defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
   properties: {
     id: { type: "string", minLength: 1 },
     name: { type: "string" },
@@ -116,7 +116,7 @@ const workflowDefinitionSchema = {
     version: { type: "string" },
     createdAt: { type: "number" },
     updatedAt: { type: "number" },
-    defaultProjectId: { type: "string", description: "Workflow-level default project/repository id. Prompt, switch, and codex nodes need this unless their config sets projectId." },
+    defaultProjectId: { type: "string", description: "Workflow-level default project/repository id. Prompt, switch, codex, and claude_code nodes need this unless their config sets projectId." },
     defaultProviderId: { type: "string", description: "Workflow-level default providerId. Prompt and switch nodes need this unless their config sets providerId." },
     defaultModelTier: modelTierSchema,
     defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt and switch nodes." },
@@ -144,20 +144,20 @@ const workflowDefinitionSchema = {
           position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
           config: {
             type: "object",
-            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, optional workingDirectory, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
+            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables. codex uses prompt, variables, projectId, optional workingDirectory, timeoutMins, approvalPolicy, sandbox, model/profile, Codex feature flags, writable dirs, images, configOverrides, and debug artifact capture. claude_code uses prompt, variables, projectId, optional workingDirectory, timeoutMins, permissionMode, model, maxTurns, outputFormat, settingSources, settingsPath, mcpConfigPath, allowed/disallowed tools, additionalDirectories, and debug artifact capture. workflow_call uses workflowId, variables, and paramTemplates to call a child workflow without provider fields.",
             properties: {
               providerId: { type: "string" },
               modelTier: modelTierSchema,
               projectId: { type: "string" },
               timeoutMins: { type: "number" },
-              prompt: { type: "string", description: "prompt/switch/codex only: prompt or instruction template. Codex prompt is sent to codex exec via stdin." },
+              prompt: { type: "string", description: "prompt/switch/codex/claude_code only: prompt or instruction template. Local CLI prompts are sent to codex exec or claude -p via stdin." },
               variables: { type: "array", items: variableBindingSchema },
               workflowId: { type: "string", description: "workflow_call only: child workflow ID to invoke." },
               paramTemplates: { type: "object", description: "workflow_call only: child parameter name to template string map." },
               approvalPolicy: { type: "string", enum: ["never", "on-request", "untrusted"], description: "codex only: Codex approval policy, e.g. never, on-request, or untrusted." },
               sandbox: { type: "string", enum: ["read-only", "workspace-write", "danger-full-access"], description: "codex only: Codex sandbox mode, e.g. read-only, workspace-write, or danger-full-access." },
-              workingDirectory: { type: "string", description: "codex only: optional per-task working directory. Supports {{variable}} interpolation, must already exist, and becomes both process cwd and Codex --cd. It is not automatically added to additionalWritableDirs." },
-              model: { type: "string", description: "codex only: optional Codex model name passed to codex exec." },
+              workingDirectory: { type: "string", description: "codex/claude_code only: optional per-task working directory. Supports {{variable}} interpolation and must already exist. For codex it becomes process cwd and Codex --cd; for claude_code it becomes process cwd." },
+              model: { type: "string", description: "codex/claude_code only: optional local CLI model name." },
               profile: { type: "string", description: "codex only: optional Codex profile passed to codex exec." },
               enableSearch: { type: "boolean", description: "codex only: pass --search before exec." },
               features: {
@@ -173,7 +173,21 @@ const workflowDefinitionSchema = {
               additionalWritableDirs: { type: "array", items: { type: "string", minLength: 1 }, description: "codex only: repeated --add-dir entries. Values may use {{variable}} interpolation and must resolve to existing directories before run." },
               images: { type: "array", items: { type: "string", minLength: 1 }, description: "codex only: repeated --image entries. Values may use {{variable}} interpolation and must resolve to existing files before run." },
               configOverrides: { type: "array", items: codexConfigOverrideSchema, description: "codex only: repeated Codex config overrides as { key, value } entries." },
-              captureDebugArtifacts: { type: "boolean", description: "codex only: when true, store sanitized debug artifacts and expose codexDebug paths in run output." },
+              permissionMode: { type: "string", enum: ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"], description: "claude_code only: Claude Code permission mode passed to claude -p." },
+              maxTurns: { type: "number", description: "claude_code only: optional maximum Claude Code turns." },
+              outputFormat: { type: "string", enum: ["text", "json", "stream-json"], description: "claude_code only: Claude Code output format." },
+              verbose: { type: "boolean", description: "claude_code only: pass --verbose." },
+              safeMode: { type: "boolean", description: "claude_code only: pass --safe-mode." },
+              bareMode: { type: "boolean", description: "claude_code only: pass --bare." },
+              noSessionPersistence: { type: "boolean", description: "claude_code only: pass --no-session-persistence." },
+              settingSources: { type: "array", items: { type: "string", enum: ["user", "project", "local"] }, description: "claude_code only: setting sources passed to Claude Code." },
+              settingsPath: { type: "string", description: "claude_code only: optional Claude Code settings path. Supports {{variable}} interpolation." },
+              mcpConfigPath: { type: "string", description: "claude_code only: optional Claude Code MCP config path. Supports {{variable}} interpolation." },
+              strictMcpConfig: { type: "boolean", description: "claude_code only: pass --strict-mcp-config." },
+              additionalDirectories: { type: "array", items: { type: "string", minLength: 1 }, description: "claude_code only: additional working directories. Values may use {{variable}} interpolation and must resolve to existing directories before run." },
+              allowedTools: { type: "array", items: { type: "string", minLength: 1 }, description: "claude_code only: allowed Claude Code tools." },
+              disallowedTools: { type: "array", items: { type: "string", minLength: 1 }, description: "claude_code only: disallowed Claude Code tools." },
+              captureDebugArtifacts: { type: "boolean", description: "codex/claude_code only: when true, store sanitized debug artifacts and expose CLI debug paths in run output." },
             },
           },
         },
@@ -207,10 +221,10 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_node_type_describe",
-      description: "Return the full manifest for a node type including config JSON Schema, port definitions, and field descriptors. For prompt and switch nodes, also returns `availableProviders` — a list of configured providers with their model names per tier. Codex nodes do not use providerId/modelTier; inspect the codex schema for CLI options.",
+      description: "Return the full manifest for a node type including config JSON Schema, port definitions, and field descriptors. For prompt and switch nodes, also returns `availableProviders` — a list of configured providers with their model names per tier. Codex and Claude Code nodes do not use providerId/modelTier; inspect their schemas for local CLI options.",
       inputSchema: {
         type: "object",
-        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"codex\", \"end\")." } },
+        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"codex\", \"claude_code\", \"end\")." } },
         required: ["nodeType"],
       },
     },
@@ -262,12 +276,12 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     // Whole write
     {
       name: "workflow_definition_create",
-      description: "Create a new empty workflow with a default end node. Returns { id, versionHash }. Prompt/switch nodes need defaultProjectId plus providerId/modelTier defaults unless each node sets projectId/providerId/modelTier itself. Codex nodes need defaultProjectId unless their config sets projectId.",
+      description: "Create a new empty workflow with a default end node. Returns { id, versionHash }. Prompt/switch nodes need defaultProjectId plus providerId/modelTier defaults unless each node sets projectId/providerId/modelTier itself. Codex and Claude Code nodes need defaultProjectId unless their config sets projectId.",
       inputSchema: {
         type: "object",
         properties: {
           name: { type: "string", description: "Optional workflow name. Defaults to \"新工作流\"." },
-          defaultProjectId: { type: "string", description: "Workflow-level default project/repository id for prompt, switch, and codex nodes." },
+          defaultProjectId: { type: "string", description: "Workflow-level default project/repository id for prompt, switch, codex, and claude_code nodes." },
           defaultProviderId: { type: "string", description: "Workflow-level default providerId for prompt and switch nodes. Discover with workflow_node_type_describe." },
           defaultModelTier: modelTierSchema,
           defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt and switch nodes." },
@@ -327,7 +341,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
             description: "Node specification.",
             properties: {
               name: { type: "string", description: "Display name for the node." },
-              type: { type: "string", description: "Node type (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"codex\", \"end\")." },
+              type: { type: "string", description: "Node type (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"workflow_call\", \"codex\", \"claude_code\", \"end\")." },
               position: { type: "object", description: "Optional { x, y } position. Auto-calculated if omitted.", properties: { x: { type: "number" }, y: { type: "number" } } },
               config: { type: "object", description: "Node configuration. Use workflow_node_type_describe to see required fields." },
             },

@@ -183,7 +183,7 @@ function formatNodeBasicInfo(definition: WorkflowDefinition, node: WorkflowNode,
 }
 
 function resolveNodeMainContent(node: WorkflowNode, result: NodeRunResult): { title: string; language: string; content: string } | null {
-  if ((node.type === "prompt" || node.type === "switch") && result.input.prompt) {
+  if ((node.type === "prompt" || node.type === "switch" || node.type === "claude_code") && result.input.prompt) {
     return { title: node.type === "switch" ? "判断 Prompt" : "完整 Prompt", language: "text", content: sanitizeWorkflowResultText(result.input.prompt) }
   }
   if (node.type === "script" && typeof node.config.script === "string") {

@@ -30,14 +30,16 @@ function stringProperty(source: unknown, key: string): string {
 }
 
 describe("workflow MCP tool definitions", () => {
-  it("teaches agents that workflow_call and codex are supported node types", () => {
+  it("teaches agents that workflow_call, codex, and claude_code are supported node types", () => {
     expect(toolByName("workflow_node_type_list").description).toContain("workflow_call")
     expect(toolByName("workflow_node_type_list").description).toContain("codex")
+    expect(toolByName("workflow_node_type_list").description).toContain("claude_code")
 
     const describeProperties = toolByName("workflow_node_type_describe").inputSchema.properties
     const describeNodeType = objectProperty(describeProperties, "nodeType")
     expect(stringProperty(describeNodeType, "description")).toContain("workflow_call")
     expect(stringProperty(describeNodeType, "description")).toContain("codex")
+    expect(stringProperty(describeNodeType, "description")).toContain("claude_code")
 
     const createProperties = toolByName("workflow_node_create").inputSchema.properties
     const nodeSchema = objectProperty(createProperties, "node")
@@ -45,9 +47,10 @@ describe("workflow MCP tool definitions", () => {
     const typeSchema = objectProperty(nodeProperties, "type")
     expect(stringProperty(typeSchema, "description")).toContain("workflow_call")
     expect(stringProperty(typeSchema, "description")).toContain("codex")
+    expect(stringProperty(typeSchema, "description")).toContain("claude_code")
   })
 
-  it("documents workflow_call and codex config fields in the full definition schema", () => {
+  it("documents workflow_call, codex, and claude_code config fields in the full definition schema", () => {
     const inspectProperties = toolByName("workflow_definition_inspect").inputSchema.properties
     const definitionSchema = objectProperty(inspectProperties, "definition")
     const definitionProperties = objectProperty(definitionSchema, "properties")
@@ -63,6 +66,9 @@ describe("workflow MCP tool definitions", () => {
     expect(configDescription).toContain("codex")
     expect(configDescription).toContain("approvalPolicy")
     expect(configDescription).toContain("configOverrides")
+    expect(configDescription).toContain("claude_code")
+    expect(configDescription).toContain("permissionMode")
+    expect(configDescription).toContain("settingSources")
 
     const configProperties = objectProperty(configSchema, "properties")
     expect(configProperties).toHaveProperty("enableSearch")
@@ -74,6 +80,9 @@ describe("workflow MCP tool definitions", () => {
     expect(configProperties).toHaveProperty("additionalWritableDirs")
     expect(configProperties).toHaveProperty("images")
     expect(configProperties).toHaveProperty("captureDebugArtifacts")
+    expect(configProperties).toHaveProperty("permissionMode")
+    expect(configProperties).toHaveProperty("additionalDirectories")
+    expect(configProperties).toHaveProperty("settingSources")
   })
 
   it("documents atomic edge creation fields on workflow_node_create", () => {
