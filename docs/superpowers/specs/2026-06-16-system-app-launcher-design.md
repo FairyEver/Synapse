@@ -16,7 +16,7 @@ First version only supports fixed system apps. It reserves an app type model for
 - Open every app in a separate `BrowserWindow`.
 - Keep one window per app id; opening an already-open app focuses the existing window.
 - Store each system app's launcher metadata in the owning module directory using one shared manifest shape.
-- Use bitmap icon assets for app icons, not lucide icons or CSS-drawn placeholders.
+- Use bitmap icon assets for app icons, not lucide icons or CSS-drawn temporary blocks.
 - Keep system apps fixed: not deletable, not renameable, and not icon-editable.
 
 ## Non-Goals
@@ -96,9 +96,24 @@ Each module manifest references its own icon asset. The launcher must not hard-c
 
 ## App Manifest Model
 
-Each system app exposes a manifest from its owning module directory.
+Each system app exposes a pure definition and a renderer manifest from its owning module directory.
 
-Proposed shape:
+The pure definition is safe for Electron main-process imports and contains no bitmap import:
+
+```ts
+type SynapseSystemAppDefinition = {
+  readonly id: SynapseSystemAppId
+  readonly type: "system"
+  readonly name: string
+  readonly windowTitle: string
+  readonly defaultView?: SynapseSystemAppDefaultView
+  readonly removable: false
+  readonly renameable: false
+  readonly iconEditable: false
+}
+```
+
+The renderer manifest extends the definition with the bitmap icon URL:
 
 ```ts
 type SynapseAppType = "system"
@@ -108,36 +123,52 @@ type UsageMonitorViewId = "cc" | "codex"
 type SynapseSystemAppDefaultView = ResourceRepositoryViewId | UsageMonitorViewId
 
 type SynapseSystemAppManifest = {
-  readonly id: SynapseSystemAppId
-  readonly type: "system"
-  readonly name: string
   readonly icon: string
-  readonly windowTitle: string
-  readonly defaultView?: SynapseSystemAppDefaultView
-  readonly removable: false
-  readonly renameable: false
-  readonly iconEditable: false
-}
+} & SynapseSystemAppDefinition
 ```
 
 Suggested files:
 
 ```text
+desktop/src/modules/resource-repository/app-definition.ts
 desktop/src/modules/resource-repository/app-manifest.ts
+desktop/src/modules/database/app-definition.ts
 desktop/src/modules/database/app-manifest.ts
+desktop/src/modules/editor-scan/app-definition.ts
 desktop/src/modules/editor-scan/app-manifest.ts
+desktop/src/modules/usage-analysis/app-definition.ts
 desktop/src/modules/usage-analysis/app-manifest.ts
+desktop/src/modules/model-price/app-definition.ts
 desktop/src/modules/model-price/app-manifest.ts
 ```
 
-The shared app registry imports these manifests and exposes:
+Each `app-definition.ts` exports pure metadata:
 
 ```ts
+export const databaseAppDefinition = { ... } satisfies SynapseSystemAppDefinition
+```
+
+Each `app-manifest.ts` imports its sibling definition and the bitmap icon:
+
+```ts
+export const databaseAppManifest = { ...databaseAppDefinition, icon } satisfies SynapseSystemAppManifest
+```
+
+The shared app helpers are split by import safety:
+
+```ts
+// desktop/src/modules/apps/definitions.ts
+listSystemAppDefinitions(): SynapseSystemAppDefinition[]
+getSystemAppDefinition(appId: string): SynapseSystemAppDefinition | null
+
+// desktop/src/modules/apps/registry.ts
 listSystemApps(): SynapseSystemAppManifest[]
 getSystemAppManifest(appId: string): SynapseSystemAppManifest | null
 ```
 
-The registry is the only place that assembles launcher apps. The launcher and system-app window renderer both consume the registry instead of duplicating app names or route metadata.
+The Electron main process must import only `desktop/src/modules/apps/definitions.ts` so it never evaluates PNG imports. The renderer launcher can import `registry.ts`.
+
+The app helper files are the only places that assemble launcher apps and app window definitions. The launcher consumes renderer manifests from `registry.ts`; Electron services consume pure definitions from `definitions.ts`; neither duplicates app names or route metadata.
 
 The type model intentionally leaves room to add future app types, but the first implementation only registers `system` apps.
 
@@ -157,7 +188,7 @@ The wrapper renders tabs:
 - `规则`
 - `提示词`
 
-The tab bodies reuse the existing `SkillsModule`, `RulesModule`, and `PromptsModule` where practical. If those modules currently assume top-level app state such as content dialog state or pending content open requests, the implementation should extract a narrow reusable content browser surface rather than duplicating resource UI.
+The tab bodies reuse the existing `SkillsModule`, `RulesModule`, and `PromptsModule`. If those modules currently assume top-level app state such as content dialog state or pending content open requests, the implementation should extract a narrow reusable content browser surface rather than duplicating resource UI.
 
 The wrapper default tab is `技能`.
 
@@ -194,13 +225,15 @@ Responsibilities:
 - Focus and restore an existing window when the same app is opened again.
 - Remove the map entry when the window closes.
 - Use existing renderer loading patterns from content, automation, and usage detail windows.
-- Use app manifest `windowTitle` for the window title.
+- Use pure app definition `windowTitle` for the window title.
 
 The service should expose:
 
 ```ts
-open(appId: SynapseSystemAppId): Promise<void>
+open(appId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions): Promise<void>
 ```
+
+`SynapseSystemAppOpenOptions` can carry a `contentOpenRequest` for the Resource Repository window. When a Resource Repository window already exists, the service focuses it and sends `synapse:apps:content-open-request` to that window. When it is opening a fresh Resource Repository window, it encodes the request into the initial `window=system-app` URL. This preserves existing Skill/Rule content-open behavior after the top-level Skill/Rule/Prompt tabs move into the launcher.
 
 Window defaults:
 
@@ -216,12 +249,13 @@ Use the same defaults for all first-phase system apps. Do not add per-app bounds
 Expose one renderer bridge method:
 
 ```ts
-synapse.apps.openSystemApp(appId)
+synapse.apps.openSystemApp(appId, options?)
+synapse.apps.onContentOpenRequest(listener)
 ```
 
 IPC validation should reject unknown app ids before calling the window service. Unknown ids should not create a window.
 
-The launcher uses this bridge method when an app icon is clicked.
+The launcher uses `openSystemApp` when an app icon is clicked. System app windows use `onContentOpenRequest` to receive content-open requests delivered to an already-open Resource Repository window.
 
 ## Renderer Window Entry
 
@@ -237,9 +271,10 @@ It renders a new `SystemAppWindowApp`.
 `SystemAppWindowApp`:
 
 - reads `appId` from the URL;
-- looks up the manifest in the registry;
+- validates the app id through `definitions.ts`;
 - renders a short error state if the id is missing or unknown;
 - renders the correct system app content for known ids;
+- forwards content-open events from non-resource system app windows to the Resource Repository app window;
 - keeps window UI minimal and uses existing module surfaces.
 
 ## App Launcher Module
