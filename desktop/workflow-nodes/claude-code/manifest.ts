@@ -1,0 +1,38 @@
+import { Bot } from "lucide-react"
+import type { NodeManifest } from "../types"
+import { claudeCodeNodeConfigSchema, defaultClaudeCodeNodeConfig, type ClaudeCodeNodeConfig } from "./schema"
+
+export const claudeCodeNodeManifest: NodeManifest<ClaudeCodeNodeConfig> = {
+  type: "claude_code",
+  title: "Claude Code",
+  icon: Bot,
+  color: "bg-primary/10",
+  defaultConfig: defaultClaudeCodeNodeConfig,
+  ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
+  cardSummary: (config) => ({
+    title: "Claude Code",
+    subtitle: config.prompt.slice(0, 60) || "未编写指令",
+  }),
+  configFields: [
+    { name: "permissionMode", kind: "select", label: "权限模式" },
+    { name: "model", kind: "text", label: "模型", optional: true },
+    { name: "maxTurns", kind: "number", label: "最大轮数", optional: true },
+    { name: "outputFormat", kind: "select", label: "输出格式" },
+    { name: "timeoutMins", kind: "number", label: "超时分钟", optional: true },
+    { name: "workingDirectory", kind: "text", label: "工作目录", optional: true },
+    { name: "safeMode", kind: "select", label: "Safe mode", optional: true },
+    { name: "bareMode", kind: "select", label: "Bare mode", optional: true },
+    { name: "noSessionPersistence", kind: "select", label: "不保存会话", optional: true },
+    { name: "settingSources", kind: "record", label: "设置来源", optional: true },
+    { name: "settingsPath", kind: "text", label: "Settings 路径", optional: true },
+    { name: "mcpConfigPath", kind: "text", label: "MCP 配置路径", optional: true },
+    { name: "strictMcpConfig", kind: "select", label: "严格 MCP 配置", optional: true },
+    { name: "additionalDirectories", kind: "record", label: "额外目录", optional: true },
+    { name: "allowedTools", kind: "record", label: "允许工具", optional: true },
+    { name: "disallowedTools", kind: "record", label: "禁用工具", optional: true },
+    { name: "captureDebugArtifacts", kind: "select", label: "保存调试文件", optional: true },
+    { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
+    { name: "prompt", kind: "text", label: "指令" },
+  ],
+  configSchema: claudeCodeNodeConfigSchema,
+}
