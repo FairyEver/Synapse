@@ -15,6 +15,7 @@ import {
 import {
   clampDriveFloatingMenuPosition,
   DriveRendererContent,
+  getDriveFloatingMenuNewWindowUrl,
   shouldSuppressDriveFloatingMenuOpen,
 } from './renderers/drive-renderer-shell'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
@@ -414,6 +415,19 @@ describe('drive browser view model', () => {
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('data-reader-toolbar="true"')
+  })
+
+  it('does not offer opening a standalone file reader in another new window', () => {
+    const snapshot = createSnapshot({
+      context: 'owner',
+      surface: 'standalone',
+      preview: {
+        ...basePreview(),
+        visitUrl: '/drive/items/root/items/file/render',
+      },
+    })
+
+    expect(getDriveFloatingMenuNewWindowUrl(snapshot)).toBeNull()
   })
 
   it('clamps the floating file menu inside the viewport', () => {
