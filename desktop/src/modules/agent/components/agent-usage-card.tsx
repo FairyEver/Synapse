@@ -92,7 +92,7 @@ function AgentUsageCard({
       <section
         aria-label="用量统计"
         className={cn(
-          "mt-2 w-full min-w-0 max-w-full overflow-hidden rounded-lg bg-muted/60 text-foreground",
+          "@container/usage-card mt-2 w-full min-w-0 max-w-full overflow-hidden rounded-lg bg-muted/60 text-foreground",
           className,
         )}
       >
@@ -138,12 +138,19 @@ function AgentUsageCard({
             />
           ))}
         </div>
-        <div className={cn("mt-2 grid min-w-0", data.rows.length >= 5 ? "grid-cols-5" : "grid-cols-4")}>
+        <div
+          data-usage-stats-grid
+          className={cn(
+            "mt-2 grid min-w-0 @max-[499px]/usage-card:grid-cols-2 @max-[499px]/usage-card:gap-y-3",
+            data.rows.length >= 5 ? "grid-cols-5" : "grid-cols-4",
+          )}
+        >
           {data.rows.map((row, index) => (
             <div
               key={row.key}
+              data-usage-stat-item
               className={cn(
-                "min-w-0 px-2",
+                "min-w-0 px-2 @max-[499px]/usage-card:odd:border-l-0 @max-[499px]/usage-card:odd:pl-0",
                 index === 0 ? "pl-0" : "border-l border-border",
                 index === data.rows.length - 1 ? "pr-0" : undefined,
               )}
