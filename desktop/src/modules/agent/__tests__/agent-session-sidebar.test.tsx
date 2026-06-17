@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AgentSessionSidebar } from "../components/agent-session-sidebar"
 import { AgentSidebarSessionRow } from "../components/agent-sidebar-session-row"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "@/lib/default-agent-workspace"
+import * as createSessionName from "../create-session-name"
 
 const rendererLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -72,6 +73,87 @@ describe("AgentSessionSidebar", () => {
     expect(html).toContain("新建会话")
     expect(html).not.toContain("尚未配置项目")
     expect(html).not.toContain("添加项目后即可开始 Agent 对话")
+  })
+
+  it("lets users edit the generated name before creating a session", async () => {
+    vi.spyOn(createSessionName, "formatCreateSessionName").mockReturnValue("24日下午1:30")
+    const onCreateSession = vi.fn()
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([
+            {
+              id: "anthropic",
+              name: "Anthropic",
+              category: "official",
+              apiKeyField: "ANTHROPIC_API_KEY",
+              active: true,
+              readonly: true,
+              model: "claude-sonnet-4-5",
+              sonnetModel: "claude-sonnet-4-5",
+              createdAt: "2026-05-13T00:00:00.000Z",
+              updatedAt: "2026-05-13T00:00:00.000Z",
+            },
+          ]),
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionSidebar
+          sessions={[]}
+          archivedSessions={[]}
+          projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
+          selectedProjectId="project-1"
+          selectedConversationId={undefined}
+          sourceFilter="user"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onCreateSession={onCreateSession}
+          onSourceFilterChange={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button[title='新建会话']")?.click()
+      await Promise.resolve()
+    })
+
+    const input = document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")
+    expect(input?.value).toBe("24日下午1:30")
+
+    await act(async () => {
+      if (!input) return
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      if (!setter) throw new Error("Input value setter not found")
+      setter.call(input, "需求复盘")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+    await act(async () => {
+      confirmButton?.click()
+    })
+
+    expect(onCreateSession).toHaveBeenCalledWith("project-1", {
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelTier: "sonnet",
+      modelName: "claude-sonnet-4-5",
+    }, "需求复盘")
   })
 
   it("allows long session titles to truncate inside the sidebar", () => {
@@ -431,7 +513,7 @@ describe("AgentSessionSidebar", () => {
       providerName: "Anthropic",
       modelTier: "sonnet",
       modelName: "claude-sonnet-4-5",
-    })
+    }, expect.any(String))
   })
 
   it("shows the dialog even when only one provider is available", async () => {
@@ -503,7 +585,7 @@ describe("AgentSessionSidebar", () => {
       providerName: "Anthropic",
       modelTier: "sonnet",
       modelName: "claude-sonnet-4-5",
-    })
+    }, expect.any(String))
   })
 
   it("keeps provider selection open until session creation finishes", async () => {

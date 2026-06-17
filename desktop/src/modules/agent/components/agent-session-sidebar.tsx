@@ -21,6 +21,7 @@ import {
   filterSessionsBySource,
   type ConversationSourceFilter,
 } from "../conversation-source"
+import { formatCreateSessionName } from "../create-session-name"
 
 type ProjectOption = {
   id: string
@@ -37,7 +38,11 @@ type AgentSessionSidebarProps = {
   sourceFilter: ConversationSourceFilter
   unreadByConversationId: Record<string, number>
   sendingConversationIds: ReadonlySet<string>
-  onCreateSession: (projectId: string, selection: ProviderModelSelection) => void | Promise<void>
+  onCreateSession: (
+    projectId: string,
+    selection: ProviderModelSelection,
+    name?: string,
+  ) => void | Promise<void>
   onSourceFilterChange: (sourceFilter: ConversationSourceFilter) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
@@ -62,7 +67,10 @@ function AgentSessionSidebar({
   onRename,
 }: AgentSessionSidebarProps) {
   const { config } = useAppConfig()
-  const [createProject, setCreateProject] = useState<ProjectOption | null>(null)
+  const [createTarget, setCreateTarget] = useState<{
+    readonly project: ProjectOption
+    readonly initialName: string
+  } | null>(null)
   const visibleSessions = filterSessionsBySource(sessions, sourceFilter)
   const visibleArchivedSessions = filterSessionsBySource(archivedSessions, sourceFilter)
   const sessionsByProject = groupSessionsByProject(visibleSessions)
@@ -105,7 +113,10 @@ function AgentSessionSidebar({
             selectedConversationId={selectedConversationId}
             unreadByConversationId={unreadByConversationId}
             sendingConversationIds={sendingConversationIds}
-            onCreateSession={() => setCreateProject(project)}
+            onCreateSession={() => setCreateTarget({
+              project,
+              initialName: formatCreateSessionName(new Date()),
+            })}
             onSelect={onSelect}
             onDelete={onDelete}
             onDeleteOthers={onDeleteOthers}
@@ -127,13 +138,17 @@ function AgentSessionSidebar({
         ) : null}
       </div>
       <ProviderModelSelectDialog
-        open={createProject !== null}
-        onOpenChange={(open) => { if (!open) setCreateProject(null) }}
+        open={createTarget !== null}
+        onOpenChange={(open) => { if (!open) setCreateTarget(null) }}
         defaultSelection={config.agent.defaultProviderModel ?? undefined}
-        onSelect={async (selection) => {
-          if (!createProject) return
-          await onCreateSession(createProject.id, selection)
-          setCreateProject(null)
+        confirmInput={createTarget ? {
+          initialValue: createTarget.initialName,
+          ariaLabel: "会话名称",
+        } : undefined}
+        onSelect={async (selection, meta) => {
+          if (!createTarget) return
+          await onCreateSession(createTarget.project.id, selection, meta?.confirmInputValue)
+          setCreateTarget(null)
         }}
       />
     </ModuleSidebar>
