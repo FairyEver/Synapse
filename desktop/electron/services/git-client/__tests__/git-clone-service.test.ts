@@ -1,3 +1,4 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { createGitCloneService, detectRemoteKind } from "../git-clone-service"
 
@@ -31,7 +32,12 @@ describe("git clone service", () => {
       name: "docs",
     })
 
-    expect(run).toHaveBeenCalledWith({ cwd: "/work", args: ["clone", "--progress", "https://git.example.com/team/docs.git", "/work/docs"], timeoutMs: 300000 })
+    const targetPath = path.resolve("/work/docs")
+    expect(run).toHaveBeenCalledWith({
+      cwd: path.dirname(targetPath),
+      args: ["clone", "--progress", "https://git.example.com/team/docs.git", targetPath],
+      timeoutMs: 300000,
+    })
     expect(result.repository.id).toBe("repo-1")
   })
 

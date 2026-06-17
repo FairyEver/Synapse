@@ -1,9 +1,10 @@
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { assertRepositoryPath, normalizeRepositoryPath } from "../git-path-utils"
 
 describe("git path utilities", () => {
   it("normalizes repository paths", () => {
-    expect(normalizeRepositoryPath("/tmp/repo/../repo")).toBe("/tmp/repo")
+    expect(normalizeRepositoryPath("/tmp/repo/../repo")).toBe(path.resolve("/tmp/repo"))
   })
 
   it("allows paths inside the repository", () => {
