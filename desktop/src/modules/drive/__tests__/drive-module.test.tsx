@@ -166,6 +166,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  window.getSelection()?.removeAllRanges()
   for (const root of roots) {
     act(() => {
       root.unmount()
@@ -508,6 +509,52 @@ describe("DriveModule", () => {
 
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
     expect(document.body.textContent).not.toContain("cui.md")
+  })
+
+  it("does not open a folder when releasing a row click after selecting its name", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      createDriveItem({ id: "file-1", name: "常用.md", type: "file" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    selectElementText(driveItemNameElement("作业范文"))
+
+    await act(async () => {
+      driveItemNameElement("作业范文").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      getTableRow("作业范文").click()
+      await flushPromises()
+    })
+
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens a folder from row whitespace after a previous name selection", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-1", name: "cui.md", type: "file", parentId: "folder-1" }),
+      ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    selectElementText(driveItemNameElement("作业范文"))
+
+    await act(async () => {
+      const row = getTableRow("作业范文")
+      row.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      row.click()
+      await flushPromises()
+    })
+    await flushAct()
+
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "folder-1" })
+    expect(document.body.textContent).toContain("cui.md")
   })
 
   it("opens a name context menu for copying name and drive path", async () => {
@@ -1552,6 +1599,17 @@ function driveItemNameElement(text: string): HTMLElement {
   const element = getTableRow(text).querySelector<HTMLElement>(`[title="${text}"]`)
   if (!element) throw new Error(`Drive item name not found: ${text}`)
   return element
+}
+
+function selectElementText(element: HTMLElement): void {
+  const textNode = Array.from(element.childNodes).find((node) => node.nodeType === Node.TEXT_NODE)
+  if (!textNode) throw new Error("Selectable text node not found")
+  const range = document.createRange()
+  range.selectNodeContents(textNode)
+  const selection = window.getSelection()
+  if (!selection) throw new Error("Selection API not available")
+  selection.removeAllRanges()
+  selection.addRange(range)
 }
 
 function rowButton(rowText: string, buttonText: string): HTMLButtonElement | undefined {

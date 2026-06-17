@@ -1348,12 +1348,21 @@ function DriveFileListRow({
   const statusBadges = getDriveStatusBadges(item)
   const canShare = canShareDriveItem(item)
   const hasActiveShare = Boolean(item.activeShareId)
+  const pointerDownStartedOnNameRef = useRef(false)
 
   return (
     <TableRow
       className={cn(isFolder && !opening ? "cursor-pointer" : undefined)}
       aria-busy={opening || undefined}
-      onClick={isFolder && !opening ? () => onOpenFolder(item) : undefined}
+      onPointerDownCapture={(event) => {
+        pointerDownStartedOnNameRef.current = isDriveItemNameTarget(event.target)
+      }}
+      onClick={isFolder && !opening ? (event) => {
+        const shouldIgnoreSelectionClick = pointerDownStartedOnNameRef.current && hasSelectedTextInside(event.currentTarget)
+        pointerDownStartedOnNameRef.current = false
+        if (shouldIgnoreSelectionClick) return
+        onOpenFolder(item)
+      } : undefined}
     >
       <TableCell className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
@@ -1373,6 +1382,7 @@ function DriveFileListRow({
               {isFolder ? (
                 <span
                   className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
+                  data-drive-item-name="true"
                   title={item.name}
                   onClick={(event) => {
                     event.stopPropagation()
@@ -1386,6 +1396,7 @@ function DriveFileListRow({
               ) : (
                 <span
                   className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
+                  data-drive-item-name="true"
                   title={item.name}
                   onClick={(event) => {
                     event.stopPropagation()
@@ -1443,6 +1454,23 @@ function DriveFileListRow({
       </TableCell>
     </TableRow>
   )
+}
+
+function isDriveItemNameTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Node)) return false
+  const element = target instanceof Element ? target : target.parentElement
+  return Boolean(element?.closest("[data-drive-item-name='true']"))
+}
+
+function hasSelectedTextInside(element: HTMLElement): boolean {
+  const selection = element.ownerDocument.defaultView?.getSelection()
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false
+  if (selection.toString().trim().length === 0) return false
+
+  for (let index = 0; index < selection.rangeCount; index += 1) {
+    if (selection.getRangeAt(index).intersectsNode(element)) return true
+  }
+  return false
 }
 
 function DriveItemNameContextMenu({
