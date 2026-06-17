@@ -22,13 +22,13 @@ export function AppLauncherGrid({ apps, onOpenApp }: AppLauncherGridProps) {
         <button
           key={app.id}
           type="button"
-          className="flex min-h-20 w-full items-center gap-4 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-h-16 w-full items-center gap-3 py-2 pl-3 pr-7 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
           onClick={() => onOpenApp(app.id)}
         >
           <img
             src={app.icon}
             alt=""
-            className="size-12 shrink-0 rounded-lg object-cover"
+            className="size-14 shrink-0 object-cover"
             draggable={false}
           />
           <span className="min-w-0 flex-1">

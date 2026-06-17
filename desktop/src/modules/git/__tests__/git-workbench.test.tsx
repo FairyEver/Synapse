@@ -99,6 +99,16 @@ describe("GitWorkbench", () => {
     expect(document.body.textContent).toContain("abc123")
   })
 
+  it("does not leave a surface gap between tabs and content", () => {
+    const html = renderToStaticMarkup(<GitWorkbench repository={repository} onBack={vi.fn()} />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const tabs = container.querySelector('[data-slot="tabs"]')
+
+    expect(tabs?.className).toContain("gap-0")
+  })
+
   it("shows loading labels while running toolbar actions", async () => {
     const pendingSync = deferred()
     bridge.git.sync.mockReturnValue(pendingSync.promise)
