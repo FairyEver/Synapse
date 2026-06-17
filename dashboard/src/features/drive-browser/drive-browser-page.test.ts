@@ -345,7 +345,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-renderer-region="true"')
   })
 
-  it('renders console files as split finder and renderer layout', () => {
+  it('renders console files as a full renderer layout without sibling list', () => {
     const snapshot = createSnapshot({
       context: 'owner',
       surface: 'console',
@@ -371,12 +371,15 @@ describe('drive browser view model', () => {
 
     const html = renderToStaticMarkup(createElement(DriveFinder, { snapshot, mode: 'console' }))
 
-    expect(html).toContain('data-drive-finder="split"')
+    expect(html).toContain('data-drive-finder="file"')
     expect(html).toContain('data-drive-renderer-region="true"')
     expect(html).toContain('新窗口打开')
     expect(html).toContain('/drive/items/file?surface=standalone')
     expect(html).toContain('打开方式')
     expect(html).toContain('<h1>Notes</h1>')
+    expect(html).not.toContain('data-drive-finder="split"')
+    expect(html).not.toContain('data-slot="table"')
+    expect(html).not.toContain('<th')
     expect(html).not.toContain('文件操作')
   })
 

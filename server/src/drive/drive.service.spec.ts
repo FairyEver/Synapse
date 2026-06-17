@@ -880,7 +880,7 @@ describe("DriveService", () => {
     })])
   })
 
-  it("builds console file snapshots with current folder siblings", async () => {
+  it("builds console file snapshots without sibling children", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -903,17 +903,8 @@ describe("DriveService", () => {
     })
 
     expect(snapshot.current.id).toBe(selected.id)
-    expect(snapshot.children.map((item) => item.id).sort()).toEqual([selected.id, sibling.id].sort())
-    expect(snapshot.children).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: selected.id,
-        browserUrl: `/console/drive/items/${selected.id}?surface=console`,
-      }),
-      expect.objectContaining({
-        id: sibling.id,
-        browserUrl: `/console/drive/items/${sibling.id}?surface=console`,
-      }),
-    ]))
+    expect(snapshot.children).toEqual([])
+    expect(snapshot.childrenPage?.hasMore).toBe(false)
     vi.mocked(storageMock.getObjectStream).mockClear()
   })
 

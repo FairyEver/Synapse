@@ -769,9 +769,7 @@ export class DriveService implements OnApplicationBootstrap {
     const route: DriveBrowserRouteContext = { context: "owner", surface: input.surface }
     const children = current.type === DRIVE_ITEM_TYPE.folder
       ? await this.listActiveChildrenPage(root.userId, current.id, input.childrenPage)
-      : input.surface === "console"
-        ? await this.listActiveChildrenPage(root.userId, current.parentId, input.childrenPage)
-        : emptyDriveBrowserChildrenPage(input.childrenPage)
+      : emptyDriveBrowserChildrenPage(input.childrenPage)
 
     return {
       context: "owner",

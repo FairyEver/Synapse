@@ -19,7 +19,7 @@ import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { getDriveFinderActions } from '../shared/drive-view-model'
 import { DriveFinderBreadcrumbs } from './drive-finder-breadcrumbs'
 import { DriveFinderList } from './drive-finder-list'
-import { DriveFinderFullLayout, DriveFinderSplitLayout } from './drive-finder-layout'
+import { DriveFinderFileLayout, DriveFinderFullLayout } from './drive-finder-layout'
 
 export function DriveFinder({
   snapshot,
@@ -43,40 +43,35 @@ export function DriveFinder({
     setRendererId((current) => findDriveRendererOption(snapshot, current)?.id ?? rendererOptions[0]?.id ?? null)
   }, [rendererOptions, snapshot])
 
-  const list = (
-    <DriveFinderList
-      snapshot={snapshot}
-      onLoadMoreChildren={onLoadMoreChildren}
-      loadingMoreChildren={loadingMoreChildren}
-      loadMoreChildrenError={loadMoreChildrenError}
-    />
-  )
-
   return (
     <section data-drive-finder-mode={mode} className='flex min-h-0 flex-1 flex-col gap-3'>
       <DriveFinderToolbar snapshot={snapshot} />
       {fileSelected ? (
-        <DriveFinderSplitLayout
-          list={list}
-          renderer={(
-            <div className='flex h-full min-h-0 flex-col'>
-              <DriveFinderFileHeader
+        <DriveFinderFileLayout>
+          <div className='flex h-full min-h-0 flex-col'>
+            <DriveFinderFileHeader
+              snapshot={snapshot}
+              rendererId={selectedRenderer?.id ?? null}
+              onRendererChange={setRendererId}
+            />
+            <div className='min-h-0 flex-1 overflow-hidden'>
+              <DriveRendererShell
                 snapshot={snapshot}
                 rendererId={selectedRenderer?.id ?? null}
                 onRendererChange={setRendererId}
               />
-              <div className='min-h-0 flex-1 overflow-hidden'>
-                <DriveRendererShell
-                  snapshot={snapshot}
-                  rendererId={selectedRenderer?.id ?? null}
-                  onRendererChange={setRendererId}
-                />
-              </div>
             </div>
-          )}
-        />
+          </div>
+        </DriveFinderFileLayout>
       ) : (
-        <DriveFinderFullLayout>{list}</DriveFinderFullLayout>
+        <DriveFinderFullLayout>
+          <DriveFinderList
+            snapshot={snapshot}
+            onLoadMoreChildren={onLoadMoreChildren}
+            loadingMoreChildren={loadingMoreChildren}
+            loadMoreChildrenError={loadMoreChildrenError}
+          />
+        </DriveFinderFullLayout>
       )}
     </section>
   )

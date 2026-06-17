@@ -8,20 +8,14 @@ export function DriveFinderFullLayout({ children }: { readonly children: ReactNo
   )
 }
 
-export function DriveFinderSplitLayout({
-  list,
-  renderer,
-}: {
-  readonly list: ReactNode
-  readonly renderer: ReactNode
-}) {
+export function DriveFinderFileLayout({ children }: { readonly children: ReactNode }) {
   return (
     <div
-      data-drive-finder='split'
-      className='grid min-h-0 flex-1 overflow-hidden rounded-md border bg-background md:grid-cols-[minmax(260px,32%)_minmax(0,1fr)]'
+      data-drive-finder='file'
+      data-drive-renderer-region='true'
+      className='min-h-0 flex-1 overflow-hidden rounded-md border bg-background'
     >
-      <div className='min-h-0 border-b md:border-r md:border-b-0'>{list}</div>
-      <div data-drive-renderer-region='true' className='min-h-0'>{renderer}</div>
+      {children}
     </div>
   )
 }
