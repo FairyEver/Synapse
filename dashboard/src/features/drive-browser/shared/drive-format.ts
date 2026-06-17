@@ -13,7 +13,11 @@ export function driveBrowserKindLabel(kind: DriveBrowserPreviewKind) {
 
 export function formatDriveBrowserSize(item: DriveBrowserItemDto) {
   if (item.type === 'folder') return '-'
-  const bytes = Number(item.size)
+  return formatDriveBrowserBytes(item.size)
+}
+
+export function formatDriveBrowserBytes(value: string) {
+  const bytes = Number(value)
   if (!Number.isFinite(bytes)) return '-'
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`

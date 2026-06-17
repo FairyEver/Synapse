@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, dashboardApi, driveBrowserApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
 
 describe('adminApi.cleanupLogs', () => {
   afterEach(() => {
@@ -360,6 +360,67 @@ describe('driveBrowserApi', () => {
     } finally {
       unsubscribe()
     }
+  })
+})
+
+describe('driveFileVersionsApi', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function mockJsonResponse(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+  }
+
+  it('uses owner file version endpoints', async () => {
+    const fetchMock = mockJsonResponse({ ok: true })
+
+    await driveFileVersionsApi.list('item/id', { offset: 10, limit: 20 })
+    await driveFileVersionsApi.restore('item/id', 'version/id')
+    await driveFileVersionsApi.updatePin('item/id', 'version/id', true)
+    await driveFileVersionsApi.delete('item/id', 'version/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/drive/items/item%2Fid/versions?offset=10&limit=20',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/drive/items/item%2Fid/versions/version%2Fid/restore',
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/drive/items/item%2Fid/versions/version%2Fid',
+      expect.objectContaining({
+        body: JSON.stringify({ isPinned: true }),
+        credentials: 'include',
+        method: 'PATCH',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/drive/items/item%2Fid/versions/version%2Fid',
+      expect.objectContaining({
+        credentials: 'include',
+        method: 'DELETE',
+      })
+    )
+    expect(driveFileVersionsApi.downloadUrl('item/id', 'version/id')).toBe(
+      '/api/drive/items/item%2Fid/versions/version%2Fid/download'
+    )
   })
 })
 

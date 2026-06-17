@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { Download, ExternalLink } from 'lucide-react'
+import { Download, ExternalLink, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,9 +14,10 @@ import {
   getDriveRendererOptions,
   type DriveRendererId,
 } from '../renderers/drive-renderer-registry'
+import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
-import { getDriveFinderActions } from '../shared/drive-view-model'
+import { getDriveFileVersionItemId, getDriveFinderActions } from '../shared/drive-view-model'
 import { DriveFinderBreadcrumbs } from './drive-finder-breadcrumbs'
 import { DriveFinderList } from './drive-finder-list'
 import { DriveFinderFileLayout, DriveFinderFullLayout } from './drive-finder-layout'
@@ -37,7 +38,9 @@ export function DriveFinder({
   const fileSelected = snapshot.current.type === 'file'
   const rendererOptions = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
   const [rendererId, setRendererId] = useState<DriveRendererId | null>(rendererOptions[0]?.id ?? null)
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const selectedRenderer = findDriveRendererOption(snapshot, rendererId)
+  const versionItemId = getDriveFileVersionItemId(snapshot)
 
   useEffect(() => {
     setRendererId((current) => findDriveRendererOption(snapshot, current)?.id ?? rendererOptions[0]?.id ?? null)
@@ -53,6 +56,7 @@ export function DriveFinder({
               snapshot={snapshot}
               rendererId={selectedRenderer?.id ?? null}
               onRendererChange={setRendererId}
+              onOpenVersions={versionItemId ? () => setVersionsOpen(true) : undefined}
             />
             <div className='min-h-0 flex-1 overflow-hidden'>
               <DriveRendererShell
@@ -73,6 +77,13 @@ export function DriveFinder({
           />
         </DriveFinderFullLayout>
       )}
+      {versionsOpen && versionItemId ? (
+        <DriveFileVersionsDialog
+          itemId={versionItemId}
+          open={versionsOpen}
+          onOpenChange={setVersionsOpen}
+        />
+      ) : null}
     </section>
   )
 }
@@ -100,10 +111,12 @@ function DriveFinderFileHeader({
   snapshot,
   rendererId,
   onRendererChange,
+  onOpenVersions,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly rendererId: DriveRendererId | null
   readonly onRendererChange: (id: DriveRendererId) => void
+  readonly onOpenVersions?: () => void
 }) {
   const actions = getDriveFinderActions(snapshot)
   const rendererOptions = getDriveRendererOptions(snapshot)
@@ -135,6 +148,12 @@ function DriveFinderFileHeader({
               <ExternalLink data-icon='inline-start' />
               新窗口打开
             </a>
+          </Button>
+        ) : null}
+        {onOpenVersions ? (
+          <Button type='button' variant='outline' size='sm' onClick={onOpenVersions}>
+            <History data-icon='inline-start' />
+            历史版本
           </Button>
         ) : null}
         {rendererOptions.length > 1 ? (

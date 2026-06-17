@@ -4,7 +4,7 @@ import {
   buildConsoleDriveItemBrowserUrl,
   type DriveBrowserSnapshotDto,
 } from '@synapse/shared'
-import { Download, ExternalLink, MoreHorizontal } from 'lucide-react'
+import { Download, ExternalLink, History, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -16,8 +16,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { driveBrowserKindLabel, formatDriveBrowserDate, formatDriveBrowserSize } from '../shared/drive-format'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
+import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import { DriveCodeRenderer } from './code-renderer'
 import {
   findDriveRendererOption,
@@ -197,10 +199,12 @@ function DriveRendererFloatingMenu({
 }) {
   const driveBrowserUrl = getDriveFloatingMenuDriveBrowserUrl(snapshot)
   const newWindowUrl = getDriveFloatingMenuNewWindowUrl(snapshot)
+  const versionItemId = getDriveFileVersionItemId(snapshot)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<DriveFloatingMenuDragState | null>(null)
   const suppressClickRef = useRef(false)
   const [open, setOpen] = useState(false)
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<DriveFloatingMenuPoint | null>(null)
   const [interactionActive, setInteractionActive] = useState(false)
   const [idleDimmed, setIdleDimmed] = useState(false)
@@ -353,6 +357,12 @@ function DriveRendererFloatingMenu({
               </a>
             </DropdownMenuItem>
           ) : null}
+          {versionItemId ? (
+            <DropdownMenuItem onSelect={() => setVersionsOpen(true)}>
+              <History data-icon='inline-start' />
+              历史版本
+            </DropdownMenuItem>
+          ) : null}
           {options.length > 1 ? (
             <>
               <DropdownMenuSeparator />
@@ -370,6 +380,13 @@ function DriveRendererFloatingMenu({
           )) : null}
         </DropdownMenuContent>
       </DropdownMenu>
+      {versionsOpen && versionItemId ? (
+        <DriveFileVersionsDialog
+          itemId={versionItemId}
+          open={versionsOpen}
+          onOpenChange={setVersionsOpen}
+        />
+      ) : null}
     </div>
   )
 }

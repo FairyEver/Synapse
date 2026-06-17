@@ -11,6 +11,9 @@ import type {
   DashboardWebhookSecretResult,
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
+  DriveFileVersionDto,
+  DriveFileVersionListPageDto,
+  DriveItemDto,
   WebhookDeliveryDto,
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
@@ -239,6 +242,7 @@ const consoleApiBasePath = '/api/console'
 const legacyDashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
 const contentStoreApiBasePath = '/api/content-store'
+const driveApiBasePath = '/api/drive'
 const driveBrowserApiBasePath = '/api/drive/browser'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
 const authExpiredListeners = new Set<() => void>()
@@ -757,6 +761,38 @@ export const driveBrowserApi = {
         body: JSON.stringify({ password }),
       }
     ),
+}
+
+type DriveFileVersionListOptions = {
+  offset?: number
+  limit?: number
+}
+
+const driveFileVersionPath = (itemId: string, versionId?: string) => {
+  const itemPath = `${driveApiBasePath}/items/${encodeURIComponent(itemId)}/versions`
+  return versionId ? `${itemPath}/${encodeURIComponent(versionId)}` : itemPath
+}
+
+export const driveFileVersionsApi = {
+  list: (itemId: string, options: DriveFileVersionListOptions = {}) =>
+    request<DriveFileVersionListPageDto>(
+      `${driveFileVersionPath(itemId)}${querySuffix(options)}`
+    ),
+  restore: (itemId: string, versionId: string) =>
+    request<DriveItemDto>(`${driveFileVersionPath(itemId, versionId)}/restore`, {
+      method: 'POST',
+    }),
+  updatePin: (itemId: string, versionId: string, isPinned: boolean) =>
+    request<DriveFileVersionDto>(driveFileVersionPath(itemId, versionId), {
+      method: 'PATCH',
+      body: JSON.stringify({ isPinned }),
+    }),
+  delete: (itemId: string, versionId: string) =>
+    request<{ ok: true }>(driveFileVersionPath(itemId, versionId), {
+      method: 'DELETE',
+    }),
+  downloadUrl: (itemId: string, versionId: string) =>
+    `${driveFileVersionPath(itemId, versionId)}/download`,
 }
 
 export const adminApi = {

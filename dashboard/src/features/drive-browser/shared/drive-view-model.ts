@@ -15,8 +15,14 @@ export function getDriveFinderActions(snapshot: DriveBrowserSnapshotDto) {
     directoryDownloadUrl: isFolder ? snapshot.current.downloadUrl : null,
     fileDownloadUrl: isFolder ? null : snapshot.current.downloadUrl,
     fileOpenUrl: isFolder ? null : getDriveStandaloneOpenUrl(snapshot),
+    fileVersionItemId: isFolder || snapshot.context !== 'owner' ? null : snapshot.current.id,
     visitUrl: isFolder ? null : snapshot.preview?.visitUrl ?? null,
   }
+}
+
+export function getDriveFileVersionItemId(snapshot: DriveBrowserSnapshotDto): string | null {
+  if (snapshot.context !== 'owner' || snapshot.current.type !== 'file') return null
+  return snapshot.current.id
 }
 
 function getDriveStandaloneOpenUrl(snapshot: DriveBrowserSnapshotDto): string {

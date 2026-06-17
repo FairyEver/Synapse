@@ -23,6 +23,7 @@ import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-fo
 import {
   getDriveBrowserActions,
   getDriveBrowserChildUrls,
+  getDriveFileVersionItemId,
   getDriveFinderActions,
   shouldRenderDriveBodyRenderer,
   shouldRenderDriveSingleFileReader,
@@ -60,14 +61,25 @@ describe('drive browser view model', () => {
       directoryDownloadUrl: '/drive/items/folder/download',
       fileDownloadUrl: null,
       fileOpenUrl: null,
+      fileVersionItemId: null,
       visitUrl: null,
     })
     expect(getDriveFinderActions(file)).toEqual({
       directoryDownloadUrl: null,
       fileDownloadUrl: '/drive/items/file/download',
       fileOpenUrl: '/drive/items/file',
+      fileVersionItemId: 'file',
       visitUrl: '/drive/items/file/render',
     })
+  })
+
+  it('only exposes file version management for owner files', () => {
+    expect(getDriveFileVersionItemId(createSnapshot({ context: 'owner' }))).toBe('file')
+    expect(getDriveFileVersionItemId(createSnapshot({ context: 'share' }))).toBeNull()
+    expect(getDriveFileVersionItemId(createSnapshot({
+      context: 'owner',
+      current: { ...baseCurrent(), type: 'folder' },
+    }))).toBeNull()
   })
 
   it('opens console files in standalone reader mode from finder actions', () => {
