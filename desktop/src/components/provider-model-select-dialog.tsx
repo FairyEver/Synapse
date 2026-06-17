@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
   Table,
@@ -29,9 +30,23 @@ const logger = createRendererLogger("agent")
 type ProviderModelSelectDialogProps = {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
-  readonly onSelect: (selection: ProviderModelSelection) => void | Promise<void>
+  readonly onSelect: (
+    selection: ProviderModelSelection,
+    meta?: ProviderModelSelectDialogSelectMeta,
+  ) => void | Promise<void>
   readonly defaultSelection?: ProviderModelSelection
   readonly excludeProviderIds?: readonly string[]
+  readonly confirmInput?: ProviderModelSelectDialogConfirmInput
+}
+
+type ProviderModelSelectDialogConfirmInput = {
+  readonly initialValue: string
+  readonly placeholder?: string
+  readonly ariaLabel: string
+}
+
+type ProviderModelSelectDialogSelectMeta = {
+  readonly confirmInputValue?: string
 }
 
 const TIER_CONFIG: ReadonlyArray<{ tier: ModelTier; label: string }> = [
@@ -53,6 +68,7 @@ function ProviderModelSelectDialog({
   onSelect,
   defaultSelection,
   excludeProviderIds = EMPTY_EXCLUDED_PROVIDERS,
+  confirmInput,
 }: ProviderModelSelectDialogProps) {
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined)
@@ -60,6 +76,7 @@ function ProviderModelSelectDialog({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmInputValue, setConfirmInputValue] = useState(confirmInput?.initialValue ?? "")
   const requestIdRef = useRef(0)
 
   const visibleProviders = useMemo(
@@ -128,10 +145,22 @@ function ProviderModelSelectDialog({
     void loadProviders()
   }, [loadProviders, open])
 
+  useEffect(() => {
+    if (!open) return
+    setConfirmInputValue(confirmInput?.initialValue ?? "")
+  }, [confirmInput?.initialValue, open])
+
   const selectedProviderAvailable = Boolean(
     selectedProviderId && visibleProviders.some((p) => p.id === selectedProviderId),
   )
-  const canConfirm = selectedProviderAvailable && selectedTier !== undefined && !loading && !error && !saving
+  const confirmInputTrimmedValue = confirmInput ? confirmInputValue.trim() : undefined
+  const confirmInputValid = !confirmInput || Boolean(confirmInputTrimmedValue)
+  const canConfirm = selectedProviderAvailable
+    && selectedTier !== undefined
+    && confirmInputValid
+    && !loading
+    && !error
+    && !saving
 
   const handleSelectProvider = (providerId: string) => {
     setSelectedProviderId(providerId)
@@ -167,14 +196,28 @@ function ProviderModelSelectDialog({
     const providerName = provider?.name
     const modelName = provider ? resolveModelName(provider, selectedTier) : undefined
     try {
-      await onSelect({ providerId: selectedProviderId, modelTier: selectedTier, providerName, modelName })
+      const selection = { providerId: selectedProviderId, modelTier: selectedTier, providerName, modelName }
+      if (confirmInput) {
+        await onSelect(selection, { confirmInputValue: confirmInputTrimmedValue })
+      } else {
+        await onSelect(selection)
+      }
       onOpenChange(false)
     } catch {
       // Save failed — dialog stays open, selection preserved
     } finally {
       setSaving(false)
     }
-  }, [canConfirm, onOpenChange, onSelect, selectedProviderId, selectedTier, visibleProviders])
+  }, [
+    canConfirm,
+    confirmInput,
+    confirmInputTrimmedValue,
+    onOpenChange,
+    onSelect,
+    selectedProviderId,
+    selectedTier,
+    visibleProviders,
+  ])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -270,6 +313,20 @@ function ProviderModelSelectDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             取消
           </Button>
+          {confirmInput ? (
+            <Input
+              aria-label={confirmInput.ariaLabel}
+              value={confirmInputValue}
+              placeholder={confirmInput.placeholder}
+              disabled={saving}
+              onChange={(event) => setConfirmInputValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+                event.preventDefault()
+                void handleConfirm()
+              }}
+            />
+          ) : null}
           <Button
             type="button"
             disabled={!canConfirm}
@@ -295,4 +352,8 @@ function errorMessageLength(error: unknown): number {
 }
 
 export { ProviderModelSelectDialog }
-export type { ProviderModelSelectDialogProps }
+export type {
+  ProviderModelSelectDialogConfirmInput,
+  ProviderModelSelectDialogProps,
+  ProviderModelSelectDialogSelectMeta,
+}
