@@ -108,7 +108,7 @@ model DriveItem {
 
 `type` is `file` or `folder`. `storageKey` is required for active files and null for folders. New files use storage keys shaped like `drive/<driveItemId>`. Same-name overwrite uploads may move the active file to an item-scoped replacement key while keeping the same `DriveItem.id`.
 
-Uploading a file with the same normalized name into the same folder overwrites the newest active same-name file instead of creating another visible duplicate. The overwrite preserves the existing `DriveItem.id` and share links, uploads bytes to a replacement object first, then switches metadata after storage verification. Historical same-name duplicates are not migrated or cleaned automatically. Same-name folders are reused by folder upload and rejected by manual folder creation in the same parent to keep navigation and move dialogs unambiguous.
+Uploading a file with the same normalized name into the same folder overwrites the newest active same-name file instead of creating another visible duplicate. The overwrite preserves the existing `DriveItem.id` and share links, uploads bytes to a replacement object first, then switches metadata after storage verification. Rename and move operations do not overwrite; they reject same-type name conflicts in the target folder. Files and folders may share the same name because they are different item types. Historical same-name duplicates are not migrated or cleaned automatically. Same-name folders are reused by folder upload and rejected by manual folder creation in the same parent to keep navigation and move dialogs unambiguous.
 
 ### DriveShare
 

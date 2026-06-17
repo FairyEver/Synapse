@@ -713,11 +713,6 @@ export class DriveService implements OnApplicationBootstrap {
   ): Promise<{ readonly folder: DriveItemDto; readonly created: boolean }> {
     const name = normalizeDriveName(input.name)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
-    const fileCollision = await this.prisma.driveItem.findFirst({
-      where: { userId, parentId: input.parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null },
-      select: { id: true },
-    })
-    if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
     const existingFolder = await this.prisma.driveItem.findFirst({
       where: { userId, parentId: input.parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null },
       include: driveItemWithShares,
@@ -729,13 +724,14 @@ export class DriveService implements OnApplicationBootstrap {
   async renameItem(userId: string, itemId: string, name: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
     const item = await this.requireOwnedItem(userId, itemId)
     const nextName = normalizeDriveName(name)
-    if (item.type === DRIVE_ITEM_TYPE.folder) {
-      const duplicate = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId: item.parentId, name: nextName, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, id: { not: item.id } },
-        select: { id: true },
-      })
-      if (duplicate) throw new BadRequestException("同名文件夹已存在。")
-    }
+    await this.assertNoSameTypeNameConflict({
+      excludeItemId: item.id,
+      message: item.type === DRIVE_ITEM_TYPE.folder ? "同名文件夹已存在。" : "同名文件已存在。",
+      name: nextName,
+      parentId: item.parentId,
+      type: item.type,
+      userId,
+    })
     const updated = await this.prisma.driveItem.update({
       where: { id: itemId },
       data: { name: nextName },
@@ -758,12 +754,15 @@ export class DriveService implements OnApplicationBootstrap {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     if (item.type === DRIVE_ITEM_TYPE.folder) {
       await this.assertNoFolderCycle(item.id, parentId)
-      const duplicate = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name: item.name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, id: { not: item.id } },
-        select: { id: true },
-      })
-      if (duplicate) throw new BadRequestException("目标位置已有同名文件夹。")
     }
+    await this.assertNoSameTypeNameConflict({
+      excludeItemId: item.id,
+      message: item.type === DRIVE_ITEM_TYPE.folder ? "目标位置已有同名文件夹。" : "目标位置已有同名文件。",
+      name: item.name,
+      parentId,
+      type: item.type,
+      userId,
+    })
     const updated = await this.prisma.driveItem.update({
       where: { id: item.id },
       data: { parentId },
@@ -778,6 +777,28 @@ export class DriveService implements OnApplicationBootstrap {
       ipAddress: auditContext.ipAddress,
     })
     return toDriveItemDto(updated)
+  }
+
+  private async assertNoSameTypeNameConflict(input: {
+    readonly excludeItemId: string
+    readonly message: string
+    readonly name: string
+    readonly parentId: string | null
+    readonly type: string
+    readonly userId: string
+  }): Promise<void> {
+    const duplicate = await this.prisma.driveItem.findFirst({
+      where: {
+        userId: input.userId,
+        parentId: input.parentId,
+        name: input.name,
+        type: input.type,
+        deletedAt: null,
+        id: { not: input.excludeItemId },
+      },
+      select: { id: true },
+    })
+    if (duplicate) throw new BadRequestException(input.message)
   }
 
   async deleteItem(

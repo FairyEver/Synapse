@@ -38,6 +38,8 @@ The design must support current upload overwrite behavior and reserve a clean pa
 
 Current Drive behavior already preserves `DriveItem.id` and share links when a same-name file upload overwrites an active file. Upload completion writes a replacement object first, verifies it, then switches `DriveItem.storageKey`, size, and mime metadata.
 
+Rename and move operations reject same-type name conflicts instead of overwriting another item. Files and folders may share the same name because they are different item types.
+
 The version history feature should attach to this existing content-switch point. The stable file identity remains `DriveItem.id`; versions are separate immutable records under that file.
 
 ## Data Model
@@ -162,6 +164,8 @@ Concurrent overwrites keep current behavior: the last completed upload becomes c
 ### Folder Upload Overwrite
 
 Folder upload already calls single-file upload preparation for each file entry. Same-path same-name files that are overwritten generate versions through the same upload completion path. New files inside the folder generate `v1`.
+
+Folder creation during upload follows same-type uniqueness: same-name folders are reused, while same-name files do not block creating or reusing a folder path.
 
 ### Restore
 

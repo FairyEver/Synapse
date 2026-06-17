@@ -431,7 +431,7 @@ describe("DriveService", () => {
     expect(deleteObject).toHaveBeenCalledWith(expect.stringContaining(`/overwrites/${prepared.sessionId}`))
   })
 
-  it("overwrites the newest historical same-name file and keeps older duplicates", async () => {
+  it("overwrites the newest legacy same-name file and keeps older duplicates", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -450,7 +450,7 @@ describe("DriveService", () => {
       name: "report-copy.txt",
       mimeType: "text/plain",
     })
-    await service.renameItem("user-1", newer.id, "report.txt")
+    await prisma.driveItem.update({ where: { id: newer.id }, data: { name: "report.txt" } })
 
     const prepared = await service.prepareUpload("user-1", {
       parentId: null,
@@ -821,6 +821,74 @@ describe("DriveService", () => {
     expect(unchanged.name).toBe("report.txt")
   })
 
+  it("rejects renaming a file to another file name in the same folder", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    const second = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "notes.txt",
+      mimeType: "text/plain",
+    })
+
+    await expect(service.renameItem("user-1", second.id, "report.txt")).rejects.toThrow("同名文件已存在。")
+    await expect(service.renameItem("user-1", first.id, "report.txt")).resolves.toMatchObject({ id: first.id, name: "report.txt" })
+  })
+
+  it("rejects moving a file into a folder that already has a file with the same name", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const source = await service.createFolder("user-1", { parentId: null, name: "来源" })
+    const target = await service.createFolder("user-1", { parentId: null, name: "目标" })
+    const moving = await createCompletedUpload(service, "user-1", {
+      parentId: source.id,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: target.id,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+
+    await expect(service.moveItem("user-1", moving.id, target.id)).rejects.toThrow("目标位置已有同名文件。")
+    await expect(service.moveItem("user-1", moving.id, source.id)).resolves.toMatchObject({ id: moving.id, parentId: source.id })
+  })
+
+  it("allows files and folders with the same name in one folder", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+
+    const filePrepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "资料",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    const file = await service.completeUpload("user-1", filePrepared.sessionId)
+
+    const folderPrepared = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "资料.md",
+      files: [{ relativePath: "index.md", size: "11", mimeType: "text/markdown" }],
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", folderPrepared.entries[0]!.sessionId)
+
+    expect(file).toMatchObject({ name: "资料", type: "file" })
+    expect(folder).toMatchObject({ name: "资料", type: "folder" })
+    expect(folderPrepared.root).toMatchObject({ name: "资料.md", type: "folder" })
+  })
+
   it("prepares folder upload manifests with nested folders and file sessions", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -1105,7 +1173,7 @@ describe("DriveService", () => {
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
-  it("disambiguates same-name files in owner folder archive entries", async () => {
+  it("disambiguates legacy same-name files in owner folder archive entries", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -1120,7 +1188,7 @@ describe("DriveService", () => {
       name: "report-copy.pdf",
       mimeType: "application/pdf",
     })
-    await service.renameItem("user-1", second.id, "report.pdf")
+    await prisma.driveItem.update({ where: { id: second.id }, data: { name: "report.pdf" } })
 
     const archive = await service.openOwnerBrowserItemDownload({
       userId: "user-1",
@@ -1136,7 +1204,7 @@ describe("DriveService", () => {
     ])
   })
 
-  it("disambiguates same-name files in shared child folder archive entries", async () => {
+  it("disambiguates legacy same-name files in shared child folder archive entries", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -1152,7 +1220,7 @@ describe("DriveService", () => {
       name: "report-copy.pdf",
       mimeType: "application/pdf",
     })
-    await service.renameItem("user-1", second.id, "report.pdf")
+    await prisma.driveItem.update({ where: { id: second.id }, data: { name: "report.pdf" } })
     const share = await service.createShare("user-1", root.id, "https://synapse.test")
 
     const archive = await service.openShareBrowserItemDownload({
