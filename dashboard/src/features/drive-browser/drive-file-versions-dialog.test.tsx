@@ -18,7 +18,7 @@ describe('DriveFileVersionContent', () => {
     expect(contentClass).not.toContain('sm:max-w-2xl')
   })
 
-  it('keeps version rows inside an internal scroll area', () => {
+  it('keeps version rows inside a bounded table frame', () => {
     const html = renderVersions([
       version({ id: 'version-4', versionNumber: 4, isCurrent: true }),
       version({ id: 'version-3', versionNumber: 3 }),
@@ -26,8 +26,8 @@ describe('DriveFileVersionContent', () => {
       version({ id: 'version-1', versionNumber: 1 }),
     ])
 
-    expect(html).toContain('data-slot="scroll-area"')
-    expect(html).toContain('min-h-0 flex-1')
+    expect(html).toContain('class="rounded-md border"')
+    expect(html).not.toContain('data-slot="scroll-area"')
     expect(html).toContain('data-slot="table"')
     expect(html).toContain('版本')
     expect(html).toContain('来源')

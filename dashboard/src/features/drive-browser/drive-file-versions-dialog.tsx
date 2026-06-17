@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -96,11 +95,11 @@ export function DriveFileVersionsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className='flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden p-0 sm:max-w-3xl'>
-          <DialogHeader className='shrink-0 px-5 pt-5'>
+        <DialogContent className='sm:max-w-3xl'>
+          <DialogHeader className='text-start'>
             <DialogTitle className='pr-8'>历史版本</DialogTitle>
           </DialogHeader>
-          <div className='flex min-h-0 flex-1 flex-col px-5 pt-1 pb-5'>
+          <div className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'>
             <DriveFileVersionContent
               itemId={itemId}
               versions={versionsQuery.data?.items ?? []}
@@ -215,9 +214,9 @@ export function DriveFileVersionContent({
 
 function DriveFileVersionTableFrame({ children }: { readonly children: ReactNode }) {
   return (
-    <ScrollArea className='min-h-0 flex-1 rounded-md border'>
+    <div className='rounded-md border'>
       {children}
-    </ScrollArea>
+    </div>
   )
 }
 
