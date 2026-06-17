@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DriveFileVersionDto, DriveFileVersionSource } from '@synapse/shared'
 import { Download, Loader2, Pin, PinOff, RotateCcw, Trash2 } from 'lucide-react'
@@ -14,10 +14,25 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { driveFileVersionsApi } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { formatDriveBrowserBytes, formatDriveBrowserDate } from './shared/drive-format'
 
 const versionPageSize = 100
+const versionSkeletonRows = [0, 1, 2] as const
 
 type ConfirmTarget =
   | { action: 'restore'; version: DriveFileVersionDto }
@@ -81,11 +96,11 @@ export function DriveFileVersionsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className='flex max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-3xl'>
+        <DialogContent className='flex max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-2xl'>
           <DialogHeader className='shrink-0 px-5 pt-5'>
-            <DialogTitle>历史版本</DialogTitle>
+            <DialogTitle className='pr-8'>历史版本</DialogTitle>
           </DialogHeader>
-          <div className='flex min-h-0 flex-1 flex-col px-5 pb-5'>
+          <div className='flex min-h-0 flex-1 flex-col px-5 pt-1 pb-5'>
             <DriveFileVersionContent
               itemId={itemId}
               versions={versionsQuery.data?.items ?? []}
@@ -93,6 +108,9 @@ export function DriveFileVersionsDialog({
               error={versionsQuery.error instanceof Error ? versionsQuery.error.message : null}
               pinningVersionId={pinMutation.variables?.versionId ?? null}
               pinning={pinMutation.isPending}
+              onRetry={() => {
+                void versionsQuery.refetch()
+              }}
               onPin={(version) => pinMutation.mutate({ versionId: version.id, isPinned: !version.isPinned })}
               onRestore={(version) => setConfirmTarget({ action: 'restore', version })}
               onDelete={(version) => setConfirmTarget({ action: 'delete', version })}
@@ -132,6 +150,7 @@ export function DriveFileVersionContent({
   error,
   pinningVersionId,
   pinning,
+  onRetry,
   onPin,
   onRestore,
   onDelete,
@@ -142,25 +161,42 @@ export function DriveFileVersionContent({
   readonly error: string | null
   readonly pinningVersionId: string | null
   readonly pinning: boolean
+  readonly onRetry: () => void
   readonly onPin: (version: DriveFileVersionDto) => void
   readonly onRestore: (version: DriveFileVersionDto) => void
   readonly onDelete: (version: DriveFileVersionDto) => void
 }) {
   if (loading) {
     return (
-      <div className='grid min-h-0 flex-1 gap-3'>
-        <Skeleton className='h-16 w-full' />
-        <Skeleton className='h-16 w-full' />
-        <Skeleton className='h-16 w-full' />
+      <DriveFileVersionTableFrame>
+        <DriveFileVersionTable skeleton />
+      </DriveFileVersionTableFrame>
+    )
+  }
+  if (error) {
+    return (
+      <div className='flex min-h-48 flex-1 flex-col items-center justify-center gap-3 rounded-md border p-4 text-center'>
+        <div className='grid gap-1 text-sm'>
+          <div className='font-medium'>读取失败</div>
+          <div className='text-muted-foreground'>{error}</div>
+        </div>
+        <Button type='button' variant='outline' size='sm' onClick={onRetry}>
+          重试
+        </Button>
       </div>
     )
   }
-  if (error) return <div className='min-h-0 flex-1 rounded-md border p-4 text-sm text-destructive'>{error}</div>
-  if (versions.length === 0) return <div className='min-h-0 flex-1 rounded-md border p-4 text-sm text-muted-foreground'>暂无历史版本</div>
+  if (versions.length === 0) {
+    return (
+      <div className='flex min-h-48 flex-1 items-center justify-center rounded-md border p-4 text-sm text-muted-foreground'>
+        暂无历史版本
+      </div>
+    )
+  }
 
   return (
-    <ScrollArea className='min-h-0 flex-1 pr-3'>
-      <div className='grid gap-2'>
+    <DriveFileVersionTableFrame>
+      <DriveFileVersionTable>
         {versions.map((version) => (
           <DriveFileVersionRow
             key={version.id}
@@ -172,8 +208,62 @@ export function DriveFileVersionContent({
             onDelete={onDelete}
           />
         ))}
-      </div>
+      </DriveFileVersionTable>
+    </DriveFileVersionTableFrame>
+  )
+}
+
+function DriveFileVersionTableFrame({ children }: { readonly children: ReactNode }) {
+  return (
+    <ScrollArea className='min-h-0 flex-1 rounded-md border'>
+      {children}
     </ScrollArea>
+  )
+}
+
+function DriveFileVersionTable({
+  children,
+  skeleton = false,
+}: {
+  readonly children?: ReactNode
+  readonly skeleton?: boolean
+}) {
+  return (
+    <Table className='min-w-[680px] table-fixed'>
+      <TableHeader>
+        <TableRow>
+          <TableHead className='w-40'>版本</TableHead>
+          <TableHead className='w-24'>来源</TableHead>
+          <TableHead className='w-24 text-right'>大小</TableHead>
+          <TableHead className='w-44'>创建时间</TableHead>
+          <TableHead className='w-40 text-right' aria-label='操作' />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {skeleton ? <DriveFileVersionTableSkeleton /> : children}
+      </TableBody>
+    </Table>
+  )
+}
+
+function DriveFileVersionTableSkeleton() {
+  return (
+    <>
+      {versionSkeletonRows.map((row) => (
+        <TableRow key={row}>
+          <TableCell>
+            <div className='flex items-center gap-2'>
+              <Skeleton className='h-4 w-10' />
+              <Skeleton className='h-5 w-12' />
+            </div>
+          </TableCell>
+          <TableCell><Skeleton className='h-5 w-12' /></TableCell>
+          <TableCell><Skeleton className='ml-auto h-4 w-14' /></TableCell>
+          <TableCell><Skeleton className='h-4 w-32' /></TableCell>
+          <TableCell><Skeleton className='ml-auto h-8 w-28' /></TableCell>
+        </TableRow>
+      ))}
+    </>
   )
 }
 
@@ -193,62 +283,119 @@ function DriveFileVersionRow({
   readonly onDelete: (version: DriveFileVersionDto) => void
 }) {
   return (
-    <div className='flex min-w-0 flex-col gap-3 rounded-md border p-3 md:flex-row md:items-center md:justify-between'>
-      <div className='min-w-0 flex-1 space-y-2'>
-        <div className='flex min-w-0 flex-wrap items-center gap-2'>
-          <span className='shrink-0 text-sm font-medium tabular-nums'>v{version.versionNumber}</span>
-          {version.isCurrent ? <Badge>当前</Badge> : null}
-          {version.isPinned ? <Badge variant='outline'>保留</Badge> : null}
-          {version.deletePending ? <Badge variant='secondary'>待清理</Badge> : null}
-          <Badge variant='outline'>{driveVersionSourceLabel(version.source)}</Badge>
+    <TableRow>
+      <TableCell>
+        <div className='flex min-w-0 items-center gap-2'>
+          <span className='shrink-0 font-medium tabular-nums'>v{version.versionNumber}</span>
+          <DriveFileVersionBadges version={version} />
         </div>
-        <div className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
-          <span className='shrink-0 tabular-nums'>{formatDriveBrowserBytes(version.size)}</span>
-          <span className='min-w-0 truncate tabular-nums' title={formatDriveBrowserDate(version.createdAt)}>
-            {formatDriveBrowserDate(version.createdAt)}
-          </span>
+      </TableCell>
+      <TableCell>
+        <Badge variant='outline'>{driveVersionSourceLabel(version.source)}</Badge>
+      </TableCell>
+      <TableCell className='text-right tabular-nums text-muted-foreground'>
+        {formatDriveBrowserBytes(version.size)}
+      </TableCell>
+      <TableCell className='truncate tabular-nums text-muted-foreground' title={formatDriveBrowserDate(version.createdAt)}>
+        {formatDriveBrowserDate(version.createdAt)}
+      </TableCell>
+      <TableCell>
+        <div className='flex items-center justify-end gap-1'>
+          <DriveVersionActionButton
+            href={driveFileVersionsApi.downloadUrl(itemId, version.id)}
+            label={`下载 v${version.versionNumber}`}
+            tooltip='下载'
+          >
+            <Download />
+          </DriveVersionActionButton>
+          {!version.isCurrent ? (
+            <DriveVersionActionButton
+              label={`恢复 v${version.versionNumber}`}
+              tooltip='恢复'
+              onClick={() => onRestore(version)}
+            >
+              <RotateCcw />
+            </DriveVersionActionButton>
+          ) : null}
+          {!version.isCurrent ? (
+            <DriveVersionActionButton
+              disabled={pinning}
+              label={version.isPinned ? `取消保留 v${version.versionNumber}` : `保留 v${version.versionNumber}`}
+              tooltip={version.isPinned ? '取消保留' : '保留'}
+              onClick={() => onPin(version)}
+            >
+              {pinning ? <Loader2 className='animate-spin' /> : version.isPinned ? <PinOff /> : <Pin />}
+            </DriveVersionActionButton>
+          ) : null}
+          {!version.isCurrent ? (
+            <DriveVersionActionButton
+              destructive
+              label={`删除 v${version.versionNumber}`}
+              tooltip='删除'
+              onClick={() => onDelete(version)}
+            >
+              <Trash2 />
+            </DriveVersionActionButton>
+          ) : null}
         </div>
-      </div>
-      <div className='flex shrink-0 flex-wrap gap-2 md:justify-end'>
-        <Button asChild variant='outline' size='sm' className='shrink-0'>
-          <a href={driveFileVersionsApi.downloadUrl(itemId, version.id)}>
-            <Download data-icon='inline-start' />
-            下载
-          </a>
-        </Button>
-        {!version.isCurrent ? (
-          <Button type='button' variant='outline' size='sm' className='shrink-0' onClick={() => onRestore(version)}>
-            <RotateCcw data-icon='inline-start' />
-            恢复
-          </Button>
-        ) : null}
-        {!version.isCurrent ? (
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='shrink-0'
-            disabled={pinning}
-            onClick={() => onPin(version)}
-          >
-            {pinning ? <Loader2 className='animate-spin' data-icon='inline-start' /> : version.isPinned ? <PinOff data-icon='inline-start' /> : <Pin data-icon='inline-start' />}
-            {version.isPinned ? '取消保留' : '保留'}
-          </Button>
-        ) : null}
-        {!version.isCurrent ? (
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='shrink-0 text-destructive hover:text-destructive'
-            onClick={() => onDelete(version)}
-          >
-            <Trash2 data-icon='inline-start' />
-            删除
-          </Button>
-        ) : null}
-      </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+function DriveFileVersionBadges({ version }: { readonly version: DriveFileVersionDto }) {
+  return (
+    <div className='flex min-w-0 items-center gap-1'>
+      {version.isCurrent ? <Badge>当前</Badge> : null}
+      {version.isPinned ? <Badge variant='outline'>保留</Badge> : null}
+      {version.deletePending ? <Badge variant='secondary'>待清理</Badge> : null}
     </div>
+  )
+}
+
+function DriveVersionActionButton({
+  children,
+  destructive = false,
+  disabled = false,
+  href,
+  label,
+  onClick,
+  tooltip,
+}: {
+  readonly children: ReactNode
+  readonly destructive?: boolean
+  readonly disabled?: boolean
+  readonly href?: string
+  readonly label: string
+  readonly onClick?: () => void
+  readonly tooltip: string
+}) {
+  const className = cn('size-8', destructive && 'text-destructive hover:text-destructive')
+  const button = href ? (
+    <Button asChild variant='ghost' size='icon' className={className} aria-label={label}>
+      <a href={href}>{children}</a>
+    </Button>
+  ) : (
+    <Button
+      type='button'
+      variant='ghost'
+      size='icon'
+      className={className}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  )
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {button}
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   )
 }
 

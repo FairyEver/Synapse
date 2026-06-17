@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { createElement, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { DriveFileVersionDto } from '@synapse/shared'
@@ -15,6 +15,11 @@ describe('DriveFileVersionContent', () => {
 
     expect(html).toContain('data-slot="scroll-area"')
     expect(html).toContain('min-h-0 flex-1')
+    expect(html).toContain('data-slot="table"')
+    expect(html).toContain('版本')
+    expect(html).toContain('来源')
+    expect(html).toContain('大小')
+    expect(html).toContain('创建时间')
     expect(html).toContain('v4')
     expect(html).toContain('v1')
   })
@@ -41,20 +46,40 @@ describe('DriveFileVersionContent', () => {
     expect(html).toContain('保留')
     expect(html).toContain('删除')
   })
+
+  it('renders loading, empty, and error states in the same bounded area', () => {
+    const loadingHtml = renderVersionContent({ loading: true })
+    const emptyHtml = renderVersions([])
+    const errorHtml = renderVersionContent({ error: '版本加载失败。' })
+
+    expect(loadingHtml).toContain('data-slot="table"')
+    expect(loadingHtml).toContain('data-slot="skeleton"')
+    expect(emptyHtml).toContain('暂无历史版本')
+    expect(emptyHtml).toContain('min-h-48')
+    expect(errorHtml).toContain('读取失败')
+    expect(errorHtml).toContain('版本加载失败。')
+    expect(errorHtml).toContain('重试')
+  })
 })
 
 function renderVersions(versions: readonly DriveFileVersionDto[]) {
+  return renderVersionContent({ versions })
+}
+
+function renderVersionContent(overrides: Partial<ComponentProps<typeof DriveFileVersionContent>> = {}) {
   return renderToStaticMarkup(
     createElement(DriveFileVersionContent, {
       itemId: 'item-1',
-      versions,
+      versions: [],
       loading: false,
       error: null,
       pinningVersionId: null,
       pinning: false,
+      onRetry: vi.fn(),
       onPin: vi.fn(),
       onRestore: vi.fn(),
       onDelete: vi.fn(),
+      ...overrides,
     })
   )
 }
