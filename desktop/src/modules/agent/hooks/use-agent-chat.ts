@@ -9,6 +9,7 @@ import type {
   SynapseAgentTimelineItem,
 } from "@/types/agent"
 import type { AgentProjectScope } from "../project-resolution"
+import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { UnreadState } from "../live-sync"
 import { chatReducer, initialChatState } from "./use-chat-reducer"
 import type { ChatState } from "./use-chat-reducer"
@@ -46,15 +47,15 @@ type UseAgentChatState = {
   renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   refresh: () => Promise<void>
   sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
-  setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
+  setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
   respondPermission: (
     requestId: string,
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
   ) => Promise<void>
-  cancelTurn: () => Promise<void>
-  forceKillTurn: () => Promise<void>
+  cancelTurn: (target?: AgentConversationTarget) => Promise<void>
+  forceKillTurn: (target?: AgentConversationTarget) => Promise<void>
 }
 
 function useAgentChat(
