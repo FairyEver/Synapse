@@ -27,7 +27,7 @@ import { app, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
-import { statfs } from "node:fs/promises"
+import { readFile, statfs } from "node:fs/promises"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
@@ -1555,6 +1555,7 @@ export const gitEnvironmentServiceDescriptor: ServiceDescriptor<GitEnvironmentSe
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       homeDir: os.homedir(),
       pathExists,
+      readFile: (filePath) => readFile(filePath, "utf8"),
       platform: process.platform,
     })
   },

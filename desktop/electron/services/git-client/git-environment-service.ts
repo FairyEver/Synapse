@@ -1,5 +1,5 @@
 import path from "node:path"
-import type { SynapseGitEnvironmentState } from "../../../src/types/git"
+import type { SynapseGitEnvironmentState, SynapseGitSshPublicKey } from "../../../src/types/git"
 import type { GitClientCommandRunner } from "./git-command-runner"
 
 type Platform = NodeJS.Platform
@@ -8,6 +8,7 @@ type EnvironmentDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly homeDir: string
   readonly pathExists: (filePath: string) => Promise<boolean>
+  readonly readFile: (filePath: string) => Promise<string>
   readonly platform: Platform
 }
 
@@ -37,6 +38,27 @@ async function hasCommonSshKey(
   const sshDir = path.join(homeDir, ".ssh")
   return (await pathExists(path.join(sshDir, "id_ed25519.pub")))
     || (await pathExists(path.join(sshDir, "id_rsa.pub")))
+}
+
+async function findCommonSshPublicKey(
+  homeDir: string,
+  pathExists: (filePath: string) => Promise<boolean>,
+  readFile: (filePath: string) => Promise<string>,
+): Promise<SynapseGitSshPublicKey | null> {
+  const sshDir = path.join(homeDir, ".ssh")
+  const candidates = [
+    path.join(sshDir, "id_ed25519.pub"),
+    path.join(sshDir, "id_rsa.pub"),
+  ]
+
+  for (const filePath of candidates) {
+    if (await pathExists(filePath)) {
+      const content = (await readFile(filePath)).trim()
+      return content ? { path: filePath, content } : null
+    }
+  }
+
+  return null
 }
 
 export function createGitEnvironmentService(deps: EnvironmentDeps) {
@@ -83,6 +105,10 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
       if (!userEmail) throw new Error("请输入邮箱。")
       await deps.commandRunner.run({ cwd: deps.homeDir, args: ["config", "--global", "user.name", userName] })
       await deps.commandRunner.run({ cwd: deps.homeDir, args: ["config", "--global", "user.email", userEmail] })
+    },
+
+    async getSshPublicKey(): Promise<SynapseGitSshPublicKey | null> {
+      return findCommonSshPublicKey(deps.homeDir, deps.pathExists, deps.readFile)
     },
   }
 }

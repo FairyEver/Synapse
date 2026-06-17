@@ -9,7 +9,10 @@ import { GitModule } from "../index"
 const bridge = vi.hoisted(() => ({
   git: {
     checkEnvironment: vi.fn(),
+    configureIdentity: vi.fn(),
+    getSshPublicKey: vi.fn(),
     listRepositories: vi.fn(),
+    listRepositorySummaries: vi.fn(),
     addLocalRepository: vi.fn(),
     cloneRepository: vi.fn(),
     removeRepository: vi.fn(),
@@ -28,6 +31,32 @@ vi.mock("@/lib/electron-bridge", () => ({
   requireSynapseBridge: () => bridge,
 }))
 
+type Repository = {
+  readonly id: string
+  readonly name: string
+  readonly localPath: string
+  readonly addedAt: string
+  readonly lastOpenedAt: string | null
+}
+
+function summary(repository: Repository) {
+  return {
+    repository,
+    snapshot: {
+      repositoryId: repository.id,
+      pathExists: true,
+      isGitRepository: true,
+      currentBranch: "main",
+      upstream: "origin/main",
+      ahead: 0,
+      behind: 0,
+      hasConflicts: false,
+      changes: [],
+    },
+    error: null,
+  }
+}
+
 describe("GitModule repository list", () => {
   const roots: Root[] = []
 
@@ -45,6 +74,9 @@ describe("GitModule repository list", () => {
       installHint: null,
     })
     bridge.git.listRepositories.mockResolvedValue([])
+    bridge.git.listRepositorySummaries.mockResolvedValue([])
+    bridge.git.configureIdentity.mockResolvedValue(undefined)
+    bridge.git.getSshPublicKey.mockResolvedValue(null)
     bridge.repository.chooseDirectory.mockResolvedValue(null)
   })
 
@@ -90,6 +122,41 @@ describe("GitModule repository list", () => {
       remoteUrl: "https://git.example.com/team/docs.git",
       targetPath: "/work/docs",
       name: "docs",
+    })
+  })
+
+  it("configures missing Git identity after confirmation", async () => {
+    bridge.git.checkEnvironment
+      .mockResolvedValueOnce({
+        gitAvailable: true,
+        gitVersion: "git version 2.50.0",
+        gitPath: null,
+        sshAvailable: true,
+        userName: null,
+        userEmail: null,
+        commonSshKeyExists: false,
+        installHint: null,
+      })
+      .mockResolvedValueOnce({
+        gitAvailable: true,
+        gitVersion: "git version 2.50.0",
+        gitPath: null,
+        sshAvailable: true,
+        userName: "Writer",
+        userEmail: "writer@example.com",
+        commonSshKeyExists: false,
+        installHint: null,
+      })
+    await renderGitModule(roots)
+
+    await changeInput("用户名", "Writer")
+    await changeInput("邮箱", "writer@example.com")
+    await click(findButton("保存身份"))
+    await click(findButton("保存"))
+
+    expect(bridge.git.configureIdentity).toHaveBeenCalledWith({
+      userName: "Writer",
+      userEmail: "writer@example.com",
     })
   })
 
@@ -140,16 +207,16 @@ describe("GitModule repository list", () => {
 
   it("keeps repository sync loading scoped to the clicked repository", async () => {
     const sync = deferred<void>()
-    bridge.git.listRepositories.mockResolvedValue([
-      { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
-      { id: "repo-2", name: "App", localPath: "/work/app", addedAt: "now", lastOpenedAt: null },
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
+      summary({ id: "repo-2", name: "App", localPath: "/work/app", addedAt: "now", lastOpenedAt: null }),
     ])
     bridge.git.sync.mockReturnValue(sync.promise)
     await renderGitModule(roots)
 
-    const syncButtons = buttonsByLabel("同步")
+    const syncButtons = exactButtonsByLabel("同步")
     expect(syncButtons).toHaveLength(2)
-    expect(countButtons("进入")).toBe(0)
+    expect(countButtons("进入")).toBe(2)
 
     await click(syncButtons[0])
 
@@ -164,9 +231,9 @@ describe("GitModule repository list", () => {
   })
 
   it("removes repository records without trashing local files by default", async () => {
-    bridge.git.listRepositories
+    bridge.git.listRepositorySummaries
       .mockResolvedValueOnce([
-        { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+        summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
       ])
       .mockResolvedValueOnce([])
     bridge.git.removeRepository.mockResolvedValue(undefined)
@@ -187,12 +254,12 @@ describe("GitModule repository list", () => {
       repositoryId: "repo-1",
       mode: "keep-local",
     })
-    expect(bridge.git.listRepositories).toHaveBeenCalledTimes(2)
+    expect(bridge.git.listRepositorySummaries).toHaveBeenCalledTimes(2)
   })
 
   it("trashes local files when selected and keeps the dialog open on failure", async () => {
-    bridge.git.listRepositories.mockResolvedValue([
-      { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
     ])
     bridge.git.removeRepository.mockRejectedValue(new Error("移到废纸篓失败"))
     await renderGitModule(roots)
@@ -265,6 +332,11 @@ function countButtons(label: string): number {
 function buttonsByLabel(label: string): HTMLButtonElement[] {
   return Array.from(document.querySelectorAll("button"))
     .filter((item): item is HTMLButtonElement => item instanceof HTMLButtonElement && Boolean(item.textContent?.includes(label)))
+}
+
+function exactButtonsByLabel(label: string): HTMLButtonElement[] {
+  return Array.from(document.querySelectorAll("button"))
+    .filter((item): item is HTMLButtonElement => item instanceof HTMLButtonElement && item.textContent === label)
 }
 
 function inputByLabel(label: string): HTMLInputElement {

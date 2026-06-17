@@ -1,48 +1,49 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { FolderGit2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { SynapseGitEnvironmentState, SynapseGitRepository } from "@/types/git"
 import { GitAddLocalDialog, GitCloneDialog } from "./components/git-clone-dialog"
+import { GitEnvironmentPanel } from "./components/git-environment-panel"
 import { GitRepositoryList } from "./components/git-repository-list"
 import { GitWorkbench } from "./components/git-workbench"
 import { useGitOperations } from "./hooks/use-git-operations"
 import { useGitRepositories } from "./hooks/use-git-repositories"
-
-function environmentMessage(environment: SynapseGitEnvironmentState | null): string | null {
-  if (!environment) return null
-  if (!environment.gitAvailable) return environment.installHint ?? "未检测到 Git。"
-  if (!environment.userName || !environment.userEmail) return "请先配置 Git 用户名和邮箱。"
-  if (!environment.sshAvailable) return "未检测到 SSH。HTTPS 仓库不受影响。"
-  return null
-}
 
 export function GitModule() {
   const [selectedRepository, setSelectedRepository] = useState<SynapseGitRepository | null>(null)
   const [cloneOpen, setCloneOpen] = useState(false)
   const [addLocalOpen, setAddLocalOpen] = useState(false)
   const [environment, setEnvironment] = useState<SynapseGitEnvironmentState | null>(null)
+  const [environmentLoading, setEnvironmentLoading] = useState(false)
   const [environmentError, setEnvironmentError] = useState<string | null>(null)
   const repositoriesState = useGitRepositories()
   const operations = useGitOperations(repositoriesState.refresh)
 
+  const refreshEnvironment = useCallback(async () => {
+    setEnvironmentLoading(true)
+    setEnvironmentError(null)
+    try {
+      const state = await getSynapseBridge()?.git.checkEnvironment()
+      setEnvironment(state ?? null)
+    } catch (err) {
+      setEnvironmentError(err instanceof Error ? err.message : "Git 环境检测失败。")
+    } finally {
+      setEnvironmentLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     async function check() {
-      setEnvironmentError(null)
-      try {
-        const state = await getSynapseBridge()?.git.checkEnvironment()
-        if (!cancelled) setEnvironment(state ?? null)
-      } catch (err) {
-        if (!cancelled) setEnvironmentError(err instanceof Error ? err.message : "Git 环境检测失败。")
-      }
+      if (!cancelled) await refreshEnvironment()
     }
     void check()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshEnvironment])
 
   return (
     <>
@@ -77,23 +78,32 @@ export function GitModule() {
             onBack={() => setSelectedRepository(null)}
           />
         ) : (
-          <GitRepositoryList
-            repositories={repositoriesState.repositories}
-            loading={repositoriesState.loading}
-            error={repositoriesState.error ?? operations.error ?? environmentError}
-            environmentMessage={environmentMessage(environment)}
-            busy={operations.busy}
-            onOpenRepository={setSelectedRepository}
-            onPull={(repositoryId) => void operations.pull(repositoryId)}
-            onPush={(repositoryId) => void operations.push(repositoryId)}
-            onSync={(repositoryId) => void operations.sync(repositoryId)}
-            onRemoveRepository={(input) => operations.removeRepository(input)}
-          />
+          <div className="flex h-full min-h-0 flex-col bg-surface">
+            <div className="shrink-0 p-4 pb-0">
+              <GitEnvironmentPanel
+                environment={environment}
+                loading={environmentLoading}
+                onRefresh={refreshEnvironment}
+              />
+            </div>
+            <GitRepositoryList
+              summaries={repositoriesState.summaries}
+              loading={repositoriesState.loading}
+              error={repositoriesState.error ?? operations.error ?? environmentError}
+              busy={operations.busy}
+              onOpenRepository={setSelectedRepository}
+              onPull={(repositoryId) => void operations.pull(repositoryId)}
+              onPush={(repositoryId) => void operations.push(repositoryId)}
+              onSync={(repositoryId) => void operations.sync(repositoryId)}
+              onRemoveRepository={(input) => operations.removeRepository(input)}
+            />
+          </div>
         )}
       </SystemAppWindowShell>
       <GitCloneDialog
         open={cloneOpen}
         busy={operations.busy.global === "clone"}
+        environment={environment}
         onOpenChange={setCloneOpen}
         onSubmit={async (input) => {
           if (await operations.cloneRepository(input)) setCloneOpen(false)

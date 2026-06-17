@@ -150,6 +150,8 @@ describe("GitWorkbench", () => {
       refresh: vi.fn(async () => undefined),
       loadDiff: vi.fn(async () => undefined),
       togglePath: vi.fn(),
+      selectAll: vi.fn(),
+      clearSelection: vi.fn(),
     }
     const html = renderToStaticMarkup(<GitChangesTab repository={repository} status={status} />)
     const container = document.createElement("div")
@@ -256,6 +258,8 @@ describe("GitWorkbench", () => {
       refresh: vi.fn(async () => undefined),
       loadDiff: vi.fn(async () => undefined),
       togglePath: vi.fn(),
+      selectAll: vi.fn(),
+      clearSelection: vi.fn(),
     }
     const html = renderToStaticMarkup(<GitChangesTab repository={repository} status={status} />)
     const container = document.createElement("div")

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { ArrowLeft } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
@@ -10,6 +11,7 @@ import { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { GitBranchSwitcher } from "./git-branch-switcher"
 import { GitChangesTab } from "./git-changes-tab"
 import { GitHistoryTab } from "./git-history-tab"
+import { getGitErrorAdvice, getGitRecommendedAction, getGitStatusText } from "../lib/git-status-view"
 
 type GitWorkbenchProps = {
   readonly repository: SynapseGitRepository
@@ -23,6 +25,8 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   const status = useGitWorktreeStatus(repository)
   const history = useGitHistory(repository)
   const currentBranch = status.snapshot?.currentBranch ?? null
+  const recommendedAction = getGitRecommendedAction(status.snapshot, status.error)
+  const statusText = getGitStatusText(status.snapshot, status.error)
 
   const refreshAll = async () => {
     await status.refresh()
@@ -42,6 +46,32 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
     }
   }
 
+  const runRecommendedAction = () => {
+    if (recommendedAction === "pull") {
+      void run("pull", () => requireSynapseBridge().git.pull(repository.id))
+      return
+    }
+    if (recommendedAction === "push") {
+      void run("push", () => requireSynapseBridge().git.push(repository.id))
+      return
+    }
+    if (recommendedAction === "sync") {
+      void run("sync", () => requireSynapseBridge().git.sync(repository.id))
+      return
+    }
+    setView("changes")
+  }
+
+  const recommendedLabel = recommendedAction === "pull"
+    ? "拉取远程更新"
+    : recommendedAction === "push"
+      ? "推送本地提交"
+      : recommendedAction === "sync"
+        ? "同步"
+        : recommendedAction === "open"
+          ? "提交改动"
+          : "已同步"
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div
@@ -55,6 +85,14 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{repository.name}</div>
           <div className="truncate text-xs text-muted-foreground">{repository.localPath}</div>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+            <Badge variant="secondary">{currentBranch ?? "无分支"}</Badge>
+            {status.snapshot?.upstream ? <Badge variant="outline">{status.snapshot.upstream}</Badge> : null}
+            <Badge variant="outline">{statusText}</Badge>
+            {status.snapshot ? (
+              <Badge variant="outline">↑{status.snapshot.ahead} ↓{status.snapshot.behind}</Badge>
+            ) : null}
+          </div>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
           <GitBranchSwitcher
@@ -66,10 +104,10 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
           <Button
             type="button"
             size="sm"
-            disabled={busy !== null}
-            onClick={() => void run("sync", () => requireSynapseBridge().git.sync(repository.id))}
+            disabled={busy !== null || recommendedAction === "none"}
+            onClick={runRecommendedAction}
           >
-            {busy === "sync" ? "同步中" : "同步"}
+            {busy === recommendedAction ? `${recommendedLabel}中` : recommendedLabel}
           </Button>
           <Button
             type="button"
@@ -89,13 +127,26 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
           >
             {busy === "push" ? "推送中" : "推送"}
           </Button>
+          {recommendedAction !== "sync" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() => void run("sync", () => requireSynapseBridge().git.sync(repository.id))}
+            >
+              {busy === "sync" ? "同步中" : "同步"}
+            </Button>
+          ) : null}
         </div>
       </div>
       {operationError ? (
         <div className="shrink-0 px-4 py-3">
           <Alert variant="destructive">
             <AlertTitle>操作失败</AlertTitle>
-            <AlertDescription>{operationError}</AlertDescription>
+            <AlertDescription>
+              {operationError} {getGitErrorAdvice(operationError)}
+            </AlertDescription>
           </Alert>
         </div>
       ) : null}
@@ -107,7 +158,13 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
           </TabsList>
         </div>
         <TabsContent value="changes" className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden">
-          <GitChangesTab repository={repository} status={status} />
+          <GitChangesTab
+            repository={repository}
+            status={status}
+            pushDisabled={busy !== null}
+            onCommitted={history.refresh}
+            onPush={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
+          />
         </TabsContent>
         <TabsContent value="history" className="m-0 min-h-0 flex-1 data-[state=inactive]:hidden">
           <GitHistoryTab history={history} />

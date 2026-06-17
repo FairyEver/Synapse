@@ -1,4 +1,9 @@
-import type { SynapseGitDiffResult, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
+import type {
+  SynapseGitDiffResult,
+  SynapseGitRepository,
+  SynapseGitRepositorySnapshot,
+  SynapseGitRepositorySummary,
+} from "../../../src/types/git"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import { assertRepositoryPath } from "./git-path-utils"
 import { parseGitStatusPorcelainV2 } from "./git-status-parser"
@@ -56,6 +61,24 @@ export function createGitStatusService(deps: StatusDeps) {
         }
         throw error
       }
+    },
+
+    async listSummaries(repositories: readonly SynapseGitRepository[]): Promise<SynapseGitRepositorySummary[]> {
+      return Promise.all(repositories.map(async (repository) => {
+        try {
+          return {
+            repository,
+            snapshot: await this.getSnapshot(repository),
+            error: null,
+          }
+        } catch (error) {
+          return {
+            repository,
+            snapshot: null,
+            error: error instanceof Error ? error.message : "读取仓库状态失败。",
+          }
+        }
+      }))
     },
 
     async getDiff(

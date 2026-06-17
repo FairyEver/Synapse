@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseGitRepository } from "@/types/git"
+import type { SynapseGitRepositorySummary } from "@/types/git"
 
 function getGitBridge() {
   return requireSynapseBridge().git
 }
 
 export function useGitRepositories() {
-  const [repositories, setRepositories] = useState<readonly SynapseGitRepository[]>([])
+  const [summaries, setSummaries] = useState<readonly SynapseGitRepositorySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -15,7 +15,7 @@ export function useGitRepositories() {
     setLoading(true)
     setError(null)
     try {
-      setRepositories(await getGitBridge().listRepositories())
+      setSummaries(await getGitBridge().listRepositorySummaries())
     } catch (err) {
       setError(err instanceof Error ? err.message : "读取仓库失败。")
     } finally {
@@ -27,5 +27,5 @@ export function useGitRepositories() {
     void refresh()
   }, [refresh])
 
-  return { repositories, loading, error, refresh }
+  return { summaries, loading, error, refresh }
 }

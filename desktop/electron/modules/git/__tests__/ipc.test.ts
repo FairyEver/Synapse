@@ -17,6 +17,7 @@ describe("gitIpcModule", () => {
   it("declares structured channels", () => {
     expect(gitIpcModule.id).toBe("git")
     expect(gitIpcModule.methods.listRepositories.channel).toBe("synapse:git:repositories:list")
+    expect(gitIpcModule.methods.listRepositorySummaries.channel).toBe("synapse:git:repositories:list-summaries")
     expect(gitIpcModule.methods.getSnapshot.channel).toBe("synapse:git:status:get-snapshot")
     expect(gitIpcModule.methods.commit.channel).toBe("synapse:git:commit:create")
   })
@@ -41,6 +42,42 @@ describe("gitIpcModule", () => {
     const result = await gitIpcModule.methods.listRepositories.handler(createContext({ "git.repository-registry": registry }), undefined)
 
     expect(result).toHaveLength(1)
+  })
+
+  it("lists repository summaries through registry and status services", async () => {
+    const repository = { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null }
+    const registry = {
+      list: vi.fn().mockResolvedValue([repository]),
+    }
+    const statusService = {
+      listSummaries: vi.fn().mockResolvedValue([{ repository, snapshot: null, error: "not ready" }]),
+    }
+
+    const result = await gitIpcModule.methods.listRepositorySummaries.handler(createContext({
+      "git.repository-registry": registry,
+      "git.status-service": statusService,
+    }), undefined)
+
+    expect(statusService.listSummaries).toHaveBeenCalledWith([repository])
+    expect(result).toEqual([{ repository, snapshot: null, error: "not ready" }])
+  })
+
+  it("reads SSH public key through environment service", async () => {
+    const environment = {
+      getSshPublicKey: vi.fn().mockResolvedValue({
+        path: "/Users/writer/.ssh/id_ed25519.pub",
+        content: "ssh-ed25519 public-key",
+      }),
+    }
+
+    const result = await gitIpcModule.methods.getSshPublicKey.handler(createContext({
+      "git.environment-service": environment,
+    }), undefined)
+
+    expect(result).toEqual({
+      path: "/Users/writer/.ssh/id_ed25519.pub",
+      content: "ssh-ed25519 public-key",
+    })
   })
 
   it("removes repositories through the registry service", async () => {

@@ -1,5 +1,5 @@
-import { useState, type MouseEvent } from "react"
-import { Download, GitPullRequest, RefreshCw, Trash2, Upload } from "lucide-react"
+import { useMemo, useState, type MouseEvent } from "react"
+import { Download, RefreshCw, Trash2, Upload } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -11,19 +11,27 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
-import type { SynapseGitRepository, SynapseGitRepositoryRemoveInput, SynapseGitRepositoryRemoveMode } from "@/types/git"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { SynapseGitRepository, SynapseGitRepositoryRemoveInput, SynapseGitRepositoryRemoveMode, SynapseGitRepositorySummary } from "@/types/git"
 import type { GitOperationBusyState, GitRepositoryOperation } from "../hooks/use-git-operations"
+import {
+  getGitChangeCount,
+  getGitRecommendedAction,
+  getGitStatusText,
+  isGitUnavailable,
+  needsGitAttention,
+} from "../lib/git-status-view"
 
 type GitRepositoryListProps = {
-  readonly repositories: readonly SynapseGitRepository[]
+  readonly summaries: readonly SynapseGitRepositorySummary[]
   readonly loading: boolean
   readonly error: string | null
-  readonly environmentMessage: string | null
   readonly busy: GitOperationBusyState
   readonly onOpenRepository: (repository: SynapseGitRepository) => void
   readonly onPull: (repositoryId: string) => void
@@ -57,10 +65,9 @@ function isRepositoryOperationBusy(
 }
 
 export function GitRepositoryList({
-  repositories,
+  summaries,
   loading,
   error,
-  environmentMessage,
   busy,
   onOpenRepository,
   onPull,
@@ -69,9 +76,16 @@ export function GitRepositoryList({
   onRemoveRepository,
 }: GitRepositoryListProps) {
   const globalActionDisabled = isGlobalBusy(busy)
+  const [filter, setFilter] = useState<"all" | "attention" | "clean" | "unavailable">("all")
   const [removalTarget, setRemovalTarget] = useState<SynapseGitRepository | null>(null)
   const [removalMode, setRemovalMode] = useState<SynapseGitRepositoryRemoveMode>("keep-local")
   const [removalError, setRemovalError] = useState<string | null>(null)
+  const filteredSummaries = useMemo(() => summaries.filter((summary) => {
+    if (filter === "attention") return needsGitAttention(summary.snapshot, summary.error)
+    if (filter === "clean") return !needsGitAttention(summary.snapshot, summary.error)
+    if (filter === "unavailable") return isGitUnavailable(summary.snapshot, summary.error)
+    return true
+  }), [filter, summaries])
 
   const closeRemovalDialog = () => {
     setRemovalTarget(null)
@@ -165,13 +179,6 @@ export function GitRepositoryList({
       <div className="min-h-0 flex-1">
         <ScrollArea className="h-full">
           <div className="space-y-3 p-4">
-            {environmentMessage ? (
-              <Alert>
-                <GitPullRequest />
-                <AlertTitle>Git 环境</AlertTitle>
-                <AlertDescription>{environmentMessage}</AlertDescription>
-              </Alert>
-            ) : null}
             {error ? (
               <Alert variant="destructive">
                 <AlertTitle>操作失败</AlertTitle>
@@ -182,65 +189,159 @@ export function GitRepositoryList({
               <div className="flex h-40 items-center justify-center">
                 <Spinner />
               </div>
-            ) : repositories.length === 0 ? (
+            ) : summaries.length === 0 ? (
               <Empty className="border">
                 <EmptyHeader>
                   <EmptyTitle>暂无仓库</EmptyTitle>
                 </EmptyHeader>
               </Empty>
             ) : (
-              <div className="divide-y divide-border overflow-hidden rounded-lg border bg-background">
-                {repositories.map((repository) => {
-                  const repositoryActionDisabled = globalActionDisabled || isRepositoryBusy(busy, repository.id)
+              <>
+                <Tabs value={filter} onValueChange={(value) => setFilter(value as typeof filter)}>
+                  <TabsList>
+                    <TabsTrigger value="all">全部</TabsTrigger>
+                    <TabsTrigger value="attention">需要处理</TabsTrigger>
+                    <TabsTrigger value="clean">已同步</TabsTrigger>
+                    <TabsTrigger value="unavailable">不可访问</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                {filteredSummaries.length === 0 ? (
+                  <Empty className="border">
+                    <EmptyHeader>
+                      <EmptyTitle>没有匹配仓库</EmptyTitle>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <div className="divide-y divide-border overflow-hidden rounded-lg border bg-background">
+                    {filteredSummaries.map((summary) => {
+                      const { repository, snapshot } = summary
+                      const repositoryActionDisabled = globalActionDisabled || isRepositoryBusy(busy, repository.id)
+                      const recommendedAction = getGitRecommendedAction(snapshot, summary.error)
+                      const statusText = getGitStatusText(snapshot, summary.error)
+                      const changeCount = getGitChangeCount(snapshot)
+                      const branch = snapshot?.currentBranch ?? "无分支"
+                      const isClean = !needsGitAttention(snapshot, summary.error)
 
-                  return (
-                    <div
-                      key={repository.id}
-                      role="button"
-                      tabIndex={0}
-                      className="grid w-full gap-3 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-                      onClick={() => onOpenRepository(repository)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") onOpenRepository(repository)
-                      }}
-                    >
+                      return (
+                        <div
+                          key={repository.id}
+                          role="button"
+                          tabIndex={0}
+                          className="grid w-full gap-3 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                          onClick={() => onOpenRepository(repository)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") onOpenRepository(repository)
+                          }}
+                        >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{repository.name}</span>
+                        <span className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-medium">{repository.name}</span>
+                          <Badge variant={isClean ? "secondary" : "outline"}>{statusText}</Badge>
+                        </span>
                         <span className="mt-1 block truncate text-xs text-muted-foreground">{repository.localPath}</span>
+                        <span className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="truncate">{branch}</span>
+                          {snapshot?.upstream ? <span className="truncate">{snapshot.upstream}</span> : null}
+                          {changeCount > 0 ? <span>{changeCount} 个改动</span> : null}
+                          {snapshot && (snapshot.ahead > 0 || snapshot.behind > 0) ? (
+                            <span>↑{snapshot.ahead} ↓{snapshot.behind}</span>
+                          ) : null}
+                          {summary.error ? <span className="text-destructive">{summary.error}</span> : null}
+                        </span>
                       </span>
                       <span className="flex flex-wrap gap-2 md:justify-end">
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={repositoryActionDisabled}
-                          onClick={(event) => stopAction(event, () => onSync(repository.id))}
-                        >
-                          <RefreshCw
-                            data-icon="inline-start"
-                            className={isRepositoryOperationBusy(busy, repository.id, "sync") ? "animate-spin" : undefined}
-                          />
-                          同步
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={repositoryActionDisabled}
-                          onClick={(event) => stopAction(event, () => onPull(repository.id))}
-                        >
-                          <Download data-icon="inline-start" />
-                          拉取
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={repositoryActionDisabled}
-                          onClick={(event) => stopAction(event, () => onPush(repository.id))}
-                        >
-                          <Upload data-icon="inline-start" />
-                          推送
-                        </Button>
+                        {recommendedAction === "open" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onOpenRepository(repository))}
+                          >
+                            进入
+                          </Button>
+                        ) : recommendedAction === "pull" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onPull(repository.id))}
+                          >
+                            <Download data-icon="inline-start" />
+                            拉取
+                          </Button>
+                        ) : recommendedAction === "push" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onPush(repository.id))}
+                          >
+                            <Upload data-icon="inline-start" />
+                            推送
+                          </Button>
+                        ) : recommendedAction === "sync" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onSync(repository.id))}
+                          >
+                            <RefreshCw
+                              data-icon="inline-start"
+                              className={isRepositoryOperationBusy(busy, repository.id, "sync") ? "animate-spin" : undefined}
+                            />
+                            同步
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onOpenRepository(repository))}
+                          >
+                            进入
+                          </Button>
+                        )}
+                        {recommendedAction !== "pull" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onPull(repository.id))}
+                          >
+                            <Download data-icon="inline-start" />
+                            拉取
+                          </Button>
+                        ) : null}
+                        {recommendedAction !== "push" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onPush(repository.id))}
+                          >
+                            <Upload data-icon="inline-start" />
+                            推送
+                          </Button>
+                        ) : null}
+                        {recommendedAction !== "sync" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onSync(repository.id))}
+                          >
+                            <RefreshCw
+                              data-icon="inline-start"
+                              className={isRepositoryOperationBusy(busy, repository.id, "sync") ? "animate-spin" : undefined}
+                            />
+                            同步
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           variant="destructive"
@@ -252,10 +353,12 @@ export function GitRepositoryList({
                           删除
                         </Button>
                       </span>
-                    </div>
-                  )
-                })}
-              </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </ScrollArea>

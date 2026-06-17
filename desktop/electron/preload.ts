@@ -335,7 +335,9 @@ const IPC_CHANNELS = {
   "git": {
     "checkEnvironment": "synapse:git:environment:check",
     "configureIdentity": "synapse:git:environment:configure-identity",
+    "getSshPublicKey": "synapse:git:environment:get-ssh-public-key",
     "listRepositories": "synapse:git:repositories:list",
+    "listRepositorySummaries": "synapse:git:repositories:list-summaries",
     "addLocalRepository": "synapse:git:repositories:add-local",
     "removeRepository": "synapse:git:repositories:remove",
     "cloneRepository": "synapse:git:repositories:clone",
@@ -616,7 +618,9 @@ const synapseBridge: SynapseBridge = {
     checkEnvironment: invoke(IPC_CHANNELS.git.checkEnvironment),
     configureIdentity: (input) =>
       invoke(IPC_CHANNELS.git.configureIdentity)(input),
+    getSshPublicKey: invoke(IPC_CHANNELS.git.getSshPublicKey),
     listRepositories: invoke(IPC_CHANNELS.git.listRepositories),
+    listRepositorySummaries: invoke(IPC_CHANNELS.git.listRepositorySummaries),
     addLocalRepository: (input) =>
       invoke(IPC_CHANNELS.git.addLocalRepository)(input),
     removeRepository: (input) =>

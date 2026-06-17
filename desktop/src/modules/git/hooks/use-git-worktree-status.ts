@@ -57,6 +57,14 @@ export function useGitWorktreeStatus(repository: SynapseGitRepository) {
     ))
   }, [])
 
+  const selectAll = useCallback(() => {
+    setSelectedPaths(snapshot?.changes.map((change) => change.path) ?? [])
+  }, [snapshot])
+
+  const clearSelection = useCallback(() => {
+    setSelectedPaths([])
+  }, [])
+
   return {
     snapshot,
     selectedFile,
@@ -68,5 +76,7 @@ export function useGitWorktreeStatus(repository: SynapseGitRepository) {
     refresh,
     loadDiff,
     togglePath,
+    selectAll,
+    clearSelection,
   }
 }

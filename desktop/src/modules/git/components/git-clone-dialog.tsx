@@ -10,6 +10,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import type { SynapseGitEnvironmentState, SynapseGitRemoteKind } from "@/types/git"
+import { CopySshPublicKeyButton } from "./git-environment-panel"
 
 type CloneInput = {
   readonly remoteUrl: string
@@ -25,6 +27,7 @@ type AddLocalInput = {
 type GitCloneDialogProps = {
   readonly open: boolean
   readonly busy: boolean
+  readonly environment: SynapseGitEnvironmentState | null
   readonly onOpenChange: (open: boolean) => void
   readonly onSubmit: (input: CloneInput) => Promise<void>
 }
@@ -42,11 +45,25 @@ function basename(input: string): string {
   return name.replace(/\.git$/i, "") || "Git 仓库"
 }
 
-export function GitCloneDialog({ open, busy, onOpenChange, onSubmit }: GitCloneDialogProps) {
+function detectRemoteKind(remoteUrl: string): SynapseGitRemoteKind {
+  const value = remoteUrl.trim()
+  if (/^https:\/\//i.test(value)) return "https"
+  if (/^(ssh:\/\/|[^@\s]+@[^:\s]+:.+)/i.test(value)) return "ssh"
+  return "unknown"
+}
+
+function remoteKindLabel(kind: SynapseGitRemoteKind): string {
+  if (kind === "https") return "HTTPS"
+  if (kind === "ssh") return "SSH"
+  return "无法识别"
+}
+
+export function GitCloneDialog({ open, busy, environment, onOpenChange, onSubmit }: GitCloneDialogProps) {
   const [remoteUrl, setRemoteUrl] = useState("")
   const [targetPath, setTargetPath] = useState("")
   const [error, setError] = useState<string | null>(null)
   const name = useMemo(() => basename(targetPath || remoteUrl), [remoteUrl, targetPath])
+  const remoteKind = useMemo(() => detectRemoteKind(remoteUrl), [remoteUrl])
 
   useEffect(() => {
     if (!open) {
@@ -98,6 +115,18 @@ export function GitCloneDialog({ open, busy, onOpenChange, onSubmit }: GitCloneD
               onChange={(event) => setRemoteUrl(event.target.value)}
               autoComplete="off"
             />
+            {remoteUrl.trim() ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>认证方式：{remoteKindLabel(remoteKind)}</span>
+                {remoteKind === "ssh" ? (
+                  <>
+                    <span>{environment?.sshAvailable ? "SSH 可用" : "未检测到 SSH"}</span>
+                    <span>{environment?.commonSshKeyExists ? "已检测到 SSH 公钥" : "未检测到常见 SSH 公钥"}</span>
+                    {environment?.commonSshKeyExists ? <CopySshPublicKeyButton /> : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="git-clone-target-path">保存到</Label>

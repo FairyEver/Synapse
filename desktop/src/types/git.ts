@@ -44,6 +44,12 @@ export type SynapseGitRepositorySnapshot = {
   readonly changes: readonly SynapseGitFileChange[]
 }
 
+export type SynapseGitRepositorySummary = {
+  readonly repository: SynapseGitRepository
+  readonly snapshot: SynapseGitRepositorySnapshot | null
+  readonly error: string | null
+}
+
 export type SynapseGitStatusParseResult = Omit<
   SynapseGitRepositorySnapshot,
   "repositoryId" | "pathExists" | "isGitRepository"
@@ -84,6 +90,11 @@ export type SynapseGitEnvironmentState = {
   readonly userEmail: string | null
   readonly commonSshKeyExists: boolean
   readonly installHint: string | null
+}
+
+export type SynapseGitSshPublicKey = {
+  readonly path: string
+  readonly content: string
 }
 
 export type SynapseGitOperationResult = {

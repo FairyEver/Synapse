@@ -243,7 +243,9 @@ import type {
   SynapseGitRemoteKind,
   SynapseGitRepository,
   SynapseGitRepositoryRemoveInput,
+  SynapseGitRepositorySummary,
   SynapseGitRepositorySnapshot,
+  SynapseGitSshPublicKey,
 } from "./git"
 import type { SynapseAppUpdateState } from "./update"
 import type {
@@ -750,7 +752,9 @@ export type SynapseBridge = {
   git: {
     checkEnvironment: () => Promise<SynapseGitEnvironmentState>
     configureIdentity: (input: { userName: string; userEmail: string }) => Promise<void>
+    getSshPublicKey: () => Promise<SynapseGitSshPublicKey | null>
     listRepositories: () => Promise<SynapseGitRepository[]>
+    listRepositorySummaries: () => Promise<SynapseGitRepositorySummary[]>
     addLocalRepository: (input: { name: string; localPath: string }) => Promise<SynapseGitRepository>
     removeRepository: (input: SynapseGitRepositoryRemoveInput) => Promise<void>
     cloneRepository: (input: {

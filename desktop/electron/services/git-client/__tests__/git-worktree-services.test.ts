@@ -31,6 +31,32 @@ describe("git worktree services", () => {
     })
   })
 
+  it("lists repository summaries without failing the whole batch", async () => {
+    const run = vi.fn()
+      .mockResolvedValueOnce({
+        stdout: "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n",
+        stderr: "",
+      })
+      .mockRejectedValueOnce(new Error("status failed"))
+    const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
+
+    await expect(service.listSummaries([
+      repository,
+      { ...repository, id: "repo-2", localPath: "/broken" },
+    ])).resolves.toMatchObject([
+      {
+        repository: { id: "repo-1" },
+        snapshot: { repositoryId: "repo-1", currentBranch: "main" },
+        error: null,
+      },
+      {
+        repository: { id: "repo-2" },
+        snapshot: null,
+        error: "status failed",
+      },
+    ])
+  })
+
   it("loads text diff and marks binary diff", async () => {
     const textService = createGitStatusService({
       commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "diff --git a/docs/a.md b/docs/a.md\n+hello\n", stderr: "" }) },

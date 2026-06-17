@@ -19,6 +19,9 @@ import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 type GitChangesTabProps = {
   readonly repository: SynapseGitRepository
   readonly status: ReturnType<typeof useGitWorktreeStatus>
+  readonly onCommitted?: () => void | Promise<void>
+  readonly onPush?: () => void
+  readonly pushDisabled?: boolean
 }
 
 const statusLabels: Record<SynapseGitFileChange["status"], string> = {
@@ -31,10 +34,11 @@ const statusLabels: Record<SynapseGitFileChange["status"], string> = {
   unknown: "未知",
 }
 
-export function GitChangesTab({ repository, status }: GitChangesTabProps) {
+export function GitChangesTab({ repository, status, onCommitted, onPush, pushDisabled }: GitChangesTabProps) {
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [commitNotice, setCommitNotice] = useState(false)
   const changes = status.snapshot?.changes ?? []
   const commitDisabled = busy || status.selectedPaths.length === 0 || !message.trim()
 
@@ -48,7 +52,9 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
         paths: [...status.selectedPaths],
       })
       setMessage("")
+      setCommitNotice(true)
       await status.refresh()
+      await onCommitted?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : "提交失败。")
     } finally {
@@ -124,7 +130,7 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
                   </div>
                 </div>
                 <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
-                  {status.diff.binary ? "文件已变更。" : (status.diff.text || "没有文本差异。")}
+                  {status.diff.binary ? "文件已变更。" : <GitDiffText text={status.diff.text || "没有文本差异。"} />}
                 </pre>
               </div>
             ) : (
@@ -144,6 +150,32 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
             <AlertDescription>{status.error ?? error}</AlertDescription>
           </Alert>
         ) : null}
+        {commitNotice ? (
+          <Alert>
+            <AlertTitle>已提交</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-2">
+              <span>可以推送本地提交。</span>
+              {onPush ? (
+                <Button type="button" variant="outline" size="sm" disabled={pushDisabled} onClick={onPush}>
+                  推送
+                </Button>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {changes.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="text-muted-foreground">已选 {status.selectedPaths.length} / {changes.length}</span>
+            <span className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={status.selectAll}>
+                全选
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={status.clearSelection}>
+                全不选
+              </Button>
+            </span>
+          </div>
+        ) : null}
         <div className="grid gap-2">
           <Label htmlFor="git-commit-message">提交说明</Label>
           <Textarea
@@ -160,6 +192,31 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
         </div>
       </div>
     </div>
+  )
+}
+
+function GitDiffText({ text }: { readonly text: string }) {
+  return (
+    <>
+      {text.split(/\r?\n/).map((line, index) => {
+        const isAddition = line.startsWith("+") && !line.startsWith("+++")
+        const isDeletion = line.startsWith("-") && !line.startsWith("---")
+        return (
+          <span
+            key={`${index}:${line}`}
+            className={
+              isDeletion
+                ? "block whitespace-pre text-destructive"
+                : isAddition
+                  ? "block whitespace-pre bg-background font-medium"
+                  : "block whitespace-pre"
+            }
+          >
+            {line || " "}
+          </span>
+        )
+      })}
+    </>
   )
 }
 

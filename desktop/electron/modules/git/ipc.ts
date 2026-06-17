@@ -37,6 +37,11 @@ const environmentStateSchema = z.object({
   installHint: z.string().nullable(),
 })
 
+const sshPublicKeySchema = z.object({
+  path: z.string(),
+  content: z.string(),
+})
+
 const configureIdentitySchema = z.object({
   userName: z.string(),
   userEmail: z.string(),
@@ -76,6 +81,12 @@ const snapshotSchema = z.object({
   behind: z.number(),
   hasConflicts: z.boolean(),
   changes: z.array(fileChangeSchema),
+})
+
+const repositorySummarySchema = z.object({
+  repository: repositorySchema,
+  snapshot: snapshotSchema.nullable(),
+  error: z.string().nullable(),
 })
 
 const diffRequestSchema = repositoryIdSchema.extend({
@@ -169,12 +180,30 @@ export const gitIpcModule: IpcModule = {
       response: z.void(),
       handler: async (ctx, input: ConfigureIdentityRequest) => ctx.resolve<GitEnvironmentService>("git.environment-service").configureIdentity(input),
     },
+    getSshPublicKey: {
+      channel: "synapse:git:environment:get-ssh-public-key",
+      kind: "invoke",
+      request: z.void(),
+      response: sshPublicKeySchema.nullable(),
+      handler: async (ctx) => ctx.resolve<GitEnvironmentService>("git.environment-service").getSshPublicKey(),
+    },
     listRepositories: {
       channel: "synapse:git:repositories:list",
       kind: "invoke",
       request: z.void(),
       response: z.array(repositorySchema),
       handler: async (ctx) => ctx.resolve<GitRepositoryRegistry>("git.repository-registry").list(),
+    },
+    listRepositorySummaries: {
+      channel: "synapse:git:repositories:list-summaries",
+      kind: "invoke",
+      request: z.void(),
+      response: z.array(repositorySummarySchema),
+      handler: async (ctx) => {
+        const registry = ctx.resolve<GitRepositoryRegistry>("git.repository-registry")
+        const statusService = ctx.resolve<GitStatusService>("git.status-service")
+        return statusService.listSummaries(await registry.list())
+      },
     },
     addLocalRepository: {
       channel: "synapse:git:repositories:add-local",
