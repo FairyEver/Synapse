@@ -10,6 +10,9 @@ export const DRIVE_FILE_VERSION_SOURCE = {
   restore: "restore",
 } as const satisfies Record<string, DriveFileVersionSource>
 
+export const DRIVE_FILE_VERSION_MAX_COUNT = 100
+export const DRIVE_FILE_VERSION_RETENTION_DAYS = 180
+
 export function createDriveFileVersionId(): string {
   return `dfv_${randomUUID().replace(/-/gu, "")}`
 }
@@ -106,6 +109,38 @@ export function toDriveFileVersionDto(version: {
     createdAt: version.createdAt.toISOString(),
     createdBy: version.createdBy,
   }
+}
+
+export async function listCleanupCandidateVersions(tx: VersionTx, input: {
+  readonly itemId: string
+  readonly currentStorageKey: string | null
+  readonly now: Date
+  readonly maxCount?: number
+  readonly retentionDays?: number
+}): Promise<Array<{ readonly id: string; readonly storageKey: string; readonly size: bigint }>> {
+  const maxCount = input.maxCount ?? DRIVE_FILE_VERSION_MAX_COUNT
+  const retentionDays = input.retentionDays ?? DRIVE_FILE_VERSION_RETENTION_DAYS
+  const cutoff = new Date(input.now.getTime() - retentionDays * 24 * 60 * 60 * 1000)
+  const versions = await tx.driveFileVersion.findMany({
+    where: { itemId: input.itemId, deletedAt: null },
+    orderBy: { versionNumber: "desc" },
+  })
+  const protectedIds = new Set(
+    versions
+      .filter((version) => version.storageKey === input.currentStorageKey || version.isPinned)
+      .map((version) => version.id),
+  )
+  let remainingKeepSlots = Math.max(maxCount - protectedIds.size, 0)
+  const candidates: Array<{ readonly id: string; readonly storageKey: string; readonly size: bigint }> = []
+  for (const version of versions) {
+    if (protectedIds.has(version.id)) continue
+    if (version.createdAt >= cutoff && remainingKeepSlots > 0) {
+      remainingKeepSlots -= 1
+      continue
+    }
+    candidates.push({ id: version.id, storageKey: version.storageKey, size: version.size })
+  }
+  return candidates
 }
 
 function normalizeDriveFileVersionSource(value: string): DriveFileVersionSource {

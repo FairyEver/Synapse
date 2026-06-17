@@ -52,6 +52,7 @@ import {
   DRIVE_FILE_VERSION_SOURCE,
   driveVersionStorageKey,
   ensureCurrentDriveFileVersion,
+  listCleanupCandidateVersions,
   toDriveFileVersionDto,
 } from "./drive-version-history"
 import {
@@ -283,6 +284,7 @@ export class DriveService implements OnApplicationBootstrap {
       detail: { userId, itemId: item.id, versionId: version.id, restoredItemId: restored.id },
       ipAddress: auditContext.ipAddress,
     })
+    await this.cleanupFileVersionsAfterChange(userId, restored.id)
     return toDriveItemDto(restored)
   }
 
@@ -354,6 +356,35 @@ export class DriveService implements OnApplicationBootstrap {
       size: object.size ?? version.size,
       contentType: object.contentType ?? version.mimeType,
     }
+  }
+
+  async retryPendingFileVersionDeletes(limit = 100): Promise<{ readonly attempted: number; readonly deleted: number; readonly failed: number }> {
+    const versions = await this.prisma.driveFileVersion.findMany({
+      where: { deletePending: true, deletedAt: { not: null } },
+      orderBy: { createdAt: "asc" },
+      take: Math.max(1, Math.min(Math.floor(limit), 500)),
+    })
+    let deleted = 0
+    let failed = 0
+    for (const version of versions) {
+      try {
+        await this.storage.deleteObject(version.storageKey)
+        await this.prisma.driveFileVersion.update({
+          where: { id: version.id },
+          data: { deletePending: false },
+        })
+        deleted += 1
+      } catch (error) {
+        failed += 1
+        this.logger.warn({
+          versionId: version.id,
+          storageKeyLength: version.storageKey.length,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessage: formatAuditError(error),
+        }, "Drive file version pending delete retry failed")
+      }
+    }
+    return { attempted: versions.length, deleted, failed }
   }
 
   async prepareUpload(userId: string, input: DrivePrepareUploadInput): Promise<DriveUploadPrepareResult> {
@@ -611,6 +642,7 @@ export class DriveService implements OnApplicationBootstrap {
     }
     if (result.completedNow && session.storageKey !== result.item.storageKey) {
       await this.deleteTemporaryUploadObject(session.storageKey)
+      await this.cleanupFileVersionsAfterChange(userId, result.item.id)
     }
     if (result.completedNow) {
       await this.recordDriveAudit({
@@ -1973,6 +2005,51 @@ export class DriveService implements OnApplicationBootstrap {
         errorName: error instanceof Error ? error.name : typeof error,
         errorMessage: formatAuditError(error),
       }, "Drive temporary upload object delete failed")
+    }
+  }
+
+  private async cleanupFileVersionsAfterChange(userId: string, itemId: string): Promise<void> {
+    const item = await this.prisma.driveItem.findFirst({
+      where: { id: itemId, userId, deletedAt: null },
+      select: { id: true, storageKey: true },
+    })
+    if (!item) return
+    const candidates = await this.prisma.$transaction(async (tx) => {
+      const rows = await listCleanupCandidateVersions(tx, {
+        itemId: item.id,
+        currentStorageKey: item.storageKey,
+        now: new Date(),
+      })
+      if (rows.length === 0) return rows
+      await tx.driveFileVersion.updateMany({
+        where: { id: { in: rows.map((version) => version.id) } },
+        data: { deletedAt: new Date(), deletePending: false },
+      })
+      const releasedBytes = rows.reduce((sum, version) => sum + version.size, 0n)
+      if (releasedBytes > 0n) {
+        await tx.driveUsage.update({
+          where: { userId },
+          data: { usedBytes: { decrement: releasedBytes } },
+        })
+      }
+      return rows
+    })
+    for (const version of candidates) {
+      try {
+        await this.storage.deleteObject(version.storageKey)
+      } catch (error) {
+        await this.prisma.driveFileVersion.update({
+          where: { id: version.id },
+          data: { deletePending: true },
+        })
+        this.logger.warn({
+          itemId,
+          versionId: version.id,
+          storageKeyLength: version.storageKey.length,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessage: formatAuditError(error),
+        }, "Drive file version cleanup delete failed")
+      }
     }
   }
 
