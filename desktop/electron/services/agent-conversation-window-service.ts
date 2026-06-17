@@ -4,6 +4,7 @@ import path from "node:path"
 import { buildAgentConversationWindowSearchParams } from "../../src/lib/agent-conversation-window"
 import type {
   AgentConversationTarget,
+  AgentConversationWindowCloseResult,
   AgentConversationWindowFocusResult,
   AgentConversationWindowOpenResult,
   AgentConversationWindowRequest,
@@ -73,6 +74,15 @@ export function createAgentConversationWindowService(deps: Deps) {
     deps.broadcast(AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL, listDetachedConversations())
   }
 
+  function removeTrackedWindow(key: string): boolean {
+    const hadWindow = windowsByKey.delete(key)
+    const hadDetached = detachedByKey.delete(key)
+    if (hadWindow || hadDetached) {
+      broadcastDetachedConversations()
+    }
+    return hadWindow || hadDetached
+  }
+
   return {
     async openConversationWindow(
       request: AgentConversationWindowRequest,
@@ -123,9 +133,7 @@ export function createAgentConversationWindowService(deps: Deps) {
       })
 
       window.on("closed", () => {
-        windowsByKey.delete(key)
-        detachedByKey.delete(key)
-        broadcastDetachedConversations()
+        removeTrackedWindow(key)
         deps.logger.info("Agent conversation window closed.", {
           projectId: request.projectId,
           conversationId: request.conversationId,
@@ -135,9 +143,7 @@ export function createAgentConversationWindowService(deps: Deps) {
       try {
         await window.loadURL(buildWindowUrl(deps.baseUrl(), request))
       } catch (error) {
-        windowsByKey.delete(key)
-        detachedByKey.delete(key)
-        broadcastDetachedConversations()
+        removeTrackedWindow(key)
         deps.logger.error("Failed to load agent conversation window.", {
           projectId: request.projectId,
           conversationId: request.conversationId,
@@ -159,6 +165,35 @@ export function createAgentConversationWindowService(deps: Deps) {
       if (!window || window.isDestroyed()) return { focused: false }
       focusWindow(window)
       return { focused: true }
+    },
+
+    closeConversationWindow(
+      target: Pick<AgentConversationTarget, "projectId" | "conversationId">,
+    ): AgentConversationWindowCloseResult {
+      const key = keyForTarget(target)
+      const window = windowsByKey.get(key)
+      if (!window || window.isDestroyed()) {
+        removeTrackedWindow(key)
+        return { closed: false }
+      }
+
+      try {
+        window.close()
+      } catch (error) {
+        deps.logger.warn("Failed to close agent conversation window.", {
+          projectId: target.projectId,
+          conversationId: target.conversationId,
+          error,
+        })
+        return { closed: false }
+      }
+
+      removeTrackedWindow(key)
+      deps.logger.info("Closed agent conversation window.", {
+        projectId: target.projectId,
+        conversationId: target.conversationId,
+      })
+      return { closed: true }
     },
 
     listDetachedConversations,

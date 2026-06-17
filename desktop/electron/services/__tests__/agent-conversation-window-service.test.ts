@@ -117,6 +117,68 @@ describe("agent conversation window service", () => {
     expect(AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL).toBe("synapse:agent:detached-conversations-changed")
   })
 
+  it("closes and detaches a conversation window by conversation target", async () => {
+    const broadcasts: unknown[] = []
+    const window = createFakeWindow()
+    const service = createAgentConversationWindowService({
+      createWindow: () => window as never,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: (_channel, payload) => {
+        broadcasts.push(payload)
+        return 1
+      },
+      logger: createLoggerMock(),
+    })
+
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })
+
+    expect(service.closeConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+    })).toEqual({ closed: true })
+
+    expect(window.close).toHaveBeenCalledTimes(1)
+    expect(service.listDetachedConversations()).toEqual([])
+    expect(broadcasts.at(-1)).toEqual([])
+  })
+
+  it("removes stale detached state when the tracked window is already destroyed", async () => {
+    const window = createFakeWindow()
+    window.isDestroyed.mockReturnValue(true)
+    const service = createAgentConversationWindowService({
+      createWindow: () => window as never,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: vi.fn(),
+      logger: createLoggerMock(),
+    })
+
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })
+
+    expect(service.closeConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+    })).toEqual({ closed: false })
+
+    expect(window.close).not.toHaveBeenCalled()
+    expect(service.listDetachedConversations()).toEqual([])
+  })
+
   it("cleans up detached state when loading fails", async () => {
     const window = createFakeWindow()
     const loadError = new Error("load failed")

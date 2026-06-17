@@ -21,3 +21,7 @@ export type AgentConversationWindowOpenResult = {
 export type AgentConversationWindowFocusResult = {
   readonly focused: boolean
 }
+
+export type AgentConversationWindowCloseResult = {
+  readonly closed: boolean
+}

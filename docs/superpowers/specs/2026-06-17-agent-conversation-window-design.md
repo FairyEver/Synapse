@@ -12,6 +12,7 @@ Agent 对话页当前由 `desktop/src/modules/agent/index.tsx` 同时承担侧�
 - 新窗口只承载当前对话工作区，不带左侧会话列表。
 - 一条会话同一时间最多有一个独立窗口；重复打开时聚焦已有窗口。
 - 主窗口对被独立窗口接管的会话显示占位提示，避免同一会话在两个窗口同时编辑。
+- 主窗口删除某条会话成功后，若该会话已有独立窗口，必须自动关闭对应窗口并清理接管状态。
 - 保留现有 Agent 运行链路：timeline、权限、发送、取消、导出、引用打开继续使用现有 IPC 和事件。
 
 ## 非目标
@@ -149,6 +150,8 @@ agent.listDetachedConversationWindows(): Promise<AgentDetachedConversation[]>
 agent.onDetachedConversationWindowsChanged(listener): () => void
 ```
 
+主进程窗口服务另提供内部方法 `closeConversationWindow(target): { closed: boolean }`，供删除会话 IPC 成功后关闭对应独立窗口；该方法不暴露给 renderer 直接调用。
+
 接管状态：
 
 ```ts
@@ -167,6 +170,7 @@ type AgentDetachedConversation = {
 - 打开同一会话时，若窗口存在且未销毁，只聚焦已有窗口。
 - 新窗口 ready 后加入接管列表并广播。
 - 窗口关闭时从接管列表移除并广播。
+- 会话删除成功后，主进程按 `projectId + conversationId` 主动关闭对应独立窗口，并立即从接管列表移除。
 - 主窗口订阅接管列表变化，用于决定渲染工作区还是占位。
 
 ## 数据流
@@ -191,10 +195,17 @@ type AgentDetachedConversation = {
 2. 广播接管列表。
 3. 主窗口恢复渲染 `AgentConversationWorkspace`。
 
+删除已在新窗口打开的会话：
+
+1. 主窗口删除会话。
+2. Agent runtime 删除会话数据并关闭该会话运行状态。
+3. 主进程关闭同一 `projectId + conversationId` 的独立窗口。
+4. 主进程广播接管列表。
+
 ## 错误处理
 
 - 打开窗口失败：主界面 toast “打开失败”，结构化日志记录 projectId、conversationId、sessionKey，不记录消息正文。
-- 目标会话不存在：新窗口显示“对话不存在或已删除”。
+- 目标会话不存在：新窗口显示“对话不存在或已删除”；如果目标会话是从主窗口删除成功而消失，窗口应由主进程主动关闭，不停留在该错误态。
 - 聚焦窗口失败或不存在：主窗口可以重新调用打开窗口；若仍失败显示“打开失败”。
 - 发送、权限、取消、导出错误沿用现有错误处理和脱敏规则。
 
@@ -226,6 +237,8 @@ type AgentDetachedConversation = {
   - 同一会话重复打开只聚焦。
   - 关闭窗口后广播状态。
   - `focusConversationWindow` 聚焦已有窗口。
+  - `closeConversationWindow` 关闭目标窗口并广播状态。
+  - 删除会话 IPC 成功后调用 `closeConversationWindow`；删除失败或返回 false 时不关闭窗口。
 
 - `useChatConnection`：
   - `setPermissionMode(mode, target)` 使用目标会话。
