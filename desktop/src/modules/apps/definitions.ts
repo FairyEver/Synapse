@@ -1,5 +1,6 @@
 import { databaseAppDefinition } from "../database/app-definition"
 import { editorScanAppDefinition } from "../editor-scan/app-definition"
+import { gitAppDefinition } from "../git/app-definition"
 import { modelPriceAppDefinition } from "../model-price/app-definition"
 import { resourceRepositoryAppDefinition } from "../resource-repository/app-definition"
 import { usageMonitorAppDefinition } from "../usage-analysis/app-definition"
@@ -8,6 +9,7 @@ import { isSystemAppId } from "./types"
 
 const systemAppDefinitions = [
   resourceRepositoryAppDefinition,
+  gitAppDefinition,
   databaseAppDefinition,
   editorScanAppDefinition,
   usageMonitorAppDefinition,

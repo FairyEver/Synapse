@@ -23,6 +23,10 @@ vi.mock("@/modules/editor-scan", () => ({
   EditorScanModule: () => <div>IDE 窗口</div>,
 }))
 
+vi.mock("@/modules/git", () => ({
+  GitModule: () => <div>Git 窗口</div>,
+}))
+
 vi.mock("@/modules/usage-analysis", () => ({
   UsageMonitorModule: () => <div>用量窗口</div>,
 }))

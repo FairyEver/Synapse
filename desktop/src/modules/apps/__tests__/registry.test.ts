@@ -13,6 +13,7 @@ describe("system app registry", () => {
   it("lists the fixed first-phase system apps in launcher order", () => {
     expect(listSystemApps().map((app) => app.id)).toEqual([
       "resource-repository",
+      "git",
       "database",
       "editor-scan",
       "usage-monitor",
