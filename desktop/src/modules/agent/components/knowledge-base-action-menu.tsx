@@ -1,4 +1,4 @@
-import { BookOpen, ChevronDown, FolderOpen } from "lucide-react"
+import { BookOpen, ChevronDown } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -59,7 +59,6 @@ export function KnowledgeBaseActionMenu({
       >
         {onOpenSourceManager ? (
           <DropdownMenuItem onSelect={onOpenSourceManager}>
-            <FolderOpen data-icon="inline-start" />
             <span className="min-w-0 flex-1 truncate">资料管理</span>
           </DropdownMenuItem>
         ) : null}
