@@ -327,6 +327,26 @@ const IPC_CHANNELS = {
   "apps": {
     "openSystemApp": "synapse:apps:open-system-app",
   },
+  "git": {
+    "checkEnvironment": "synapse:git:environment:check",
+    "configureIdentity": "synapse:git:environment:configure-identity",
+    "listRepositories": "synapse:git:repositories:list",
+    "addLocalRepository": "synapse:git:repositories:add-local",
+    "removeRepository": "synapse:git:repositories:remove",
+    "cloneRepository": "synapse:git:repositories:clone",
+    "getSnapshot": "synapse:git:status:get-snapshot",
+    "getDiff": "synapse:git:status:get-diff",
+    "commit": "synapse:git:commit:create",
+    "fetch": "synapse:git:sync:fetch",
+    "pull": "synapse:git:sync:pull",
+    "push": "synapse:git:sync:push",
+    "sync": "synapse:git:sync:sync",
+    "listBranches": "synapse:git:branches:list",
+    "checkoutBranch": "synapse:git:branches:checkout",
+    "createBranch": "synapse:git:branches:create",
+    "listHistory": "synapse:git:history:list",
+    "getCommit": "synapse:git:history:get-commit",
+  },
 } as const satisfies IpcChannelMap
 
 // Legacy event channels that are not declared by IpcModule descriptors yet.
@@ -586,6 +606,42 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       EVENT_CHANNELS.apps.contentOpenRequest,
     ),
+  },
+  git: {
+    checkEnvironment: invoke(IPC_CHANNELS.git.checkEnvironment),
+    configureIdentity: (input) =>
+      invoke(IPC_CHANNELS.git.configureIdentity)(input),
+    listRepositories: invoke(IPC_CHANNELS.git.listRepositories),
+    addLocalRepository: (input) =>
+      invoke(IPC_CHANNELS.git.addLocalRepository)(input),
+    removeRepository: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.removeRepository)({ repositoryId }),
+    cloneRepository: (input) =>
+      invoke(IPC_CHANNELS.git.cloneRepository)(input),
+    getSnapshot: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.getSnapshot)({ repositoryId }),
+    getDiff: (input) =>
+      invoke(IPC_CHANNELS.git.getDiff)(input),
+    commit: (input) =>
+      invoke(IPC_CHANNELS.git.commit)(input),
+    fetch: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.fetch)({ repositoryId }),
+    pull: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.pull)({ repositoryId }),
+    push: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.push)({ repositoryId }),
+    sync: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.sync)({ repositoryId }),
+    listBranches: (repositoryId) =>
+      invoke(IPC_CHANNELS.git.listBranches)({ repositoryId }),
+    checkoutBranch: (repositoryId, branchName) =>
+      invoke(IPC_CHANNELS.git.checkoutBranch)({ branchName, repositoryId }),
+    createBranch: (repositoryId, branchName) =>
+      invoke(IPC_CHANNELS.git.createBranch)({ branchName, repositoryId }),
+    listHistory: (input) =>
+      invoke(IPC_CHANNELS.git.listHistory)(input),
+    getCommit: (repositoryId, hash) =>
+      invoke(IPC_CHANNELS.git.getCommit)({ hash, repositoryId }),
   },
   account: {
     getState: invoke(IPC_CHANNELS.account.getState),

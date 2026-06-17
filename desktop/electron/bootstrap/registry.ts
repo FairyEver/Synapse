@@ -54,6 +54,15 @@ import {
   coreWorkflowEngineDescriptor,
   coreWorkflowPackageDescriptor,
   coreWorkflowWindowManagerDescriptor,
+  gitBranchServiceDescriptor,
+  gitCloneServiceDescriptor,
+  gitCommandRunnerDescriptor,
+  gitCommitServiceDescriptor,
+  gitEnvironmentServiceDescriptor,
+  gitHistoryServiceDescriptor,
+  gitRepositoryRegistryDescriptor,
+  gitStatusServiceDescriptor,
+  gitSyncServiceDescriptor,
   providerServiceDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
@@ -110,6 +119,15 @@ export function buildServiceRegistry(
   registry.register(coreWorkflowRunStatusesDescriptor)
   registry.register(coreWorkflowEngineDescriptor)
   registry.register(coreWorkflowWindowManagerDescriptor)
+  registry.register(gitCommandRunnerDescriptor)
+  registry.register(gitRepositoryRegistryDescriptor)
+  registry.register(gitEnvironmentServiceDescriptor)
+  registry.register(gitCloneServiceDescriptor)
+  registry.register(gitStatusServiceDescriptor)
+  registry.register(gitCommitServiceDescriptor)
+  registry.register(gitSyncServiceDescriptor)
+  registry.register(gitBranchServiceDescriptor)
+  registry.register(gitHistoryServiceDescriptor)
   registry.register(coreDiagnosticsDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)

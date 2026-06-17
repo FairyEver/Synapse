@@ -26,6 +26,7 @@ import { agentIpcModule } from "../modules/agent/ipc"
 import { opsIpcModule } from "../modules/ops/ipc"
 import { automationIpcModule } from "../modules/automation/ipc"
 import { appsIpcModule } from "../modules/apps/ipc"
+import { gitIpcModule } from "../modules/git/ipc"
 import { workflowIpcModule } from "../modules/workflow/ipc"
 import { knowledgeBaseIpcModule } from "../modules/knowledge-base/ipc"
 import { accountIpcModule } from "../modules/account/ipc"
@@ -58,6 +59,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(agentIpcModule, ctx)
   registry.register(automationIpcModule, ctx)
   registry.register(appsIpcModule, ctx)
+  registry.register(gitIpcModule, ctx)
   registry.register(workflowIpcModule, ctx)
   registry.register(knowledgeBaseIpcModule, ctx)
   registry.register(accountIpcModule, ctx)
@@ -89,6 +91,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   agentIpcModule,
   automationIpcModule,
   appsIpcModule,
+  gitIpcModule,
   workflowIpcModule,
   knowledgeBaseIpcModule,
   accountIpcModule,
