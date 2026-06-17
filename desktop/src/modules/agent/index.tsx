@@ -641,9 +641,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       sourceFilter={sourceFilter}
       unreadByConversationId={chat.unreadByConversationId}
       sendingConversationIds={chat.sendingConversationIds}
-      onCreateSession={async (projectId, selection) => {
+      onCreateSession={async (projectId, selection, name) => {
         if (sourceFilter !== "user") setSourceFilter("user")
-        await chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)
+        await chat.createSession(projectId, selection.providerId, undefined, selection.modelTier, name)
       }}
       onSourceFilterChange={setSourceFilter}
       onSelect={(session) => void chat.selectSession(session)}

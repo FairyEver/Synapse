@@ -1158,6 +1158,80 @@ describe("useAgentChat", () => {
     }))
   })
 
+  it("creates an Agent session with an explicit name", async () => {
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.createSession("project-1", "provider-1", "bypassPermissions", "opus", "需求复盘")
+    })
+
+    expect((window as unknown as {
+      synapse: {
+        agent: {
+          createSession: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      providerId: "provider-1",
+      mode: "bypassPermissions",
+      modelTier: "opus",
+      name: "需求复盘",
+    }))
+  })
+
+  it("keeps the existing fallback name when no explicit name is supplied", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 5, 24, 13, 30))
+    try {
+      let chat: ReturnType<typeof useAgentChat> | undefined
+      const container = document.createElement("div")
+      document.body.appendChild(container)
+      const root = createRoot(container)
+      roots.push(root)
+
+      await act(async () => {
+        root.render(
+          <HookProbe onChange={(next) => {
+            chat = next
+          }}
+          />,
+        )
+      })
+      await waitFor(() => chat?.selectedConversationId === session.id)
+
+      await act(async () => {
+        await chat?.createSession("project-1", "provider-1", "bypassPermissions", "opus")
+      })
+
+      expect((window as unknown as {
+        synapse: {
+          agent: {
+            createSession: ReturnType<typeof vi.fn>
+          }
+        }
+      }).synapse.agent.createSession).toHaveBeenCalledWith(expect.objectContaining({
+        name: expect.stringMatching(/^新会话 /),
+      }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("logs session create failures without exposing backend error text", async () => {
     const bridge = (window as unknown as {
       synapse: {

@@ -60,6 +60,7 @@ type ChatConnectionResult = {
     providerId?: string,
     mode?: SynapseAgentPermissionMode,
     modelTier?: string,
+    name?: string,
   ) => Promise<void>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
@@ -375,6 +376,7 @@ function useChatConnection(
     providerId?: string,
     mode?: SynapseAgentPermissionMode,
     modelTier?: string,
+    name?: string,
   ) => {
     if (!projectId) return
     const requestId = selectRequestIdRef.current + 1
@@ -382,10 +384,11 @@ function useChatConnection(
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
     try {
+      const sessionName = name?.trim() || `新会话 ${formatSessionNameTime(new Date())}`
       const created = await bridge.agent.createSession({
         projectId,
         sessionKey: DEFAULT_LOCAL_SESSION_KEY,
-        name: `新会话 ${formatSessionNameTime(new Date())}`,
+        name: sessionName,
         agentType: "claude-code",
         providerId,
         mode,
