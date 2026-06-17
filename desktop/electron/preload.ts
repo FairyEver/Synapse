@@ -202,7 +202,6 @@ const IPC_CHANNELS = {
     "openConversation": "synapse:agent:open-conversation",
     "getAvailableAgents": "synapse:agent:get-available-agents",
     "event": "synapse:events:agent",
-    "detachedConversationsChanged": "synapse:agent:detached-conversations-changed",
   },
   "automation": {
     "openCreateEditorWindow": "synapse:automation:editor:open-create",
@@ -337,6 +336,7 @@ const EVENT_CHANNELS = {
   },
   agent: {
     event: "synapse:events:agent",
+    detachedConversationsChanged: "synapse:agent:detached-conversations-changed",
   },
   workflow: {
     event: "synapse:events:workflow",
@@ -975,7 +975,7 @@ const synapseBridge: SynapseBridge = {
     ),
     onDetachedConversationWindowsChanged: createRawPayloadSubscription<AgentDetachedConversation[]>(
       subscribe,
-      IPC_CHANNELS.agent.detachedConversationsChanged,
+      EVENT_CHANNELS.agent.detachedConversationsChanged,
     ),
   },
   ops: {

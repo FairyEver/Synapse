@@ -50,7 +50,7 @@ describe("detached agent conversations", () => {
         }),
       },
     })
-    const values: readonly AgentDetachedConversation[][] = []
+    const values: Array<readonly AgentDetachedConversation[]> = []
 
     const container = document.createElement("div")
     document.body.appendChild(container)

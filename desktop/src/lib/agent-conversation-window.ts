@@ -1,4 +1,4 @@
-import type { AgentConversationWindowRequest } from "@/types/agent-conversation-window"
+import type { AgentConversationWindowRequest } from "../types/agent-conversation-window"
 
 const WINDOW_KIND_PARAM = "synapseWindow"
 const WINDOW_KIND = "agent-conversation"
