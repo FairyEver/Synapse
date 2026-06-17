@@ -30,6 +30,7 @@ import {
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { parseAgentConversationWindowRequest } from "@/lib/agent-conversation-window"
 import { parseCcConversationWindowRequest } from "@/lib/cc-conversation-window"
 import { parseContentStoreInstallWindowRequest } from "@/lib/content-store-install-window"
 import { parseContentWindowRequest } from "@/lib/content-window"
@@ -38,6 +39,7 @@ import { ContentStoreInstallWindowPage } from "@/modules/content-store-install"
 import { SettingsModule } from "@/modules/settings"
 import { AppsModule } from "@/modules/apps"
 import { AgentModule } from "@/modules/agent"
+import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
 import { AutomationModule } from "@/modules/automation"
 import { DriveModule } from "@/modules/drive"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
@@ -298,15 +300,28 @@ function MainApp() {
 
 function App() {
   const { resetKey } = useAppConfig()
+  const [agentConversationWindowRequest, setAgentConversationWindowRequest] =
+    useState<ReturnType<typeof parseAgentConversationWindowRequest>>(null)
   const [ccConversationWindowRequest, setCcConversationWindowRequest] = useState<ReturnType<typeof parseCcConversationWindowRequest>>(null)
   const [contentStoreInstallWindowRequest, setContentStoreInstallWindowRequest] = useState<ReturnType<typeof parseContentStoreInstallWindowRequest>>(null)
   const [standaloneContentWindowRequest, setStandaloneContentWindowRequest] = useState<ReturnType<typeof parseContentWindowRequest>>(null)
 
   useEffect(() => {
+    setAgentConversationWindowRequest(parseAgentConversationWindowRequest(window.location.search))
     setCcConversationWindowRequest(parseCcConversationWindowRequest(window.location.search))
     setContentStoreInstallWindowRequest(parseContentStoreInstallWindowRequest(window.location.search))
     setStandaloneContentWindowRequest(parseContentWindowRequest(window.location.search))
   }, [])
+
+  if (agentConversationWindowRequest) {
+    return (
+      <IdentityGate>
+        <ErrorBoundary fallbackTitle="对话窗口出现问题">
+          <AgentConversationWindowPage request={agentConversationWindowRequest} />
+        </ErrorBoundary>
+      </IdentityGate>
+    )
+  }
 
   if (ccConversationWindowRequest) {
     return (
