@@ -39,7 +39,7 @@ const AGENT_CONVERSATION_WINDOW_BOUNDS = {
   width: 700,
   height: 820,
   minWidth: 400,
-  minHeight: 820,
+  minHeight: 300,
 }
 
 function keyForTarget(target: Pick<AgentConversationTarget, "projectId" | "conversationId">): string {

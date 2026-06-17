@@ -43,7 +43,7 @@ describe("agent conversation window service", () => {
       width: 700,
       height: 820,
       minWidth: 400,
-      minHeight: 820,
+      minHeight: 300,
     }))
     expect(createWindow.mock.calls[0]?.[0]).not.toHaveProperty("maxWidth")
     expect(createWindow.mock.calls[0]?.[0]).not.toHaveProperty("maxHeight")
