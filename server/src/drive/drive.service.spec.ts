@@ -129,6 +129,87 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("creates a first file version when a new upload completes", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: 11n, etag: "etag-v1" })),
+      copyObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const completed = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+
+    const versions = await prisma.driveFileVersion.findMany({ where: { itemId: completed.id } })
+    expect(versions).toHaveLength(1)
+    expect(versions[0]).toMatchObject({
+      userId: "user-1",
+      versionNumber: 1,
+      size: 11n,
+      mimeType: "text/plain",
+      source: "upload",
+      etag: "etag-v1",
+      deletedAt: null,
+    })
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: completed.id } })
+    expect(item.storageKey).toBe(versions[0]!.storageKey)
+    expect(storage.copyObject).toHaveBeenCalledWith({
+      fromKey: expect.stringMatching(/^drive\/item-/u),
+      toKey: versions[0]!.storageKey,
+      contentType: "text/plain",
+    })
+  })
+
+  it("keeps old upload versions and charges full version storage on overwrite", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({
+        key,
+        size: key.includes("/overwrites/") ? 5n : 11n,
+        etag: key.includes("/overwrites/") ? "etag-v2" : "etag-v1",
+      })),
+      copyObject: vi.fn(async () => undefined),
+      deleteObject,
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+    })
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    expect(session.reservedBytes).toBe(5n)
+
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    const versions = await prisma.driveFileVersion.findMany({
+      where: { itemId: first.id, deletedAt: null },
+      orderBy: { versionNumber: "asc" },
+    })
+    expect(versions.map((version: { versionNumber: number }) => version.versionNumber)).toEqual([1, 2])
+    expect(versions.map((version: { size: bigint }) => version.size)).toEqual([11n, 5n])
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(16n)
+    expect(usage.reservedBytes).toBe(0n)
+    expect(deleteObject).not.toHaveBeenCalledWith(versions[0]!.storageKey)
+  })
+
   it("overwrites same-name files while preserving item identity and shares", async () => {
     const prisma = createPrismaMemory()
     const deleteObject = vi.fn(async () => undefined)
@@ -158,7 +239,7 @@ describe("DriveService", () => {
     const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
     expect(prepared.item.id).toBe(first.id)
     expect(session.storageKey).toContain(`/overwrites/${prepared.sessionId}`)
-    expect(session.reservedBytes).toBe(0n)
+    expect(session.reservedBytes).toBe(5n)
 
     const completed = await service.completeUpload("user-1", prepared.sessionId)
     expect(completed).toMatchObject({
@@ -169,12 +250,12 @@ describe("DriveService", () => {
       shared: true,
     })
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
-    expect(usage.usedBytes).toBe(5n)
+    expect(usage.usedBytes).toBe(16n)
     expect(usage.reservedBytes).toBe(0n)
     expect(await service.listShares("user-1", "https://synapse.test")).toMatchObject({
       items: [expect.objectContaining({ shareId: share.shareId, itemName: "report.txt" })],
     })
-    expect(deleteObject).toHaveBeenCalledWith(originalStorageKey)
+    expect(deleteObject).not.toHaveBeenCalledWith(originalStorageKey)
   })
 
   it("keeps the existing file active when overwrite completion fails validation", async () => {
@@ -294,7 +375,7 @@ describe("DriveService", () => {
       mimeType: "text/plain",
     })
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
-    expect(usage.usedBytes).toBe(5n)
+    expect(usage.usedBytes).toBe(23n)
     expect(usage.reservedBytes).toBe(0n)
   })
 
@@ -665,7 +746,7 @@ describe("DriveService", () => {
     const rootChildren = await service.listItems("user-1", root.id)
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["a.md", "docs"])
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
-    expect(usage.usedBytes).toBe(16n)
+    expect(usage.usedBytes).toBe(27n)
     expect(usage.reservedBytes).toBe(0n)
   })
 
@@ -756,7 +837,8 @@ describe("DriveService", () => {
     expect(download.fileName).toBe("brief.txt")
     expect(download.size).toBe(5n)
     expect(download.contentType).toBe("text/plain")
-    expect(storageMock.getObjectStream).toHaveBeenCalledWith({ key: `drive/${file.id}` })
+    const currentFile = await prisma.driveItem.findUniqueOrThrow({ where: { id: file.id } })
+    expect(storageMock.getObjectStream).toHaveBeenCalledWith({ key: currentFile.storageKey })
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
@@ -879,11 +961,12 @@ describe("DriveService", () => {
       shareId: share.shareId,
       password: share.password ?? undefined,
     })
+    const fileItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.entries[0]!.item.id } })
 
     expect(archive).toEqual({
       kind: "zip",
       filename: "交接材料.zip",
-      entries: [{ path: "docs/spec.txt", storageKey: `drive/${prepared.entries[0]!.item.id}` }],
+      entries: [{ path: "docs/spec.txt", storageKey: fileItem.storageKey }],
     })
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
@@ -909,11 +992,13 @@ describe("DriveService", () => {
       userId: "user-1",
       itemId: folder.id,
     })
+    const firstItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: first.id } })
+    const secondItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: second.id } })
 
     expect(archive).toMatchObject({ kind: "zip", filename: "交接材料.zip" })
     expect(archive.kind === "zip" ? archive.entries : []).toEqual([
-      { path: "report.pdf", storageKey: `drive/${first.id}` },
-      { path: "report (2).pdf", storageKey: `drive/${second.id}` },
+      { path: "report.pdf", storageKey: firstItem.storageKey },
+      { path: "report (2).pdf", storageKey: secondItem.storageKey },
     ])
   })
 
@@ -941,11 +1026,13 @@ describe("DriveService", () => {
       itemId: docs.id,
       password: share.password ?? undefined,
     })
+    const firstItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: first.id } })
+    const secondItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: second.id } })
 
     expect(archive).toMatchObject({ kind: "zip", filename: "docs.zip" })
     expect(archive.kind === "zip" ? archive.entries : []).toEqual([
-      { path: "report.pdf", storageKey: `drive/${first.id}` },
-      { path: "report (2).pdf", storageKey: `drive/${second.id}` },
+      { path: "report.pdf", storageKey: firstItem.storageKey },
+      { path: "report (2).pdf", storageKey: secondItem.storageKey },
     ])
   })
 
@@ -1429,11 +1516,13 @@ describe("DriveService", () => {
       publicAppUrl: "https://synapse.test",
     })
     await service.completeUpload("user-1", prepared.sessionId)
+    const currentItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    vi.mocked(storage.deleteObject).mockClear()
 
     try {
       await expect(service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")).resolves.toEqual({ ok: true })
 
-      expect(storage.deleteObject).toHaveBeenCalledWith(`drive/${prepared.item.id}`)
+      expect(storage.deleteObject).toHaveBeenCalledWith(currentItem.storageKey)
       expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
         action: "admin.drive.delete",
         targetType: "drive_item",
@@ -1465,6 +1554,7 @@ describe("DriveService", () => {
       publicAppUrl: "https://synapse.test",
     })
     await service.completeUpload("user-1", prepared.sessionId)
+    const currentItem = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
 
     try {
       await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
@@ -1482,7 +1572,7 @@ describe("DriveService", () => {
       ])
       expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({
         itemId: prepared.item.id,
-        storageKeyLength: `drive/${prepared.item.id}`.length,
+        storageKeyLength: currentItem.storageKey!.length,
         errorName: "Error",
         errorMessage: expect.stringContaining("Authorization: [REDACTED]"),
       }), "Drive storage object delete failed")
@@ -1647,6 +1737,7 @@ function createPrismaMemory() {
   const usages = new Map<string, any>()
   const sessions = new Map<string, any>()
   const shares = new Map<string, any>()
+  const versions = new Map<string, any>()
   const now = () => new Date("2026-06-07T12:00:00.000Z")
   const id = (prefix: string) => `${prefix}-${nextId++}`
   const withShares = (item: any) => ({
@@ -1671,6 +1762,7 @@ function createPrismaMemory() {
           [usages, cloneMap(usages)],
           [sessions, cloneMap(sessions)],
           [shares, cloneMap(shares)],
+          [versions, cloneMap(versions)],
         ] as const
         try {
           return await input(prisma)
@@ -1803,6 +1895,58 @@ function createPrismaMemory() {
         const found = [...sessions.values()].filter((session) => matchesWhere(session, where ?? {}))
         return select ? found.map((session) => selectFields(session, select)) : found
       },
+    },
+    driveFileVersion: {
+      create: async ({ data }: any) => {
+        const version = {
+          id: data.id ?? id("version"),
+          isPinned: data.isPinned ?? false,
+          deletedAt: data.deletedAt ?? null,
+          deletePending: data.deletePending ?? false,
+          createdAt: data.createdAt ?? now(),
+          createdBy: data.createdBy ?? null,
+          restoredFromVersionId: data.restoredFromVersionId ?? null,
+          etag: data.etag ?? null,
+          ...data,
+        }
+        versions.set(version.id, version)
+        return version
+      },
+      findFirst: async ({ where, select, orderBy }: any) => {
+        const version = orderRows([...versions.values()].filter((item) => matchesWhere(item, where ?? {})), orderBy)[0]
+        if (!version) return null
+        return select ? selectFields(version, select) : version
+      },
+      findMany: async (args: any = {}) => {
+        const { where, select, orderBy, skip, take } = args
+        const found = paginateRows(
+          orderRows([...versions.values()].filter((version) => matchesWhere(version, where ?? {})), orderBy),
+          { skip, take },
+        )
+        return select ? found.map((version) => selectFields(version, select)) : found
+      },
+      findUniqueOrThrow: async ({ where }: any) => {
+        const version = versions.get(where.id)
+        if (!version) throw new Error("version not found")
+        return version
+      },
+      update: async ({ where, data }: any) => {
+        const version = versions.get(where.id)
+        if (!version) throw new Error("version not found")
+        Object.assign(version, data)
+        return version
+      },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0
+        for (const version of versions.values()) {
+          if (matchesWhere(version, where)) {
+            Object.assign(version, data)
+            count += 1
+          }
+        }
+        return { count }
+      },
+      count: async ({ where }: any = {}) => [...versions.values()].filter((version) => matchesWhere(version, where ?? {})).length,
     },
     driveShare: {
       create: async ({ data }: any) => {

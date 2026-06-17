@@ -44,6 +44,13 @@ import {
 } from "./drive-access-protection"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 import {
+  createDriveFileVersion,
+  createDriveFileVersionId,
+  DRIVE_FILE_VERSION_SOURCE,
+  driveVersionStorageKey,
+  ensureCurrentDriveFileVersion,
+} from "./drive-version-history"
+import {
   DRIVE_ITEM_TYPE,
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_STATUS,
@@ -216,7 +223,7 @@ export class DriveService implements OnApplicationBootstrap {
         include: driveItemWithShares,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       })
-      const reservedBytes = existingFile ? positiveByteDifference(requestedSize, existingFile.size) : requestedSize
+      const reservedBytes = requestedSize
       if (usage.usedBytes + usage.reservedBytes + reservedBytes > usage.quotaBytes) {
         throw new BadRequestException("云盘空间不足。")
       }
@@ -380,9 +387,21 @@ export class DriveService implements OnApplicationBootstrap {
       throw new BadRequestException("上传文件校验失败。")
     }
 
+    const versionId = createDriveFileVersionId()
+    const versionStorageKey = driveVersionStorageKey(session.itemId, versionId)
+    try {
+      await this.storage.copyObject({
+        fromKey: session.storageKey,
+        toKey: versionStorageKey,
+        contentType: session.expectedMime ?? null,
+      })
+    } catch (error) {
+      await this.failUploadSession(userId, session.id, session.itemId, session.reservedBytes, DRIVE_UPLOAD_STATUS.failed, new Date(), session.storageKey)
+      throw error
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
       const isOverwrite = isOverwriteUploadSession(session)
-      const replacedStorageKey = isOverwrite ? session.item.storageKey : null
       const transitioned = await tx.driveUploadSession.updateMany({
         where: { id: session.id, userId, status: DRIVE_UPLOAD_STATUS.pending },
         data: { status: DRIVE_UPLOAD_STATUS.completed, completedAt: new Date() },
@@ -403,16 +422,28 @@ export class DriveService implements OnApplicationBootstrap {
             },
             include: driveItemWithShares,
           })
-        return { item, completedNow: false, replacedStorageKey: null as string | null }
+        return { item, completedNow: false }
       }
+      if (isOverwrite) await ensureCurrentDriveFileVersion(tx, { item: session.item })
       await updateDriveUsageAfterUploadCompletion(tx, userId, {
         reservedBytes: session.reservedBytes,
-        usedBytesDelta: isOverwrite ? session.expectedSize - session.item.size : session.expectedSize,
+        usedBytesDelta: session.expectedSize,
+      })
+      await createDriveFileVersion(tx, {
+        id: versionId,
+        itemId: session.itemId,
+        userId,
+        storageKey: versionStorageKey,
+        size: session.expectedSize,
+        mimeType: session.expectedMime ?? null,
+        source: DRIVE_FILE_VERSION_SOURCE.upload,
+        etag: object.etag ?? null,
+        createdBy: userId,
       })
       const item = await tx.driveItem.update({
         where: { id: session.itemId },
         data: {
-          storageKey: session.storageKey,
+          storageKey: versionStorageKey,
           size: session.expectedSize,
           mimeType: session.expectedMime ?? null,
           storageStatus: DRIVE_STORAGE_STATUS.active,
@@ -420,10 +451,13 @@ export class DriveService implements OnApplicationBootstrap {
         },
         include: driveItemWithShares,
       })
-      return { item, completedNow: true, replacedStorageKey }
+      return { item, completedNow: true }
     })
-    if (result.completedNow && result.replacedStorageKey && result.replacedStorageKey !== result.item.storageKey) {
-      await this.deleteReplacedStorageObject(result.item.id, result.replacedStorageKey)
+    if (!result.completedNow) {
+      await this.deleteTemporaryUploadObject(versionStorageKey)
+    }
+    if (result.completedNow && session.storageKey !== result.item.storageKey) {
+      await this.deleteTemporaryUploadObject(session.storageKey)
     }
     if (result.completedNow) {
       await this.recordDriveAudit({
@@ -1775,19 +1809,6 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
-  private async deleteReplacedStorageObject(itemId: string, storageKey: string): Promise<void> {
-    try {
-      await this.storage.deleteObject(storageKey)
-    } catch (error) {
-      this.logger.warn({
-        itemId,
-        storageKeyLength: storageKey.length,
-        errorName: error instanceof Error ? error.name : typeof error,
-        errorMessage: formatAuditError(error),
-      }, "Drive replaced storage object delete failed")
-    }
-  }
-
   private async recordDriveDeleteAuditSafely(input: Parameters<AuditLogService["record"]>[0]): Promise<void> {
     try {
       await this.auditLog?.record(input)
@@ -1809,10 +1830,6 @@ async function ensureUsage(client: DrivePrismaClient, userId: string) {
     create: { userId, usedBytes: 0n, reservedBytes: 0n, quotaBytes: driveDefaultQuotaBytes },
     update: {},
   })
-}
-
-function positiveByteDifference(nextBytes: bigint, currentBytes: bigint): bigint {
-  return nextBytes > currentBytes ? nextBytes - currentBytes : 0n
 }
 
 function isOverwriteUploadSession(session: {
