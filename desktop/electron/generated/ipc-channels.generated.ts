@@ -168,6 +168,7 @@ export const IPC_CHANNELS = {
     "openConversation": "synapse:agent:open-conversation",
     "openConversationWindow": "synapse:agent:open-conversation-window",
     "focusConversationWindow": "synapse:agent:focus-conversation-window",
+    "replaceConversationWindowTarget": "synapse:agent:replace-conversation-window-target",
     "listDetachedConversationWindows": "synapse:agent:list-detached-conversation-windows",
     "createSession": "synapse:agent:create-session",
     "switchSession": "synapse:agent:switch-session",

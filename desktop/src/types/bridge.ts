@@ -89,6 +89,8 @@ import type {
   AgentConversationTarget,
   AgentConversationWindowFocusResult,
   AgentConversationWindowOpenResult,
+  AgentConversationWindowReplaceRequest,
+  AgentConversationWindowReplaceResult,
   AgentConversationWindowRequest,
   AgentDetachedConversation,
 } from "./agent-conversation-window"
@@ -1042,6 +1044,9 @@ export type SynapseBridge = {
     focusConversationWindow: (
       target: AgentConversationTarget,
     ) => Promise<AgentConversationWindowFocusResult>
+    replaceConversationWindowTarget: (
+      request: AgentConversationWindowReplaceRequest,
+    ) => Promise<AgentConversationWindowReplaceResult>
     listDetachedConversationWindows: () => Promise<AgentDetachedConversation[]>
     getTimeline: (
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },

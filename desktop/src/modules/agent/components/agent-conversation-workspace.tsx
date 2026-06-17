@@ -79,7 +79,7 @@ export type AgentConversationWorkspaceController = {
     providerId?: string,
     mode?: SynapseAgentPermissionMode,
     modelTier?: string,
-  ) => Promise<void>
+  ) => Promise<SynapseAgentSessionSummary | undefined>
   readonly setPermissionMode: (
     mode: SynapseAgentPermissionMode,
     target?: AgentConversationTarget,
@@ -108,6 +108,7 @@ type AgentConversationWorkspaceProps = {
   readonly agentIcon?: string
   readonly mode: "embedded" | "window"
   readonly onOpenDetached?: (target: AgentConversationTarget) => void
+  readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean> | boolean
   readonly onUserSessionRequested?: () => void
 }
 
@@ -134,10 +135,12 @@ function AgentConversationWorkspace({
   agentIcon,
   mode,
   onOpenDetached,
+  onReplaceDetachedTarget,
   onUserSessionRequested,
 }: AgentConversationWorkspaceProps) {
   const [draft, setDraft] = useState("")
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
+  const [creatingConversation, setCreatingConversation] = useState(false)
   const [isExportingConversation, setIsExportingConversation] = useState(false)
   const pendingMessageIdRef = useRef(0)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
@@ -484,14 +487,27 @@ function AgentConversationWorkspace({
     }
   }
 
-  const handleStartRolloverConversation = () => {
+  const createConversationFromCurrent = async (nextMode?: SynapseAgentPermissionMode) => {
+    if (creatingConversation) return
     onUserSessionRequested?.()
-    void chat.createSession(
-      session.projectId,
-      session.providerId,
-      session.mode,
-      session.modelTier,
-    )
+    setCreatingConversation(true)
+    try {
+      const created = await chat.createSession(
+        session.projectId,
+        session.providerId,
+        nextMode ?? session.mode,
+        session.modelTier,
+      )
+      if (created && mode === "window") {
+        await onReplaceDetachedTarget?.(created)
+      }
+    } finally {
+      setCreatingConversation(false)
+    }
+  }
+
+  const handleStartRolloverConversation = () => {
+    void createConversationFromCurrent()
   }
 
   return (
@@ -634,13 +650,13 @@ function AgentConversationWorkspace({
         disabled={!target.projectId}
         canSend={Boolean(draft.trim() && target.projectId)}
         sending={chat.sending}
+        creatingConversation={creatingConversation}
         cancelPhase={chat.cancelPhase}
         permissionMode={selectedPermissionMode}
         quickInputs={quickInputs}
         onPermissionModeChange={(nextMode) => chat.setPermissionMode(nextMode, target)}
         onCreatePermissionModeSession={(nextMode) => {
-          onUserSessionRequested?.()
-          void chat.createSession(target.projectId, session.providerId, nextMode, session.modelTier)
+          void createConversationFromCurrent(nextMode)
         }}
         onDraftChange={setDraft}
         onQuickInputDirectSend={(content) =>

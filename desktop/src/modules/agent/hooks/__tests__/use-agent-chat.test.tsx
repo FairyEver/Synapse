@@ -818,6 +818,65 @@ describe("useAgentChat", () => {
     expect(chat?.timeline).toEqual([])
   })
 
+  it("returns the created session while preserving the create selection flow", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          createSession: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    const createdSession: SynapseAgentSessionSummary = {
+      ...nextSession,
+      id: "conversation-created",
+      name: "新会话 10:00 AM",
+      active: true,
+    }
+    bridge.createSession.mockResolvedValue(createdSession)
+    bridge.listSessions
+      .mockResolvedValueOnce([session])
+      .mockResolvedValueOnce([session, createdSession])
+
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    let created: SynapseAgentSessionSummary | undefined
+    await act(async () => {
+      created = await chat?.createSession(
+        session.projectId,
+        "provider-1",
+        "acceptEdits",
+        "sonnet",
+      )
+    })
+
+    expect(created).toEqual(createdSession)
+    expect(chat?.selectedConversationId).toBe(createdSession.id)
+    expect(chat?.selectedSessionKey).toBe(createdSession.sessionKey)
+    expect(chat?.timeline).toEqual([])
+    expect(bridge.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: session.projectId,
+      sessionKey: "local:renderer",
+      providerId: "provider-1",
+      mode: "acceptEdits",
+      modelTier: "sonnet",
+    }))
+  })
+
   it("refreshes selection when delete fallback switch fails", async () => {
     const bridge = (window as unknown as {
       synapse: {

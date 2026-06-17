@@ -6,6 +6,8 @@ import type {
   AgentConversationTarget,
   AgentConversationWindowFocusResult,
   AgentConversationWindowOpenResult,
+  AgentConversationWindowReplaceRequest,
+  AgentConversationWindowReplaceResult,
   AgentConversationWindowRequest,
   AgentDetachedConversation,
 } from "../../src/types/agent-conversation-window"
@@ -32,6 +34,7 @@ type Deps = {
   readonly now: () => string
   readonly broadcast: (channel: string, payload: unknown) => number
   readonly attachWindow?: (managerId: string, window: BrowserWindow) => void
+  readonly detachWindow?: (managerId: string) => void
   readonly logger: Logger
 }
 
@@ -64,6 +67,7 @@ function buildWindowUrl(baseUrl: string, request: AgentConversationWindowRequest
 export function createAgentConversationWindowService(deps: Deps) {
   const windowsByKey = new Map<string, BrowserWindow>()
   const detachedByKey = new Map<string, AgentDetachedConversation>()
+  const keyByWindowId = new Map<number, string>()
 
   function listDetachedConversations(): AgentDetachedConversation[] {
     return [...detachedByKey.values()].sort((left, right) => left.openedAt.localeCompare(right.openedAt))
@@ -104,6 +108,7 @@ export function createAgentConversationWindowService(deps: Deps) {
       const managerId = windowManagerIdForKey(key)
       deps.attachWindow?.(managerId, window)
       windowsByKey.set(key, window)
+      keyByWindowId.set(window.id, key)
       detachedByKey.set(key, {
         projectId: request.projectId,
         conversationId: request.conversationId,
@@ -123,8 +128,10 @@ export function createAgentConversationWindowService(deps: Deps) {
       })
 
       window.on("closed", () => {
-        windowsByKey.delete(key)
-        detachedByKey.delete(key)
+        const currentKey = keyByWindowId.get(window.id) ?? key
+        keyByWindowId.delete(window.id)
+        windowsByKey.delete(currentKey)
+        detachedByKey.delete(currentKey)
         broadcastDetachedConversations()
         deps.logger.info("Agent conversation window closed.", {
           projectId: request.projectId,
@@ -137,6 +144,7 @@ export function createAgentConversationWindowService(deps: Deps) {
       } catch (error) {
         windowsByKey.delete(key)
         detachedByKey.delete(key)
+        keyByWindowId.delete(window.id)
         broadcastDetachedConversations()
         deps.logger.error("Failed to load agent conversation window.", {
           projectId: request.projectId,
@@ -161,6 +169,52 @@ export function createAgentConversationWindowService(deps: Deps) {
       return { focused: true }
     },
 
+    async replaceConversationWindowTarget(
+      request: AgentConversationWindowReplaceRequest,
+    ): Promise<AgentConversationWindowReplaceResult> {
+      const oldKey = keyForTarget(request.from)
+      const window = windowsByKey.get(oldKey)
+      if (!window || window.isDestroyed()) {
+        return { replaced: false }
+      }
+
+      const newKey = keyForTarget(request.to)
+      const existingNewWindow = windowsByKey.get(newKey)
+      if (existingNewWindow && existingNewWindow !== window && !existingNewWindow.isDestroyed()) {
+        focusWindow(existingNewWindow)
+        return { replaced: false }
+      }
+
+      const previousDetached = detachedByKey.get(oldKey)
+      const title = request.to.title?.trim() || "对话"
+      if (oldKey !== newKey) {
+        windowsByKey.delete(oldKey)
+        detachedByKey.delete(oldKey)
+        deps.detachWindow?.(windowManagerIdForKey(oldKey))
+        windowsByKey.set(newKey, window)
+        keyByWindowId.set(window.id, newKey)
+        deps.attachWindow?.(windowManagerIdForKey(newKey), window)
+      }
+
+      window.setTitle(title)
+      detachedByKey.set(newKey, {
+        projectId: request.to.projectId,
+        conversationId: request.to.conversationId,
+        sessionKey: request.to.sessionKey,
+        title,
+        windowId: window.id,
+        openedAt: previousDetached?.openedAt ?? deps.now(),
+      })
+      broadcastDetachedConversations()
+      deps.logger.info("Replaced agent conversation window target.", {
+        fromProjectId: request.from.projectId,
+        fromConversationId: request.from.conversationId,
+        projectId: request.to.projectId,
+        conversationId: request.to.conversationId,
+      })
+      return { replaced: true }
+    },
+
     listDetachedConversations,
   }
 }
@@ -182,6 +236,9 @@ export function createDefaultAgentConversationWindowService(
         { id: managerId, role: "detail" },
         managedBrowserWindow(window, "detail"),
       )
+    },
+    detachWindow: (managerId) => {
+      windowManager.detach(managerId)
     },
     logger: createMainLogger("agent-conversation-window"),
   })

@@ -73,6 +73,7 @@ function AgentComposer({
   canSend,
   sending,
   cancelPhase,
+  creatingConversation = false,
   permissionMode = "default",
   onDraftChange,
   onInputKeyDown,
@@ -99,6 +100,7 @@ function AgentComposer({
   readonly disabled: boolean
   readonly canSend: boolean
   readonly sending: boolean
+  readonly creatingConversation?: boolean
   readonly cancelPhase: "idle" | "cancel_pending" | "cancelled"
   readonly permissionMode?: SynapseAgentPermissionMode
   readonly pendingMessages?: readonly PendingMessage[]
@@ -427,7 +429,10 @@ function AgentComposer({
         <AgentComposerInputBox
           multiline={multiline}
           contextNotice={showConversationRolloverPrompt && onStartNewConversation ? (
-            <AgentConversationRolloverPrompt onStartNewConversation={onStartNewConversation} />
+            <AgentConversationRolloverPrompt
+              onStartNewConversation={onStartNewConversation}
+              disabled={creatingConversation}
+            />
           ) : null}
           slashMenu={slashMenuOpen ? (
             <AgentSlashMenu
@@ -621,6 +626,7 @@ function AgentComposer({
             <Button
               type="button"
               variant={pendingMode === "bypassPermissions" ? "destructive" : "default"}
+              disabled={creatingConversation}
               onClick={() => {
                 const mode = pendingMode
                 if (!mode) return

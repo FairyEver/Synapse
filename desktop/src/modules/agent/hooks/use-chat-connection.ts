@@ -62,7 +62,7 @@ type ChatConnectionResult = {
     mode?: SynapseAgentPermissionMode,
     modelTier?: string,
     name?: string,
-  ) => Promise<void>
+  ) => Promise<SynapseAgentSessionSummary | undefined>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
@@ -379,11 +379,12 @@ function useChatConnection(
     modelTier?: string,
     name?: string,
   ) => {
-    if (!projectId) return
+    if (!projectId) return undefined
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
+    let session: SynapseAgentSessionSummary | undefined
     try {
       const sessionName = name?.trim() || `新会话 ${formatSessionNameTime(new Date())}`
       const created = await bridge.agent.createSession({
@@ -395,26 +396,27 @@ function useChatConnection(
         mode,
         modelTier,
       })
-      const session = normalizeSessionProject(created, projectId)
+      const createdSession = normalizeSessionProject(created, projectId)
+      session = createdSession
       if (requestId !== selectRequestIdRef.current) {
-        dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.some((item) => isSameSession(item, session))
+        dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.some((item) => isSameSession(item, createdSession))
           ? current
-          : sortSessions([{ ...session, active: false }, ...current]) })
-        return
+          : sortSessions([{ ...createdSession, active: false }, ...current]) })
+        return createdSession
       }
-      setSelectedSession(session)
+      setSelectedSession(createdSession)
       dispatch({ type: "UPDATE_SESSIONS", updater: (current) => sortSessions([
-        session,
+        createdSession,
         ...current.map((item) => ({
           ...item,
-          active: item.projectId === session.projectId ? false : item.active,
-        })).filter((item) => !isSameSession(item, session)),
+          active: item.projectId === createdSession.projectId ? false : item.active,
+        })).filter((item) => !isSameSession(item, createdSession)),
       ]) })
-      dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, session.projectId, session.id) })
+      dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, createdSession.projectId, createdSession.id) })
       clearTimeline()
     } catch (rawError) {
       if (requestId !== selectRequestIdRef.current) {
-        return
+        return undefined
       }
       logger.error("Agent session create failed.", {
         projectId,
@@ -425,7 +427,7 @@ function useChatConnection(
         errorLength: errorMessage(rawError).length,
       })
       dispatch({ type: "SET_ERROR", error: "创建失败" })
-      return
+      return undefined
     }
     // Separate error boundary for post-creation refresh. A refresh failure
     // after a successful create should not be reported as "创建失败".
@@ -436,6 +438,7 @@ function useChatConnection(
       // net in case a synchronous error somehow escapes to prevent an
       // unhandled rejection.
     }
+    return session
   }, [clearTimeline, dispatch, refresh, selectRequestIdRef, setSelectedSession])
 
   const selectSession = useCallback(async (target: SynapseAgentSessionSummary) => {

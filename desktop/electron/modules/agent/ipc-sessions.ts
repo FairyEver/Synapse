@@ -75,6 +75,11 @@ const openConversationWindowRequestSchema = agentConversationTargetSchema.extend
   title: z.string().optional(),
 })
 
+const replaceConversationWindowTargetRequestSchema = z.object({
+  from: agentConversationTargetSchema,
+  to: openConversationWindowRequestSchema,
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const statusSchema = z.object({
@@ -108,6 +113,10 @@ const focusConversationWindowResultSchema = z.object({
   focused: z.boolean(),
 })
 
+const replaceConversationWindowTargetResultSchema = z.object({
+  replaced: z.boolean(),
+})
+
 const detachedConversationSchema = agentConversationTargetSchema.extend({
   title: z.string(),
   windowId: z.number(),
@@ -125,6 +134,7 @@ type RenameSessionRequest = z.infer<typeof renameSessionRequestSchema>
 type OpenConversationRequest = z.infer<typeof openConversationRequestSchema>
 type AgentConversationTargetRequest = z.infer<typeof agentConversationTargetSchema>
 type OpenConversationWindowRequest = z.infer<typeof openConversationWindowRequestSchema>
+type ReplaceConversationWindowTargetRequest = z.infer<typeof replaceConversationWindowTargetRequestSchema>
 
 function resolveCreateSessionMode(
   requestedMode: CreateSessionRequest["mode"],
@@ -233,6 +243,16 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: AgentConversationTargetRequest) => {
       const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
       return service.focusConversationWindow(request)
+    },
+  },
+  replaceConversationWindowTarget: {
+    kind: "invoke",
+    channel: "synapse:agent:replace-conversation-window-target",
+    request: replaceConversationWindowTargetRequestSchema,
+    response: replaceConversationWindowTargetResultSchema,
+    handler: async (ctx, request: ReplaceConversationWindowTargetRequest) => {
+      const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
+      return service.replaceConversationWindowTarget(request)
     },
   },
   listDetachedConversationWindows: {
