@@ -256,6 +256,7 @@ export class AccountService {
   private storageMutationQueue: Promise<void> = Promise.resolve()
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryAttempt = 0
+  private refreshInFlight: Promise<SynapseAccountState> | null = null
 
   constructor(deps: AccountServiceDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
@@ -1001,6 +1002,18 @@ export class AccountService {
   }
 
   async refreshFromStorage(options: { resetRetryBackoff?: boolean } = {}): Promise<SynapseAccountState> {
+    if (this.refreshInFlight) return this.refreshInFlight
+    const refresh = this.performRefreshFromStorage(options)
+      .finally(() => {
+        if (this.refreshInFlight === refresh) {
+          this.refreshInFlight = null
+        }
+      })
+    this.refreshInFlight = refresh
+    return refresh
+  }
+
+  private async performRefreshFromStorage(options: { resetRetryBackoff?: boolean } = {}): Promise<SynapseAccountState> {
     const resetRetryBackoff = options.resetRetryBackoff ?? true
     if (resetRetryBackoff) {
       this.cancelOfflineRetry()

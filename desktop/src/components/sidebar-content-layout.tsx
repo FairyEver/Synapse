@@ -14,6 +14,7 @@ type SidebarContentLayoutProps = {
   containerClassName?: string
   sidebarClassName?: string
   contentClassName?: string
+  contentLayout?: "default" | "fill" | "center"
   contentScrollable?: boolean
   sidebarResizable?: boolean
 }
@@ -25,9 +26,16 @@ function SidebarContentLayout({
   containerClassName,
   sidebarClassName,
   contentClassName,
+  contentLayout = "default",
   contentScrollable = true,
   sidebarResizable = false,
 }: SidebarContentLayoutProps) {
+  const contentInnerClassName = cn(
+    contentScrollable ? "min-h-full min-w-0" : "h-full min-h-0 overflow-hidden",
+    contentLayout === "fill" && "flex flex-col",
+    contentLayout === "center" && "flex flex-col items-center justify-center p-6 text-center",
+  )
+
   return (
     <ResizablePanelGroup
       orientation="horizontal"
@@ -60,7 +68,7 @@ function SidebarContentLayout({
               contentClassName,
             )}
           >
-            <div className="min-h-full min-w-0">
+            <div className={contentInnerClassName}>
               {children}
             </div>
           </ScrollArea>
@@ -71,7 +79,7 @@ function SidebarContentLayout({
               contentClassName,
             )}
           >
-            <div className="h-full min-h-0 overflow-hidden">
+            <div className={contentInnerClassName}>
               {children}
             </div>
           </div>

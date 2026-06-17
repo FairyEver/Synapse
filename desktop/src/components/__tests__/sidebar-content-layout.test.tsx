@@ -92,4 +92,14 @@ describe("SidebarContentLayout", () => {
     expect(sidebar?.className).not.toContain("py-")
     expect(sidebar?.className).not.toContain("p-")
   })
+
+  it("centers content on the inner content layer when requested", async () => {
+    const container = await renderLayout({ contentLayout: "center" })
+    const scroll = container.querySelector('[data-testid="content-scroll"]')
+    const content = container.querySelector("main")
+
+    expect(scroll?.className).not.toContain("justify-center")
+    expect(content?.parentElement?.className).toContain("items-center")
+    expect(content?.parentElement?.className).toContain("justify-center")
+  })
 })

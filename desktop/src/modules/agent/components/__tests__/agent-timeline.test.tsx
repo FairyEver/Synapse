@@ -61,7 +61,15 @@ function textFromMarkup(html: string): string {
 
 describe("AgentTimeline", () => {
   it("uses compact vertical spacing between timeline items", () => {
-    const html = renderTimeline()
+    const html = renderTimeline({
+      items: [{
+        id: "message-1",
+        kind: "message",
+        role: "assistant",
+        content: "hello",
+        timestamp: "2026-05-10T00:00:00.000Z",
+      }],
+    })
     expect(html).toContain("gap-2")
     expect(html).not.toContain("gap-5")
   })

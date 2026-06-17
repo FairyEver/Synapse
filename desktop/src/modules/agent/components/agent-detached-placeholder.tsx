@@ -8,14 +8,12 @@ type AgentDetachedPlaceholderProps = {
 
 function AgentDetachedPlaceholder({ onShowWindow }: AgentDetachedPlaceholderProps) {
   return (
-    <div className="flex h-full min-h-0 items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <p className="text-sm font-medium">已经在新窗口打开</p>
-        <Button type="button" variant="outline" size="sm" onClick={onShowWindow}>
-          <ExternalLink data-icon="inline-start" />
-          显示窗口
-        </Button>
-      </div>
+    <div className="flex flex-col items-center gap-3">
+      <p className="text-sm font-medium">已经在新窗口打开</p>
+      <Button type="button" variant="outline" size="sm" onClick={onShowWindow}>
+        <ExternalLink data-icon="inline-start" />
+        显示窗口
+      </Button>
     </div>
   )
 }

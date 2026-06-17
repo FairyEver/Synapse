@@ -103,6 +103,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   })
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
+  const contentLayout = selectedSession && selectedTarget && !selectedDetached ? "fill" : "center"
   const mergedCommands = useMemo(() => {
     const defCommands = selectedAgentDefinition?.commands ?? []
     const runtimeCommands = chat.commands ?? []
@@ -281,7 +282,12 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   )
 
   return (
-    <SidebarContentLayout sidebar={sidebar} contentScrollable={false} sidebarResizable>
+    <SidebarContentLayout
+      sidebar={sidebar}
+      contentScrollable={false}
+      contentLayout={contentLayout}
+      sidebarResizable
+    >
       {selectedDetached ? (
         <AgentDetachedPlaceholder onShowWindow={() => void handleShowDetachedConversation()} />
       ) : selectedSession && selectedTarget ? (
@@ -303,9 +309,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
           }}
         />
       ) : (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-muted-foreground">请创建新的会话</p>
-        </div>
+        <p className="text-sm text-muted-foreground">请创建新的会话</p>
       )}
     </SidebarContentLayout>
   )

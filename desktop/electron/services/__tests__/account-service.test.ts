@@ -1382,6 +1382,80 @@ describe("AccountService", () => {
     expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
   })
 
+  it("coalesces concurrent stored refreshes into a single token rotation", async () => {
+    let resolveRefresh: ((response: Response) => void) | undefined
+    const refreshResponse = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve
+    })
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+        return refreshResponse
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const firstRefresh = service.refreshFromStorage()
+    const secondRefresh = service.refreshFromStorage()
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+
+    resolveRefresh?.(jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" }))
+
+    await expect(firstRefresh).resolves.toMatchObject({ status: "authenticated", connectivity: "online" })
+    await expect(secondRefresh).resolves.toMatchObject({ status: "authenticated", connectivity: "online" })
+    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/auth/refresh"))).toHaveLength(1)
+    expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
+  })
+
+  it("coalesces concurrent account API refreshes before retrying each request", async () => {
+    let resolveRefresh: ((response: Response) => void) | undefined
+    const refreshResponse = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve
+    })
+    const calls: string[] = []
+    const fetch = vi.fn(async (url, init) => {
+      calls.push(String(url))
+      if (String(url).endsWith("/auth/refresh")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+        return refreshResponse
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      if (String(url).endsWith("/drive/items")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse([driveItem({ id: "drive-1" })])
+      }
+      if (String(url).endsWith("/drive/usage")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+        return jsonResponse({ usedBytes: "1", reservedBytes: "0", quotaBytes: "100" })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const items = service.listDriveItems(null)
+    const usage = service.getDriveUsage()
+    await vi.waitFor(() => {
+      expect(calls.filter((url) => url.endsWith("/auth/refresh"))).toHaveLength(1)
+    })
+
+    resolveRefresh?.(jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" }))
+
+    await expect(items).resolves.toEqual([driveItem({ id: "drive-1" })])
+    await expect(usage).resolves.toEqual({ usedBytes: "1", reservedBytes: "0", quotaBytes: "100" })
+    expect(calls.filter((url) => url.endsWith("/auth/refresh"))).toHaveLength(1)
+    expect(await namespace.getSingleton()).toMatchObject({ refreshToken: "refresh-new" })
+  })
+
   it("keeps stored credentials and enters offline when refresh has a network error", async () => {
     const { namespace, service } = await createTestAccountService({
       fetch: vi.fn(async () => {
@@ -1687,21 +1761,17 @@ describe("AccountService", () => {
     })
   })
 
-  it("keeps a newer successful refresh when an older concurrent refresh fails", async () => {
-    let rejectFirstRefresh: ((error: Error) => void) | undefined
-    let resolveSecondRefresh: ((response: Response) => void) | undefined
-    const firstRefresh = new Promise<Response>((_resolve, reject) => {
-      rejectFirstRefresh = reject
-    })
-    const secondRefresh = new Promise<Response>((resolve) => {
-      resolveSecondRefresh = resolve
+  it("shares a single in-flight refresh between concurrent refresh callers", async () => {
+    let resolveRefresh: ((response: Response) => void) | undefined
+    const refreshResponse = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve
     })
     let refreshCalls = 0
     const fetch = vi.fn(async (url, init) => {
       if (String(url).endsWith("/auth/refresh")) {
         refreshCalls += 1
         expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
-        return refreshCalls === 1 ? firstRefresh : secondRefresh
+        return refreshResponse
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
@@ -1715,14 +1785,12 @@ describe("AccountService", () => {
     const olderRefresh = service.refreshFromStorage()
     await vi.waitFor(() => expect(refreshCalls).toBe(1))
     const newerRefresh = service.refreshFromStorage()
-    await vi.waitFor(() => expect(refreshCalls).toBe(2))
 
-    resolveSecondRefresh?.(jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" }))
+    resolveRefresh?.(jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" }))
     await expect(newerRefresh).resolves.toMatchObject({ status: "authenticated", connectivity: "online" })
-
-    rejectFirstRefresh?.(new Error("expired refresh token"))
     await expect(olderRefresh).resolves.toMatchObject({ status: "authenticated", connectivity: "online" })
 
+    expect(refreshCalls).toBe(1)
     expect(service.getState()).toMatchObject({ status: "authenticated", connectivity: "online" })
     expect(service.getAccessTokenForLive()).toBe("access-new")
     expect(await namespace.getSingleton()).toMatchObject({
