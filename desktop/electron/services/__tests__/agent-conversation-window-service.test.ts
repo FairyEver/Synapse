@@ -1,0 +1,183 @@
+import { describe, expect, it, vi } from "vitest"
+
+import {
+  AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL,
+  createAgentConversationWindowService,
+} from "../agent-conversation-window-service"
+
+describe("agent conversation window service", () => {
+  it("opens one window per conversation and focuses duplicates", async () => {
+    const broadcasts: unknown[] = []
+    const window = createFakeWindow()
+    const createWindow = vi.fn(() => window as never)
+    const attachWindow = vi.fn()
+    const service = createAgentConversationWindowService({
+      createWindow,
+      attachWindow,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: (_channel, payload) => {
+        broadcasts.push(payload)
+        return 1
+      },
+      logger: createLoggerMock(),
+    })
+
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })
+
+    expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(attachWindow).toHaveBeenCalledWith(
+      "agent-conversation:project-1:conversation-1",
+      window,
+    )
+    expect(window.focus).toHaveBeenCalledTimes(1)
+    expect(window.loadURL).toHaveBeenCalledWith(
+      "http://localhost:5173?synapseWindow=agent-conversation&projectId=project-1&conversationId=conversation-1&sessionKey=local%3Arenderer&title=%E6%96%B0%E4%BC%9A%E8%AF%9D",
+    )
+    expect(service.listDetachedConversations()).toEqual([{
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+      windowId: window.id,
+      openedAt: "2026-06-17T00:00:00.000Z",
+    }])
+    expect(broadcasts.length).toBeGreaterThan(0)
+  })
+
+  it("removes detached state when the window closes", async () => {
+    const window = createFakeWindow()
+    const service = createAgentConversationWindowService({
+      createWindow: () => window as never,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: vi.fn(),
+      logger: createLoggerMock(),
+    })
+
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })
+    window.emitClosed()
+
+    expect(service.listDetachedConversations()).toEqual([])
+  })
+
+  it("focuses an existing detached window", async () => {
+    const window = createFakeWindow()
+    const service = createAgentConversationWindowService({
+      createWindow: () => window as never,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: vi.fn(),
+      logger: createLoggerMock(),
+    })
+
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })
+
+    expect(service.focusConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })).toEqual({ focused: true })
+    expect(window.focus).toHaveBeenCalled()
+    expect(AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL).toBe("synapse:agent:detached-conversations-changed")
+  })
+
+  it("cleans up detached state when loading fails", async () => {
+    const window = createFakeWindow()
+    const loadError = new Error("load failed")
+    window.loadURL.mockRejectedValueOnce(loadError)
+    const logger = createLoggerMock()
+    const service = createAgentConversationWindowService({
+      createWindow: () => window as never,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: vi.fn(),
+      logger,
+    })
+
+    await expect(service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })).rejects.toThrow(loadError)
+
+    expect(service.listDetachedConversations()).toEqual([])
+    expect(window.close).toHaveBeenCalled()
+    expect(logger.error).toHaveBeenCalledWith(
+      "Failed to load agent conversation window.",
+      expect.objectContaining({
+        projectId: "project-1",
+        conversationId: "conversation-1",
+      }),
+    )
+  })
+})
+
+function createFakeWindow() {
+  const listeners = new Map<string, Array<() => void>>()
+  const window = {
+    id: Math.floor(Math.random() * 100_000),
+    webContents: {
+      id: Math.floor(Math.random() * 100_000),
+      on: vi.fn(),
+      send: vi.fn(),
+    },
+    close: vi.fn(),
+    focus: vi.fn(),
+    isDestroyed: vi.fn(() => false),
+    isMinimized: vi.fn(() => false),
+    isVisible: vi.fn(() => true),
+    loadURL: vi.fn(async () => undefined),
+    once: vi.fn((event: string, listener: () => void) => {
+      if (event === "ready-to-show") listener()
+    }),
+    on: vi.fn((event: string, listener: () => void) => {
+      const current = listeners.get(event) ?? []
+      listeners.set(event, current.concat(listener))
+    }),
+    restore: vi.fn(),
+    show: vi.fn(),
+    emitClosed: () => {
+      for (const listener of listeners.get("closed") ?? []) listener()
+    },
+  }
+  return window
+}
+
+function createLoggerMock() {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }
+}
