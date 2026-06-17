@@ -36,6 +36,7 @@ const FULL_CONTAINER_CLASSNAME = 'h-full min-h-0 w-full'
 const FLOATING_MENU_MARGIN = 20
 const FLOATING_MENU_FALLBACK_SIZE = 36
 const FLOATING_MENU_DRAG_THRESHOLD_PX = 4
+const FLOATING_MENU_IDLE_DIM_DELAY_MS = 3000
 
 type DriveFloatingMenuPoint = {
   readonly left: number
@@ -201,10 +202,29 @@ function DriveRendererFloatingMenu({
   const suppressClickRef = useRef(false)
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<DriveFloatingMenuPoint | null>(null)
+  const [interactionActive, setInteractionActive] = useState(false)
+  const [idleDimmed, setIdleDimmed] = useState(false)
+  const [activityTick, setActivityTick] = useState(0)
 
   const menuStyle: CSSProperties | undefined = menuPosition
     ? { left: `${menuPosition.left}px`, top: `${menuPosition.top}px` }
     : undefined
+
+  const markActivity = () => {
+    setIdleDimmed(false)
+    setActivityTick((current) => current + 1)
+  }
+
+  useEffect(() => {
+    setIdleDimmed(false)
+    if (open || interactionActive) return
+
+    const timer = window.setTimeout(() => {
+      setIdleDimmed(true)
+    }, FLOATING_MENU_IDLE_DIM_DELAY_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [activityTick, interactionActive, open])
 
   const getMenuSize = (): DriveFloatingMenuSize => {
     const rect = menuRef.current?.getBoundingClientRect()
@@ -215,6 +235,7 @@ function DriveRendererFloatingMenu({
   }
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    markActivity()
     if (event.button !== 0) return
     const rect = menuRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -281,12 +302,19 @@ function DriveRendererFloatingMenu({
           <Button
             type='button'
             size='icon'
-            className='touch-none rounded-full cursor-grab active:cursor-grabbing'
+            className={cn(
+              'touch-none rounded-full cursor-grab transition-opacity duration-200 active:cursor-grabbing',
+              idleDimmed && !open ? 'opacity-50 hover:opacity-100 focus-visible:opacity-100' : 'opacity-100'
+            )}
             aria-label='文件操作'
+            onPointerEnter={() => setInteractionActive(true)}
+            onPointerLeave={() => setInteractionActive(false)}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
+            onFocus={() => setInteractionActive(true)}
+            onBlur={() => setInteractionActive(false)}
             onClick={handleClick}
           >
             <MoreHorizontal />
