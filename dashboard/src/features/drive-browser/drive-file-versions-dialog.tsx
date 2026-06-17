@@ -96,7 +96,7 @@ export function DriveFileVersionsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className='flex max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-2xl'>
+        <DialogContent className='flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden p-0 sm:max-w-3xl'>
           <DialogHeader className='shrink-0 px-5 pt-5'>
             <DialogTitle className='pr-8'>历史版本</DialogTitle>
           </DialogHeader>

@@ -1,10 +1,23 @@
 import { createElement, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import type { DriveFileVersionDto } from '@synapse/shared'
 import { DriveFileVersionContent } from './drive-file-versions-dialog'
 
 describe('DriveFileVersionContent', () => {
+  it('uses the shadcn-admin scrollable dialog body pattern', () => {
+    const source = readFileSync(new URL('./drive-file-versions-dialog.tsx', import.meta.url), 'utf8')
+    const contentClass = source.match(/<DialogContent className='([^']+)'/)?.[1]?.split(/\s+/u) ?? []
+
+    expect(contentClass).toEqual(['sm:max-w-3xl'])
+    expect(source).toContain("className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'")
+    expect(source).not.toContain("from '@/components/ui/scroll-area'")
+    expect(contentClass).not.toContain('flex')
+    expect(contentClass).not.toContain('overflow-hidden')
+    expect(contentClass).not.toContain('sm:max-w-2xl')
+  })
+
   it('keeps version rows inside an internal scroll area', () => {
     const html = renderVersions([
       version({ id: 'version-4', versionNumber: 4, isCurrent: true }),
