@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
 import { initUsageAnalysisSchema } from "../../usage-analysis/db-schema"
+import { localDateKey, localHourKey } from "../../usage-analysis/range"
 import { ModelPriceService } from "../service"
 import { MODEL_PRICE_COVERAGE_MAX_LIMIT } from "../types"
 
@@ -14,7 +15,12 @@ function isoTimestampForDay(dayOffset: number, hour = 1): string {
   const date = new Date()
   date.setHours(0, 0, 0, 0)
   date.setDate(date.getDate() + dayOffset)
-  date.setHours(hour, 0, 0, 0)
+  if (dayOffset === 0) {
+    const now = new Date()
+    date.setHours(Math.min(hour, now.getHours()), 0, 0, 0)
+  } else {
+    date.setHours(hour, 0, 0, 0)
+  }
   return date.toISOString()
 }
 
@@ -29,8 +35,8 @@ function insertUsageEvent(db: DatabaseSync, prefix: "cc" | "cx", input: {
 }): void {
   const timestamp = input.timestamp ?? "2026-06-09T01:00:00.000Z"
   const timestampMs = new Date(timestamp).getTime()
-  const date = timestamp.slice(0, 10)
-  const hour = `${date} ${timestamp.slice(11, 13)}`
+  const date = localDateKey(timestampMs)
+  const hour = localHourKey(timestampMs)
   const outputTokens = input.outputTokens ?? 0
   const tokens = input.inputTokens + outputTokens
   db.prepare(`
