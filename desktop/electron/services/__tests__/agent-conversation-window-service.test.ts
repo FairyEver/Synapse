@@ -9,7 +9,7 @@ describe("agent conversation window service", () => {
   it("opens one window per conversation and focuses duplicates", async () => {
     const broadcasts: unknown[] = []
     const window = createFakeWindow()
-    const createWindow = vi.fn(() => window as never)
+    const createWindow = vi.fn((_options: Electron.BrowserWindowConstructorOptions) => window as never)
     const attachWindow = vi.fn()
     const service = createAgentConversationWindowService({
       createWindow,
@@ -39,6 +39,14 @@ describe("agent conversation window service", () => {
     })
 
     expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      width: 700,
+      height: 820,
+      minWidth: 400,
+      minHeight: 820,
+    }))
+    expect(createWindow.mock.calls[0]?.[0]).not.toHaveProperty("maxWidth")
+    expect(createWindow.mock.calls[0]?.[0]).not.toHaveProperty("maxHeight")
     expect(attachWindow).toHaveBeenCalledWith(
       "agent-conversation:project-1:conversation-1",
       window,

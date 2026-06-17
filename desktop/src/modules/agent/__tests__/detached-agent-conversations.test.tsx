@@ -102,6 +102,7 @@ describe("detached agent conversations", () => {
     })
 
     expect(container.textContent).toContain("已经在新窗口打开")
+    expect(container.firstElementChild?.className).toContain("h-full")
     const button = container.querySelector("button")
     expect(button?.textContent).toContain("显示窗口")
     act(() => {

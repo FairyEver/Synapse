@@ -1,7 +1,6 @@
 import { BrowserWindow } from "electron"
 import path from "node:path"
 
-import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
 import { buildAgentConversationWindowSearchParams } from "../../src/lib/agent-conversation-window"
 import type {
   AgentConversationTarget,
@@ -37,10 +36,10 @@ type Deps = {
 }
 
 const AGENT_CONVERSATION_WINDOW_BOUNDS = {
-  width: 1120,
-  height: 760,
-  minWidth: 900,
-  minHeight: DEFAULT_WINDOW_BOUNDS.minHeight,
+  width: 700,
+  height: 820,
+  minWidth: 400,
+  minHeight: 820,
 }
 
 function keyForTarget(target: Pick<AgentConversationTarget, "projectId" | "conversationId">): string {
