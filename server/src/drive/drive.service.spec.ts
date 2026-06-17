@@ -129,6 +129,175 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("overwrites same-name files while preserving item identity and shares", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject,
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    const share = await service.createShare("user-1", first.id, "https://synapse.test")
+    const original = await prisma.driveItem.findUniqueOrThrow({ where: { id: first.id } })
+    const originalStorageKey = original.storageKey
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+    })
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    expect(prepared.item.id).toBe(first.id)
+    expect(session.storageKey).toContain(`/overwrites/${prepared.sessionId}`)
+    expect(session.reservedBytes).toBe(0n)
+
+    const completed = await service.completeUpload("user-1", prepared.sessionId)
+    expect(completed).toMatchObject({
+      id: first.id,
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/markdown",
+      shared: true,
+    })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(5n)
+    expect(usage.reservedBytes).toBe(0n)
+    expect(await service.listShares("user-1", "https://synapse.test")).toMatchObject({
+      items: [expect.objectContaining({ shareId: share.shareId, itemName: "report.txt" })],
+    })
+    expect(deleteObject).toHaveBeenCalledWith(originalStorageKey)
+  })
+
+  it("keeps the existing file active when overwrite completion fails validation", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => (key.includes("/overwrites/") ? null : { key, size: 11n, etag: "etag" })),
+      deleteObject,
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    const original = await prisma.driveItem.findUniqueOrThrow({ where: { id: first.id } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await expect(service.completeUpload("user-1", prepared.sessionId)).rejects.toThrow("上传文件校验失败。")
+    const item = await prisma.driveItem.findUniqueOrThrow({ where: { id: first.id } })
+    expect(item).toMatchObject({
+      storageKey: original.storageKey,
+      storageStatus: "active",
+      uploadStatus: "completed",
+      size: 11n,
+      mimeType: "text/plain",
+    })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(11n)
+    expect(usage.reservedBytes).toBe(0n)
+    expect(deleteObject).toHaveBeenCalledWith(expect.stringContaining(`/overwrites/${prepared.sessionId}`))
+  })
+
+  it("overwrites the newest historical same-name file and keeps older duplicates", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const older = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    const newer = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report-copy.txt",
+      mimeType: "text/plain",
+    })
+    await service.renameItem("user-1", newer.id, "report.txt")
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    expect(await service.getItem("user-1", older.id)).toMatchObject({ id: older.id, name: "report.txt", size: "11" })
+    expect(await service.getItem("user-1", newer.id)).toMatchObject({ id: newer.id, name: "report.txt", size: "5", mimeType: "text/markdown" })
+    expect(await service.listItems("user-1", null)).toHaveLength(2)
+  })
+
+  it("lets the last completed concurrent overwrite win with correct usage", async () => {
+    const prisma = createPrismaMemory()
+    const objectSizes = new Map<string, bigint>()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: objectSizes.get(key) ?? 11n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const initial = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.txt",
+      mimeType: "text/plain",
+    })
+    const firstOverwrite = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "5",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    const secondOverwrite = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.txt",
+      size: "7",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+    })
+    const firstSession = (await prisma.driveUploadSession.findMany({ where: { id: firstOverwrite.sessionId } }))[0]
+    const secondSession = (await prisma.driveUploadSession.findMany({ where: { id: secondOverwrite.sessionId } }))[0]
+    objectSizes.set(firstSession.storageKey, 5n)
+    objectSizes.set(secondSession.storageKey, 7n)
+
+    await service.completeUpload("user-1", secondOverwrite.sessionId)
+    await service.completeUpload("user-1", firstOverwrite.sessionId)
+
+    expect(await service.getItem("user-1", initial.id)).toMatchObject({
+      id: initial.id,
+      size: "5",
+      mimeType: "text/plain",
+    })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(5n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("applies quota once when upload completion requests race", async () => {
     const prisma = createPrismaMemory()
     const pendingHeads: Array<(value: { key: string; size: bigint; etag: string }) => void> = []
@@ -460,6 +629,46 @@ describe("DriveService", () => {
     expect(rootChildren.map((item) => item.name).sort()).toEqual(["brief.txt", "docs"])
   })
 
+  it("merges folder uploads into existing folders and overwrites same-name files", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "项目A" })
+    const existing = await createCompletedUpload(service, "user-1", {
+      parentId: root.id,
+      name: "a.md",
+      mimeType: "text/markdown",
+    })
+
+    const prepared = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "项目A",
+      files: [
+        { relativePath: "a.md", size: "5", mimeType: "text/plain" },
+        { relativePath: "docs/b.md", size: "11", mimeType: "text/markdown" },
+      ],
+      publicAppUrl: "https://synapse.test",
+    })
+    expect(prepared.root.id).toBe(root.id)
+    expect(prepared.entries.find((entry) => entry.relativePath === "a.md")?.item.id).toBe(existing.id)
+
+    for (const entry of prepared.entries) {
+      await service.completeUpload("user-1", entry.sessionId)
+    }
+
+    expect(await service.getItem("user-1", existing.id)).toMatchObject({ id: existing.id, name: "a.md", size: "5", mimeType: "text/plain" })
+    const rootChildren = await service.listItems("user-1", root.id)
+    expect(rootChildren.map((item) => item.name).sort()).toEqual(["a.md", "docs"])
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(16n)
+    expect(usage.reservedBytes).toBe(0n)
+  })
+
   it("rejects Windows-unsafe folder upload path segments and rolls back", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -691,9 +900,10 @@ describe("DriveService", () => {
     })
     const second = await createCompletedUpload(service, "user-1", {
       parentId: folder.id,
-      name: "report.pdf",
+      name: "report-copy.pdf",
       mimeType: "application/pdf",
     })
+    await service.renameItem("user-1", second.id, "report.pdf")
 
     const archive = await service.openOwnerBrowserItemDownload({
       userId: "user-1",
@@ -720,9 +930,10 @@ describe("DriveService", () => {
     })
     const second = await createCompletedUpload(service, "user-1", {
       parentId: docs.id,
-      name: "report.pdf",
+      name: "report-copy.pdf",
       mimeType: "application/pdf",
     })
+    await service.renameItem("user-1", second.id, "report.pdf")
     const share = await service.createShare("user-1", root.id, "https://synapse.test")
 
     const archive = await service.openShareBrowserItemDownload({
@@ -1378,12 +1589,12 @@ describe("DriveService", () => {
 async function createCompletedUpload(
   service: DriveService,
   userId: string,
-  input: { readonly parentId: string | null; readonly name: string; readonly mimeType: string | null },
+  input: { readonly parentId: string | null; readonly name: string; readonly mimeType: string | null; readonly size?: string },
 ) {
   const prepared = await service.prepareUpload(userId, {
     parentId: input.parentId,
     name: input.name,
-    size: "11",
+    size: input.size ?? "11",
     mimeType: input.mimeType,
     publicAppUrl: "https://synapse.test",
   })
@@ -1496,8 +1707,8 @@ function createPrismaMemory() {
         }
         return { count }
       },
-      findFirst: async ({ where, include, select }: any) => {
-        const found = [...items.values()].find((item) => matchesWhere(item, where))
+      findFirst: async ({ where, include, select, orderBy }: any) => {
+        const found = orderRows([...items.values()].filter((item) => matchesWhere(item, where)), orderBy)[0]
         if (!found) return null
         if (select) return selectFields(found, select)
         return include ? withShares(found) : found
@@ -1525,7 +1736,7 @@ function createPrismaMemory() {
     },
     driveUploadSession: {
       create: async ({ data }: any) => {
-        const session = { id: id("session"), ...data, createdAt: now(), completedAt: null, failedAt: null }
+        const session = { id: data.id ?? id("session"), ...data, reservedBytes: data.reservedBytes ?? data.expectedSize, createdAt: now(), completedAt: null, failedAt: null }
         sessions.set(session.id, session)
         return session
       },
@@ -1646,12 +1857,20 @@ function orderRows(rows: any[], orderBy: any): any[] {
   return [...rows].sort((left, right) => {
     for (const entry of entries) {
       const [key, direction] = Object.entries(entry)[0] as [string, "asc" | "desc"]
-      if (left[key] === right[key]) continue
-      const comparison = left[key] > right[key] ? 1 : -1
+      const leftValue = comparableValue(left[key])
+      const rightValue = comparableValue(right[key])
+      if (leftValue === rightValue) continue
+      const comparison = leftValue > rightValue ? 1 : -1
       return direction === "desc" ? -comparison : comparison
     }
     return 0
   })
+}
+
+function comparableValue(value: unknown): string | number | bigint | boolean {
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === "string" || typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") return value
+  return ""
 }
 
 function paginateRows(rows: any[], options: { readonly skip?: number; readonly take?: number }): any[] {
