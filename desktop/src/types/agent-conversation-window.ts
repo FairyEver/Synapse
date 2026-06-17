@@ -25,3 +25,12 @@ export type AgentConversationWindowFocusResult = {
 export type AgentConversationWindowCloseResult = {
   readonly closed: boolean
 }
+
+export type AgentConversationWindowReplaceRequest = {
+  readonly from: AgentConversationTarget
+  readonly to: AgentConversationWindowRequest
+}
+
+export type AgentConversationWindowReplaceResult = {
+  readonly replaced: boolean
+}

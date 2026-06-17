@@ -179,6 +179,101 @@ describe("agent conversation window service", () => {
     expect(service.listDetachedConversations()).toEqual([])
   })
 
+  it("replaces an existing detached window target in place", async () => {
+    const broadcasts: unknown[] = []
+    const window = createFakeWindow()
+    const attachWindow = vi.fn()
+    const detachWindow = vi.fn()
+    const service = createAgentConversationWindowService({
+      createWindow: () => window as never,
+      attachWindow,
+      detachWindow,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: (_channel, payload) => {
+        broadcasts.push(payload)
+        return 1
+      },
+      logger: createLoggerMock(),
+    })
+
+    await service.openConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "旧会话",
+    })
+
+    await expect(service.replaceConversationWindowTarget({
+      from: {
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+      },
+      to: {
+        projectId: "project-1",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+        title: "新会话",
+      },
+    })).resolves.toEqual({ replaced: true })
+
+    expect(service.focusConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })).toEqual({ focused: false })
+    expect(service.focusConversationWindow({
+      projectId: "project-1",
+      conversationId: "conversation-2",
+      sessionKey: "local:renderer",
+    })).toEqual({ focused: true })
+    expect(window.setTitle).toHaveBeenCalledWith("新会话")
+    expect(detachWindow).toHaveBeenCalledWith("agent-conversation:project-1:conversation-1")
+    expect(attachWindow).toHaveBeenCalledWith("agent-conversation:project-1:conversation-2", window)
+    expect(service.listDetachedConversations()).toEqual([{
+      projectId: "project-1",
+      conversationId: "conversation-2",
+      sessionKey: "local:renderer",
+      title: "新会话",
+      windowId: window.id,
+      openedAt: "2026-06-17T00:00:00.000Z",
+    }])
+    expect(broadcasts.at(-1)).toEqual(service.listDetachedConversations())
+    window.emitClosed()
+    expect(service.listDetachedConversations()).toEqual([])
+  })
+
+  it("does not replace a missing detached window target", async () => {
+    const service = createAgentConversationWindowService({
+      createWindow: () => createFakeWindow() as never,
+      baseUrl: () => "http://localhost:5173",
+      getPreloadPath: () => "/preload.js",
+      getIconPath: () => null,
+      now: () => "2026-06-17T00:00:00.000Z",
+      broadcast: vi.fn(),
+      logger: createLoggerMock(),
+    })
+
+    await expect(service.replaceConversationWindowTarget({
+      from: {
+        projectId: "project-1",
+        conversationId: "missing",
+        sessionKey: "local:renderer",
+      },
+      to: {
+        projectId: "project-1",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+        title: "新会话",
+      },
+    })).resolves.toEqual({ replaced: false })
+
+    expect(service.listDetachedConversations()).toEqual([])
+  })
+
   it("cleans up detached state when loading fails", async () => {
     const window = createFakeWindow()
     const loadError = new Error("load failed")
@@ -236,6 +331,7 @@ function createFakeWindow() {
       listeners.set(event, current.concat(listener))
     }),
     restore: vi.fn(),
+    setTitle: vi.fn(),
     show: vi.fn(),
     emitClosed: () => {
       for (const listener of listeners.get("closed") ?? []) listener()

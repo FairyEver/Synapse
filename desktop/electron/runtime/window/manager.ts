@@ -55,6 +55,11 @@ export interface WindowManager {
    */
   attach(descriptor: Pick<WindowDescriptor, "id" | "role">, handle: ManagedWindow): void
   /**
+   * Drop the manager reference without closing the underlying window.
+   * Used when an externally managed BrowserWindow is retargeted to a new id.
+   */
+  detach(id: string): void
+  /**
    * Open the window registered under `id`. `payload` is opaque — each
    * descriptor's `create` callback owns the schema; the manager passes it
    * through unchanged. Descriptors that need a strict shape should validate
@@ -104,6 +109,12 @@ export class WindowManagerImpl implements WindowManager {
       },
       handle,
     })
+  }
+
+  detach(id: string): void {
+    const entry = this.windows.get(id)
+    if (!entry) return
+    entry.handle = null
   }
 
   open(id: string, payload?: unknown): ManagedWindow {

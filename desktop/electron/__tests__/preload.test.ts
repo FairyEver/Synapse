@@ -207,6 +207,41 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps agent conversation window replacement to the agent IPC channel", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.agent.replaceConversationWindowTarget({
+      from: {
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+      },
+      to: {
+        projectId: "project-1",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+        title: "新会话",
+      },
+    })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:agent:replace-conversation-window-target",
+      {
+        from: {
+          projectId: "project-1",
+          conversationId: "conversation-1",
+          sessionKey: "local:renderer",
+        },
+        to: {
+          projectId: "project-1",
+          conversationId: "conversation-2",
+          sessionKey: "local:renderer",
+          title: "新会话",
+        },
+      },
+    )
+  })
+
   it("maps content store install methods to narrow IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

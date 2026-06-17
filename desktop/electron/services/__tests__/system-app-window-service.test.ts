@@ -127,6 +127,7 @@ function createWindowManagerMock() {
   return {
     register: vi.fn(),
     attach: vi.fn(),
+    detach: vi.fn(),
     open: vi.fn(),
     close: vi.fn(),
     list: vi.fn(() => []),

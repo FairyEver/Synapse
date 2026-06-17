@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { useAppConfig } from "@/app-shell/config"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
@@ -6,10 +6,13 @@ import {
   DEFAULT_AGENT_WORKSPACE_PROJECT,
   isDefaultAgentWorkspaceProjectId,
 } from "@/lib/default-agent-workspace"
+import { buildAgentConversationWindowSearchParams } from "@/lib/agent-conversation-window"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseAgentDisplayProfile, SynapseAgentPublishedCommand } from "@/types/agent"
 import type { AgentConversationWindowRequest } from "@/types/agent-conversation-window"
 import { AgentConversationWorkspace } from "./agent-conversation-workspace"
 import { useAgentChat } from "../hooks/use-agent-chat"
+import { sessionLabel } from "../utils"
 
 const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
   agentLabel: "Agent",
@@ -27,20 +30,22 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
 }
 
 function AgentConversationWindowPage({ request }: { readonly request: AgentConversationWindowRequest }) {
+  const [currentRequest, setCurrentRequest] = useState(request)
+  const [retargetError, setRetargetError] = useState<string | null>(null)
   const { config } = useAppConfig()
-  const project = isDefaultAgentWorkspaceProjectId(request.projectId)
+  const project = isDefaultAgentWorkspaceProjectId(currentRequest.projectId)
     ? DEFAULT_AGENT_WORKSPACE_PROJECT
-    : config.global.projects.find((item) => item.id === request.projectId)
+    : config.global.projects.find((item) => item.id === currentRequest.projectId)
   const projectScope = useMemo(() => ({
-    projectIds: [request.projectId],
-    defaultProjectId: request.projectId,
-  }), [request.projectId])
+    projectIds: [currentRequest.projectId],
+    defaultProjectId: currentRequest.projectId,
+  }), [currentRequest.projectId])
   const chat = useAgentChat(projectScope)
   const selectedRef = useRef<string | null>(null)
   const session = [...chat.sessions, ...chat.archivedSessions].find((item) =>
-    item.projectId === request.projectId
-    && item.id === request.conversationId
-    && item.sessionKey === request.sessionKey)
+    item.projectId === currentRequest.projectId
+    && item.id === currentRequest.conversationId
+    && item.sessionKey === currentRequest.sessionKey)
 
   useEffect(() => {
     if (!session) return
@@ -82,20 +87,66 @@ function AgentConversationWindowPage({ request }: { readonly request: AgentConve
   }
   const commands = mergeCommands(definition?.commands ?? [], chat.commands ?? [])
 
+  const replaceDetachedTarget = async (created: typeof session): Promise<boolean> => {
+    const previousSession = session
+    const nextRequest: AgentConversationWindowRequest = {
+      projectId: created.projectId,
+      conversationId: created.id,
+      sessionKey: created.sessionKey,
+      title: sessionLabel(created),
+    }
+    setRetargetError(null)
+    try {
+      const result = await requireSynapseBridge().agent.replaceConversationWindowTarget({
+        from: {
+          projectId: currentRequest.projectId,
+          conversationId: currentRequest.conversationId,
+          sessionKey: currentRequest.sessionKey,
+        },
+        to: nextRequest,
+      })
+      if (!result.replaced) {
+        await chat.selectSession(previousSession)
+        setRetargetError("打开失败")
+        return false
+      }
+      setCurrentRequest(nextRequest)
+      const params = buildAgentConversationWindowSearchParams(nextRequest)
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}?${params.toString()}${window.location.hash}`,
+      )
+      return true
+    } catch {
+      await chat.selectSession(previousSession)
+      setRetargetError("打开失败")
+      return false
+    }
+  }
+
   return (
-    <AgentConversationWorkspace
-      session={session}
-      project={project}
-      target={target}
-      chat={chat}
-      quickInputs={config.global.quickInputs ?? []}
-      commands={commands}
-      providers={chat.providers}
-      currentConversationModel={chat.currentConversationModel}
-      displayProfile={definition?.displayProfile ?? DEFAULT_AGENT_DISPLAY_PROFILE}
-      agentIcon={definition?.icon}
-      mode="window"
-    />
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      {retargetError ? (
+        <p className="px-3 pt-2 text-sm text-destructive">{retargetError}</p>
+      ) : null}
+      <div className="min-h-0 flex-1">
+        <AgentConversationWorkspace
+          session={session}
+          project={project}
+          target={target}
+          chat={chat}
+          quickInputs={config.global.quickInputs ?? []}
+          commands={commands}
+          providers={chat.providers}
+          currentConversationModel={chat.currentConversationModel}
+          displayProfile={definition?.displayProfile ?? DEFAULT_AGENT_DISPLAY_PROFILE}
+          agentIcon={definition?.icon}
+          mode="window"
+          onReplaceDetachedTarget={replaceDetachedTarget}
+        />
+      </div>
+    </div>
   )
 }
 

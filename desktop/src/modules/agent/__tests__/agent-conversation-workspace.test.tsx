@@ -11,7 +11,17 @@ import { AgentConversationWorkspace } from "../components/agent-conversation-wor
 import type { AgentConversationWorkspaceController } from "../components/agent-conversation-workspace"
 
 vi.mock("../components/agent-composer", () => ({
-  AgentComposer: () => <div data-testid="agent-composer" />,
+  AgentComposer: (props: {
+    readonly onStartNewConversation?: () => void
+    readonly disabled?: boolean
+  }) => {
+    composerProps = props
+    return (
+      <div data-testid="agent-composer">
+        <button type="button" aria-label="新建对话" disabled={props.disabled} onClick={props.onStartNewConversation} />
+      </div>
+    )
+  },
 }))
 
 vi.mock("../components/agent-timeline", () => ({
@@ -37,6 +47,10 @@ const session: SynapseAgentSessionSummary = {
 }
 
 let roots: Root[] = []
+let composerProps: {
+  readonly onStartNewConversation?: () => void
+  readonly disabled?: boolean
+} | null = null
 
 afterEach(() => {
   for (const root of roots) {
@@ -45,6 +59,7 @@ afterEach(() => {
     })
   }
   roots = []
+  composerProps = null
   document.body.innerHTML = ""
   vi.clearAllMocks()
 })
@@ -97,12 +112,65 @@ describe("AgentConversationWorkspace", () => {
 
     expect(container.textContent).not.toContain("资料管理")
   })
+
+  it("creates a replacement session from window mode and asks the page to retarget", async () => {
+    const createdSession: SynapseAgentSessionSummary = {
+      ...session,
+      id: "conversation-2",
+      name: "新会话 06:00 PM",
+      active: true,
+    }
+    const createSession = vi.fn(async () => createdSession)
+    const onReplaceDetachedTarget = vi.fn(async () => true)
+    const container = renderWorkspace({
+      mode: "window",
+      chat: createController({ createSession }),
+      onReplaceDetachedTarget,
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="新建对话"]')?.click()
+    })
+
+    expect(createSession).toHaveBeenCalledWith(
+      "project-1",
+      "provider-1",
+      "default",
+      "sonnet",
+    )
+    expect(onReplaceDetachedTarget).toHaveBeenCalledWith(createdSession)
+  })
+
+  it("does not ask embedded workspaces to retarget after creating a rollover session", async () => {
+    const createdSession: SynapseAgentSessionSummary = {
+      ...session,
+      id: "conversation-2",
+      name: "新会话 06:00 PM",
+      active: true,
+    }
+    const createSession = vi.fn(async () => createdSession)
+    const onReplaceDetachedTarget = vi.fn(async () => true)
+    const container = renderWorkspace({
+      mode: "embedded",
+      chat: createController({ createSession }),
+      onReplaceDetachedTarget,
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="新建对话"]')?.click()
+    })
+
+    expect(createSession).toHaveBeenCalled()
+    expect(onReplaceDetachedTarget).not.toHaveBeenCalled()
+  })
 })
 
 function renderWorkspace(options: {
   readonly mode: "embedded" | "window"
   readonly onOpenDetached?: (target: { projectId: string; conversationId: string; sessionKey: string }) => void
   readonly project?: SynapseProjectConfig
+  readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
+  readonly chat?: AgentConversationWorkspaceController
 }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -114,7 +182,7 @@ function renderWorkspace(options: {
         session={session}
         project={options.project}
         target={{ projectId: "project-1", conversationId: "conversation-1", sessionKey: "local:renderer" }}
-        chat={createController()}
+        chat={options.chat ?? createController()}
         quickInputs={[]}
         commands={[]}
         providers={{
@@ -139,6 +207,7 @@ function renderWorkspace(options: {
         }}
         mode={options.mode}
         onOpenDetached={options.onOpenDetached}
+        onReplaceDetachedTarget={options.onReplaceDetachedTarget}
       />,
     )
   })

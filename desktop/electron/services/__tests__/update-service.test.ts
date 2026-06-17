@@ -221,6 +221,7 @@ describe("UpdateService", () => {
         return 1
       }),
       close: vi.fn(),
+      detach: vi.fn(),
       getAllWindows: vi.fn(() => []),
       list: vi.fn(() => []),
       open: vi.fn(),
@@ -313,6 +314,7 @@ describe("UpdateService", () => {
         return 1
       }),
       close: vi.fn(),
+      detach: vi.fn(),
       getAllWindows: vi.fn(() => []),
       list: vi.fn(() => []),
       open: vi.fn(() => {

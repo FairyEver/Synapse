@@ -130,6 +130,18 @@ describe("WindowManager (T3.12)", () => {
     expect(main.sent[0]).toEqual({ channel: "synapse:test", payload: { v: 1 } })
   })
 
+  it("detach() drops an attached handle without closing it", () => {
+    const manager = createWindowManager()
+    const detail = makeFakeWindow(1)
+    manager.attach({ id: "detail", role: "detail" }, detail)
+
+    manager.detach("detail")
+
+    expect(detail.destroyed).toBe(false)
+    expect(manager.list()).toEqual([])
+    expect(manager.broadcast("synapse:test", { v: 1 })).toBe(0)
+  })
+
   it("broadcast() filter excludes destroyed windows automatically", () => {
     const manager = createWindowManager()
     const a = makeFakeWindow(1)

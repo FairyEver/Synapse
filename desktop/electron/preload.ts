@@ -163,6 +163,7 @@ const IPC_CHANNELS = {
     "listAllSessions": "synapse:agent:list-all-sessions",
     "openConversationWindow": "synapse:agent:open-conversation-window",
     "focusConversationWindow": "synapse:agent:focus-conversation-window",
+    "replaceConversationWindowTarget": "synapse:agent:replace-conversation-window-target",
     "listDetachedConversationWindows": "synapse:agent:list-detached-conversation-windows",
     "getTimeline": "synapse:agent:get-timeline",
     "exportConversationBundle": "synapse:agent:export-conversation-bundle",
@@ -918,6 +919,8 @@ const synapseBridge: SynapseBridge = {
     listAllSessions: () => invoke(IPC_CHANNELS.agent.listAllSessions)({}),
     openConversationWindow: (request) => invoke(IPC_CHANNELS.agent.openConversationWindow)(request),
     focusConversationWindow: (target) => invoke(IPC_CHANNELS.agent.focusConversationWindow)(target),
+    replaceConversationWindowTarget: (request) =>
+      invoke(IPC_CHANNELS.agent.replaceConversationWindowTarget)(request),
     listDetachedConversationWindows: () => invoke(IPC_CHANNELS.agent.listDetachedConversationWindows)({}),
     getTimeline: (args) => invoke(IPC_CHANNELS.agent.getTimeline)(args),
     exportConversationBundle: (args) => invoke(IPC_CHANNELS.agent.exportConversationBundle)(args),

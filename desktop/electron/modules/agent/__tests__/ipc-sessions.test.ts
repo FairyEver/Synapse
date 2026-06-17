@@ -485,6 +485,51 @@ describe("agent session IPC methods", () => {
     }])
   })
 
+  it("replaces an agent conversation window target", async () => {
+    const conversationWindowService = {
+      openConversationWindow: vi.fn(),
+      focusConversationWindow: vi.fn(),
+      listDetachedConversations: vi.fn(),
+      closeConversationWindow: vi.fn(),
+      replaceConversationWindowTarget: vi.fn(() => ({ replaced: true })),
+    }
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => createConversationNamespace([])),
+      } as unknown as DataRepository,
+      conversationWindowService,
+    })
+
+    await expect(sessionMethods.replaceConversationWindowTarget.handler(ctx, {
+      from: {
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+      },
+      to: {
+        projectId: "project-1",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+        title: "新会话",
+      },
+    })).resolves.toEqual({ replaced: true })
+
+    expect(conversationWindowService.replaceConversationWindowTarget).toHaveBeenCalledWith({
+      from: {
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+      },
+      to: {
+        projectId: "project-1",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+        title: "新会话",
+      },
+    })
+  })
+
   it("logs session rename failures without recording the requested title", async () => {
     const renameSession = vi.fn().mockRejectedValue(new Error("write failed"))
     const ctx = createContext({
@@ -529,6 +574,7 @@ function createContext(overrides: {
     readonly focusConversationWindow: ReturnType<typeof vi.fn>
     readonly listDetachedConversations: ReturnType<typeof vi.fn>
     readonly closeConversationWindow: ReturnType<typeof vi.fn>
+    readonly replaceConversationWindowTarget?: ReturnType<typeof vi.fn>
   }
 }): IpcHandlerContext & {
   readonly projectContainers: Pick<ProjectContainerRegistry, "open">
