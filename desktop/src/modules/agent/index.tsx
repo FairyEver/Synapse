@@ -20,13 +20,19 @@ import type {
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import { AgentComposer } from "./components/agent-composer"
 import { AgentConversationWorkspace } from "./components/agent-conversation-workspace"
+import { AgentDetachedPlaceholder } from "./components/agent-detached-placeholder"
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import {
   filterSessionsBySource,
   type ConversationSourceFilter,
 } from "./conversation-source"
 import { useAgentChat } from "./hooks/use-agent-chat"
+import {
+  isDetachedAgentConversation,
+  useDetachedAgentConversations,
+} from "./hooks/use-detached-agent-conversations"
 import { resolveAgentProjectScope } from "./project-resolution"
+import { sessionLabel } from "./utils"
 
 const logger = createRendererLogger("agent")
 
@@ -59,6 +65,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   [activeRepository, config.global.projects, platform])
   const [sourceFilter, setSourceFilter] = useState<ConversationSourceFilter>("user")
   const chat = useAgentChat(projectScope)
+  const detachedConversations = useDetachedAgentConversations()
   const pendingSessionRefreshKeyRef = useRef<string | null>(null)
   const pendingSessionMissingKeyRef = useRef<string | null>(null)
 
@@ -90,6 +97,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         sessionKey: selectedSession.sessionKey,
       }
     : undefined
+  const selectedDetached = isDetachedAgentConversation(detachedConversations, {
+    projectId: selectedSession?.projectId,
+    conversationId: selectedSession?.id,
+  })
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
   const mergedCommands = useMemo(() => {
@@ -199,7 +210,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     try {
       await requireSynapseBridge().agent.openConversationWindow({
         ...target,
-        title: selectedSession?.name,
+        title: selectedSession ? sessionLabel(selectedSession) : undefined,
       })
     } catch (rawError) {
       logger.error("Agent detached conversation open failed.", {
@@ -207,6 +218,29 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         projectId: target.projectId,
         conversationId: target.conversationId,
         sessionKey: target.sessionKey,
+        ...errorDiagnostic(rawError),
+      })
+      toast.error("打开失败")
+    }
+  }
+
+  const handleShowDetachedConversation = async () => {
+    if (!selectedTarget) return
+    try {
+      const bridge = requireSynapseBridge()
+      const result = await bridge.agent.focusConversationWindow(selectedTarget)
+      if (!result.focused) {
+        await bridge.agent.openConversationWindow({
+          ...selectedTarget,
+          title: selectedSession ? sessionLabel(selectedSession) : undefined,
+        })
+      }
+    } catch (rawError) {
+      logger.error("Agent detached conversation focus failed.", {
+        boundary: "renderer.agent.focus-conversation-window",
+        projectId: selectedTarget.projectId,
+        conversationId: selectedTarget.conversationId,
+        sessionKey: selectedTarget.sessionKey,
         ...errorDiagnostic(rawError),
       })
       toast.error("打开失败")
@@ -248,7 +282,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
 
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false} sidebarResizable>
-      {selectedSession && selectedTarget ? (
+      {selectedDetached ? (
+        <AgentDetachedPlaceholder onShowWindow={() => void handleShowDetachedConversation()} />
+      ) : selectedSession && selectedTarget ? (
         <AgentConversationWorkspace
           session={selectedSession}
           project={selectedProject}
