@@ -321,6 +321,46 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('暂无同级文件')
   })
 
+  it('renders markdown outline links when preview contains headings', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes\n\n## Details',
+        html: '<h1 id="notes">Notes</h1><h2 id="details">Details</h2>',
+        outline: [
+          {
+            id: 'notes',
+            text: 'Notes',
+            depth: 1,
+            children: [
+              {
+                id: 'details',
+                text: 'Details',
+                depth: 2,
+                children: [],
+              },
+            ],
+          },
+        ],
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+
+    expect(html).toContain('aria-label="目录"')
+    expect(html).toContain('href="#notes"')
+    expect(html).toContain('href="#details"')
+    expect(html).toContain('<h1 id="notes">Notes</h1>')
+  })
+
   it('renders console folders as full-width finder without renderer chrome', () => {
     const snapshot = createSnapshot({
       context: 'owner',
@@ -647,5 +687,6 @@ function basePreview(): NonNullable<DriveBrowserSnapshotDto['preview']> {
     imageUrl: null,
     visitUrl: '/drive/items/file/render',
     html: null,
+    outline: null,
   }
 }

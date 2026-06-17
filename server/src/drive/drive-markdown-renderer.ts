@@ -1,6 +1,12 @@
+import type { DriveMarkdownOutlineItemDto } from "@synapse/shared"
+
 type MarkdownAstNode = {
   type?: string
   value?: unknown
+  depth?: unknown
+  data?: {
+    hProperties?: Record<string, unknown>
+  }
   children?: MarkdownAstNode[]
 }
 
@@ -11,17 +17,38 @@ type HtmlAstNode = {
   children?: HtmlAstNode[]
 }
 
-export async function renderDriveMarkdownFragment(markdown: string): Promise<string> {
+export type DriveMarkdownRenderResult = {
+  readonly html: string
+  readonly outline: readonly DriveMarkdownOutlineItemDto[]
+}
+
+type MutableDriveMarkdownOutlineItem = {
+  id: string
+  text: string
+  depth: number
+  children: MutableDriveMarkdownOutlineItem[]
+}
+
+export async function renderDriveMarkdownFragment(markdown: string): Promise<DriveMarkdownRenderResult> {
   return renderMarkdownBody(markdown)
 }
 
-async function renderMarkdownBody(markdown: string): Promise<string> {
+async function renderMarkdownBody(markdown: string): Promise<DriveMarkdownRenderResult> {
+  const outlineState: {
+    readonly counts: Map<string, number>
+    readonly items: MutableDriveMarkdownOutlineItem[]
+    sequence: number
+  } = {
+    counts: new Map<string, number>(),
+    items: [],
+    sequence: 0,
+  }
   const [
     { unified },
     { default: remarkParse },
     { default: remarkGfm },
     { default: remarkRehype },
-    { default: rehypeSanitize },
+    { default: rehypeSanitize, defaultSchema },
     { default: rehypeStringify },
   ] = await Promise.all([
     import("unified"),
@@ -35,13 +62,99 @@ async function renderMarkdownBody(markdown: string): Promise<string> {
   const file = await unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(() => createHeadingOutlinePlugin(outlineState))
     .use(escapeRawHtmlPlugin)
     .use(remarkRehype)
     .use(stripRelativeResourceUrlsPlugin)
-    .use(rehypeSanitize)
+    .use(rehypeSanitize, { ...defaultSchema, clobberPrefix: "" })
     .use(rehypeStringify)
     .process(markdown)
-  return String(file)
+  return {
+    html: String(file),
+    outline: outlineState.items,
+  }
+}
+
+function createHeadingOutlinePlugin(state: {
+  readonly counts: Map<string, number>
+  readonly items: MutableDriveMarkdownOutlineItem[]
+  sequence: number
+}) {
+  return (tree: MarkdownAstNode) => {
+    visitHeadingAst(tree, state)
+  }
+}
+
+function visitHeadingAst(
+  node: MarkdownAstNode,
+  state: {
+    readonly counts: Map<string, number>
+    readonly items: MutableDriveMarkdownOutlineItem[]
+    sequence: number
+  },
+): void {
+  if (node.type === "heading" && isMarkdownHeadingDepth(node.depth)) {
+    state.sequence += 1
+    const text = extractMarkdownNodeText(node).trim()
+    const id = uniqueHeadingId(text, state.sequence, state.counts)
+    node.data = {
+      ...(node.data ?? {}),
+      hProperties: {
+        ...(node.data?.hProperties ?? {}),
+        id,
+      },
+    }
+    insertOutlineItem(state.items, {
+      id,
+      text: text || `heading ${state.sequence}`,
+      depth: node.depth,
+      children: [],
+    })
+  }
+
+  for (const child of node.children ?? []) visitHeadingAst(child, state)
+}
+
+function isMarkdownHeadingDepth(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 6
+}
+
+function extractMarkdownNodeText(node: MarkdownAstNode): string {
+  if (typeof node.value === "string") return node.value
+  return (node.children ?? []).map(extractMarkdownNodeText).join("")
+}
+
+function uniqueHeadingId(text: string, sequence: number, counts: Map<string, number>): string {
+  const base = slugHeadingText(text) || `heading-${sequence}`
+  const count = (counts.get(base) ?? 0) + 1
+  counts.set(base, count)
+  return count === 1 ? base : `${base}-${count}`
+}
+
+function slugHeadingText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+    .replace(/\s+/gu, "-")
+    .replace(/-+/gu, "-")
+    .replace(/^-|-$/gu, "")
+}
+
+function insertOutlineItem(
+  roots: MutableDriveMarkdownOutlineItem[],
+  item: MutableDriveMarkdownOutlineItem,
+): void {
+  let siblings = roots
+  while (true) {
+    const parent = siblings.at(-1)
+    if (!parent || parent.depth >= item.depth) {
+      siblings.push(item)
+      return
+    }
+    siblings = parent.children
+  }
 }
 
 function escapeRawHtmlPlugin() {

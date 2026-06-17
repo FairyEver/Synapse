@@ -3,7 +3,7 @@ import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 
 describe("drive markdown renderer", () => {
   it("renders a sanitized markdown fragment for browser previews", async () => {
-    const html = await renderDriveMarkdownFragment([
+    const result = await renderDriveMarkdownFragment([
       "# Notes",
       "",
       "| Item | Done |",
@@ -21,7 +21,8 @@ describe("drive markdown renderer", () => {
       "```",
     ].join("\n"))
 
-    expect(html).toContain("<h1>Notes</h1>")
+    const html = result.html
+    expect(html).toContain('<h1 id="notes">Notes</h1>')
     expect(html).toContain("<table>")
     expect(html).toContain('type="checkbox"')
     expect(html).toContain("<code")
@@ -32,7 +33,7 @@ describe("drive markdown renderer", () => {
   })
 
   it("removes relative resource urls from markdown previews", async () => {
-    const html = await renderDriveMarkdownFragment([
+    const result = await renderDriveMarkdownFragment([
       "# Notes",
       "",
       "![diagram](./diagram.png)",
@@ -42,8 +43,63 @@ describe("drive markdown renderer", () => {
       "[external](https://example.com/guide)",
     ].join("\n"))
 
+    const html = result.html
     expect(html).not.toContain("./diagram.png")
     expect(html).not.toContain("../guide.md")
     expect(html).toContain('<a href="https://example.com/guide">external</a>')
+  })
+
+  it("extracts a nested heading outline and injects stable heading ids", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "# Notes!",
+      "",
+      "## 当前 状态",
+      "",
+      "### 当前 状态",
+      "",
+      "## 当前 状态",
+      "",
+      "#### Deep",
+    ].join("\n"))
+
+    expect(result.html).toContain('<h1 id="notes">Notes!</h1>')
+    expect(result.html).toContain('<h2 id="当前-状态">当前 状态</h2>')
+    expect(result.html).toContain('<h3 id="当前-状态-2">当前 状态</h3>')
+    expect(result.html).toContain('<h2 id="当前-状态-3">当前 状态</h2>')
+    expect(result.outline).toEqual([
+      {
+        id: "notes",
+        text: "Notes!",
+        depth: 1,
+        children: [
+          {
+            id: "当前-状态",
+            text: "当前 状态",
+            depth: 2,
+            children: [
+              {
+                id: "当前-状态-2",
+                text: "当前 状态",
+                depth: 3,
+                children: [],
+              },
+            ],
+          },
+          {
+            id: "当前-状态-3",
+            text: "当前 状态",
+            depth: 2,
+            children: [
+              {
+                id: "deep",
+                text: "Deep",
+                depth: 4,
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ])
   })
 })

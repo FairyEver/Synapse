@@ -10,6 +10,7 @@ import {
   buildShareDriveRenderUrl,
   type DriveBrowserBreadcrumbDto,
   type DriveBrowserItemDto,
+  type DriveMarkdownOutlineItemDto,
   type DriveBrowserPreviewDto,
   type DriveBrowserPreviewKind,
   type DriveBrowserSurface,
@@ -109,6 +110,7 @@ export function buildDriveBrowserPreview(input: {
   readonly route: DriveBrowserRouteContext
   readonly text?: string | null
   readonly html?: string | null
+  readonly outline?: readonly DriveMarkdownOutlineItemDto[] | null
   readonly truncated?: boolean
   readonly imageUrl?: string | null
 }): DriveBrowserPreviewDto {
@@ -118,6 +120,7 @@ export function buildDriveBrowserPreview(input: {
     kind,
     text: textPreview ? input.text ?? "" : null,
     html: kind === "markdown" ? input.html ?? null : null,
+    outline: kind === "markdown" ? input.outline ?? null : null,
     truncated: textPreview ? input.truncated ?? false : false,
     imageUrl: kind === "image" ? input.imageUrl ?? null : null,
     visitUrl: kind === "html-source"
