@@ -6,6 +6,10 @@ import type { ConversationEntryV1, DataRepository } from "../../runtime/data-rep
 import type { WindowManager } from "../../runtime/window"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
+import {
+  AGENT_CONVERSATION_WINDOW_SERVICE_ID,
+  type AgentConversationWindowService,
+} from "../../services/agent-conversation-window-service"
 import { isManagedKnowledgeBaseProject } from "../../services/knowledge-base/managed-path"
 import type { KnowledgeBaseStorageMigrationService } from "../../services/knowledge-base/storage-migration-service"
 import {
@@ -61,6 +65,16 @@ const openConversationRequestSchema = z.object({
   platform: z.enum(["automation", "workflow", "scheduled"]),
 })
 
+const agentConversationTargetSchema = z.object({
+  projectId: z.string().min(1),
+  conversationId: z.string().min(1),
+  sessionKey: z.string().min(1),
+})
+
+const openConversationWindowRequestSchema = agentConversationTargetSchema.extend({
+  title: z.string().optional(),
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const statusSchema = z.object({
@@ -86,6 +100,20 @@ const openConversationResultSchema = z.discriminatedUnion("opened", [
   z.object({ opened: z.literal(false), reason: z.literal("not-found") }),
 ])
 
+const openConversationWindowResultSchema = z.object({
+  opened: z.literal(true),
+})
+
+const focusConversationWindowResultSchema = z.object({
+  focused: z.boolean(),
+})
+
+const detachedConversationSchema = agentConversationTargetSchema.extend({
+  title: z.string(),
+  windowId: z.number(),
+  openedAt: z.string(),
+})
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
@@ -95,6 +123,8 @@ type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
 type DeleteSessionRequest = z.infer<typeof deleteSessionRequestSchema>
 type RenameSessionRequest = z.infer<typeof renameSessionRequestSchema>
 type OpenConversationRequest = z.infer<typeof openConversationRequestSchema>
+type AgentConversationTargetRequest = z.infer<typeof agentConversationTargetSchema>
+type OpenConversationWindowRequest = z.infer<typeof openConversationWindowRequestSchema>
 
 function resolveCreateSessionMode(
   requestedMode: CreateSessionRequest["mode"],
@@ -183,6 +213,36 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
         platform: request.platform,
       })
       return { opened: true }
+    },
+  },
+  openConversationWindow: {
+    kind: "invoke",
+    channel: "synapse:agent:open-conversation-window",
+    request: openConversationWindowRequestSchema,
+    response: openConversationWindowResultSchema,
+    handler: async (ctx, request: OpenConversationWindowRequest) => {
+      const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
+      return service.openConversationWindow(request)
+    },
+  },
+  focusConversationWindow: {
+    kind: "invoke",
+    channel: "synapse:agent:focus-conversation-window",
+    request: agentConversationTargetSchema,
+    response: focusConversationWindowResultSchema,
+    handler: async (ctx, request: AgentConversationTargetRequest) => {
+      const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
+      return service.focusConversationWindow(request)
+    },
+  },
+  listDetachedConversationWindows: {
+    kind: "invoke",
+    channel: "synapse:agent:list-detached-conversation-windows",
+    request: z.object({}),
+    response: z.array(detachedConversationSchema),
+    handler: async (ctx) => {
+      const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
+      return service.listDetachedConversations()
     },
   },
   createSession: {

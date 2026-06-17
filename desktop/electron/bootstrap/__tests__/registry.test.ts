@@ -72,6 +72,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(ids).toEqual(
       [
         "core.action-runtime",
+        "agent.conversation-window-service",
         "core.audit-sink",
         "core.app-icon",
         "core.automation",
@@ -136,6 +137,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.project-containers",
     ])
     expect(byId.get("core.window-manager")?.dependsOn).toEqual([])
+    expect(byId.get("agent.conversation-window-service")?.dependsOn).toEqual(["core.window-manager"])
     expect(byId.get("core.event-bus")?.dependsOn).toEqual(["core.window-manager"])
     expect(byId.get("core.action-runtime")?.dependsOn).toEqual([
       "core.process-environment",

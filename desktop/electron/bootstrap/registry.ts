@@ -19,6 +19,7 @@ import type { ProcessRuntime } from "../runtime/process"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import {
   coreActionRuntimeDescriptor,
+  coreAgentConversationWindowDescriptor,
   coreAppIconDescriptor,
   coreAuditSinkDescriptor,
   coreAutomationDescriptor,
@@ -85,6 +86,7 @@ export function buildServiceRegistry(
   registry.register(coreNetworkRegistryDescriptor)
   registry.register(coreAppIconDescriptor)
   registry.register(coreWindowManagerDescriptor)
+  registry.register(coreAgentConversationWindowDescriptor)
   registry.register(coreEventBusDescriptor)
   registry.register(coreCheatCodeStateDescriptor)
   registry.register(coreProjectContainerRegistryDescriptor)

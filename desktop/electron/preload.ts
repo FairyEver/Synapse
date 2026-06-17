@@ -7,6 +7,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { DriveLocalUploadRequest, SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
+import type { AgentDetachedConversation } from "../src/types/agent-conversation-window"
 import type { OpenAgentSessionPayload } from "../src/types/agent-navigation"
 import type { SynapseAccountStateChangedEvent } from "../src/types/account"
 import type { SynapseLiveStateChangedEvent } from "../src/types/live"
@@ -160,6 +161,9 @@ const IPC_CHANNELS = {
     "status": "synapse:agent:status",
     "listSessions": "synapse:agent:list-sessions",
     "listAllSessions": "synapse:agent:list-all-sessions",
+    "openConversationWindow": "synapse:agent:open-conversation-window",
+    "focusConversationWindow": "synapse:agent:focus-conversation-window",
+    "listDetachedConversationWindows": "synapse:agent:list-detached-conversation-windows",
     "getTimeline": "synapse:agent:get-timeline",
     "exportConversationBundle": "synapse:agent:export-conversation-bundle",
     "createSession": "synapse:agent:create-session",
@@ -198,6 +202,7 @@ const IPC_CHANNELS = {
     "openConversation": "synapse:agent:open-conversation",
     "getAvailableAgents": "synapse:agent:get-available-agents",
     "event": "synapse:events:agent",
+    "detachedConversationsChanged": "synapse:agent:detached-conversations-changed",
   },
   "automation": {
     "openCreateEditorWindow": "synapse:automation:editor:open-create",
@@ -911,6 +916,9 @@ const synapseBridge: SynapseBridge = {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
     listSessions: (projectId) => invoke(IPC_CHANNELS.agent.listSessions)({ projectId }),
     listAllSessions: () => invoke(IPC_CHANNELS.agent.listAllSessions)({}),
+    openConversationWindow: (request) => invoke(IPC_CHANNELS.agent.openConversationWindow)(request),
+    focusConversationWindow: (target) => invoke(IPC_CHANNELS.agent.focusConversationWindow)(target),
+    listDetachedConversationWindows: () => invoke(IPC_CHANNELS.agent.listDetachedConversationWindows)({}),
     getTimeline: (args) => invoke(IPC_CHANNELS.agent.getTimeline)(args),
     exportConversationBundle: (args) => invoke(IPC_CHANNELS.agent.exportConversationBundle)(args),
     createSession: (args) => invoke(IPC_CHANNELS.agent.createSession)(args),
@@ -964,6 +972,10 @@ const synapseBridge: SynapseBridge = {
     onEvent: createRawPayloadSubscription<SynapseAgentDomainEvent>(
       subscribe,
       EVENT_CHANNELS.agent.event,
+    ),
+    onDetachedConversationWindowsChanged: createRawPayloadSubscription<AgentDetachedConversation[]>(
+      subscribe,
+      IPC_CHANNELS.agent.detachedConversationsChanged,
     ),
   },
   ops: {

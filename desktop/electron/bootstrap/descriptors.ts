@@ -62,6 +62,11 @@ import { RepositorySyncCoordinator } from "../services/repository-sync-coordinat
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService, AgentRuntimeService, AGENT_RUNTIME_SERVICE_ID } from "../services/agent-runtime"
 import {
+  AGENT_CONVERSATION_WINDOW_SERVICE_ID,
+  createDefaultAgentConversationWindowService,
+  type AgentConversationWindowService,
+} from "../services/agent-conversation-window-service"
+import {
   createProviderProjectService,
   createProviderServiceFromDataRepository,
   PROVIDER_SERVICE_ID,
@@ -934,6 +939,17 @@ export const coreWindowManagerDescriptor: ServiceDescriptor<WindowManager> = {
   criticality: "fatal",
   create() {
     return createWindowManager()
+  },
+}
+
+export const coreAgentConversationWindowDescriptor: ServiceDescriptor<AgentConversationWindowService> = {
+  id: AGENT_CONVERSATION_WINDOW_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.window-manager"],
+  create(ctx) {
+    return createDefaultAgentConversationWindowService(
+      ctx.registry.get<WindowManager>("core.window-manager"),
+    )
   },
 }
 

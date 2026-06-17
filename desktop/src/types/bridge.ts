@@ -86,6 +86,13 @@ import type {
   SynapseAgentPermissionMode,
 } from "./agent"
 import type {
+  AgentConversationTarget,
+  AgentConversationWindowFocusResult,
+  AgentConversationWindowOpenResult,
+  AgentConversationWindowRequest,
+  AgentDetachedConversation,
+} from "./agent-conversation-window"
+import type {
   OpenAgentSessionPayload,
   SynapseAgentConversationTarget,
   SynapseOpenAgentConversationResult,
@@ -1029,6 +1036,13 @@ export type SynapseBridge = {
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
     listAllSessions: () => Promise<SynapseAgentSessionSummary[]>
+    openConversationWindow: (
+      request: AgentConversationWindowRequest,
+    ) => Promise<AgentConversationWindowOpenResult>
+    focusConversationWindow: (
+      target: AgentConversationTarget,
+    ) => Promise<AgentConversationWindowFocusResult>
+    listDetachedConversationWindows: () => Promise<AgentDetachedConversation[]>
     getTimeline: (
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
@@ -1174,6 +1188,9 @@ export type SynapseBridge = {
     ) => Promise<SynapseOpenAgentConversationResult>
     onOpenConversation: (listener: (payload: OpenAgentSessionPayload) => void) => () => void
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void
+    onDetachedConversationWindowsChanged: (
+      listener: (items: AgentDetachedConversation[]) => void,
+    ) => () => void
   }
   ops: {
     diagnostics: (payload?: { projectId?: string }) => Promise<SynapseOpsDiagnostics>
