@@ -278,7 +278,7 @@ describe("createDriveCapabilityDispatcher", () => {
 
   it("returns preview snapshots and text content without creating shares", async () => {
     const snapshot = drivePreviewSnapshot({
-      preview: { kind: "markdown", text: "# Note", html: "<h1>Note</h1>", truncated: false, imageUrl: null, visitUrl: null },
+      preview: { kind: "markdown", text: "# Note", html: "<h1>Note</h1>", outline: null, truncated: false, imageUrl: null, visitUrl: null },
     })
     const accountService = createAccountService({
       getDriveItemPreview: vi.fn(async () => snapshot),

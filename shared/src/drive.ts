@@ -206,10 +206,18 @@ export interface DriveBrowserBreadcrumbDto {
   readonly browserUrl: string
 }
 
+export interface DriveMarkdownOutlineItemDto {
+  readonly id: string
+  readonly text: string
+  readonly depth: number
+  readonly children: readonly DriveMarkdownOutlineItemDto[]
+}
+
 export interface DriveBrowserPreviewDto {
   readonly kind: DriveBrowserPreviewKind
   readonly text: string | null
   readonly html: string | null
+  readonly outline: readonly DriveMarkdownOutlineItemDto[] | null
   readonly truncated: boolean
   readonly imageUrl: string | null
   readonly visitUrl: string | null

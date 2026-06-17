@@ -1251,6 +1251,7 @@ describe("AccountService", () => {
         kind: "html-source",
         text: "<h1>Report</h1>",
         html: null,
+        outline: null,
         truncated: false,
         imageUrl: null,
         visitUrl: `${expectedPublicAppUrl}/drive/items/item-1/render`,

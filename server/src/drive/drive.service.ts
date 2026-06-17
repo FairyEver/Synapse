@@ -1304,9 +1304,21 @@ export class DriveService implements OnApplicationBootstrap {
     const kind = resolveDriveBrowserPreviewKind(item)
     const storageKey = this.requireActiveFileStorage(current)
     if (shouldReadDriveBrowserTextPreview(kind)) {
+      if (kind === "markdown") {
+        const text = await this.readFullTextPreview(storageKey)
+        const rendered = await renderDriveMarkdownFragment(text)
+        return buildDriveBrowserPreview({
+          item,
+          route,
+          text,
+          html: rendered.html,
+          outline: rendered.outline,
+          truncated: false,
+        })
+      }
+
       const preview = await this.readTextPreview(storageKey)
-      const html = kind === "markdown" ? await renderDriveMarkdownFragment(preview.text) : null
-      return buildDriveBrowserPreview({ item, route, text: preview.text, html, truncated: preview.truncated })
+      return buildDriveBrowserPreview({ item, route, text: preview.text, html: null, truncated: preview.truncated })
     }
     if (shouldCreateDriveBrowserImagePreview(kind)) {
       const imageUrl = buildDriveBrowserItemDto({ item, route }).downloadUrl
@@ -1318,6 +1330,11 @@ export class DriveService implements OnApplicationBootstrap {
   private async readTextPreview(storageKey: string): Promise<{ readonly text: string; readonly truncated: boolean }> {
     const object = await this.storage.getObjectStream({ key: storageKey })
     return readStreamTextPrefix(object.stream, DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES)
+  }
+
+  private async readFullTextPreview(storageKey: string): Promise<string> {
+    const object = await this.storage.getObjectStream({ key: storageKey })
+    return readStreamText(object.stream)
   }
 
   private requireActiveFileStorage(item: DriveItemRecordWithStorage): string {
@@ -1810,6 +1827,20 @@ async function readStreamTextPrefix(
   }
 
   return { text: Buffer.concat(chunks, bytes).toString("utf8"), truncated }
+}
+
+async function readStreamText(stream: NodeJS.ReadableStream): Promise<string> {
+  const chunks: Buffer[] = []
+  let bytes = 0
+  const readable = stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>
+
+  for await (const chunk of readable) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    chunks.push(buffer)
+    bytes += buffer.length
+  }
+
+  return Buffer.concat(chunks, bytes).toString("utf8")
 }
 
 function toDriveShareDto(

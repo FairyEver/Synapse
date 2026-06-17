@@ -796,9 +796,16 @@ describe("DriveService", () => {
 
   it("builds owner browser snapshots with rendered markdown previews", async () => {
     const prisma = createPrismaMemory()
+    const longMarkdown = [
+      "# Notes",
+      "",
+      "## Details",
+      "",
+      "x".repeat(150 * 1024),
+    ].join("\n")
     const storage: DriveStoragePort = {
       ...storageMock,
-      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Notes"), size: 7n, contentType: "text/markdown" })),
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from(longMarkdown), size: BigInt(Buffer.byteLength(longMarkdown)), contentType: "text/markdown" })),
     }
     const service = new DriveService(prisma as unknown as PrismaService, storage)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -817,8 +824,24 @@ describe("DriveService", () => {
     expect(snapshot.current.previewKind).toBe("markdown")
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
-      text: "# Notes",
-      html: "<h1>Notes</h1>",
+      text: longMarkdown,
+      html: expect.stringContaining('<h1 id="notes">Notes</h1>'),
+      outline: [
+        {
+          id: "notes",
+          text: "Notes",
+          depth: 1,
+          children: [
+            {
+              id: "details",
+              text: "Details",
+              depth: 2,
+              children: [],
+            },
+          ],
+        },
+      ],
+      truncated: false,
       visitUrl: null,
     })
   })
@@ -959,7 +982,7 @@ describe("DriveService", () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
-      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Notes"), size: 7n, contentType: "text/markdown" })),
+      getObjectStream: vi.fn(async () => ({ stream: Readable.from("# Notes\n\n## Shared"), size: 17n, contentType: "text/markdown" })),
     }
     const service = new DriveService(prisma as unknown as PrismaService, storage)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -977,8 +1000,23 @@ describe("DriveService", () => {
 
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
-      text: "# Notes",
-      html: "<h1>Notes</h1>",
+      text: "# Notes\n\n## Shared",
+      html: expect.stringContaining('<h1 id="notes">Notes</h1>'),
+      outline: [
+        {
+          id: "notes",
+          text: "Notes",
+          depth: 1,
+          children: [
+            {
+              id: "shared",
+              text: "Shared",
+              depth: 2,
+              children: [],
+            },
+          ],
+        },
+      ],
       visitUrl: null,
     })
   })
