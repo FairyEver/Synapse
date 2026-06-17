@@ -861,7 +861,7 @@ describe("DriveService", () => {
     })])
   })
 
-  it("builds console root file children as standalone owner item links", async () => {
+  it("builds console root file children as console item links", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
     await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
@@ -875,9 +875,46 @@ describe("DriveService", () => {
 
     expect(snapshot.children).toEqual([expect.objectContaining({
       id: file.id,
-      browserUrl: `/drive/items/${file.id}`,
+      browserUrl: `/console/drive/items/${file.id}?surface=console`,
       downloadUrl: `/drive/items/${file.id}/download`,
     })])
+  })
+
+  it("builds console file snapshots with current folder siblings", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
+    const selected = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "selected.md",
+      mimeType: "text/markdown",
+    })
+    const sibling = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "sibling.md",
+      mimeType: "text/markdown",
+    })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      itemId: selected.id,
+      surface: "console",
+    })
+
+    expect(snapshot.current.id).toBe(selected.id)
+    expect(snapshot.children.map((item) => item.id).sort()).toEqual([selected.id, sibling.id].sort())
+    expect(snapshot.children).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: selected.id,
+        browserUrl: `/console/drive/items/${selected.id}?surface=console`,
+      }),
+      expect.objectContaining({
+        id: sibling.id,
+        browserUrl: `/console/drive/items/${sibling.id}?surface=console`,
+      }),
+    ]))
+    vi.mocked(storageMock.getObjectStream).mockClear()
   })
 
   it("limits console root browser children", async () => {

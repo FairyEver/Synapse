@@ -8,6 +8,7 @@ import {
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SHARE_BROWSER_PATH_PREFIX,
   buildConsoleDriveBrowserUrl,
+  buildConsoleDriveItemBrowserUrl,
   buildConsoleDriveRootUrl,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
@@ -44,6 +45,10 @@ describe("drive URL helpers", () => {
     expect(buildConsoleDriveBrowserUrl("folder/a")).toBe("/console/drive/folders/folder%2Fa")
   })
 
+  it("builds console drive browser URLs for files", () => {
+    expect(buildConsoleDriveItemBrowserUrl("item/a")).toBe("/console/drive/items/item%2Fa?surface=console")
+  })
+
   it("builds share browser URLs with root and child item ids", () => {
     expect(buildShareDriveBrowserUrl("shr/a")).toBe("/share/shr%2Fa")
     expect(buildShareDriveBrowserUrl("shr/a", "child/b")).toBe("/share/shr%2Fa/items/child%2Fb")
@@ -65,6 +70,8 @@ describe("drive URL helpers", () => {
       .toBe("/drive/items/***/render")
     expect(maskDriveBrowserUrl("https://synapse.d2.pub/console/drive/folders/folder_secret"))
       .toBe("https://synapse.d2.pub/console/drive/folders/***")
+    expect(maskDriveBrowserUrl("https://synapse.d2.pub/console/drive/items/item_secret?surface=console"))
+      .toBe("https://synapse.d2.pub/console/drive/items/***?surface=console")
   })
 
   it("builds password-bearing drive URLs", () => {

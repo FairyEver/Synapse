@@ -278,6 +278,10 @@ export function buildConsoleDriveBrowserUrl(folderId: string): string {
   return `${DRIVE_CONSOLE_BROWSER_PATH_PREFIX}/folders/${encodeURIComponent(folderId)}`
 }
 
+export function buildConsoleDriveItemBrowserUrl(itemId: string): string {
+  return `${DRIVE_CONSOLE_BROWSER_PATH_PREFIX}/items/${encodeURIComponent(itemId)}?surface=console`
+}
+
 export function buildShareDriveBrowserUrl(shareId: string, itemId?: string | null): string {
   const rootUrl = `${DRIVE_SHARE_BROWSER_PATH_PREFIX}/${encodeURIComponent(shareId)}`
   return itemId ? `${rootUrl}/items/${encodeURIComponent(itemId)}` : rootUrl
@@ -324,6 +328,7 @@ function maskDriveBrowserPath(value: string): string {
   return value
     .replace(/\/drive\/items\/[^/?#]+/u, "/drive/items/***")
     .replace(/\/console\/drive\/folders\/[^/?#]+/u, "/console/drive/folders/***")
+    .replace(/\/console\/drive\/items\/[^/?#]+/u, "/console/drive/items/***")
     .replace(/\/share\/[^/?#]+/u, "/share/***")
     .replace(/(\/share\/\*\*\*\/items\/)[^/?#]+/u, "$1***")
 }

@@ -1,5 +1,6 @@
 import {
   buildConsoleDriveBrowserUrl,
+  buildConsoleDriveItemBrowserUrl,
   buildConsoleDriveRootUrl,
   buildOwnerDriveBrowserUrl,
   buildOwnerDriveDownloadUrl,
@@ -141,9 +142,10 @@ export function buildDriveBrowserZipUrl(input: DriveBrowserRouteContext & { read
 
 function buildBrowserUrl(route: DriveBrowserRouteContext, item: DriveBrowserSourceItem): string {
   if (route.context === "owner") {
-    return route.surface === "console" && item.type === "folder"
+    if (route.surface !== "console") return buildOwnerDriveBrowserUrl(item.id)
+    return item.type === "folder"
       ? buildConsoleDriveBrowserUrl(item.id)
-      : buildOwnerDriveBrowserUrl(item.id)
+      : buildConsoleDriveItemBrowserUrl(item.id)
   }
   return buildShareDriveBrowserUrl(route.shareId, item.id === route.rootItemId ? null : item.id)
 }

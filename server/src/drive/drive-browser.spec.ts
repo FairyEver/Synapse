@@ -112,13 +112,13 @@ describe("drive browser helpers", () => {
     expect(item.downloadUrl).toBe("/drive/items/child-1/download")
   })
 
-  it("builds console file browser urls as standalone owner item links", () => {
+  it("builds console file browser urls as console item links", () => {
     const item = buildDriveBrowserItemDto({
       item: { ...baseItem, id: "child-1", type: "file" },
       route: { context: "owner", surface: "console" },
     })
 
-    expect(item.browserUrl).toBe("/drive/items/child-1")
+    expect(item.browserUrl).toBe("/console/drive/items/child-1?surface=console")
     expect(item.downloadUrl).toBe("/drive/items/child-1/download")
   })
 })
