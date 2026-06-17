@@ -677,7 +677,7 @@ describe("AgentModule pending prompt sessions", () => {
       })
     })
 
-    expect(createSession).toHaveBeenCalledWith("project-1", "provider-1", undefined, "opus")
+    expect(createSession).toHaveBeenCalledWith("project-1", "provider-1", undefined, "opus", undefined)
     expect(mocks.sidebarProps?.sourceFilter).toBe("user")
   })
 

@@ -91,6 +91,12 @@ function renderDialog(props: Partial<React.ComponentProps<typeof ProviderModelSe
   return { root, ...defaultProps }
 }
 
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  if (!setter) throw new Error("Input value setter not found")
+  setter.call(input, value)
+}
+
 describe("ProviderModelSelectDialog", () => {
   it("renders provider rows with tier model names", async () => {
     bridge.agent.listProviders.mockResolvedValue([
@@ -305,6 +311,131 @@ describe("ProviderModelSelectDialog", () => {
       modelTier: "opus",
       providerName: "Claude Official",
       modelName: "claude-opus",
+    })
+  })
+
+  it("keeps the default footer without confirm input", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({ id: "anthropic", name: "Claude Official", active: true, model: "claude-main", sonnetModel: "claude-sonnet" }),
+    ])
+    const { root, ...props } = renderDialog()
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector("input[aria-label='会话名称']")).toBeNull()
+
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(props.onSelect).toHaveBeenCalledWith({
+      providerId: "anthropic",
+      modelTier: "sonnet",
+      providerName: "Claude Official",
+      modelName: "claude-sonnet",
+    })
+  })
+
+  it("returns trimmed confirm input metadata when configured", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({ id: "anthropic", name: "Claude Official", active: true, model: "claude-main", sonnetModel: "claude-sonnet" }),
+    ])
+    const { root, ...props } = renderDialog({
+      confirmInput: {
+        initialValue: "24日下午1:30",
+        ariaLabel: "会话名称",
+      },
+    })
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    const input = document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")
+    expect(input?.value).toBe("24日下午1:30")
+
+    await act(async () => {
+      if (!input) return
+      setInputValue(input, "  需求复盘  ")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(props.onSelect).toHaveBeenCalledWith({
+      providerId: "anthropic",
+      modelTier: "sonnet",
+      providerName: "Claude Official",
+      modelName: "claude-sonnet",
+    }, {
+      confirmInputValue: "需求复盘",
+    })
+  })
+
+  it("disables confirm when configured confirm input is blank", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({ id: "anthropic", name: "Claude Official", active: true, model: "claude-main", sonnetModel: "claude-sonnet" }),
+    ])
+    const { root, ...props } = renderDialog({
+      confirmInput: {
+        initialValue: "24日下午1:30",
+        ariaLabel: "会话名称",
+      },
+    })
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    const input = document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")
+    await act(async () => {
+      if (!input) return
+      setInputValue(input, "   ")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+    expect(confirmButton?.disabled).toBe(true)
+  })
+
+  it("submits confirm input with Enter", async () => {
+    bridge.agent.listProviders.mockResolvedValue([
+      provider({ id: "anthropic", name: "Claude Official", active: true, model: "claude-main", sonnetModel: "claude-sonnet" }),
+    ])
+    const { root, ...props } = renderDialog({
+      confirmInput: {
+        initialValue: "24日下午1:30",
+        ariaLabel: "会话名称",
+      },
+    })
+
+    await act(async () => {
+      root.render(<ProviderModelSelectDialog {...props} />)
+      await Promise.resolve()
+    })
+
+    const input = document.querySelector<HTMLInputElement>("input[aria-label='会话名称']")
+    await act(async () => {
+      input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+
+    expect(props.onSelect).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "anthropic",
+      modelTier: "sonnet",
+    }), {
+      confirmInputValue: "24日下午1:30",
     })
   })
 })
