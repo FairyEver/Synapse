@@ -62,6 +62,18 @@ describe("GitModule repository list", () => {
     expect(countButtons("添加本地仓库")).toBeGreaterThan(0)
   })
 
+  it("uses the system app window toolbar for repository actions", async () => {
+    await renderGitModule(roots)
+
+    const toolbar = document.querySelector("[data-system-app-window-toolbar]")
+    expect(toolbar).toBeTruthy()
+    expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)]")
+    expect(document.querySelector("[data-system-app-window-left-spacer]")).toBeTruthy()
+    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("仓库")
+    expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("添加本地仓库")
+    expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("克隆仓库")
+  })
+
   it("opens clone dialog and submits clone request", async () => {
     bridge.git.cloneRepository.mockResolvedValue({
       repository: { id: "repo-1", name: "docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
@@ -125,6 +137,74 @@ describe("GitModule repository list", () => {
       name: "team-rules",
     })
   })
+
+  it("keeps repository sync loading scoped to the clicked repository", async () => {
+    const sync = deferred<void>()
+    bridge.git.listRepositories.mockResolvedValue([
+      { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+      { id: "repo-2", name: "App", localPath: "/work/app", addedAt: "now", lastOpenedAt: null },
+    ])
+    bridge.git.sync.mockReturnValue(sync.promise)
+    await renderGitModule(roots)
+
+    const syncButtons = buttonsByLabel("同步")
+    expect(syncButtons).toHaveLength(2)
+
+    await click(syncButtons[0])
+
+    expect(bridge.git.sync).toHaveBeenCalledWith("repo-1")
+    expect(syncButtons[0].disabled).toBe(true)
+    expect(syncButtons[0].querySelector(".animate-spin")).not.toBeNull()
+    expect(syncButtons[1].disabled).toBe(false)
+    expect(syncButtons[1].querySelector(".animate-spin")).toBeNull()
+
+    sync.resolve()
+    await flush()
+  })
+
+  it("removes repository records without trashing local files by default", async () => {
+    bridge.git.listRepositories
+      .mockResolvedValueOnce([
+        { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+      ])
+      .mockResolvedValueOnce([])
+    bridge.git.removeRepository.mockResolvedValue(undefined)
+    await renderGitModule(roots)
+
+    await click(findButton("删除"))
+    expect(document.body.textContent).toContain("删除 Git 仓库？")
+    expect(document.body.textContent).toContain("仅移除列表记录")
+
+    await click(findButton("删除记录"))
+
+    expect(bridge.git.removeRepository).toHaveBeenCalledWith({
+      repositoryId: "repo-1",
+      mode: "keep-local",
+    })
+    expect(bridge.git.listRepositories).toHaveBeenCalledTimes(2)
+  })
+
+  it("trashes local files when selected and keeps the dialog open on failure", async () => {
+    bridge.git.listRepositories.mockResolvedValue([
+      { id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+    ])
+    bridge.git.removeRepository.mockRejectedValue(new Error("移到废纸篓失败"))
+    await renderGitModule(roots)
+
+    await click(findButton("删除"))
+    await click(labelByText("移到废纸篓并移除记录"))
+    expect(document.body.textContent).toContain("/work/docs")
+
+    const confirmButton = findButton("移到废纸篓")
+    await click(confirmButton)
+
+    expect(bridge.git.removeRepository).toHaveBeenCalledWith({
+      repositoryId: "repo-1",
+      mode: "trash-local",
+    })
+    expect(document.body.textContent).toContain("移到废纸篓失败")
+    expect(document.body.textContent).toContain("删除 Git 仓库？")
+  })
 })
 
 async function renderGitModule(roots: Root[]): Promise<void> {
@@ -173,9 +253,12 @@ function findButton(label: string): HTMLButtonElement {
 }
 
 function countButtons(label: string): number {
+  return buttonsByLabel(label).length
+}
+
+function buttonsByLabel(label: string): HTMLButtonElement[] {
   return Array.from(document.querySelectorAll("button"))
-    .filter((item) => item.textContent?.includes(label))
-    .length
+    .filter((item): item is HTMLButtonElement => item instanceof HTMLButtonElement && Boolean(item.textContent?.includes(label)))
 }
 
 function inputByLabel(label: string): HTMLInputElement {
@@ -189,7 +272,26 @@ function inputByLabel(label: string): HTMLInputElement {
   return input
 }
 
+function labelByText(text: string): HTMLLabelElement {
+  const labelElement = Array.from(document.querySelectorAll("label"))
+    .find((item) => item.textContent?.includes(text))
+  if (!(labelElement instanceof HTMLLabelElement)) {
+    throw new Error(`Label not found: ${text}`)
+  }
+  return labelElement
+}
+
 function setNativeInputValue(input: HTMLInputElement, value: string): void {
   const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
   descriptor?.set?.call(input, value)
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
 }

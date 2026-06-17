@@ -1,5 +1,12 @@
 export type SynapseGitRemoteKind = "https" | "ssh" | "unknown"
 
+export type SynapseGitRepositoryRemoveMode = "keep-local" | "trash-local"
+
+export type SynapseGitRepositoryRemoveInput = {
+  readonly repositoryId: string
+  readonly mode: SynapseGitRepositoryRemoveMode
+}
+
 export type SynapseGitRepository = {
   readonly id: string
   readonly name: string

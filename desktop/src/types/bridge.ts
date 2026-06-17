@@ -242,6 +242,7 @@ import type {
   SynapseGitOperationResult,
   SynapseGitRemoteKind,
   SynapseGitRepository,
+  SynapseGitRepositoryRemoveInput,
   SynapseGitRepositorySnapshot,
 } from "./git"
 import type { SynapseAppUpdateState } from "./update"
@@ -751,7 +752,7 @@ export type SynapseBridge = {
     configureIdentity: (input: { userName: string; userEmail: string }) => Promise<void>
     listRepositories: () => Promise<SynapseGitRepository[]>
     addLocalRepository: (input: { name: string; localPath: string }) => Promise<SynapseGitRepository>
-    removeRepository: (repositoryId: string) => Promise<void>
+    removeRepository: (input: SynapseGitRepositoryRemoveInput) => Promise<void>
     cloneRepository: (input: {
       remoteUrl: string
       targetPath: string

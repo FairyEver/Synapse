@@ -62,6 +62,10 @@ const repositoryIdSchema = z.object({
   repositoryId: z.string(),
 }).strict()
 
+const removeRepositorySchema = repositoryIdSchema.extend({
+  mode: z.enum(["keep-local", "trash-local"]),
+}).strict()
+
 const snapshotSchema = z.object({
   repositoryId: z.string(),
   pathExists: z.boolean(),
@@ -133,6 +137,7 @@ type ConfigureIdentityRequest = z.infer<typeof configureIdentitySchema>
 type AddLocalRepositoryRequest = z.infer<typeof addLocalRepositorySchema>
 type CloneRepositoryRequest = z.infer<typeof cloneRepositorySchema>
 type RepositoryIdRequest = z.infer<typeof repositoryIdSchema>
+type RemoveRepositoryRequest = z.infer<typeof removeRepositorySchema>
 type DiffRequest = z.infer<typeof diffRequestSchema>
 type CommitRequest = z.infer<typeof commitRequestSchema>
 type BranchRequest = z.infer<typeof branchRequestSchema>
@@ -181,9 +186,9 @@ export const gitIpcModule: IpcModule = {
     removeRepository: {
       channel: "synapse:git:repositories:remove",
       kind: "invoke",
-      request: repositoryIdSchema,
+      request: removeRepositorySchema,
       response: z.void(),
-      handler: async (ctx, input: RepositoryIdRequest) => ctx.resolve<GitRepositoryRegistry>("git.repository-registry").remove(input.repositoryId),
+      handler: async (ctx, input: RemoveRepositoryRequest) => ctx.resolve<GitRepositoryRegistry>("git.repository-registry").remove(input),
     },
     cloneRepository: {
       channel: "synapse:git:repositories:clone",

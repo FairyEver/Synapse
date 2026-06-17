@@ -25,6 +25,13 @@ describe("gitIpcModule", () => {
     expect(gitIpcModule.methods.getSnapshot.request.safeParse({ repositoryId: "repo-1", args: ["status"] }).success).toBe(false)
   })
 
+  it("accepts only supported repository removal modes", () => {
+    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local" }).success).toBe(true)
+    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "trash-local" }).success).toBe(true)
+    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "delete-local" }).success).toBe(false)
+    expect(gitIpcModule.methods.removeRepository.request.safeParse({ repositoryId: "repo-1", mode: "keep-local", extra: true }).success).toBe(false)
+  })
+
   it("lists repositories through the registry service", async () => {
     const registry = {
       list: vi.fn().mockResolvedValue([
@@ -34,5 +41,18 @@ describe("gitIpcModule", () => {
     const result = await gitIpcModule.methods.listRepositories.handler(createContext({ "git.repository-registry": registry }), undefined)
 
     expect(result).toHaveLength(1)
+  })
+
+  it("removes repositories through the registry service", async () => {
+    const registry = {
+      remove: vi.fn().mockResolvedValue(undefined),
+    }
+
+    await gitIpcModule.methods.removeRepository.handler(
+      createContext({ "git.repository-registry": registry }),
+      { repositoryId: "repo-1", mode: "trash-local" },
+    )
+
+    expect(registry.remove).toHaveBeenCalledWith({ repositoryId: "repo-1", mode: "trash-local" })
   })
 })
