@@ -348,4 +348,35 @@ describe("AgentUsageCard", () => {
     expect(container.textContent).toContain("¥3.55")
     expect(container.textContent).not.toContain("3.553562")
   })
+
+  it("switches usage stats to two columns from its own narrow container", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentUsageCard
+          totalUsage={{
+            inputTokens: 12997,
+            outputTokens: 776,
+            cacheReadInputTokens: 147943,
+            cacheCreationInputTokens: 53631,
+            totalTokens: 213347,
+          }}
+        />
+      )
+    })
+
+    const card = container.querySelector<HTMLElement>("[aria-label='用量统计']")
+    const statsGrid = card?.querySelector<HTMLElement>("[data-usage-stats-grid]")
+    expect(card?.className).toContain("@container/usage-card")
+    expect(statsGrid?.className).toContain("grid-cols-4")
+    expect(statsGrid?.className).toContain("@max-[499px]/usage-card:grid-cols-2")
+    expect(statsGrid?.className).toContain("@max-[499px]/usage-card:gap-y-3")
+    const statsItems = card?.querySelectorAll<HTMLElement>("[data-usage-stat-item]")
+    expect(statsItems?.[2]?.className).toContain("@max-[499px]/usage-card:odd:border-l-0")
+    expect(statsItems?.[2]?.className).toContain("@max-[499px]/usage-card:odd:pl-0")
+  })
 })
