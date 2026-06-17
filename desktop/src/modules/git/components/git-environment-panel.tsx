@@ -21,6 +21,7 @@ import type { SynapseGitEnvironmentState } from "@/types/git"
 type GitEnvironmentPanelProps = {
   readonly environment: SynapseGitEnvironmentState | null
   readonly loading: boolean
+  readonly error?: string | null
   readonly onRefresh: () => Promise<void>
 }
 
@@ -28,7 +29,7 @@ function stateLabel(ok: boolean): string {
   return ok ? "正常" : "需要处理"
 }
 
-export function GitEnvironmentPanel({ environment, loading, onRefresh }: GitEnvironmentPanelProps) {
+export function GitEnvironmentPanel({ environment, loading, error: environmentError, onRefresh }: GitEnvironmentPanelProps) {
   const [userName, setUserName] = useState("")
   const [userEmail, setUserEmail] = useState("")
   const [pendingIdentity, setPendingIdentity] = useState<{ userName: string; userEmail: string } | null>(null)
@@ -145,6 +146,12 @@ export function GitEnvironmentPanel({ environment, loading, onRefresh }: GitEnvi
           ) : null}
         </div>
       )}
+      {environmentError ? (
+        <Alert className="mt-3" variant="destructive">
+          <AlertTitle>检测失败</AlertTitle>
+          <AlertDescription>{environmentError}</AlertDescription>
+        </Alert>
+      ) : null}
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
     </div>
   )

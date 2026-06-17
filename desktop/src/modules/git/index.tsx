@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { FolderGit2, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { SynapseGitEnvironmentState, SynapseGitRepository } from "@/types/git"
@@ -11,7 +12,15 @@ import { GitWorkbench } from "./components/git-workbench"
 import { useGitOperations } from "./hooks/use-git-operations"
 import { useGitRepositories } from "./hooks/use-git-repositories"
 
+type GitAppViewId = "repositories" | "environment"
+
+const GIT_APP_TABS: readonly { readonly id: GitAppViewId; readonly label: string }[] = [
+  { id: "repositories", label: "仓库" },
+  { id: "environment", label: "环境" },
+]
+
 export function GitModule() {
+  const [view, setView] = useState<GitAppViewId>("repositories")
   const [selectedRepository, setSelectedRepository] = useState<SynapseGitRepository | null>(null)
   const [cloneOpen, setCloneOpen] = useState(false)
   const [addLocalOpen, setAddLocalOpen] = useState(false)
@@ -48,7 +57,10 @@ export function GitModule() {
   return (
     <>
       <SystemAppWindowShell
-        actions={!selectedRepository ? (
+        tabs={GIT_APP_TABS}
+        value={view}
+        onValueChange={setView}
+        actions={view === "repositories" && !selectedRepository ? (
           <>
             <Button
               type="button"
@@ -72,33 +84,38 @@ export function GitModule() {
           </>
         ) : undefined}
       >
-        {selectedRepository ? (
-          <GitWorkbench
-            repository={selectedRepository}
-            onBack={() => setSelectedRepository(null)}
-          />
-        ) : (
-          <div className="flex h-full min-h-0 flex-col bg-surface">
-            <div className="shrink-0 p-4 pb-0">
+        <Tabs value={view} className="contents">
+          <TabsContent value="repositories" className="m-0 h-full data-[state=inactive]:hidden">
+            {selectedRepository ? (
+              <GitWorkbench
+                repository={selectedRepository}
+                onBack={() => setSelectedRepository(null)}
+              />
+            ) : (
+              <GitRepositoryList
+                summaries={repositoriesState.summaries}
+                loading={repositoriesState.loading}
+                error={repositoriesState.error ?? operations.error}
+                busy={operations.busy}
+                onOpenRepository={setSelectedRepository}
+                onPull={(repositoryId) => void operations.pull(repositoryId)}
+                onPush={(repositoryId) => void operations.push(repositoryId)}
+                onSync={(repositoryId) => void operations.sync(repositoryId)}
+                onRemoveRepository={(input) => operations.removeRepository(input)}
+              />
+            )}
+          </TabsContent>
+          <TabsContent value="environment" className="m-0 h-full data-[state=inactive]:hidden">
+            <div className="h-full bg-surface p-4">
               <GitEnvironmentPanel
                 environment={environment}
                 loading={environmentLoading}
+                error={environmentError}
                 onRefresh={refreshEnvironment}
               />
             </div>
-            <GitRepositoryList
-              summaries={repositoriesState.summaries}
-              loading={repositoriesState.loading}
-              error={repositoriesState.error ?? operations.error ?? environmentError}
-              busy={operations.busy}
-              onOpenRepository={setSelectedRepository}
-              onPull={(repositoryId) => void operations.pull(repositoryId)}
-              onPush={(repositoryId) => void operations.push(repositoryId)}
-              onSync={(repositoryId) => void operations.sync(repositoryId)}
-              onRemoveRepository={(input) => operations.removeRepository(input)}
-            />
-          </div>
-        )}
+          </TabsContent>
+        </Tabs>
       </SystemAppWindowShell>
       <GitCloneDialog
         open={cloneOpen}

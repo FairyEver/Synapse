@@ -6,6 +6,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GitModule } from "../index"
 
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 const bridge = vi.hoisted(() => ({
   git: {
     checkEnvironment: vi.fn(),
@@ -94,16 +96,29 @@ describe("GitModule repository list", () => {
     expect(countButtons("添加本地仓库")).toBeGreaterThan(0)
   })
 
-  it("uses the system app window toolbar for repository actions without a redundant tab", async () => {
+  it("uses centered system app tabs and repository actions", async () => {
     await renderGitModule(roots)
 
     const toolbar = document.querySelector("[data-system-app-window-toolbar]")
     expect(toolbar).toBeTruthy()
     expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)]")
     expect(document.querySelector("[data-system-app-window-left-spacer]")).toBeTruthy()
-    expect(document.querySelector("[data-system-app-window-tabs]")).toBeNull()
+    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("仓库")
+    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("环境")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("添加本地仓库")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("克隆仓库")
+  })
+
+  it("separates Git environment from the repository list tab", async () => {
+    await renderGitModule(roots)
+
+    expect(document.body.textContent).toContain("暂无仓库")
+    expect(document.body.textContent).not.toContain("Git 环境")
+
+    await click(findButton("环境"))
+
+    expect(document.body.textContent).toContain("Git 环境")
+    expect(document.querySelector("[data-system-app-window-actions]")?.textContent).not.toContain("克隆仓库")
   })
 
   it("opens clone dialog and submits clone request", async () => {
@@ -149,6 +164,7 @@ describe("GitModule repository list", () => {
       })
     await renderGitModule(roots)
 
+    await click(findButton("环境"))
     await changeInput("用户名", "Writer")
     await changeInput("邮箱", "writer@example.com")
     await click(findButton("保存身份"))
@@ -294,6 +310,10 @@ async function renderGitModule(roots: Root[]): Promise<void> {
 
 async function click(element: HTMLElement): Promise<void> {
   await act(async () => {
+    const PointerEventCtor = window.PointerEvent ?? window.MouseEvent
+    element.dispatchEvent(new PointerEventCtor("pointerdown", { bubbles: true, cancelable: true, button: 0 }))
+    element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 0 }))
     element.click()
     await flush()
   })
