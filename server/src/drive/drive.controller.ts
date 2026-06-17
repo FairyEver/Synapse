@@ -66,6 +66,7 @@ const reorganizationApplySchema = z.object({
 
 const renameSchema = z.object({ name: z.string().min(1).max(255) }).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
+const versionPinSchema = z.object({ isPinned: z.boolean() }).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]).optional(),
@@ -100,6 +101,46 @@ export class DriveUserController {
   @Get("/items/:id")
   getItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
     return this.drive.getItem(request.user!.id, id)
+  }
+
+  @Get("/items/:id/versions")
+  listFileVersions(
+    @Param("id") id: string,
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.listFileVersions(request.user!.id, id, {
+      offset: parseOptionalNonNegativeInteger(offset, "offset"),
+      limit: parseOptionalNonNegativeInteger(limit, "limit"),
+    })
+  }
+
+  @Get("/items/:id/versions/:versionId/download")
+  async downloadFileVersion(
+    @Param("id") id: string,
+    @Param("versionId") versionId: string,
+    @Req() request: AuthenticatedUserRequest,
+    @Res() response: Response,
+  ) {
+    const download = await this.drive.openFileVersionDownload(request.user!.id, id, versionId)
+    await sendDriveFileDownload(response, download)
+  }
+
+  @Post("/items/:id/versions/:versionId/restore")
+  restoreFileVersion(@Param("id") id: string, @Param("versionId") versionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.restoreFileVersion(request.user!.id, id, versionId, driveAuditContext(request))
+  }
+
+  @Patch("/items/:id/versions/:versionId")
+  updateFileVersion(@Param("id") id: string, @Param("versionId") versionId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(versionPinSchema, body, "历史版本请求无效。")
+    return this.drive.updateFileVersionPin(request.user!.id, id, versionId, parsed.isPinned, driveAuditContext(request))
+  }
+
+  @Delete("/items/:id/versions/:versionId")
+  deleteFileVersion(@Param("id") id: string, @Param("versionId") versionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.deleteFileVersion(request.user!.id, id, versionId, driveAuditContext(request))
   }
 
   @Post("/uploads/prepare")

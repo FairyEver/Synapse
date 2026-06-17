@@ -14,6 +14,9 @@ import {
   type DriveFolderPathEnsureInput,
   type DriveFolderPathEnsureResultDto,
   type DriveFolderUploadPrepareResult,
+  type DriveFileVersionDto,
+  type DriveFileVersionListInput,
+  type DriveFileVersionListPageDto,
   type DriveItemDto,
   type DriveItemTreeEntryDto,
   type DriveItemTreeListInput,
@@ -49,6 +52,7 @@ import {
   DRIVE_FILE_VERSION_SOURCE,
   driveVersionStorageKey,
   ensureCurrentDriveFileVersion,
+  toDriveFileVersionDto,
 } from "./drive-version-history"
 import {
   DRIVE_ITEM_TYPE,
@@ -201,6 +205,155 @@ export class DriveService implements OnApplicationBootstrap {
 
   async getItem(userId: string, itemId: string): Promise<DriveItemDto> {
     return toDriveItemDto(await this.requireOwnedItem(userId, itemId))
+  }
+
+  async listFileVersions(userId: string, itemId: string, input: DriveFileVersionListInput = {}): Promise<DriveFileVersionListPageDto> {
+    const item = await this.requireOwnedFile(userId, itemId)
+    const page = normalizeDrivePublicLinksPage(input)
+    const [versions, total] = await this.prisma.$transaction([
+      this.prisma.driveFileVersion.findMany({
+        where: { itemId: item.id, userId, deletedAt: null },
+        orderBy: { versionNumber: "desc" },
+        skip: page.offset,
+        take: page.limit + 1,
+      }),
+      this.prisma.driveFileVersion.count({
+        where: { itemId: item.id, userId, deletedAt: null },
+      }),
+    ])
+    return {
+      items: versions.slice(0, page.limit).map((version) => toDriveFileVersionDto(version, item.storageKey)),
+      total,
+      page: buildDrivePublicLinksPage(page, versions.length),
+    }
+  }
+
+  async restoreFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<DriveItemDto> {
+    const item = await this.requireOwnedFile(userId, itemId)
+    const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    const usage = await ensureUsage(this.prisma, userId)
+    if (usage.usedBytes + usage.reservedBytes + version.size > usage.quotaBytes) {
+      throw new BadRequestException("云盘空间不足。")
+    }
+    const nextVersionId = createDriveFileVersionId()
+    const nextStorageKey = driveVersionStorageKey(item.id, nextVersionId)
+    try {
+      await this.storage.copyObject({
+        fromKey: version.storageKey,
+        toKey: nextStorageKey,
+        contentType: version.mimeType,
+      })
+    } catch (error) {
+      throw error
+    }
+    const restored = await this.prisma.$transaction(async (tx) => {
+      await createDriveFileVersion(tx, {
+        id: nextVersionId,
+        itemId: item.id,
+        userId,
+        storageKey: nextStorageKey,
+        size: version.size,
+        mimeType: version.mimeType,
+        source: DRIVE_FILE_VERSION_SOURCE.restore,
+        etag: version.etag,
+        restoredFromVersionId: version.id,
+        createdBy: userId,
+      })
+      await updateDriveUsageAfterUploadCompletion(tx, userId, {
+        reservedBytes: 0n,
+        usedBytesDelta: version.size,
+      })
+      return tx.driveItem.update({
+        where: { id: item.id },
+        data: {
+          storageKey: nextStorageKey,
+          size: version.size,
+          mimeType: version.mimeType,
+          storageStatus: DRIVE_STORAGE_STATUS.active,
+          uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+        },
+        include: driveItemWithShares,
+      })
+    })
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.file_version.restore",
+      targetType: "drive.fileVersion",
+      targetId: version.id,
+      detail: { userId, itemId: item.id, versionId: version.id, restoredItemId: restored.id },
+      ipAddress: auditContext.ipAddress,
+    })
+    return toDriveItemDto(restored)
+  }
+
+  async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
+    const item = await this.requireOwnedFile(userId, itemId)
+    const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
+    await this.prisma.$transaction(async (tx) => {
+      await tx.driveFileVersion.update({
+        where: { id: version.id },
+        data: { deletedAt: new Date(), deletePending: false },
+      })
+      await tx.driveUsage.update({
+        where: { userId },
+        data: { usedBytes: { decrement: version.size } },
+      })
+    })
+    try {
+      await this.storage.deleteObject(version.storageKey)
+    } catch (error) {
+      await this.prisma.driveFileVersion.update({
+        where: { id: version.id },
+        data: { deletePending: true },
+      })
+      this.logger.warn({
+        itemId: item.id,
+        versionId: version.id,
+        storageKeyLength: version.storageKey.length,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: formatAuditError(error),
+      }, "Drive file version object delete failed")
+    }
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.file_version.delete",
+      targetType: "drive.fileVersion",
+      targetId: version.id,
+      detail: { userId, itemId: item.id, versionId: version.id, size: version.size.toString() },
+      ipAddress: auditContext.ipAddress,
+    })
+    return { ok: true }
+  }
+
+  async updateFileVersionPin(userId: string, itemId: string, versionId: string, isPinned: boolean, auditContext: DriveAuditContext = {}): Promise<DriveFileVersionDto> {
+    const item = await this.requireOwnedFile(userId, itemId)
+    await this.requireOwnedFileVersion(userId, item.id, versionId)
+    const version = await this.prisma.driveFileVersion.update({
+      where: { id: versionId },
+      data: { isPinned },
+    })
+    await this.recordDriveAudit({
+      userId,
+      action: "drive.file_version.pin_update",
+      targetType: "drive.fileVersion",
+      targetId: version.id,
+      detail: { userId, itemId: item.id, versionId: version.id, isPinned },
+      ipAddress: auditContext.ipAddress,
+    })
+    return toDriveFileVersionDto(version, item.storageKey)
+  }
+
+  async openFileVersionDownload(userId: string, itemId: string, versionId: string): Promise<DriveBrowserDownloadResult> {
+    const item = await this.requireOwnedFile(userId, itemId)
+    const version = await this.requireOwnedFileVersion(userId, item.id, versionId)
+    const object = await this.storage.getObjectStream({ key: version.storageKey })
+    return {
+      stream: object.stream,
+      fileName: versionFileName(item.name, version.versionNumber),
+      size: object.size ?? version.size,
+      contentType: object.contentType ?? version.mimeType,
+    }
   }
 
   async prepareUpload(userId: string, input: DrivePrepareUploadInput): Promise<DriveUploadPrepareResult> {
@@ -1298,6 +1451,20 @@ export class DriveService implements OnApplicationBootstrap {
     return folder
   }
 
+  private async requireOwnedFile(userId: string, itemId: string) {
+    const item = await this.requireOwnedItem(userId, itemId)
+    if (item.type !== DRIVE_ITEM_TYPE.file) throw new BadRequestException("目标不是文件。")
+    return item
+  }
+
+  private async requireOwnedFileVersion(userId: string, itemId: string, versionId: string) {
+    const version = await this.prisma.driveFileVersion.findFirst({
+      where: { id: versionId, itemId, userId, deletedAt: null },
+    })
+    if (!version) throw new NotFoundException("历史版本不存在。")
+    return version
+  }
+
   private async resolveOwnedBrowserCurrent(input: {
     readonly userId: string
     readonly itemId: string
@@ -1837,6 +2004,10 @@ function isOverwriteUploadSession(session: {
   readonly item: { readonly storageKey: string | null; readonly storageStatus: string }
 }): boolean {
   return session.item.storageStatus === DRIVE_STORAGE_STATUS.active && session.item.storageKey !== null && session.item.storageKey !== session.storageKey
+}
+
+function versionFileName(name: string, versionNumber: number): string {
+  return `v${versionNumber}-${name}`
 }
 
 async function updateDriveUsageAfterUploadCompletion(

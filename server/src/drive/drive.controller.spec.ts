@@ -21,6 +21,7 @@ type SupertestRequest = {
 const request = require("supertest") as (server: unknown) => {
   readonly get: (path: string) => SupertestRequest
   readonly post: (path: string) => SupertestRequest
+  readonly patch: (path: string) => SupertestRequest
   readonly put: (path: string) => SupertestRequest
   readonly delete: (path: string) => SupertestRequest
 }
@@ -32,6 +33,11 @@ describe("DriveController", () => {
     listItems: vi.fn(),
     prepareFolderUpload: vi.fn(),
     deleteItem: vi.fn(),
+    listFileVersions: vi.fn(),
+    restoreFileVersion: vi.fn(),
+    updateFileVersionPin: vi.fn(),
+    deleteFileVersion: vi.fn(),
+    openFileVersionDownload: vi.fn(),
     listShares: vi.fn(),
     createShare: vi.fn(),
     resolvePublicShareAccess: vi.fn(),
@@ -52,6 +58,11 @@ describe("DriveController", () => {
     drive.listItems.mockReset()
     drive.prepareFolderUpload.mockReset()
     drive.deleteItem.mockReset()
+    drive.listFileVersions.mockReset()
+    drive.restoreFileVersion.mockReset()
+    drive.updateFileVersionPin.mockReset()
+    drive.deleteFileVersion.mockReset()
+    drive.openFileVersionDownload.mockReset()
     drive.listShares.mockReset()
     drive.createShare.mockReset()
     drive.resolvePublicShareAccess.mockReset()
@@ -133,6 +144,41 @@ describe("DriveController", () => {
         surface: "standalone",
         childrenPage: undefined,
       })
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("routes owner file version operations through the authenticated user", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.listFileVersions.mockResolvedValue({ items: [], total: 0, page: { offset: 10, limit: 5, hasMore: false, nextOffset: null } })
+      drive.restoreFileVersion.mockResolvedValue({ id: "file-1" })
+      drive.updateFileVersionPin.mockResolvedValue({ id: "ver-1", isPinned: true })
+      drive.deleteFileVersion.mockResolvedValue({ ok: true })
+
+      await request(userApp.getHttpServer()).get("/api/drive/items/file-1/versions?offset=10&limit=5").expect(200)
+      await request(userApp.getHttpServer()).post("/api/drive/items/file-1/versions/ver-1/restore").expect(201)
+      await request(userApp.getHttpServer()).patch("/api/drive/items/file-1/versions/ver-1").send({ isPinned: true }).expect(200)
+      await request(userApp.getHttpServer()).delete("/api/drive/items/file-1/versions/ver-1").expect(200)
+
+      expect(drive.listFileVersions).toHaveBeenCalledWith("user-1", "file-1", { offset: 10, limit: 5 })
+      expect(drive.restoreFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
+      expect(drive.updateFileVersionPin).toHaveBeenCalledWith("user-1", "file-1", "ver-1", true, expect.any(Object))
+      expect(drive.deleteFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
     } finally {
       await userApp.close()
     }

@@ -210,6 +210,67 @@ describe("DriveService", () => {
     expect(deleteObject).not.toHaveBeenCalledWith(versions[0]!.storageKey)
   })
 
+  it("restores a historical version by creating a new current version", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      copyObject: vi.fn(async () => undefined),
+      deleteObject: vi.fn(async () => undefined),
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const v1 = (await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })).items[0]!
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/markdown", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    const restored = await service.restoreFileVersion("user-1", first.id, v1.id)
+
+    expect(restored).toMatchObject({ id: first.id, size: "11", mimeType: "text/plain" })
+    const versions = await service.listFileVersions("user-1", first.id, { offset: 0, limit: 20 })
+    expect(versions.items.map((version) => version.versionNumber)).toEqual([3, 2, 1])
+    expect(versions.items[0]).toMatchObject({ source: "restore", restoredFromVersionId: v1.id, isCurrent: true })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(27n)
+  })
+
+  it("rejects deleting the current version and releases quota for a deleted historical version", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      deleteObject: vi.fn(async () => undefined),
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const prepared = await service.prepareUpload("user-1", { parentId: null, name: "report.txt", size: "5", mimeType: "text/plain", publicAppUrl: "https://synapse.test" })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const versions = await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })
+    const current = versions.items.find((version) => version.isCurrent)!
+    const historical = versions.items.find((version) => !version.isCurrent)!
+
+    await expect(service.deleteFileVersion("user-1", item.id, current.id)).rejects.toThrow("不能删除当前版本。")
+    await service.deleteFileVersion("user-1", item.id, historical.id)
+
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(5n)
+    expect(await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).toMatchObject({ total: 1 })
+  })
+
+  it("updates version pin state", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const item = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.txt", mimeType: "text/plain" })
+    const version = (await service.listFileVersions("user-1", item.id, { offset: 0, limit: 20 })).items[0]!
+
+    const pinned = await service.updateFileVersionPin("user-1", item.id, version.id, true)
+
+    expect(pinned).toMatchObject({ id: version.id, isPinned: true })
+  })
+
   it("overwrites same-name files while preserving item identity and shares", async () => {
     const prisma = createPrismaMemory()
     const deleteObject = vi.fn(async () => undefined)
