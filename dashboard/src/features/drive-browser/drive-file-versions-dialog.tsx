@@ -81,11 +81,11 @@ export function DriveFileVersionsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className='max-w-2xl p-0'>
-          <DialogHeader className='px-5 pt-5'>
+        <DialogContent className='flex max-h-[calc(100vh-2rem)] overflow-hidden p-0 sm:max-w-3xl'>
+          <DialogHeader className='shrink-0 px-5 pt-5'>
             <DialogTitle>历史版本</DialogTitle>
           </DialogHeader>
-          <div className='px-5 pb-5'>
+          <div className='flex min-h-0 flex-1 flex-col px-5 pb-5'>
             <DriveFileVersionContent
               itemId={itemId}
               versions={versionsQuery.data?.items ?? []}
@@ -125,7 +125,7 @@ export function DriveFileVersionsDialog({
   )
 }
 
-function DriveFileVersionContent({
+export function DriveFileVersionContent({
   itemId,
   versions,
   loading,
@@ -148,19 +148,19 @@ function DriveFileVersionContent({
 }) {
   if (loading) {
     return (
-      <div className='space-y-3'>
+      <div className='grid min-h-0 flex-1 gap-3'>
         <Skeleton className='h-16 w-full' />
         <Skeleton className='h-16 w-full' />
         <Skeleton className='h-16 w-full' />
       </div>
     )
   }
-  if (error) return <div className='rounded-md border p-4 text-sm text-destructive'>{error}</div>
-  if (versions.length === 0) return <div className='rounded-md border p-4 text-sm text-muted-foreground'>暂无历史版本</div>
+  if (error) return <div className='min-h-0 flex-1 rounded-md border p-4 text-sm text-destructive'>{error}</div>
+  if (versions.length === 0) return <div className='min-h-0 flex-1 rounded-md border p-4 text-sm text-muted-foreground'>暂无历史版本</div>
 
   return (
-    <ScrollArea className='max-h-96 pr-3'>
-      <div className='space-y-2'>
+    <ScrollArea className='min-h-0 flex-1 pr-3'>
+      <div className='grid gap-2'>
         {versions.map((version) => (
           <DriveFileVersionRow
             key={version.id}
@@ -193,29 +193,31 @@ function DriveFileVersionRow({
   readonly onDelete: (version: DriveFileVersionDto) => void
 }) {
   return (
-    <div className='flex flex-col gap-3 rounded-md border p-3 md:flex-row md:items-center md:justify-between'>
-      <div className='min-w-0 space-y-1'>
+    <div className='flex min-w-0 flex-col gap-3 rounded-md border p-3 md:flex-row md:items-center md:justify-between'>
+      <div className='min-w-0 flex-1 space-y-2'>
         <div className='flex min-w-0 flex-wrap items-center gap-2'>
-          <span className='text-sm font-medium'>v{version.versionNumber}</span>
+          <span className='shrink-0 text-sm font-medium tabular-nums'>v{version.versionNumber}</span>
           {version.isCurrent ? <Badge>当前</Badge> : null}
           {version.isPinned ? <Badge variant='outline'>保留</Badge> : null}
           {version.deletePending ? <Badge variant='secondary'>待清理</Badge> : null}
           <Badge variant='outline'>{driveVersionSourceLabel(version.source)}</Badge>
         </div>
-        <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
-          <span>{formatDriveBrowserBytes(version.size)}</span>
-          <span>{formatDriveBrowserDate(version.createdAt)}</span>
+        <div className='flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground'>
+          <span className='shrink-0 tabular-nums'>{formatDriveBrowserBytes(version.size)}</span>
+          <span className='min-w-0 truncate tabular-nums' title={formatDriveBrowserDate(version.createdAt)}>
+            {formatDriveBrowserDate(version.createdAt)}
+          </span>
         </div>
       </div>
-      <div className='flex shrink-0 flex-wrap gap-2'>
-        <Button asChild variant='outline' size='sm'>
+      <div className='flex shrink-0 flex-wrap gap-2 md:justify-end'>
+        <Button asChild variant='outline' size='sm' className='shrink-0'>
           <a href={driveFileVersionsApi.downloadUrl(itemId, version.id)}>
             <Download data-icon='inline-start' />
             下载
           </a>
         </Button>
         {!version.isCurrent ? (
-          <Button type='button' variant='outline' size='sm' onClick={() => onRestore(version)}>
+          <Button type='button' variant='outline' size='sm' className='shrink-0' onClick={() => onRestore(version)}>
             <RotateCcw data-icon='inline-start' />
             恢复
           </Button>
@@ -225,6 +227,7 @@ function DriveFileVersionRow({
             type='button'
             variant='outline'
             size='sm'
+            className='shrink-0'
             disabled={pinning}
             onClick={() => onPin(version)}
           >
@@ -237,7 +240,7 @@ function DriveFileVersionRow({
             type='button'
             variant='outline'
             size='sm'
-            className='text-destructive hover:text-destructive'
+            className='shrink-0 text-destructive hover:text-destructive'
             onClick={() => onDelete(version)}
           >
             <Trash2 data-icon='inline-start' />
