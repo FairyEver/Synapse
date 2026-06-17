@@ -17,6 +17,11 @@ Use these tools only for Synapse Drive:
 - `drive_item_preview_get`
 - `drive_file_content_read`
 - `drive_file_download_create`
+- `drive_file_version_list`
+- `drive_file_version_download_create`
+- `drive_file_version_restore`
+- `drive_file_version_delete`
+- `drive_file_version_pin_update`
 - `drive_folder_zip_create`
 - `drive_share_list`
 - `drive_share_create`
@@ -39,7 +44,7 @@ Do not use this skill for database records, content resources, scheduler tasks, 
    - Uploading a same-name folder merges into the existing folder; same-name files inside it are overwritten and missing files are added.
 4. To open or preview an item for the owner, call `drive_item_preview_get`. It returns the browser snapshot, preview metadata, children, and available download/render URLs without creating a share.
 5. To read a small previewable text file, call `drive_file_content_read`. Use `drive_file_download_create` instead for binary, oversized, or non-previewable files.
-6. To save Drive content locally, call `drive_file_download_create` for a file or `drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.
+6. To save Drive content locally, call `drive_file_download_create` for a file, `drive_file_version_download_create` for a specific file version, or `drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.
 7. If the user wants to hand the file or folder to someone else for browse, render, or download access, call `drive_share_create` for the item and return the `/share/...` public URL.
    - Pass `passwordEnabled: false` only when the user asks for a no-password link. Omit it to keep the default password requirement.
    - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; omitting it uses `3d`.
@@ -48,6 +53,7 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 10. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
 11. Use `drive_folder_path_ensure` to create or reuse target category folders, then call `drive_reorganization_preview` with item ids and target folder ids. Show the preview summary to the user before applying.
 12. Apply organization changes only with `drive_reorganization_apply` and the `planId` returned by the preview. Do not submit raw moves to apply.
+13. For file history, call `drive_file_version_list` first. Use `drive_file_version_restore` only when the user wants that version to become current, `drive_file_version_delete` only for non-current versions the user wants removed, and `drive_file_version_pin_update` to keep or unkeep a version during automatic cleanup.
 13. Report the final item name, item id, and share URL when one was created.
 
 ## Safety
@@ -60,6 +66,8 @@ Shares use `/share/...` and let others browse files and folders, render previewa
 
 Drive organization changes can move many user files. Always preview first, then apply by `planId` only after the user has confirmed. If apply reports that the Drive changed, refresh the tree and create a new preview.
 
+File versions are full-copy history for owned Drive files. Public share links always point to the current file and do not expose version history. Restoring a version creates a new current version; deleting a historical version cannot be undone.
+
 ## Common Requests
 
 - "上传这个文件并给我链接": call `drive_file_upload`, then `drive_share_create`.
@@ -67,6 +75,9 @@ Drive organization changes can move many user files. Always preview first, then 
 - "打开/预览这个文件": call `drive_item_preview_get`.
 - "读取这个 Markdown": call `drive_file_content_read`.
 - "下载这个文件到本地": call `drive_file_download_create`.
+- "下载 v3 历史版本": call `drive_file_version_list`, then `drive_file_version_download_create` with the selected version id.
+- "恢复到上一个版本": call `drive_file_version_list`, then `drive_file_version_restore` with the selected version id.
+- "保留这个历史版本": call `drive_file_version_pin_update`.
 - "下载整个文件夹": call `drive_folder_zip_create`.
 - "新建一个资料文件夹": call `drive_folder_create`.
 - "移动到某个文件夹": call `drive_item_move` with the target folder id.

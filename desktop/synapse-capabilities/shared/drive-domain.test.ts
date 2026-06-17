@@ -17,6 +17,11 @@ describe("Drive capability domain", () => {
       "drive_item_preview_get",
       "drive_file_content_read",
       "drive_file_download_create",
+      "drive_file_version_list",
+      "drive_file_version_download_create",
+      "drive_file_version_restore",
+      "drive_file_version_delete",
+      "drive_file_version_pin_update",
       "drive_folder_zip_create",
       "drive_share_list",
       "drive_share_create",
@@ -29,6 +34,7 @@ describe("Drive capability domain", () => {
       "drive_reorganization_apply",
     ])
     expect(MCP_TOOL_ACTIONS.drive_file_upload).toBe("drive.file.upload")
+    expect(MCP_TOOL_ACTIONS.drive_file_version_restore).toBe("drive.file_version.restore")
     expect(MCP_TOOL_ACTIONS.drive_reorganization_apply).toBe("drive.reorganization.apply")
     expect(getActionDomainId("drive.item.list")).toBe("drive")
   })

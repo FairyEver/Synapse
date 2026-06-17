@@ -14,6 +14,11 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.item_preview.get" as CapabilityId, title: "Get item preview", description: "Get the owner browser preview snapshot for a Synapse Drive item.", mutates: false },
   { id: "drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
   { id: "drive.file_download.create" as CapabilityId, title: "Create file download", description: "Download a Synapse Drive file to a local path.", mutates: true },
+  { id: "drive.file_version.list" as CapabilityId, title: "List file versions", description: "List historical versions for an owned Synapse Drive file.", mutates: false },
+  { id: "drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version to a local path.", mutates: true },
+  { id: "drive.file_version.restore" as CapabilityId, title: "Restore file version", description: "Restore a historical Synapse Drive file version as the current version.", mutates: true },
+  { id: "drive.file_version.delete" as CapabilityId, title: "Delete file version", description: "Delete a non-current historical Synapse Drive file version.", mutates: true, risk: "high" },
+  { id: "drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.", mutates: true },
   { id: "drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
   { id: "drive.share.list" as CapabilityId, title: "List shares", description: "List public Synapse Drive share links for the current user.", mutates: false },
   { id: "drive.share.create" as CapabilityId, title: "Create share", description: "Create or reuse a public Synapse Drive share link.", mutates: true },
@@ -180,6 +185,68 @@ export function buildDriveTools(): McpToolDefinition[] {
           outputPath: stringField("Absolute local output file path."),
         },
         required: ["itemId", "outputPath"],
+      },
+    },
+    {
+      name: "drive_file_version_list",
+      description: "List historical versions for an owned Synapse Drive file. Shares do not expose version history.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Drive file item id."),
+          ...pageInputProperties,
+        },
+        required: ["itemId"],
+      },
+    },
+    {
+      name: "drive_file_version_download_create",
+      description: "Download a specific Synapse Drive file version to a local path. This writes to the local filesystem and requires fs.write permission.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Drive file item id."),
+          versionId: stringField("Drive file version id."),
+          outputPath: stringField("Absolute local output file path."),
+        },
+        required: ["itemId", "versionId", "outputPath"],
+      },
+    },
+    {
+      name: "drive_file_version_restore",
+      description: "Restore a historical Synapse Drive file version as the current version.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Drive file item id."),
+          versionId: stringField("Drive file version id."),
+        },
+        required: ["itemId", "versionId"],
+      },
+    },
+    {
+      name: "drive_file_version_delete",
+      description: "Delete a non-current historical Synapse Drive file version. Current versions cannot be deleted with this tool.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Drive file item id."),
+          versionId: stringField("Drive file version id."),
+        },
+        required: ["itemId", "versionId"],
+      },
+    },
+    {
+      name: "drive_file_version_pin_update",
+      description: "Keep or unkeep a historical Synapse Drive file version during automatic cleanup.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Drive file item id."),
+          versionId: stringField("Drive file version id."),
+          isPinned: { type: "boolean", description: "true keeps the version; false lets automatic cleanup remove it later." },
+        },
+        required: ["itemId", "versionId", "isPinned"],
       },
     },
     {

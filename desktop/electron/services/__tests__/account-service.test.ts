@@ -1230,6 +1230,20 @@ describe("AccountService", () => {
     }
     const shareSettings = { passwordEnabled: true, expiresIn: "30d" } as const
     const driveItemDto = driveItem({ id: "item-1", name: "report.html", mimeType: "text/html" })
+    const fileVersion = {
+      id: "version-1",
+      itemId: "item-1",
+      versionNumber: 1,
+      size: "12",
+      mimeType: "text/html",
+      source: "upload",
+      isCurrent: true,
+      isPinned: false,
+      deletePending: false,
+      restoredFromVersionId: null,
+      createdAt: "2026-06-09T00:00:00.000Z",
+      createdBy: "user-1",
+    }
     const previewSnapshot = {
       context: "owner",
       surface: "standalone",
@@ -1277,6 +1291,18 @@ describe("AccountService", () => {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
         if (String(url).endsWith("/drive/items/item-1") && method === "GET") return jsonResponse(driveItemDto)
         if (String(url).endsWith("/drive/browser/owner/items/item-1?surface=standalone")) return jsonResponse(previewSnapshot)
+        if (String(url).endsWith("/drive/items/item-1/versions?offset=10&limit=5")) {
+          return jsonResponse({
+            items: [fileVersion],
+            total: 1,
+            page: { offset: 10, limit: 5, hasMore: false, nextOffset: null },
+          })
+        }
+        if (String(url).endsWith("/drive/items/item-1/versions/version-1/restore")) return jsonResponse(driveItemDto)
+        if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "PATCH") {
+          return jsonResponse({ ...fileVersion, isPinned: true })
+        }
+        if (String(url).endsWith("/drive/items/item-1/versions/version-1") && method === "DELETE") return jsonResponse({ ok: true })
         if (String(url).endsWith("/drive/items/item-1/share")) return jsonResponse(shareResult)
         if (String(url).endsWith("/drive/shares")) {
           return jsonResponse({
@@ -1304,6 +1330,17 @@ describe("AccountService", () => {
       truncated: true,
     })
     await expect(service.shareDriveItem("item-1", shareSettings)).resolves.toEqual(expectedShareResult)
+    await expect(service.listDriveFileVersions("item-1", { offset: 10, limit: 5 })).resolves.toEqual({
+      items: [fileVersion],
+      total: 1,
+      page: { offset: 10, limit: 5, hasMore: false, nextOffset: null },
+    })
+    await expect(service.restoreDriveFileVersion("item-1", "version-1")).resolves.toEqual(driveItemDto)
+    await expect(service.updateDriveFileVersionPin("item-1", "version-1", true)).resolves.toEqual({
+      ...fileVersion,
+      isPinned: true,
+    })
+    await expect(service.deleteDriveFileVersion("item-1", "version-1")).resolves.toEqual({ ok: true })
     await expect(service.listDriveShares()).resolves.toEqual({
       items: [expectedShare],
       page: { offset: 0, limit: 20, hasMore: false, nextOffset: null },
@@ -1317,6 +1354,10 @@ describe("AccountService", () => {
       { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/browser/owner/items/item-1?surface=standalone"), method: "GET", body: undefined },
       { url: expectedApiUrl("/drive/items/item-1/share"), method: "POST", body: shareSettings },
+      { url: expectedApiUrl("/drive/items/item-1/versions?offset=10&limit=5"), method: "GET", body: undefined },
+      { url: expectedApiUrl("/drive/items/item-1/versions/version-1/restore"), method: "POST", body: undefined },
+      { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "PATCH", body: { isPinned: true } },
+      { url: expectedApiUrl("/drive/items/item-1/versions/version-1"), method: "DELETE", body: undefined },
       { url: expectedApiUrl("/drive/shares"), method: "GET", body: undefined },
       {
         url: expectedApiUrl("/drive/items/item-1"),

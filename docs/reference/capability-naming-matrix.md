@@ -109,6 +109,11 @@ Canonical capability ids use `<domain>.<resource>.<action>`. The local HTTP API 
 | `drive.item_preview.get` | `drive_item_preview_get` | `drive.item_preview.get` | `driveItemPreviewGet` |
 | `drive.file_content.read` | `drive_file_content_read` | `drive.file_content.read` | `driveFileContentRead` |
 | `drive.file_download.create` | `drive_file_download_create` | `drive.file_download.create` | `driveFileDownloadCreate` |
+| `drive.file_version.list` | `drive_file_version_list` | `drive.file_version.list` | `driveFileVersionList` |
+| `drive.file_version_download.create` | `drive_file_version_download_create` | `drive.file_version_download.create` | `driveFileVersionDownloadCreate` |
+| `drive.file_version.restore` | `drive_file_version_restore` | `drive.file_version.restore` | `driveFileVersionRestore` |
+| `drive.file_version.delete` | `drive_file_version_delete` | `drive.file_version.delete` | `driveFileVersionDelete` |
+| `drive.file_version_pin.update` | `drive_file_version_pin_update` | `drive.file_version_pin.update` | `driveFileVersionPinUpdate` |
 | `drive.folder_zip.create` | `drive_folder_zip_create` | `drive.folder_zip.create` | `driveFolderZipCreate` |
 | `drive.share.list` | `drive_share_list` | `drive.share.list` | `driveShareList` |
 | `drive.share.create` | `drive_share_create` | `drive.share.create` | `driveShareCreate` |

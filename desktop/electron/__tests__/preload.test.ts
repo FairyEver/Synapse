@@ -309,6 +309,11 @@ describe("preload bridge", () => {
     expect(bridge.shell.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     await bridge.account.createDriveFolder({ parentId: null, name: "交接材料" })
     await bridge.account.deleteDriveItem({ itemId: "item-1" })
+    await bridge.account.listDriveFileVersions({ itemId: "item-1", limit: 20 })
+    await bridge.account.downloadDriveFileVersion({ itemId: "item-1", versionId: "version-1", outputPath: "/tmp/report-v1.txt" })
+    await bridge.account.restoreDriveFileVersion({ itemId: "item-1", versionId: "version-1" })
+    await bridge.account.deleteDriveFileVersion({ itemId: "item-1", versionId: "version-1" })
+    await bridge.account.updateDriveFileVersionPin({ itemId: "item-1", versionId: "version-1", isPinned: true })
     await bridge.account.shareDriveItem({ itemId: "item-1", passwordEnabled: true, expiresIn: "7d" })
     await bridge.account.listDriveShares()
 
@@ -348,6 +353,26 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:delete",
       { itemId: "item-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:file-versions:list",
+      { itemId: "item-1", limit: 20 },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:file-versions:download",
+      { itemId: "item-1", versionId: "version-1", outputPath: "/tmp/report-v1.txt" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:file-versions:restore",
+      { itemId: "item-1", versionId: "version-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:file-versions:delete",
+      { itemId: "item-1", versionId: "version-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:account:drive:file-versions:pin",
+      { itemId: "item-1", versionId: "version-1", isPinned: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:account:drive:items:share",

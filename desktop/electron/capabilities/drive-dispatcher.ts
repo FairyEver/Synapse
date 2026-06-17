@@ -6,6 +6,9 @@ import type {
   DriveAccessExpiresIn,
   DriveAccessSettingsInput,
   DriveBrowserSnapshotDto,
+  DriveFileVersionDto,
+  DriveFileVersionListInput,
+  DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
   DriveFolderPathEnsureInput,
   DriveFolderPathEnsureResultDto,
@@ -67,6 +70,15 @@ type DriveAccountServicePort = {
     readonly maxBytes?: number
   }) => Promise<unknown>
   readonly downloadDriveFile: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
+  readonly listDriveFileVersions: (itemId: string, input?: DriveFileVersionListInput) => Promise<DriveFileVersionListPageDto>
+  readonly downloadDriveFileVersion: (input: {
+    readonly itemId: string
+    readonly versionId: string
+    readonly outputPath: string
+  }) => Promise<unknown>
+  readonly restoreDriveFileVersion: (itemId: string, versionId: string) => Promise<DriveItemDto>
+  readonly deleteDriveFileVersion: (itemId: string, versionId: string) => Promise<{ ok: true }>
+  readonly updateDriveFileVersionPin: (itemId: string, versionId: string, isPinned: boolean) => Promise<DriveFileVersionDto>
   readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
 }
 
@@ -187,6 +199,48 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               data: await deps.accountService.downloadDriveFile({ itemId, outputPath }),
             }
           })
+        case "drive.file_version.list":
+          return dispatchDriveRead(deps, action, params, context, async () => {
+            const itemId = requireString(params, "itemId")
+            const versions = await deps.accountService.listDriveFileVersions(itemId, parseDriveVersionListInput(params))
+            return { ok: true, data: versions, total: versions.total }
+          })
+        case "drive.file_version_download.create":
+          return dispatchDriveMutation(deps, action, params, context, async () => {
+            const itemId = requireString(params, "itemId")
+            const versionId = requireString(params, "versionId")
+            const outputPath = requireString(params, "outputPath")
+            await authorizeFileWrite(deps, action, itemId, outputPath, context)
+            return {
+              ok: true,
+              data: await deps.accountService.downloadDriveFileVersion({ itemId, versionId, outputPath }),
+            }
+          })
+        case "drive.file_version.restore":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.restoreDriveFileVersion(
+              requireString(params, "itemId"),
+              requireString(params, "versionId"),
+            ),
+          }))
+        case "drive.file_version.delete":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.deleteDriveFileVersion(
+              requireString(params, "itemId"),
+              requireString(params, "versionId"),
+            ),
+          }))
+        case "drive.file_version_pin.update":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.updateDriveFileVersionPin(
+              requireString(params, "itemId"),
+              requireString(params, "versionId"),
+              requireBoolean(params, "isPinned"),
+            ),
+          }))
         case "drive.folder_zip.create":
           return dispatchDriveMutation(deps, action, params, context, async () => {
             const itemId = requireString(params, "itemId")
@@ -504,7 +558,7 @@ function driveMutationSecurity(
 
 function driveParamCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const metadata: Record<string, unknown> = {}
-  for (const key of ["itemId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "expiresIn", "planId"]) {
+  for (const key of ["itemId", "versionId", "shareId", "parentId", "name", "folderName", "passwordEnabled", "isPinned", "expiresIn", "planId"]) {
     const value = params[key]
     if (typeof value === "string" || typeof value === "boolean" || value === null) metadata[key] = value
   }
@@ -673,6 +727,14 @@ function optionalBoolean(value: unknown): boolean | undefined {
   return value
 }
 
+function requireBoolean(params: Record<string, unknown>, key: string): boolean {
+  const value = params[key]
+  if (typeof value !== "boolean") {
+    throw new Error(`Missing or invalid '${key}': expected boolean`)
+  }
+  return value
+}
+
 function optionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error("Expected non-negative number parameter.")
@@ -686,6 +748,16 @@ function optionalDrivePreviewSurface(value: unknown): "standalone" | "console" |
 }
 
 function parsePublicLinksPageInput(params: Record<string, unknown>): DrivePublicLinksPageInput | undefined {
+  const offset = optionalNumber(params.offset)
+  const limit = optionalNumber(params.limit)
+  if (offset === undefined && limit === undefined) return undefined
+  return {
+    ...(offset === undefined ? {} : { offset }),
+    ...(limit === undefined ? {} : { limit }),
+  }
+}
+
+function parseDriveVersionListInput(params: Record<string, unknown>): DriveFileVersionListInput | undefined {
   const offset = optionalNumber(params.offset)
   const limit = optionalNumber(params.limit)
   if (offset === undefined && limit === undefined) return undefined

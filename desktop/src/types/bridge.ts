@@ -26,6 +26,9 @@ import type {
 import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
+  DriveFileVersionDto,
+  DriveFileVersionListInput,
+  DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
   DriveItemDto,
   DrivePublicLinksPageInput,
@@ -751,6 +754,11 @@ export type SynapseBridge = {
     renameDriveItem: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
     moveDriveItem: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
     deleteDriveItem: (input: { itemId: string }) => Promise<{ ok: true }>
+    listDriveFileVersions: (input: { itemId: string } & DriveFileVersionListInput) => Promise<DriveFileVersionListPageDto>
+    downloadDriveFileVersion: (input: { itemId: string; versionId: string; outputPath: string }) => Promise<{ ok: true; path: string }>
+    restoreDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<DriveItemDto>
+    deleteDriveFileVersion: (input: { itemId: string; versionId: string }) => Promise<{ ok: true }>
+    updateDriveFileVersionPin: (input: { itemId: string; versionId: string; isPinned: boolean }) => Promise<DriveFileVersionDto>
     shareDriveItem: (input: { itemId: string } & DriveAccessSettingsInput) => Promise<DriveShareDto>
     disableDriveShare: (input: { shareId: string }) => Promise<{ ok: true }>
     getDriveUsage: () => Promise<DriveUsageDto>

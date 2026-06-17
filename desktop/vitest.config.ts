@@ -15,6 +15,7 @@ export default defineConfig({
       "action-packages/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "action-packages/**/*.test.{ts,tsx}",
       "electron/**/__tests__/**/*.{test,spec}.ts",
+      "synapse-capabilities/**/*.test.ts",
       "src/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "tests/unit/**/*.{test,spec}.ts",
       "tests/ipc/**/*.{test,spec}.ts",

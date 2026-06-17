@@ -38,6 +38,11 @@ describe("createDriveCapabilityDispatcher", () => {
       "drive_item_preview_get",
       "drive_file_content_read",
       "drive_file_download_create",
+      "drive_file_version_list",
+      "drive_file_version_download_create",
+      "drive_file_version_restore",
+      "drive_file_version_delete",
+      "drive_file_version_pin_update",
       "drive_folder_zip_create",
       "drive_share_list",
       "drive_share_create",
@@ -335,6 +340,83 @@ describe("createDriveCapabilityDispatcher", () => {
     }))
     expect(accountService.downloadDriveFile).toHaveBeenCalledWith({ itemId: "item-1", outputPath: "/tmp/report.md" })
     expect(accountService.downloadDriveFolderZip).toHaveBeenCalledWith({ itemId: "folder-1", outputPath: "/tmp/project.zip" })
+  })
+
+  it("manages Drive file versions", async () => {
+    const accountService = createAccountService({
+      listDriveFileVersions: vi.fn(async () => ({
+        items: [driveFileVersion({ id: "version-1" })],
+        total: 1,
+        page: drivePage(),
+      })),
+      restoreDriveFileVersion: vi.fn(async () => driveItem({ id: "item-1" })),
+      deleteDriveFileVersion: vi.fn(async () => ({ ok: true as const })),
+      updateDriveFileVersionPin: vi.fn(async () => driveFileVersion({ id: "version-1", isPinned: true })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.file_version.list", {
+      itemId: "item-1",
+      offset: 10,
+      limit: 5,
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: {
+        items: [driveFileVersion({ id: "version-1" })],
+        total: 1,
+        page: drivePage(),
+      },
+      total: 1,
+    })
+    await expect(dispatcher.dispatch("drive.file_version.restore", {
+      itemId: "item-1",
+      versionId: "version-1",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: driveItem({ id: "item-1" }) })
+    await expect(dispatcher.dispatch("drive.file_version.delete", {
+      itemId: "item-1",
+      versionId: "version-1",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true } })
+    await expect(dispatcher.dispatch("drive.file_version_pin.update", {
+      itemId: "item-1",
+      versionId: "version-1",
+      isPinned: true,
+    }, { source: "mcp-stdio" })).resolves.toEqual({
+      ok: true,
+      data: driveFileVersion({ id: "version-1", isPinned: true }),
+    })
+
+    expect(accountService.listDriveFileVersions).toHaveBeenCalledWith("item-1", { offset: 10, limit: 5 })
+    expect(accountService.restoreDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
+    expect(accountService.deleteDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
+    expect(accountService.updateDriveFileVersionPin).toHaveBeenCalledWith("item-1", "version-1", true)
+  })
+
+  it("checks fs.write before saving a Drive file version locally", async () => {
+    const accountService = createAccountService({
+      downloadDriveFileVersion: vi.fn(async () => ({ ok: true as const, path: "/tmp/report-v1.md" })),
+    })
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const dispatcher = createDriveCapabilityDispatcher({ accountService, permissionGuard })
+
+    await expect(dispatcher.dispatch("drive.file_version_download.create", {
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md",
+    }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: { ok: true, path: "/tmp/report-v1.md" } })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "/tmp/report-v1.md",
+      context: expect.objectContaining({ driveAction: "drive.file_version_download.create", itemId: "item-1" }),
+    }))
+    expect(accountService.downloadDriveFileVersion).toHaveBeenCalledWith({
+      itemId: "item-1",
+      versionId: "version-1",
+      outputPath: "/tmp/report-v1.md",
+    })
   })
 
   it("uploads a local file without returning the presigned URL", async () => {
@@ -702,6 +784,11 @@ function createAccountService(overrides: Partial<DriveAccountService> = {}): Dri
     getDriveItemPreview: vi.fn(),
     readDriveFileContent: vi.fn(),
     downloadDriveFile: vi.fn(),
+    listDriveFileVersions: vi.fn(),
+    downloadDriveFileVersion: vi.fn(),
+    restoreDriveFileVersion: vi.fn(),
+    deleteDriveFileVersion: vi.fn(),
+    updateDriveFileVersionPin: vi.fn(),
     downloadDriveFolderZip: vi.fn(),
     ...overrides,
   } as unknown as DriveAccountService
@@ -733,6 +820,26 @@ function driveItem(overrides: Partial<DriveItem>): DriveItem {
     activeShareId: null,
     createdAt: "2026-06-07T00:00:00.000Z",
     updatedAt: "2026-06-07T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+type DriveFileVersion = Awaited<ReturnType<DriveAccountService["listDriveFileVersions"]>>["items"][number]
+
+function driveFileVersion(overrides: Partial<DriveFileVersion>): DriveFileVersion {
+  return {
+    id: "version-1",
+    itemId: "item-1",
+    versionNumber: 1,
+    size: "4",
+    mimeType: "text/markdown",
+    source: "upload",
+    isCurrent: false,
+    isPinned: false,
+    deletePending: false,
+    restoredFromVersionId: null,
+    createdAt: "2026-06-07T00:00:00.000Z",
+    createdBy: "user-1",
     ...overrides,
   }
 }

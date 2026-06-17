@@ -21,6 +21,9 @@ import type {
   DashboardWebhookDto,
   DriveAccessSettingsInput,
   DriveBrowserSnapshotDto,
+  DriveFileVersionDto,
+  DriveFileVersionListInput,
+  DriveFileVersionListPageDto,
   DriveFolderUploadPrepareResult,
   DriveFolderPathEnsureInput,
   DriveFolderPathEnsureResultDto,
@@ -140,6 +143,14 @@ function drivePublicLinksPageQuery(input?: DrivePublicLinksPageInput): string {
   return query ? `?${query}` : ""
 }
 
+function driveVersionListQuery(input?: DriveFileVersionListInput): string {
+  const params = new URLSearchParams()
+  if (input?.offset !== undefined) params.set("offset", String(input.offset))
+  if (input?.limit !== undefined) params.set("limit", String(input.limit))
+  const query = params.toString()
+  return query ? `?${query}` : ""
+}
+
 export function getAccountApiBaseUrl(): string {
   return apiBaseUrl()
 }
@@ -199,6 +210,10 @@ async function currentOwnerDriveBrowserUrl(itemId: string): Promise<string> {
 
 function currentOwnerDriveDownloadUrl(itemId: string): string {
   return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/download`
+}
+
+function currentOwnerDriveVersionDownloadUrl(itemId: string, versionId: string): string {
+  return `${publicAppUrl().trim().replace(/\/+$/u, "")}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}/download`
 }
 
 type DriveFileContentReadResult = {
@@ -415,6 +430,54 @@ export class AccountService {
     const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), {}, "文件夹下载失败。")
     await writeResponseBodyToFile(response, input.outputPath)
     return { ok: true, path: input.outputPath }
+  }
+
+  async listDriveFileVersions(itemId: string, input?: DriveFileVersionListInput): Promise<DriveFileVersionListPageDto> {
+    return this.getAuthenticatedJson<DriveFileVersionListPageDto>(
+      `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/versions${driveVersionListQuery(input)}`,
+      "历史版本加载失败。",
+    )
+  }
+
+  async downloadDriveFileVersion(input: {
+    readonly itemId: string
+    readonly versionId: string
+    readonly outputPath: string
+  }): Promise<{ readonly ok: true; readonly path: string }> {
+    const response = await this.fetchAuthenticated(
+      currentOwnerDriveVersionDownloadUrl(input.itemId, input.versionId),
+      {},
+      "历史版本下载失败。",
+    )
+    await writeResponseBodyToFile(response, input.outputPath)
+    return { ok: true, path: input.outputPath }
+  }
+
+  async restoreDriveFileVersion(itemId: string, versionId: string): Promise<DriveItemDto> {
+    return this.requestAuthenticatedJson<DriveItemDto>(
+      "POST",
+      `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}/restore`,
+      undefined,
+      "历史版本恢复失败。",
+    )
+  }
+
+  async deleteDriveFileVersion(itemId: string, versionId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>(
+      "DELETE",
+      `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}`,
+      undefined,
+      "历史版本删除失败。",
+    )
+  }
+
+  async updateDriveFileVersionPin(itemId: string, versionId: string, isPinned: boolean): Promise<DriveFileVersionDto> {
+    return this.requestAuthenticatedJson<DriveFileVersionDto>(
+      "PATCH",
+      `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(versionId)}`,
+      { isPinned },
+      "历史版本保留状态保存失败。",
+    )
   }
 
   async prepareDriveUpload(input: { parentId?: string | null; name: string; size: string; mimeType?: string | null }): Promise<DriveUploadPrepareResult> {

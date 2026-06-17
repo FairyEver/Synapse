@@ -75,6 +75,21 @@ const driveItemSchema = z.object({
   updatedAt: z.string(),
 })
 
+const driveFileVersionSchema = z.object({
+  id: z.string(),
+  itemId: z.string(),
+  versionNumber: z.number().int().positive(),
+  size: z.string(),
+  mimeType: z.string().nullable(),
+  source: z.enum(["upload", "online_edit", "restore"]),
+  isCurrent: z.boolean(),
+  isPinned: z.boolean(),
+  deletePending: z.boolean(),
+  restoredFromVersionId: z.string().nullable(),
+  createdAt: z.string(),
+  createdBy: z.string().nullable(),
+})
+
 const driveUploadInstructionSchema = z.object({
   method: z.literal("PUT"),
   url: z.string(),
@@ -133,6 +148,17 @@ const drivePublicLinksPageInputSchema = z.object({
 
 const drivePublicLinksPageSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
   items: z.array(itemSchema),
+  page: z.object({
+    offset: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    hasMore: z.boolean(),
+    nextOffset: z.number().int().nonnegative().nullable(),
+  }),
+})
+
+const driveFileVersionListPageSchema = z.object({
+  items: z.array(driveFileVersionSchema),
+  total: z.number().int().nonnegative(),
   page: z.object({
     offset: z.number().int().nonnegative(),
     limit: z.number().int().positive(),
@@ -226,6 +252,13 @@ const driveFolderCreateSchema = z.object({ parentId: z.string().nullable().optio
 const driveRenameSchema = z.object({ itemId: z.string(), name: z.string() })
 const driveMoveSchema = z.object({ itemId: z.string(), parentId: z.string().nullable() })
 const driveItemIdSchema = z.object({ itemId: z.string() })
+const driveFileVersionListSchema = driveItemIdSchema.extend({
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+})
+const driveFileVersionIdSchema = driveItemIdSchema.extend({ versionId: z.string() })
+const driveFileVersionDownloadSchema = driveFileVersionIdSchema.extend({ outputPath: z.string() })
+const driveFileVersionPinSchema = driveFileVersionIdSchema.extend({ isPinned: z.boolean() })
 const drivePreviewUrlSchema = z.object({ url: z.string().url() })
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean(),
@@ -536,6 +569,56 @@ export const accountIpcModule: IpcModule = {
       handler: async (_ctx, input) => {
         const parsed = driveDeleteItemSchema.parse(input)
         return accountService.deleteDriveItem(parsed.itemId)
+      },
+    },
+    listDriveFileVersions: {
+      kind: "invoke",
+      channel: "synapse:account:drive:file-versions:list",
+      request: driveFileVersionListSchema,
+      response: driveFileVersionListPageSchema,
+      handler: async (_ctx, input) => {
+        const parsed = driveFileVersionListSchema.parse(input)
+        return accountService.listDriveFileVersions(parsed.itemId, {
+          offset: parsed.offset,
+          limit: parsed.limit,
+        })
+      },
+    },
+    downloadDriveFileVersion: {
+      kind: "invoke",
+      channel: "synapse:account:drive:file-versions:download",
+      request: driveFileVersionDownloadSchema,
+      response: okSchema.extend({ path: z.string() }),
+      handler: async (_ctx, input) => accountService.downloadDriveFileVersion(driveFileVersionDownloadSchema.parse(input)),
+    },
+    restoreDriveFileVersion: {
+      kind: "invoke",
+      channel: "synapse:account:drive:file-versions:restore",
+      request: driveFileVersionIdSchema,
+      response: driveItemSchema,
+      handler: async (_ctx, input) => {
+        const parsed = driveFileVersionIdSchema.parse(input)
+        return accountService.restoreDriveFileVersion(parsed.itemId, parsed.versionId)
+      },
+    },
+    deleteDriveFileVersion: {
+      kind: "invoke",
+      channel: "synapse:account:drive:file-versions:delete",
+      request: driveFileVersionIdSchema,
+      response: okSchema,
+      handler: async (_ctx, input) => {
+        const parsed = driveFileVersionIdSchema.parse(input)
+        return accountService.deleteDriveFileVersion(parsed.itemId, parsed.versionId)
+      },
+    },
+    updateDriveFileVersionPin: {
+      kind: "invoke",
+      channel: "synapse:account:drive:file-versions:pin",
+      request: driveFileVersionPinSchema,
+      response: driveFileVersionSchema,
+      handler: async (_ctx, input) => {
+        const parsed = driveFileVersionPinSchema.parse(input)
+        return accountService.updateDriveFileVersionPin(parsed.itemId, parsed.versionId, parsed.isPinned)
       },
     },
     shareDriveItem: {

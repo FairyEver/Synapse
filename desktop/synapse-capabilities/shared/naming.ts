@@ -16,6 +16,7 @@ const CAPABILITY_ACTIONS = [
   "reorder",
   "move",
   "upload",
+  "restore",
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]
