@@ -3,7 +3,9 @@
  */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { GitHistoryTab } from "../components/git-history-tab"
 import { GitWorkbench } from "../components/git-workbench"
 
 const repository = { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null }
@@ -93,6 +95,81 @@ describe("GitWorkbench", () => {
     await click(findButton("历史"))
     expect(document.body.textContent).toContain("更新文档")
     expect(document.body.textContent).toContain("abc123")
+  })
+
+  it("keeps long history details inside the right pane", () => {
+    const longPath = "app/portal/views/simple/finance/form/001/page/pc/edit/index.vue"
+    const longDiffLine = `diff --git a/${longPath} b/${longPath} `.repeat(4)
+    const html = renderToStaticMarkup(<GitHistoryTab
+      history={{
+        commits: [],
+        selectedCommit: {
+          hash: "abc",
+          shortHash: "abc123",
+          subject: "fix(finance): 修复工资类型验证并优化提交按钮状态",
+          authorName: "wangl",
+          authorEmail: "wangl@example.com",
+          committedAt: "2026-06-15T16:21:42+08:00",
+          files: [{ path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false }],
+          diff: longDiffLine,
+        },
+        loading: false,
+        detailLoading: false,
+        error: null,
+        refresh: vi.fn(async () => undefined),
+        loadCommit: vi.fn(async () => undefined),
+      }}
+    />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const root = container.firstElementChild
+    const rightPane = container.querySelector('[data-git-history-detail-pane="true"]')
+    const rightViewport = rightPane?.querySelector('[data-slot="scroll-area-viewport"]')
+    const detailContent = container.querySelector('[data-git-history-detail-content="true"]')
+    const fileList = container.querySelector('[data-git-history-file-list="true"]')
+    const diff = container.querySelector("pre")
+
+    expect(root?.className).toContain("min-w-0")
+    expect(rightPane?.className).toContain("min-w-0")
+    expect(rightViewport?.className).toContain("overflow-x-hidden")
+    expect(rightViewport?.className).toContain("[&>div]:!block")
+    expect(rightViewport?.className).toContain("[&>div]:!max-w-full")
+    expect(detailContent?.className).toContain("min-w-0")
+    expect(fileList?.className).toContain("max-w-full")
+    expect(diff?.className).toContain("block")
+    expect(diff?.className).toContain("w-full")
+    expect(diff?.className).toContain("min-w-0")
+    expect(diff?.className).toContain("max-w-full")
+    expect(diff?.className).toContain("overflow-x-auto")
+  })
+
+  it("does not render an empty history file list border", () => {
+    const html = renderToStaticMarkup(<GitHistoryTab
+      history={{
+        commits: [],
+        selectedCommit: {
+          hash: "abc",
+          shortHash: "abc123",
+          subject: "Merge branch docs",
+          authorName: "wangl",
+          authorEmail: "wangl@example.com",
+          committedAt: "2026-06-15T16:21:42+08:00",
+          files: [],
+          diff: "",
+        },
+        loading: false,
+        detailLoading: false,
+        error: null,
+        refresh: vi.fn(async () => undefined),
+        loadCommit: vi.fn(async () => undefined),
+      }}
+    />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    expect(container.querySelector('[data-git-history-file-list="true"]')).toBeNull()
+    expect(container.querySelector("pre")?.textContent).toBe("没有文本差异。")
   })
 })
 

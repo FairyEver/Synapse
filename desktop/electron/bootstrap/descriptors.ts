@@ -1539,7 +1539,10 @@ export const gitRepositoryRegistryDescriptor: ServiceDescriptor<GitRepositoryReg
   id: "git.repository-registry",
   criticality: "degraded",
   create() {
-    return createGitRepositoryRegistry({ userDataPath: app.getPath("userData") })
+    return createGitRepositoryRegistry({
+      userDataPath: app.getPath("userData"),
+      trashItem: (targetPath) => shell.trashItem(targetPath),
+    })
   },
 }
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { SynapseGitRepository } from "../../../src/types/git"
+import type { SynapseGitRepositoryRemoveInput } from "../../../src/types/git"
 import { normalizeRepositoryPath } from "./git-path-utils"
 
 type RegistryFile = {
@@ -17,6 +18,7 @@ type AddLocalInput = {
 type RegistryDeps = {
   readonly userDataPath: string
   readonly now?: () => Date
+  readonly trashItem?: (targetPath: string) => Promise<void>
 }
 
 function registryFilePath(userDataPath: string): string {
@@ -87,11 +89,24 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
       })
     },
 
-    async remove(repositoryId: string): Promise<void> {
+    async remove(input: SynapseGitRepositoryRemoveInput): Promise<void> {
       const data = await readRegistry(filePath)
+      const repository = data.repositories.find((item) => item.id === input.repositoryId)
+
+      if (!repository) {
+        return
+      }
+
+      if (input.mode === "trash-local") {
+        if (!deps.trashItem) {
+          throw new Error("移到废纸篓功能不可用。")
+        }
+        await deps.trashItem(repository.localPath)
+      }
+
       await writeRegistry(filePath, {
         version: 1,
-        repositories: data.repositories.filter((repository) => repository.id !== repositoryId),
+        repositories: data.repositories.filter((repository) => repository.id !== input.repositoryId),
       })
     },
   }

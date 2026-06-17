@@ -26,8 +26,8 @@ function formatDate(value: string): string {
 
 export function GitHistoryTab({ history }: GitHistoryTabProps) {
   return (
-    <div className="grid h-full min-h-0 md:grid-cols-[minmax(240px,360px)_minmax(0,1fr)]">
-      <ScrollArea className="min-h-0 border-b md:border-r md:border-b-0">
+    <div className="grid h-full min-h-0 min-w-0 md:grid-cols-[minmax(240px,360px)_minmax(0,1fr)]">
+      <ScrollArea className="min-h-0 min-w-0 border-b md:border-r md:border-b-0">
         <div className="divide-y divide-border">
           {history.loading ? (
             <div className="flex h-32 items-center justify-center">
@@ -51,8 +51,12 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
           )}
         </div>
       </ScrollArea>
-      <ScrollArea className="min-h-0">
-        <div className="space-y-3 p-4">
+      <ScrollArea
+        className="min-h-0 min-w-0 max-w-full"
+        data-git-history-detail-pane="true"
+        viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
+      >
+        <div className="min-w-0 max-w-full overflow-hidden space-y-3 p-4" data-git-history-detail-content="true">
           {history.error ? (
             <Alert variant="destructive">
               <AlertTitle>读取失败</AlertTitle>
@@ -66,20 +70,22 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
           ) : history.selectedCommit ? (
             <>
               <div className="space-y-1">
-                <div className="text-sm font-medium">{history.selectedCommit.subject}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="truncate text-sm font-medium">{history.selectedCommit.subject}</div>
+                <div className="truncate text-xs text-muted-foreground">
                   {history.selectedCommit.shortHash} · {history.selectedCommit.authorName} · {formatDate(history.selectedCommit.committedAt)}
                 </div>
               </div>
-              <div className="divide-y divide-border overflow-hidden rounded-lg border">
-                {history.selectedCommit.files.map((file) => (
-                  <div key={`${file.path}:${file.originalPath ?? ""}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm">
-                    <span className="truncate">{file.path}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{statusLabels[file.status]}</span>
-                  </div>
-                ))}
-              </div>
-              <pre className="overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
+              {history.selectedCommit.files.length > 0 ? (
+                <div className="max-w-full divide-y divide-border overflow-hidden rounded-lg border" data-git-history-file-list="true">
+                  {history.selectedCommit.files.map((file) => (
+                    <div key={`${file.path}:${file.originalPath ?? ""}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm">
+                      <span className="min-w-0 truncate">{file.path}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{statusLabels[file.status]}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
                 {history.selectedCommit.diff || "没有文本差异。"}
               </pre>
             </>

@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { createGitRepositoryRegistry } from "../git-repository-registry"
 
 let tempDir: string | null = null
@@ -35,8 +35,45 @@ describe("git repository registry", () => {
     await registry.markOpened(added.id)
     expect((await registry.list())[0]?.lastOpenedAt).toBe("2026-06-17T10:00:00.000Z")
 
-    await registry.remove(added.id)
+    await registry.remove({ repositoryId: added.id, mode: "keep-local" })
     expect(await registry.list()).toEqual([])
+  })
+
+  it("trashes local files before removing repository records", async () => {
+    const trashItem = vi.fn(async () => undefined)
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
+    const localPath = path.join(tempDir, "docs")
+    await mkdir(localPath)
+    const registry = createGitRepositoryRegistry({
+      userDataPath: tempDir,
+      now: () => new Date("2026-06-17T10:00:00.000Z"),
+      trashItem,
+    })
+    const added = await registry.addLocal({ name: "Docs", localPath })
+
+    await registry.remove({ repositoryId: added.id, mode: "trash-local" })
+
+    expect(trashItem).toHaveBeenCalledWith(localPath)
+    expect(await registry.list()).toEqual([])
+  })
+
+  it("keeps repository records when trashing local files fails", async () => {
+    const trashItem = vi.fn(async () => {
+      throw new Error("trash failed")
+    })
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
+    const localPath = path.join(tempDir, "docs")
+    await mkdir(localPath)
+    const registry = createGitRepositoryRegistry({
+      userDataPath: tempDir,
+      now: () => new Date("2026-06-17T10:00:00.000Z"),
+      trashItem,
+    })
+    const added = await registry.addLocal({ name: "Docs", localPath })
+
+    await expect(registry.remove({ repositoryId: added.id, mode: "trash-local" })).rejects.toThrow("trash failed")
+
+    expect(await registry.list()).toEqual([added])
   })
 
   it("deduplicates repositories by normalized path", async () => {

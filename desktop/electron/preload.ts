@@ -619,8 +619,8 @@ const synapseBridge: SynapseBridge = {
     listRepositories: invoke(IPC_CHANNELS.git.listRepositories),
     addLocalRepository: (input) =>
       invoke(IPC_CHANNELS.git.addLocalRepository)(input),
-    removeRepository: (repositoryId) =>
-      invoke(IPC_CHANNELS.git.removeRepository)({ repositoryId }),
+    removeRepository: (input) =>
+      invoke(IPC_CHANNELS.git.removeRepository)(input),
     cloneRepository: (input) =>
       invoke(IPC_CHANNELS.git.cloneRepository)(input),
     getSnapshot: (repositoryId) =>
