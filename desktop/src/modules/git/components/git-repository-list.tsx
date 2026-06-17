@@ -2,7 +2,7 @@ import type { MouseEvent } from "react"
 import { Download, FolderGit2, GitPullRequest, Plus, RefreshCw, Upload } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import type { SynapseGitRepository } from "@/types/git"
@@ -92,18 +92,6 @@ export function GitRepositoryList({
                 <EmptyHeader>
                   <EmptyTitle>暂无仓库</EmptyTitle>
                 </EmptyHeader>
-                <EmptyContent>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <Button type="button" onClick={onClone} disabled={actionDisabled}>
-                      <Plus data-icon="inline-start" />
-                      克隆仓库
-                    </Button>
-                    <Button type="button" variant="outline" onClick={onAddLocal} disabled={actionDisabled}>
-                      <FolderGit2 data-icon="inline-start" />
-                      添加本地仓库
-                    </Button>
-                  </div>
-                </EmptyContent>
               </Empty>
             ) : (
               <div className="divide-y divide-border overflow-hidden rounded-lg border bg-background">

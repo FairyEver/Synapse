@@ -18,6 +18,9 @@ const bridge = vi.hoisted(() => ({
     pull: vi.fn(),
     push: vi.fn(),
   },
+  repository: {
+    chooseDirectory: vi.fn(),
+  },
 }))
 
 vi.mock("@/lib/electron-bridge", () => ({
@@ -42,6 +45,7 @@ describe("GitModule repository list", () => {
       installHint: null,
     })
     bridge.git.listRepositories.mockResolvedValue([])
+    bridge.repository.chooseDirectory.mockResolvedValue(null)
   })
 
   afterEach(() => {
@@ -50,11 +54,12 @@ describe("GitModule repository list", () => {
     }
   })
 
-  it("shows empty state actions", async () => {
+  it("shows only the empty state title when no repositories exist", async () => {
     await renderGitModule(roots)
 
-    expect(findButton("克隆仓库")).toBeTruthy()
-    expect(findButton("添加本地仓库")).toBeTruthy()
+    expect(document.body.textContent).toContain("暂无仓库")
+    expect(countButtons("克隆仓库")).toBeGreaterThan(0)
+    expect(countButtons("添加本地仓库")).toBeGreaterThan(0)
   })
 
   it("opens clone dialog and submits clone request", async () => {
@@ -73,6 +78,51 @@ describe("GitModule repository list", () => {
       remoteUrl: "https://git.example.com/team/docs.git",
       targetPath: "/work/docs",
       name: "docs",
+    })
+  })
+
+  it("uses native folder selection for clone target path", async () => {
+    bridge.repository.chooseDirectory.mockResolvedValue("/work/docs")
+    bridge.git.cloneRepository.mockResolvedValue({
+      repository: { id: "repo-1", name: "docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null },
+      remoteKind: "https",
+    })
+    await renderGitModule(roots)
+
+    await click(findButton("克隆仓库"))
+    await changeInput("仓库地址", "https://git.example.com/team/docs.git")
+    await click(findButton("选择文件夹"))
+    await click(findButton("开始克隆"))
+
+    expect(bridge.repository.chooseDirectory).toHaveBeenCalled()
+    expect(bridge.git.cloneRepository).toHaveBeenCalledWith({
+      remoteUrl: "https://git.example.com/team/docs.git",
+      targetPath: "/work/docs",
+      name: "docs",
+    })
+  })
+
+  it("uses native folder selection and folder name for local repositories", async () => {
+    bridge.repository.chooseDirectory.mockResolvedValue("/work/team-rules")
+    bridge.git.addLocalRepository.mockResolvedValue({
+      id: "repo-1",
+      name: "team-rules",
+      localPath: "/work/team-rules",
+      addedAt: "now",
+      lastOpenedAt: null,
+    })
+    await renderGitModule(roots)
+
+    await click(findButton("添加本地仓库"))
+    await click(findButton("选择文件夹"))
+    expect(inputByLabel("仓库名称").value).toBe("team-rules")
+
+    await click(findButton("添加"))
+
+    expect(bridge.repository.chooseDirectory).toHaveBeenCalled()
+    expect(bridge.git.addLocalRepository).toHaveBeenCalledWith({
+      localPath: "/work/team-rules",
+      name: "team-rules",
     })
   })
 })
@@ -111,14 +161,21 @@ async function flush(): Promise<void> {
 }
 
 function findButton(label: string): HTMLButtonElement {
-  const button = Array.from(document.querySelectorAll("button"))
-    .find((item) => item.textContent?.includes(label))
+  const buttons = Array.from(document.querySelectorAll("button"))
+  const button = buttons.find((item) => item.textContent === label)
+    ?? buttons.find((item) => item.textContent?.includes(label))
 
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`Button not found: ${label}`)
   }
 
   return button
+}
+
+function countButtons(label: string): number {
+  return Array.from(document.querySelectorAll("button"))
+    .filter((item) => item.textContent?.includes(label))
+    .length
 }
 
 function inputByLabel(label: string): HTMLInputElement {

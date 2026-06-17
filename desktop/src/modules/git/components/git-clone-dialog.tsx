@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 
 type CloneInput = {
   readonly remoteUrl: string
@@ -69,6 +70,19 @@ export function GitCloneDialog({ open, busy, onOpenChange, onSubmit }: GitCloneD
     await onSubmit({ remoteUrl: remoteUrl.trim(), targetPath: targetPath.trim(), name })
   }
 
+  const chooseTargetPath = async () => {
+    setError(null)
+    try {
+      const selectedPath = await getSynapseBridge()?.repository?.chooseDirectory()
+
+      if (selectedPath) {
+        setTargetPath(selectedPath)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "选择目录失败。")
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} data-track="git-clone-dialog">
       <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
@@ -87,12 +101,17 @@ export function GitCloneDialog({ open, busy, onOpenChange, onSubmit }: GitCloneD
           </div>
           <div className="grid gap-2">
             <Label htmlFor="git-clone-target-path">保存到</Label>
-            <Input
-              id="git-clone-target-path"
-              value={targetPath}
-              onChange={(event) => setTargetPath(event.target.value)}
-              autoComplete="off"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="git-clone-target-path"
+                value={targetPath}
+                onChange={(event) => setTargetPath(event.target.value)}
+                autoComplete="off"
+              />
+              <Button type="button" variant="outline" disabled={busy} onClick={() => void chooseTargetPath()}>
+                选择文件夹
+              </Button>
+            </div>
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <DialogFooter>
@@ -133,6 +152,20 @@ export function GitAddLocalDialog({ open, busy, onOpenChange, onSubmit }: GitAdd
     await onSubmit({ localPath: localPath.trim(), name: resolvedName })
   }
 
+  const chooseLocalPath = async () => {
+    setError(null)
+    try {
+      const selectedPath = await getSynapseBridge()?.repository?.chooseDirectory()
+
+      if (selectedPath) {
+        setLocalPath(selectedPath)
+        setName(basename(selectedPath))
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "选择目录失败。")
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} data-track="git-add-local-dialog">
       <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
@@ -142,12 +175,17 @@ export function GitAddLocalDialog({ open, busy, onOpenChange, onSubmit }: GitAdd
           </DialogHeader>
           <div className="grid gap-2">
             <Label htmlFor="git-add-local-path">本地路径</Label>
-            <Input
-              id="git-add-local-path"
-              value={localPath}
-              onChange={(event) => setLocalPath(event.target.value)}
-              autoComplete="off"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="git-add-local-path"
+                value={localPath}
+                readOnly
+                autoComplete="off"
+              />
+              <Button type="button" variant="outline" disabled={busy} onClick={() => void chooseLocalPath()}>
+                选择文件夹
+              </Button>
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="git-add-local-name">仓库名称</Label>
