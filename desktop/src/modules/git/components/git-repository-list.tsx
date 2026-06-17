@@ -108,11 +108,15 @@ export function GitRepositoryList({
             ) : (
               <div className="divide-y divide-border overflow-hidden rounded-lg border bg-background">
                 {repositories.map((repository) => (
-                  <button
+                  <div
                     key={repository.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     className="grid w-full gap-3 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                     onClick={() => onOpenRepository(repository)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") onOpenRepository(repository)
+                    }}
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{repository.name}</span>
@@ -158,7 +162,7 @@ export function GitRepositoryList({
                         进入
                       </Button>
                     </span>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
