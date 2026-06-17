@@ -37,11 +37,13 @@ describe("AppsModule", () => {
 
     expect(document.querySelector("h2")).toBeNull()
     expect(findButton("资源仓库")).toBeTruthy()
+    expect(findButton("Git")).toBeTruthy()
     expect(findButton("本地数据库")).toBeTruthy()
     expect(findButton("IDE 管理")).toBeTruthy()
     expect(findButton("用量监控")).toBeTruthy()
     expect(findButton("价格管理")).toBeTruthy()
     expect(document.body.textContent).toContain("技能、规则、提示词")
+    expect(document.body.textContent).toContain("仓库、提交、同步")
     expect(document.body.textContent).toContain("表、字段、数据记录")
     expect(document.body.textContent).toContain("编辑器扫描与安装状态")
     expect(document.body.textContent).toContain("CC 与 Codex 用量")
@@ -56,7 +58,7 @@ describe("AppsModule", () => {
   it("uses an external-link icon for app launch actions", async () => {
     await renderAppsModule(roots)
 
-    expect(document.querySelectorAll(".lucide-external-link")).toHaveLength(5)
+    expect(document.querySelectorAll(".lucide-external-link")).toHaveLength(6)
     expect(document.querySelector(".lucide-chevron-right")).toBeNull()
   })
 

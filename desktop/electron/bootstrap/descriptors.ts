@@ -94,8 +94,18 @@ import {
   AutomationService,
   createBuiltinAutomationTriggerRegistry,
 } from "../services/automation"
+import { pathExists } from "../services/fs-utils"
 import { createBuiltinMainActionRegistry } from "../action-runtime/builtin-actions"
 import { configureGitCommandSecurity } from "../services/git-command"
+import { createGitBranchService, type GitBranchService } from "../services/git-client/git-branch-service"
+import { createGitClientCommandRunner, type GitClientCommandRunner } from "../services/git-client/git-command-runner"
+import { createGitCloneService, type GitCloneService } from "../services/git-client/git-clone-service"
+import { createGitCommitService, type GitCommitService } from "../services/git-client/git-commit-service"
+import { createGitEnvironmentService, type GitEnvironmentService } from "../services/git-client/git-environment-service"
+import { createGitHistoryService, type GitHistoryService } from "../services/git-client/git-history-service"
+import { createGitRepositoryRegistry, type GitRepositoryRegistry } from "../services/git-client/git-repository-registry"
+import { createGitStatusService, type GitStatusService } from "../services/git-client/git-status-service"
+import { createGitSyncService, type GitSyncService } from "../services/git-client/git-sync-service"
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
@@ -1514,6 +1524,109 @@ export const coreHttpTestDescriptor: ServiceDescriptor<{ initialized: true }> = 
       auditSink: ctx.auditSink,
     })
     return { initialized: true }
+  },
+}
+
+export const gitCommandRunnerDescriptor: ServiceDescriptor<GitClientCommandRunner> = {
+  id: "git.command-runner",
+  criticality: "degraded",
+  create() {
+    return createGitClientCommandRunner()
+  },
+}
+
+export const gitRepositoryRegistryDescriptor: ServiceDescriptor<GitRepositoryRegistry> = {
+  id: "git.repository-registry",
+  criticality: "degraded",
+  create() {
+    return createGitRepositoryRegistry({ userDataPath: app.getPath("userData") })
+  },
+}
+
+export const gitEnvironmentServiceDescriptor: ServiceDescriptor<GitEnvironmentService> = {
+  id: "git.environment-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner"],
+  create(ctx) {
+    return createGitEnvironmentService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      homeDir: os.homedir(),
+      pathExists,
+      platform: process.platform,
+    })
+  },
+}
+
+export const gitCloneServiceDescriptor: ServiceDescriptor<GitCloneService> = {
+  id: "git.clone-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner", "git.repository-registry"],
+  create(ctx) {
+    return createGitCloneService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      registry: ctx.registry.get<GitRepositoryRegistry>("git.repository-registry"),
+      pathExists,
+    })
+  },
+}
+
+export const gitStatusServiceDescriptor: ServiceDescriptor<GitStatusService> = {
+  id: "git.status-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner"],
+  create(ctx) {
+    return createGitStatusService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      pathExists,
+    })
+  },
+}
+
+export const gitCommitServiceDescriptor: ServiceDescriptor<GitCommitService> = {
+  id: "git.commit-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner"],
+  create(ctx) {
+    return createGitCommitService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+    })
+  },
+}
+
+export const gitSyncServiceDescriptor: ServiceDescriptor<GitSyncService> = {
+  id: "git.sync-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner", "git.status-service"],
+  create(ctx) {
+    const statusService = ctx.registry.get<GitStatusService>("git.status-service")
+    return createGitSyncService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      getSnapshot: (repository) => statusService.getSnapshot(repository),
+    })
+  },
+}
+
+export const gitBranchServiceDescriptor: ServiceDescriptor<GitBranchService> = {
+  id: "git.branch-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner", "git.status-service"],
+  create(ctx) {
+    const statusService = ctx.registry.get<GitStatusService>("git.status-service")
+    return createGitBranchService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      getSnapshot: (repository) => statusService.getSnapshot(repository),
+    })
+  },
+}
+
+export const gitHistoryServiceDescriptor: ServiceDescriptor<GitHistoryService> = {
+  id: "git.history-service",
+  criticality: "degraded",
+  dependsOn: ["git.command-runner"],
+  create(ctx) {
+    return createGitHistoryService({
+      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+    })
   },
 }
 

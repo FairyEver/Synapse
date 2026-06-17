@@ -7,6 +7,7 @@ import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/em
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { DatabaseModule } from "@/modules/database"
 import { EditorScanModule } from "@/modules/editor-scan"
+import { GitModule } from "@/modules/git"
 import { ModelPriceModule } from "@/modules/model-price"
 import { ResourceRepositoryModule } from "@/modules/resource-repository"
 import { UsageMonitorModule } from "@/modules/usage-analysis"
@@ -73,6 +74,7 @@ export function SystemAppWindowApp() {
     )
   }
   if (appId === "database") return <DatabaseModule />
+  if (appId === "git") return <GitModule />
   if (appId === "editor-scan") return <EditorScanModule />
   if (appId === "usage-monitor") return <UsageMonitorModule />
   if (appId === "model-price") return <ModelPriceModule />

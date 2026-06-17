@@ -105,6 +105,15 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.run-statuses",
         "core.workflow.snapshots",
         "core.workflow.window-manager",
+        "git.branch-service",
+        "git.clone-service",
+        "git.command-runner",
+        "git.commit-service",
+        "git.environment-service",
+        "git.history-service",
+        "git.repository-registry",
+        "git.status-service",
+        "git.sync-service",
         "knowledge-base.service",
         "knowledge-base.storage-migration-service",
         "provider",
@@ -128,6 +137,15 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.workflow",
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
+    expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
+    expect(byId.get("git.repository-registry")?.dependsOn).toEqual([])
+    expect(byId.get("git.environment-service")?.dependsOn).toEqual(["git.command-runner"])
+    expect(byId.get("git.clone-service")?.dependsOn).toEqual(["git.command-runner", "git.repository-registry"])
+    expect(byId.get("git.status-service")?.dependsOn).toEqual(["git.command-runner"])
+    expect(byId.get("git.commit-service")?.dependsOn).toEqual(["git.command-runner"])
+    expect(byId.get("git.sync-service")?.dependsOn).toEqual(["git.command-runner", "git.status-service"])
+    expect(byId.get("git.branch-service")?.dependsOn).toEqual(["git.command-runner", "git.status-service"])
+    expect(byId.get("git.history-service")?.dependsOn).toEqual(["git.command-runner"])
     expect(byId.get("core.permission-guard")?.dependsOn).toEqual([])
     expect(byId.get("core.process-runtime")?.dependsOn).toEqual([])
     expect(byId.get("core.app-icon")?.dependsOn).toEqual([])

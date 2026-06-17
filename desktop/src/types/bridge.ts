@@ -233,6 +233,17 @@ import type {
   SynapseRepositoryUpdatedEvent,
   SynapseRepositoryValidationResult,
 } from "./repository"
+import type {
+  SynapseGitBranch,
+  SynapseGitCommitDetail,
+  SynapseGitCommitSummary,
+  SynapseGitDiffResult,
+  SynapseGitEnvironmentState,
+  SynapseGitOperationResult,
+  SynapseGitRemoteKind,
+  SynapseGitRepository,
+  SynapseGitRepositorySnapshot,
+} from "./git"
 import type { SynapseAppUpdateState } from "./update"
 import type {
   AutomationChangedEvent,
@@ -734,6 +745,43 @@ export type SynapseBridge = {
     onContentOpenRequest: (
       listener: (request: SynapseSystemAppContentOpenRequest) => void,
     ) => () => void
+  }
+  git: {
+    checkEnvironment: () => Promise<SynapseGitEnvironmentState>
+    configureIdentity: (input: { userName: string; userEmail: string }) => Promise<void>
+    listRepositories: () => Promise<SynapseGitRepository[]>
+    addLocalRepository: (input: { name: string; localPath: string }) => Promise<SynapseGitRepository>
+    removeRepository: (repositoryId: string) => Promise<void>
+    cloneRepository: (input: {
+      remoteUrl: string
+      targetPath: string
+      name: string
+    }) => Promise<{ repository: SynapseGitRepository; remoteKind: SynapseGitRemoteKind }>
+    getSnapshot: (repositoryId: string) => Promise<SynapseGitRepositorySnapshot>
+    getDiff: (input: {
+      repositoryId: string
+      path: string
+      originalPath?: string | null
+      staged: boolean
+    }) => Promise<SynapseGitDiffResult>
+    commit: (input: {
+      repositoryId: string
+      message: string
+      paths: string[]
+    }) => Promise<SynapseGitOperationResult>
+    fetch: (repositoryId: string) => Promise<SynapseGitOperationResult>
+    pull: (repositoryId: string) => Promise<SynapseGitOperationResult>
+    push: (repositoryId: string) => Promise<SynapseGitOperationResult>
+    sync: (repositoryId: string) => Promise<SynapseGitOperationResult>
+    listBranches: (repositoryId: string) => Promise<SynapseGitBranch[]>
+    checkoutBranch: (repositoryId: string, branchName: string) => Promise<void>
+    createBranch: (repositoryId: string, branchName: string) => Promise<void>
+    listHistory: (input: {
+      repositoryId: string
+      limit: number
+      offset: number
+    }) => Promise<SynapseGitCommitSummary[]>
+    getCommit: (repositoryId: string, hash: string) => Promise<SynapseGitCommitDetail>
   }
   account: {
     getState: () => Promise<SynapseAccountState>
