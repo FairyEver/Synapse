@@ -106,9 +106,9 @@ model DriveItem {
 }
 ```
 
-`type` is `file` or `folder`. `storageKey` is required for active files and null for folders. `storageKey` should be shaped like `drive/<driveItemId>`.
+`type` is `file` or `folder`. `storageKey` is required for active files and null for folders. New files use storage keys shaped like `drive/<driveItemId>`. Same-name overwrite uploads may move the active file to an item-scoped replacement key while keeping the same `DriveItem.id`.
 
-Same-name files are allowed in the same folder. Same-name folders should be rejected in the same parent in the first version to keep navigation and move dialogs unambiguous. This rule can be enforced in service validation rather than a partial unique index if soft-delete behavior makes the index awkward.
+Uploading a file with the same normalized name into the same folder overwrites the newest active same-name file instead of creating another visible duplicate. The overwrite preserves the existing `DriveItem.id` and share links, uploads bytes to a replacement object first, then switches metadata after storage verification. Historical same-name duplicates are not migrated or cleaned automatically. Same-name folders are reused by folder upload and rejected by manual folder creation in the same parent to keep navigation and move dialogs unambiguous.
 
 ### DriveShare
 
@@ -184,6 +184,8 @@ model DriveUploadSession {
 ```
 
 Upload credentials are not stored in this table. It stores only the server-created upload intent, expected object key, expected size, status, and expiry.
+
+`reservedBytes` stores the quota reservation for this upload session. New uploads reserve the full expected size. Same-name overwrite uploads reserve only `max(newSize - currentSize, 0)` so replacing a file with a smaller file does not require extra quota and completion adjusts used bytes by the final size delta.
 
 ## Storage And Credential Model
 

@@ -5,8 +5,8 @@ import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinitio
 const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.item.list" as CapabilityId, title: "List drive items", description: "List Synapse Drive files and folders under a parent folder.", mutates: false },
   { id: "drive.item.get" as CapabilityId, title: "Get drive item", description: "Get metadata for one Synapse Drive file or folder.", mutates: false },
-  { id: "drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive and complete the direct upload session.", mutates: true },
-  { id: "drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive while preserving relative paths.", mutates: true },
+  { id: "drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive, overwriting the newest same-name file in the target folder.", mutates: true },
+  { id: "drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive, merging same-name folders and overwriting same-name files.", mutates: true },
   { id: "drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
   { id: "drive.item.rename" as CapabilityId, title: "Rename item", description: "Rename a Synapse Drive file or folder.", mutates: true },
   { id: "drive.item.move" as CapabilityId, title: "Move item", description: "Move a Synapse Drive file or folder.", mutates: true },
@@ -72,7 +72,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_upload",
-      description: "Upload one local file to Synapse Drive using server-prepared direct upload. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
+      description: "Upload one local file to Synapse Drive using server-prepared direct upload. A same-name file in the target folder is overwritten while preserving its item id and share links. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -86,7 +86,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_folder_upload",
-      description: "Upload a local folder to Synapse Drive while preserving relative paths. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
+      description: "Upload a local folder to Synapse Drive while preserving relative paths. Same-name folders are merged and same-name files are overwritten. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
       inputSchema: {
         type: "object",
         properties: {

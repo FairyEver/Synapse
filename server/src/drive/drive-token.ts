@@ -8,6 +8,10 @@ export function driveStorageKeyForItem(itemId: string): string {
   return `drive/${itemId}`
 }
 
+export function driveOverwriteStorageKeyForSession(itemId: string, sessionId: string): string {
+  return `drive/${itemId}/overwrites/${sessionId}`
+}
+
 export function isValidDriveItemName(value: string): boolean {
   const name = value.normalize("NFC")
   if (!name) return false

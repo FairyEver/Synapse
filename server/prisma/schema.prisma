@@ -331,6 +331,7 @@ model DriveUploadSession {
   expectedName   String    @db.VarChar(255)
   expectedSize   BigInt
   expectedMime   String?   @db.VarChar(255)
+  reservedBytes  BigInt    @default(0)
   status         String    @db.VarChar(32)
   credentialKind String    @db.VarChar(32)
   expiresAt      DateTime

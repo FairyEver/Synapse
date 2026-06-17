@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   createDriveShareId,
+  driveOverwriteStorageKeyForSession,
   driveStorageKeyForItem,
   isValidDriveItemName,
 } from "./drive-token"
@@ -12,6 +13,10 @@ describe("drive token helpers", () => {
 
   it("builds storage keys from server item ids", () => {
     expect(driveStorageKeyForItem("item_123")).toBe("drive/item_123")
+  })
+
+  it("builds item-scoped overwrite storage keys", () => {
+    expect(driveOverwriteStorageKeyForSession("item_123", "session_456")).toBe("drive/item_123/overwrites/session_456")
   })
 
   it("accepts normal file names", () => {

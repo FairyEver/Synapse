@@ -35,6 +35,8 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 1. If the user did not specify a target folder, omit `parentId` so the file or folder is uploaded to the Drive root directory.
 2. For a single local file, call `drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
 3. For a local folder, call `drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve the relative paths returned by the tool.
+   - Uploading a same-name file to the same Drive folder overwrites the existing newest active file while preserving its item id and share links.
+   - Uploading a same-name folder merges into the existing folder; same-name files inside it are overwritten and missing files are added.
 4. To open or preview an item for the owner, call `drive_item_preview_get`. It returns the browser snapshot, preview metadata, children, and available download/render URLs without creating a share.
 5. To read a small previewable text file, call `drive_file_content_read`. Use `drive_file_download_create` instead for binary, oversized, or non-previewable files.
 6. To save Drive content locally, call `drive_file_download_create` for a file or `drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.
