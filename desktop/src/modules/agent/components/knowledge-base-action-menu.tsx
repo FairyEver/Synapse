@@ -1,4 +1,4 @@
-import { BookOpen, ChevronDown } from "lucide-react"
+import { BookOpen, ChevronDown, FolderOpen } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +25,7 @@ type KnowledgeBaseActionMenuProps = {
   readonly disabled?: boolean
   readonly onSend: (commandText: string) => void
   readonly onInsert: (commandText: string) => void
+  readonly onOpenSourceManager?: () => void
 }
 
 export function KnowledgeBaseActionMenu({
@@ -32,8 +33,9 @@ export function KnowledgeBaseActionMenu({
   disabled,
   onSend,
   onInsert,
+  onOpenSourceManager,
 }: KnowledgeBaseActionMenuProps) {
-  if (actions.length === 0) return null
+  if (actions.length === 0 && !onOpenSourceManager) return null
 
   return (
     <DropdownMenu data-track="agent-knowledge-base-actions">
@@ -55,6 +57,12 @@ export function KnowledgeBaseActionMenu({
         align="start"
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
+        {onOpenSourceManager ? (
+          <DropdownMenuItem onSelect={onOpenSourceManager}>
+            <FolderOpen data-icon="inline-start" />
+            <span className="min-w-0 flex-1 truncate">资料管理</span>
+          </DropdownMenuItem>
+        ) : null}
         {actions.map((item) => (
           <HoverCard key={`${item.action}:${item.commandText}`} openDelay={100} closeDelay={100}>
             <HoverCardTrigger asChild>

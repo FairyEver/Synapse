@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseAgentSessionSummary } from "@/types/agent"
+import type { SynapseProjectConfig } from "@/types/config"
 import { AgentConversationWorkspace } from "../components/agent-conversation-workspace"
 import type { AgentConversationWorkspaceController } from "../components/agent-conversation-workspace"
 
@@ -74,11 +75,34 @@ describe("AgentConversationWorkspace", () => {
 
     expect(container.querySelector('button[aria-label="新窗口打开"]')).toBeNull()
   })
+
+  it("does not render a source manager button in the conversation header", () => {
+    const container = renderWorkspace({
+      mode: "embedded",
+      project: {
+        id: "project-1",
+        name: "知识库",
+        path: "synapse-kb://project-1",
+        capabilities: {
+          knowledgeBase: {
+            enabled: true,
+            schemaVersion: 1,
+            templateVersion: "test-template",
+            managed: true,
+            runtimeId: "runtime-1",
+          },
+        },
+      },
+    })
+
+    expect(container.textContent).not.toContain("资料管理")
+  })
 })
 
 function renderWorkspace(options: {
   readonly mode: "embedded" | "window"
   readonly onOpenDetached?: (target: { projectId: string; conversationId: string; sessionKey: string }) => void
+  readonly project?: SynapseProjectConfig
 }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -88,6 +112,7 @@ function renderWorkspace(options: {
     root.render(
       <AgentConversationWorkspace
         session={session}
+        project={options.project}
         target={{ projectId: "project-1", conversationId: "conversation-1", sessionKey: "local:renderer" }}
         chat={createController()}
         quickInputs={[]}

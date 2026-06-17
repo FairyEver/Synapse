@@ -1921,6 +1921,54 @@ describe("AgentComposer", () => {
     expect(onSendCommand).toHaveBeenCalledWith("/wiki ingest")
   })
 
+  it("opens source manager from the knowledge base menu without sending a command", async () => {
+    const onOpenSourceManager = vi.fn()
+    const onSendCommand = vi.fn()
+    const onDraftChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          knowledgeBaseActions={[{
+            label: "汲取来源",
+            description: "扫描 .raw/ 变更来源并导入到 wiki。",
+            action: "send",
+            commandText: "/wiki ingest",
+          }]}
+          onKnowledgeBaseCommand={onSendCommand}
+          onOpenKnowledgeBaseSourceManager={onOpenSourceManager}
+          onDraftChange={onDraftChange}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openKnowledgeBaseMenu(container)
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find((node) => node.textContent === "资料管理") as HTMLElement
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item.click()
+    })
+
+    expect(onOpenSourceManager).toHaveBeenCalledTimes(1)
+    expect(onSendCommand).not.toHaveBeenCalled()
+    expect(onDraftChange).not.toHaveBeenCalled()
+  })
+
   it("shows knowledge base command descriptions in hover cards", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

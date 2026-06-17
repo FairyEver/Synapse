@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, CircleHelp, Copy, Download, ExternalLink, FolderOpen, LoaderCircle, ShieldAlert } from "lucide-react"
+import { AlertTriangle, CircleHelp, Copy, Download, ExternalLink, LoaderCircle, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "@/app-shell/logging"
@@ -547,18 +547,6 @@ function AgentConversationWorkspace({
               </Button>
             ) : null}
 
-            {canManageKnowledgeSources ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleOpenSourceManager()}
-              >
-                <FolderOpen data-icon="inline-start" />
-                资料管理
-              </Button>
-            ) : null}
-
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -648,6 +636,9 @@ function AgentConversationWorkspace({
         slashCandidates={slashCandidates}
         knowledgeBaseActions={knowledgeBaseActions}
         onKnowledgeBaseCommand={sendComposerCommand}
+        onOpenKnowledgeBaseSourceManager={canManageKnowledgeSources
+          ? () => void handleOpenSourceManager()
+          : undefined}
         onInputKeyDown={handleInputKeyDown}
         onSubmit={handleSubmit}
         onCancelTurn={() => void chat.cancelTurn(target)}
