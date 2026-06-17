@@ -184,8 +184,9 @@ describe("DriveModule", () => {
     expect(html).toContain("我的分享")
     expect(html).not.toContain("已分享")
     expect(html).not.toContain("已发布")
-    expect(html).toContain("上传文件")
-    expect(html).toContain("上传文件夹")
+    expect(html).toContain("上传")
+    expect(html).not.toContain("上传文件")
+    expect(html).not.toContain("上传文件夹")
     expect(html).toContain("新建文件夹")
     expect(html).toContain("刷新")
   })
@@ -205,6 +206,16 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("全部")
     expect(document.body.textContent).toContain("分享")
     expect(document.body.textContent).not.toContain("发布")
+  })
+
+  it("groups cloud drive actions in the top toolbar", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(driveToolbarActionTexts()).toEqual(["上传", "新建文件夹", "我的分享", "刷新"])
+    for (const button of driveToolbarButtons()) {
+      expect(button.querySelector("svg")).toBeNull()
+    }
   })
 
   it("shows drive capacity usage next to the title", async () => {
@@ -227,12 +238,13 @@ describe("DriveModule", () => {
     expect(document.querySelector('[aria-label="云盘容量"]')?.getAttribute("aria-valuenow")).toBe("50")
   })
 
-  it("keeps file actions in the list toolbar without local search", () => {
+  it("keeps file actions available without local search", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
     expect(html).not.toContain('aria-label="搜索"')
-    expect(html).toContain("上传文件")
-    expect(html).toContain("上传文件夹")
+    expect(html).toContain("上传")
+    expect(html).not.toContain("上传文件")
+    expect(html).not.toContain("上传文件夹")
     expect(html).toContain("新建文件夹")
   })
 
@@ -249,8 +261,10 @@ describe("DriveModule", () => {
     expect(document.body.textContent).not.toContain("synapse:account:drive:items:list")
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
-    expect(queryButton("新建文件夹")).toBeNull()
+    expect(getButton("上传").disabled).toBe(true)
+    expect(getButton("新建文件夹").disabled).toBe(true)
     expect(getButton("我的分享").disabled).toBe(true)
+    expect(getButton("刷新").disabled).toBe(true)
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
@@ -271,8 +285,10 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("在浏览器完成登录后会自动刷新。")
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
-    expect(queryButton("新建文件夹")).toBeNull()
+    expect(getButton("上传").disabled).toBe(true)
+    expect(getButton("新建文件夹").disabled).toBe(true)
     expect(getButton("我的分享").disabled).toBe(true)
+    expect(getButton("刷新").disabled).toBe(true)
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
   })
@@ -340,20 +356,25 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("上传失败")
     expect(document.body.textContent).toContain("删除中")
     expect(document.body.textContent).toContain("已分享")
+    expect(tableHeaderTexts()).toEqual(["名称", "大小", "更新时间", ""])
+    expect(actionColumnHeader()?.getAttribute("aria-label")).toBe("操作")
+    expect(getTableRow("pending.txt").querySelector("td")?.textContent).toContain("上传中")
+    expect(getTableRow("failed.txt").querySelector("td")?.textContent).toContain("上传失败")
+    expect(getTableRow("deleting.txt").querySelector("td")?.textContent).toContain("删除中")
+    expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("已分享")
     const failedBadge = Array.from(document.querySelectorAll<HTMLElement>("[data-slot='badge']"))
       .find((element) => element.textContent === "上传失败")
     expect(failedBadge?.dataset.variant).toBe("destructive")
     for (const name of ["pending.txt", "failed.txt", "deleting.txt"]) {
-      const shareButton = Array.from(getTableRow(name).querySelectorAll<HTMLButtonElement>("button"))
-        .find((button) => button.textContent?.trim() === "分享")
+      const shareButton = rowButton(name, "分享")
       expect(shareButton?.disabled).toBe(true)
+      expect(rowButton(name, "取消分享")).toBeUndefined()
     }
-    const activeShareButton = Array.from(getTableRow("shared.txt").querySelectorAll<HTMLButtonElement>("button"))
-      .find((button) => button.textContent?.trim() === "分享")
-    expect(activeShareButton?.disabled).toBe(false)
+    expect(rowButton("shared.txt", "分享")).toBeUndefined()
+    expect(rowButton("shared.txt", "取消分享")?.disabled).toBe(false)
   })
 
-  it("shows shared state in the compact status cell", async () => {
+  it("shows shared state inline with the item name", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({
         activeShareId: "share-row-1",
@@ -369,7 +390,8 @@ describe("DriveModule", () => {
     await flushAct()
 
     const reportRow = getTableRow("report.html")
-    const reportBadges = Array.from(reportRow.querySelectorAll<HTMLElement>("[data-slot='badge']"))
+    const nameCell = reportRow.querySelector("td")
+    const reportBadges = Array.from(nameCell?.querySelectorAll<HTMLElement>("[data-slot='badge']") ?? [])
       .map((element) => element.textContent)
     expect(reportBadges).toEqual(["已分享"])
   })
@@ -398,7 +420,7 @@ describe("DriveModule", () => {
 
     await render(<DriveModule />)
     await flushAct()
-    await clickText("作业范文")
+    await clickDriveRow("作业范文")
     await flushAct()
 
     expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "folder-1" })
@@ -465,6 +487,74 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("cui.md")
   })
 
+  it("keeps item names selectable without opening the folder row", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      createDriveItem({ id: "file-1", name: "常用.md", type: "file" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    const folderName = driveItemNameElement("作业范文")
+    const fileName = driveItemNameElement("常用.md")
+    expect(folderName.className).toContain("select-text")
+    expect(fileName.className).toContain("select-text")
+
+    await act(async () => {
+      folderName.click()
+      await flushPromises()
+    })
+
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).not.toContain("cui.md")
+  })
+
+  it("opens a name context menu for copying name and drive path", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-1", name: "cui.md", type: "file", parentId: "folder-1" }),
+      ])
+
+    await render(<DriveModule />)
+    await flushAct()
+    await clickDriveRow("作业范文")
+    await flushAct()
+
+    await openDriveNameContextMenu("cui.md")
+
+    expect(menuItemTexts()).toEqual(["复制名称", "复制路径", "重命名"])
+
+    await clickText("复制名称")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("cui.md")
+    expect(mocks.toast).toHaveBeenCalledWith("名称已复制")
+
+    await openDriveNameContextMenu("cui.md")
+    await clickText("复制路径")
+
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("/作业范文/cui.md")
+    expect(mocks.toast).toHaveBeenCalledWith("路径已复制")
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
+  })
+
+  it("renames an item from the name context menu", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "cui.md", type: "file" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openDriveNameContextMenu("cui.md")
+    await clickText("重命名")
+
+    expect(document.body.textContent).toContain("重命名")
+    expect(document.querySelector<HTMLInputElement>("#drive-item-name")?.value).toBe("cui.md")
+  })
+
   it("uses file type icons, table columns, and a grouped breadcrumb trail", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
@@ -480,14 +570,12 @@ describe("DriveModule", () => {
 
     expect(document.querySelector(".lucide-file-text")).not.toBeNull()
     expect(document.querySelector(".lucide-folder")).not.toBeNull()
-    expect(document.querySelector('[aria-label="打开文件夹 作业范文"]')).not.toBeNull()
+    expect(driveItemNameElement("作业范文").className).toContain("select-text")
     expect(document.querySelector("table")).not.toBeNull()
-    expect(document.body.textContent).toContain("名称")
-    expect(document.body.textContent).toContain("状态")
-    expect(document.body.textContent).toContain("大小")
-    expect(document.body.textContent).toContain("更新时间")
+    expect(tableHeaderTexts()).toEqual(["名称", "大小", "更新时间", ""])
+    expect(actionColumnHeader()?.getAttribute("aria-label")).toBe("操作")
 
-    await clickText("作业范文")
+    await clickDriveRow("作业范文")
     await flushAct()
 
     const breadcrumbNav = document.querySelector<HTMLElement>('nav[aria-label="当前位置"]')
@@ -589,7 +677,7 @@ describe("DriveModule", () => {
     })
 
     expect(document.body.textContent).toContain("正在上传 1 项")
-    expect(getButton("上传文件").disabled).toBe(true)
+    expect(getButton("上传").disabled).toBe(true)
     expect(getButton("新建文件夹").disabled).toBe(false)
 
     await act(async () => {
@@ -613,7 +701,7 @@ describe("DriveModule", () => {
       .mockResolvedValueOnce([])
     await render(<DriveModule />)
     await flushAct()
-    await clickText("作业范文")
+    await clickDriveRow("作业范文")
     await flushAct()
 
     const input = document.querySelector('input[type="file"]:not([webkitdirectory])')
@@ -662,7 +750,7 @@ describe("DriveModule", () => {
       await flushPromises()
     })
 
-    await clickText("作业范文")
+    await clickDriveRow("作业范文")
     await flushAct()
 
     await act(async () => {
@@ -723,7 +811,7 @@ describe("DriveModule", () => {
       .mockResolvedValueOnce([])
     await render(<DriveModule />)
     await flushAct()
-    await clickText("作业范文")
+    await clickDriveRow("作业范文")
     await flushAct()
 
     const dropzone = getDriveDropzone()
@@ -804,18 +892,49 @@ describe("DriveModule", () => {
     expect(mocks.toast).toHaveBeenCalledWith(`一次最多上传 ${DRIVE_LOCAL_UPLOAD_MAX_FILES} 个文件，请拆分后再上传。`)
   })
 
-  it("shows cancel share when a shared item keeps its active share id", async () => {
+  it("shows cancel share as the shared row action", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "shared.txt", type: "file", shared: true, activeShareId: "share-row-1" }),
     ])
     await render(<DriveModule />)
     await flushAct()
 
-    await openFirstMenu()
-    await clickText("取消分享")
+    expect(rowButton("shared.txt", "分享")).toBeUndefined()
+    expect(rowButton("shared.txt", "取消分享")).not.toBeUndefined()
+
+    await clickRowButtonText("shared.txt", "取消分享")
 
     expect(mocks.disableDriveShare).toHaveBeenCalledWith({ shareId: "share-row-1" })
     expect(mocks.toast).toHaveBeenCalledWith("已取消分享")
+  })
+
+  it("opens existing share details from the shared badge", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "文档", type: "folder", shared: true, activeShareId: "share-row-1" }),
+    ])
+    mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([
+      createDriveShare({
+        id: "share-row-1",
+        itemId: "folder-1",
+        itemName: "文档",
+        itemType: "folder",
+        shareId: "shr_folder",
+        url: "https://synapse.test/share/shr_folder",
+        urlWithPassword: "https://synapse.test/share/shr_folder?password=FolderPwd",
+        password: "FolderPwd",
+        expiresAt: "2026-06-20T05:18:52.000Z",
+      }),
+    ]))
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickRowButtonText("文档", "已分享")
+
+    expect(mocks.listDriveShares).toHaveBeenCalledWith({ offset: 0, limit: 100 })
+    expect(document.body.textContent).toContain("文件夹已分享")
+    expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_folder?password=FolderPwd")
+    expect(document.body.textContent).toContain("FolderPwd")
+    expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
   })
 
   it("shares a file from the row action and shows the share URL actions", async () => {
@@ -847,6 +966,9 @@ describe("DriveModule", () => {
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test?password=AbC234xy")
     expect(document.body.textContent).toContain("AbC234xy")
     expect(document.body.textContent).toContain("2026")
+    expect(getButton("复制链接").querySelector("svg")).toBeNull()
+    expect(getButton("打开文件").querySelector("svg")).toBeNull()
+    expect(queryButtonByLabel("复制密码")?.querySelector("svg")).toBeNull()
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
 
     await clickButtonText("打开文件")
@@ -861,7 +983,7 @@ describe("DriveModule", () => {
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
   })
 
-  it("keeps row actions focused on opening and sharing", async () => {
+  it("keeps row actions focused on sharing, previewing, and deleting", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "notes.md", type: "file", mimeType: "text/markdown" }),
     ])
@@ -869,11 +991,54 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getButton("打开")).not.toBeNull()
+    expect(getButton("预览")).not.toBeNull()
     expect(getButton("分享")).not.toBeNull()
-    expect(queryButton("预览")).toBeNull()
-    expect(queryButton("删除")).toBeNull()
+    expect(queryButton("取消分享")).toBeNull()
+    expect(queryButton("打开")).toBeNull()
+    expect(getButton("删除")).not.toBeNull()
+    expect(getButton("更多").querySelector("svg")).toBeNull()
+    expect(rowButton("notes.md", "删除")?.className).not.toContain("bg-destructive")
+    expect(rowActions("notes.md")?.className).not.toContain("gap-")
+    expect(rowButtonTexts("notes.md")).toEqual(["分享", "预览", "删除", "更多"])
+    expect(actionColumnHeader()?.className).toContain("w-52")
     expect(queryButtonByLabel("更多 notes.md")).not.toBeNull()
+  })
+
+  it("keeps trailing row actions aligned when share labels differ", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "notes.md", type: "file" }),
+      createDriveItem({ id: "file-2", name: "shared.md", type: "file", shared: true, activeShareId: "share-row-1" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(rowButtonTexts("notes.md")).toEqual(["分享", "预览", "删除", "更多"])
+    expect(rowButtonTexts("shared.md")).toEqual(["取消分享", "预览", "删除", "更多"])
+  })
+
+  it("uses a text upload menu without button icons", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]:not([webkitdirectory])')
+    const folderInput = document.querySelector<HTMLInputElement>('input[type="file"][webkitdirectory]')
+    if (!fileInput || !folderInput) throw new Error("Drive upload inputs not found")
+    const fileInputClick = vi.spyOn(fileInput, "click")
+    const folderInputClick = vi.spyOn(folderInput, "click")
+
+    expect(getButton("上传").querySelector("svg")).toBeNull()
+    expect(getButton("新建文件夹").querySelector("svg")).toBeNull()
+    expect(queryButton("上传文件")).toBeNull()
+    expect(queryButton("上传文件夹")).toBeNull()
+
+    await openButtonMenu("上传")
+    await clickText("上传文件")
+    expect(fileInputClick).toHaveBeenCalledTimes(1)
+
+    await openButtonMenu("上传")
+    await clickText("上传文件夹")
+    expect(folderInputClick).toHaveBeenCalledTimes(1)
   })
 
   it("opens a file preview from the row action", async () => {
@@ -884,9 +1049,9 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getButton("打开").querySelector("svg")).toBeNull()
+    expect(getButton("预览").querySelector("svg")).toBeNull()
 
-    await clickButtonText("打开")
+    await clickButtonText("预览")
 
     expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: "file-1" })
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/drive/items/file-1")
@@ -904,7 +1069,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("打开")
+    await clickButtonText("预览")
 
     expect(mocks.getDriveItemPreviewUrl).toHaveBeenCalledWith({ itemId: "folder-1" })
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/drive/items/folder-1")
@@ -920,7 +1085,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("打开")
+    await clickButtonText("预览")
 
     expect(mocks.openExternal).not.toHaveBeenCalled()
     expect(mocks.toast).toHaveBeenCalledWith("打开失败")
@@ -1004,7 +1169,7 @@ describe("DriveModule", () => {
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test?password=AbC234xy")
   })
 
-  it("renders row menu items without icons and separates action groups", async () => {
+  it("renders row menu items without icons and keeps deletion outside the menu", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({
         id: "html-1",
@@ -1023,13 +1188,12 @@ describe("DriveModule", () => {
     const menu = document.body.querySelector<HTMLElement>("[role='menu']")
     expect(menu).not.toBeNull()
     expect(menu?.querySelectorAll("[role='menuitem'] svg")).toHaveLength(0)
-    expect(menu?.querySelectorAll("[role='separator']").length).toBeGreaterThanOrEqual(1)
+    expect(menu?.querySelectorAll("[role='separator']")).toHaveLength(0)
     expect(menuItemTexts()).toEqual([
-      "取消分享",
       "重命名",
       "移动",
-      "删除",
     ])
+    expect(rowButton("report.html", "删除")).not.toBeUndefined()
   })
 
   it("keeps row management actions in the more menu without duplicate share", async () => {
@@ -1041,7 +1205,8 @@ describe("DriveModule", () => {
 
     await openFirstMenu()
 
-    expect(menuItemTexts()).toEqual(["取消分享", "重命名", "移动", "删除"])
+    expect(menuItemTexts()).toEqual(["重命名", "移动"])
+    expect(rowButton("shared.txt", "删除")).not.toBeUndefined()
   })
 
   it("opens an in-app confirmation before deleting an item", async () => {
@@ -1051,8 +1216,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await openFirstMenu()
-    await clickText("删除")
+    await clickRowButtonText("report.txt", "删除")
 
     expect(document.body.textContent).toContain("确认删除")
     expect(document.body.textContent).toContain("report.txt")
@@ -1357,11 +1521,51 @@ function menuItemTexts(): string[] {
     .map((element) => element.textContent?.trim() ?? "")
 }
 
+function tableHeaderTexts(): string[] {
+  return Array.from(document.body.querySelectorAll<HTMLTableCellElement>("thead th"))
+    .map((element) => element.textContent?.trim() ?? "")
+}
+
+function actionColumnHeader(): HTMLTableCellElement | undefined {
+  return Array.from(document.body.querySelectorAll<HTMLTableCellElement>("thead th"))
+    .find((element) => element.getAttribute("aria-label") === "操作")
+}
+
+function driveToolbarButtons(): HTMLButtonElement[] {
+  const toolbar = document.querySelector<HTMLElement>('[data-testid="drive-toolbar-actions"]')
+  if (!toolbar) throw new Error("Drive toolbar actions not found")
+  return Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"))
+}
+
+function driveToolbarActionTexts(): string[] {
+  return driveToolbarButtons().map((button) => button.textContent?.trim() ?? "")
+}
+
 function getTableRow(text: string): HTMLTableRowElement {
   const row = Array.from(document.body.querySelectorAll<HTMLTableRowElement>("tbody tr"))
     .find((candidate) => candidate.textContent?.includes(text))
   if (!row) throw new Error(`Table row not found: ${text}`)
   return row
+}
+
+function driveItemNameElement(text: string): HTMLElement {
+  const element = getTableRow(text).querySelector<HTMLElement>(`[title="${text}"]`)
+  if (!element) throw new Error(`Drive item name not found: ${text}`)
+  return element
+}
+
+function rowButton(rowText: string, buttonText: string): HTMLButtonElement | undefined {
+  return Array.from(getTableRow(rowText).querySelectorAll<HTMLButtonElement>("button"))
+    .find((button) => button.textContent?.trim() === buttonText)
+}
+
+function rowButtonTexts(rowText: string): string[] {
+  return Array.from(getTableRow(rowText).querySelectorAll<HTMLButtonElement>("td:last-child button"))
+    .map((button) => button.textContent?.trim() ?? "")
+}
+
+function rowActions(rowText: string): HTMLElement | null {
+  return getTableRow(rowText).querySelector<HTMLElement>("td:last-child > div")
 }
 
 function getDriveDropzone(): HTMLElement {
@@ -1445,6 +1649,16 @@ async function openFirstMenu(): Promise<void> {
   })
 }
 
+async function openButtonMenu(text: string): Promise<void> {
+  await act(async () => {
+    const trigger = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+      .find((candidate) => candidate.textContent?.trim() === text)
+    if (!trigger) throw new Error(`Menu button not found: ${text}`)
+    trigger.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    await flushPromises()
+  })
+}
+
 async function openRowMenu(name: string): Promise<void> {
   await act(async () => {
     const trigger = document.querySelector<HTMLButtonElement>(`button[aria-label="更多 ${name}"]`)
@@ -1461,10 +1675,35 @@ async function closeMenus(): Promise<void> {
   })
 }
 
+async function openDriveNameContextMenu(name: string): Promise<void> {
+  const target = driveItemNameElement(name)
+  await act(async () => {
+    target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }))
+    await flushPromises()
+  })
+}
+
 async function clickButtonText(text: string): Promise<void> {
   const element = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => candidate.textContent?.trim() === text)
   if (!element) throw new Error(`Button not found: ${text}`)
+  await act(async () => {
+    element.click()
+    await flushPromises()
+  })
+}
+
+async function clickDriveRow(rowText: string): Promise<void> {
+  const row = getTableRow(rowText)
+  await act(async () => {
+    row.click()
+    await flushPromises()
+  })
+}
+
+async function clickRowButtonText(rowText: string, buttonText: string): Promise<void> {
+  const element = rowButton(rowText, buttonText)
+  if (!element) throw new Error(`Button not found in row ${rowText}: ${buttonText}`)
   await act(async () => {
     element.click()
     await flushPromises()

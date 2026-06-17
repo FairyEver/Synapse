@@ -15,6 +15,7 @@ import {
 import {
   clampDriveFloatingMenuPosition,
   DriveRendererContent,
+  getDriveFloatingMenuDriveBrowserUrl,
   getDriveFloatingMenuNewWindowUrl,
   shouldSuppressDriveFloatingMenuOpen,
 } from './renderers/drive-renderer-shell'
@@ -440,7 +441,8 @@ describe('drive browser view model', () => {
     expect(html).toContain('文件操作')
     expect(source).toContain("'fixed top-5 right-5 z-50'")
     expect(source).not.toContain("'fixed right-5 bottom-5 z-50'")
-    expect(source).toContain("const driveBrowserUrl = snapshot.context === 'owner' ? snapshot.current.browserUrl : null")
+    expect(source).toContain("const driveBrowserUrl = getDriveFloatingMenuDriveBrowserUrl(snapshot)")
+    expect(source).toContain('buildConsoleDriveItemBrowserUrl(snapshot.current.id)')
     expect(source).toContain('href={driveBrowserUrl}')
     expect(source).toContain('在云盘中查看')
     expect(html).toContain('<h1>Notes</h1>')
@@ -459,6 +461,23 @@ describe('drive browser view model', () => {
     })
 
     expect(getDriveFloatingMenuNewWindowUrl(snapshot)).toBeNull()
+  })
+
+  it('links standalone owner files back to their console drive location', () => {
+    const owner = createSnapshot({
+      context: 'owner',
+      surface: 'standalone',
+      current: {
+        ...baseCurrent(),
+        id: 'file/a',
+        type: 'file',
+        browserUrl: '/drive/items/file%2Fa',
+      },
+    })
+    const shared = createSnapshot({ context: 'share' })
+
+    expect(getDriveFloatingMenuDriveBrowserUrl(owner)).toBe('/console/drive/items/file%2Fa?surface=console')
+    expect(getDriveFloatingMenuDriveBrowserUrl(shared)).toBeNull()
   })
 
   it('clamps the floating file menu inside the viewport', () => {

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import {
+  buildConsoleDriveBrowserUrl,
+  buildConsoleDriveItemBrowserUrl,
+  type DriveBrowserSnapshotDto,
+} from '@synapse/shared'
 import { Download, ExternalLink, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -75,6 +79,13 @@ export function shouldSuppressDriveFloatingMenuOpen(
 export function getDriveFloatingMenuNewWindowUrl(snapshot: DriveBrowserSnapshotDto): string | null {
   if (snapshot.surface === 'standalone' || snapshot.context === 'share') return null
   return snapshot.preview?.visitUrl ?? null
+}
+
+export function getDriveFloatingMenuDriveBrowserUrl(snapshot: DriveBrowserSnapshotDto): string | null {
+  if (snapshot.context !== 'owner') return null
+  return snapshot.current.type === 'folder'
+    ? buildConsoleDriveBrowserUrl(snapshot.current.id)
+    : buildConsoleDriveItemBrowserUrl(snapshot.current.id)
 }
 
 export function DriveRendererShell({
@@ -183,7 +194,7 @@ function DriveRendererFloatingMenu({
   readonly selected: DriveRendererOption
   readonly onSelect: (id: DriveRendererId) => void
 }) {
-  const driveBrowserUrl = snapshot.context === 'owner' ? snapshot.current.browserUrl : null
+  const driveBrowserUrl = getDriveFloatingMenuDriveBrowserUrl(snapshot)
   const newWindowUrl = getDriveFloatingMenuNewWindowUrl(snapshot)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<DriveFloatingMenuDragState | null>(null)
