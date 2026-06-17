@@ -15,6 +15,7 @@ export type DriveAccessExpiresIn = "3d" | "7d" | "30d" | "1y" | "forever"
 export type DriveBrowserAccessContext = "owner" | "share"
 export type DriveBrowserSurface = "standalone" | "console"
 export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "markdown" | "download-only"
+export type DriveFileVersionSource = "upload" | "online_edit" | "restore"
 
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
@@ -65,6 +66,43 @@ export interface DriveFolderUploadPrepareResult {
     readonly item: DriveItemDto
     readonly upload: DriveUploadPrepareResult["upload"]
   }>
+}
+
+export interface DriveFileVersionDto {
+  readonly id: string
+  readonly itemId: string
+  readonly versionNumber: number
+  readonly size: string
+  readonly mimeType: string | null
+  readonly source: DriveFileVersionSource
+  readonly isCurrent: boolean
+  readonly isPinned: boolean
+  readonly deletePending: boolean
+  readonly restoredFromVersionId: string | null
+  readonly createdAt: string
+  readonly createdBy: string | null
+}
+
+export interface DriveFileVersionListInput {
+  readonly offset?: number
+  readonly limit?: number
+}
+
+export interface DriveFileVersionListPageDto {
+  readonly items: readonly DriveFileVersionDto[]
+  readonly total: number
+  readonly page: DriveBrowserChildrenPageDto
+}
+
+export interface DriveFileVersionPinInput {
+  readonly isPinned: boolean
+}
+
+export interface DriveFileVersionDownloadResultDto {
+  readonly itemId: string
+  readonly versionId: string
+  readonly versionNumber: number
+  readonly outputPath: string
 }
 
 export interface DriveShareDto {

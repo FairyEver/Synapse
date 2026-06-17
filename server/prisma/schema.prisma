@@ -66,6 +66,7 @@ model User {
   driveItems                  DriveItem[]
   driveUsage                  DriveUsage?
   driveUploadSessions         DriveUploadSession[]
+  driveFileVersions           DriveFileVersion[]
   contentStoreItems           ContentStoreItem[]
   contentStoreDrafts          ContentStoreDraft[]
   contentStoreInstallSessions ContentStoreInstallSession[]
@@ -285,6 +286,7 @@ model DriveItem {
   updatedAt            DateTime                @updatedAt
   shares               DriveShare[]
   uploadSessions       DriveUploadSession[]
+  fileVersions         DriveFileVersion[]
 
   @@index([userId, parentId, deletedAt, createdAt])
   @@index([userId, deletedAt, updatedAt])
@@ -342,6 +344,31 @@ model DriveUploadSession {
   @@index([userId, status, createdAt])
   @@index([expiresAt, status])
   @@index([itemId])
+}
+
+model DriveFileVersion {
+  id                    String    @id @default(cuid())
+  itemId                String
+  item                  DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versionNumber         Int
+  storageKey            String    @unique
+  size                  BigInt
+  mimeType              String?   @db.VarChar(255)
+  etag                  String?
+  source                String    @db.VarChar(32)
+  createdBy             String?
+  restoredFromVersionId String?
+  isPinned              Boolean   @default(false)
+  deletedAt             DateTime?
+  deletePending         Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+
+  @@unique([itemId, versionNumber])
+  @@index([itemId, deletedAt, versionNumber])
+  @@index([userId, createdAt])
+  @@index([deletePending])
 }
 
 model AuditLog {
