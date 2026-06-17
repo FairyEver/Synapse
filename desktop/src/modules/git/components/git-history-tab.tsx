@@ -1,6 +1,12 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Spinner } from "@/components/ui/spinner"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { SynapseGitFileChange } from "@/types/git"
 import type { useGitHistory } from "../hooks/use-git-history"
 
@@ -26,26 +32,30 @@ function formatDate(value: string): string {
 
 export function GitHistoryTab({ history }: GitHistoryTabProps) {
   return (
-    <div className="grid h-full min-h-0 min-w-0 md:grid-cols-[minmax(240px,360px)_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 min-w-0 bg-background md:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
       <ScrollArea className="min-h-0 min-w-0 border-b md:border-r md:border-b-0">
-        <div className="divide-y divide-border">
+        <div className="min-h-full divide-y divide-border">
           {history.loading ? (
-            <div className="flex h-32 items-center justify-center">
-              <Spinner />
-            </div>
+            <GitCommitListSkeleton />
           ) : history.commits.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">没有提交记录。</div>
+            <Empty className="min-h-40 rounded-none border-0 bg-transparent">
+              <EmptyHeader>
+                <EmptyTitle>暂无提交</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
           ) : (
             history.commits.map((commit) => (
               <button
                 key={commit.hash}
                 type="button"
                 data-active={history.selectedCommit?.hash === commit.hash ? "true" : undefined}
-                className="grid w-full gap-1 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
+                className="grid w-full gap-1.5 px-4 py-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
                 onClick={() => void history.loadCommit(commit.hash)}
               >
                 <span className="truncate text-sm font-medium">{commit.subject}</span>
-                <span className="truncate text-xs text-muted-foreground">{commit.shortHash} · {formatDate(commit.committedAt)}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {commit.shortHash} · {commit.authorName} · {formatDate(commit.committedAt)}
+                </span>
               </button>
             ))
           )}
@@ -64,14 +74,12 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
             </Alert>
           ) : null}
           {history.detailLoading ? (
-            <div className="flex h-32 items-center justify-center">
-              <Spinner />
-            </div>
+            <GitCommitDetailSkeleton />
           ) : history.selectedCommit ? (
             <>
-              <div className="space-y-1">
-                <div className="truncate text-sm font-medium">{history.selectedCommit.subject}</div>
-                <div className="truncate text-xs text-muted-foreground">
+              <div className="grid min-w-0 gap-1">
+                <div className="truncate text-base font-semibold">{history.selectedCommit.subject}</div>
+                <div className="truncate text-sm text-muted-foreground">
                   {history.selectedCommit.shortHash} · {history.selectedCommit.authorName} · {formatDate(history.selectedCommit.committedAt)}
                 </div>
               </div>
@@ -79,8 +87,8 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
                 <div className="max-w-full divide-y divide-border overflow-hidden rounded-lg border" data-git-history-file-list="true">
                   {history.selectedCommit.files.map((file) => (
                     <div key={`${file.path}:${file.originalPath ?? ""}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm">
-                      <span className="min-w-0 truncate">{file.path}</span>
-                      <span className="shrink-0 text-xs text-muted-foreground">{statusLabels[file.status]}</span>
+                      <span className="min-w-0 truncate font-medium">{file.path}</span>
+                      <Badge variant="outline">{statusLabels[file.status]}</Badge>
                     </div>
                   ))}
                 </div>
@@ -90,10 +98,40 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
               </pre>
             </>
           ) : (
-            <div className="text-sm text-muted-foreground">选择提交查看详情。</div>
+            <Empty className="min-h-64 border bg-muted/20">
+              <EmptyHeader>
+                <EmptyTitle>选择提交查看详情</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
           )}
         </div>
       </ScrollArea>
+    </div>
+  )
+}
+
+function GitCommitListSkeleton() {
+  return (
+    <div className="grid gap-3 p-4">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={index} className="grid gap-2">
+          <Skeleton className="h-4 w-full max-w-64" />
+          <Skeleton className="h-3 w-40" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function GitCommitDetailSkeleton() {
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-2">
+        <Skeleton className="h-5 w-80 max-w-full" />
+        <Skeleton className="h-4 w-56 max-w-full" />
+      </div>
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="h-64 w-full" />
     </div>
   )
 }

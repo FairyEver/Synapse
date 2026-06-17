@@ -1,10 +1,16 @@
 import { useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Spinner } from "@/components/ui/spinner"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitFileChange, SynapseGitRepository } from "@/types/git"
@@ -52,15 +58,17 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
 
   return (
     <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto]">
-      <div className="grid min-h-0 min-w-0 gap-0 border-b md:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]">
+      <div className="grid min-h-0 min-w-0 gap-0 border-b bg-background md:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]">
         <ScrollArea className="min-h-0 min-w-0 border-b md:border-r md:border-b-0">
-          <div className="divide-y divide-border">
+          <div className="min-h-full divide-y divide-border">
             {status.loading ? (
-              <div className="flex h-32 items-center justify-center">
-                <Spinner />
-              </div>
+              <GitListSkeleton />
             ) : changes.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">没有改动。</div>
+              <Empty className="min-h-40 rounded-none border-0 bg-transparent">
+                <EmptyHeader>
+                  <EmptyTitle>暂无改动</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
             ) : (
               changes.map((change) => {
                 const checked = status.selectedPaths.includes(change.path)
@@ -71,7 +79,7 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
                     role="button"
                     tabIndex={0}
                     data-active={active ? "true" : undefined}
-                    className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
+                    className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-2.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
                     onClick={() => void status.loadDiff(change)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") void status.loadDiff(change)
@@ -84,8 +92,10 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
                       onCheckedChange={() => status.togglePath(change.path)}
                     />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm">{change.path}</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">{statusLabels[change.status]}</span>
+                      <span className="block truncate text-sm font-medium">{change.path}</span>
+                      <span className="mt-1 block">
+                        <Badge variant="outline">{statusLabels[change.status]}</Badge>
+                      </span>
                     </span>
                   </div>
                 )
@@ -100,20 +110,34 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
         >
           <div className="min-w-0 max-w-full overflow-hidden p-4" data-git-changes-detail-content="true">
             {status.diffLoading ? (
-              <div className="flex h-32 items-center justify-center">
-                <Spinner />
-              </div>
+              <GitDiffSkeleton />
             ) : status.diff ? (
-              <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
-                {status.diff.binary ? "文件已变更。" : (status.diff.text || "没有文本差异。")}
-              </pre>
+              <div className="grid min-w-0 gap-3">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{status.diff.path}</div>
+                    {status.selectedFile ? (
+                      <div className="mt-1">
+                        <Badge variant="outline">{statusLabels[status.selectedFile.status]}</Badge>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
+                  {status.diff.binary ? "文件已变更。" : (status.diff.text || "没有文本差异。")}
+                </pre>
+              </div>
             ) : (
-              <div className="text-sm text-muted-foreground">选择文件查看差异。</div>
+              <Empty className="min-h-64 border bg-muted/20">
+                <EmptyHeader>
+                  <EmptyTitle>选择文件查看差异</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
             )}
           </div>
         </ScrollArea>
       </div>
-      <div className="grid gap-3 p-4">
+      <div className="grid gap-3 bg-background p-4">
         {status.error || error ? (
           <Alert variant="destructive">
             <AlertTitle>操作失败</AlertTitle>
@@ -124,6 +148,7 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
           <Label htmlFor="git-commit-message">提交说明</Label>
           <Textarea
             id="git-commit-message"
+            className="min-h-24"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
           />
@@ -134,6 +159,34 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function GitListSkeleton() {
+  return (
+    <div className="grid gap-0 p-3">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 py-2">
+          <Skeleton className="size-4" />
+          <span className="grid min-w-0 gap-2">
+            <Skeleton className="h-4 w-full max-w-56" />
+            <Skeleton className="h-5 w-12" />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function GitDiffSkeleton() {
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-2">
+        <Skeleton className="h-4 w-64 max-w-full" />
+        <Skeleton className="h-5 w-12" />
+      </div>
+      <Skeleton className="h-64 w-full" />
     </div>
   )
 }
