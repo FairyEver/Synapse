@@ -44,7 +44,10 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-3">
+      <div
+        className="grid shrink-0 gap-3 border-b bg-background px-4 py-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+        data-git-workbench-toolbar="true"
+      >
         <Button type="button" variant="outline" size="sm" onClick={onBack}>
           <ArrowLeft data-icon="inline-start" />
           返回
@@ -53,20 +56,20 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
           <div className="truncate text-sm font-medium">{repository.name}</div>
           <div className="truncate text-xs text-muted-foreground">{repository.localPath}</div>
         </div>
-        <GitBranchSwitcher
-          repository={repository}
-          currentBranch={currentBranch}
-          disabled={busy !== null}
-          onChanged={refreshAll}
-        />
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
+          <GitBranchSwitcher
+            repository={repository}
+            currentBranch={currentBranch}
+            disabled={busy !== null}
+            onChanged={refreshAll}
+          />
           <Button
             type="button"
             size="sm"
             disabled={busy !== null}
             onClick={() => void run("sync", () => requireSynapseBridge().git.sync(repository.id))}
           >
-            同步
+            {busy === "sync" ? "同步中" : "同步"}
           </Button>
           <Button
             type="button"
@@ -75,7 +78,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
             disabled={busy !== null}
             onClick={() => void run("pull", () => requireSynapseBridge().git.pull(repository.id))}
           >
-            拉取
+            {busy === "pull" ? "拉取中" : "拉取"}
           </Button>
           <Button
             type="button"
@@ -84,7 +87,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
             disabled={busy !== null}
             onClick={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
           >
-            推送
+            {busy === "push" ? "推送中" : "推送"}
           </Button>
         </div>
       </div>
@@ -97,7 +100,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
         </div>
       ) : null}
       <Tabs value={view} onValueChange={setView} className="flex min-h-0 flex-1 flex-col">
-        <div className="shrink-0 border-b px-4 py-2">
+        <div className="shrink-0 border-b bg-background px-4 py-2">
           <TabsList>
             <TabsTrigger value="changes">改动</TabsTrigger>
             <TabsTrigger value="history">历史</TabsTrigger>

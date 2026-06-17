@@ -99,6 +99,82 @@ describe("GitWorkbench", () => {
     expect(document.body.textContent).toContain("abc123")
   })
 
+  it("shows loading labels while running toolbar actions", async () => {
+    const pendingSync = deferred()
+    bridge.git.sync.mockReturnValue(pendingSync.promise)
+    await renderWorkbench(roots)
+
+    await act(async () => {
+      findButton("同步").click()
+      await flush()
+    })
+
+    expect(findButton("同步中").textContent).toContain("同步中")
+
+    pendingSync.resolve({ completedAt: "now", message: "已同步。" })
+    await act(async () => {
+      await pendingSync.promise
+      await flush()
+    })
+  })
+
+  it("uses shared empty states for empty worktree panes and keeps submit disabled", () => {
+    const status: ReturnType<typeof useGitWorktreeStatus> = {
+      snapshot: {
+        repositoryId: "repo-1",
+        pathExists: true,
+        isGitRepository: true,
+        currentBranch: "main",
+        upstream: "origin/main",
+        ahead: 0,
+        behind: 0,
+        hasConflicts: false,
+        changes: [],
+      },
+      selectedFile: null,
+      diff: null,
+      selectedPaths: [],
+      loading: false,
+      diffLoading: false,
+      error: null,
+      refresh: vi.fn(async () => undefined),
+      loadDiff: vi.fn(async () => undefined),
+      togglePath: vi.fn(),
+    }
+    const html = renderToStaticMarkup(<GitChangesTab repository={repository} status={status} />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const emptyStates = container.querySelectorAll('[data-slot="empty"]')
+    const submit = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("提交选中文件"))
+
+    expect(emptyStates).toHaveLength(2)
+    expect(container.textContent).toContain("暂无改动")
+    expect(container.textContent).toContain("选择文件查看差异")
+    expect(submit?.hasAttribute("disabled")).toBe(true)
+  })
+
+  it("uses shared empty states for empty history panes", () => {
+    const html = renderToStaticMarkup(<GitHistoryTab
+      history={{
+        commits: [],
+        selectedCommit: null,
+        loading: false,
+        detailLoading: false,
+        error: null,
+        refresh: vi.fn(async () => undefined),
+        loadCommit: vi.fn(async () => undefined),
+      }}
+    />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    expect(container.querySelectorAll('[data-slot="empty"]')).toHaveLength(2)
+    expect(container.textContent).toContain("暂无提交")
+    expect(container.textContent).toContain("选择提交查看详情")
+  })
+
   it("keeps long history details inside the right pane", () => {
     const longPath = "app/portal/views/simple/finance/form/001/page/pc/edit/index.vue"
     const longDiffLine = `diff --git a/${longPath} b/${longPath} `.repeat(4)
@@ -280,4 +356,14 @@ function textareaByLabel(label: string): HTMLTextAreaElement {
     throw new Error(`Textarea not found: ${label}`)
   }
   return textarea
+}
+
+function deferred<T = unknown>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve
+    reject = innerReject
+  })
+  return { promise, resolve, reject }
 }
