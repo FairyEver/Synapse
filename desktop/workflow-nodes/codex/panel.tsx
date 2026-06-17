@@ -1,16 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { CircleHelp, Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import {
   HoverCard,
   HoverCardContent,
@@ -23,6 +14,7 @@ import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
 import type { WorkflowValidationDisplayItem } from "@/modules/workflow/editor/validation-display"
 import { CollapsibleSection } from "../collapsible-section"
+import { FieldHelp, LabelWithHelp, type FieldHelpContent } from "../field-help"
 import { ProjectSelect } from "../project-select"
 import { PromptEditor } from "../prompt-editor"
 import { VariableBindingEditor } from "../variable-binding-editor"
@@ -35,12 +27,7 @@ import type {
 
 const MODEL_INHERIT_LABEL = "继承当前 Codex 配置"
 
-type HelpTopic = {
-  title: string
-  summary: string
-  impact: string
-  note?: string
-}
+type HelpTopic = FieldHelpContent
 
 const CODEX_FIELD_HELP = {
   approvalPolicy: {
@@ -507,7 +494,7 @@ function LabeledInput({
 }) {
   return (
     <div className="grid gap-1">
-      <LabelRow id={id} label={label} help={help} />
+      <LabelWithHelp id={id} label={label} help={help} />
       <Input
         id={id}
         aria-label={label}
@@ -541,7 +528,7 @@ function LabeledSelect({
 }) {
   return (
     <div className="grid gap-1">
-      <LabelRow id={id} label={label} help={help} />
+      <LabelWithHelp id={id} label={label} help={help} />
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger id={id} aria-label={label} className="h-7 w-full text-xs">
           <SelectValue>{displayValue}</SelectValue>
@@ -576,7 +563,7 @@ function BooleanRow({
         onCheckedChange={(value) => onChange(value === true)}
       />
       <Label htmlFor={id} className="text-xs font-normal">{label}</Label>
-      {help ? <FieldHelpButton topic={help} /> : null}
+      {help ? <FieldHelp help={help} /> : null}
     </div>
   )
 }
@@ -605,7 +592,7 @@ function StringListEditor({
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <LabelRow label={label} help={help} />
+        <LabelWithHelp label={label} help={help} />
         <Button
           type="button"
           size="sm"
@@ -667,7 +654,7 @@ function ConfigOverrideEditor({
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <LabelRow label="配置覆盖" help={help} />
+        <LabelWithHelp label="配置覆盖" help={help} />
         <Button
           type="button"
           size="sm"
@@ -735,7 +722,7 @@ function ModelInput({
 
   return (
     <div className="grid gap-1">
-      <LabelRow id={id} label={label} help={help} />
+      <LabelWithHelp id={id} label={label} help={help} />
       <Input
         id={id}
         aria-label={label}
@@ -796,44 +783,6 @@ function OptionLabel({ label, description }: { readonly label: string; readonly 
       <span className="truncate font-medium">{label}</span>
       <span className="truncate text-[11px] text-muted-foreground">{description}</span>
     </span>
-  )
-}
-
-function LabelRow({ id, label, help }: { readonly id?: string; readonly label: string; readonly help?: HelpTopic }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <Label htmlFor={id} className="text-xs">{label}</Label>
-      {help ? <FieldHelpButton topic={help} /> : null}
-    </div>
-  )
-}
-
-function FieldHelpButton({ topic }: { readonly topic: HelpTopic }) {
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="h-5 w-5"
-          aria-label={`查看${topic.title}说明`}
-        >
-          <CircleHelp className="h-3.5 w-3.5" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{topic.title}</DialogTitle>
-          <DialogDescription>{topic.summary}</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-2 text-sm">
-          <HelpLine label="影响" text={topic.impact} />
-          {topic.note ? <HelpLine label="注意" text={topic.note} /> : null}
-        </div>
-        <DialogFooter showCloseButton />
-      </DialogContent>
-    </Dialog>
   )
 }
 

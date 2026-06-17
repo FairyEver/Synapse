@@ -158,6 +158,34 @@ function getByLabelText(label: string): HTMLElement {
   throw new Error(`Unable to find label: ${label}`)
 }
 
+function elementName(element: HTMLElement): string {
+  const ariaLabel = element.getAttribute("aria-label")
+  if (ariaLabel) return ariaLabel
+  return element.textContent?.trim() ?? ""
+}
+
+function elementRole(element: HTMLElement): string | null {
+  const role = element.getAttribute("role")
+  if (role) return role
+  if (element.tagName === "BUTTON") return "button"
+  if (element.tagName === "INPUT" && (element as HTMLInputElement).type === "checkbox") return "checkbox"
+  return null
+}
+
+function getByRole(role: string, options: { name: string }): HTMLElement {
+  const match = allElements().find((element) => (
+    elementRole(element) === role && elementName(element) === options.name
+  ))
+  if (!match) throw new Error(`Unable to find role ${role} named ${options.name}`)
+  return match
+}
+
+function click(element: HTMLElement) {
+  act(() => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+  })
+}
+
 function changeInput(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set
   if (!setter) {
@@ -193,6 +221,28 @@ describe("ClaudeCodeNodePanel", () => {
     expect(text).toContain("权限模式")
     expect(text).toContain("模型")
     expect(text).toContain("Max turns")
+    expect(getByRole("button", { name: "查看权限模式说明" })).toBeTruthy()
+    expect(getByRole("button", { name: "查看额外目录说明" })).toBeTruthy()
+    expect(getByRole("button", { name: "查看保存调试文件说明" })).toBeTruthy()
+  })
+
+  it("opens field help dialogs", () => {
+    render(
+      <ClaudeCodeNodePanel
+        config={{ ...defaultClaudeCodeNodeConfig, prompt: "Run tests" }}
+        onChange={vi.fn()}
+        upstreamNodes={[]}
+        workflowParams={[]}
+        projects={[]}
+        validationItems={[]}
+      />,
+    )
+
+    click(getByRole("button", { name: "查看权限模式说明" }))
+
+    expect(getByText("权限模式")).toBeTruthy()
+    expect(getByText("控制 Claude Code 执行工具或修改文件前的授权方式。")).toBeTruthy()
+    expect(getByText("影响范围：工具调用、文件修改、无人值守运行和安全边界。")).toBeTruthy()
   })
 
   it("updates model input", () => {

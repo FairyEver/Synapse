@@ -356,6 +356,8 @@ describe('drive browser view model', () => {
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
     expect(html).toContain('aria-label="目录"')
+    expect(html).toContain('overflow-auto pl-4')
+    expect(html).not.toContain('overflow-auto border-l')
     expect(html).toContain('href="#notes"')
     expect(html).toContain('href="#details"')
     expect(html).toContain('<h1 id="notes">Notes</h1>')

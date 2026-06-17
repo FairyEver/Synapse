@@ -36,7 +36,7 @@ export function DriveMarkdownRenderer({
   return (
     <div className='mx-auto flex min-h-0 w-full max-w-6xl gap-6 px-4 py-6 md:px-6'>
       <aside className='hidden w-52 shrink-0 xl:block'>
-        <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto border-l border-border pl-4' aria-label='目录'>
+        <nav className='sticky top-6 max-h-[calc(100vh-3rem)] overflow-auto pl-4' aria-label='目录'>
           <p className='mb-2 text-xs font-medium text-muted-foreground'>目录</p>
           <MarkdownOutlineTree items={outline} />
         </nav>
