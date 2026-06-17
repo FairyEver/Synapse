@@ -256,6 +256,47 @@ describe("agent session IPC methods", () => {
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("message body")
   })
 
+  it("closes a detached conversation window after deleting its session", async () => {
+    const deleteSession = vi.fn().mockResolvedValue(true)
+    const conversationWindowService = createConversationWindowServiceMock()
+    const ctx = createContext({
+      agent: { deleteSession },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+      conversationWindowService,
+    })
+
+    await expect(sessionMethods.deleteSession.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })).resolves.toEqual({ ok: true })
+
+    expect(conversationWindowService.closeConversationWindow).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })
+  })
+
+  it("keeps detached windows open when session deletion returns false", async () => {
+    const deleteSession = vi.fn().mockResolvedValue(false)
+    const conversationWindowService = createConversationWindowServiceMock()
+    const ctx = createContext({
+      agent: { deleteSession },
+      dataRepo: {
+        namespace: vi.fn(),
+      } as unknown as DataRepository,
+      conversationWindowService,
+    })
+
+    await expect(sessionMethods.deleteSession.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-1",
+    })).resolves.toEqual({ ok: false })
+
+    expect(conversationWindowService.closeConversationWindow).not.toHaveBeenCalled()
+  })
+
   it("deletes an archived orphan session after its project was removed", async () => {
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [],
@@ -365,6 +406,7 @@ describe("agent session IPC methods", () => {
       openConversationWindow: vi.fn(async () => ({ opened: true })),
       focusConversationWindow: vi.fn(),
       listDetachedConversations: vi.fn(),
+      closeConversationWindow: vi.fn(),
     }
     const ctx = createContext({
       agent: {},
@@ -394,6 +436,7 @@ describe("agent session IPC methods", () => {
       openConversationWindow: vi.fn(),
       focusConversationWindow: vi.fn(() => ({ focused: true })),
       listDetachedConversations: vi.fn(),
+      closeConversationWindow: vi.fn(),
     }
     const ctx = createContext({
       agent: {},
@@ -422,6 +465,7 @@ describe("agent session IPC methods", () => {
         windowId: 10,
         openedAt: "2026-06-17T00:00:00.000Z",
       }]),
+      closeConversationWindow: vi.fn(),
     }
     const ctx = createContext({
       agent: {},
@@ -484,6 +528,7 @@ function createContext(overrides: {
     readonly openConversationWindow: ReturnType<typeof vi.fn>
     readonly focusConversationWindow: ReturnType<typeof vi.fn>
     readonly listDetachedConversations: ReturnType<typeof vi.fn>
+    readonly closeConversationWindow: ReturnType<typeof vi.fn>
   }
 }): IpcHandlerContext & {
   readonly projectContainers: Pick<ProjectContainerRegistry, "open">
@@ -509,12 +554,21 @@ function createContext(overrides: {
       if (serviceId === "core.project-containers") return projectContainers as T
       if (serviceId === "core.data-repository") return overrides.dataRepo as T
       if (serviceId === "core.window-manager" && overrides.windowManager) return overrides.windowManager as T
-      if (serviceId === AGENT_CONVERSATION_WINDOW_SERVICE_ID && overrides.conversationWindowService) {
-        return overrides.conversationWindowService as T
+      if (serviceId === AGENT_CONVERSATION_WINDOW_SERVICE_ID) {
+        return (overrides.conversationWindowService ?? createConversationWindowServiceMock()) as T
       }
       if (serviceId === "knowledge-base.storage-migration-service" && overrides.storageMigration) return overrides.storageMigration as T
       throw new Error(`Unknown service: ${serviceId}`)
     },
+  }
+}
+
+function createConversationWindowServiceMock() {
+  return {
+    openConversationWindow: vi.fn(async () => ({ opened: true })),
+    focusConversationWindow: vi.fn(() => ({ focused: true })),
+    listDetachedConversations: vi.fn(() => []),
+    closeConversationWindow: vi.fn(() => ({ closed: true })),
   }
 }
 

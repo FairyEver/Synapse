@@ -329,13 +329,27 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: DeleteSessionRequest) => {
       try {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
-        return { ok: await agent.deleteSession(request.conversationId) }
+        const ok = await agent.deleteSession(request.conversationId)
+        if (ok) {
+          const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
+          service.closeConversationWindow({
+            projectId: request.projectId,
+            conversationId: request.conversationId,
+          })
+        }
+        return { ok }
       } catch (rawError) {
         if (isProjectMissingError(rawError)) {
           try {
-            return {
-              ok: await deleteOrphanSession(ctx.resolve, request),
+            const ok = await deleteOrphanSession(ctx.resolve, request)
+            if (ok) {
+              const service = ctx.resolve<AgentConversationWindowService>(AGENT_CONVERSATION_WINDOW_SERVICE_ID)
+              service.closeConversationWindow({
+                projectId: request.projectId,
+                conversationId: request.conversationId,
+              })
             }
+            return { ok }
           } catch (fallbackError) {
             logger.warn("Agent orphan session deletion failed.", {
               projectId: request.projectId,

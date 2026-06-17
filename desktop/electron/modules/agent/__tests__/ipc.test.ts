@@ -28,6 +28,7 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
+import { AGENT_CONVERSATION_WINDOW_SERVICE_ID } from "../../../services/agent-conversation-window-service"
 import { defaultKnowledgeBaseUserDataPath } from "../../../services/knowledge-base/managed-path"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { agentIpcModule } from "../ipc"
@@ -1854,6 +1855,12 @@ function createHarness(overrides: {
     on: () => () => {},
     onType: () => () => {},
   }
+  const conversationWindowService = {
+    openConversationWindow: vi.fn(async () => ({ opened: true })),
+    focusConversationWindow: vi.fn(() => ({ focused: true })),
+    listDetachedConversations: vi.fn(() => []),
+    closeConversationWindow: vi.fn(() => ({ closed: true })),
+  }
   const resolve: IpcHandlerContext["resolve"] = <T>(serviceId: string): T => {
     if (serviceId === "core.project-containers") return projectContainers as T
     if (serviceId === "core.event-bus") return eventBus as T
@@ -1861,11 +1868,19 @@ function createHarness(overrides: {
     if (serviceId === "core.permission-guard") return permissionGuard as T
     if (serviceId === "core.audit-sink") return auditSink as T
     if (serviceId === PROVIDER_SERVICE_ID) return providerService as T
+    if (serviceId === AGENT_CONVERSATION_WINDOW_SERVICE_ID) return conversationWindowService as T
     throw new Error(`Unknown service: ${serviceId}`)
   }
   harness.registry.register(agentIpcModule, {
     moduleId: "agent",
     resolve,
   })
-  return Object.assign(harness, { projectContainers, eventBusEmits, dataRepository, permissionGuard, auditSink })
+  return Object.assign(harness, {
+    projectContainers,
+    eventBusEmits,
+    dataRepository,
+    permissionGuard,
+    auditSink,
+    conversationWindowService,
+  })
 }
