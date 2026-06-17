@@ -562,7 +562,7 @@ function DriveModule() {
             <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
             <Button variant="outline" size="sm" disabled={!accountAuthenticated || loading} onClick={() => setPublicLinksOpen(true)}>
               <Link2 data-icon="inline-start" />
-              公开链接
+              我的分享
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>

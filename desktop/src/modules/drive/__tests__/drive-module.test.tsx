@@ -181,7 +181,7 @@ describe("DriveModule", () => {
     const html = renderToStaticMarkup(<DriveModule />)
 
     expect(html).toContain("云盘")
-    expect(html).toContain("公开链接")
+    expect(html).toContain("我的分享")
     expect(html).not.toContain("已分享")
     expect(html).not.toContain("已发布")
     expect(html).toContain("上传文件")
@@ -194,11 +194,11 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getButton("公开链接")).not.toBeNull()
+    expect(getButton("我的分享")).not.toBeNull()
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
-    await clickButtonText("公开链接")
+    await clickButtonText("我的分享")
     await flushAct()
 
     expect(document.body.textContent).toContain("公开链接")
@@ -250,7 +250,7 @@ describe("DriveModule", () => {
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
     expect(queryButton("新建文件夹")).toBeNull()
-    expect(getButton("公开链接").disabled).toBe(true)
+    expect(getButton("我的分享").disabled).toBe(true)
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
@@ -272,7 +272,7 @@ describe("DriveModule", () => {
     expect(queryButton("上传文件")).toBeNull()
     expect(queryButton("上传文件夹")).toBeNull()
     expect(queryButton("新建文件夹")).toBeNull()
-    expect(getButton("公开链接").disabled).toBe(true)
+    expect(getButton("我的分享").disabled).toBe(true)
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
   })
@@ -286,7 +286,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushPromises()
 
-    expect(getButton("公开链接").disabled).toBe(true)
+    expect(getButton("我的分享").disabled).toBe(true)
     expect(queryButton("已分享")).toBeNull()
     expect(queryButton("已发布")).toBeNull()
 
@@ -1066,7 +1066,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("公开链接")
+    await clickButtonText("我的分享")
     await flushAct()
 
     const dialogContent = document.querySelector('[data-slot="dialog-content"]')
@@ -1091,7 +1091,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("公开链接")
+    await clickButtonText("我的分享")
     await flushAct()
 
     expect(mocks.listDriveShares).toHaveBeenCalledTimes(1)
@@ -1106,7 +1106,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    await clickButtonText("公开链接")
+    await clickButtonText("我的分享")
     await flushAct()
 
     expect(document.body.textContent).toContain("report.txt")
@@ -1161,7 +1161,7 @@ describe("DriveModule", () => {
 
     expect(getTableRow("report.txt").textContent).toContain("已分享")
 
-    await clickButtonText("公开链接")
+    await clickButtonText("我的分享")
     await flushAct()
     await clickButtonByLabel("取消分享 report.txt")
     await clickButtonText("关闭")
@@ -1175,7 +1175,7 @@ describe("DriveModule", () => {
     await flushAct()
 
     mocks.listDriveShares.mockReturnValueOnce(shares.promise)
-    await clickButtonText("公开链接")
+    await clickButtonText("我的分享")
 
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeNull()
 
@@ -1192,7 +1192,7 @@ describe("DriveModule", () => {
       .mockResolvedValueOnce(createDrivePublicLinksPage([]))
 
     await clickButtonText("关闭")
-    await clickButtonText("公开链接")
+    await clickButtonText("我的分享")
     await flushAct()
 
     expect(document.body.textContent).toContain("读取失败")
