@@ -901,6 +901,48 @@ describe("AgentModule pending prompt sessions", () => {
     expect(mocks.composerProps?.knowledgeBaseActions).toEqual([])
   })
 
+  it("keeps transcript toolbar actions grouped without spacing between icon buttons", async () => {
+    const session = {
+      ...targetSession,
+      providerId: "bailian",
+      modelTier: "sonnet",
+    }
+    mocks.chat = createChatState({
+      sessions: [session],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{ id: "entry-1", timestamp: "2026-05-13T00:00:00.000Z" }],
+      providers: {
+        agentType: "claude-code",
+        providers: [{
+          id: "bailian",
+          display: "百炼",
+          active: true,
+          scope: "global",
+          sonnetModel: "glm-5.1",
+        }],
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    const copyButton = document.querySelector<HTMLButtonElement>('button[aria-label="复制对话"]')
+    const exportButton = document.querySelector<HTMLButtonElement>('button[aria-label="导出对话"]')
+    const actionGroup = copyButton?.parentElement
+
+    expect(document.body.textContent).toContain("百炼 glm-5.1")
+    expect(actionGroup).toBe(exportButton?.parentElement)
+    expect(actionGroup?.className).toContain("gap-0")
+    expect(actionGroup?.parentElement?.className).toContain("gap-2")
+  })
+
   it("logs transcript copy failures with sanitized conversation context", async () => {
     const transcriptError = new Error("secret transcript IPC detail")
     mocks.bridge.agent.getTimeline.mockRejectedValue(transcriptError)

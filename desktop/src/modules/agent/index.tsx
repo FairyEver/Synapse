@@ -732,37 +732,39 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 </Button>
               ) : null}
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={!selectedSession || !selectedProjectId || chat.timeline.length === 0}
-                    onClick={() => void handleCopyTranscript()}
-                    aria-label="复制对话"
-                  >
-                    <Copy />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>复制对话</TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={!selectedSession || !selectedProjectId || chat.timeline.length === 0}
+                      onClick={() => void handleCopyTranscript()}
+                      aria-label="复制对话"
+                    >
+                      <Copy />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>复制对话</TooltipContent>
+                </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={!selectedSession || !selectedProjectId || chat.timeline.length === 0 || isExportingConversation}
-                    onClick={() => void handleExportConversation()}
-                    aria-label="导出对话"
-                  >
-                    {isExportingConversation ? <LoaderCircle className="animate-spin" /> : <Download />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>导出对话</TooltipContent>
-              </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={!selectedSession || !selectedProjectId || chat.timeline.length === 0 || isExportingConversation}
+                      onClick={() => void handleExportConversation()}
+                      aria-label="导出对话"
+                    >
+                      {isExportingConversation ? <LoaderCircle className="animate-spin" /> : <Download />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>导出对话</TooltipContent>
+                </Tooltip>
+              </div>
 
             </div>
           </div>
