@@ -112,12 +112,17 @@ export function GitRepositoryList({
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>删除 Git 仓库？</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>选择是否同时处理本地目录。</p>
+                {removalTarget ? (
+                  <p className="break-all text-foreground" data-allow-select="true">
+                    目录：{removalTarget.localPath}
+                  </p>
+                ) : null}
                 <RadioGroup
                   value={removalMode}
                   onValueChange={(value) => setRemovalMode(value as SynapseGitRepositoryRemoveMode)}
@@ -132,9 +137,6 @@ export function GitRepositoryList({
                     <Label htmlFor="git-remove-trash-local">移到废纸篓并移除记录</Label>
                   </div>
                 </RadioGroup>
-                {removalMode === "trash-local" && removalTarget ? (
-                  <p className="break-all">目录：{removalTarget.localPath}</p>
-                ) : null}
                 {removalError ? (
                   <p className="text-destructive">{removalError}</p>
                 ) : null}
@@ -238,15 +240,6 @@ export function GitRepositoryList({
                         >
                           <Upload data-icon="inline-start" />
                           推送
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={repositoryActionDisabled}
-                          onClick={(event) => stopAction(event, () => onOpenRepository(repository))}
-                        >
-                          进入
                         </Button>
                         <Button
                           type="button"

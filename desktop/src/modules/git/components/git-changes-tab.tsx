@@ -51,9 +51,9 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-      <div className="grid min-h-0 gap-0 border-b md:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]">
-        <ScrollArea className="min-h-0 border-b md:border-r md:border-b-0">
+    <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto]">
+      <div className="grid min-h-0 min-w-0 gap-0 border-b md:grid-cols-[minmax(220px,320px)_minmax(0,1fr)]">
+        <ScrollArea className="min-h-0 min-w-0 border-b md:border-r md:border-b-0">
           <div className="divide-y divide-border">
             {status.loading ? (
               <div className="flex h-32 items-center justify-center">
@@ -93,23 +93,25 @@ export function GitChangesTab({ repository, status }: GitChangesTabProps) {
             )}
           </div>
         </ScrollArea>
-        <div className="min-h-0">
-          <ScrollArea className="h-full">
-            <div className="p-4">
-              {status.diffLoading ? (
-                <div className="flex h-32 items-center justify-center">
-                  <Spinner />
-                </div>
-              ) : status.diff ? (
-                <pre className="overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
-                  {status.diff.binary ? "文件已变更。" : (status.diff.text || "没有文本差异。")}
-                </pre>
-              ) : (
-                <div className="text-sm text-muted-foreground">选择文件查看差异。</div>
-              )}
-            </div>
-          </ScrollArea>
-        </div>
+        <ScrollArea
+          className="min-h-0 min-w-0 max-w-full"
+          data-git-changes-detail-pane="true"
+          viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
+        >
+          <div className="min-w-0 max-w-full overflow-hidden p-4" data-git-changes-detail-content="true">
+            {status.diffLoading ? (
+              <div className="flex h-32 items-center justify-center">
+                <Spinner />
+              </div>
+            ) : status.diff ? (
+              <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
+                {status.diff.binary ? "文件已变更。" : (status.diff.text || "没有文本差异。")}
+              </pre>
+            ) : (
+              <div className="text-sm text-muted-foreground">选择文件查看差异。</div>
+            )}
+          </div>
+        </ScrollArea>
       </div>
       <div className="grid gap-3 p-4">
         {status.error || error ? (

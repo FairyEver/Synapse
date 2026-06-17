@@ -62,14 +62,14 @@ describe("GitModule repository list", () => {
     expect(countButtons("添加本地仓库")).toBeGreaterThan(0)
   })
 
-  it("uses the system app window toolbar for repository actions", async () => {
+  it("uses the system app window toolbar for repository actions without a redundant tab", async () => {
     await renderGitModule(roots)
 
     const toolbar = document.querySelector("[data-system-app-window-toolbar]")
     expect(toolbar).toBeTruthy()
     expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)]")
     expect(document.querySelector("[data-system-app-window-left-spacer]")).toBeTruthy()
-    expect(document.querySelector("[data-system-app-window-tabs]")?.textContent).toContain("仓库")
+    expect(document.querySelector("[data-system-app-window-tabs]")).toBeNull()
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("添加本地仓库")
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("克隆仓库")
   })
@@ -149,6 +149,7 @@ describe("GitModule repository list", () => {
 
     const syncButtons = buttonsByLabel("同步")
     expect(syncButtons).toHaveLength(2)
+    expect(countButtons("进入")).toBe(0)
 
     await click(syncButtons[0])
 
@@ -172,8 +173,13 @@ describe("GitModule repository list", () => {
     await renderGitModule(roots)
 
     await click(findButton("删除"))
-    expect(document.body.textContent).toContain("删除 Git 仓库？")
-    expect(document.body.textContent).toContain("仅移除列表记录")
+    const removalDialogText = document.body.textContent ?? ""
+    expect(removalDialogText).toContain("删除 Git 仓库？")
+    expect(removalDialogText).toContain("仅移除列表记录")
+    expect(removalDialogText).toContain("目录：/work/docs")
+    expect(removalDialogText.indexOf("目录：/work/docs")).toBeLessThan(
+      removalDialogText.indexOf("仅移除列表记录"),
+    )
 
     await click(findButton("删除记录"))
 

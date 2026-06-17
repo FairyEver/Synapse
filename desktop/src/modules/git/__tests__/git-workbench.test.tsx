@@ -5,8 +5,10 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { GitChangesTab } from "../components/git-changes-tab"
 import { GitHistoryTab } from "../components/git-history-tab"
 import { GitWorkbench } from "../components/git-workbench"
+import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 
 const repository = { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null }
 const bridge = vi.hoisted(() => ({
@@ -137,6 +139,55 @@ describe("GitWorkbench", () => {
     expect(rightViewport?.className).toContain("[&>div]:!max-w-full")
     expect(detailContent?.className).toContain("min-w-0")
     expect(fileList?.className).toContain("max-w-full")
+    expect(diff?.className).toContain("block")
+    expect(diff?.className).toContain("w-full")
+    expect(diff?.className).toContain("min-w-0")
+    expect(diff?.className).toContain("max-w-full")
+    expect(diff?.className).toContain("overflow-x-auto")
+  })
+
+  it("keeps long worktree diffs inside the right pane", () => {
+    const longPath = "app/portal/views/simple/finance/form/001/page/pc/edit/index.vue"
+    const longDiffLine = `diff --git a/${longPath} b/${longPath} `.repeat(4)
+    const status: ReturnType<typeof useGitWorktreeStatus> = {
+      snapshot: {
+        repositoryId: "repo-1",
+        pathExists: true,
+        isGitRepository: true,
+        currentBranch: "main",
+        upstream: "origin/main",
+        ahead: 0,
+        behind: 0,
+        hasConflicts: false,
+        changes: [{ path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false }],
+      },
+      selectedFile: { path: longPath, originalPath: null, status: "modified", staged: false, conflicted: false },
+      diff: { path: longPath, originalPath: null, binary: false, text: longDiffLine },
+      selectedPaths: [longPath],
+      loading: false,
+      diffLoading: false,
+      error: null,
+      refresh: vi.fn(async () => undefined),
+      loadDiff: vi.fn(async () => undefined),
+      togglePath: vi.fn(),
+    }
+    const html = renderToStaticMarkup(<GitChangesTab repository={repository} status={status} />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const root = container.firstElementChild
+    const rightPane = container.querySelector('[data-git-changes-detail-pane="true"]')
+    const rightViewport = rightPane?.querySelector('[data-slot="scroll-area-viewport"]')
+    const detailContent = container.querySelector('[data-git-changes-detail-content="true"]')
+    const diff = container.querySelector("pre")
+
+    expect(root?.className).toContain("min-w-0")
+    expect(rightPane?.className).toContain("min-w-0")
+    expect(rightViewport?.className).toContain("overflow-x-hidden")
+    expect(rightViewport?.className).toContain("[&>div]:!block")
+    expect(rightViewport?.className).toContain("[&>div]:!max-w-full")
+    expect(detailContent?.className).toContain("min-w-0")
+    expect(detailContent?.className).toContain("max-w-full")
     expect(diff?.className).toContain("block")
     expect(diff?.className).toContain("w-full")
     expect(diff?.className).toContain("min-w-0")

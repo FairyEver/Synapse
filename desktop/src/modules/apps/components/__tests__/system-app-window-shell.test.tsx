@@ -44,6 +44,20 @@ describe("SystemAppWindowShell", () => {
     expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("右侧操作")
     expect(document.querySelector("[data-system-app-window-tabs]")?.parentElement).toBe(toolbar)
   })
+
+  it("keeps actions in the toolbar when a window has no tabs", async () => {
+    await renderShell(roots, (
+      <SystemAppWindowShell actions={<button type="button">右侧操作</button>}>
+        <div>内容</div>
+      </SystemAppWindowShell>
+    ))
+
+    const toolbar = document.querySelector("[data-system-app-window-toolbar]")
+    expect(toolbar?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)]")
+    expect(document.querySelector("[data-system-app-window-left-spacer]")).toBeTruthy()
+    expect(document.querySelector("[data-system-app-window-tabs]")).toBeNull()
+    expect(document.querySelector("[data-system-app-window-actions]")?.textContent).toContain("右侧操作")
+  })
 })
 
 async function renderShell(roots: Root[], element: React.ReactNode): Promise<void> {

@@ -10,8 +10,6 @@ import { GitWorkbench } from "./components/git-workbench"
 import { useGitOperations } from "./hooks/use-git-operations"
 import { useGitRepositories } from "./hooks/use-git-repositories"
 
-const GIT_TABS = [{ id: "repositories", label: "仓库" }] as const
-
 function environmentMessage(environment: SynapseGitEnvironmentState | null): string | null {
   if (!environment) return null
   if (!environment.gitAvailable) return environment.installHint ?? "未检测到 Git。"
@@ -49,9 +47,6 @@ export function GitModule() {
   return (
     <>
       <SystemAppWindowShell
-        tabs={GIT_TABS}
-        value="repositories"
-        onValueChange={() => setSelectedRepository(null)}
         actions={!selectedRepository ? (
           <>
             <Button
