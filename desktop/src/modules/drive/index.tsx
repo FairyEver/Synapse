@@ -75,6 +75,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -1395,7 +1396,7 @@ function DriveAccessSettingsDialog({
       {target ? (
         <FormDialog
           title={title}
-          contentClassName="sm:max-w-md"
+          contentClassName="sm:max-w-sm"
           onSubmit={(event) => {
             event.preventDefault()
             void onConfirm(settings)
@@ -1785,38 +1786,45 @@ function DriveShareSuccessDialog({
       <FormDialog
         title={isFolder ? "文件夹已分享" : "文件已分享"}
         description={<span className="block truncate">{share.name}</span>}
-        contentClassName="sm:max-w-xl"
+        contentClassName="sm:max-w-lg"
         onSubmit={(event) => event.preventDefault()}
         footer={(
-          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
-            {password ? (
-              <Button type="button" variant="outline" onClick={() => { void copyDrivePassword(password) }}>
-                <KeyRound data-icon="inline-start" />
-                复制密码
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" onClick={() => { void copyDriveUrl(accessUrl) }}>
-              <Copy data-icon="inline-start" />
-              复制链接
-            </Button>
-            <Button type="button" onClick={() => { void openDriveUrl(accessUrl) }}>
-              <ExternalLink data-icon="inline-start" />
-              {isFolder ? "打开文件夹" : "打开文件"}
-            </Button>
-          </div>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
         )}
       >
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="drive-share-success-url">访问链接</Label>
-            <Input id="drive-share-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
+            <InputGroup>
+              <InputGroupInput id="drive-share-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton type="button" onClick={() => { void copyDriveUrl(accessUrl) }}>
+                  <Copy data-icon="inline-start" />
+                  复制链接
+                </InputGroupButton>
+                <InputGroupButton type="button" onClick={() => { void openDriveUrl(accessUrl) }}>
+                  <ExternalLink data-icon="inline-start" />
+                  {isFolder ? "打开文件夹" : "打开文件"}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
           </div>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="font-medium">密码</dt>
-              <dd className="truncate text-muted-foreground" title={formatDriveAccessPassword(share)}>
-                {formatDriveAccessPassword(share)}
+              <dd className="mt-1 flex min-h-8 items-center gap-2 text-muted-foreground" title={formatDriveAccessPassword(share)}>
+                <span className="min-w-0 flex-1 truncate">{formatDriveAccessPassword(share)}</span>
+                {password ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="复制密码"
+                    onClick={() => { void copyDrivePassword(password) }}
+                  >
+                    <Copy />
+                  </Button>
+                ) : null}
               </dd>
             </div>
             <div>

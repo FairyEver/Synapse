@@ -831,6 +831,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("需要密码")
     expect(document.body.textContent).toContain("有效时长")
     expect(document.body.textContent).toContain("3 天")
+    expect(getDialogContent().className).toContain("sm:max-w-sm")
 
     await clickButtonText("确定")
 
@@ -842,9 +843,11 @@ describe("DriveModule", () => {
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
     expect(document.body.textContent).toContain("文件已分享")
+    expect(getDialogContent().className).toContain("sm:max-w-lg")
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_test?password=AbC234xy")
     expect(document.body.textContent).toContain("AbC234xy")
     expect(document.body.textContent).toContain("2026")
+    expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
 
     await clickButtonText("打开文件")
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
@@ -853,8 +856,9 @@ describe("DriveModule", () => {
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
 
-    await clickButtonText("复制密码")
+    await clickButtonByLabel("复制密码")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("AbC234xy")
+    expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
   })
 
   it("keeps row actions focused on opening and sharing", async () => {
@@ -972,7 +976,9 @@ describe("DriveModule", () => {
     })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_folder?password=AbC234xy")
     expect(document.body.textContent).toContain("文件夹已分享")
+    expect(getDialogContent().className).toContain("sm:max-w-lg")
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_folder?password=AbC234xy")
+    expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
 
     await clickButtonText("打开文件夹")
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/share/shr_folder?password=AbC234xy")
@@ -1515,6 +1521,19 @@ function getShareUrlInput(): HTMLInputElement {
   const input = document.querySelector<HTMLInputElement>("#drive-share-success-url")
   if (!input) throw new Error("Share URL input not found")
   return input
+}
+
+function getDialogContent(): HTMLElement {
+  const content = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+  if (!content) throw new Error("Dialog content not found")
+  return content
+}
+
+function getDialogFooterButtonTexts(): string[] {
+  const footer = document.querySelector<HTMLElement>('[data-slot="dialog-footer"]')
+  if (!footer) throw new Error("Dialog footer not found")
+  return Array.from(footer.querySelectorAll<HTMLButtonElement>("button"))
+    .map((button) => button.textContent?.trim() ?? "")
 }
 
 async function clickSwitchByLabel(label: string): Promise<void> {
