@@ -26,6 +26,7 @@ import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import type { WindowManager } from "../../../runtime/window"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
+import { AGENT_CONVERSATION_WINDOW_SERVICE_ID } from "../../../services/agent-conversation-window-service"
 import { configStore } from "../../../services/config-store"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { sessionMethods } from "../ipc-sessions"
@@ -359,6 +360,87 @@ describe("agent session IPC methods", () => {
     })
   })
 
+  it("opens an agent conversation window", async () => {
+    const conversationWindowService = {
+      openConversationWindow: vi.fn(async () => ({ opened: true })),
+      focusConversationWindow: vi.fn(),
+      listDetachedConversations: vi.fn(),
+    }
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => createConversationNamespace([])),
+      } as unknown as DataRepository,
+      conversationWindowService,
+    })
+
+    await expect(sessionMethods.openConversationWindow.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })).resolves.toEqual({ opened: true })
+
+    expect(conversationWindowService.openConversationWindow).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+    })
+  })
+
+  it("focuses an agent conversation window", async () => {
+    const conversationWindowService = {
+      openConversationWindow: vi.fn(),
+      focusConversationWindow: vi.fn(() => ({ focused: true })),
+      listDetachedConversations: vi.fn(),
+    }
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => createConversationNamespace([])),
+      } as unknown as DataRepository,
+      conversationWindowService,
+    })
+
+    await expect(sessionMethods.focusConversationWindow.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })).resolves.toEqual({ focused: true })
+  })
+
+  it("lists detached agent conversation windows", async () => {
+    const conversationWindowService = {
+      openConversationWindow: vi.fn(),
+      focusConversationWindow: vi.fn(),
+      listDetachedConversations: vi.fn(() => [{
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "local:renderer",
+        title: "新会话",
+        windowId: 10,
+        openedAt: "2026-06-17T00:00:00.000Z",
+      }]),
+    }
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => createConversationNamespace([])),
+      } as unknown as DataRepository,
+      conversationWindowService,
+    })
+
+    await expect(sessionMethods.listDetachedConversationWindows.handler(ctx, {})).resolves.toEqual([{
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+      windowId: 10,
+      openedAt: "2026-06-17T00:00:00.000Z",
+    }])
+  })
+
   it("logs session rename failures without recording the requested title", async () => {
     const renameSession = vi.fn().mockRejectedValue(new Error("write failed"))
     const ctx = createContext({
@@ -398,6 +480,11 @@ function createContext(overrides: {
   readonly dataRepo: DataRepository
   readonly storageMigration?: { isActive: ReturnType<typeof vi.fn> }
   readonly windowManager?: WindowManager
+  readonly conversationWindowService?: {
+    readonly openConversationWindow: ReturnType<typeof vi.fn>
+    readonly focusConversationWindow: ReturnType<typeof vi.fn>
+    readonly listDetachedConversations: ReturnType<typeof vi.fn>
+  }
 }): IpcHandlerContext & {
   readonly projectContainers: Pick<ProjectContainerRegistry, "open">
 } {
@@ -422,6 +509,9 @@ function createContext(overrides: {
       if (serviceId === "core.project-containers") return projectContainers as T
       if (serviceId === "core.data-repository") return overrides.dataRepo as T
       if (serviceId === "core.window-manager" && overrides.windowManager) return overrides.windowManager as T
+      if (serviceId === AGENT_CONVERSATION_WINDOW_SERVICE_ID && overrides.conversationWindowService) {
+        return overrides.conversationWindowService as T
+      }
       if (serviceId === "knowledge-base.storage-migration-service" && overrides.storageMigration) return overrides.storageMigration as T
       throw new Error(`Unknown service: ${serviceId}`)
     },

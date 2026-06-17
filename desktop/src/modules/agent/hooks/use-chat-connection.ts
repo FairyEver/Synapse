@@ -8,6 +8,7 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
+import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseAgentBridgeAttachment } from "@/types/bridge"
 import { DEFAULT_LOCAL_SESSION_KEY } from "../utils"
 import {
@@ -66,15 +67,15 @@ type ChatConnectionResult = {
   readonly sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
-  readonly setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
+  readonly setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
   readonly respondPermission: (
     requestId: string,
     behavior: "allow" | "deny",
     updatedInput?: Record<string, unknown>,
     message?: string,
   ) => Promise<void>
-  readonly cancelTurn: () => Promise<void>
-  readonly forceKillTurn: () => Promise<void>
+  readonly cancelTurn: (target?: AgentConversationTarget) => Promise<void>
+  readonly forceKillTurn: (target?: AgentConversationTarget) => Promise<void>
 }
 
 function useChatConnection(
@@ -722,9 +723,16 @@ function useChatConnection(
     }
   }, [dispatch])
 
-  const setPermissionMode = useCallback(async (mode: SynapseAgentPermissionMode) => {
-    const projectId = selectedProjectIdRef.current ?? getDefaultProjectId()
-    const conversationId = selectedConversationIdRef.current
+  const setPermissionMode = useCallback(async (
+    mode: SynapseAgentPermissionMode,
+    target?: AgentConversationTarget,
+  ) => {
+    const resolved = resolveActionTarget(target, {
+      projectId: selectedProjectIdRef.current,
+      conversationId: selectedConversationIdRef.current,
+    }, getDefaultProjectId)
+    const projectId = resolved.projectId
+    const conversationId = resolved.conversationId
     if (!projectId || !conversationId) return
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
@@ -813,9 +821,13 @@ function useChatConnection(
     }
   }, [dispatch, getDefaultProjectId, refreshPendingPermissions, state.pendingPermissions])
 
-  const cancelTurn = useCallback(async () => {
-    const projectId = selectedProjectIdRef.current ?? getDefaultProjectId()
-    const conversationId = selectedConversationIdRef.current
+  const cancelTurn = useCallback(async (target?: AgentConversationTarget) => {
+    const resolved = resolveActionTarget(target, {
+      projectId: selectedProjectIdRef.current,
+      conversationId: selectedConversationIdRef.current,
+    }, getDefaultProjectId)
+    const projectId = resolved.projectId
+    const conversationId = resolved.conversationId
     if (!projectId || !conversationId) return
     const bridge = requireSynapseBridge()
     dispatch({ type: "CANCEL_REQUESTED" })
@@ -839,9 +851,13 @@ function useChatConnection(
     }
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
 
-  const forceKillTurn = useCallback(async () => {
-    const projectId = selectedProjectIdRef.current ?? getDefaultProjectId()
-    const conversationId = selectedConversationIdRef.current
+  const forceKillTurn = useCallback(async (target?: AgentConversationTarget) => {
+    const resolved = resolveActionTarget(target, {
+      projectId: selectedProjectIdRef.current,
+      conversationId: selectedConversationIdRef.current,
+    }, getDefaultProjectId)
+    const projectId = resolved.projectId
+    const conversationId = resolved.conversationId
     if (!projectId || !conversationId) return
     const bridge = requireSynapseBridge()
     try {
@@ -933,6 +949,26 @@ function isSelectedTimelineTarget(
     return target.conversationId === selected.conversationId
   }
   return target.sessionKey === selected.sessionKey
+}
+
+function resolveActionTarget(
+  explicitTarget: AgentConversationTarget | undefined,
+  selected: {
+    readonly projectId?: string
+    readonly conversationId?: string
+  },
+  getDefaultProjectId: () => string | undefined,
+): { readonly projectId?: string; readonly conversationId?: string } {
+  if (explicitTarget) {
+    return {
+      projectId: explicitTarget.projectId,
+      conversationId: explicitTarget.conversationId,
+    }
+  }
+  return {
+    projectId: selected.projectId ?? getDefaultProjectId(),
+    conversationId: selected.conversationId,
+  }
 }
 
 function serializeDraftAttachments(

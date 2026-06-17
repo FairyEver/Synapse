@@ -57,6 +57,10 @@ const mocks = vi.hoisted(() => {
         getTimeline: vi.fn(),
         exportConversationBundle: vi.fn(),
         openReference: vi.fn(),
+        openConversationWindow: vi.fn(),
+        focusConversationWindow: vi.fn(),
+        listDetachedConversationWindows: vi.fn(),
+        onDetachedConversationWindowsChanged: vi.fn(),
       },
       shell: {
         showItemInFolder: vi.fn().mockResolvedValue(undefined),
@@ -184,6 +188,10 @@ const targetSession: SynapseAgentSessionSummary = {
 let roots: Root[] = []
 
 beforeEach(() => {
+  mocks.bridge.agent.listDetachedConversationWindows.mockResolvedValue([])
+  mocks.bridge.agent.onDetachedConversationWindowsChanged.mockImplementation(() => () => undefined)
+  mocks.bridge.agent.focusConversationWindow.mockResolvedValue({ focused: true })
+  mocks.bridge.agent.openConversationWindow.mockResolvedValue({ opened: true })
   mocks.useAgentChat.mockImplementation(() => mocks.chat)
 })
 
@@ -209,8 +217,12 @@ afterEach(() => {
   mocks.configProjects = [{ id: "project-1", name: "Project One", path: "/repo" }]
   mocks.activeRepository = { uuid: "project-1", name: "Project One", localPath: "/repo" }
   mocks.bridgeAvailable = true
-  mocks.bridge.shell.showItemInFolder.mockResolvedValue(undefined)
-  mocks.useAgentChat.mockImplementation(() => mocks.chat)
+    mocks.bridge.shell.showItemInFolder.mockResolvedValue(undefined)
+    mocks.bridge.agent.listDetachedConversationWindows.mockResolvedValue([])
+    mocks.bridge.agent.onDetachedConversationWindowsChanged.mockImplementation(() => () => undefined)
+    mocks.bridge.agent.focusConversationWindow.mockResolvedValue({ focused: true })
+    mocks.bridge.agent.openConversationWindow.mockResolvedValue({ opened: true })
+    mocks.useAgentChat.mockImplementation(() => mocks.chat)
 })
 
 describe("AgentModule pending prompt sessions", () => {
@@ -522,6 +534,49 @@ describe("AgentModule pending prompt sessions", () => {
     })
 
     expect(container.textContent).toBe("deepseek")
+  })
+
+  it("shows detached placeholder for a selected conversation opened in a window", async () => {
+    mocks.bridge.agent.listDetachedConversationWindows.mockResolvedValue([{
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+      title: "新会话",
+      windowId: 12,
+      openedAt: "2026-06-17T00:00:00.000Z",
+    }])
+    mocks.chat = createChatState({
+      sessions: [{
+        ...targetSession,
+        name: "新会话",
+      }],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain("已经在新窗口打开")
+    expect(container.querySelector("form")).toBeNull()
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("button")?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.bridge.agent.focusConversationWindow).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })
   })
 
   it("does not render a selected session excluded by the active source filter", async () => {
@@ -1281,7 +1336,8 @@ function createChatState(overrides: Record<string, unknown> = {}) {
     status: null,
     providers: null,
     commands: [],
-        unreadByConversationId: {},
+    unreadByConversationId: {},
+    sendingConversationIds: new Set(),
     selectedProjectId: undefined,
     selectedConversationId: undefined,
     selectedSessionKey: "local:renderer",

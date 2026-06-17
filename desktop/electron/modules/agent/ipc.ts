@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
+import { AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL } from "../../services/agent-conversation-window-service"
 import {
   agentEventTypeSchema,
   agentEventSchema,
@@ -59,6 +60,15 @@ const agentPhaseUpdateDomainEventSchema = z.object({
   scope: agentEventScopeSchema,
 })
 
+const agentDetachedConversationSchema = z.object({
+  projectId: z.string(),
+  conversationId: z.string(),
+  sessionKey: z.string(),
+  title: z.string(),
+  windowId: z.number(),
+  openedAt: z.string(),
+})
+
 // ─── Module assembly ──────────────────────────────────────────────────────────
 
 export const agentIpcModule: IpcModule = {
@@ -77,6 +87,11 @@ export const agentIpcModule: IpcModule = {
         agentConversationUpdatedDomainEventSchema,
         agentPhaseUpdateDomainEventSchema,
       ]),
+    },
+    detachedConversationsChanged: {
+      kind: "event",
+      channel: AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL,
+      payload: z.array(agentDetachedConversationSchema),
     },
   },
 }

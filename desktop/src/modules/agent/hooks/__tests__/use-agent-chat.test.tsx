@@ -1057,6 +1057,45 @@ describe("useAgentChat", () => {
     })
   })
 
+  it("sets permission mode for an explicit target", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          setPermissionMode: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.setPermissionMode("acceptEdits", {
+        projectId: "project-2",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+      })
+    })
+
+    expect(bridge.setPermissionMode).toHaveBeenCalledWith({
+      projectId: "project-2",
+      conversationId: "conversation-2",
+      mode: "acceptEdits",
+    })
+  })
+
   it("keeps permission mode switch failures handled in hook state", async () => {
     const bridge = (window as unknown as {
       synapse: {
@@ -1402,6 +1441,54 @@ describe("useAgentChat", () => {
     }))
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt=secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
+  })
+
+  it("cancels and force kills an explicit target", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          cancelTurn: ReturnType<typeof vi.fn>
+          forceKillTurn: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.cancelTurn({
+        projectId: "project-2",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+      })
+      await chat?.forceKillTurn({
+        projectId: "project-2",
+        conversationId: "conversation-2",
+        sessionKey: "local:renderer",
+      })
+    })
+
+    expect(bridge.cancelTurn).toHaveBeenCalledWith({
+      projectId: "project-2",
+      conversationId: "conversation-2",
+    })
+    expect(bridge.forceKillTurn).toHaveBeenCalledWith({
+      projectId: "project-2",
+      conversationId: "conversation-2",
+    })
   })
 
   it("resets cancel state when no active turn is found", async () => {
