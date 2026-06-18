@@ -18,32 +18,84 @@ vi.mock('@mdxeditor/editor/style.css', () => ({}))
 
 vi.mock('@mdxeditor/editor', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
+  const pluginCalls = new Set<string>()
+  const collectToolbarControls = (node: React.ReactNode) => {
+    React.Children.forEach(node, (child) => {
+      if (!React.isValidElement(child)) return
+      const type = child.type
+      if (typeof type === 'function' && type.name) pluginCalls.add(type.name)
+      collectToolbarControls(child.props.children)
+    })
+  }
 
   return {
-    MDXEditor: ({
+    MDXEditor: React.forwardRef(({
       markdown,
       readOnly,
       onChange,
+      plugins,
     }: {
       readonly markdown: string
       readonly readOnly?: boolean
-      readonly onChange?: (value: string) => void
-    }) => React.createElement('textarea', {
-      'data-mdxeditor': 'true',
-      readOnly,
-      value: markdown,
-      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.currentTarget.value),
+      readonly onChange?: (value: string, initialMarkdownNormalize?: boolean) => void
+      readonly plugins?: readonly unknown[]
+    }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
+      const [value, setValue] = React.useState(markdown)
+      React.useImperativeHandle(ref, () => ({
+        setMarkdown: (nextValue: string) => setValue(nextValue),
+      }), [])
+
+      return React.createElement('textarea', {
+        'data-mdxeditor': 'true',
+        'data-toolbar-plugin': String(pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)),
+        'data-toolbar-controls': Array.from(pluginCalls).join(','),
+        readOnly,
+        value,
+        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+          setValue(event.currentTarget.value)
+          onChange?.(event.currentTarget.value, event.currentTarget.dataset.initialNormalize === 'true')
+        },
+      })
     }),
-    codeBlockPlugin: () => null,
-    codeMirrorPlugin: () => null,
-    headingsPlugin: () => null,
-    linkDialogPlugin: () => null,
-    linkPlugin: () => null,
-    listsPlugin: () => null,
-    markdownShortcutPlugin: () => null,
-    quotePlugin: () => null,
-    tablePlugin: () => null,
-    thematicBreakPlugin: () => null,
+    BlockTypeSelect: () => {
+      pluginCalls.add('BlockTypeSelect')
+      return null
+    },
+    BoldItalicUnderlineToggles: () => {
+      pluginCalls.add('BoldItalicUnderlineToggles')
+      return null
+    },
+    CreateLink: () => {
+      pluginCalls.add('CreateLink')
+      return null
+    },
+    InsertTable: () => {
+      pluginCalls.add('InsertTable')
+      return null
+    },
+    InsertThematicBreak: () => {
+      pluginCalls.add('InsertThematicBreak')
+      return null
+    },
+    UndoRedo: () => {
+      pluginCalls.add('UndoRedo')
+      return null
+    },
+    codeBlockPlugin: () => ({ name: 'codeBlockPlugin' }),
+    codeMirrorPlugin: () => ({ name: 'codeMirrorPlugin' }),
+    headingsPlugin: () => ({ name: 'headingsPlugin' }),
+    linkDialogPlugin: () => ({ name: 'linkDialogPlugin' }),
+    linkPlugin: () => ({ name: 'linkPlugin' }),
+    listsPlugin: () => ({ name: 'listsPlugin' }),
+    markdownShortcutPlugin: () => ({ name: 'markdownShortcutPlugin' }),
+    quotePlugin: () => ({ name: 'quotePlugin' }),
+    tablePlugin: () => ({ name: 'tablePlugin' }),
+    thematicBreakPlugin: () => ({ name: 'thematicBreakPlugin' }),
+    toolbarPlugin: (input: { readonly toolbarContents: () => React.ReactNode }) => {
+      pluginCalls.add('toolbarPlugin')
+      collectToolbarControls(input.toolbarContents())
+      return { name: 'toolbarPlugin' }
+    },
   }
 })
 
@@ -88,6 +140,97 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editContext.reload).toHaveBeenCalled()
     expect(editor().value).toBe('# Notes')
     expect(document.body.textContent).toContain('已同步')
+  })
+
+  it('resets the mounted editor content after reload', async () => {
+    const editContext = createEditContext()
+    const { rerender } = renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# Draft')
+    rerender({ preview: { ...basePreview(), text: '# Server' } })
+    await click(buttonWithText('重新加载'))
+
+    expect(editor().value).toBe('# Server')
+    expect(document.body.textContent).toContain('已同步')
+  })
+
+  it('syncs mounted editor content when the file or version changes', () => {
+    const { rerender } = renderRenderer({ edit: editable() })
+
+    expect(editor().value).toBe('# Notes')
+
+    rerender({
+      current: { ...baseCurrent(), id: 'other-file', name: 'other.md' },
+      preview: { ...basePreview(), text: '# Other' },
+      edit: { ...editable(), currentVersionId: 'version-2' },
+    })
+
+    expect(editor().value).toBe('# Other')
+    expect(document.body.textContent).toContain('已同步')
+  })
+
+  it('does not mark initial markdown normalization as dirty', async () => {
+    renderRenderer({ edit: editable() })
+
+    await inputValue(editor(), '# Notes\n', true)
+
+    expect(document.body.textContent).not.toContain('未保存')
+    expect(document.body.textContent).toContain('已同步')
+    expect(buttonWithText('保存').disabled).toBe(true)
+  })
+
+  it('disables save until dirty and while saving or reloading', async () => {
+    const { rerender } = renderRenderer({ edit: editable() })
+
+    expect(buttonWithText('保存').disabled).toBe(true)
+
+    await inputValue(editor(), '# Draft')
+    rerender({ edit: editable(), editContext: createEditContext({ savingText: true }) })
+
+    expect(buttonWithText('保存').disabled).toBe(true)
+    expect(buttonWithText('重新加载').disabled).toBe(true)
+
+    rerender({ edit: editable(), editContext: createEditContext({ reloading: true }) })
+
+    expect(buttonWithText('保存').disabled).toBe(true)
+    expect(buttonWithText('重新加载').disabled).toBe(true)
+  })
+
+  it('does not save read-only input changes', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: null, editContext })
+
+    await inputValue(editor(), '# Read only')
+
+    expect(editor().readOnly).toBe(true)
+    expect(editContext.saveText).not.toHaveBeenCalled()
+  })
+
+  it('keeps local text after a save conflict', async () => {
+    const editContext = createEditContext()
+    editContext.saveText.mockRejectedValue(new ApiError('版本冲突', 409))
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# Local')
+    await click(buttonWithText('保存'))
+
+    expect(editor().value).toBe('# Local')
+    expect(document.body.textContent).toContain('未保存')
+  })
+
+  it('registers the default markdown toolbar controls', () => {
+    renderRenderer({ edit: editable() })
+
+    expect(editor().dataset.toolbarPlugin).toBe('true')
+    expect(editor().dataset.toolbarControls?.split(',')).toEqual(expect.arrayContaining([
+      'toolbarPlugin',
+      'UndoRedo',
+      'BlockTypeSelect',
+      'BoldItalicUnderlineToggles',
+      'CreateLink',
+      'InsertTable',
+      'InsertThematicBreak',
+    ]))
   })
 
   it('renders read-only when editing is unavailable', () => {
@@ -136,6 +279,7 @@ describe('DriveMDXeditorRenderer', () => {
 })
 
 function renderRenderer(input: {
+  readonly current?: DriveBrowserItemDto
   readonly preview?: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly editContext?: DriveRendererEditContext
@@ -144,16 +288,28 @@ function renderRenderer(input: {
   document.body.append(host)
   root = createRoot(host)
 
-  act(() => {
+  const render = (nextInput: typeof input) => {
     root?.render(
       <DriveMDXeditorRenderer
-        current={baseCurrent()}
-        preview={input.preview ?? basePreview()}
-        edit={input.edit === undefined ? editable() : input.edit}
-        editContext={input.editContext ?? createEditContext()}
+        current={nextInput.current ?? baseCurrent()}
+        preview={nextInput.preview ?? basePreview()}
+        edit={nextInput.edit === undefined ? editable() : nextInput.edit}
+        editContext={nextInput.editContext ?? createEditContext()}
       />
     )
+  }
+
+  act(() => {
+    render(input)
   })
+
+  return {
+    rerender: (nextInput: typeof input) => {
+      act(() => {
+        render(nextInput)
+      })
+    },
+  }
 }
 
 function baseCurrent(): DriveBrowserItemDto {
@@ -192,24 +348,27 @@ function editable(): DriveBrowserEditDto {
   }
 }
 
-function createEditContext() {
+function createEditContext(input: Partial<DriveRendererEditContext> = {}) {
   return {
     reload: vi.fn(async () => ({}) as never),
     reloading: false,
     saveText: vi.fn(async () => ({}) as never),
     savingText: false,
+    ...input,
   }
 }
 
-async function inputValue(input: HTMLTextAreaElement, value: string) {
+async function inputValue(input: HTMLTextAreaElement, value: string, initialNormalize = false) {
   await act(async () => {
     const valueSetter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       'value'
     )?.set
     valueSetter?.call(input, value)
+    input.dataset.initialNormalize = String(initialNormalize)
     input.dispatchEvent(new Event('input', { bubbles: true }))
     input.dispatchEvent(new Event('change', { bubbles: true }))
+    delete input.dataset.initialNormalize
     await Promise.resolve()
   })
 }

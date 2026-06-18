@@ -34,12 +34,30 @@ vi.mock('@mdxeditor/editor', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
 
   return {
-    MDXEditor: ({ markdown, readOnly }: { readonly markdown: string; readonly readOnly?: boolean }) =>
-      React.createElement('textarea', {
+    MDXEditor: React.forwardRef(({
+      markdown,
+      readOnly,
+    }: {
+      readonly markdown: string
+      readonly readOnly?: boolean
+    }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
+      const [value, setValue] = React.useState(markdown)
+      React.useImperativeHandle(ref, () => ({
+        setMarkdown: (nextValue: string) => setValue(nextValue),
+      }), [])
+
+      return React.createElement('textarea', {
         'data-mdxeditor': 'true',
         readOnly,
-        value: markdown,
-      }),
+        value,
+      })
+    }),
+    BlockTypeSelect: () => null,
+    BoldItalicUnderlineToggles: () => null,
+    CreateLink: () => null,
+    InsertTable: () => null,
+    InsertThematicBreak: () => null,
+    UndoRedo: () => null,
     codeBlockPlugin: () => null,
     codeMirrorPlugin: () => null,
     headingsPlugin: () => null,
@@ -50,6 +68,7 @@ vi.mock('@mdxeditor/editor', async () => {
     quotePlugin: () => null,
     tablePlugin: () => null,
     thematicBreakPlugin: () => null,
+    toolbarPlugin: () => null,
   }
 })
 
@@ -218,6 +237,7 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-code-renderer="true"')
     expect(html).toContain('data-drive-code-language="html"')
+    expect(html).not.toContain('只读')
     expect(html).not.toContain('rounded-lg')
     expect(html).not.toContain('border')
     expect(html).not.toContain('bg-card')
@@ -397,6 +417,33 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-code-renderer="true"')
   })
 
+  it('renders MDXeditor content without falling back to code renderer', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveRendererContent, {
+      snapshot,
+      selected: { id: 'mdxeditor', label: 'MDXeditor', container: 'full' },
+      body: true,
+    }))
+
+    expect(html).toContain('data-mdxeditor="true"')
+    expect(html).not.toContain('data-drive-code-renderer="true"')
+  })
+
   it('renders markdown outline links when preview contains headings', () => {
     const snapshot = createSnapshot({
       current: {
@@ -564,10 +611,14 @@ describe('drive browser view model', () => {
     const source = readFileSync(new URL('./renderers/drive-renderer-shell.tsx', import.meta.url), 'utf8')
 
     expect(html).toContain('文件操作')
-    expect(source).toContain("selected.id === 'code' ? 'top-14' : 'top-5'")
+    expect(source).toContain("selected.id === 'code' || selected.id === 'mdxeditor' ? 'top-14' : 'top-5'")
     expect(source).not.toContain("'fixed right-5 bottom-5 z-50'")
     expect(html).toContain('top-5')
     expect(codeHtml).toContain('top-14')
+    expect(renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
+      snapshot,
+      initialRendererId: 'mdxeditor',
+    }))).toContain('top-14')
     expect(source).toContain('FLOATING_MENU_IDLE_DIM_DELAY_MS = 3000')
     expect(source).toContain('setIdleDimmed(true)')
     expect(source).toContain("'opacity-50 hover:opacity-100 focus-visible:opacity-100'")

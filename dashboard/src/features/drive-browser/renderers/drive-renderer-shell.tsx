@@ -316,7 +316,7 @@ function DriveRendererFloatingMenu({
       ref={menuRef}
       className={cn(
         'fixed right-5 z-50',
-        selected.id === 'code' ? 'top-14' : 'top-5',
+        selected.id === 'code' || selected.id === 'mdxeditor' ? 'top-14' : 'top-5',
         menuPosition && 'top-auto right-auto'
       )}
       style={menuStyle}

@@ -1,8 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  BlockTypeSelect,
+  BoldItalicUnderlineToggles,
   codeBlockPlugin,
   codeMirrorPlugin,
+  CreateLink,
   headingsPlugin,
+  InsertTable,
+  InsertThematicBreak,
   linkDialogPlugin,
   linkPlugin,
   listsPlugin,
@@ -11,8 +16,11 @@ import {
   quotePlugin,
   tablePlugin,
   thematicBreakPlugin,
+  toolbarPlugin,
+  UndoRedo,
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
+import type { MDXEditorMethods } from '@mdxeditor/editor'
 import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
 import { Download, Loader2, LogIn, RefreshCw, Save } from 'lucide-react'
 import {
@@ -41,8 +49,9 @@ export function DriveMDXeditorRenderer({
   readonly editContext?: DriveRendererEditContext
 }) {
   const initialText = preview.text ?? ''
+  const editorRef = useRef<MDXEditorMethods | null>(null)
+  const savedValueRef = useRef(initialText)
   const [value, setValue] = useState(initialText)
-  const [savedValue, setSavedValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
@@ -50,6 +59,18 @@ export function DriveMDXeditorRenderer({
   const loginRequired = edit?.reason === 'login_required'
   const loginUrl = useMemo(() => buildLoginUrl(), [])
   const plugins = useMemo(() => [
+    toolbarPlugin({
+      toolbarContents: () => (
+        <>
+          <UndoRedo />
+          <BlockTypeSelect />
+          <BoldItalicUnderlineToggles />
+          <CreateLink />
+          <InsertTable />
+          <InsertThematicBreak />
+        </>
+      ),
+    }),
     headingsPlugin(),
     listsPlugin(),
     quotePlugin(),
@@ -63,11 +84,12 @@ export function DriveMDXeditorRenderer({
   ], [])
 
   useEffect(() => {
+    savedValueRef.current = initialText
     setValue(initialText)
-    setSavedValue(initialText)
     setDirty(false)
     setError(null)
     setConflictOpen(false)
+    editorRef.current?.setMarkdown(initialText)
   }, [current.id, edit?.currentVersionId, initialText])
 
   const handleSave = async () => {
@@ -75,7 +97,7 @@ export function DriveMDXeditorRenderer({
     setError(null)
     try {
       await editContext.saveText({ text: value, baseVersionId: edit.currentVersionId })
-      setSavedValue(value)
+      savedValueRef.current = value
       setDirty(false)
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 409) {
@@ -91,10 +113,11 @@ export function DriveMDXeditorRenderer({
     setError(null)
     try {
       await editContext.reload()
+      savedValueRef.current = initialText
       setValue(initialText)
-      setSavedValue(initialText)
       setDirty(false)
       setConflictOpen(false)
+      editorRef.current?.setMarkdown(initialText)
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
@@ -145,12 +168,18 @@ export function DriveMDXeditorRenderer({
       </div>
       <div className='min-h-0 flex-1 overflow-auto'>
         <MDXEditor
+          ref={editorRef}
           markdown={value}
           readOnly={!canEdit}
-          onChange={(nextValue) => {
+          onChange={(nextValue, initialMarkdownNormalize) => {
             if (!canEdit) return
             setValue(nextValue)
-            setDirty(nextValue !== savedValue)
+            if (initialMarkdownNormalize) {
+              savedValueRef.current = nextValue
+              setDirty(false)
+              return
+            }
+            setDirty(nextValue !== savedValueRef.current)
           }}
           plugins={plugins}
           className='h-full min-h-full'
