@@ -28,6 +28,66 @@ describe('adminApi.users', () => {
   })
 })
 
+describe('adminApi.drive', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  function mockJsonResponse(payload: unknown) {
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      )
+    )
+  }
+
+  it('uses admin public asset endpoints', async () => {
+    const fetchMock = mockJsonResponse({ data: [], total: 0, page: 1, pageSize: 20 })
+
+    await adminApi.listDrivePublicAssets({ page: 2, pageSize: 10, search: 'logo' })
+    await adminApi.getDrivePublicAsset('asset/id')
+    await adminApi.listDrivePublicAssetAccessLogs('asset/id', { page: 3 })
+    await adminApi.listDrivePublicAssetRevisions('asset/id')
+    await adminApi.getDriveStorageSummary()
+    await adminApi.restoreDriveItem('item/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/admin/drive/public-assets?page=2&pageSize=10&search=logo',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/admin/drive/public-assets/asset%2Fid',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/admin/drive/public-assets/asset%2Fid/access-logs?page=3',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/admin/drive/public-assets/asset%2Fid/revisions',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      '/api/admin/drive/storage-summary',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      '/api/admin/drive/items/item%2Fid/restore',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
+    )
+  })
+})
+
 describe('adminApi.cleanupLogs', () => {
   afterEach(() => {
     vi.restoreAllMocks()

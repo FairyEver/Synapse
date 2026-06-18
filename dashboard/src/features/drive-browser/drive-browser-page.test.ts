@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import {
   DriveBrowserView,
   DriveSingleFileReaderView,
 } from './drive-browser-page'
+import { AdminDriveStorageSummary } from './admin-drive-storage-summary'
+import { AccessLogTable, AdminPublicAssets } from './admin-public-assets'
 import { DriveFinder } from './finder/drive-finder'
 import {
   getDriveRendererOptions,
@@ -31,6 +34,49 @@ import {
 import { getDriveFinderBreadcrumbs } from './finder/drive-finder-breadcrumbs'
 
 describe('drive browser view model', () => {
+  it('renders admin public asset controls without marketing copy', () => {
+    const queryClient = new QueryClient()
+    const assetsHtml = renderToStaticMarkup(
+      createElement(QueryClientProvider, { client: queryClient },
+        createElement(AdminPublicAssets)
+      )
+    )
+    const summaryHtml = renderToStaticMarkup(
+      createElement(QueryClientProvider, { client: queryClient },
+        createElement(AdminDriveStorageSummary)
+      )
+    )
+
+    expect(assetsHtml).toContain('搜索')
+    expect(assetsHtml).toContain('访问')
+    expect(assetsHtml).not.toContain('让您的')
+    expect(summaryHtml).toContain('普通文件')
+    expect(summaryHtml).toContain('公开素材')
+    expect(summaryHtml).toContain('隐藏')
+    const adminPublicAssetsSource = readFileSync(
+      new URL('./admin-public-assets.tsx', import.meta.url),
+      'utf8'
+    )
+    expect(adminPublicAssetsSource).toContain('访问日志')
+    expect(adminPublicAssetsSource).toContain('历史版本')
+  })
+
+  it('renders access log pagination controls when more pages exist', () => {
+    const html = renderToStaticMarkup(
+      createElement(AccessLogTable, {
+        data: [],
+        isLoading: false,
+        page: 1,
+        pageSize: 20,
+        total: 41,
+        onPageChange: () => undefined,
+      })
+    )
+
+    expect(html).toContain('下一页')
+    expect(html).toContain('1 / 3')
+  })
+
   it('formats drive file metadata from shared helpers', () => {
     expect(formatDriveBrowserSize({ ...baseCurrent(), size: '7372' })).toBe('7.2 KB')
     expect(formatDriveBrowserSize({ ...baseCurrent(), type: 'folder' })).toBe('-')

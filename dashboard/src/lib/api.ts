@@ -16,6 +16,8 @@ import type {
   DriveFileVersionDto,
   DriveFileVersionListPageDto,
   DriveItemDto,
+  DriveItemLifecycleStatus,
+  DrivePublicAssetDto,
   WebhookDeliveryDto,
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
@@ -238,6 +240,68 @@ export type AdminDriveItemRow = {
   userId: string
   userEmail?: string | null
   storageDeletePending: boolean
+  lifecycleStatus: DriveItemLifecycleStatus
+}
+
+export type AdminDrivePublicAssetRow = DrivePublicAssetDto & {
+  owner: {
+    userId: string
+    email: string | null
+  }
+}
+
+export type AdminDrivePublicAssetAccessLogRow = {
+  id: string
+  assetId: string
+  publicAssetId: string | null
+  userId: string | null
+  method: string
+  statusCode: number
+  bytes: string
+  ip: string | null
+  referer: string | null
+  userAgent: string | null
+  accessedAt: string
+  createdAt: string
+}
+
+export type AdminDrivePublicAssetRevisionRow = {
+  id: string
+  assetId: string
+  publicAssetId: string | null
+  itemId: string
+  name: string
+  originalName: string
+  size: string
+  mimeType: string | null
+  etag: string | null
+  replacedBy: string | null
+  createdAt: string
+  replacedAt: string
+}
+
+export type AdminDriveStorageSummary = {
+  normalDrive: AdminDriveStorageBucket
+  publicAssets: AdminDriveStorageBucket
+  publicAssetRevisions: {
+    count: number
+    bytes: string
+  }
+  total: {
+    quotaBytes: string
+    adminVisibleBytes: string
+  }
+}
+
+export type AdminDriveStorageBucket = {
+  active: AdminDriveStorageStatus
+  trashed: AdminDriveStorageStatus
+  hidden: AdminDriveStorageStatus
+}
+
+export type AdminDriveStorageStatus = {
+  count: number
+  bytes: string
 }
 
 type RequestOptions = RequestInit
@@ -373,6 +437,12 @@ export type AdminDriveListQuery = PaginationOptions & {
   search?: string
 }
 
+export type AdminDrivePublicAssetListQuery = PaginationOptions & {
+  search?: string
+  userId?: string
+  lifecycleStatus?: DriveItemLifecycleStatus
+}
+
 export type WebhookDeliveryHistoryQuery = PaginationOptions & {
   webhookId?: string
   status?: string
@@ -479,6 +549,18 @@ function adminDriveQuerySuffix(options: AdminDriveListQuery = {}) {
     storageStatus: options.storageStatus,
     shared: options.shared,
     search: options.search,
+  })
+}
+
+function adminDrivePublicAssetQuerySuffix(options: AdminDrivePublicAssetListQuery = {}) {
+  return querySuffix({
+    page: options.page,
+    pageSize: options.pageSize,
+    sortBy: options.sortBy,
+    sortOrder: options.sortOrder,
+    search: options.search,
+    userId: options.userId,
+    lifecycleStatus: options.lifecycleStatus,
   })
 }
 
@@ -945,6 +1027,39 @@ export const adminApi = {
       `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}`,
       { method: 'DELETE' }
     ),
+  downloadDriveItemUrl: (id: string) =>
+    `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}/download`,
+  restoreDriveItem: (id: string) =>
+    request<AdminDriveItemRow>(
+      `${adminApiBasePath}/drive/items/${encodeURIComponent(id)}/restore`,
+      { method: 'POST' }
+    ),
+  getDriveStorageSummary: () =>
+    request<AdminDriveStorageSummary>(`${adminApiBasePath}/drive/storage-summary`),
+  listDrivePublicAssets: (options: AdminDrivePublicAssetListQuery = {}) =>
+    request<PaginatedResponse<AdminDrivePublicAssetRow>>(
+      `${adminApiBasePath}/drive/public-assets${adminDrivePublicAssetQuerySuffix(options)}`
+    ),
+  getDrivePublicAsset: (assetId: string) =>
+    request<AdminDrivePublicAssetRow>(
+      `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}`
+    ),
+  listDrivePublicAssetAccessLogs: (
+    assetId: string,
+    options: PaginationOptions = {}
+  ) =>
+    request<PaginatedResponse<AdminDrivePublicAssetAccessLogRow>>(
+      `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}/access-logs${paginationSuffix(options)}`
+    ),
+  listDrivePublicAssetRevisions: (
+    assetId: string,
+    options: PaginationOptions = {}
+  ) =>
+    request<PaginatedResponse<AdminDrivePublicAssetRevisionRow>>(
+      `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}/revisions${paginationSuffix(options)}`
+    ),
+  downloadDrivePublicAssetRevisionUrl: (assetId: string, revisionId: string) =>
+    `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}/download`,
   listContentStoreItems: (options: AdminContentStoreListQuery = {}) =>
     request<PaginatedResponse<ContentStoreItemDto>>(
       `${adminApiBasePath}/content-store/items${contentStoreQuerySuffix(options)}`

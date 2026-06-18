@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
+import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { PrismaService } from "../prisma/prisma.service"
 import {
   DRIVE_ITEM_LIFECYCLE_STATUS,
@@ -27,8 +28,14 @@ import { detectPublicAssetImageType, validatePublicAssetNameAndMime } from "./dr
 import type { DriveStoragePort } from "./drive-storage"
 import { createDrivePublicAssetId, driveOverwriteStorageKeyForSession, driveStorageKeyForItem, isValidDriveItemName } from "./drive-token"
 import {
+  toDriveAdminPublicAssetAccessLogDto,
+  toDriveAdminPublicAssetDto,
+  toDriveAdminPublicAssetRevisionDto,
   toDriveItemDto,
   toDrivePublicAssetDto,
+  type DriveAdminPublicAssetAccessLogDto,
+  type DriveAdminPublicAssetDto,
+  type DriveAdminPublicAssetRevisionDto,
   type DrivePublicAssetListInput,
   type DrivePublicAssetPrepareUploadInput,
   type DrivePublicAssetRecord,
@@ -64,6 +71,10 @@ type PublicAssetWithItem = DrivePublicAssetRecord & {
     readonly createdAt: Date
     readonly updatedAt: Date
   }
+}
+
+type PublicAssetWithOwner = PublicAssetWithItem & {
+  readonly user: { readonly email: string | null }
 }
 
 type PublicAssetUploadSession = {
@@ -167,6 +178,109 @@ export class DrivePublicAssetService {
 
   async getAsset(userId: string, assetId: string, publicAppUrl: string): Promise<DrivePublicAssetDto> {
     return toDrivePublicAssetDto(await this.requireOwnedAsset(userId, assetId), publicAppUrl)
+  }
+
+  async listAdminAssets(
+    publicAppUrl: string,
+    input: {
+      readonly pagination: PaginationQuery
+      readonly search?: string
+      readonly userId?: string
+      readonly lifecycleStatus?: string
+    },
+  ): Promise<PaginatedResponse<DriveAdminPublicAssetDto>> {
+    const where: Prisma.PublicAssetWhereInput = {
+      deletedAt: null,
+      ...(input.userId ? { userId: input.userId } : {}),
+      ...(input.lifecycleStatus ? { lifecycleStatus: input.lifecycleStatus } : {}),
+      ...(input.search
+        ? {
+          OR: [
+            { name: { contains: input.search } },
+            { assetId: { contains: input.search } },
+            { itemId: { contains: input.search } },
+            { user: { email: { contains: input.search } } },
+          ],
+        }
+        : {}),
+    }
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.publicAsset.findMany({
+        ...toPrismaArgs(input.pagination),
+        where,
+        include: { item: true, user: { select: { email: true } } },
+      }),
+      this.prisma.publicAsset.count({ where }),
+    ])
+    return {
+      data: (data as PublicAssetWithOwner[]).map((asset) => toDriveAdminPublicAssetDto(asset, publicAppUrl)),
+      total,
+      page: input.pagination.page,
+      pageSize: input.pagination.pageSize,
+    }
+  }
+
+  async getAdminAsset(assetId: string, publicAppUrl: string): Promise<DriveAdminPublicAssetDto> {
+    this.assertPublicAssetId(assetId)
+    const asset = await this.prisma.publicAsset.findFirst({
+      where: { assetId, deletedAt: null },
+      include: { item: true, user: { select: { email: true } } },
+    }) as PublicAssetWithOwner | null
+    if (!asset) throw new NotFoundException("公共资源不存在。")
+    return toDriveAdminPublicAssetDto(asset, publicAppUrl)
+  }
+
+  async listAdminAccessLogs(assetId: string, pagination: PaginationQuery): Promise<PaginatedResponse<DriveAdminPublicAssetAccessLogDto>> {
+    this.assertPublicAssetId(assetId)
+    await this.requireAdminAsset(assetId)
+    const where = { assetId }
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.publicAssetAccessLog.findMany({
+        ...toPrismaArgs(pagination),
+        where,
+      }),
+      this.prisma.publicAssetAccessLog.count({ where }),
+    ])
+    return {
+      data: data.map(toDriveAdminPublicAssetAccessLogDto),
+      total,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    }
+  }
+
+  async listAdminRevisions(assetId: string, pagination: PaginationQuery): Promise<PaginatedResponse<DriveAdminPublicAssetRevisionDto>> {
+    this.assertPublicAssetId(assetId)
+    await this.requireAdminAsset(assetId)
+    const where = { assetId }
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.publicAssetRevision.findMany({
+        ...toPrismaArgs(pagination),
+        where,
+      }),
+      this.prisma.publicAssetRevision.count({ where }),
+    ])
+    return {
+      data: data.map(toDriveAdminPublicAssetRevisionDto),
+      total,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    }
+  }
+
+  async openAdminRevisionDownload(assetId: string, revisionId: string) {
+    this.assertPublicAssetId(assetId)
+    const revision = await this.prisma.publicAssetRevision.findFirst({
+      where: { id: revisionId, assetId },
+    })
+    if (!revision) throw new NotFoundException("历史版本不存在。")
+    const object = await this.storage.getObjectStream({ key: revision.storageKey })
+    return {
+      stream: object.stream,
+      fileName: revision.name,
+      size: object.size ?? revision.size,
+      contentType: object.contentType ?? revision.mimeType,
+    }
   }
 
   async prepareUpload(userId: string, input: DrivePublicAssetPrepareUploadInput): Promise<DriveUploadPrepareResult> {
@@ -683,6 +797,18 @@ export class DrivePublicAssetService {
     }) as PublicAssetWithItem | null
     if (!asset) throw new NotFoundException("公共资源不存在。")
     return asset
+  }
+
+  private assertPublicAssetId(assetId: string): void {
+    if (!isDrivePublicAssetId(assetId)) throw new BadRequestException("公共资源 ID 无效。")
+  }
+
+  private async requireAdminAsset(assetId: string): Promise<void> {
+    const asset = await this.prisma.publicAsset.findFirst({
+      where: { assetId, deletedAt: null },
+      select: { id: true },
+    })
+    if (!asset) throw new NotFoundException("公共资源不存在。")
   }
 
   private async failSession(

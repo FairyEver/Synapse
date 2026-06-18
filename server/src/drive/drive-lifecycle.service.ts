@@ -103,7 +103,7 @@ export class DriveLifecycleService {
   async hideTrashedItem(input: DriveLifecycleInput): Promise<{ readonly ok: true }> {
     const root = await this.requireLifecycleItem(input.userId, input.itemId, DRIVE_ITEM_LIFECYCLE_STATUS.trashed)
     if (root.deleteRootId !== root.id) throw new NotFoundException("文件不存在。")
-    const items = await this.collectSubtree(root.id, belongsToTrashedTree(root.id))
+    const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, DRIVE_ITEM_LIFECYCLE_STATUS.trashed))
     const itemIds = items.map((item) => item.id)
     const releasedBytes = currentFileBytes(items)
     const hiddenAt = new Date()
@@ -181,19 +181,32 @@ export class DriveLifecycleService {
   }
 
   async restoreItem(input: DriveLifecycleInput): Promise<DriveItemDto> {
+    return this.restoreItemForStatuses(input, [DRIVE_ITEM_LIFECYCLE_STATUS.trashed])
+  }
+
+  async restoreItemAsAdmin(input: DriveLifecycleInput): Promise<DriveItemDto> {
+    return this.restoreItemForStatuses(input, [
+      DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+      DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
+    ])
+  }
+
+  private async restoreItemForStatuses(input: DriveLifecycleInput, lifecycleStatuses: string[]): Promise<DriveItemDto> {
     const root = await this.prisma.driveItem.findFirst({
       where: {
         id: input.itemId,
         userId: input.userId,
-        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+        lifecycleStatus: { in: lifecycleStatuses },
       },
       include: { publicAsset: true, shares: { where: { enabled: true }, select: { id: true, enabled: true } } },
     }) as DriveLifecycleItemRecord | null
     if (!root) throw new NotFoundException("文件不存在。")
     if (root.deleteRootId !== root.id) throw new NotFoundException("文件不存在。")
 
-    const items = await this.collectSubtree(root.id, belongsToTrashedTree(root.id))
+    const restoringHidden = root.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden
+    const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, root.lifecycleStatus))
     const itemIds = items.map((item) => item.id)
+    const restoredBytes = restoringHidden ? currentFileBytes(items) : 0n
 
     const parentId = await this.resolveRestoreParent(root)
     const name = root.publicAsset ? root.name : await this.resolveRestoreName({
@@ -205,10 +218,20 @@ export class DriveLifecycleService {
     })
     const restoredAt = new Date()
     const restored = await this.prisma.$transaction(async (tx) => {
+      if (restoredBytes > 0n) {
+        const usage = await tx.driveUsage.findUniqueOrThrow({ where: { userId: input.userId } })
+        if (usage.usedBytes + usage.reservedBytes + restoredBytes > usage.quotaBytes) {
+          throw new BadRequestException("云盘空间不足。")
+        }
+        await tx.driveUsage.update({
+          where: { userId: input.userId },
+          data: { usedBytes: { increment: restoredBytes } },
+        })
+      }
       const updatedItems = await tx.driveItem.updateMany({
         where: {
           id: { in: itemIds },
-          lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+          lifecycleStatus: root.lifecycleStatus,
           deleteRootId: root.id,
         },
         data: {
@@ -230,7 +253,7 @@ export class DriveLifecycleService {
         trashedBy: null,
         hiddenAt: null,
         hiddenBy: null,
-      }, DRIVE_ITEM_LIFECYCLE_STATUS.trashed)
+      }, root.lifecycleStatus)
       return tx.driveItem.update({
         where: { id: root.id },
         data: { parentId, name, updatedAt: restoredAt },
@@ -242,7 +265,7 @@ export class DriveLifecycleService {
       action: "drive.restore",
       targetId: root.id,
       ipAddress: input.ipAddress,
-      detail: { userId: input.userId, itemId: root.id, count: itemIds.length, restoredBytes: "0" },
+      detail: { userId: input.userId, itemId: root.id, count: itemIds.length, restoredBytes: restoredBytes.toString() },
     })
     return toDriveItemDto(restored)
   }
@@ -413,8 +436,8 @@ function isActiveLifecycleItem(item: DriveLifecycleItemRecord): boolean {
   return item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.active
 }
 
-function belongsToTrashedTree(rootId: string): (item: DriveLifecycleItemRecord) => boolean {
-  return (item) => item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.trashed && item.deleteRootId === rootId
+function belongsToDeletedTree(rootId: string, lifecycleStatus: string): (item: DriveLifecycleItemRecord) => boolean {
+  return (item) => item.lifecycleStatus === lifecycleStatus && item.deleteRootId === rootId
 }
 
 function assertLifecycleTransitionCount(actual: number, expected: number): void {

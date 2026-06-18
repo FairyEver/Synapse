@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { Readable } from "node:stream"
+import { Readable, Writable } from "node:stream"
 import { BadRequestException, type INestApplication, NotFoundException, UnauthorizedException } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
 import type { DriveBrowserSnapshotDto, DriveItemDto } from "@synapse/shared"
@@ -52,6 +52,16 @@ describe("DriveController", () => {
     openOwnerBrowserItemDownload: vi.fn(),
     openShareBrowserItemDownload: vi.fn(),
     listAdminItems: vi.fn(),
+    getAdminStorageSummary: vi.fn(),
+    openAdminItemDownload: vi.fn(),
+    restoreItemAsAdmin: vi.fn(),
+  }
+  const publicAssets = {
+    listAdminAssets: vi.fn(),
+    getAdminAsset: vi.fn(),
+    listAdminAccessLogs: vi.fn(),
+    listAdminRevisions: vi.fn(),
+    openAdminRevisionDownload: vi.fn(),
   }
   const storage = {
     getObjectStream: vi.fn(async () => ({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })),
@@ -80,6 +90,14 @@ describe("DriveController", () => {
     drive.openOwnerBrowserItemDownload.mockReset()
     drive.openShareBrowserItemDownload.mockReset()
     drive.listAdminItems.mockReset()
+    drive.getAdminStorageSummary.mockReset()
+    drive.openAdminItemDownload.mockReset()
+    drive.restoreItemAsAdmin.mockReset()
+    publicAssets.listAdminAssets.mockReset()
+    publicAssets.getAdminAsset.mockReset()
+    publicAssets.listAdminAccessLogs.mockReset()
+    publicAssets.listAdminRevisions.mockReset()
+    publicAssets.openAdminRevisionDownload.mockReset()
     storage.getObjectStream.mockReset()
     storage.getObjectStream.mockResolvedValue({ stream: Readable.from("brief"), size: 5n, contentType: "text/plain" })
     restoreEnv("APP_PUBLIC_URL", originalAppPublicUrl)
@@ -224,7 +242,7 @@ describe("DriveController", () => {
 
   it("records audit when admins list drive items", async () => {
     const auditLog = { record: vi.fn(async () => undefined) }
-    const controller = new DriveAdminController(drive as unknown as DriveService, auditLog as never)
+    const controller = new DriveAdminController(drive as unknown as DriveService, publicAssets as never, auditLog as never)
     drive.listAdminItems.mockResolvedValue({
       data: [{ id: "item-1" }],
       total: 1,
@@ -262,6 +280,69 @@ describe("DriveController", () => {
         }),
       }),
     }))
+  })
+
+  it("routes admin public asset APIs and audits downloads", async () => {
+    process.env.APP_PUBLIC_URL = "https://dashboard.example"
+    const auditLog = { record: vi.fn(async () => undefined) }
+    const controller = new DriveAdminController(drive as unknown as DriveService, publicAssets as never, auditLog as never)
+    const response = createDownloadResponse()
+    publicAssets.listAdminAssets.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    publicAssets.getAdminAsset.mockResolvedValue({ assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ" })
+    publicAssets.listAdminAccessLogs.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    publicAssets.listAdminRevisions.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    publicAssets.openAdminRevisionDownload.mockResolvedValue({
+      stream: Readable.from("old"),
+      fileName: "logo-old.png",
+      size: 3n,
+      contentType: "image/png",
+    })
+    drive.openAdminItemDownload.mockResolvedValue({
+      stream: Readable.from("file"),
+      fileName: "brief.txt",
+      size: 4n,
+      contentType: "text/plain",
+    })
+    drive.restoreItemAsAdmin.mockResolvedValue({ id: "item-1" })
+    drive.getAdminStorageSummary.mockResolvedValue({ total: { quotaBytes: "1" } })
+
+    const requestContext = {
+      admin: { email: "admin@example.com" },
+      ip: "127.0.0.1",
+      headers: { host: "dashboard.example" },
+    } as never
+
+    await controller.listPublicAssets({ page: "1" }, requestContext)
+    await controller.getPublicAsset("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", requestContext)
+    await controller.listPublicAssetAccessLogs("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", { page: "1" }, requestContext)
+    await controller.listPublicAssetRevisions("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", { page: "1" }, requestContext)
+    await controller.downloadPublicAssetRevision("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", "rev-1", requestContext, response as never)
+    await controller.downloadItem("item-1", requestContext, response as never)
+    await controller.restoreItem("item-1", requestContext)
+    await controller.getStorageSummary(requestContext)
+
+    expect(publicAssets.listAdminAssets).toHaveBeenCalledWith("https://dashboard.example", expect.objectContaining({ pagination: expect.any(Object) }))
+    expect(publicAssets.getAdminAsset).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", "https://dashboard.example")
+    expect(publicAssets.listAdminAccessLogs).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", expect.objectContaining({ page: 1 }))
+    expect(publicAssets.listAdminRevisions).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", expect.objectContaining({ page: 1 }))
+    expect(publicAssets.openAdminRevisionDownload).toHaveBeenCalledWith("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ", "rev-1")
+    expect(drive.openAdminItemDownload).toHaveBeenCalledWith("item-1")
+    expect(drive.restoreItemAsAdmin).toHaveBeenCalledWith("item-1", "admin@example.com", "127.0.0.1")
+    expect(drive.getAdminStorageSummary).toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.drive.public_asset_revision.download",
+      targetType: "drive_public_asset_revision",
+      targetId: "rev-1",
+    }))
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.drive.item.download",
+      targetType: "drive_item",
+      targetId: "item-1",
+    }))
+    expect(response.attachment).toHaveBeenCalledWith("logo-old.png")
+    expect(response.attachment).toHaveBeenCalledWith("brief.txt")
   })
 
   it("redirects owner direct downloads and renders owner files", async () => {
@@ -981,6 +1062,24 @@ function createDriveItem(input: Partial<DriveItemDto> = {}): DriveItemDto {
 
 function driveAccessCookieName(kind: "share", publicId: string): string {
   return `synapse_drive_access_${kind}_${Buffer.from(publicId, "utf8").toString("base64url")}`
+}
+
+function createDownloadResponse() {
+  const response = new Writable({
+    write(_chunk, _encoding, callback) {
+      callback()
+    },
+  }) as Writable & {
+    attachment: ReturnType<typeof vi.fn>
+    setHeader: ReturnType<typeof vi.fn>
+    status: ReturnType<typeof vi.fn>
+    send: ReturnType<typeof vi.fn>
+  }
+  response.attachment = vi.fn(() => response)
+  response.setHeader = vi.fn()
+  response.status = vi.fn(() => response)
+  response.send = vi.fn(() => response)
+  return response
 }
 
 function restoreEnv(name: string, value: string | undefined): void {

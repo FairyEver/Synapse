@@ -171,6 +171,39 @@ describe("DriveLifecycleService", () => {
       .rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it("admin restore brings hidden public assets back without renaming duplicates", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    await seedActiveDriveFile(prisma, { userId: "user-1", parentId: null, name: "logo.png", size: 1n })
+    const file = await seedHiddenPublicAssetDriveFile(prisma, {
+      userId: "user-1",
+      parentId: null,
+      name: "logo.png",
+      size: 10n,
+    })
+
+    const restored = await lifecycle.restoreItemAsAdmin({
+      userId: "user-1",
+      itemId: file.id,
+      actorId: "admin@example.com",
+      ipAddress: "127.0.0.1",
+    })
+
+    expect(restored).toMatchObject({
+      id: file.id,
+      name: "logo.png",
+      storageStatus: "active",
+    })
+    expect(await readDriveItem(prisma, file.id)).toMatchObject({
+      lifecycleStatus: "active",
+      name: "logo.png",
+      hiddenAt: null,
+      hiddenBy: null,
+      deleteRootId: null,
+    })
+    expect(await usedBytes(prisma, "user-1")).toBe(11n)
+  })
+
   it("rejects restore and hide for non-root children in a trashed subtree", async () => {
     const prisma = createLifecyclePrismaMemory()
     const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
@@ -398,6 +431,16 @@ async function seedHiddenDriveFile(prisma: ReturnType<typeof createLifecyclePris
       restoreParentId: input.parentId ?? null,
       restorePath: input.name,
       deleteRootId: item.id,
+    },
+  })
+}
+
+async function seedHiddenPublicAssetDriveFile(prisma: ReturnType<typeof createLifecyclePrismaMemory>, input: SeedDriveFileInput) {
+  const item = await seedHiddenDriveFile(prisma, input)
+  return prisma.driveItem.update({
+    where: { id: item.id },
+    data: {
+      publicAsset: { assetId: `asset_${item.id}` },
     },
   })
 }

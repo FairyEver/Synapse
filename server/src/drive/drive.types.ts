@@ -60,6 +60,68 @@ export type DriveAdminItemDto = DriveItemDto & {
   readonly userId: string
   readonly userEmail?: string | null
   readonly storageDeletePending: boolean
+  readonly lifecycleStatus: DriveItemLifecycleStatus
+}
+
+export type DriveAdminPublicAssetDto = DrivePublicAssetDto & {
+  readonly owner: {
+    readonly userId: string
+    readonly email: string | null
+  }
+}
+
+export type DriveAdminPublicAssetAccessLogDto = {
+  readonly id: string
+  readonly assetId: string
+  readonly publicAssetId: string | null
+  readonly userId: string | null
+  readonly method: string
+  readonly statusCode: number
+  readonly bytes: string
+  readonly ip: string | null
+  readonly referer: string | null
+  readonly userAgent: string | null
+  readonly accessedAt: string
+  readonly createdAt: string
+}
+
+export type DriveAdminPublicAssetRevisionDto = {
+  readonly id: string
+  readonly assetId: string
+  readonly publicAssetId: string | null
+  readonly itemId: string
+  readonly name: string
+  readonly originalName: string
+  readonly size: string
+  readonly mimeType: string | null
+  readonly etag: string | null
+  readonly replacedBy: string | null
+  readonly createdAt: string
+  readonly replacedAt: string
+}
+
+export type DriveAdminStorageSummaryDto = {
+  readonly normalDrive: DriveAdminStorageBucketDto
+  readonly publicAssets: DriveAdminStorageBucketDto
+  readonly publicAssetRevisions: {
+    readonly count: number
+    readonly bytes: string
+  }
+  readonly total: {
+    readonly quotaBytes: string
+    readonly adminVisibleBytes: string
+  }
+}
+
+export type DriveAdminStorageBucketDto = {
+  readonly active: DriveAdminStorageStatusDto
+  readonly trashed: DriveAdminStorageStatusDto
+  readonly hidden: DriveAdminStorageStatusDto
+}
+
+export type DriveAdminStorageStatusDto = {
+  readonly count: number
+  readonly bytes: string
 }
 
 export type DriveItemRecord = {
@@ -105,5 +167,78 @@ export function toDrivePublicAssetDto(asset: DrivePublicAssetRecord, publicAppUr
     lastAccessedAt: asset.lastAccessedAt?.toISOString() ?? null,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
+  }
+}
+
+export function toDriveAdminPublicAssetDto(
+  asset: DrivePublicAssetRecord & { readonly userId: string; readonly user?: { readonly email?: string | null } | null },
+  publicAppUrl: string,
+): DriveAdminPublicAssetDto {
+  return {
+    ...toDrivePublicAssetDto(asset, publicAppUrl),
+    owner: {
+      userId: asset.userId,
+      email: asset.user?.email ?? null,
+    },
+  }
+}
+
+export function toDriveAdminPublicAssetAccessLogDto(log: {
+  readonly id: string
+  readonly assetId: string
+  readonly publicAssetId: string | null
+  readonly userId: string | null
+  readonly method: string
+  readonly statusCode: number
+  readonly bytes: bigint
+  readonly ip: string | null
+  readonly referer: string | null
+  readonly userAgent: string | null
+  readonly accessedAt: Date
+}): DriveAdminPublicAssetAccessLogDto {
+  const accessedAt = log.accessedAt.toISOString()
+  return {
+    id: log.id,
+    assetId: log.assetId,
+    publicAssetId: log.publicAssetId,
+    userId: log.userId,
+    method: log.method,
+    statusCode: log.statusCode,
+    bytes: log.bytes.toString(),
+    ip: log.ip,
+    referer: log.referer,
+    userAgent: log.userAgent,
+    accessedAt,
+    createdAt: accessedAt,
+  }
+}
+
+export function toDriveAdminPublicAssetRevisionDto(revision: {
+  readonly id: string
+  readonly assetId: string
+  readonly publicAssetId: string | null
+  readonly itemId: string
+  readonly name: string
+  readonly originalName: string
+  readonly size: bigint
+  readonly mimeType: string | null
+  readonly etag: string | null
+  readonly replacedBy: string | null
+  readonly createdAt: Date
+  readonly replacedAt: Date
+}): DriveAdminPublicAssetRevisionDto {
+  return {
+    id: revision.id,
+    assetId: revision.assetId,
+    publicAssetId: revision.publicAssetId,
+    itemId: revision.itemId,
+    name: revision.name,
+    originalName: revision.originalName,
+    size: revision.size.toString(),
+    mimeType: revision.mimeType,
+    etag: revision.etag,
+    replacedBy: revision.replacedBy,
+    createdAt: revision.createdAt.toISOString(),
+    replacedAt: revision.replacedAt.toISOString(),
   }
 }

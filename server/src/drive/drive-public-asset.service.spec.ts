@@ -215,6 +215,90 @@ describe("DrivePublicAssetService", () => {
     expect(prisma.__debug.publicAssetAccessLogs.size).toBe(3)
   })
 
+  it("lists hidden and trashed public assets for admins with owner metadata", async () => {
+    await prisma.user.create({ data: { id: "user-2", email: "owner2@example.com", passwordHash: "hash" } })
+    await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "active.png",
+      size: 8n,
+    })
+    await seedPublicAsset({
+      prisma,
+      userId: "user-2",
+      assetId: "asset_9Hy8kQ2mNv7RbP6xAa91Lc0Dm7Tn5Yua",
+      name: "hidden.png",
+      size: 12n,
+      lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
+    })
+
+    const page = await service.listAdminAssets("https://assets.example", {
+      pagination: { page: 1, pageSize: 20, sortBy: "createdAt", sortOrder: "desc" },
+    })
+
+    expect(page.total).toBe(2)
+    expect(page.data.map((asset) => asset.lifecycleStatus).sort()).toEqual(["active", "hidden"])
+    expect(page.data[0]).toMatchObject({
+      owner: expect.objectContaining({ userId: expect.any(String), email: expect.any(String) }),
+      url: expect.stringContaining("/files/asset_"),
+    })
+  })
+
+  it("paginates public asset access logs and revision downloads for admins", async () => {
+    const asset = await seedPublicAsset({
+      prisma,
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      name: "logo.png",
+      size: 8n,
+    })
+    await service.recordAccessSafely({
+      assetId: asset.assetId,
+      publicAssetId: asset.id,
+      userId: "user-1",
+      method: "GET",
+      statusCode: 200,
+      bytes: 8n,
+      ip: "127.0.0.1",
+      referer: "https://example.test",
+      userAgent: "vitest",
+    })
+    const revision = await prisma.publicAssetRevision.create({
+      data: {
+        assetId: asset.assetId,
+        publicAssetId: asset.id,
+        itemId: asset.itemId,
+        storageKey: `${asset.storageKey}/old`,
+        name: "logo-old.png",
+        originalName: "logo-old.png",
+        size: 8n,
+        mimeType: "image/png",
+      },
+    })
+    objects.set(revision.storageKey, { body: pngSignatureBuffer(), contentType: "image/png" })
+
+    const logs = await service.listAdminAccessLogs(asset.assetId, { page: 1, pageSize: 20, sortBy: "accessedAt", sortOrder: "desc" })
+    const revisions = await service.listAdminRevisions(asset.assetId, { page: 1, pageSize: 20, sortBy: "replacedAt", sortOrder: "desc" })
+    const download = await service.openAdminRevisionDownload(asset.assetId, revision.id)
+
+    expect(logs).toMatchObject({
+      total: 1,
+      data: [expect.objectContaining({
+        method: "GET",
+        statusCode: 200,
+        bytes: "8",
+        ip: "127.0.0.1",
+        referer: "https://example.test",
+        userAgent: "vitest",
+      })],
+    })
+    expect(logs.data[0].createdAt).toBe(logs.data[0].accessedAt)
+    expect(revisions).toMatchObject({
+      total: 1,
+      data: [expect.objectContaining({ id: revision.id, name: "logo-old.png", size: "8" })],
+    })
+    expect(download).toMatchObject({ fileName: "logo-old.png", size: 8n, contentType: "image/png" })
+  })
+
   it("replaces content with quota delta and records the previous revision", async () => {
     const asset = await seedPublicAsset({
       prisma,
@@ -447,14 +531,16 @@ function createStorageMemory(
 
 async function seedPublicAsset(input: {
   readonly prisma: ReturnType<typeof createPrismaMemory>
+  readonly userId?: string
   readonly assetId: string
   readonly name: string
   readonly size: bigint
   readonly lifecycleStatus?: string
 }) {
+  const userId = input.userId ?? "user-1"
   const item = await input.prisma.driveItem.create({
     data: {
-      userId: "user-1",
+      userId,
       parentId: null,
       type: "file",
       name: input.name,
@@ -469,7 +555,7 @@ async function seedPublicAsset(input: {
   const asset = await input.prisma.publicAsset.create({
     data: {
       assetId: input.assetId,
-      userId: "user-1",
+      userId,
       itemId: item.id,
       name: input.name,
       originalName: input.name,
@@ -481,8 +567,8 @@ async function seedPublicAsset(input: {
     },
   })
   await input.prisma.driveUsage.upsert({
-    where: { userId: "user-1" },
-    create: { userId: "user-1", usedBytes: input.size, reservedBytes: 0n, quotaBytes: 1073741824n },
+    where: { userId },
+    create: { userId, usedBytes: input.size, reservedBytes: 0n, quotaBytes: 1073741824n },
     update: {},
   })
   return asset
@@ -698,9 +784,13 @@ function createPrismaMemory() {
         const asset = [...publicAssets.values()].find((row) => matchesWhere(row, where))
         return asset ? includePublicAsset(asset, include, items) : null
       },
-      findMany: async ({ where, include }: any = {}) => {
-        return [...publicAssets.values()]
-          .filter((asset) => matchesWhere(asset, where ?? {}))
+      findMany: async ({ where, include, select, orderBy, skip, take }: any = {}) => {
+        const found = paginateRows(
+          orderRows([...publicAssets.values()].filter((asset) => matchesWhere(asset, where ?? {})), orderBy),
+          { skip, take },
+        )
+        if (select) return found.map((asset) => selectFields(asset, select))
+        return found
           .map((asset) => includePublicAsset(asset, include, items))
       },
       update: async ({ where, data, include }: any) => {
@@ -728,6 +818,15 @@ function createPrismaMemory() {
         publicAssetRevisions.set(revision.id, revision)
         return revision
       },
+      findFirst: async ({ where }: any) => [...publicAssetRevisions.values()].find((row) => matchesWhere(row, where ?? {})) ?? null,
+      findMany: async ({ where, select, orderBy, skip, take }: any = {}) => {
+        const found = paginateRows(
+          orderRows([...publicAssetRevisions.values()].filter((revision) => matchesWhere(revision, where ?? {})), orderBy),
+          { skip, take },
+        )
+        return select ? found.map((revision) => selectFields(revision, select)) : found
+      },
+      count: async ({ where }: any = {}) => [...publicAssetRevisions.values()].filter((revision) => matchesWhere(revision, where ?? {})).length,
     },
     publicAssetAccessLog: {
       create: async ({ data }: any) => {
@@ -735,6 +834,14 @@ function createPrismaMemory() {
         publicAssetAccessLogs.set(log.id, log)
         return log
       },
+      findMany: async ({ where, select, orderBy, skip, take }: any = {}) => {
+        const found = paginateRows(
+          orderRows([...publicAssetAccessLogs.values()].filter((log) => matchesWhere(log, where ?? {})), orderBy),
+          { skip, take },
+        )
+        return select ? found.map((log) => selectFields(log, select)) : found
+      },
+      count: async ({ where }: any = {}) => [...publicAssetAccessLogs.values()].filter((log) => matchesWhere(log, where ?? {})).length,
     },
     __debug: { publicAssets, publicAssetRevisions, publicAssetAccessLogs, usages, sessions, items },
   }
@@ -742,7 +849,11 @@ function createPrismaMemory() {
 }
 
 function includePublicAsset(asset: any, include: any, items: Map<string, any>) {
-  return include?.item ? { ...asset, item: items.get(asset.itemId) } : asset
+  return {
+    ...asset,
+    ...(include?.item ? { item: items.get(asset.itemId) } : {}),
+    ...(include?.user ? { user: { email: asset.userId === "user-1" ? "user@example.com" : "owner2@example.com" } } : {}),
+  }
 }
 
 function applyNumericUpdates(row: any, data: any): void {
@@ -760,8 +871,27 @@ function matchesWhere(row: any, where: any): boolean {
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not
+    if (value && typeof value === "object" && "contains" in value) return String(row[key] ?? "").includes(value.contains)
     return row[key] === value
   })
+}
+
+function orderRows<T extends Record<string, any>>(rows: T[], orderBy: Record<string, "asc" | "desc"> | undefined): T[] {
+  if (!orderBy) return rows
+  const [[field, direction]] = Object.entries(orderBy)
+  return [...rows].sort((left, right) => {
+    const leftValue = left[field]
+    const rightValue = right[field]
+    if (leftValue === rightValue) return 0
+    const result = leftValue > rightValue ? 1 : -1
+    return direction === "desc" ? -result : result
+  })
+}
+
+function paginateRows<T>(rows: T[], input: { readonly skip?: number; readonly take?: number }): T[] {
+  const start = input.skip ?? 0
+  const end = input.take === undefined ? undefined : start + input.take
+  return rows.slice(start, end)
 }
 
 function selectFields(row: any, select: any) {

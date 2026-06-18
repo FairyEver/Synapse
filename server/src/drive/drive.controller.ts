@@ -86,6 +86,9 @@ const driveAccessSettingsSchema = z.object({
   editorEmails: z.array(z.string().trim().min(1).max(320)).max(100).optional(),
 }).strict()
 const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatus"] as const
+const adminPublicAssetSortFields = ["createdAt", "updatedAt", "name", "size", "lifecycleStatus", "lastAccessedAt"] as const
+const adminPublicAssetAccessLogSortFields = ["accessedAt", "statusCode", "method", "bytes"] as const
+const adminPublicAssetRevisionSortFields = ["replacedAt", "createdAt", "name", "size"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(UserAuthGuard)
@@ -436,6 +439,7 @@ export class DriveAdminController {
 
   constructor(
     private readonly drive: DriveService,
+    @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
@@ -475,6 +479,81 @@ export class DriveAdminController {
   @Delete("/items/:id")
   deleteItem(@Param("id") id: string, @Req() request: AdminRequest) {
     return this.drive.deleteItemAsAdmin(id, request.admin!.email, request.ip ?? "system")
+  }
+
+  @Get("/items/:id/download")
+  async downloadItem(@Param("id") id: string, @Req() request: AdminRequest, @Res() response: Response) {
+    const download = await this.drive.openAdminItemDownload(id)
+    await this.recordAuditSafely({
+      adminEmail: request.admin!.email,
+      action: "admin.drive.item.download",
+      targetType: "drive_item",
+      targetId: id,
+      detail: { itemId: id, name: download.fileName },
+      ipAddress: request.ip ?? "system",
+    })
+    await sendDriveFileDownload(response, download)
+  }
+
+  @Post("/items/:id/restore")
+  restoreItem(@Param("id") id: string, @Req() request: AdminRequest) {
+    return this.drive.restoreItemAsAdmin(id, request.admin!.email, request.ip ?? "system")
+  }
+
+  @Get("/storage-summary")
+  getStorageSummary(@Req() _request?: AdminRequest) {
+    return this.drive.getAdminStorageSummary()
+  }
+
+  @Get("/public-assets")
+  listPublicAssets(@Query() query: Record<string, unknown>, @Req() request: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: adminPublicAssetSortFields })
+    return requirePublicAssetService(this.publicAssets).listAdminAssets(resolveAdminPublicAppUrl(request), {
+      pagination,
+      search: typeof query.search === "string" ? query.search : undefined,
+      userId: typeof query.userId === "string" ? query.userId : undefined,
+      lifecycleStatus: typeof query.lifecycleStatus === "string" ? query.lifecycleStatus : undefined,
+    })
+  }
+
+  @Get("/public-assets/:assetId")
+  getPublicAsset(@Param("assetId") assetId: string, @Req() request: AdminRequest) {
+    return requirePublicAssetService(this.publicAssets).getAdminAsset(assetId, resolveAdminPublicAppUrl(request))
+  }
+
+  @Get("/public-assets/:assetId/access-logs")
+  listPublicAssetAccessLogs(@Param("assetId") assetId: string, @Query() query: Record<string, unknown>, @Req() _request?: AdminRequest) {
+    return requirePublicAssetService(this.publicAssets).listAdminAccessLogs(
+      assetId,
+      parsePagination({ ...query, sortBy: typeof query.sortBy === "string" ? query.sortBy : "accessedAt" }, { allowedSortFields: adminPublicAssetAccessLogSortFields }),
+    )
+  }
+
+  @Get("/public-assets/:assetId/revisions")
+  listPublicAssetRevisions(@Param("assetId") assetId: string, @Query() query: Record<string, unknown>, @Req() _request?: AdminRequest) {
+    return requirePublicAssetService(this.publicAssets).listAdminRevisions(
+      assetId,
+      parsePagination(query, { allowedSortFields: adminPublicAssetRevisionSortFields }),
+    )
+  }
+
+  @Get("/public-assets/:assetId/revisions/:revisionId/download")
+  async downloadPublicAssetRevision(
+    @Param("assetId") assetId: string,
+    @Param("revisionId") revisionId: string,
+    @Req() request: AdminRequest,
+    @Res() response: Response,
+  ) {
+    const download = await requirePublicAssetService(this.publicAssets).openAdminRevisionDownload(assetId, revisionId)
+    await this.recordAuditSafely({
+      adminEmail: request.admin!.email,
+      action: "admin.drive.public_asset_revision.download",
+      targetType: "drive_public_asset_revision",
+      targetId: revisionId,
+      detail: { assetId, revisionId, name: download.fileName },
+      ipAddress: request.ip ?? "system",
+    })
+    await sendDriveFileDownload(response, download)
   }
 
   private async recordAuditSafely(input: AuditRecordInput): Promise<void> {
@@ -1011,6 +1090,10 @@ function driveBrowserPasswordRequired(): DriveBrowserPasswordRequiredDto {
 }
 
 function resolveRequestPublicAppUrl(request: AuthenticatedUserRequest): string {
+  return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
+}
+
+function resolveAdminPublicAppUrl(request: Request): string {
   return resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })
 }
 

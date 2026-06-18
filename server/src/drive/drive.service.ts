@@ -101,6 +101,7 @@ import {
   toDriveItemDto,
   type DriveAdminFilters,
   type DriveAdminItemDto,
+  type DriveAdminStorageSummaryDto,
   type DriveItemRecord,
   type DrivePrepareFolderUploadInput,
   type DrivePrepareUploadInput,
@@ -1454,6 +1455,7 @@ export class DriveService implements OnApplicationBootstrap {
         userId: item.userId,
         userEmail: item.user.email,
         storageDeletePending: item.storageDeletePending,
+        lifecycleStatus: item.lifecycleStatus as DriveAdminItemDto["lifecycleStatus"],
       })),
       total,
       page: options.pagination.page,
@@ -1471,6 +1473,72 @@ export class DriveService implements OnApplicationBootstrap {
     if (item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden) return { ok: true }
     await this.getLifecycleService().trashItem({ userId: item.userId, itemId, actorId: actorEmail, ipAddress })
     return { ok: true }
+  }
+
+  async openAdminItemDownload(itemId: string): Promise<DriveBrowserDownloadResult> {
+    const item = await this.prisma.driveItem.findFirst({ where: { id: itemId } })
+    if (!item) throw new NotFoundException("文件不存在。")
+    if (item.type !== DRIVE_ITEM_TYPE.file) throw new BadRequestException("只能下载文件。")
+    if (!item.storageKey || item.storageStatus !== DRIVE_STORAGE_STATUS.active) throw new NotFoundException("文件不存在。")
+    const object = await this.storage.getObjectStream({ key: item.storageKey })
+    return {
+      stream: object.stream,
+      fileName: item.name,
+      size: object.size ?? item.size,
+      contentType: object.contentType ?? item.mimeType,
+    }
+  }
+
+  async restoreItemAsAdmin(itemId: string, actorEmail: string, ipAddress: string): Promise<DriveItemDto> {
+    const item = await this.prisma.driveItem.findFirst({ where: { id: itemId } })
+    if (!item) throw new NotFoundException("文件不存在。")
+    return this.getLifecycleService().restoreItemAsAdmin({ userId: item.userId, itemId: item.id, actorId: actorEmail, ipAddress })
+  }
+
+  async getAdminStorageSummary(): Promise<DriveAdminStorageSummaryDto> {
+    const visibleLifecycleStatuses = [
+      DRIVE_ITEM_LIFECYCLE_STATUS.active,
+      DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+      DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
+    ]
+    const [normalDriveItems, publicAssets, publicAssetRevisions] = await this.prisma.$transaction([
+      this.prisma.driveItem.findMany({
+        where: {
+          type: DRIVE_ITEM_TYPE.file,
+          storageStatus: DRIVE_STORAGE_STATUS.active,
+          lifecycleStatus: { in: visibleLifecycleStatuses },
+          publicAsset: null,
+        },
+        select: { size: true, lifecycleStatus: true },
+      }),
+      this.prisma.publicAsset.findMany({
+        where: {
+          deletedAt: null,
+          lifecycleStatus: { in: visibleLifecycleStatuses },
+        },
+        select: { size: true, lifecycleStatus: true },
+      }),
+      this.prisma.publicAssetRevision.findMany({
+        select: { size: true },
+      }),
+    ])
+    const normalDrive = buildAdminStorageBucket(normalDriveItems)
+    const publicAssetBucket = buildAdminStorageBucket(publicAssets)
+    const revisionBytes = publicAssetRevisions.reduce((sum, revision) => sum + revision.size, 0n)
+    const quotaBytes = bucketQuotaBytes(normalDrive) + bucketQuotaBytes(publicAssetBucket)
+    const adminVisibleBytes = quotaBytes + BigInt(normalDrive.hidden.bytes) + BigInt(publicAssetBucket.hidden.bytes) + revisionBytes
+    return {
+      normalDrive,
+      publicAssets: publicAssetBucket,
+      publicAssetRevisions: {
+        count: publicAssetRevisions.length,
+        bytes: revisionBytes.toString(),
+      },
+      total: {
+        quotaBytes: quotaBytes.toString(),
+        adminVisibleBytes: adminVisibleBytes.toString(),
+      },
+    }
   }
 
   @Cron("*/15 * * * *")
@@ -2676,6 +2744,41 @@ function buildAdminWhere(filters: DriveAdminFilters): Prisma.DriveItemWhereInput
     ]
   }
   return where
+}
+
+function buildAdminStorageBucket(
+  rows: readonly { readonly lifecycleStatus: string; readonly size: bigint }[],
+): DriveAdminStorageSummaryDto["normalDrive"] {
+  const bucket = {
+    active: { count: 0, bytes: 0n },
+    trashed: { count: 0, bytes: 0n },
+    hidden: { count: 0, bytes: 0n },
+  }
+  for (const row of rows) {
+    if (row.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.active) {
+      bucket.active.count += 1
+      bucket.active.bytes += row.size
+      continue
+    }
+    if (row.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.trashed) {
+      bucket.trashed.count += 1
+      bucket.trashed.bytes += row.size
+      continue
+    }
+    if (row.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden) {
+      bucket.hidden.count += 1
+      bucket.hidden.bytes += row.size
+    }
+  }
+  return {
+    active: { count: bucket.active.count, bytes: bucket.active.bytes.toString() },
+    trashed: { count: bucket.trashed.count, bytes: bucket.trashed.bytes.toString() },
+    hidden: { count: bucket.hidden.count, bytes: bucket.hidden.bytes.toString() },
+  }
+}
+
+function bucketQuotaBytes(bucket: DriveAdminStorageSummaryDto["normalDrive"]): bigint {
+  return BigInt(bucket.active.bytes) + BigInt(bucket.trashed.bytes)
 }
 
 function createUniqueDriveZipEntryPath(path: string, usedPaths: Set<string>): string {

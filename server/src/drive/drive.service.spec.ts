@@ -1851,6 +1851,37 @@ describe("DriveService", () => {
     }
   })
 
+  it("admin restore brings hidden files back and charges quota again", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "handoff.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+    await service.deleteItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(0n)
+
+    const restored = await service.restoreItemAsAdmin(prepared.item.id, "admin@example.com", "127.0.0.1")
+
+    expect(restored).toMatchObject({
+      id: prepared.item.id,
+      name: "handoff.txt",
+    })
+    expect(await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })).toMatchObject({
+      lifecycleStatus: "active",
+      hiddenAt: null,
+      hiddenBy: null,
+      deleteRootId: null,
+    })
+    expect((await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })).usedBytes).toBe(11n)
+  })
+
   it("keeps trashed items visible in admin search", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
