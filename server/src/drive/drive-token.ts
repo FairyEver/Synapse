@@ -1,7 +1,18 @@
 import { randomBytes } from "node:crypto"
 
+const BASE62_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
 export function createDriveShareId(): string {
   return `shr_${randomBytes(24).toString("base64url")}`
+}
+
+export function createDrivePublicAssetId(): string {
+  const bytes = randomBytes(32)
+  let suffix = ""
+  for (let index = 0; index < 32; index += 1) {
+    suffix += BASE62_ALPHABET[bytes[index]! % BASE62_ALPHABET.length]
+  }
+  return `asset_${suffix}`
 }
 
 export function driveStorageKeyForItem(itemId: string): string {

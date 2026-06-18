@@ -68,6 +68,7 @@ model User {
   driveUsage                  DriveUsage?
   driveUploadSessions         DriveUploadSession[]
   driveFileVersions           DriveFileVersion[]
+  publicAssets                PublicAsset[]
   contentStoreItems           ContentStoreItem[]
   contentStoreDrafts          ContentStoreDraft[]
   contentStoreInstallSessions ContentStoreInstallSession[]
@@ -268,30 +269,45 @@ model WebhookDeliveryReceipt {
 }
 
 model DriveItem {
-  id                   String                  @id @default(cuid())
+  id                   String                @id @default(cuid())
   userId               String
-  user                 User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   parentId             String?
-  parent               DriveItem?              @relation("DriveTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children             DriveItem[]             @relation("DriveTree")
-  type                 String                  @db.VarChar(16)
-  name                 String                  @db.VarChar(255)
-  size                 BigInt                  @default(0)
-  mimeType             String?                 @db.VarChar(255)
-  storageKey           String?                 @unique
-  storageStatus        String                  @db.VarChar(32)
-  uploadStatus         String                  @db.VarChar(32)
-  storageDeletePending Boolean                 @default(false)
+  parent               DriveItem?            @relation("DriveTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children             DriveItem[]           @relation("DriveTree")
+  type                 String                @db.VarChar(16)
+  name                 String                @db.VarChar(255)
+  size                 BigInt                @default(0)
+  mimeType             String?               @db.VarChar(255)
+  storageKey           String?               @unique
+  storageStatus        String                @db.VarChar(32)
+  uploadStatus         String                @db.VarChar(32)
+  storageDeletePending Boolean               @default(false)
+  lifecycleStatus      String                @default("active") @db.VarChar(32)
+  trashedAt            DateTime?
+  trashedBy            String?
+  hiddenAt             DateTime?
+  hiddenBy             String?
+  restoreParentId      String?
+  restorePath          String?
+  deleteRootId         String?
+  objectMissing        Boolean               @default(false)
   deletedAt            DateTime?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   shares               DriveShare[]
   uploadSessions       DriveUploadSession[]
   fileVersions         DriveFileVersion[]
+  publicAsset          PublicAsset?
+  publicAssetRevisions PublicAssetRevision[]
 
   @@index([userId, parentId, deletedAt, createdAt])
   @@index([userId, deletedAt, updatedAt])
+  @@index([userId, parentId, lifecycleStatus, createdAt])
+  @@index([userId, lifecycleStatus, updatedAt])
+  @@index([deleteRootId, lifecycleStatus])
   @@index([storageStatus])
+  @@index([objectMissing])
 }
 
 model DriveShare {
@@ -309,7 +325,7 @@ model DriveShare {
   accessMode              String             @default("link_read") @db.VarChar(32)
   editors                 DriveShareEditor[]
   accessSettingsAppliedAt DateTime?
-  createdAt               DateTime  @default(now())
+  createdAt               DateTime           @default(now())
   disabledAt              DateTime?
 
   @@index([itemId, enabled])
@@ -338,26 +354,32 @@ model DriveUsage {
 }
 
 model DriveUploadSession {
-  id             String    @id @default(cuid())
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  itemId         String
-  item           DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  storageKey     String
-  expectedName   String    @db.VarChar(255)
-  expectedSize   BigInt
-  expectedMime   String?   @db.VarChar(255)
-  reservedBytes  BigInt    @default(0)
-  status         String    @db.VarChar(32)
-  credentialKind String    @db.VarChar(32)
-  expiresAt      DateTime
-  createdAt      DateTime  @default(now())
-  completedAt    DateTime?
-  failedAt       DateTime?
+  id                        String       @id @default(cuid())
+  userId                    String
+  user                      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId                    String
+  item                      DriveItem    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  storageKey                String
+  expectedName              String       @db.VarChar(255)
+  expectedSize              BigInt
+  expectedMime              String?      @db.VarChar(255)
+  reservedBytes             BigInt       @default(0)
+  purpose                   String       @default("drive_upload") @db.VarChar(32)
+  publicAssetId             String?
+  publicAsset               PublicAsset? @relation(fields: [publicAssetId], references: [id], onDelete: SetNull)
+  replacePreviousStorageKey String?
+  status                    String       @db.VarChar(32)
+  credentialKind            String       @db.VarChar(32)
+  expiresAt                 DateTime
+  createdAt                 DateTime     @default(now())
+  completedAt               DateTime?
+  failedAt                  DateTime?
 
   @@index([userId, status, createdAt])
   @@index([expiresAt, status])
   @@index([itemId])
+  @@index([purpose, status, createdAt])
+  @@index([publicAssetId, status, createdAt])
 }
 
 model DriveFileVersion {
@@ -383,6 +405,84 @@ model DriveFileVersion {
   @@index([itemId, deletedAt, versionNumber])
   @@index([userId, createdAt])
   @@index([deletePending])
+}
+
+model PublicAsset {
+  id              String                 @id @default(cuid())
+  assetId         String                 @unique @db.VarChar(38)
+  userId          String
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId          String                 @unique
+  item            DriveItem              @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  name            String                 @db.VarChar(255)
+  originalName    String                 @db.VarChar(255)
+  size            BigInt
+  mimeType        String                 @db.VarChar(255)
+  storageKey      String                 @unique
+  etag            String?
+  lifecycleStatus String                 @default("active") @db.VarChar(32)
+  trashedAt       DateTime?
+  trashedBy       String?
+  hiddenAt        DateTime?
+  hiddenBy        String?
+  deletedAt       DateTime?
+  deletedBy       String?
+  accessCount     BigInt                 @default(0)
+  responseBytes   BigInt                 @default(0)
+  lastAccessedAt  DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  accessLogs      PublicAssetAccessLog[]
+  revisions       PublicAssetRevision[]
+  uploadSessions  DriveUploadSession[]
+
+  @@index([userId, lifecycleStatus, createdAt])
+  @@index([userId, lifecycleStatus, name])
+  @@index([userId, lastAccessedAt])
+  @@index([lifecycleStatus, lastAccessedAt])
+  @@index([lastAccessedAt])
+}
+
+model PublicAssetAccessLog {
+  id            String       @id @default(cuid())
+  assetId       String       @db.VarChar(38)
+  publicAssetId String?
+  publicAsset   PublicAsset? @relation(fields: [publicAssetId], references: [id], onDelete: SetNull)
+  userId        String?
+  ip            String?
+  referer       String?
+  userAgent     String?
+  method        String       @db.VarChar(16)
+  statusCode    Int
+  bytes         BigInt       @default(0)
+  accessedAt    DateTime     @default(now())
+
+  @@index([assetId, accessedAt])
+  @@index([publicAssetId, accessedAt])
+  @@index([userId, accessedAt])
+  @@index([statusCode, accessedAt])
+  @@index([method, accessedAt])
+}
+
+model PublicAssetRevision {
+  id            String       @id @default(cuid())
+  assetId       String       @db.VarChar(38)
+  publicAssetId String?
+  publicAsset   PublicAsset? @relation(fields: [publicAssetId], references: [id], onDelete: SetNull)
+  itemId        String
+  item          DriveItem    @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  storageKey    String       @unique
+  name          String       @db.VarChar(255)
+  originalName  String       @db.VarChar(255)
+  size          BigInt
+  mimeType      String?      @db.VarChar(255)
+  etag          String?
+  createdAt     DateTime     @default(now())
+  replacedAt    DateTime     @default(now())
+  replacedBy    String?
+
+  @@index([publicAssetId, replacedAt])
+  @@index([assetId, replacedAt])
 }
 
 model AuditLog {
