@@ -19,7 +19,8 @@ describe("git worktree services", () => {
       stdout: "# branch.head main\n# branch.upstream origin/main\n# branch.ab +1 -0\n1 .M N... 100644 100644 100644 abc abc docs/a.md\n",
       stderr: "",
     })
-    const service = createGitStatusService({ commandRunner: { run }, pathExists: async () => true })
+    const logger = { error: vi.fn(), warn: vi.fn() }
+    const service = createGitStatusService({ commandRunner: { run }, logger, pathExists: async () => true })
 
     await expect(service.getSnapshot(repository)).resolves.toMatchObject({
       repositoryId: "repo-1",
@@ -29,6 +30,45 @@ describe("git worktree services", () => {
       ahead: 1,
       behind: 0,
     })
+    expect(logger.warn).not.toHaveBeenCalledWith("Git repository state anomaly detected.", expect.anything())
+  })
+
+  it("logs status anomalies once per unchanged repository state", async () => {
+    const run = vi.fn().mockResolvedValue({
+      stdout: "# branch.head main\n# branch.ab +0 -0\nu UU N... 100644 100644 100644 100644 a b c d docs/conflict.md\n",
+      stderr: "",
+    })
+    const logger = { error: vi.fn(), warn: vi.fn() }
+    const service = createGitStatusService({
+      commandRunner: { run },
+      logger,
+      pathExists: async () => true,
+      readStateDiagnostics: async () => ({
+        cherryPickInProgress: false,
+        indexLockExists: true,
+        mergeInProgress: true,
+        rebaseInProgress: false,
+      }),
+    })
+
+    await service.getSnapshot(repository)
+    await service.getSnapshot(repository)
+
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+    expect(logger.warn).toHaveBeenCalledWith("Git repository state anomaly detected.", expect.objectContaining({
+      operation: "git.status",
+      operationId: expect.any(String),
+      repositoryId: "repo-1",
+      repoPath: "/repo",
+      anomalies: ["upstream-missing", "conflicts", "index-lock", "merge-in-progress"],
+      branch: "main",
+      changeCount: 1,
+      conflictedCount: 1,
+      diagnostics: expect.objectContaining({
+        indexLockExists: true,
+        mergeInProgress: true,
+      }),
+    }))
   })
 
   it("lists repository summaries without failing the whole batch", async () => {
@@ -111,6 +151,30 @@ describe("git worktree services", () => {
     const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
     const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
     expect(completed?.operationId).toBe(started?.operationId)
+  })
+
+  it("logs remote operation success with a lightweight snapshot summary", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const getSnapshot = vi.fn().mockResolvedValue({
+      changes: [{ path: "docs/a.md", status: "modified", conflicted: false }],
+      behind: 0,
+      ahead: 1,
+    })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot, logger, now: () => new Date("2026-06-17T10:00:00.000Z") })
+
+    await service.push(repository)
+
+    const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
+    expect(logger.info).toHaveBeenCalledWith("Git operation completed.", expect.objectContaining({
+      operation: "git.push",
+      operationId: started?.operationId,
+      snapshot: expect.objectContaining({
+        ahead: 1,
+        changeCount: 1,
+        isDirty: true,
+      }),
+    }))
   })
 
   it("blocks sync when worktree has changes", async () => {

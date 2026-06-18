@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 const defaultLoggerMock = vi.hoisted(() => ({
   info: vi.fn(),
   warn: vi.fn(),
+  error: vi.fn(),
 }))
 
 import { createSystemAppWindowService } from "../system-app-window-service"

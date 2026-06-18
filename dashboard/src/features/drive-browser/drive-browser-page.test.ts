@@ -490,11 +490,17 @@ describe('drive browser view model', () => {
     })
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const codeHtml = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
+      snapshot,
+      initialRendererId: 'code',
+    }))
     const source = readFileSync(new URL('./renderers/drive-renderer-shell.tsx', import.meta.url), 'utf8')
 
     expect(html).toContain('文件操作')
-    expect(source).toContain("'fixed top-5 right-5 z-50'")
+    expect(source).toContain("selected.id === 'code' ? 'top-14' : 'top-5'")
     expect(source).not.toContain("'fixed right-5 bottom-5 z-50'")
+    expect(html).toContain('top-5')
+    expect(codeHtml).toContain('top-14')
     expect(source).toContain('FLOATING_MENU_IDLE_DIM_DELAY_MS = 3000')
     expect(source).toContain('setIdleDimmed(true)')
     expect(source).toContain("'opacity-50 hover:opacity-100 focus-visible:opacity-100'")

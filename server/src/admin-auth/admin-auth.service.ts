@@ -97,7 +97,16 @@ export class AdminAuthService {
       throw new UnauthorizedException("邮箱或密码错误。")
     }
 
-    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        status: true,
+        displayName: true,
+      },
+    })
     const userPasswordMatches = user ? await verifyPassword(password, user.passwordHash) : false
     if (user && user.status === "active" && userPasswordMatches) {
       const token = this.signDashboardToken({ sub: user.id, email: user.email, type: "user" })
@@ -145,7 +154,16 @@ export class AdminAuthService {
       })
       if (revoked) return null
       if (payload.type === "user") {
-        const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
+        const user = await this.prisma.user.findUnique({
+          where: { id: payload.sub },
+          select: {
+            id: true,
+            email: true,
+            status: true,
+            displayName: true,
+            passwordChangedAt: true,
+          },
+        })
         if (
           !user ||
           user.status !== "active" ||

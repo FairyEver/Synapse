@@ -431,4 +431,14 @@ describe("AdminController", () => {
       .toThrow("用户状态无效：status 必须是 active 或 disabled")
   })
 
+  it("rejects oversized admin user notes", async () => {
+    const updateUserAdminNote = vi.fn()
+    const controller = createController({ updateUserAdminNote } as never)
+
+    await expect(controller.updateUserAdminNote("user-1", { adminNote: "a".repeat(501) }))
+      .rejects
+      .toThrow("管理员备注无效：adminNote 最多 500 个字符")
+    expect(updateUserAdminNote).not.toHaveBeenCalled()
+  })
+
 })

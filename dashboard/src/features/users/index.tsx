@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { Pencil, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type AdminUserRow, type LiveClientRow } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -15,6 +15,16 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   getLiveClientSummary,
   mergeLiveClientSnapshot,
@@ -37,6 +47,8 @@ export default function UsersPage() {
     user: AdminUserRow
     status: AdminUserRow['status']
   } | null>(null)
+  const [noteTarget, setNoteTarget] = useState<AdminUserRow | null>(null)
+  const [adminNoteDraft, setAdminNoteDraft] = useState('')
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
 
@@ -99,9 +111,26 @@ export default function UsersPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const updateAdminNote = useMutation({
+    mutationFn: ({ id, adminNote }: { id: string; adminNote: string | null }) =>
+      adminApi.updateUserAdminNote(id, adminNote),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setNoteTarget(null)
+      setAdminNoteDraft('')
+      toast.success('备注已保存')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   function handleToggle(user: AdminUserRow) {
     const newStatus = user.status === 'active' ? 'disabled' : 'active'
     setStatusTarget({ user, status: newStatus })
+  }
+
+  function openAdminNoteDialog(user: AdminUserRow) {
+    setNoteTarget(user)
+    setAdminNoteDraft(user.adminNote ?? '')
   }
 
   function confirmStatusChange() {
@@ -109,6 +138,15 @@ export default function UsersPage() {
     toggleStatus.mutate({
       id: statusTarget.user.id,
       status: statusTarget.status,
+    })
+  }
+
+  function saveAdminNote() {
+    if (!noteTarget) return
+    const trimmedAdminNote = adminNoteDraft.trim()
+    updateAdminNote.mutate({
+      id: noteTarget.id,
+      adminNote: trimmedAdminNote ? trimmedAdminNote : null,
     })
   }
 
@@ -121,6 +159,33 @@ export default function UsersPage() {
       cell: ({ row }) => (
         <span className='font-medium'>{row.original.email}</span>
       ),
+    },
+    {
+      accessorKey: 'displayName',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='用户名' />
+      ),
+      cell: ({ row }) => row.original.displayName?.trim() || '-',
+    },
+    {
+      accessorKey: 'adminNote',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='备注' />
+      ),
+      cell: ({ row }) => {
+        const adminNote = row.original.adminNote?.trim()
+        return adminNote ? (
+          <span
+            className='block max-w-xs truncate text-muted-foreground'
+            title={adminNote}
+          >
+            {adminNote}
+          </span>
+        ) : (
+          <span className='text-muted-foreground'>-</span>
+        )
+      },
+      enableSorting: false,
     },
     {
       accessorKey: 'status',
@@ -190,6 +255,14 @@ export default function UsersPage() {
           <Button
             variant='ghost'
             className='h-8 px-2'
+            onClick={() => openAdminNoteDialog(row.original)}
+          >
+            <Pencil className='size-4' />
+            备注
+          </Button>
+          <Button
+            variant='ghost'
+            className='h-8 px-2'
             disabled={
               toggleStatus.isPending &&
               statusTarget?.user.id === row.original.id
@@ -217,6 +290,9 @@ export default function UsersPage() {
       </Button>
     </div>
   ) : null
+  const isAdminNoteUnchanged = noteTarget
+    ? adminNoteDraft.trim() === (noteTarget.adminNote ?? '').trim()
+    : true
 
   return (
     <>
@@ -261,6 +337,54 @@ export default function UsersPage() {
           isLoading={toggleStatus.isPending}
           handleConfirm={confirmStatusChange}
         />
+        <Dialog
+          open={Boolean(noteTarget)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setNoteTarget(null)
+              setAdminNoteDraft('')
+            }
+          }}
+        >
+          <DialogContent className='sm:max-w-md'>
+            <DialogHeader>
+              <DialogTitle>编辑备注</DialogTitle>
+              <DialogDescription className='sr-only'>
+                编辑管理员可见的用户备注。
+              </DialogDescription>
+            </DialogHeader>
+            <div className='grid gap-2'>
+              <Label htmlFor='admin-note'>备注</Label>
+              <Textarea
+                id='admin-note'
+                value={adminNoteDraft}
+                maxLength={500}
+                rows={5}
+                onChange={(event) => setAdminNoteDraft(event.target.value)}
+              />
+              <div className='text-xs text-muted-foreground'>
+                {adminNoteDraft.length}/500
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant='outline'
+                onClick={() => {
+                  setNoteTarget(null)
+                  setAdminNoteDraft('')
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                disabled={updateAdminNote.isPending || isAdminNoteUnchanged}
+                onClick={saveAdminNote}
+              >
+                保存
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Main>
     </>
   )

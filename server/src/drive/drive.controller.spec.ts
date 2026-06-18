@@ -504,6 +504,8 @@ describe("DriveController", () => {
     })
     expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
       shareId: "shr_file",
+      actorUserId: null,
+      itemId: undefined,
       password: "letmein",
       cookie: "access-cookie",
       childrenPage: { offset: 20, limit: 10 },
@@ -532,6 +534,8 @@ describe("DriveController", () => {
     expect(response.headers["set-cookie"]).toBeUndefined()
     expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
       shareId: "shr_file",
+      actorUserId: null,
+      itemId: undefined,
       password: "stale",
       cookie: undefined,
       childrenPage: undefined,
@@ -579,9 +583,11 @@ describe("DriveController", () => {
 
     expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
       shareId: "shr_folder",
+      actorUserId: null,
       itemId: "file-1",
       password: "letmein",
       cookie: "access-cookie",
+      childrenPage: undefined,
     })
   })
 

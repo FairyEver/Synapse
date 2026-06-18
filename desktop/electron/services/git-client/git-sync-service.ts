@@ -3,6 +3,7 @@ import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import {
   createGitOperationId,
+  gitErrorMeta,
   logGitOperationBlocked,
   logGitOperationFailed,
   logGitOperationStarted,
@@ -154,7 +155,11 @@ export function createGitSyncService(deps: SyncDeps) {
     logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, meta)
     try {
       const operationResult = await action(operationId)
-      logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, meta)
+      const snapshot = await readSnapshotSummaryForLog(repository, operation, operationId)
+      logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+        ...meta,
+        ...(snapshot ? { snapshot } : {}),
+      })
       return operationResult
     } catch (error) {
       logGitOperationFailed(deps.logger ?? noopLogger, {
@@ -167,6 +172,25 @@ export function createGitSyncService(deps: SyncDeps) {
         extra: meta,
       })
       throw error
+    }
+  }
+
+  async function readSnapshotSummaryForLog(
+    repository: SynapseGitRepository,
+    operation: string,
+    operationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      const snapshot = await deps.getSnapshot(repository)
+      return summarizeSyncSnapshot(snapshot)
+    } catch (error) {
+      deps.logger?.warn("Git operation snapshot summary failed.", {
+        ...repositoryLogMeta(repository),
+        operation,
+        operationId,
+        ...gitErrorMeta(error),
+      })
+      return null
     }
   }
 }

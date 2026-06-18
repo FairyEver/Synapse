@@ -117,12 +117,15 @@ function readCommandDiagnostics(error: unknown): GitCommandDiagnostics {
 function categorizeGitErrorForLog(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   if (/no available git|no git command|ENOENT|没有可用的 git|git 命令/i.test(message)) return "git-missing"
-  if (/authentication failed|permission denied|could not read username|access denied|认证失败/i.test(message)) return "auth-failed"
-  if (/could not resolve host|failed to connect|network|timed out|timeout|超时/i.test(message)) return "network-failed"
+  if (/authentication failed|could not read username|access denied|invalid username or password|认证失败/i.test(message)) return "auth-failed"
+  if (/permission denied|publickey|403|not allowed|权限/i.test(message)) return "permission-denied"
+  if (/repository not found|remote not found|not found|does not appear to be a git repository/i.test(message)) return "remote-not-found"
+  if (/could not resolve host|failed to connect|network|timed out|timeout|proxy|ssl|certificate|connection reset|超时/i.test(message)) return "network-failed"
   if (/not a git repository/i.test(message)) return "not-git-repository"
   if (/local changes would be overwritten|working tree|uncommitted changes|未提交/i.test(message)) return "working-tree-dirty"
   if (/non-fast-forward|fetch first|rejected/i.test(message)) return "non-fast-forward"
   if (/conflict|merge conflict|CONFLICT/i.test(message)) return "conflict"
+  if (/index\.lock|another git process/i.test(message)) return "index-lock"
   return "unknown"
 }
 

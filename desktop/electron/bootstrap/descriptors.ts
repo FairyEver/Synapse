@@ -104,7 +104,7 @@ import { createGitCommitService, type GitCommitService } from "../services/git-c
 import { createGitEnvironmentService, type GitEnvironmentService } from "../services/git-client/git-environment-service"
 import { createGitHistoryService, type GitHistoryService } from "../services/git-client/git-history-service"
 import { createGitRepositoryRegistry, type GitRepositoryRegistry } from "../services/git-client/git-repository-registry"
-import { createGitStatusService, type GitStatusService } from "../services/git-client/git-status-service"
+import { createGitStateDiagnosticsReader, createGitStatusService, type GitStatusService } from "../services/git-client/git-status-service"
 import { createGitSyncService, type GitSyncService } from "../services/git-client/git-sync-service"
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
@@ -1585,10 +1585,12 @@ export const gitStatusServiceDescriptor: ServiceDescriptor<GitStatusService> = {
   criticality: "degraded",
   dependsOn: ["git.command-runner"],
   create(ctx) {
+    const commandRunner = ctx.registry.get<GitClientCommandRunner>("git.command-runner")
     return createGitStatusService({
-      commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      commandRunner,
       logger: ctx.logger.child("git.status"),
       pathExists,
+      readStateDiagnostics: createGitStateDiagnosticsReader(commandRunner, pathExists),
     })
   },
 }

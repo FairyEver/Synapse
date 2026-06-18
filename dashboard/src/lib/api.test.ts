@@ -1,6 +1,33 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { adminApi, dashboardApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAuthExpired } from './api'
 
+describe('adminApi.users', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('updates admin-only user notes through the admin endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'user/id', adminNote: '备注' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.updateUserAdminNote('user/id', '备注')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/users/user%2Fid/admin-note',
+      expect.objectContaining({
+        body: JSON.stringify({ adminNote: '备注' }),
+        credentials: 'include',
+        method: 'PATCH',
+      })
+    )
+  })
+})
+
 describe('adminApi.cleanupLogs', () => {
   afterEach(() => {
     vi.restoreAllMocks()

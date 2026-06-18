@@ -1,3 +1,4 @@
+import path from "node:path"
 import type {
   SynapseGitDiffResult,
   SynapseGitRepository,
@@ -13,13 +14,87 @@ import {
   logGitOperationFailed,
   repositoryLogMeta,
   summarizeChanges,
+  summarizeSnapshot,
 } from "./git-logging"
 import { parseGitStatusPorcelainV2 } from "./git-status-parser"
+
+type GitRepositoryStateDiagnostics = {
+  readonly cherryPickInProgress: boolean
+  readonly indexLockExists: boolean
+  readonly mergeInProgress: boolean
+  readonly rebaseInProgress: boolean
+}
 
 type StatusDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly logger?: Pick<StructuredLogger, "error" | "warn">
   readonly pathExists: (filePath: string) => Promise<boolean>
+  readonly readStateDiagnostics?: (repository: SynapseGitRepository) => Promise<GitRepositoryStateDiagnostics>
+}
+
+function createGitStateDiagnosticsReader(
+  commandRunner: Pick<GitClientCommandRunner, "run">,
+  pathExists: (filePath: string) => Promise<boolean>,
+) {
+  return async (repository: SynapseGitRepository): Promise<GitRepositoryStateDiagnostics> => {
+    const result = await commandRunner.run({
+      cwd: repository.localPath,
+      args: [
+        "rev-parse",
+        "--git-path",
+        "index.lock",
+        "--git-path",
+        "MERGE_HEAD",
+        "--git-path",
+        "rebase-merge",
+        "--git-path",
+        "rebase-apply",
+        "--git-path",
+        "CHERRY_PICK_HEAD",
+      ],
+      logFailure: false,
+      operation: "git.status.diagnostics",
+      repoPath: repository.localPath,
+      repositoryId: repository.id,
+    })
+    const [
+      indexLockPath = "",
+      mergeHeadPath = "",
+      rebaseMergePath = "",
+      rebaseApplyPath = "",
+      cherryPickHeadPath = "",
+    ] = result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+
+    const [
+      indexLockExists,
+      mergeInProgress,
+      rebaseMergeExists,
+      rebaseApplyExists,
+      cherryPickInProgress,
+    ] = await Promise.all([
+      gitPathExists(repository.localPath, indexLockPath, pathExists),
+      gitPathExists(repository.localPath, mergeHeadPath, pathExists),
+      gitPathExists(repository.localPath, rebaseMergePath, pathExists),
+      gitPathExists(repository.localPath, rebaseApplyPath, pathExists),
+      gitPathExists(repository.localPath, cherryPickHeadPath, pathExists),
+    ])
+
+    return {
+      cherryPickInProgress,
+      indexLockExists,
+      mergeInProgress,
+      rebaseInProgress: rebaseMergeExists || rebaseApplyExists,
+    }
+  }
+}
+
+function gitPathExists(
+  repositoryPath: string,
+  gitPath: string,
+  pathExists: (filePath: string) => Promise<boolean>,
+): Promise<boolean> {
+  if (!gitPath) return Promise.resolve(false)
+  return pathExists(path.isAbsolute(gitPath) ? gitPath : path.join(repositoryPath, gitPath))
 }
 
 function isNotGitRepository(error: unknown): boolean {
@@ -27,6 +102,8 @@ function isNotGitRepository(error: unknown): boolean {
 }
 
 export function createGitStatusService(deps: StatusDeps) {
+  const lastAnomalyFingerprints = new Map<string, string>()
+
   return {
     async getSnapshot(repository: SynapseGitRepository): Promise<SynapseGitRepositorySnapshot> {
       if (!(await deps.pathExists(repository.localPath))) {
@@ -57,12 +134,16 @@ export function createGitStatusService(deps: StatusDeps) {
           repoPath: repository.localPath,
           repositoryId: repository.id,
         })
-        return {
+        const parsed = parseGitStatusPorcelainV2(result.stdout)
+        const snapshot = {
           repositoryId: repository.id,
           pathExists: true,
           isGitRepository: true,
-          ...parseGitStatusPorcelainV2(result.stdout),
+          ...parsed,
         }
+        const diagnostics = await readStateDiagnosticsForLog(deps, repository, operation, operationId)
+        logStatusAnomalies(deps, lastAnomalyFingerprints, repository, operation, operationId, snapshot, diagnostics, result.stdout)
+        return snapshot
       } catch (error) {
         if (isNotGitRepository(error)) {
           deps.logger?.warn("Git repository status unavailable because path is not a Git repository.", {
@@ -175,9 +256,85 @@ function summarizeSummaryError(error: unknown): Record<string, unknown> {
   }
 }
 
+async function readStateDiagnosticsForLog(
+  deps: StatusDeps,
+  repository: SynapseGitRepository,
+  operation: string,
+  operationId: string,
+): Promise<GitRepositoryStateDiagnostics | null> {
+  if (!deps.readStateDiagnostics) return null
+  try {
+    return await deps.readStateDiagnostics(repository)
+  } catch (error) {
+    deps.logger?.warn("Git repository diagnostic probe failed.", {
+      ...repositoryLogMeta(repository),
+      operation,
+      operationId,
+      ...gitErrorMeta(error),
+    })
+    return null
+  }
+}
+
+function logStatusAnomalies(
+  deps: StatusDeps,
+  lastAnomalyFingerprints: Map<string, string>,
+  repository: SynapseGitRepository,
+  operation: string,
+  operationId: string,
+  snapshot: SynapseGitRepositorySnapshot,
+  diagnostics: GitRepositoryStateDiagnostics | null,
+  stdout: string,
+): void {
+  const anomalies = collectStatusAnomalies(snapshot, diagnostics, stdout)
+  if (anomalies.length === 0) {
+    lastAnomalyFingerprints.delete(repository.id)
+    return
+  }
+
+  const fingerprint = JSON.stringify({
+    anomalies,
+    branch: snapshot.currentBranch,
+    upstream: snapshot.upstream,
+    conflictedCount: snapshot.changes.filter((change) => change.conflicted).length,
+  })
+  if (lastAnomalyFingerprints.get(repository.id) === fingerprint) return
+  lastAnomalyFingerprints.set(repository.id, fingerprint)
+
+  deps.logger?.warn("Git repository state anomaly detected.", {
+    ...repositoryLogMeta(repository),
+    operation,
+    operationId,
+    anomalies,
+    ...summarizeSnapshot(snapshot),
+    ...(diagnostics ? { diagnostics } : {}),
+  })
+}
+
+function collectStatusAnomalies(
+  snapshot: SynapseGitRepositorySnapshot,
+  diagnostics: GitRepositoryStateDiagnostics | null,
+  stdout: string,
+): string[] {
+  const anomalies: string[] = []
+  if (!stdout.includes("# branch.head ")) {
+    anomalies.push("head-missing")
+  } else if (stdout.includes("# branch.head (detached)")) {
+    anomalies.push("detached-head")
+  }
+  if (snapshot.currentBranch && !snapshot.upstream) anomalies.push("upstream-missing")
+  if (snapshot.hasConflicts) anomalies.push("conflicts")
+  if (diagnostics?.indexLockExists) anomalies.push("index-lock")
+  if (diagnostics?.mergeInProgress) anomalies.push("merge-in-progress")
+  if (diagnostics?.rebaseInProgress) anomalies.push("rebase-in-progress")
+  if (diagnostics?.cherryPickInProgress) anomalies.push("cherry-pick-in-progress")
+  return anomalies
+}
+
 const noopLogger = {
   error: () => undefined,
   warn: () => undefined,
 }
 
 export type GitStatusService = ReturnType<typeof createGitStatusService>
+export { createGitStateDiagnosticsReader }

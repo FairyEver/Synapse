@@ -35,8 +35,8 @@ describe("createGitClientCommandRunner", () => {
     const logger = { error: vi.fn() }
     const error = Object.assign(new Error("Authentication failed for https://user:secret@git.example.com/team/docs.git?token=raw-token"), {
       exitCode: 128,
-      output: "Authorization: Bearer raw.bearer.token\nfatal: token=raw-token",
-      stderr: "Authorization: Bearer raw.bearer.token\nfatal: token=raw-token https://user:secret@git.example.com/team/docs.git",
+      output: "Authorization: Bearer raw.bearer.token\nCookie: session=raw-cookie\nfatal: token=raw-token",
+      stderr: "Authorization: Bearer raw.bearer.token\nCookie: session=raw-cookie\nfatal: token=raw-token GIT_AUTH_TOKEN=env-secret https://user:secret@git.example.com/team/docs.git",
       stdout: "",
       timedOut: false,
     })
@@ -63,6 +63,8 @@ describe("createGitClientCommandRunner", () => {
     const serialized = JSON.stringify(logger.error.mock.calls)
     expect(serialized).not.toContain("raw-token")
     expect(serialized).not.toContain("raw.bearer.token")
+    expect(serialized).not.toContain("raw-cookie")
+    expect(serialized).not.toContain("env-secret")
     expect(serialized).not.toContain("user:secret")
   })
 })

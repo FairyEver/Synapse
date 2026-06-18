@@ -160,6 +160,8 @@ describe("AdminService", () => {
       select: expect.objectContaining({
         id: true,
         email: true,
+        displayName: true,
+        adminNote: true,
         status: true,
         memberships: {
           select: {
@@ -189,6 +191,8 @@ describe("AdminService", () => {
       select: expect.objectContaining({
         id: true,
         email: true,
+        displayName: true,
+        adminNote: true,
         status: true,
         memberships: {
           select: {
@@ -204,6 +208,79 @@ describe("AdminService", () => {
     }))
     expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")
     expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("modulePermissions")
+  })
+
+  it("updates admin-only user notes without auditing note content", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "ada@example.com",
+      displayName: "Ada",
+      adminNote: "important account",
+      status: "active",
+      memberships: [],
+      createdAt: new Date("2026-06-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-01T00:00:00.000Z"),
+    })
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.updateUserAdminNote(
+      "user-1",
+      { adminNote: "  important account  " },
+      "admin@example.com",
+      "203.0.113.12",
+    )).resolves.toMatchObject({
+      id: "user-1",
+      adminNote: "important account",
+    })
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { adminNote: "important account" },
+      select: expect.objectContaining({
+        id: true,
+        email: true,
+        displayName: true,
+        adminNote: true,
+        status: true,
+      }),
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.user.admin_note_update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: {
+        hasAdminNote: true,
+        adminNoteLength: "important account".length,
+      },
+      ipAddress: "203.0.113.12",
+    })
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("important account")
+  })
+
+  it("clears admin-only user notes when the value is blank", async () => {
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await service.updateUserAdminNote("user-1", { adminNote: "   " })
+
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { adminNote: null },
+    }))
+  })
+
+  it("reports a missing user when updating an admin note", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.update.mockRejectedValue(createNotFoundError())
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, auditLog as never)
+
+    await expect(service.updateUserAdminNote("missing-user", { adminNote: "note" }))
+      .rejects
+      .toThrow("用户不存在。")
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 
   it("disconnects active Live sockets after disabling a user", async () => {

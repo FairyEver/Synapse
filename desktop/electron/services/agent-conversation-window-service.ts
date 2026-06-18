@@ -16,6 +16,11 @@ import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
 import type { WindowManager } from "../runtime/window"
 import { managedBrowserWindow } from "../runtime/window"
 import { getWindowIconPath } from "./app-icon-service"
+import {
+  buildDetachedViewWindowUrl,
+  createDetachedViewWindowService,
+  focusDetachedViewWindow,
+} from "./detached-view-window-service"
 import { createMainLogger } from "./log-store"
 
 export const AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL = "synapse:agent:detached-conversations-changed"
@@ -54,21 +59,17 @@ function windowManagerIdForKey(key: string): string {
   return `agent-conversation:${key}`
 }
 
-function focusWindow(window: BrowserWindow): void {
-  if (window.isMinimized()) window.restore()
-  window.focus()
-}
-
 function buildWindowUrl(baseUrl: string, request: AgentConversationWindowRequest): string {
   const params = buildAgentConversationWindowSearchParams(request)
-  const separator = baseUrl.includes("?") ? "&" : "?"
-  return `${baseUrl}${separator}${params.toString()}`
+  return buildDetachedViewWindowUrl(baseUrl, params)
 }
 
 export function createAgentConversationWindowService(deps: Deps) {
-  const windowsByKey = new Map<string, BrowserWindow>()
+  const detachedWindows = createDetachedViewWindowService({
+    createWindow: deps.createWindow,
+    logger: deps.logger,
+  })
   const detachedByKey = new Map<string, AgentDetachedConversation>()
-  const keyByWindowId = new Map<number, string>()
 
   function listDetachedConversations(): AgentDetachedConversation[] {
     return [...detachedByKey.values()].sort((left, right) => left.openedAt.localeCompare(right.openedAt))
@@ -78,17 +79,18 @@ export function createAgentConversationWindowService(deps: Deps) {
     deps.broadcast(AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL, listDetachedConversations())
   }
 
-  function removeTrackedWindow(key: string): boolean {
-    const window = windowsByKey.get(key)
-    if (window) {
-      keyByWindowId.delete(window.id)
-    }
-    const hadWindow = windowsByKey.delete(key)
+  function removeDetachedState(key: string): boolean {
     const hadDetached = detachedByKey.delete(key)
-    if (hadWindow || hadDetached) {
+    if (hadDetached) {
       deps.detachWindow?.(windowManagerIdForKey(key))
       broadcastDetachedConversations()
     }
+    return hadDetached
+  }
+
+  function removeTrackedWindow(key: string): boolean {
+    const hadWindow = detachedWindows.remove(key)
+    const hadDetached = removeDetachedState(key)
     return hadWindow || hadDetached
   }
 
@@ -97,9 +99,9 @@ export function createAgentConversationWindowService(deps: Deps) {
       request: AgentConversationWindowRequest,
     ): Promise<AgentConversationWindowOpenResult> {
       const key = keyForTarget(request)
-      const existing = windowsByKey.get(key)
-      if (existing && !existing.isDestroyed()) {
-        focusWindow(existing)
+      const existing = detachedWindows.get(key)
+      if (existing) {
+        focusDetachedViewWindow(existing)
         deps.logger.info("Focused existing agent conversation window.", {
           projectId: request.projectId,
           conversationId: request.conversationId,
@@ -108,61 +110,52 @@ export function createAgentConversationWindowService(deps: Deps) {
       }
 
       const icon = deps.getIconPath()
-      const window = deps.createWindow({
-        ...AGENT_CONVERSATION_WINDOW_BOUNDS,
-        show: false,
-        title: request.title?.trim() || "对话",
-        ...(icon ? { icon } : {}),
-        webPreferences: {
-          preload: deps.getPreloadPath(),
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
+      await detachedWindows.open({
+        key,
+        payload: request,
+        options: {
+          ...AGENT_CONVERSATION_WINDOW_BOUNDS,
+          show: false,
+          title: request.title?.trim() || "对话",
+          ...(icon ? { icon } : {}),
+          webPreferences: {
+            preload: deps.getPreloadPath(),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
         },
+        load: (targetWindow, targetRequest) => targetWindow.loadURL(buildWindowUrl(deps.baseUrl(), targetRequest)),
+        logMetadata: (targetRequest) => ({
+          projectId: targetRequest.projectId,
+          conversationId: targetRequest.conversationId,
+        }),
+        preloadErrorMessage: "Agent conversation window preload script failed.",
+        loadErrorMessage: "Failed to load agent conversation window.",
+        onCreated: ({ window }) => {
+          const managerId = windowManagerIdForKey(key)
+          deps.attachWindow?.(managerId, window)
+          detachedByKey.set(key, {
+            projectId: request.projectId,
+            conversationId: request.conversationId,
+            sessionKey: request.sessionKey,
+            title: request.title?.trim() || "对话",
+            windowId: window.id,
+            openedAt: deps.now(),
+          })
+          broadcastDetachedConversations()
+        },
+        onRemoved: ({ key: removedKey }) => {
+          removeDetachedState(removedKey)
+        },
+        onClosed: () => {
+          deps.logger.info("Agent conversation window closed.", {
+            projectId: request.projectId,
+            conversationId: request.conversationId,
+          })
+        },
+        onReadyToShow: (targetWindow) => targetWindow.show(),
       })
-      const managerId = windowManagerIdForKey(key)
-      deps.attachWindow?.(managerId, window)
-      windowsByKey.set(key, window)
-      keyByWindowId.set(window.id, key)
-      detachedByKey.set(key, {
-        projectId: request.projectId,
-        conversationId: request.conversationId,
-        sessionKey: request.sessionKey,
-        title: request.title?.trim() || "对话",
-        windowId: window.id,
-        openedAt: deps.now(),
-      })
-      broadcastDetachedConversations()
-
-      window.webContents.on("preload-error", (_event, _preloadPath, error) => {
-        deps.logger.error("Agent conversation window preload script failed.", { error })
-      })
-
-      window.once("ready-to-show", () => {
-        window.show()
-      })
-
-      window.on("closed", () => {
-        const currentKey = keyByWindowId.get(window.id) ?? key
-        removeTrackedWindow(currentKey)
-        deps.logger.info("Agent conversation window closed.", {
-          projectId: request.projectId,
-          conversationId: request.conversationId,
-        })
-      })
-
-      try {
-        await window.loadURL(buildWindowUrl(deps.baseUrl(), request))
-      } catch (error) {
-        removeTrackedWindow(key)
-        deps.logger.error("Failed to load agent conversation window.", {
-          projectId: request.projectId,
-          conversationId: request.conversationId,
-          error,
-        })
-        if (!window.isDestroyed()) window.close()
-        throw error
-      }
 
       deps.logger.info("Loaded agent conversation window.", {
         projectId: request.projectId,
@@ -172,9 +165,7 @@ export function createAgentConversationWindowService(deps: Deps) {
     },
 
     focusConversationWindow(target: AgentConversationTarget): AgentConversationWindowFocusResult {
-      const window = windowsByKey.get(keyForTarget(target))
-      if (!window || window.isDestroyed()) return { focused: false }
-      focusWindow(window)
+      if (!detachedWindows.focus(keyForTarget(target))) return { focused: false }
       return { focused: true }
     },
 
@@ -182,8 +173,8 @@ export function createAgentConversationWindowService(deps: Deps) {
       target: Pick<AgentConversationTarget, "projectId" | "conversationId">,
     ): AgentConversationWindowCloseResult {
       const key = keyForTarget(target)
-      const window = windowsByKey.get(key)
-      if (!window || window.isDestroyed()) {
+      const window = detachedWindows.get(key)
+      if (!window) {
         removeTrackedWindow(key)
         return { closed: false }
       }
@@ -211,26 +202,24 @@ export function createAgentConversationWindowService(deps: Deps) {
       request: AgentConversationWindowReplaceRequest,
     ): Promise<AgentConversationWindowReplaceResult> {
       const oldKey = keyForTarget(request.from)
-      const window = windowsByKey.get(oldKey)
-      if (!window || window.isDestroyed()) {
+      const window = detachedWindows.get(oldKey)
+      if (!window) {
         return { replaced: false }
       }
 
       const newKey = keyForTarget(request.to)
-      const existingNewWindow = windowsByKey.get(newKey)
-      if (existingNewWindow && existingNewWindow !== window && !existingNewWindow.isDestroyed()) {
-        focusWindow(existingNewWindow)
+      const existingNewWindow = detachedWindows.get(newKey)
+      if (existingNewWindow && existingNewWindow !== window) {
+        focusDetachedViewWindow(existingNewWindow)
         return { replaced: false }
       }
 
       const previousDetached = detachedByKey.get(oldKey)
       const title = request.to.title?.trim() || "对话"
       if (oldKey !== newKey) {
-        windowsByKey.delete(oldKey)
         detachedByKey.delete(oldKey)
         deps.detachWindow?.(windowManagerIdForKey(oldKey))
-        windowsByKey.set(newKey, window)
-        keyByWindowId.set(window.id, newKey)
+        detachedWindows.replaceKey(oldKey, newKey)
         deps.attachWindow?.(windowManagerIdForKey(newKey), window)
       }
 

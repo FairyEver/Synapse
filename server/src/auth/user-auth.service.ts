@@ -203,6 +203,10 @@ export class UserAuthService {
             email,
             passwordHash: await hashPassword(input.password),
           },
+          select: {
+            id: true,
+            email: true,
+          },
         })
         return { registered: true as const, user }
       })
@@ -361,7 +365,15 @@ export class UserAuthService {
 
   async login(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
     const email = input.email.trim().toLowerCase()
-    const user = await this.prisma.user.findUnique({ where: { email } })
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        status: true,
+      },
+    })
     const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false
     if (!user || !passwordMatches) {
       await this.auditLog?.record({
@@ -688,7 +700,15 @@ export class UserAuthService {
   async verifyAccessToken(token: string): Promise<{ userId: string }> {
     try {
       const payload = this.jwt.verify<UserJwtPayload>(token)
-      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: {
+          id: true,
+          email: true,
+          status: true,
+          passwordChangedAt: true,
+        },
+      })
       if (
         !user ||
         user.status !== "active" ||

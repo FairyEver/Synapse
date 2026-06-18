@@ -216,6 +216,13 @@ describe("AdminAuthService", () => {
     expect(result.token.length).toBeGreaterThan(20)
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: "user@example.com" },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        status: true,
+        displayName: true,
+      },
     })
   })
 

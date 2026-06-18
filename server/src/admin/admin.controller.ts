@@ -15,6 +15,10 @@ const userStatusSchema = z.object({
   status: z.enum(["active", "disabled"]),
 }).strict()
 
+const userAdminNoteSchema = z.object({
+  adminNote: z.string().max(500, "最多 500 个字符").nullable(),
+}).strict()
+
 const bulkInvitationDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(maxBulkInvitationDeleteIds, `最多选择 ${maxBulkInvitationDeleteIds} 项`),
 }).strict()
@@ -23,7 +27,7 @@ const createInvitationSchema = z.object({
   teamId: z.string().trim().min(1),
 }).strict()
 
-const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
+const userSortFields = ["createdAt", "updatedAt", "email", "displayName", "status"] as const
 const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
@@ -165,6 +169,13 @@ export class AdminController {
     const result = userStatusSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "用户状态无效。")
     return this.admin.updateUserStatus(id, result.data, request?.admin?.email, request?.ip)
+  }
+
+  @Patch("/users/:id/admin-note")
+  async updateUserAdminNote(@Param("id") id: string, @Body() body: unknown, @Req() request?: AdminRequest) {
+    const result = userAdminNoteSchema.safeParse(body)
+    if (!result.success) throw badRequestFromZodError(result.error, "管理员备注无效。")
+    return this.admin.updateUserAdminNote(id, result.data, request?.admin?.email, request?.ip)
   }
 
   @Get("/teams")

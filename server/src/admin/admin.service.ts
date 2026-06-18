@@ -20,6 +20,8 @@ const bulkInvitationDeleteAuditSampleSize = 10
 const adminUserSelect = {
   id: true,
   email: true,
+  displayName: true,
+  adminNote: true,
   status: true,
   memberships: {
     select: {
@@ -253,6 +255,35 @@ export class AdminService {
     return user
   }
 
+  async updateUserAdminNote(
+    id: string,
+    input: { readonly adminNote: string | null },
+    actorEmail = "system",
+    ipAddress = "system",
+  ) {
+    const adminNote = normalizeAdminNote(input.adminNote)
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: { adminNote },
+      select: adminUserSelect,
+    }).catch((error: unknown) => {
+      if (isRecordNotFoundError(error)) throw new NotFoundException("用户不存在。")
+      throw error
+    })
+    await this.recordServiceManagedAuditSafely({
+      adminEmail: actorEmail,
+      action: "admin.user.admin_note_update",
+      targetType: "user",
+      targetId: id,
+      detail: {
+        hasAdminNote: adminNote !== null,
+        adminNoteLength: adminNote?.length ?? 0,
+      },
+      ipAddress,
+    })
+    return user
+  }
+
   private async assertCanDisableUser(userId: string, client: AdminPrismaClient): Promise<void> {
     const ownerships = await client.teamMembership.findMany({
       where: {
@@ -388,6 +419,11 @@ function auditWriteErrorMetadata(error: unknown): { readonly errorName: string; 
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function normalizeAdminNote(value: string | null): string | null {
+  const adminNote = value?.trim() ?? ""
+  return adminNote ? adminNote : null
 }
 
 function toAdminTeamListRow(team: AdminTeamRecord) {

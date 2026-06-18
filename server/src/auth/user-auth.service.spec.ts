@@ -606,6 +606,10 @@ describe("UserAuthService", () => {
         email: "u@example.com",
         passwordHash: expect.any(String),
       },
+      select: {
+        id: true,
+        email: true,
+      },
     })
     expect(prisma.__tx.userSession.create).not.toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -633,6 +637,10 @@ describe("UserAuthService", () => {
         data: {
           email: "u@example.com",
           passwordHash: expect.any(String),
+        },
+        select: {
+          id: true,
+          email: true,
         },
       })
       expect(auditLog.record).toHaveBeenCalledTimes(1)

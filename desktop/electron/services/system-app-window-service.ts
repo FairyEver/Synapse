@@ -10,6 +10,11 @@ import type {
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
 } from "../../src/modules/apps/types"
+import {
+  buildDetachedViewWindowUrl,
+  createDetachedViewWindowService,
+  focusDetachedViewWindow,
+} from "./detached-view-window-service"
 import { createMainLogger } from "./log-store"
 
 const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:apps:content-open-request"
@@ -17,6 +22,7 @@ const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:apps:content-open-reque
 type SystemAppWindowLogger = {
   readonly info: (message: string, metadata?: Record<string, unknown>) => void
   readonly warn: (message: string, metadata?: Record<string, unknown>) => void
+  readonly error: (message: string, metadata?: Record<string, unknown>) => void
 }
 
 type SystemAppWindowServiceDeps = {
@@ -32,11 +38,6 @@ const SYSTEM_APP_WINDOW_BOUNDS = {
   height: 760,
   minWidth: 960,
   minHeight: 640,
-}
-
-function focusWindow(window: BrowserWindow): void {
-  if (window.isMinimized()) window.restore()
-  window.focus()
 }
 
 function resolveSystemAppWindowPreloadPath(baseDir: string): string {
@@ -65,8 +66,11 @@ function sendToSystemAppWindow(
 }
 
 export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
-  const windowsByAppId = new Map<SynapseSystemAppId, BrowserWindow>()
   const logger = deps.logger ?? createMainLogger("system-app.window")
+  const detachedWindows = createDetachedViewWindowService({
+    createWindow: deps.createWindow,
+    logger,
+  })
 
   return {
     async open(appId: SynapseSystemAppId, options: SynapseSystemAppOpenOptions = {}): Promise<void> {
@@ -76,9 +80,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         throw new Error("Unknown system app.")
       }
 
-      const existing = windowsByAppId.get(appId)
-      if (existing && !existing.isDestroyed()) {
-        focusWindow(existing)
+      const existing = detachedWindows.get(appId)
+      if (existing) {
+        focusDetachedViewWindow(existing)
         if (options.contentOpenRequest) {
           const sent = sendToSystemAppWindow(
             deps.windowManager,
@@ -102,29 +106,35 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       if (options.contentOpenRequest) {
         params.set("contentOpenRequest", JSON.stringify(options.contentOpenRequest))
       }
-      const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
-      const window = deps.createWindow({
-        ...SYSTEM_APP_WINDOW_BOUNDS,
-        title: buildSystemAppWindowTitle(definition),
-        webPreferences: {
-          preload: deps.getPreloadPath?.() ?? resolveSystemAppWindowPreloadPath(__dirname),
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
+      const url = buildDetachedViewWindowUrl(baseUrl, params)
+      await detachedWindows.open({
+        key: appId,
+        payload: { appId, definition, url },
+        options: {
+          ...SYSTEM_APP_WINDOW_BOUNDS,
+          title: buildSystemAppWindowTitle(definition),
+          webPreferences: {
+            preload: deps.getPreloadPath?.() ?? resolveSystemAppWindowPreloadPath(__dirname),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+          },
+        },
+        load: (targetWindow, payload) => targetWindow.loadURL(payload.url),
+        cleanupOnLoadError: false,
+        onCreated: ({ window }) => {
+          deps.windowManager?.attach(
+            { id: systemAppWindowManagerId(appId), role: "detail" },
+            managedBrowserWindow(window, "detail"),
+          )
+        },
+        onRemoved: () => {
+          deps.windowManager?.detach(systemAppWindowManagerId(appId))
+        },
+        onClosed: () => {
+          logger.info("System app window closed.", { appId, appType: definition.type })
         },
       })
-
-      deps.windowManager?.attach(
-        { id: systemAppWindowManagerId(appId), role: "detail" },
-        managedBrowserWindow(window, "detail"),
-      )
-      windowsByAppId.set(appId, window)
-      window.on("closed", () => {
-        windowsByAppId.delete(appId)
-        logger.info("System app window closed.", { appId, appType: definition.type })
-      })
-
-      await window.loadURL(url)
       logger.info("Loaded system app window.", { appId, appType: definition.type })
     },
   }

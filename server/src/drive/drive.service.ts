@@ -1662,7 +1662,7 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: input.item.id, userId: input.ownerId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
           include: driveItemWithShares,
         }) as DriveItemRecordWithStorage | null
-        if (!currentItem || currentItem.type !== DRIVE_ITEM_TYPE.file) throw new NotFoundException("文件不存在。")
+        if (!currentItem || currentItem.type !== DRIVE_ITEM_TYPE.file || !currentItem.storageKey) throw new NotFoundException("文件不存在。")
         const transactionCurrentVersion = await tx.driveFileVersion.findFirst({
           where: { itemId: currentItem.id, storageKey: currentItem.storageKey, deletedAt: null },
           select: { id: true },

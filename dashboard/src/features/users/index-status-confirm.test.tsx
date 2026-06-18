@@ -15,6 +15,7 @@ vi.mock('@/lib/api', () => ({
     listLiveClients: vi.fn(),
     listUsers: vi.fn(),
     subscribeLiveClients: vi.fn(),
+    updateUserAdminNote: vi.fn(),
     updateUserStatus: vi.fn(),
   },
 }))
@@ -58,6 +59,8 @@ describe('UsersPage status confirmation', () => {
       data: [{
         id: 'user-1',
         email: 'ada@example.com',
+        displayName: 'Ada',
+        adminNote: null,
         status: 'active',
         memberships: [],
         createdAt: '2026-06-14T00:00:00.000Z',
@@ -70,6 +73,8 @@ describe('UsersPage status confirmation', () => {
     mockedAdminApi.updateUserStatus.mockResolvedValue({
       id: 'user-1',
       email: 'ada@example.com',
+      displayName: 'Ada',
+      adminNote: null,
       status: 'disabled',
       memberships: [],
       createdAt: '2026-06-14T00:00:00.000Z',
@@ -93,6 +98,64 @@ describe('UsersPage status confirmation', () => {
     await click(dialogButtonByText('禁用'))
 
     expect(mockedAdminApi.updateUserStatus).toHaveBeenCalledWith('user-1', 'disabled')
+  })
+
+  it('shows display names and lets administrators edit user notes', async () => {
+    mockedAdminApi.listUsers.mockResolvedValue({
+      data: [{
+        id: 'user-1',
+        email: 'ada@example.com',
+        displayName: 'Ada',
+        adminNote: '付费客户',
+        status: 'active',
+        memberships: [],
+        createdAt: '2026-06-14T00:00:00.000Z',
+        updatedAt: '2026-06-14T00:00:00.000Z',
+      }],
+      total: 1,
+    })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+    mockedAdminApi.updateUserAdminNote.mockResolvedValue({
+      id: 'user-1',
+      email: 'ada@example.com',
+      displayName: 'Ada',
+      adminNote: '内部测试账号',
+      status: 'active',
+      memberships: [],
+      createdAt: '2026-06-14T00:00:00.000Z',
+      updatedAt: '2026-06-14T00:00:00.000Z',
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Ada')
+      expect(document.body.textContent).toContain('付费客户')
+    })
+
+    await click(tableButtonByText('备注'))
+    const textarea = document.querySelector('textarea')
+    if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('textarea not found')
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        'value'
+      )?.set
+      valueSetter?.call(textarea, ' 内部测试账号 ')
+      textarea.dispatchEvent(new Event('input', { bubbles: true }))
+      await Promise.resolve()
+    })
+    await waitFor(() => {
+      expect(dialogButtonByText('保存').disabled).toBe(false)
+    })
+    await click(dialogButtonByText('保存'))
+
+    expect(mockedAdminApi.updateUserAdminNote).toHaveBeenCalledWith(
+      'user-1',
+      '内部测试账号'
+    )
   })
 })
 

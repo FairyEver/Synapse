@@ -75,6 +75,8 @@ export type AuditLog = {
 export type AdminUserRow = {
   id: string
   email: string
+  displayName: string | null
+  adminNote: string | null
   status: 'active' | 'disabled'
   memberships: Array<{
     id?: string
@@ -861,6 +863,14 @@ export const adminApi = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
+  updateUserAdminNote: (id: string, adminNote: string | null) =>
+    request<AdminUserRow>(
+      `${adminApiBasePath}/users/${encodeURIComponent(id)}/admin-note`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ adminNote }),
+      }
+    ),
   listTeams: (options: AdminTeamListQuery = {}) =>
     request<PaginatedResponse<AdminTeamRow>>(
       `${adminApiBasePath}/teams${querySuffix({
