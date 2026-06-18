@@ -150,6 +150,11 @@ const drivePublicLinksPageInputSchema = z.object({
   limit: z.number().int().positive().optional(),
 }).optional()
 
+const drivePageInputSchema = z.object({
+  offset: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
+}).optional()
+
 const drivePublicLinksPageSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.object({
   items: z.array(itemSchema),
   page: z.object({
@@ -158,6 +163,33 @@ const drivePublicLinksPageSchema = <T extends z.ZodTypeAny>(itemSchema: T) => z.
     hasMore: z.boolean(),
     nextOffset: z.number().int().nonnegative().nullable(),
   }),
+})
+
+const drivePublicAssetSchema = z.object({
+  assetId: z.string(),
+  itemId: z.string(),
+  name: z.string(),
+  size: z.string(),
+  mimeType: z.string(),
+  url: z.string(),
+  lifecycleStatus: z.enum(["active", "trashed", "hidden", "legacy_missing"]),
+  accessCount: z.string(),
+  responseBytes: z.string(),
+  lastAccessedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+const driveTrashItemSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["normal", "public_asset"]),
+  name: z.string(),
+  type: z.enum(["file", "folder"]),
+  size: z.string(),
+  mimeType: z.string().nullable(),
+  originalPath: z.string().nullable(),
+  assetId: z.string().optional(),
+  trashedAt: z.string(),
 })
 
 const driveFileVersionListPageSchema = z.object({
@@ -199,6 +231,14 @@ const drivePreparedFileUploadSchema = z.object({
   url: z.string(),
   headers: z.record(z.string(), z.string()),
   body: z.custom<ArrayBuffer>(isArrayBufferLike, "body must be an ArrayBuffer"),
+})
+const drivePublicAssetLocalFileSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  mimeType: z.string().nullable().optional(),
+})
+const drivePublicAssetUploadSchema = z.object({
+  files: z.array(drivePublicAssetLocalFileSchema).min(1).max(DRIVE_LOCAL_UPLOAD_MAX_FILES),
 })
 const unsafeRelativePathSegmentPattern = /(^|\/)\.\.($|\/)|^\/|^[A-Za-z]:[\\/]/
 
@@ -273,6 +313,14 @@ const driveAccessSettingsSchema = z.object({
 const driveAccessItemSchema = driveItemIdSchema.extend(driveAccessSettingsSchema.shape)
 const driveDeleteItemSchema = z.object({ itemId: z.string() })
 const driveShareIdSchema = z.object({ shareId: z.string() })
+const drivePublicAssetIdSchema = z.object({ assetId: z.string() })
+const drivePublicAssetRenameSchema = drivePublicAssetIdSchema.extend({ name: z.string().min(1) })
+const drivePublicAssetReplaceSchema = drivePublicAssetIdSchema.extend(drivePublicAssetLocalFileSchema.shape)
+const driveTrashItemSchemaInput = z.object({
+  itemId: z.string(),
+  kind: z.enum(["normal", "public_asset"]).optional(),
+  assetId: z.string().optional(),
+})
 const okSchema = z.object({ ok: z.literal(true) })
 
 const accountStateSchema = z.discriminatedUnion("status", [
@@ -662,6 +710,84 @@ export const accountIpcModule: IpcModule = {
       request: drivePublicLinksPageInputSchema,
       response: drivePublicLinksPageSchema(driveShareListItemSchema),
       handler: async (_ctx, input) => accountService.listDriveShares(drivePublicLinksPageInputSchema.parse(input)),
+    },
+    listDrivePublicAssets: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:list",
+      request: drivePageInputSchema,
+      response: drivePublicLinksPageSchema(drivePublicAssetSchema).extend({ total: z.number().int().nonnegative() }),
+      handler: async (_ctx, input) => accountService.listDrivePublicAssets(drivePageInputSchema.parse(input)),
+    },
+    getDrivePublicAsset: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:get",
+      request: drivePublicAssetIdSchema,
+      response: drivePublicAssetSchema,
+      handler: async (_ctx, input) => accountService.getDrivePublicAsset(drivePublicAssetIdSchema.parse(input).assetId),
+    },
+    uploadDrivePublicAssets: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:upload",
+      request: drivePublicAssetUploadSchema,
+      response: z.object({
+        results: z.array(z.discriminatedUnion("status", [
+          z.object({ status: z.literal("fulfilled"), fileName: z.string(), asset: drivePublicAssetSchema }),
+          z.object({ status: z.literal("rejected"), fileName: z.string(), message: z.string() }),
+        ])),
+      }),
+      handler: async (_ctx, input) => accountService.uploadDrivePublicAssets(drivePublicAssetUploadSchema.parse(input)),
+    },
+    replaceDrivePublicAssetFile: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:replace-file",
+      request: drivePublicAssetReplaceSchema,
+      response: drivePublicAssetSchema,
+      handler: async (_ctx, input) => accountService.replaceDrivePublicAssetFile(drivePublicAssetReplaceSchema.parse(input)),
+    },
+    renameDrivePublicAsset: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:rename",
+      request: drivePublicAssetRenameSchema,
+      response: drivePublicAssetSchema,
+      handler: async (_ctx, input) => {
+        const parsed = drivePublicAssetRenameSchema.parse(input)
+        return accountService.renameDrivePublicAsset(parsed.assetId, parsed.name)
+      },
+    },
+    trashDrivePublicAsset: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:trash",
+      request: drivePublicAssetIdSchema,
+      response: drivePublicAssetSchema,
+      handler: async (_ctx, input) => accountService.trashDrivePublicAsset(drivePublicAssetIdSchema.parse(input).assetId),
+    },
+    restoreDrivePublicAsset: {
+      kind: "invoke",
+      channel: "synapse:account:drive:public-assets:restore",
+      request: drivePublicAssetIdSchema,
+      response: drivePublicAssetSchema,
+      handler: async (_ctx, input) => accountService.restoreDrivePublicAsset(drivePublicAssetIdSchema.parse(input).assetId),
+    },
+    listDriveTrash: {
+      kind: "invoke",
+      channel: "synapse:account:drive:trash:list",
+      request: drivePageInputSchema,
+      response: drivePublicLinksPageSchema(driveTrashItemSchema).extend({ total: z.number().int().nonnegative() }),
+      handler: async (_ctx, input) => accountService.listDriveTrash(drivePageInputSchema.parse(input)),
+    },
+    restoreDriveTrashItem: {
+      kind: "invoke",
+      channel: "synapse:account:drive:trash:restore",
+      request: driveTrashItemSchemaInput,
+      response: z.union([driveItemSchema, drivePublicAssetSchema]),
+      handler: async (_ctx, input) => accountService.restoreDriveTrashItem(driveTrashItemSchemaInput.parse(input)),
+    },
+    deleteDriveTrashItem: {
+      kind: "invoke",
+      channel: "synapse:account:drive:trash:delete",
+      request: z.object({ itemId: z.string() }),
+      response: okSchema,
+      handler: async (_ctx, input) => accountService.deleteDriveTrashItem(z.object({ itemId: z.string() }).parse(input).itemId),
     },
   },
   events: {

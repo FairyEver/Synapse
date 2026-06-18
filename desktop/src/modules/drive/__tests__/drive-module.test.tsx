@@ -8,8 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   type DriveItemDto,
+  type DrivePublicAssetDto,
+  type DrivePublicAssetListPageDto,
   type DrivePublicLinksPageDto,
   type DriveShareListItemDto,
+  type DriveTrashListPageDto,
 } from "@synapse/shared"
 import type { SynapseAccountState } from "@/types/account"
 import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "@/lib/drive-local-upload-limits"
@@ -33,7 +36,9 @@ const mocks = vi.hoisted(() => ({
   filePathForDroppedFile: vi.fn(),
   getDriveItemPreviewUrl: vi.fn(),
   getDriveUsage: vi.fn(),
+  listDrivePublicAssets: vi.fn(),
   listDriveItems: vi.fn(),
+  listDriveTrash: vi.fn(),
   listDriveShares: vi.fn(),
   moveDriveItem: vi.fn(),
   openExternal: vi.fn(),
@@ -95,7 +100,9 @@ vi.mock("@/lib/electron-bridge", () => ({
       filePathForDroppedFile: mocks.filePathForDroppedFile,
       getDriveItemPreviewUrl: mocks.getDriveItemPreviewUrl,
       getDriveUsage: mocks.getDriveUsage,
+      listDrivePublicAssets: mocks.listDrivePublicAssets,
       listDriveItems: mocks.listDriveItems,
+      listDriveTrash: mocks.listDriveTrash,
       listDriveShares: mocks.listDriveShares,
       moveDriveItem: mocks.moveDriveItem,
       prepareDriveFolderUpload: mocks.prepareDriveFolderUpload,
@@ -129,7 +136,9 @@ beforeEach(() => {
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.getDriveItemPreviewUrl.mockResolvedValue({ url: "https://synapse.test/drive/items/file-1" })
   mocks.getDriveUsage.mockResolvedValue({ usedBytes: "4", reservedBytes: "0", quotaBytes: "100" })
+  mocks.listDrivePublicAssets.mockResolvedValue(createDrivePublicAssetPage([]))
   mocks.listDriveItems.mockResolvedValue([])
+  mocks.listDriveTrash.mockResolvedValue(createDriveTrashPage([]))
   mocks.listDriveShares.mockResolvedValue(createDrivePublicLinksPage([]))
   mocks.moveDriveItem.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file" }))
   mocks.prepareDriveFolderUpload.mockResolvedValue({
@@ -192,6 +201,44 @@ describe("DriveModule", () => {
     expect(html).not.toContain("上传文件夹")
     expect(html).toContain("新建文件夹")
     expect(html).toContain("刷新")
+  })
+
+  it("shows fixed public assets and trash entries only at the drive root", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "项目资料", type: "folder" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-1", name: "inside.txt", type: "file", parentId: "folder-1" }),
+      ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).toContain("公开素材")
+    expect(document.body.textContent).toContain("回收站")
+
+    await clickDriveRow("项目资料")
+    await flushAct()
+
+    expect(document.body.textContent).not.toContain("公开素材")
+    expect(document.body.textContent).not.toContain("回收站")
+    expect(document.body.textContent).toContain("inside.txt")
+  })
+
+  it("opens system entries without normal drive context actions", async () => {
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openDriveNameContextMenu("公开素材")
+    expect(document.body.querySelector("[role='menu']")).toBeNull()
+    expect(queryButtonByLabel("更多 公开素材")).toBeNull()
+
+    await clickDriveRow("公开素材")
+    await flushAct()
+
+    expect(mocks.listDrivePublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+    expect(document.querySelector('[aria-current="page"]')?.textContent).toBe("公开素材")
   })
 
   it("opens public link management from one top-bar action", async () => {
@@ -1936,6 +1983,40 @@ function createDrivePublicLinksPage<TItem>(
     page: {
       offset: 0,
       limit: 20,
+      hasMore: false,
+      nextOffset: null,
+      ...page,
+    },
+  }
+}
+
+function createDrivePublicAssetPage(
+  items: readonly DrivePublicAssetDto[],
+  page: Partial<DrivePublicAssetListPageDto["page"]> = {},
+): DrivePublicAssetListPageDto {
+  return {
+    items,
+    total: items.length,
+    page: {
+      offset: 0,
+      limit: 50,
+      hasMore: false,
+      nextOffset: null,
+      ...page,
+    },
+  }
+}
+
+function createDriveTrashPage(
+  items: DriveTrashListPageDto["items"],
+  page: Partial<DriveTrashListPageDto["page"]> = {},
+): DriveTrashListPageDto {
+  return {
+    items,
+    total: items.length,
+    page: {
+      offset: 0,
+      limit: 50,
       hasMore: false,
       nextOffset: null,
       ...page,

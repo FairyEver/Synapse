@@ -28,6 +28,14 @@ import { useAccount } from "@/app-shell/account"
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { FormDialog } from "@/components/form-dialog"
+import { DrivePublicAssetsView } from "./drive-public-assets-view"
+import { DriveTrashView } from "./drive-trash-view"
+import {
+  DRIVE_PUBLIC_ASSETS_ENTRY_ID,
+  DRIVE_TRASH_ENTRY_ID,
+  driveRootSystemEntries,
+  type DriveSystemEntry,
+} from "./drive-system-entries"
 import {
   DRIVE_LOCAL_UPLOAD_MAX_FILES,
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
@@ -137,6 +145,7 @@ type DriveShareSuccessState = Pick<DriveItemDto, "name" | "type"> & {
 
 type DriveAccessExpiresInOption = DriveAccessSettingsInput["expiresIn"]
 type DriveShareAccessModeOption = DriveShareAccessMode
+type DriveActiveView = "files" | "public-assets" | "trash"
 
 type DriveStatusBadge = {
   readonly key: string
@@ -178,6 +187,7 @@ function DriveModule() {
   const { pendingAction, startLogin, state: accountState } = useAccount()
   const [items, setItems] = useState<DriveItemDto[]>([])
   const [path, setPath] = useState<DrivePathEntry[]>([{ id: null, name: "根目录" }])
+  const [activeView, setActiveView] = useState<DriveActiveView>("files")
   const [loading, setLoading] = useState(false)
   const [usageState, setUsageState] = useState<DriveUsageState>({ status: "idle", usage: null })
   const [openingFolderId, setOpeningFolderId] = useState<string | null>(null)
@@ -244,6 +254,7 @@ function DriveModule() {
       setOpeningFolderId(null)
       setError(null)
       setPath([{ id: null, name: "根目录" }])
+      setActiveView("files")
       return
     }
     if (prefetchedParentIdRef.current !== undefined && prefetchedParentIdRef.current === parentId) {
@@ -253,7 +264,7 @@ function DriveModule() {
     void refreshDriveView()
   }, [accountAuthenticated, parentId, refreshDriveView])
 
-  const actionsDisabled = !accountAuthenticated || loading || openingFolderId !== null || error !== null
+  const actionsDisabled = activeView !== "files" || !accountAuthenticated || loading || openingFolderId !== null || error !== null
   const uploadActionsDisabled = actionsDisabled || uploading
 
   const openFolder = useCallback(async (item: DriveItemDto) => {
@@ -273,9 +284,23 @@ function DriveModule() {
     }
   }, [openingFolderId])
 
-  const jumpToPath = useCallback((index: number) => {
-    setPath((current) => current.slice(0, index + 1))
+  const openSystemEntry = useCallback((entry: DriveSystemEntry) => {
+    if (entry.id === DRIVE_PUBLIC_ASSETS_ENTRY_ID) {
+      setActiveView("public-assets")
+      return
+    }
+    if (entry.id === DRIVE_TRASH_ENTRY_ID) {
+      setActiveView("trash")
+    }
   }, [])
+
+  const jumpToPath = useCallback((index: number) => {
+    if (activeView !== "files") {
+      if (index === 0) setActiveView("files")
+      return
+    }
+    setPath((current) => current.slice(0, index + 1))
+  }, [activeView])
 
   const refreshCurrentItemsAfterUpload = useCallback(async () => {
     if (!accountAuthenticated) return
@@ -547,14 +572,38 @@ function DriveModule() {
         />
       )
     }
+    if (activeView === "public-assets") {
+      return (
+        <div className="flex min-h-full flex-col gap-3">
+          <DriveBreadcrumbs
+            path={[{ id: null, name: "根目录" }, { id: DRIVE_PUBLIC_ASSETS_ENTRY_ID, name: "公开素材" }]}
+            onJumpToPath={jumpToPath}
+          />
+          <DrivePublicAssetsView onBack={() => setActiveView("files")} />
+        </div>
+      )
+    }
+    if (activeView === "trash") {
+      return (
+        <div className="flex min-h-full flex-col gap-3">
+          <DriveBreadcrumbs
+            path={[{ id: null, name: "根目录" }, { id: DRIVE_TRASH_ENTRY_ID, name: "回收站" }]}
+            onJumpToPath={jumpToPath}
+          />
+          <DriveTrashView onBack={() => setActiveView("files")} />
+        </div>
+      )
+    }
     return (
       <DriveFileList
         items={items}
+        systemEntries={driveRootSystemEntries(parentId)}
         loading={loading}
         openingFolderId={openingFolderId}
         path={path}
         onJumpToPath={jumpToPath}
         onOpenFolder={openFolder}
+        onOpenSystemEntry={openSystemEntry}
         onRename={handleRename}
         onMove={handleMove}
         onDelete={handleDelete}
@@ -1014,11 +1063,13 @@ function DriveMoveTreeSelectButton({
 
 function DriveFileList({
   items,
+  systemEntries,
   loading,
   openingFolderId,
   path,
   onJumpToPath,
   onOpenFolder,
+  onOpenSystemEntry,
   onRename,
   onMove,
   onDelete,
@@ -1032,11 +1083,13 @@ function DriveFileList({
   uploading,
 }: {
   readonly items: readonly DriveItemDto[]
+  readonly systemEntries: readonly DriveSystemEntry[]
   readonly loading: boolean
   readonly openingFolderId: string | null
   readonly path: readonly DrivePathEntry[]
   readonly onJumpToPath: (index: number) => void
   readonly onOpenFolder: (item: DriveItemDto) => void
+  readonly onOpenSystemEntry: (entry: DriveSystemEntry) => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto) => void
@@ -1100,7 +1153,7 @@ function DriveFileList({
         <ModuleContentPanel>
           <DriveFileTableSkeleton />
         </ModuleContentPanel>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && systemEntries.length === 0 ? (
         <Empty className="min-h-64 border">
           <EmptyHeader>
             <EmptyTitle>暂无文件</EmptyTitle>
@@ -1108,9 +1161,16 @@ function DriveFileList({
         </Empty>
       ) : (
         <ModuleContentPanel>
-          <Table className="table-fixed">
+          <Table className="table-fixed" containerClassName="overflow-x-hidden">
             <DriveFileTableHeader />
             <TableBody>
+              {systemEntries.map((entry) => (
+                <DriveSystemEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  onOpen={onOpenSystemEntry}
+                />
+              ))}
               {items.map((item) => (
                 <DriveFileListRow
                   key={item.id}
@@ -1333,6 +1393,35 @@ function DriveInlineBadges({
         )
       })}
     </div>
+  )
+}
+
+function DriveSystemEntryRow({
+  entry,
+  onOpen,
+}: {
+  readonly entry: DriveSystemEntry
+  readonly onOpen: (entry: DriveSystemEntry) => void
+}) {
+  return (
+    <TableRow className="cursor-pointer" onClick={() => onOpen(entry)}>
+      <TableCell className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span
+            className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
+            data-drive-item-name="true"
+            title={entry.name}
+            onContextMenu={(event) => event.stopPropagation()}
+          >
+            {entry.name}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">-</TableCell>
+      <TableCell className="truncate text-right tabular-nums text-muted-foreground">-</TableCell>
+      <TableCell aria-label={`${entry.name} 操作`} />
+    </TableRow>
   )
 }
 
