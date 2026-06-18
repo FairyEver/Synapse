@@ -1,3 +1,4 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { createGitEnvironmentService } from "../git-environment-service"
 
@@ -60,6 +61,7 @@ describe("git environment service", () => {
   })
 
   it("reads the first common SSH public key", async () => {
+    const expectedKeyPath = path.join("/Users/writer", ".ssh", "id_rsa.pub")
     const service = createGitEnvironmentService({
       commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }) },
       homeDir: "/Users/writer",
@@ -69,8 +71,8 @@ describe("git environment service", () => {
     })
 
     await expect(service.getSshPublicKey()).resolves.toEqual({
-      path: "/Users/writer/.ssh/id_rsa.pub",
-      content: "ssh-rsa public-key /Users/writer/.ssh/id_rsa.pub",
+      path: expectedKeyPath,
+      content: `ssh-rsa public-key ${expectedKeyPath}`,
     })
   })
 })
