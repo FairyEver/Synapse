@@ -1,14 +1,23 @@
 import type { SynapseGitErrorCategory } from "../../../src/types/git"
 import { runGitCommand, type GitCommandResult } from "../git-command"
+import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-logging"
 
 type GitClientRunInput = {
   readonly cwd: string
   readonly args: readonly string[]
   readonly fallbackMessage?: string
+  readonly logFailure?: boolean
+  readonly operation?: string
+  readonly operationId?: string
+  readonly repoPath?: string
+  readonly repositoryId?: string
   readonly timeoutMs?: number
 }
 
 type GitCommandFunction = typeof runGitCommand
+type GitCommandRunnerLogger = {
+  error(message: string, meta?: unknown): void
+}
 
 export function categorizeGitError(error: unknown): SynapseGitErrorCategory {
   const message = error instanceof Error ? error.message : String(error)
@@ -22,19 +31,42 @@ export function categorizeGitError(error: unknown): SynapseGitErrorCategory {
   return "unknown"
 }
 
-export function createGitClientCommandRunner(deps: { readonly runGitCommand?: GitCommandFunction } = {}) {
+export function createGitClientCommandRunner(deps: {
+  readonly logger?: GitCommandRunnerLogger
+  readonly runGitCommand?: GitCommandFunction
+} = {}) {
   const command = deps.runGitCommand ?? runGitCommand
   return {
     async run(input: GitClientRunInput): Promise<GitCommandResult> {
-      return command({
-        args: [...input.args],
-        cwd: input.cwd,
-        fallbackMessage: input.fallbackMessage ?? "Git 操作失败。",
-        timeoutMessage: "Git 操作超时。",
-        timeoutMs: input.timeoutMs ?? 60_000,
-      })
+      const startedAt = performance.now()
+      const operation = input.operation ?? `git.${input.args[0] ?? "command"}`
+      const operationId = input.operationId ?? createGitOperationId()
+      try {
+        return await command({
+          args: [...input.args],
+          cwd: input.cwd,
+          fallbackMessage: input.fallbackMessage ?? "Git 操作失败。",
+          timeoutMessage: "Git 操作超时。",
+          timeoutMs: input.timeoutMs ?? 60_000,
+        })
+      } catch (error) {
+        if (input.logFailure !== false) {
+          deps.logger?.error("Git command failed.", {
+            operation,
+            operationId,
+            ...(input.repositoryId ? { repositoryId: input.repositoryId } : {}),
+            repoPath: input.repoPath ?? input.cwd,
+            cwd: input.cwd,
+            gitArgs: summarizeGitArgs(input.args),
+            durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+            ...gitErrorMeta(error),
+          })
+        }
+        throw error
+      }
     },
   }
 }
 
 export type GitClientCommandRunner = ReturnType<typeof createGitClientCommandRunner>
+export type { GitClientRunInput }

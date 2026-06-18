@@ -13,6 +13,7 @@ describe("detectRemoteKind", () => {
 describe("git clone service", () => {
   it("clones into the selected target and registers the repository", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const addLocal = vi.fn().mockResolvedValue({
       id: "repo-1",
       name: "docs",
@@ -22,23 +23,30 @@ describe("git clone service", () => {
     })
     const service = createGitCloneService({
       commandRunner: { run },
+      logger,
       registry: { addLocal },
       pathExists: async () => false,
     })
 
     const result = await service.clone({
-      remoteUrl: "https://git.example.com/team/docs.git",
+      remoteUrl: "https://user:secret@git.example.com/team/docs.git?token=raw-token",
       targetPath: "/work/docs",
       name: "docs",
     })
 
     const targetPath = path.resolve("/work/docs")
-    expect(run).toHaveBeenCalledWith({
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
       cwd: path.dirname(targetPath),
-      args: ["clone", "--progress", "https://git.example.com/team/docs.git", targetPath],
+      args: ["clone", "--progress", "https://user:secret@git.example.com/team/docs.git?token=raw-token", targetPath],
+      operation: "git.clone",
+      operationId: expect.any(String),
       timeoutMs: 300000,
-    })
+    }))
     expect(result.repository.id).toBe("repo-1")
+    const serialized = JSON.stringify(logger.info.mock.calls)
+    expect(serialized).not.toContain("secret")
+    expect(serialized).not.toContain("raw-token")
+    expect(serialized).not.toContain("user:secret")
   })
 
   it("does not overwrite existing targets", async () => {

@@ -11,18 +11,31 @@ type GitCommandResult = {
   stdout: string
 }
 
+type GitCommandFailureResult = GitCommandResult & {
+  readonly exitCode?: number | null
+  readonly output: string
+  readonly signal?: NodeJS.Signals | string | null
+  readonly timedOut?: boolean
+}
+
 class GitCommandError extends Error {
+  declare readonly exitCode: number | null | undefined
   declare readonly output: string
+  declare readonly signal: NodeJS.Signals | string | null | undefined
   declare readonly stderr: string
   declare readonly stdout: string
+  declare readonly timedOut: boolean | undefined
 
-  constructor(message: string, result: GitCommandResult & { readonly output: string }) {
+  constructor(message: string, result: GitCommandFailureResult) {
     super(message)
     this.name = "GitCommandError"
     Object.defineProperties(this, {
+      exitCode: { enumerable: false, value: result.exitCode },
       output: { enumerable: false, value: result.output },
+      signal: { enumerable: false, value: result.signal },
       stderr: { enumerable: false, value: result.stderr },
       stdout: { enumerable: false, value: result.stdout },
+      timedOut: { enumerable: false, value: result.timedOut },
     })
   }
 }
@@ -139,7 +152,14 @@ function runGitCommand({
       ? setTimeout(() => {
           settled = true
           childProcess.kill("SIGTERM")
-          reject(new Error(timeoutMessage ?? fallbackMessage))
+          reject(new GitCommandError(timeoutMessage ?? fallbackMessage, {
+            exitCode: null,
+            output: combinedOutput,
+            signal: "SIGTERM",
+            stderr,
+            stdout,
+            timedOut: true,
+          }))
         }, timeoutMs)
       : null
 
@@ -171,7 +191,7 @@ function runGitCommand({
       reject(new Error((formatSpawnError ?? formatDefaultGitSpawnError)(error)))
     })
 
-    childProcess.on("close", (code) => {
+    childProcess.on("close", (code, signal) => {
       if (settled) {
         return
       }
@@ -195,7 +215,7 @@ function runGitCommand({
         ? formatFailureMessage(combinedOutput, fallbackMessage)
         : stderr.trim() || stdout.trim() || fallbackMessage
 
-      reject(new GitCommandError(message, { output: combinedOutput, stderr, stdout }))
+      reject(new GitCommandError(message, { exitCode: code, output: combinedOutput, signal, stderr, stdout }))
     })
   })
 }
@@ -236,7 +256,14 @@ async function runControlledGitCommand({
     const stdout = result.stdout ?? ""
     const stderr = result.stderr ?? ""
     if (result.timedOut) {
-      throw new Error(timeoutMessage ?? fallbackMessage)
+      throw new GitCommandError(timeoutMessage ?? fallbackMessage, {
+        exitCode: result.exitCode,
+        output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+        signal: result.signal,
+        stderr: result.stderr ?? "",
+        stdout: result.stdout ?? "",
+        timedOut: true,
+      })
     }
     if (result.exitCode === 0) {
       return { stderr, stdout }
@@ -245,12 +272,19 @@ async function runControlledGitCommand({
     const message = formatFailureMessage
       ? formatFailureMessage(combinedOutput, fallbackMessage)
       : stderr.trim() || stdout.trim() || fallbackMessage
-    throw new GitCommandError(message, { output: combinedOutput, stderr, stdout })
+    throw new GitCommandError(message, {
+      exitCode: result.exitCode,
+      output: combinedOutput,
+      signal: result.signal,
+      stderr,
+      stdout,
+      timedOut: false,
+    })
   } catch (error) {
     if (error instanceof Error && error.message) {
       throw error
     }
-    throw new Error((formatSpawnError ?? formatDefaultGitSpawnError)(error))
+    throw new Error((formatSpawnError ?? formatDefaultGitSpawnError)(error), { cause: error })
   }
 }
 

@@ -46,9 +46,11 @@ describe("git environment service", () => {
 
   it("writes global identity", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const service = createGitEnvironmentService({
       commandRunner: { run },
       homeDir: "/Users/writer",
+      logger,
       pathExists: async () => false,
       readFile: async () => "",
       platform: "darwin",
@@ -56,15 +58,21 @@ describe("git environment service", () => {
 
     await service.configureIdentity({ userName: "Writer", userEmail: "writer@example.com" })
 
-    expect(run).toHaveBeenCalledWith({ cwd: "/Users/writer", args: ["config", "--global", "user.name", "Writer"] })
-    expect(run).toHaveBeenCalledWith({ cwd: "/Users/writer", args: ["config", "--global", "user.email", "writer@example.com"] })
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/Users/writer", args: ["config", "--global", "user.name", "Writer"], logFailure: false }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/Users/writer", args: ["config", "--global", "user.email", "writer@example.com"], logFailure: false }))
+    const serialized = JSON.stringify(logger.info.mock.calls)
+    expect(serialized).toContain("example.com")
+    expect(serialized).not.toContain("writer@example.com")
+    expect(serialized).not.toContain("Writer")
   })
 
   it("reads the first common SSH public key", async () => {
     const expectedKeyPath = path.join("/Users/writer", ".ssh", "id_rsa.pub")
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const service = createGitEnvironmentService({
       commandRunner: { run: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }) },
       homeDir: "/Users/writer",
+      logger,
       pathExists: async (filePath) => filePath.endsWith("id_rsa.pub"),
       readFile: async (filePath) => `ssh-rsa public-key ${filePath}`,
       platform: "darwin",
@@ -74,5 +82,10 @@ describe("git environment service", () => {
       path: expectedKeyPath,
       content: `ssh-rsa public-key ${expectedKeyPath}`,
     })
+    expect(logger.info).toHaveBeenCalledWith("Git SSH public key lookup completed.", expect.objectContaining({
+      found: true,
+      keyType: "ssh-rsa",
+    }))
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("public-key")
   })
 })

@@ -3,7 +3,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { SynapseGitRepository } from "../../../src/types/git"
 import type { SynapseGitRepositoryRemoveInput } from "../../../src/types/git"
+import type { StructuredLogger } from "../../runtime/logging"
 import { normalizeRepositoryPath } from "./git-path-utils"
+import {
+  createGitOperationId,
+  logGitOperationFailed,
+  logGitOperationStarted,
+  logGitOperationSucceeded,
+  repositoryLogMeta,
+} from "./git-logging"
 
 type RegistryFile = {
   readonly version: 1
@@ -16,6 +24,7 @@ type AddLocalInput = {
 }
 
 type RegistryDeps = {
+  readonly logger?: Pick<StructuredLogger, "error" | "info">
   readonly userDataPath: string
   readonly now?: () => Date
   readonly trashItem?: (targetPath: string) => Promise<void>
@@ -62,54 +71,137 @@ export function createGitRepositoryRegistry(deps: RegistryDeps) {
     },
 
     async addLocal(input: AddLocalInput): Promise<SynapseGitRepository> {
-      const data = await readRegistry(filePath)
+      const operation = "git.repository.addLocal"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
       const localPath = normalizeRepositoryPath(input.localPath)
-      const existing = data.repositories.find((repository) => repository.localPath === localPath)
-      if (existing) return existing
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
+        repoPath: localPath,
+        nameLength: input.name.length,
+      })
+      try {
+        const data = await readRegistry(filePath)
+        const existing = data.repositories.find((repository) => repository.localPath === localPath)
+        if (existing) {
+          logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+            ...repositoryLogMeta(existing),
+            deduplicated: true,
+          })
+          return existing
+        }
 
-      const repository: SynapseGitRepository = {
-        id: randomUUID(),
-        name: sanitizeName(input.name, localPath),
-        localPath,
-        addedAt: now().toISOString(),
-        lastOpenedAt: null,
+        const repository: SynapseGitRepository = {
+          id: randomUUID(),
+          name: sanitizeName(input.name, localPath),
+          localPath,
+          addedAt: now().toISOString(),
+          lastOpenedAt: null,
+        }
+        await writeRegistry(filePath, { version: 1, repositories: [...data.repositories, repository] })
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, repositoryLogMeta(repository))
+        return repository
+      } catch (error) {
+        logGitOperationFailed(deps.logger ?? noopLogger, {
+          operation,
+          operationId,
+          repoPath: localPath,
+          startedAt,
+          error,
+          extra: {
+            nameLength: input.name.length,
+          },
+        })
+        throw error
       }
-      await writeRegistry(filePath, { version: 1, repositories: [...data.repositories, repository] })
-      return repository
     },
 
     async markOpened(repositoryId: string): Promise<void> {
-      const data = await readRegistry(filePath)
-      const openedAt = now().toISOString()
-      await writeRegistry(filePath, {
-        version: 1,
-        repositories: data.repositories.map((repository) => (
-          repository.id === repositoryId ? { ...repository, lastOpenedAt: openedAt } : repository
-        )),
-      })
+      const operation = "git.repository.open"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
+      try {
+        const data = await readRegistry(filePath)
+        const repository = data.repositories.find((item) => item.id === repositoryId)
+        const openedAt = now().toISOString()
+        await writeRegistry(filePath, {
+          version: 1,
+          repositories: data.repositories.map((repository) => (
+            repository.id === repositoryId ? { ...repository, lastOpenedAt: openedAt } : repository
+          )),
+        })
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+          repositoryId,
+          ...(repository ? repositoryLogMeta(repository) : {}),
+          found: Boolean(repository),
+        })
+      } catch (error) {
+        logGitOperationFailed(deps.logger ?? noopLogger, {
+          operation,
+          operationId,
+          repositoryId,
+          startedAt,
+          error,
+        })
+        throw error
+      }
     },
 
     async remove(input: SynapseGitRepositoryRemoveInput): Promise<void> {
-      const data = await readRegistry(filePath)
-      const repository = data.repositories.find((item) => item.id === input.repositoryId)
-
-      if (!repository) {
-        return
-      }
-
-      if (input.mode === "trash-local") {
-        if (!deps.trashItem) {
-          throw new Error("移到废纸篓功能不可用。")
-        }
-        await deps.trashItem(repository.localPath)
-      }
-
-      await writeRegistry(filePath, {
-        version: 1,
-        repositories: data.repositories.filter((repository) => repository.id !== input.repositoryId),
+      const operation = "git.repository.remove"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
+        repositoryId: input.repositoryId,
+        mode: input.mode,
       })
+      try {
+        const data = await readRegistry(filePath)
+        const repository = data.repositories.find((item) => item.id === input.repositoryId)
+
+        if (!repository) {
+          logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+            repositoryId: input.repositoryId,
+            mode: input.mode,
+            found: false,
+          })
+          return
+        }
+
+        if (input.mode === "trash-local") {
+          if (!deps.trashItem) {
+            throw new Error("移到废纸篓功能不可用。")
+          }
+          await deps.trashItem(repository.localPath)
+        }
+
+        await writeRegistry(filePath, {
+          version: 1,
+          repositories: data.repositories.filter((repository) => repository.id !== input.repositoryId),
+        })
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+          ...repositoryLogMeta(repository),
+          mode: input.mode,
+        })
+      } catch (error) {
+        logGitOperationFailed(deps.logger ?? noopLogger, {
+          operation,
+          operationId,
+          repositoryId: input.repositoryId,
+          startedAt,
+          error,
+          extra: {
+            mode: input.mode,
+          },
+        })
+        throw error
+      }
     },
   }
+}
+
+const noopLogger = {
+  error: () => undefined,
+  info: () => undefined,
 }
 
 export type GitRepositoryRegistry = ReturnType<typeof createGitRepositoryRegistry>

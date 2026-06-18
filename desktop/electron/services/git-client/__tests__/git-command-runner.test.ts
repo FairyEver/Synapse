@@ -30,4 +30,39 @@ describe("createGitClientCommandRunner", () => {
       timeoutMs: 60000,
     }))
   })
+
+  it("logs failed commands with diagnostics and redacts secrets", async () => {
+    const logger = { error: vi.fn() }
+    const error = Object.assign(new Error("Authentication failed for https://user:secret@git.example.com/team/docs.git?token=raw-token"), {
+      exitCode: 128,
+      output: "Authorization: Bearer raw.bearer.token\nfatal: token=raw-token",
+      stderr: "Authorization: Bearer raw.bearer.token\nfatal: token=raw-token https://user:secret@git.example.com/team/docs.git",
+      stdout: "",
+      timedOut: false,
+    })
+    const run = vi.fn().mockRejectedValue(error)
+    const runner = createGitClientCommandRunner({ logger, runGitCommand: run })
+
+    await expect(runner.run({
+      cwd: "/repo",
+      args: ["push", "https://user:secret@git.example.com/team/docs.git?token=raw-token"],
+      operation: "git.push",
+      operationId: "git-op-1",
+      repositoryId: "repo-1",
+      repoPath: "/repo",
+    })).rejects.toThrow("Authentication failed")
+
+    expect(logger.error).toHaveBeenCalledWith("Git command failed.", expect.objectContaining({
+      operation: "git.push",
+      operationId: "git-op-1",
+      repositoryId: "repo-1",
+      repoPath: "/repo",
+      exitCode: 128,
+      stderrPreview: expect.stringContaining("[redacted]"),
+    }))
+    const serialized = JSON.stringify(logger.error.mock.calls)
+    expect(serialized).not.toContain("raw-token")
+    expect(serialized).not.toContain("raw.bearer.token")
+    expect(serialized).not.toContain("user:secret")
+  })
 })

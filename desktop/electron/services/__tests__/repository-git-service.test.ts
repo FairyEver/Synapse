@@ -73,10 +73,12 @@ describe("repositoryGitService", () => {
     expect(mocks.runGitCommand).not.toHaveBeenCalledWith(expect.objectContaining({
       args: ["push", "--progress"],
     }))
-    expect(mocks.logger.warn).toHaveBeenCalledWith("Failed to determine ahead count after pull.", {
+    expect(mocks.logger.warn).toHaveBeenCalledWith("Failed to determine ahead count after pull.", expect.objectContaining({
+      operation: "repository.sync",
+      operationId: expect.any(String),
       repositoryUuid: "repo-1",
       error: aheadError,
-    })
+    }))
     expect(mocks.logger.error).not.toHaveBeenCalledWith(
       "Repository sync failed.",
       expect.anything(),
@@ -108,5 +110,32 @@ describe("repositoryGitService", () => {
     expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
       args: ["push", "--progress"],
     }))
+  })
+
+  it("logs failed repository git commands with operation diagnostics", async () => {
+    const pullError = Object.assign(new Error("fatal: Authentication failed for https://user:secret@example.com/repo.git"), {
+      exitCode: 128,
+      stderr: "Authorization: Bearer raw.bearer.token\nfatal: token=raw-token",
+      stdout: "",
+      output: "Authorization: Bearer raw.bearer.token\nfatal: token=raw-token",
+    })
+    mocks.runGitCommand.mockRejectedValue(pullError)
+
+    await expect(repositoryGitService.syncRepository(repository, vi.fn()))
+      .rejects
+      .toThrow("Authentication failed")
+
+    expect(mocks.logger.error).toHaveBeenCalledWith("Repository Git command failed.", expect.objectContaining({
+      operation: "repository.sync",
+      operationId: expect.any(String),
+      repositoryUuid: "repo-1",
+      gitArgs: ["pull", "--ff-only", "--progress"],
+      exitCode: 128,
+      stderrPreview: expect.stringContaining("[redacted]"),
+    }))
+    const serialized = JSON.stringify(mocks.logger.error.mock.calls)
+    expect(serialized).not.toContain("raw-token")
+    expect(serialized).not.toContain("raw.bearer.token")
+    expect(serialized).not.toContain("user:secret")
   })
 })
