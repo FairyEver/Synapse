@@ -17,6 +17,7 @@
 ### UI 与文案
 
 - UI 修改必须优先使用当前 shadcn/Radix 基线、`desktop/components.json`、`desktop/src/styles/globals.css`、现有 `desktop/src/components/ui/` 组件和当前模块已有实现。
+- 涉及产品定位、信息架构、用户文案、视觉气质或体验取舍时，先阅读 `docs/reference/product-context.md`，再结合本文件和 `.claude/rules/` 判断。
 - 禁止自定义颜色、hex/rgb/hsl 字面色、Tailwind 任意颜色值、装饰性渐变、glow、emoji heading、卡片套卡片和营销式内部工具界面。
 - 禁止普通场景下的内联 `style={{...}}`；动态运行时值除外。
 - UI 文案只保留必要标题、label、操作、空/错/加载状态；不要写功能介绍、实现解释、重复状态或 AI 自称。
@@ -154,6 +155,7 @@
 
 - 用模块名、目录名和关键能力名搜索，例如 `knowledge-base`、`agent-runtime`、`slash menu`、`workflow`、`scheduler`、`rule skill content`、`editor scan`。
 - 同时用即将修改的路径片段搜索，例如 `desktop/src/modules/workflow`、`desktop/electron/services/agent-runtime`。
+- 修改编辑器 Rule / Skill / Prompt 安装、扫描、复制或兼容策略时，先阅读 `docs/reference/editor-integration-matrix.md`。
 - 优先阅读标题、路径或正文与当前改动直接相关的设计文档；不要为了“保险”批量读取无关长文档。
 - 读取后把其中的 `Hard Rules`、`Non-Goals`、明确的“禁止 / 不允许 / 必须 / 不支持 / 不新增”语句视为强约束。
 - 如果搜索不到可信的相关设计文档，继续遵循本文件和现有代码边界；不要编造文档路径或假设不存在的设计说明。
