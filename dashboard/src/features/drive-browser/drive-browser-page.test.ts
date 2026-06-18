@@ -57,6 +57,7 @@ vi.mock('@mdxeditor/editor', async () => {
     CreateLink: () => null,
     InsertTable: () => null,
     InsertThematicBreak: () => null,
+    ListsToggle: () => null,
     UndoRedo: () => null,
     codeBlockPlugin: () => null,
     codeMirrorPlugin: () => null,

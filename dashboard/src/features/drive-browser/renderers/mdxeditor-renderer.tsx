@@ -10,6 +10,7 @@ import {
   InsertThematicBreak,
   linkDialogPlugin,
   linkPlugin,
+  ListsToggle,
   listsPlugin,
   markdownShortcutPlugin,
   MDXEditor,
@@ -65,6 +66,7 @@ export function DriveMDXeditorRenderer({
           <UndoRedo />
           <BlockTypeSelect />
           <BoldItalicUnderlineToggles />
+          <ListsToggle />
           <CreateLink />
           <InsertTable />
           <InsertThematicBreak />
@@ -112,12 +114,13 @@ export function DriveMDXeditorRenderer({
     if (!editContext) return
     setError(null)
     try {
-      await editContext.reload()
-      savedValueRef.current = initialText
-      setValue(initialText)
+      const nextSnapshot = await editContext.reload()
+      const nextText = nextSnapshot.preview?.text ?? ''
+      savedValueRef.current = nextText
+      setValue(nextText)
       setDirty(false)
       setConflictOpen(false)
-      editorRef.current?.setMarkdown(initialText)
+      editorRef.current?.setMarkdown(nextText)
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }

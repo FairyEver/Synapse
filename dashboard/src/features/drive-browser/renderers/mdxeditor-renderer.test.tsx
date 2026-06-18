@@ -7,6 +7,7 @@ import type {
   DriveBrowserEditDto,
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
+  DriveBrowserSnapshotDto,
 } from '@synapse/shared'
 import { ApiError } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
@@ -77,6 +78,10 @@ vi.mock('@mdxeditor/editor', async () => {
       pluginCalls.add('InsertThematicBreak')
       return null
     },
+    ListsToggle: () => {
+      pluginCalls.add('ListsToggle')
+      return null
+    },
     UndoRedo: () => {
       pluginCalls.add('UndoRedo')
       return null
@@ -143,11 +148,12 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('resets the mounted editor content after reload', async () => {
-    const editContext = createEditContext()
-    const { rerender } = renderRenderer({ edit: editable(), editContext })
+    const editContext = createEditContext({
+      reload: vi.fn(async () => baseSnapshot({ preview: { ...basePreview(), text: '# Server' } })),
+    })
+    renderRenderer({ edit: editable(), editContext })
 
     await inputValue(editor(), '# Draft')
-    rerender({ preview: { ...basePreview(), text: '# Server' } })
     await click(buttonWithText('重新加载'))
 
     expect(editor().value).toBe('# Server')
@@ -227,6 +233,7 @@ describe('DriveMDXeditorRenderer', () => {
       'UndoRedo',
       'BlockTypeSelect',
       'BoldItalicUnderlineToggles',
+      'ListsToggle',
       'CreateLink',
       'InsertTable',
       'InsertThematicBreak',
@@ -326,6 +333,21 @@ function baseCurrent(): DriveBrowserItemDto {
   }
 }
 
+function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
+  return {
+    context: 'owner',
+    surface: 'standalone',
+    current: baseCurrent(),
+    breadcrumbs: [{ id: 'root', name: 'root', browserUrl: '/drive/items/root' }],
+    children: [],
+    preview: basePreview(),
+    edit: editable(),
+    canDownload: true,
+    canZip: false,
+    ...input,
+  }
+}
+
 function basePreview(): DriveBrowserPreviewDto {
   return {
     kind: 'markdown',
@@ -350,7 +372,7 @@ function editable(): DriveBrowserEditDto {
 
 function createEditContext(input: Partial<DriveRendererEditContext> = {}) {
   return {
-    reload: vi.fn(async () => ({}) as never),
+    reload: vi.fn(async () => baseSnapshot()),
     reloading: false,
     saveText: vi.fn(async () => ({}) as never),
     savingText: false,
