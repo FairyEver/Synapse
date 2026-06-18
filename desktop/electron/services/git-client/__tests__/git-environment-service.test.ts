@@ -113,8 +113,18 @@ describe("git environment service", () => {
 
     await service.configureIdentity({ userName: "Writer", userEmail: "writer@example.com" })
 
-    expect(run).toHaveBeenCalledWith({ cwd: "/Users/writer", args: ["config", "--global", "user.name", "Writer"] })
-    expect(run).toHaveBeenCalledWith({ cwd: "/Users/writer", args: ["config", "--global", "user.email", "writer@example.com"] })
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["config", "--global", "user.name", "Writer"],
+      cwd: "/Users/writer",
+      operation: "git.environment.configureIdentity",
+      operationId: expect.any(String),
+    }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["config", "--global", "user.email", "writer@example.com"],
+      cwd: "/Users/writer",
+      operation: "git.environment.configureIdentity",
+      operationId: expect.any(String),
+    }))
   })
 
   it("reads the first common SSH public key", async () => {

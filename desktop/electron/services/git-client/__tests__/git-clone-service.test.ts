@@ -33,11 +33,13 @@ describe("git clone service", () => {
     })
 
     const targetPath = path.resolve("/work/docs")
-    expect(run).toHaveBeenCalledWith({
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
       cwd: path.dirname(targetPath),
       args: ["clone", "--progress", "https://git.example.com/team/docs.git", targetPath],
+      operation: "git.clone",
+      operationId: expect.any(String),
       timeoutMs: 300000,
-    })
+    }))
     expect(result.repository.id).toBe("repo-1")
   })
 

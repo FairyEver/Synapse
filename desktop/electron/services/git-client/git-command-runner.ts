@@ -1,14 +1,25 @@
 import type { SynapseGitErrorCategory } from "../../../src/types/git"
 import { runGitCommand, type GitCommandResult } from "../git-command"
+import {
+  createGitLogger,
+  gitFailureLogMeta,
+  sanitizeGitText,
+  summarizeGitArgs,
+  type GitLogger,
+} from "./git-log-utils"
 
 type GitClientRunInput = {
   readonly cwd: string
   readonly args: readonly string[]
   readonly fallbackMessage?: string
+  readonly logFailure?: boolean
+  readonly operation?: string
+  readonly operationId?: string
   readonly timeoutMs?: number
 }
 
 type GitCommandFunction = typeof runGitCommand
+const defaultLogger = createGitLogger("git.command")
 
 export function categorizeGitError(error: unknown): SynapseGitErrorCategory {
   const message = error instanceof Error ? error.message : String(error)
@@ -22,17 +33,40 @@ export function categorizeGitError(error: unknown): SynapseGitErrorCategory {
   return "unknown"
 }
 
-export function createGitClientCommandRunner(deps: { readonly runGitCommand?: GitCommandFunction } = {}) {
+export function createGitClientCommandRunner(deps: {
+  readonly logger?: GitLogger
+  readonly runGitCommand?: GitCommandFunction
+} = {}) {
   const command = deps.runGitCommand ?? runGitCommand
+  const logger = deps.logger ?? defaultLogger
   return {
     async run(input: GitClientRunInput): Promise<GitCommandResult> {
-      return command({
-        args: [...input.args],
-        cwd: input.cwd,
-        fallbackMessage: input.fallbackMessage ?? "Git 操作失败。",
-        timeoutMessage: "Git 操作超时。",
-        timeoutMs: input.timeoutMs ?? 60_000,
-      })
+      const startedAt = Date.now()
+      try {
+        return await command({
+          args: [...input.args],
+          cwd: input.cwd,
+          fallbackMessage: input.fallbackMessage ?? "Git 操作失败。",
+          timeoutMessage: "Git 操作超时。",
+          timeoutMs: input.timeoutMs ?? 60_000,
+        })
+      } catch (error) {
+        if (input.logFailure !== false) {
+          logger.error("Git command failed.", {
+            args: summarizeGitArgs(input.args),
+            cwd: sanitizeGitText(input.cwd),
+            durationMs: Date.now() - startedAt,
+            operation: input.operation ?? "git.command",
+            operationId: input.operationId,
+            timeoutMs: input.timeoutMs ?? 60_000,
+            ...gitFailureLogMeta(error, {
+              category: categorizeGitError(error),
+              includeOutput: true,
+            }),
+          })
+        }
+        throw error
+      }
     },
   }
 }

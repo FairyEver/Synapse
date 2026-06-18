@@ -9,6 +9,9 @@ import type { GitRepositoryRegistry } from "../../services/git-client/git-reposi
 import type { GitStatusService } from "../../services/git-client/git-status-service"
 import type { GitSyncService } from "../../services/git-client/git-sync-service"
 import type { SynapseGitRepository } from "../../../src/types/git"
+import { createMainLogger } from "../../services/log-store"
+
+const logger = createMainLogger("ipc.git")
 
 const repositorySchema = z.object({
   id: z.string(),
@@ -174,7 +177,13 @@ async function resolveRepository(ctx: IpcHandlerContext, repositoryId: string): 
   const registry = ctx.resolve<GitRepositoryRegistry>("git.repository-registry")
   const repositories = await registry.list()
   const repository = repositories.find((item) => item.id === repositoryId)
-  if (!repository) throw new Error("找不到对应的 Git 仓库。")
+  if (!repository) {
+    logger.warn("Git IPC repository lookup failed.", {
+      operation: "git.ipc.resolveRepository",
+      repoId: repositoryId,
+    })
+    throw new Error("找不到对应的 Git 仓库。")
+  }
   return repository
 }
 

@@ -2,19 +2,33 @@ import path from "node:path"
 import { createHash } from "node:crypto"
 import type { ShellEnvironmentSnapshot } from "../../runtime/process"
 import type { SynapseGitEnvironmentState, SynapseGitSshPublicKey } from "../../../src/types/git"
+import { categorizeGitError } from "./git-command-runner"
 import type { GitClientCommandRunner } from "./git-command-runner"
+import {
+  createGitLogger,
+  createGitOperation,
+  gitFailureLogMeta,
+  logGitOperationFailure,
+  logGitOperationStart,
+  logGitOperationSuccess,
+  sanitizeGitText,
+  type GitLogger,
+} from "./git-log-utils"
 
 type Platform = NodeJS.Platform
 
 type EnvironmentDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly homeDir: string
+  readonly logger?: GitLogger
   readonly pathExists: (filePath: string) => Promise<boolean>
   readonly readFile: (filePath: string) => Promise<string>
   readonly platform: Platform
   readonly shellEnvironment: ShellEnvironmentSnapshot
   readonly now?: () => Date
 }
+
+const defaultLogger = createGitLogger("git.environment")
 
 function installHint(platform: Platform): string {
   if (platform === "win32") return "安装 Git for Windows 后重新检测。"
@@ -28,7 +42,12 @@ async function readConfig(
   key: string,
 ): Promise<string | null> {
   try {
-    const result = await commandRunner.run({ cwd: homeDir, args: ["config", "--global", key] })
+    const result = await commandRunner.run({
+      cwd: homeDir,
+      args: ["config", "--global", key],
+      logFailure: false,
+      operation: "git.environment.check",
+    })
     return result.stdout.trim() || null
   } catch {
     return null
@@ -41,7 +60,12 @@ async function readConfigSource(
   key: string,
 ): Promise<string | null> {
   try {
-    const result = await commandRunner.run({ cwd: homeDir, args: ["config", "--global", "--show-origin", "--get", key] })
+    const result = await commandRunner.run({
+      cwd: homeDir,
+      args: ["config", "--global", "--show-origin", "--get", key],
+      logFailure: false,
+      operation: "git.environment.check",
+    })
     const line = result.stdout.trim()
     if (!line) return null
     const tabIndex = line.indexOf("\t")
@@ -52,15 +76,6 @@ async function readConfigSource(
   } catch {
     return null
   }
-}
-
-async function hasCommonSshKey(
-  homeDir: string,
-  pathExists: (filePath: string) => Promise<boolean>,
-): Promise<boolean> {
-  const sshDir = path.join(homeDir, ".ssh")
-  return (await pathExists(path.join(sshDir, "id_ed25519.pub")))
-    || (await pathExists(path.join(sshDir, "id_rsa.pub")))
 }
 
 async function findCommonSshPublicKey(
@@ -130,6 +145,7 @@ function parseSshPublicKeyDetails(key: SynapseGitSshPublicKey | null): SshPublic
 
 export function createGitEnvironmentService(deps: EnvironmentDeps) {
   const now = deps.now ?? (() => new Date())
+  const logger = deps.logger ?? defaultLogger
 
   async function getPublicKeyDetails(): Promise<SshPublicKeyDetails> {
     try {
@@ -168,10 +184,19 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
     async check(): Promise<SynapseGitEnvironmentState> {
       const publicKey = await getPublicKeyDetails()
       try {
-        const gitVersionResult = await deps.commandRunner.run({ cwd: deps.homeDir, args: ["--version"] })
+        const gitVersionResult = await deps.commandRunner.run({
+          cwd: deps.homeDir,
+          args: ["--version"],
+          operation: "git.environment.check",
+        })
         let sshAvailable = false
         try {
-          await deps.commandRunner.run({ cwd: deps.homeDir, args: ["-c", "core.sshCommand=ssh -V", "version"] })
+          await deps.commandRunner.run({
+            cwd: deps.homeDir,
+            args: ["-c", "core.sshCommand=ssh -V", "version"],
+            logFailure: false,
+            operation: "git.environment.check",
+          })
           sshAvailable = true
         } catch {
           sshAvailable = false
@@ -179,7 +204,7 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
         const userName = await readConfig(deps.commandRunner, deps.homeDir, "user.name")
         const userEmail = await readConfig(deps.commandRunner, deps.homeDir, "user.email")
 
-        return {
+        const state = {
           ...baseState(),
           gitAvailable: true,
           gitVersion: gitVersionResult.stdout.trim() || null,
@@ -196,7 +221,28 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
           sshPublicKeyFingerprint: publicKey.fingerprint,
           installHint: null,
         }
-      } catch {
+        logger.info("Git environment check completed.", {
+          operation: "git.environment.check",
+          commonSshKeyExists: state.commonSshKeyExists,
+          gitAvailable: state.gitAvailable,
+          gitPath: state.gitPath ? sanitizeGitText(state.gitPath) : null,
+          gitVersion: state.gitVersion,
+          homeDir: sanitizeGitText(state.homeDir),
+          sshAvailable: state.sshAvailable,
+          userEmailConfigured: state.userEmail !== null,
+          userNameConfigured: state.userName !== null,
+        })
+        return state
+      } catch (error) {
+        logger.warn("Git environment check failed.", {
+          operation: "git.environment.check",
+          commonSshKeyExists: publicKey.path !== null,
+          effectiveGitPath: deps.shellEnvironment.effectiveGitPath
+            ? sanitizeGitText(deps.shellEnvironment.effectiveGitPath)
+            : null,
+          homeDir: sanitizeGitText(deps.homeDir),
+          ...gitFailureLogMeta(error, { category: categorizeGitError(error) }),
+        })
         return {
           ...baseState(),
           gitAvailable: false,
@@ -218,12 +264,39 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
     },
 
     async configureIdentity(input: { readonly userName: string; readonly userEmail: string }): Promise<void> {
+      const operation = createGitOperation("git.environment.configureIdentity")
       const userName = input.userName.trim()
       const userEmail = input.userEmail.trim()
       if (!userName) throw new Error("请输入用户名。")
       if (!userEmail) throw new Error("请输入邮箱。")
-      await deps.commandRunner.run({ cwd: deps.homeDir, args: ["config", "--global", "user.name", userName] })
-      await deps.commandRunner.run({ cwd: deps.homeDir, args: ["config", "--global", "user.email", userEmail] })
+      logGitOperationStart(logger, "Git operation started.", operation, undefined, {
+        homeDir: sanitizeGitText(deps.homeDir),
+        userEmailProvided: true,
+        userNameProvided: true,
+      })
+      try {
+        await deps.commandRunner.run({
+          cwd: deps.homeDir,
+          args: ["config", "--global", "user.name", userName],
+          operation: operation.operation,
+          operationId: operation.operationId,
+        })
+        await deps.commandRunner.run({
+          cwd: deps.homeDir,
+          args: ["config", "--global", "user.email", userEmail],
+          operation: operation.operation,
+          operationId: operation.operationId,
+        })
+        logGitOperationSuccess(logger, "Git operation completed.", operation, undefined, {
+          homeDir: sanitizeGitText(deps.homeDir),
+        })
+      } catch (error) {
+        logGitOperationFailure(logger, "Git operation failed.", operation, error, undefined, {
+          errorCategory: categorizeGitError(error),
+          homeDir: sanitizeGitText(deps.homeDir),
+        })
+        throw error
+      }
     },
 
     async getSshPublicKey(): Promise<SynapseGitSshPublicKey | null> {

@@ -4,23 +4,39 @@ import type {
   SynapseGitRepositorySnapshot,
   SynapseGitRepositorySummary,
 } from "../../../src/types/git"
+import { categorizeGitError } from "./git-command-runner"
 import type { GitClientCommandRunner } from "./git-command-runner"
+import {
+  createGitLogger,
+  gitFailureLogMeta,
+  gitRepositoryLogMeta,
+  gitSnapshotLogMeta,
+  type GitLogger,
+} from "./git-log-utils"
 import { assertRepositoryPath } from "./git-path-utils"
 import { parseGitStatusPorcelainV2 } from "./git-status-parser"
 
 type StatusDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
+  readonly logger?: GitLogger
   readonly pathExists: (filePath: string) => Promise<boolean>
 }
+
+const defaultLogger = createGitLogger("git.status")
 
 function isNotGitRepository(error: unknown): boolean {
   return error instanceof Error && /not a git repository/i.test(error.message)
 }
 
 export function createGitStatusService(deps: StatusDeps) {
+  const logger = deps.logger ?? defaultLogger
   return {
     async getSnapshot(repository: SynapseGitRepository): Promise<SynapseGitRepositorySnapshot> {
       if (!(await deps.pathExists(repository.localPath))) {
+        logger.warn("Git repository path is missing.", {
+          operation: "git.status",
+          ...gitRepositoryLogMeta(repository),
+        })
         return {
           repositoryId: repository.id,
           pathExists: false,
@@ -38,15 +54,30 @@ export function createGitStatusService(deps: StatusDeps) {
         const result = await deps.commandRunner.run({
           cwd: repository.localPath,
           args: ["status", "--porcelain=v2", "--branch"],
+          logFailure: false,
+          operation: "git.status",
         })
-        return {
+        const snapshot = {
           repositoryId: repository.id,
           pathExists: true,
           isGitRepository: true,
           ...parseGitStatusPorcelainV2(result.stdout),
         }
+        if (snapshot.hasConflicts || snapshot.currentBranch === null) {
+          logger.warn("Git repository status needs attention.", {
+            operation: "git.status",
+            ...gitRepositoryLogMeta(repository),
+            ...gitSnapshotLogMeta(snapshot),
+          })
+        }
+        return snapshot
       } catch (error) {
         if (isNotGitRepository(error)) {
+          logger.warn("Git repository status read found a non-Git directory.", {
+            operation: "git.status",
+            ...gitRepositoryLogMeta(repository),
+            ...gitFailureLogMeta(error, { category: "not-git-repository" }),
+          })
           return {
             repositoryId: repository.id,
             pathExists: true,
@@ -59,6 +90,14 @@ export function createGitStatusService(deps: StatusDeps) {
             changes: [],
           }
         }
+        logger.error("Git repository status read failed.", {
+          operation: "git.status",
+          ...gitRepositoryLogMeta(repository),
+          ...gitFailureLogMeta(error, {
+            category: categorizeGitError(error),
+            includeOutput: true,
+          }),
+        })
         throw error
       }
     },
@@ -72,6 +111,14 @@ export function createGitStatusService(deps: StatusDeps) {
             error: null,
           }
         } catch (error) {
+          logger.warn("Git repository summary read failed.", {
+            operation: "git.status.summary",
+            ...gitRepositoryLogMeta(repository),
+            ...gitFailureLogMeta(error, {
+              category: categorizeGitError(error),
+              includeOutput: true,
+            }),
+          })
           return {
             repository,
             snapshot: null,

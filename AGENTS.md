@@ -2,6 +2,80 @@
 
 本仓库内的所有任务都先遵循本文件。
 
+## 项目概览
+
+Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用。用户通过 Synapse 创建、版本管理并安装内容到 Claude Code、Codex、Cursor 等编辑器，同时使用 Agent 会话、工作流自动化、诊断、用量分析和本地数据能力。
+
+渲染进程通过 `window.synapse.*` preload bridge 与主进程通信。主进程、preload、renderer 边界要求以本文件和 `.claude/rules/` 为准。
+
+## 基础上下文
+
+### 规则索引
+
+| 文件 | 覆盖范围 |
+|------|----------|
+| `AGENTS.md` | 仓库权威规则、模块设计索引、架构硬约束、放置规则 |
+| `.claude/rules/design.md` | 视觉基线、颜色 token、字体、组件风格、主题切换 |
+| `.claude/rules/ui-rules.md` | UI 编写规则、Tailwind 使用边界、className 纪律、用户文案 |
+| `.claude/rules/frontend.md` | 前端架构约定、状态管理、IPC 通信、模块组织 |
+| `.claude/rules/api.md` | 主进程 service / IPC handler 设计约定 |
+| `.claude/rules/testing.md` | 测试策略与规则 |
+| `.claude/rules/workspace-dev-ports.md` | 子包 dev 端口分配 |
+| `.claude/rules/website-copy.md` | 文档站文案规范 |
+
+### 技术栈
+
+- Electron 41 + Vite 8 + React 19 + TypeScript 6
+- shadcn/ui（radix-nova preset）+ Tailwind CSS 4
+- pnpm monorepo（`desktop/` + `website/` + `server/`）
+- Git-based 内容存储 + SQLite Database
+
+### 仓库结构与命令
+
+- 本仓库是 pnpm monorepo。工作区根目录包含共享文档（`AGENTS.md`、`NOT.md`、`TODO.md`、`CHANGELOG.md`、`RELEASE_NOTES_PENDING.md`）、项目级规则 `.claude/rules/`、`.github/` CI，以及 monorepo 的 `package.json` / `pnpm-workspace.yaml`。工作区包包括 `@synapse/desktop`、`@synapse/website`、`@synapse/server`、`@synapse/auto` 和 `@synapse/auto-web`；桌面应用源码位于 `desktop/` 子包。
+- 仓库速览：
+  ```text
+  desktop/
+  ├── electron/           # 主进程：runtime / bootstrap / services / database
+  ├── src/                # 渲染进程：React SPA
+  │   ├── app-shell/      # 壳层：Context Providers / Navigation / Logging
+  │   ├── modules/        # 功能模块
+  │   ├── components/ui/  # shadcn 组件库
+  │   ├── hooks/          # 共享 hooks
+  │   ├── lib/            # 工具函数
+  │   └── types/          # 类型定义
+  website/                # VitePress 文档站
+  server/                 # 服务端与管理后台相关代码
+  ```
+- 特权 Electron 代码位于 `desktop/electron/`。
+- Renderer 代码位于 `desktop/src/`。
+- 共享 shell 状态与编排位于 `desktop/src/app-shell/`。
+- 共享 UI 组件位于 `desktop/src/components/` 和 `desktop/src/components/ui/`。
+- 共享纯工具函数位于 `desktop/src/lib/`。
+- 共享 renderer 全局类型位于 `desktop/src/types/`。
+- Renderer 新业务模块应放在 `desktop/src/modules/`，不要放在 `desktop/src/features/`。
+- 当前已有 renderer 业务模块以 `desktop/src/modules/*` 为准；`rules`、`skills` 和 `settings` 已经存在。新增模块或目录前先查现有结构。
+- 根目录开发启动命令：`pnpm dev`（同时启动 desktop + server）、`pnpm dev:desktop`（仅桌面端）、`pnpm dev:server`（仅后台，含 server API、dashboard 和 compose 服务）、`pnpm dev:website`（仅官网）。停止命令：`pnpm quit`（全部停止）、`pnpm quit:server`、`pnpm quit:desktop`、`pnpm quit:website`。其他包级脚本直接使用对应包名运行，例如 `pnpm --filter @synapse/desktop run <script>`。
+- 启动策略：根据当前任务修改的内容选择最小启动范围，不要无差别执行 `pnpm dev`。只改 `desktop/` 就只启 `pnpm dev:desktop`；只改 `server/` 就只启 `pnpm dev:server`；两者都改才用 `pnpm dev`。如果对应服务已经在运行，因为有热更新，通常不需要停止再重启——直接修改代码即可生效。只有在确认热更新不覆盖的场景（如改了 Electron 主进程入口、改了构建配置、改了依赖）时才需要重启。
+- 除非用户明确要求，不要为了验证主动启动 dev server 或打开运行中的应用页面。
+- 进行自动化测试、UI 测试或需要本地服务的验证时，禁止自行猜测启动 / 停止命令，必须使用上述根目录命令。
+
+### Synapse MCP 快捷指令
+
+当用户提到 `sss` 时，按意图使用匹配的 `synapse-mcp` MCP 工具：
+
+- 数据库、表、字段、行、SQL、Database 或数据增删改查请求使用 Database 工具。
+- 定时任务、scheduler、cron/interval、启用/停用、运行历史或 runtime 状态请求使用 scheduler 工具。
+- 如果 `sss` 没有明确领域，先根据上下文推断；仍不明确时，只问一句简短澄清。
+
+## 未来开发计划
+
+本节用于记录 Synapse 后续可能建设的产品板块、后台能力、长期规划和暂未启动的开发方向。这里的内容不是当前任务的实现要求，也不自动授权新增功能；它的作用是让 Agent 在做当前设计、数据结构、接口、模块边界和扩展点时，能理解产品未来可能演进的方向，并在不增加当前复杂度的前提下避免明显封死后续路线。
+
+当用户明确表达“未来要开发某个功能 / 计划做某个板块 / 先记录一下后续规划”等意图时，默认把该内容整理后追加到本节，而不是当成当前立即实现的开发任务。除非用户明确要求实现、设计详细方案或写到其它文档，否则只更新本节中的未来计划记录。
+
+后续补充计划时，应尽量描述目标、边界、触发场景和对现有模块的潜在影响，不要把未确认想法写成必须立即实现的硬规则。当前章节先作为占位说明，暂不列具体计划。
+
 ## 顶层硬性要求
 
 本节是本仓库的长期硬性要求摘要，只记录不应被长设计文档冲淡的边界。除非用户在当前对话中明确覆盖，否则所有 agent 必须优先遵守。
@@ -170,46 +244,46 @@
 
 `.claude/rules/design.md` 是默认视觉基线，但不是在所有时间点都自动高于代码现状。若设计文档与当前 shadcn preset、全局 tokens、已有组件实现或用户明确需求冲突，不要静默套用旧文档；必须指出冲突并请求确认。
 
-## 技术栈
-
-- Electron
-- React
-- Tailwind CSS
-- shadcn/ui
-- TypeScript
-
-## Synapse MCP 快捷指令
-
-当用户提到 `sss` 时，按意图使用匹配的 `synapse-mcp` MCP 工具：
-
-- 数据库、表、字段、行、SQL、Database 或数据增删改查请求使用 Database 工具。
-- 定时任务、scheduler、cron/interval、启用/停用、运行历史或 runtime 状态请求使用 scheduler 工具。
-- 如果 `sss` 没有明确领域，先根据上下文推断；仍不明确时，只问一句简短澄清。
-
-## 当前 UI 基础
+## UI 与产品体验规则
 
 - 当前 shadcn preset 是 `desktop/components.json` 中的 `radix-nova`。
 - 当前 primitive 基础是 Radix，不是 Base UI。
 - `desktop/src/components/ui/` 必须保持与当前 shadcn + Radix 设置一致。
 - 除非任务是用户明确批准的迁移，否则不要添加或重新引入 `@base-ui/react`。
 - 添加或重装 shadcn 组件时，保留当前 Radix 基础。如果任务需要重新初始化或重装 shadcn，使用 Radix 路径，不要切换到 `base`。
-
-## 当前仓库结构
-
-- 本仓库是 pnpm monorepo。工作区根目录包含共享文档（`AGENTS.md`, `CLAUDE.md`, `README.md`）、项目级 Claude 规则 `.claude/rules/`、`.github/` CI，以及 monorepo 的 `package.json` / `pnpm-workspace.yaml`。工作区包包括 `@synapse/desktop`、`@synapse/website`、`@synapse/server`、`@synapse/auto` 和 `@synapse/auto-web`；桌面应用源码位于 `desktop/` 子包。
 - `dashboard/` 是独立的管理后台包，视觉与交互规范以 `templates/shadcn-admin/` 为参考基线。凡是新增或修改管理后台页面，必须先在 `templates/shadcn-admin/` 中查找相近页面、组件和布局，优先复用模板已有结构与组件组合，尽量不要自行发挥页面样式；模板没有对应实现时，再按现有 dashboard 共享组件做最小扩展。
 - 管理后台列表页禁止在页面内直接组装 `Table` / `TableHeader` / `TableBody` / `TableCell` / 手写分页；服务端分页表格必须优先使用 `dashboard/src/components/data-table/server-data-table.tsx` 暴露的 `ServerDataTable`，列头使用 `DataTableColumnHeader`。如果现有共享表格不满足需求，先扩展共享表格组件，不要在单个页面复制或临时拼一套表格结构。所有管理后台表格只要有操作按钮列，操作列必须固定在表格右侧，不随横向滚动离开视口；优先通过共享表格组件实现，不要在单个页面重复写 sticky 逻辑。
-- 根目录开发启动命令：`pnpm dev`（同时启动 desktop + server）、`pnpm dev:desktop`（仅桌面端）、`pnpm dev:server`（仅后台，含 server API、dashboard 和 compose 服务）、`pnpm dev:website`（仅官网）。停止命令：`pnpm quit`（全部停止）、`pnpm quit:server`、`pnpm quit:desktop`、`pnpm quit:website`。其他包级脚本直接使用对应包名运行，例如 `pnpm --filter @synapse/desktop run <script>`。
-- 启动策略：根据当前任务修改的内容选择最小启动范围，不要无差别执行 `pnpm dev`。只改 `desktop/` 就只启 `pnpm dev:desktop`；只改 `server/` 就只启 `pnpm dev:server`；两者都改才用 `pnpm dev`。如果对应服务已经在运行，因为有热更新，通常不需要停止再重启——直接修改代码即可生效。只有在确认热更新不覆盖的场景（如改了 Electron 主进程入口、改了构建配置、改了依赖）时才需要重启。
-- 进行自动化测试、UI 测试或需要本地服务的验证时，禁止自行猜测启动 / 停止命令，必须使用上述根目录命令。
-- 特权 Electron 代码位于 `desktop/electron/`。
-- Renderer 代码位于 `desktop/src/`。
-- 共享 shell 状态与编排位于 `desktop/src/app-shell/`。
-- 共享 UI 组件位于 `desktop/src/components/` 和 `desktop/src/components/ui/`。
-- 共享纯工具函数位于 `desktop/src/lib/`。
-- 共享 renderer 全局类型位于 `desktop/src/types/`。
-- Renderer 新业务模块应放在 `desktop/src/modules/`，不要放在 `desktop/src/features/`。
-- 当前已有 renderer 业务模块以 `desktop/src/modules/*` 为准；`rules`、`skills` 和 `settings` 已经存在。新增模块或目录前先查现有结构。
+
+### 设计护栏
+
+任何 UI 或样式任务，除非用户明确要求例外，都默认遵循这些要求：
+
+- 使用 `desktop/components.json` 和 `desktop/src/styles/globals.css` 中定义的当前 shadcn preset 与 CSS variable tokens。
+- 优先使用中性 palette tokens，例如 `bg-background`、`text-foreground`、`bg-card`、`border-border` 和 `bg-muted`。
+- 使用 preset 默认字体导入和 tokenized font roles，不要额外添加独立品牌展示字体。
+- 优先使用 shadcn 默认 radius、border、shadow 和 focus-ring 处理，不要使用自定义 arbitrary values。
+- UI 决策顺序：已经合适的现有业务组合 -> 现有 `desktop/src/components/ui/` 组件 -> 新增到 `desktop/src/components/ui/` 的 shadcn 组件 -> 模块内薄组合 -> 最后才是自定义 primitive。
+- 先用 shadcn 组件组合，再考虑手写并行 UI primitives。
+- Tailwind 主要用于布局、间距、尺寸、响应式、overflow 和简单排版；不要把它作为重写按钮、输入框、卡片、对话框或 tabs 样式的主要方式。
+- 当存在或可以添加 shadcn 等价组件时，不要在 `desktop/src/components/` 创建新的共享展示 primitive。
+- 除非任务明确要求，避免硬编码品牌色、自定义阴影系统、装饰性渐变和页面级独立视觉语言。
+
+### 产品文案护栏
+
+- 把所有 UI 文案都视为面向最终用户的产品文案，不是给开发者看的实现说明。
+- 除非用户确实需要这些信息来完成当前任务，否则不要把路线图说明、未来阶段计划、架构理由、状态边界解释、技术 caveat 或设计自证放进界面。
+- 空状态、加载状态、禁用状态和错误状态应简短、行动导向。用朴素语言告诉用户现在能做什么，或刚刚发生了什么。
+- 优先提供一个清楚的下一步，而不是多句解释。
+- 保留任何 UI 句子前，先问："普通用户现在使用这个功能时真的需要这句话吗？" 如果不需要，就删掉。
+
+## 放置规则
+
+- 新 renderer 业务逻辑通常应放在相关模块的 `desktop/src/modules/<module>/` 下。
+- 模块内部在边界有帮助时，优先使用 `components/`、`hooks/`、`services/`、`types.ts` 和 `utils.ts`。
+- 共享纯 helper 放在 `desktop/src/lib/`。
+- 共享 renderer 全局类型放在 `desktop/src/types/`。
+- 当 Electron 逻辑变多时，拆到 `desktop/electron/` 下命名清晰的文件中，不要把 `desktop/electron/main.ts` 越堆越大。
+- 保持 `desktop/src/App.tsx` 专注于 app-shell 组合和顶层 tab 编排，不要放入深层功能逻辑。
 
 ## 核心规则
 
@@ -239,6 +313,9 @@
 11. **可扩展枚举**（content types、editor adapters、connectors、providers、hook types、UI panels）：通过 `ExtensionPoint` 注册。新增硬编码枚举需要明确批准。
 
 不确定时运行 `pnpm --filter @synapse/desktop run check:hard-constraints` 和 `pnpm --filter @synapse/desktop run test`。
+
+### 补充工程边界
+
 - 严格保持 renderer、preload 和主进程边界。
 - 文件系统、git、安装、下载、dialog、updater 和 OS 逻辑属于 Electron 主进程代码，不要放进 React 组件。
 - Renderer 代码只能通过窄而类型化的 preload API 访问特权能力。
@@ -324,37 +401,6 @@
 强成功标准能让你独立循环。弱标准（如 "make it work"）需要持续澄清。
 
 这些准则生效的表现是：无必要变更更少，因为过度复杂导致的返工更少，澄清问题发生在实现前而不是出错后。
-
-## 设计护栏
-
-任何 UI 或样式任务，除非用户明确要求例外，都默认遵循这些要求：
-
-- 使用 `desktop/components.json` 和 `desktop/src/styles/globals.css` 中定义的当前 shadcn preset 与 CSS variable tokens。
-- 优先使用中性 palette tokens，例如 `bg-background`、`text-foreground`、`bg-card`、`border-border` 和 `bg-muted`。
-- 使用 preset 默认字体导入和 tokenized font roles，不要额外添加独立品牌展示字体。
-- 优先使用 shadcn 默认 radius、border、shadow 和 focus-ring 处理，不要使用自定义 arbitrary values。
-- UI 决策顺序：已经合适的现有业务组合 -> 现有 `desktop/src/components/ui/` 组件 -> 新增到 `desktop/src/components/ui/` 的 shadcn 组件 -> 模块内薄组合 -> 最后才是自定义 primitive。
-- 先用 shadcn 组件组合，再考虑手写并行 UI primitives。
-- Tailwind 主要用于布局、间距、尺寸、响应式、overflow 和简单排版；不要把它作为重写按钮、输入框、卡片、对话框或 tabs 样式的主要方式。
-- 当存在或可以添加 shadcn 等价组件时，不要在 `desktop/src/components/` 创建新的共享展示 primitive。
-- 除非任务明确要求，避免硬编码品牌色、自定义阴影系统、装饰性渐变和页面级独立视觉语言。
-
-## 产品文案护栏
-
-- 把所有 UI 文案都视为面向最终用户的产品文案，不是给开发者看的实现说明。
-- 除非用户确实需要这些信息来完成当前任务，否则不要把路线图说明、未来阶段计划、架构理由、状态边界解释、技术 caveat 或设计自证放进界面。
-- 空状态、加载状态、禁用状态和错误状态应简短、行动导向。用朴素语言告诉用户现在能做什么，或刚刚发生了什么。
-- 优先提供一个清楚的下一步，而不是多句解释。
-- 保留任何 UI 句子前，先问："普通用户现在使用这个功能时真的需要这句话吗？" 如果不需要，就删掉。
-
-## 放置规则
-
-- 新 renderer 业务逻辑通常应放在相关模块的 `desktop/src/modules/<module>/` 下。
-- 模块内部在边界有帮助时，优先使用 `components/`、`hooks/`、`services/`、`types.ts` 和 `utils.ts`。
-- 共享纯 helper 放在 `desktop/src/lib/`。
-- 共享 renderer 全局类型放在 `desktop/src/types/`。
-- 当 Electron 逻辑变多时，拆到 `desktop/electron/` 下命名清晰的文件中，不要把 `desktop/electron/main.ts` 越堆越大。
-- 保持 `desktop/src/App.tsx` 专注于 app-shell 组合和顶层 tab 编排，不要放入深层功能逻辑。
 
 ## 完成前
 
