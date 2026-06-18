@@ -24,10 +24,19 @@ type GitBranchSwitcherProps = {
   readonly repository: SynapseGitRepository
   readonly currentBranch: string | null
   readonly disabled?: boolean
+  readonly mode?: "full" | "select" | "create"
+  readonly refreshKey?: number
   readonly onChanged: () => void | Promise<void>
 }
 
-export function GitBranchSwitcher({ repository, currentBranch, disabled, onChanged }: GitBranchSwitcherProps) {
+export function GitBranchSwitcher({
+  repository,
+  currentBranch,
+  disabled,
+  mode = "full",
+  refreshKey = 0,
+  onChanged,
+}: GitBranchSwitcherProps) {
   const [branches, setBranches] = useState<readonly SynapseGitBranch[]>([])
   const [open, setOpen] = useState(false)
   const [branchName, setBranchName] = useState("")
@@ -43,8 +52,9 @@ export function GitBranchSwitcher({ repository, currentBranch, disabled, onChang
   }
 
   useEffect(() => {
+    if (mode === "create") return
     void refreshBranches()
-  }, [repository.id])
+  }, [mode, repository.id, refreshKey])
 
   const checkout = async (nextBranch: string) => {
     if (!nextBranch || nextBranch === currentBranch) return
@@ -71,7 +81,7 @@ export function GitBranchSwitcher({ repository, currentBranch, disabled, onChang
       await requireSynapseBridge().git.createBranch(repository.id, name)
       setBranchName("")
       setOpen(false)
-      await refreshBranches()
+      if (mode !== "create") await refreshBranches()
       await onChanged()
     } catch (err) {
       setError(err instanceof Error ? err.message : "新建分支失败。")
@@ -80,29 +90,37 @@ export function GitBranchSwitcher({ repository, currentBranch, disabled, onChang
     }
   }
 
+  const selectControl = (
+    <Select
+      value={currentBranch ?? ""}
+      onValueChange={(value) => void checkout(value)}
+      disabled={disabled || busy || branches.length === 0}
+    >
+      <SelectTrigger size="sm" aria-label="分支" className={mode === "full" ? "w-40" : "w-full min-w-0"}>
+        <GitBranch data-icon="inline-start" />
+        <SelectValue placeholder="无分支" />
+      </SelectTrigger>
+      <SelectContent>
+        {branches.map((branch) => (
+          <SelectItem key={branch.name} value={branch.name}>
+            {branch.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
+  const createButton = (
+    <Button type="button" variant="outline" size="sm" disabled={disabled || busy} onClick={() => setOpen(true)}>
+      <Plus data-icon="inline-start" />
+      新建分支
+    </Button>
+  )
+
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <Select
-        value={currentBranch ?? ""}
-        onValueChange={(value) => void checkout(value)}
-        disabled={disabled || busy || branches.length === 0}
-      >
-        <SelectTrigger size="sm" aria-label="分支" className="w-40">
-          <GitBranch data-icon="inline-start" />
-          <SelectValue placeholder="无分支" />
-        </SelectTrigger>
-        <SelectContent>
-          {branches.map((branch) => (
-            <SelectItem key={branch.name} value={branch.name}>
-              {branch.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button type="button" variant="outline" size="sm" disabled={disabled || busy} onClick={() => setOpen(true)}>
-        <Plus data-icon="inline-start" />
-        新建分支
-      </Button>
+      {mode !== "create" ? selectControl : null}
+      {mode !== "select" ? createButton : null}
       <Dialog open={open} onOpenChange={setOpen} data-track="git-create-branch-dialog">
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <form className="grid gap-4" onSubmit={createBranch}>
