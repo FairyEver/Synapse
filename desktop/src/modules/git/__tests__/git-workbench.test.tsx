@@ -115,6 +115,7 @@ describe("GitWorkbench", () => {
 
   it("shows loading labels while running toolbar actions", async () => {
     const pendingSync = deferred()
+    bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({ changes: [], ahead: 1, behind: 1 }))
     bridge.git.sync.mockReturnValue(pendingSync.promise)
     await renderWorkbench(roots)
 
@@ -130,6 +131,39 @@ describe("GitWorkbench", () => {
       await pendingSync.promise
       await flush()
     })
+  })
+
+  it("separates primary repository context from secondary metadata", async () => {
+    const longRepository = {
+      id: "repo-1",
+      name: "Projects_Js_With_A_Very_Long_Display_Name",
+      localPath: "/Users/liyang/Documents/code/wdbc/Projects_Js/app/portal/views/simple/finance/form/001/page/pc/edit",
+      addedAt: "now",
+      lastOpenedAt: null,
+    }
+    bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({
+      currentBranch: "feat/portal/王璐-人力合并功能-with-extra-long-suffix",
+      upstream: "origin/feat/portal/王璐-人力合并功能-with-extra-long-suffix",
+      ahead: 12,
+      behind: 0,
+      changes: [],
+    }))
+
+    await renderWorkbench(roots, longRepository)
+
+    const toolbar = document.querySelector('[data-git-workbench-toolbar="true"]')
+    const primaryBar = document.querySelector('[data-git-workbench-primary-bar="true"]')
+    const secondaryBar = document.querySelector('[data-git-workbench-secondary-bar="true"]')
+
+    expect(toolbar?.className).toContain("py-2")
+    expect(primaryBar?.className).toContain("lg:grid-cols-[minmax(180px,1fr)_minmax(220px,360px)_minmax(180px,1fr)]")
+    expect(secondaryBar?.className).toContain("text-xs")
+    expect(document.body.textContent).toContain("Projects_Js_With_A_Very_Long_Display_Name")
+    expect(document.body.textContent).toContain(longRepository.localPath)
+    expect(document.body.textContent).toContain("origin/feat/portal/王璐-人力合并功能-with-extra-long-suffix")
+    expect(findButton("推送本地提交")).toBeTruthy()
+    expect(findButton("详情")).toBeTruthy()
+    expect(document.querySelector('button[aria-label="更多 Git 操作"]')).toBeTruthy()
   })
 
   it("uses the action bar without syncing dirty worktrees", async () => {
@@ -439,14 +473,17 @@ function createStatus(overrides: Partial<ReturnType<typeof useGitWorktreeStatus>
   }
 }
 
-async function renderWorkbench(roots: Root[]): Promise<void> {
+async function renderWorkbench(
+  roots: Root[],
+  targetRepository: typeof repository = repository,
+): Promise<void> {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
 
   await act(async () => {
-    root.render(<GitWorkbench repository={repository} onBack={vi.fn()} />)
+    root.render(<GitWorkbench repository={targetRepository} onBack={vi.fn()} />)
     await flush()
     await flush()
   })

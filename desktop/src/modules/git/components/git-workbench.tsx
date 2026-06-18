@@ -1,8 +1,19 @@
 import { useState } from "react"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Info, MoreHorizontal } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitRepository } from "@/types/git"
@@ -22,6 +33,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   const [view, setView] = useState("changes")
   const [busy, setBusy] = useState<"sync" | "pull" | "push" | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
+  const [branchRefreshKey, setBranchRefreshKey] = useState(0)
   const status = useGitWorktreeStatus(repository)
   const history = useGitHistory(repository)
   const currentBranch = status.snapshot?.currentBranch ?? null
@@ -31,6 +43,11 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   const refreshAll = async () => {
     await status.refresh()
     await history.refresh()
+  }
+
+  const refreshAfterBranchChange = async () => {
+    await refreshAll()
+    setBranchRefreshKey((value) => value + 1)
   }
 
   const run = async (kind: "sync" | "pull" | "push", action: () => Promise<unknown>) => {
@@ -63,85 +80,120 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   }
 
   const recommendedLabel = busy === recommendedAction ? `${actionPlan.primaryLabel}中` : actionPlan.primaryLabel
+  const statusLabel = statusStateLabel(actionPlan.statusText, status.snapshot?.ahead, status.snapshot?.behind)
+  const showContextNote = Boolean(actionPlan.blockerText || actionPlan.recoveryText)
+  const canRunGitOperation = busy === null
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       <div
-        className="grid shrink-0 gap-3 border-b bg-background px-4 py-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+        className="grid shrink-0 gap-2 border-b bg-background px-3 py-2"
         data-git-workbench-toolbar="true"
       >
-        <Button type="button" variant="outline" size="sm" onClick={onBack}>
-          <ArrowLeft data-icon="inline-start" />
-          返回
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{repository.name}</div>
-          <div className="truncate text-xs text-muted-foreground">{repository.localPath}</div>
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-            <Badge variant="secondary">{currentBranch ?? "无分支"}</Badge>
-            {status.snapshot?.upstream ? <Badge variant="outline">{status.snapshot.upstream}</Badge> : null}
-            <Badge variant="outline">{actionPlan.statusText}</Badge>
-            {status.snapshot ? (
-              <Badge variant="outline">↑{status.snapshot.ahead} ↓{status.snapshot.behind}</Badge>
-            ) : null}
+        <div
+          className="grid min-w-0 gap-2 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,360px)_minmax(180px,1fr)] lg:items-center"
+          data-git-workbench-primary-bar="true"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="返回仓库列表" onClick={onBack}>
+              <ArrowLeft />
+            </Button>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">{repository.name}</div>
+            </div>
           </div>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
-          <GitBranchSwitcher
-            repository={repository}
-            currentBranch={currentBranch}
-            disabled={busy !== null}
-            onChanged={refreshAll}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy !== null}
-            onClick={() => void run("pull", () => requireSynapseBridge().git.pull(repository.id))}
-          >
-            {busy === "pull" ? "拉取中" : "拉取"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy !== null}
-            onClick={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
-          >
-            {busy === "push" ? "推送中" : "推送"}
-          </Button>
-          {recommendedAction !== "sync" ? (
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <GitBranchSwitcher
+              repository={repository}
+              currentBranch={currentBranch}
+              disabled={busy !== null}
+              mode="select"
+              refreshKey={branchRefreshKey}
+              onChanged={refreshAfterBranchChange}
+            />
+            <Badge variant="secondary" className="max-w-28 truncate">
+              {statusLabel}
+            </Badge>
+          </div>
+          <div className="flex min-w-0 items-center justify-start gap-2 lg:justify-end">
             <Button
               type="button"
-              variant="outline"
               size="sm"
-              disabled={busy !== null}
-              onClick={() => void run("sync", () => requireSynapseBridge().git.sync(repository.id))}
+              disabled={busy !== null || recommendedAction === "none"}
+              onClick={runRecommendedAction}
             >
-              {busy === "sync" ? "同步中" : "同步"}
+              {recommendedLabel}
             </Button>
-          ) : null}
-        </div>
-      </div>
-      <div className="grid shrink-0 gap-2 border-b bg-background px-4 py-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-        <div className="min-w-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">下一步</span>
-            {actionPlan.blockerText ? <Badge variant="outline">{actionPlan.blockerText}</Badge> : null}
+            <GitBranchSwitcher
+              repository={repository}
+              currentBranch={currentBranch}
+              disabled={busy !== null}
+              mode="create"
+              onChanged={refreshAfterBranchChange}
+            />
+            <DropdownMenu data-track="git-workbench-more-actions">
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="icon-sm" aria-label="更多 Git 操作">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!canRunGitOperation}
+                  onSelect={() => void run("pull", () => requireSynapseBridge().git.pull(repository.id))}
+                >
+                  拉取
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canRunGitOperation}
+                  onSelect={() => void run("push", () => requireSynapseBridge().git.push(repository.id))}
+                >
+                  推送
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canRunGitOperation}
+                  onSelect={() => void run("sync", () => requireSynapseBridge().git.sync(repository.id))}
+                >
+                  同步
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          {actionPlan.recoveryText ? (
-            <div className="mt-1 truncate text-xs text-muted-foreground">{actionPlan.recoveryText}</div>
-          ) : null}
         </div>
-        <Button
-          type="button"
-          size="sm"
-          disabled={busy !== null || recommendedAction === "none"}
-          onClick={runRecommendedAction}
+        <div
+          className="grid min-w-0 gap-2 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+          data-git-workbench-secondary-bar="true"
         >
-          {recommendedLabel}
-        </Button>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate">{repository.localPath}</span>
+            {showContextNote ? (
+              <span className="hidden shrink-0 items-center gap-1 sm:inline-flex">
+                {actionPlan.blockerText ? <Badge variant="outline">{actionPlan.blockerText}</Badge> : null}
+                {actionPlan.recoveryText ? <span>{actionPlan.recoveryText}</span> : null}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex min-w-0 items-center gap-2 md:justify-end">
+            {status.snapshot?.upstream ? (
+              <Badge variant="outline" className="hidden max-w-52 truncate sm:inline-flex">
+                {status.snapshot.upstream}
+              </Badge>
+            ) : null}
+            {status.snapshot ? (
+              <Badge variant="outline" className="hidden sm:inline-flex">
+                ↑{status.snapshot.ahead} ↓{status.snapshot.behind}
+              </Badge>
+            ) : null}
+            <RepositoryDetailsPopover
+              repository={repository}
+              currentBranch={currentBranch}
+              upstream={status.snapshot?.upstream ?? null}
+              ahead={status.snapshot?.ahead ?? null}
+              behind={status.snapshot?.behind ?? null}
+              statusText={actionPlan.statusText}
+            />
+          </div>
+        </div>
       </div>
       {operationError ? (
         <div className="shrink-0 px-4 py-3">
@@ -173,6 +225,59 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
           <GitHistoryTab history={history} />
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+function statusStateLabel(statusText: string, ahead?: number, behind?: number): string {
+  if (ahead === undefined || behind === undefined) return statusText
+  if (ahead === 0 && behind === 0) return statusText
+  return `${statusText} · ↑${ahead} ↓${behind}`
+}
+
+type RepositoryDetailsPopoverProps = {
+  readonly repository: SynapseGitRepository
+  readonly currentBranch: string | null
+  readonly upstream: string | null
+  readonly ahead: number | null
+  readonly behind: number | null
+  readonly statusText: string
+}
+
+function RepositoryDetailsPopover({
+  repository,
+  currentBranch,
+  upstream,
+  ahead,
+  behind,
+  statusText,
+}: RepositoryDetailsPopoverProps) {
+  return (
+    <Popover data-track="git-repository-details">
+      <PopoverTrigger asChild>
+        <Button type="button" variant="ghost" size="sm">
+          <Info data-icon="inline-start" />
+          详情
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 sm:w-96">
+        <div className="grid gap-2 text-xs">
+          <RepositoryDetail label="路径" value={repository.localPath} />
+          <RepositoryDetail label="分支" value={currentBranch ?? "无分支"} />
+          <RepositoryDetail label="上游" value={upstream ?? "未设置"} />
+          <RepositoryDetail label="状态" value={statusText} />
+          <RepositoryDetail label="同步" value={ahead === null || behind === null ? "未知" : `↑${ahead} ↓${behind}`} />
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function RepositoryDetail({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] gap-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="break-all text-foreground">{value}</span>
     </div>
   )
 }
