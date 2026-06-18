@@ -1384,9 +1384,6 @@ function DriveFileListRow({
                   className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
                   data-drive-item-name="true"
                   title={item.name}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                  }}
                   onContextMenu={(event) => {
                     event.stopPropagation()
                   }}
@@ -1398,9 +1395,6 @@ function DriveFileListRow({
                   className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
                   data-drive-item-name="true"
                   title={item.name}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                  }}
                   onContextMenu={(event) => {
                     event.stopPropagation()
                   }}
