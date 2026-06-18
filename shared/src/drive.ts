@@ -1,4 +1,5 @@
 export const DRIVE_PUBLIC_PATH_PREFIX = "/share"
+export const DRIVE_PUBLIC_ASSET_PATH_PREFIX = "/files"
 export const DRIVE_OWNER_BROWSER_PATH_PREFIX = "/drive/items"
 export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/console/drive"
 export const DRIVE_SHARE_BROWSER_PATH_PREFIX = DRIVE_PUBLIC_PATH_PREFIX
@@ -19,6 +20,8 @@ export type DriveBrowserPreviewKind = "image" | "text" | "html-source" | "markdo
 export type DriveBrowserEditKind = "text" | "replace" | "none"
 export type DriveBrowserEditUnavailableReason = "unsupported" | "truncated" | "login_required" | "permission_denied" | "quota"
 export type DriveFileVersionSource = "upload" | "online_edit" | "restore"
+export type DriveItemLifecycleStatus = "active" | "trashed" | "hidden" | "legacy_missing"
+export type DriveTrashItemKind = "normal" | "public_asset"
 
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
@@ -97,6 +100,45 @@ export interface DriveFileVersionListInput {
 
 export interface DriveFileVersionListPageDto {
   readonly items: readonly DriveFileVersionDto[]
+  readonly total: number
+  readonly page: DriveBrowserChildrenPageDto
+}
+
+export interface DrivePublicAssetDto {
+  readonly assetId: string
+  readonly itemId: string
+  readonly name: string
+  readonly size: string
+  readonly mimeType: string
+  readonly url: string
+  readonly lifecycleStatus: DriveItemLifecycleStatus
+  readonly accessCount: string
+  readonly responseBytes: string
+  readonly lastAccessedAt: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface DrivePublicAssetListPageDto {
+  readonly items: readonly DrivePublicAssetDto[]
+  readonly total: number
+  readonly page: DriveBrowserChildrenPageDto
+}
+
+export interface DriveTrashItemDto {
+  readonly id: string
+  readonly kind: DriveTrashItemKind
+  readonly name: string
+  readonly type: DriveItemType
+  readonly size: string
+  readonly mimeType: string | null
+  readonly originalPath: string | null
+  readonly assetId?: string
+  readonly trashedAt: string
+}
+
+export interface DriveTrashListPageDto {
+  readonly items: readonly DriveTrashItemDto[]
   readonly total: number
   readonly page: DriveBrowserChildrenPageDto
 }
@@ -333,6 +375,17 @@ export function buildDriveShareUrl(input: {
   readonly shareId: string
 }): string {
   return `${normalizePublicAppUrl(input.publicAppUrl)}${DRIVE_PUBLIC_PATH_PREFIX}/${encodeURIComponent(input.shareId)}`
+}
+
+export function buildDrivePublicAssetUrl(input: {
+  readonly publicAppUrl: string
+  readonly assetId: string
+}): string {
+  return `${normalizePublicAppUrl(input.publicAppUrl)}${DRIVE_PUBLIC_ASSET_PATH_PREFIX}/${encodeURIComponent(input.assetId)}`
+}
+
+export function isDrivePublicAssetId(value: string): boolean {
+  return /^asset_[0-9A-Za-z]{32}$/u.test(value)
 }
 
 export function buildOwnerDriveBrowserUrl(itemId: string): string {

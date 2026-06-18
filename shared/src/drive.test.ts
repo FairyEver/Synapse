@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   DRIVE_DEFAULT_QUOTA_BYTES,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  DRIVE_PUBLIC_ASSET_PATH_PREFIX,
   DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
   DRIVE_OWNER_BROWSER_PATH_PREFIX,
@@ -10,6 +11,7 @@ import {
   buildConsoleDriveBrowserUrl,
   buildConsoleDriveItemBrowserUrl,
   buildConsoleDriveRootUrl,
+  buildDrivePublicAssetUrl,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
   buildOwnerDriveBrowserUrl,
@@ -18,6 +20,7 @@ import {
   buildShareDriveBrowserUrl,
   buildShareDriveDownloadUrl,
   buildShareDriveRenderUrl,
+  isDrivePublicAssetId,
   type DriveBrowserPreviewKind,
   maskDriveBrowserUrl,
   maskDriveShareUrl,
@@ -27,6 +30,27 @@ describe("drive URL helpers", () => {
   it("builds public drive share URLs", () => {
     expect(buildDriveShareUrl({ publicAppUrl: "https://synapse.d2.pub/", shareId: "shr_abc" }))
       .toBe("https://synapse.d2.pub/share/shr_abc")
+  })
+
+  it("builds public asset URLs without filenames", () => {
+    expect(DRIVE_PUBLIC_ASSET_PATH_PREFIX).toBe("/files")
+    expect(buildDrivePublicAssetUrl({
+      publicAppUrl: "https://synapse.example/",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    })).toBe("https://synapse.example/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+  })
+
+  it("trims public app URL whitespace for public asset URLs", () => {
+    expect(buildDrivePublicAssetUrl({
+      publicAppUrl: " https://synapse.example/ ",
+      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+    })).toBe("https://synapse.example/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")
+  })
+
+  it("validates public asset ids", () => {
+    expect(isDrivePublicAssetId("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")).toBe(true)
+    expect(isDrivePublicAssetId("asset_short")).toBe(false)
+    expect(isDrivePublicAssetId("shr_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")).toBe(false)
   })
 
   it("encodes share ids", () => {
