@@ -33,6 +33,7 @@ import {
   type DriveShareListPageDto,
   type DriveShareListItemDto,
   type DriveShareAccessMode,
+  type DriveTrashListPageDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
 } from "@synapse/shared"
@@ -59,6 +60,7 @@ import {
   toDriveFileVersionDto,
 } from "./drive-version-history"
 import {
+  DRIVE_ITEM_LIFECYCLE_STATUS,
   DRIVE_ITEM_TYPE,
   DRIVE_STORAGE_STATUS,
   DRIVE_UPLOAD_STATUS,
@@ -66,6 +68,7 @@ import {
   driveMaxFileBytes,
   driveUploadUrlTtlSeconds,
 } from "./drive.constants"
+import { DriveLifecycleService } from "./drive-lifecycle.service"
 import {
   createDriveShareId,
   driveOverwriteStorageKeyForSession,
@@ -210,6 +213,7 @@ export class DriveService implements OnApplicationBootstrap {
     private readonly prisma: PrismaService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly lifecycle?: DriveLifecycleService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -219,7 +223,7 @@ export class DriveService implements OnApplicationBootstrap {
   async listItems(userId: string, parentId: string | null): Promise<DriveItemDto[]> {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     const items = await this.prisma.driveItem.findMany({
-      where: { userId, parentId, deletedAt: null },
+      where: { userId, parentId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
@@ -488,6 +492,7 @@ export class DriveService implements OnApplicationBootstrap {
           name,
           storageStatus: DRIVE_STORAGE_STATUS.active,
           deletedAt: null,
+          lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
         },
         include: driveItemWithShares,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -641,7 +646,7 @@ export class DriveService implements OnApplicationBootstrap {
       where: { id: sessionId, userId },
       include: { item: { include: driveItemWithShares } },
     })
-    if (!session || session.item.deletedAt) throw new NotFoundException("上传会话不存在。")
+    if (!session || session.item.deletedAt || session.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) throw new NotFoundException("上传会话不存在。")
     if (session.status === DRIVE_UPLOAD_STATUS.completed) {
       return toDriveItemDto(session.item)
     }
@@ -680,7 +685,7 @@ export class DriveService implements OnApplicationBootstrap {
           where: { id: session.id, userId, status: DRIVE_UPLOAD_STATUS.completed },
           include: { item: { include: driveItemWithShares } },
         })
-        if (!current || current.item.deletedAt) throw new NotFoundException("上传会话不存在。")
+        if (!current || current.item.deletedAt || current.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) throw new NotFoundException("上传会话不存在。")
         const item = current.item.storageStatus === DRIVE_STORAGE_STATUS.active && current.item.uploadStatus === DRIVE_UPLOAD_STATUS.completed
           ? current.item
           : await tx.driveItem.update({
@@ -764,7 +769,7 @@ export class DriveService implements OnApplicationBootstrap {
     const name = normalizeDriveName(input.name)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
     const existingFolder = await this.prisma.driveItem.findFirst({
-      where: { userId, parentId: input.parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null },
+      where: { userId, parentId: input.parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       select: { id: true },
     })
     if (existingFolder) throw new BadRequestException("同名文件夹已存在。")
@@ -799,7 +804,7 @@ export class DriveService implements OnApplicationBootstrap {
     const name = normalizeDriveName(input.name)
     if (input.parentId) await this.requireOwnedFolder(userId, input.parentId)
     const existingFolder = await this.prisma.driveItem.findFirst({
-      where: { userId, parentId: input.parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null },
+      where: { userId, parentId: input.parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
     })
     if (existingFolder) return { folder: toDriveItemDto(existingFolder), created: false }
@@ -879,6 +884,7 @@ export class DriveService implements OnApplicationBootstrap {
         name: input.name,
         type: input.type,
         deletedAt: null,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
         id: { not: input.excludeItemId },
       },
       select: { id: true },
@@ -889,20 +895,23 @@ export class DriveService implements OnApplicationBootstrap {
   async deleteItem(
     userId: string,
     itemId: string,
-    actorEmail = userId,
+    _actorEmail = userId,
     ipAddress = "system",
   ): Promise<{ readonly ok: true }> {
-    const resolvedActorEmail = actorEmail === userId
-      ? await this.resolveDriveAuditActorEmail(userId)
-      : actorEmail
-    await this.deleteItemInternal({
-      itemId,
-      userId,
-      actorEmail: resolvedActorEmail,
-      ipAddress,
-      admin: false,
-    })
+    await this.getLifecycleService().trashItem({ userId, itemId, actorId: userId, ipAddress })
     return { ok: true }
+  }
+
+  listTrash(userId: string, input: { readonly offset?: number; readonly limit?: number } = {}): Promise<DriveTrashListPageDto> {
+    return this.getLifecycleService().listTrash(userId, input)
+  }
+
+  restoreItem(userId: string, itemId: string, actorId = userId, ipAddress = "system"): Promise<DriveItemDto> {
+    return this.getLifecycleService().restoreItem({ userId, itemId, actorId, ipAddress })
+  }
+
+  hideTrashedItem(userId: string, itemId: string, actorId = userId, ipAddress = "system"): Promise<{ readonly ok: true }> {
+    return this.getLifecycleService().hideTrashedItem({ userId, itemId, actorId, ipAddress })
   }
 
   async createShare(
@@ -914,7 +923,7 @@ export class DriveService implements OnApplicationBootstrap {
   ): Promise<DriveShareDto> {
     const normalizedSettings = normalizeDriveAccessSettings(settings)
     const item = await this.requireOwnedItem(userId, itemId)
-    if (item.storageStatus !== DRIVE_STORAGE_STATUS.active) {
+    if (item.storageStatus !== DRIVE_STORAGE_STATUS.active || item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) {
       throw new BadRequestException("文件尚不可分享。")
     }
     const material = await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
@@ -968,7 +977,7 @@ export class DriveService implements OnApplicationBootstrap {
     const pageInput = normalizeDrivePublicLinksPage(page)
     const shares = await this.prisma.driveShare.findMany({
       where: { userId, enabled: true },
-      include: { item: { select: { id: true, name: true, type: true, deletedAt: true } }, ...driveShareWithEditors },
+      include: { item: { select: { id: true, name: true, type: true, deletedAt: true, lifecycleStatus: true } }, ...driveShareWithEditors },
       orderBy: { createdAt: "desc" },
       skip: pageInput.offset,
       take: pageInput.limit + 1,
@@ -982,7 +991,7 @@ export class DriveService implements OnApplicationBootstrap {
         itemId: share.itemId,
         itemName: share.item.name,
         itemType: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
-        sourceDeleted: share.item.deletedAt !== null,
+        sourceDeleted: share.item.deletedAt !== null || share.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active,
         url,
         urlWithPassword: buildDriveUrlWithPassword(url, password),
         passwordEnabled: share.passwordEnabled,
@@ -1011,9 +1020,9 @@ export class DriveService implements OnApplicationBootstrap {
   async getStats(userId: string): Promise<DriveStatsDto> {
     const usage = await ensureUsage(this.prisma, userId)
     const [itemCount, fileCount, folderCount] = await this.prisma.$transaction([
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null } }),
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, type: DRIVE_ITEM_TYPE.file } }),
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, type: DRIVE_ITEM_TYPE.folder } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.file } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.folder } }),
     ])
     return {
       itemCount,
@@ -1030,7 +1039,7 @@ export class DriveService implements OnApplicationBootstrap {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     const page = normalizeDriveItemTreePage(input)
     const items = await this.prisma.driveItem.findMany({
-      where: { userId, deletedAt: null },
+      where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
@@ -1055,13 +1064,13 @@ export class DriveService implements OnApplicationBootstrap {
 
     for (const name of segments) {
       const fileCollision = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null },
+        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
         select: { id: true },
       })
       if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
 
       const existingFolder = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null },
+        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
         include: driveItemWithShares,
       })
       if (existingFolder) {
@@ -1196,7 +1205,7 @@ export class DriveService implements OnApplicationBootstrap {
   async getOwnerConsoleRootBrowserSnapshot(userId: string, childrenPage?: DriveBrowserChildrenPageInput): Promise<DriveBrowserSnapshotDto> {
     const pageInput = normalizeDriveBrowserChildrenPage(childrenPage)
     const children = await this.prisma.driveItem.findMany({
-      where: { userId, parentId: null, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      where: { userId, parentId: null, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
       skip: pageInput.offset,
@@ -1379,7 +1388,12 @@ export class DriveService implements OnApplicationBootstrap {
       where: { shareId: input.shareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       include: { item: { include: driveItemWithShares }, ...driveShareWithEditors },
     })
-    if (!share || share.item.deletedAt || share.item.storageStatus !== DRIVE_STORAGE_STATUS.active) {
+    if (
+      !share
+      || share.item.deletedAt
+      || share.item.storageStatus !== DRIVE_STORAGE_STATUS.active
+      || share.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active
+    ) {
       throw new NotFoundException("文件未找到")
     }
 
@@ -1448,7 +1462,14 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   async deleteItemAsAdmin(itemId: string, actorEmail: string, ipAddress: string): Promise<{ readonly ok: true }> {
-    await this.deleteItemInternal({ itemId, actorEmail, ipAddress, admin: true })
+    const item = await this.prisma.driveItem.findFirst({ where: { id: itemId } })
+    if (!item) throw new NotFoundException("文件不存在。")
+    if (item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.trashed) {
+      await this.getLifecycleService().hideTrashedItem({ userId: item.userId, itemId, actorId: actorEmail, ipAddress })
+      return { ok: true }
+    }
+    if (item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden) return { ok: true }
+    await this.getLifecycleService().trashItem({ userId: item.userId, itemId, actorId: actorEmail, ipAddress })
     return { ok: true }
   }
 
@@ -1571,7 +1592,7 @@ export class DriveService implements OnApplicationBootstrap {
     targetParentId: string | null,
   ): Promise<void> {
     const duplicate = await this.prisma.driveItem.findFirst({
-      where: { userId, parentId: targetParentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, id: { not: itemId } },
+      where: { userId, parentId: targetParentId, name, type: DRIVE_ITEM_TYPE.folder, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, id: { not: itemId } },
       select: { id: true },
     })
     if (duplicate) throw new BadRequestException("目标位置已有同名文件夹。")
@@ -1597,7 +1618,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async requireOwnedItem(userId: string, itemId: string) {
     const item = await this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null },
+      where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
     })
     if (!item) throw new NotFoundException("文件不存在。")
@@ -1659,7 +1680,7 @@ export class DriveService implements OnApplicationBootstrap {
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const currentItem = await tx.driveItem.findFirst({
-          where: { id: input.item.id, userId: input.ownerId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+          where: { id: input.item.id, userId: input.ownerId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
           include: driveItemWithShares,
         }) as DriveItemRecordWithStorage | null
         if (!currentItem || currentItem.type !== DRIVE_ITEM_TYPE.file || !currentItem.storageKey) throw new NotFoundException("文件不存在。")
@@ -1773,7 +1794,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async findActiveDriveItem(userId: string, itemId: string): Promise<DriveItemRecordWithStorage | null> {
     return this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      where: { id: itemId, userId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
     }) as Promise<DriveItemRecordWithStorage | null>
   }
@@ -1820,7 +1841,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async listActiveChildren(userId: string, parentId: string): Promise<DriveItemRecordWithStorage[]> {
     return this.prisma.driveItem.findMany({
-      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     }) as Promise<DriveItemRecordWithStorage[]>
@@ -1833,7 +1854,7 @@ export class DriveService implements OnApplicationBootstrap {
   ): Promise<DriveBrowserChildrenResult> {
     const pageInput = normalizeDriveBrowserChildrenPage(input)
     const children = await this.prisma.driveItem.findMany({
-      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
       skip: pageInput.offset,
@@ -2328,7 +2349,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async cleanupFileVersionsAfterChange(userId: string, itemId: string): Promise<void> {
     const item = await this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null },
+      where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
       select: { id: true, storageKey: true },
     })
     if (!item) return
@@ -2383,6 +2404,10 @@ export class DriveService implements OnApplicationBootstrap {
         errorMessage: error instanceof Error ? error.message : undefined,
       }, "Failed to record drive delete audit log")
     }
+  }
+
+  private getLifecycleService(): DriveLifecycleService {
+    return this.lifecycle ?? new DriveLifecycleService(this.prisma, this.storage, this.auditLog)
   }
 }
 

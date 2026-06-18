@@ -33,6 +33,9 @@ describe("DriveController", () => {
     listItems: vi.fn(),
     prepareFolderUpload: vi.fn(),
     deleteItem: vi.fn(),
+    listTrash: vi.fn(),
+    restoreItem: vi.fn(),
+    hideTrashedItem: vi.fn(),
     listFileVersions: vi.fn(),
     restoreFileVersion: vi.fn(),
     updateFileVersionPin: vi.fn(),
@@ -58,6 +61,9 @@ describe("DriveController", () => {
     drive.listItems.mockReset()
     drive.prepareFolderUpload.mockReset()
     drive.deleteItem.mockReset()
+    drive.listTrash.mockReset()
+    drive.restoreItem.mockReset()
+    drive.hideTrashedItem.mockReset()
     drive.listFileVersions.mockReset()
     drive.restoreFileVersion.mockReset()
     drive.updateFileVersionPin.mockReset()
@@ -179,6 +185,38 @@ describe("DriveController", () => {
       expect(drive.restoreFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
       expect(drive.updateFileVersionPin).toHaveBeenCalledWith("user-1", "file-1", "ver-1", true, expect.any(Object))
       expect(drive.deleteFileVersion).toHaveBeenCalledWith("user-1", "file-1", "ver-1", expect.any(Object))
+    } finally {
+      await userApp.close()
+    }
+  })
+
+  it("routes owner trash operations through the authenticated user", async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DriveUserController],
+      providers: [{ provide: DriveService, useValue: drive }],
+    })
+      .overrideGuard(UserAuthGuard)
+      .useValue({
+        canActivate: vi.fn((context) => {
+          context.switchToHttp().getRequest().user = { id: "user-1" }
+          return true
+        }),
+      })
+      .compile()
+    const userApp = moduleRef.createNestApplication()
+    await userApp.init()
+    try {
+      drive.listTrash.mockResolvedValue({ items: [], total: 0, page: { offset: 10, limit: 5, hasMore: false, nextOffset: null } })
+      drive.restoreItem.mockResolvedValue({ id: "file-1" })
+      drive.hideTrashedItem.mockResolvedValue({ ok: true })
+
+      await request(userApp.getHttpServer()).get("/api/drive/trash?offset=10&limit=5").expect(200)
+      await request(userApp.getHttpServer()).post("/api/drive/items/file-1/restore").expect(201)
+      await request(userApp.getHttpServer()).delete("/api/drive/trash/file-1").expect(200)
+
+      expect(drive.listTrash).toHaveBeenCalledWith("user-1", { offset: 10, limit: 5 })
+      expect(drive.restoreItem).toHaveBeenCalledWith("user-1", "file-1", "user-1", expect.any(String))
+      expect(drive.hideTrashedItem).toHaveBeenCalledWith("user-1", "file-1", "user-1", expect.any(String))
     } finally {
       await userApp.close()
     }

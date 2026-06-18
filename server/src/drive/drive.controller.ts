@@ -209,6 +209,28 @@ export class DriveUserController {
     return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip)
   }
 
+  @Get("/trash")
+  listTrash(
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return this.drive.listTrash(request.user!.id, {
+      offset: parseOptionalNonNegativeInteger(offset, "offset"),
+      limit: parseOptionalNonNegativeInteger(limit, "limit"),
+    })
+  }
+
+  @Post("/items/:id/restore")
+  restoreItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.restoreItem(request.user!.id, id, request.user!.id, request.ip)
+  }
+
+  @Delete("/trash/:id")
+  hideTrashItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.hideTrashedItem(request.user!.id, id, request.user!.id, request.ip)
+  }
+
   @Post("/items/:id/share")
   createShare(@Param("id") id: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
     return this.drive.createShare(request.user!.id, id, resolveRequestPublicAppUrl(request), parseAccessSettings(body), driveAuditContext(request))
