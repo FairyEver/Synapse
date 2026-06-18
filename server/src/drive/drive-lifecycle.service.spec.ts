@@ -539,6 +539,7 @@ function createLifecyclePrismaMemory() {
           hiddenBy: data.hiddenBy ?? null,
           objectMissing: data.objectMissing ?? false,
           storageDeletePending: data.storageDeletePending ?? false,
+          publicAsset: data.publicAsset ?? null,
           createdAt: now(),
           updatedAt: now(),
         }

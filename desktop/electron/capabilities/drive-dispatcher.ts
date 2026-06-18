@@ -482,12 +482,13 @@ async function uploadPublicAsset(
   action: string,
 ): Promise<DispatchResult> {
   const filePath = requireString(params, "filePath")
+  const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   const result = await deps.accountService.uploadDrivePublicAssets({
     files: [{
       path: filePath,
-      name: optionalString(params.name) ?? path.basename(filePath),
-      mimeType: optionalString(params.mimeType) ?? null,
+      name,
+      mimeType: await resolvePublicAssetMimeType(name, optionalString(params.mimeType)),
     }],
   })
   const first = result.results[0]
@@ -508,16 +509,23 @@ async function replacePublicAsset(
 ): Promise<DispatchResult> {
   const assetId = requireString(params, "assetId")
   const filePath = requireString(params, "filePath")
+  const name = optionalString(params.name) ?? path.basename(filePath)
   await authorizeFileRead(deps, filePath, context, action)
   return {
     ok: true,
     data: await deps.accountService.replaceDrivePublicAssetFile({
       assetId,
       path: filePath,
-      name: optionalString(params.name) ?? path.basename(filePath),
-      mimeType: optionalString(params.mimeType) ?? null,
+      name,
+      mimeType: await resolvePublicAssetMimeType(name, optionalString(params.mimeType)),
     }),
   }
+}
+
+async function resolvePublicAssetMimeType(name: string, mimeType?: string): Promise<string | null> {
+  if (mimeType) return mimeType
+  const { inferDrivePublicAssetMimeType } = await import("@synapse/shared")
+  return inferDrivePublicAssetMimeType(name)
 }
 
 async function putPreparedUpload(

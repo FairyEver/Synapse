@@ -7,6 +7,15 @@ export const DRIVE_MAX_FILE_BYTES = 100 * 1024 * 1024
 export const DRIVE_DEFAULT_QUOTA_BYTES = 5 * 1024 * 1024 * 1024
 export const DRIVE_MAX_FILE_SIZE_LABEL = "100MB"
 export const DRIVE_DEFAULT_QUOTA_LABEL = "5GB"
+export const DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  avif: "image/avif",
+  ico: "image/x-icon",
+} as const
 
 export type DriveItemType = "file" | "folder"
 export type DriveShareItemType = "file" | "folder"
@@ -386,6 +395,12 @@ export function buildDrivePublicAssetUrl(input: {
 
 export function isDrivePublicAssetId(value: string): boolean {
   return /^asset_[0-9A-Za-z]{32}$/u.test(value)
+}
+
+export function inferDrivePublicAssetMimeType(name: string): string | null {
+  const extension = name.split(".").pop()?.toLowerCase()
+  if (!extension) return null
+  return DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION[extension as keyof typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION] ?? null
 }
 
 export function buildOwnerDriveBrowserUrl(itemId: string): string {

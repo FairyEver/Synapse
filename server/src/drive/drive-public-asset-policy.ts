@@ -1,12 +1,6 @@
-const PUBLIC_ASSET_TYPES: ReadonlyMap<string, string> = new Map([
-  ["jpg", "image/jpeg"],
-  ["jpeg", "image/jpeg"],
-  ["png", "image/png"],
-  ["webp", "image/webp"],
-  ["gif", "image/gif"],
-  ["avif", "image/avif"],
-  ["ico", "image/x-icon"],
-] as const)
+import { DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION } from "@synapse/shared"
+
+const PUBLIC_ASSET_TYPES: ReadonlyMap<string, string> = new Map(Object.entries(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION))
 
 export function validatePublicAssetNameAndMime(input: { readonly name: string; readonly mimeType?: string | null }) {
   const extension = input.name.split(".").pop()?.toLowerCase()

@@ -389,7 +389,7 @@ export function buildDriveTools(): McpToolDefinition[] {
         properties: {
           filePath: stringField("Absolute local image file path to upload. Public assets are image-only."),
           name: stringField("Optional public asset display name. Defaults to the local file basename."),
-          mimeType: stringField("Optional image MIME type."),
+          mimeType: stringField("Optional image MIME type; inferred from filename extension when omitted."),
         },
         required: ["filePath"],
       },
@@ -422,7 +422,7 @@ export function buildDriveTools(): McpToolDefinition[] {
           assetId: stringField("Public asset id to replace."),
           filePath: stringField("Absolute local replacement image file path. Public assets are image-only."),
           name: stringField("Optional replacement display name. Defaults to the local file basename."),
-          mimeType: stringField("Optional image MIME type."),
+          mimeType: stringField("Optional image MIME type; inferred from filename extension when omitted."),
         },
         required: ["assetId", "filePath"],
       },

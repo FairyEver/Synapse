@@ -20,6 +20,7 @@ import {
   buildShareDriveBrowserUrl,
   buildShareDriveDownloadUrl,
   buildShareDriveRenderUrl,
+  inferDrivePublicAssetMimeType,
   isDrivePublicAssetId,
   type DriveBrowserPreviewKind,
   maskDriveBrowserUrl,
@@ -51,6 +52,12 @@ describe("drive URL helpers", () => {
     expect(isDrivePublicAssetId("asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")).toBe(true)
     expect(isDrivePublicAssetId("asset_short")).toBe(false)
     expect(isDrivePublicAssetId("shr_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ")).toBe(false)
+  })
+
+  it("infers public asset image MIME types from filenames", () => {
+    expect(inferDrivePublicAssetMimeType("logo.PNG")).toBe("image/png")
+    expect(inferDrivePublicAssetMimeType("photo.jpeg")).toBe("image/jpeg")
+    expect(inferDrivePublicAssetMimeType("icon.svg")).toBeNull()
   })
 
   it("encodes share ids", () => {

@@ -13,6 +13,7 @@ type DriveLifecycleInput = {
   readonly itemId: string
   readonly actorId: string
   readonly ipAddress: string
+  readonly allowPublicAsset?: boolean
 }
 
 type DriveTrashListInput = {
@@ -61,7 +62,7 @@ export class DriveLifecycleService {
 
   async trashItem(input: DriveLifecycleInput): Promise<DriveItemDto> {
     void this.storage
-    const root = await this.requireLifecycleItem(input.userId, input.itemId, DRIVE_ITEM_LIFECYCLE_STATUS.active)
+    const root = await this.requireLifecycleItem(input.userId, input.itemId, DRIVE_ITEM_LIFECYCLE_STATUS.active, input.allowPublicAsset)
     const items = await this.collectSubtree(root.id, isActiveLifecycleItem)
     const itemIds = items.map((item) => item.id)
     const trashedAt = new Date()
@@ -185,7 +186,7 @@ export class DriveLifecycleService {
   }
 
   async restoreItemAsAdmin(input: DriveLifecycleInput): Promise<DriveItemDto> {
-    return this.restoreItemForStatuses(input, [
+    return this.restoreItemForStatuses({ ...input, allowPublicAsset: true }, [
       DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
       DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
     ])
@@ -197,6 +198,7 @@ export class DriveLifecycleService {
         id: input.itemId,
         userId: input.userId,
         lifecycleStatus: { in: lifecycleStatuses },
+        ...normalLifecycleItemWhere(input.allowPublicAsset),
       },
       include: { publicAsset: true, shares: { where: { enabled: true }, select: { id: true, enabled: true } } },
     }) as DriveLifecycleItemRecord | null
@@ -291,10 +293,15 @@ export class DriveLifecycleService {
     }
   }
 
-  private async requireLifecycleItem(userId: string, itemId: string, lifecycleStatus: string): Promise<DriveLifecycleItemRecord> {
+  private async requireLifecycleItem(
+    userId: string,
+    itemId: string,
+    lifecycleStatus: string,
+    allowPublicAsset = false,
+  ): Promise<DriveLifecycleItemRecord> {
     const item = await this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, lifecycleStatus },
-      include: { shares: { where: { enabled: true }, select: { id: true, enabled: true } } },
+      where: { id: itemId, userId, lifecycleStatus, ...normalLifecycleItemWhere(allowPublicAsset) },
+      include: { publicAsset: true, shares: { where: { enabled: true }, select: { id: true, enabled: true } } },
     }) as DriveLifecycleItemRecord | null
     if (!item) throw new NotFoundException("文件不存在。")
     return item
@@ -391,6 +398,7 @@ export class DriveLifecycleService {
         type: input.type,
         lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
         deletedAt: null,
+        publicAsset: null,
         id: { not: input.excludeItemId },
       },
       select: { name: true },
@@ -434,6 +442,10 @@ function currentFileBytes(items: readonly DriveLifecycleItemRecord[]): bigint {
 
 function isActiveLifecycleItem(item: DriveLifecycleItemRecord): boolean {
   return item.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.active
+}
+
+function normalLifecycleItemWhere(allowPublicAsset = false) {
+  return allowPublicAsset ? {} : { publicAsset: null }
 }
 
 function belongsToDeletedTree(rootId: string, lifecycleStatus: string): (item: DriveLifecycleItemRecord) => boolean {

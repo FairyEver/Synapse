@@ -857,11 +857,12 @@ export class AccountService {
     if (!fileStat?.isFile()) throw new Error("文件不可用。")
     const uploadLimits = await getDriveUploadLimits()
     if (fileStat.size > uploadLimits.maxFileBytes) throw new Error(driveMaxFileSizeMessage(uploadLimits.maxFileSizeLabel))
+    const mimeType = await resolveDrivePublicAssetMimeType(input.name, input.mimeType)
 
     const prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
       "POST",
       `${apiBaseUrl()}/drive/public-assets/${encodeURIComponent(input.assetId)}/replace/prepare`,
-      { name: input.name, size: String(fileStat.size), mimeType: input.mimeType ?? null },
+      { name: input.name, size: String(fileStat.size), mimeType },
       "替换准备失败。",
     )
 
@@ -943,11 +944,12 @@ export class AccountService {
     }
 
     let prepared: DriveUploadPrepareResult
+    const mimeType = await resolveDrivePublicAssetMimeType(file.name, file.mimeType)
     try {
       prepared = await this.requestAuthenticatedJson<DriveUploadPrepareResult>(
         "POST",
         `${apiBaseUrl()}/drive/public-assets/uploads/prepare`,
-        { name: file.name, size: String(fileStat.size), mimeType: file.mimeType ?? null },
+        { name: file.name, size: String(fileStat.size), mimeType },
         "上传准备失败。",
       )
     } catch {
@@ -1733,6 +1735,13 @@ async function getDriveUploadLimits(): Promise<{ readonly maxFileBytes: number; 
     maxFileBytes: shared.DRIVE_MAX_FILE_BYTES,
     maxFileSizeLabel: shared.DRIVE_MAX_FILE_SIZE_LABEL,
   }
+}
+
+async function resolveDrivePublicAssetMimeType(name: string, mimeType?: string | null): Promise<string | null> {
+  const normalized = typeof mimeType === "string" && mimeType.trim() ? mimeType.trim() : null
+  if (normalized) return normalized
+  const shared = await sharedUrlsPromise
+  return shared.inferDrivePublicAssetMimeType(name)
 }
 
 function driveMaxFileSizeMessage(label: string): string {

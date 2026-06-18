@@ -224,7 +224,7 @@ export class DriveService implements OnApplicationBootstrap {
   async listItems(userId: string, parentId: string | null): Promise<DriveItemDto[]> {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     const items = await this.prisma.driveItem.findMany({
-      where: { userId, parentId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+      where: { userId, parentId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
@@ -494,6 +494,7 @@ export class DriveService implements OnApplicationBootstrap {
           storageStatus: DRIVE_STORAGE_STATUS.active,
           deletedAt: null,
           lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+          publicAsset: null,
         },
         include: driveItemWithShares,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -886,6 +887,7 @@ export class DriveService implements OnApplicationBootstrap {
         type: input.type,
         deletedAt: null,
         lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+        publicAsset: null,
         id: { not: input.excludeItemId },
       },
       select: { id: true },
@@ -912,7 +914,7 @@ export class DriveService implements OnApplicationBootstrap {
   }
 
   hideTrashedItem(userId: string, itemId: string, actorId = userId, ipAddress = "system"): Promise<{ readonly ok: true }> {
-    return this.getLifecycleService().hideTrashedItem({ userId, itemId, actorId, ipAddress })
+    return this.getLifecycleService().hideTrashedItem({ userId, itemId, actorId, ipAddress, allowPublicAsset: true })
   }
 
   async createShare(
@@ -977,7 +979,7 @@ export class DriveService implements OnApplicationBootstrap {
   async listShares(userId: string, publicAppUrl: string, page?: DrivePublicLinksPageInput): Promise<DriveShareListPageDto> {
     const pageInput = normalizeDrivePublicLinksPage(page)
     const shares = await this.prisma.driveShare.findMany({
-      where: { userId, enabled: true },
+      where: { userId, enabled: true, item: { is: { publicAsset: null } } },
       include: { item: { select: { id: true, name: true, type: true, deletedAt: true, lifecycleStatus: true } }, ...driveShareWithEditors },
       orderBy: { createdAt: "desc" },
       skip: pageInput.offset,
@@ -1021,9 +1023,9 @@ export class DriveService implements OnApplicationBootstrap {
   async getStats(userId: string): Promise<DriveStatsDto> {
     const usage = await ensureUsage(this.prisma, userId)
     const [itemCount, fileCount, folderCount] = await this.prisma.$transaction([
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active } }),
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.file } }),
-      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.folder } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.file, publicAsset: null } }),
+      this.prisma.driveItem.count({ where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, type: DRIVE_ITEM_TYPE.folder, publicAsset: null } }),
     ])
     return {
       itemCount,
@@ -1040,7 +1042,7 @@ export class DriveService implements OnApplicationBootstrap {
     if (parentId) await this.requireOwnedFolder(userId, parentId)
     const page = normalizeDriveItemTreePage(input)
     const items = await this.prisma.driveItem.findMany({
-      where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+      where: { userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     })
@@ -1065,7 +1067,7 @@ export class DriveService implements OnApplicationBootstrap {
 
     for (const name of segments) {
       const fileCollision = await this.prisma.driveItem.findFirst({
-        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+        where: { userId, parentId, name, type: DRIVE_ITEM_TYPE.file, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
         select: { id: true },
       })
       if (fileCollision) throw new BadRequestException("路径中存在同名文件。")
@@ -1206,7 +1208,7 @@ export class DriveService implements OnApplicationBootstrap {
   async getOwnerConsoleRootBrowserSnapshot(userId: string, childrenPage?: DriveBrowserChildrenPageInput): Promise<DriveBrowserSnapshotDto> {
     const pageInput = normalizeDriveBrowserChildrenPage(childrenPage)
     const children = await this.prisma.driveItem.findMany({
-      where: { userId, parentId: null, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+      where: { userId, parentId: null, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
       skip: pageInput.offset,
@@ -1386,14 +1388,15 @@ export class DriveService implements OnApplicationBootstrap {
   }): Promise<DrivePublicAccessResult<DrivePublicShareValue>> {
     const now = input.now ?? new Date()
     const share = await this.prisma.driveShare.findFirst({
-      where: { shareId: input.shareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-      include: { item: { include: driveItemWithShares }, ...driveShareWithEditors },
+      where: { shareId: input.shareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], item: { is: { publicAsset: null } } },
+      include: { item: { include: { ...driveItemWithShares, publicAsset: true } }, ...driveShareWithEditors },
     })
     if (
       !share
       || share.item.deletedAt
       || share.item.storageStatus !== DRIVE_STORAGE_STATUS.active
       || share.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active
+      || share.item.publicAsset
     ) {
       throw new NotFoundException("文件未找到")
     }
@@ -1686,7 +1689,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async requireOwnedItem(userId: string, itemId: string) {
     const item = await this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+      where: { id: itemId, userId, deletedAt: null, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
     })
     if (!item) throw new NotFoundException("文件不存在。")
@@ -1862,7 +1865,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async findActiveDriveItem(userId: string, itemId: string): Promise<DriveItemRecordWithStorage | null> {
     return this.prisma.driveItem.findFirst({
-      where: { id: itemId, userId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+      where: { id: itemId, userId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
     }) as Promise<DriveItemRecordWithStorage | null>
   }
@@ -1909,7 +1912,7 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async listActiveChildren(userId: string, parentId: string): Promise<DriveItemRecordWithStorage[]> {
     return this.prisma.driveItem.findMany({
-      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
     }) as Promise<DriveItemRecordWithStorage[]>
@@ -1922,7 +1925,7 @@ export class DriveService implements OnApplicationBootstrap {
   ): Promise<DriveBrowserChildrenResult> {
     const pageInput = normalizeDriveBrowserChildrenPage(input)
     const children = await this.prisma.driveItem.findMany({
-      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active },
+      where: { userId, parentId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active, lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, publicAsset: null },
       include: driveItemWithShares,
       orderBy: [{ type: "asc" }, { createdAt: "desc" }],
       skip: pageInput.offset,

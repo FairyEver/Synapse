@@ -467,6 +467,83 @@ describe("DriveService", () => {
     expect(await service.listItems("user-1", null)).toHaveLength(2)
   })
 
+  it("keeps public asset backing files out of normal Drive views and actions", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    const normal = await createCompletedUpload(service, "user-1", { parentId: null, name: "readme.txt", mimeType: "text/plain" })
+    await markAsPublicAssetBacking(prisma, backing.id)
+
+    expect((await service.listItems("user-1", null)).map((item) => item.id)).toEqual([normal.id])
+    expect((await service.listItemTree("user-1", { parentId: null })).items.map((item) => item.id)).toEqual([normal.id])
+    await expect(service.getItem("user-1", backing.id)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.renameItem("user-1", backing.id, "renamed.png")).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.moveItem("user-1", backing.id, null)).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.createShare("user-1", backing.id, "https://synapse.test")).rejects.toBeInstanceOf(NotFoundException)
+    await expect(service.deleteItem("user-1", backing.id)).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("hides legacy shares that point at public asset backing files", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    const share = await service.createShare("user-1", backing.id, "https://synapse.test")
+    await markAsPublicAssetBacking(prisma, backing.id)
+
+    await expect(service.listShares("user-1", "https://synapse.test")).resolves.toMatchObject({ items: [] })
+    await expect(service.resolvePublicShareAccess({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("rejects ordinary restore for trashed public asset backing files", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    await markAsPublicAssetBacking(prisma, backing.id)
+    await prisma.driveItem.update({
+      where: { id: backing.id },
+      data: {
+        lifecycleStatus: "trashed",
+        trashedAt: new Date("2026-06-07T12:00:00.000Z"),
+        trashedBy: "user-1",
+        deleteRootId: backing.id,
+      },
+    })
+
+    await expect(service.restoreItem("user-1", backing.id)).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("does not overwrite public asset backing files during normal same-name uploads", async () => {
+    const prisma = createPrismaMemory()
+    const objectSizes = new Map<string, bigint>()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: objectSizes.get(key) ?? 11n, etag: "etag" })),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const backing = await createCompletedUpload(service, "user-1", { parentId: null, name: "logo.png", mimeType: "image/png" })
+    await markAsPublicAssetBacking(prisma, backing.id)
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "logo.png",
+      size: "5",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.test",
+    })
+    const session = (await prisma.driveUploadSession.findMany({ where: { id: prepared.sessionId } }))[0]
+    objectSizes.set(session.storageKey, 5n)
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    expect(prepared.item.id).not.toBe(backing.id)
+    expect(await service.getItem("user-1", prepared.item.id)).toMatchObject({ name: "logo.png", size: "5" })
+    expect((await service.listItems("user-1", null)).map((item) => item.id)).toEqual([prepared.item.id])
+    expect(await prisma.driveItem.findUniqueOrThrow({ where: { id: backing.id } })).toMatchObject({ size: 11n })
+  })
+
   it("lets the last completed concurrent overwrite win with correct usage", async () => {
     const prisma = createPrismaMemory()
     const objectSizes = new Map<string, bigint>()
@@ -2022,6 +2099,17 @@ async function createCompletedUpload(
   return service.getItem(userId, prepared.item.id)
 }
 
+async function markAsPublicAssetBacking(prisma: ReturnType<typeof createPrismaMemory>, itemId: string) {
+  return prisma.driveItem.update({
+    where: { id: itemId },
+    data: {
+      publicAsset: {
+        assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
+      },
+    },
+  })
+}
+
 function createPrismaMemory() {
   let nextId = 1
   const users = new Map<string, { id: string; email: string; passwordHash: string }>()
@@ -2054,6 +2142,7 @@ function createPrismaMemory() {
         : {}),
     }
   }
+  const shareWhereRow = (share: any) => ({ ...share, item: items.get(share.itemId) ?? null })
 
   const prisma: any = {
     $transaction: async (input: any) => {
@@ -2125,6 +2214,7 @@ function createPrismaMemory() {
           restorePath: data.restorePath ?? null,
           deleteRootId: data.deleteRootId ?? null,
           objectMissing: data.objectMissing ?? false,
+          publicAsset: data.publicAsset ?? null,
           deletedAt: null,
           createdAt: now(),
           updatedAt: now(),
@@ -2288,12 +2378,12 @@ function createPrismaMemory() {
         return withShareIncludes(share, { editors: true })
       },
       findFirst: async ({ where, include }: any) => {
-        const share = [...shares.values()].find((item) => matchesWhere(item, where))
+        const share = [...shares.values()].find((item) => matchesWhere(shareWhereRow(item), where))
         if (!share) return null
         return withShareIncludes(share, include)
       },
       findMany: async ({ where, include, orderBy, select }: any = {}) => {
-        const found = orderRows([...shares.values()].filter((share) => matchesWhere(share, where ?? {})), orderBy)
+        const found = orderRows([...shares.values()].filter((share) => matchesWhere(shareWhereRow(share), where ?? {})), orderBy)
         if (select) return found.map((share) => selectFields(share, select))
         return found.map((share) => withShareIncludes(share, include))
       },
@@ -2339,6 +2429,7 @@ function matchesWhere(row: any, where: any): boolean {
   return Object.entries(where).every(([key, value]: [string, any]) => {
     if (key === "AND") return value.every((entry: any) => matchesWhere(row, entry))
     if (key === "OR") return value.some((entry: any) => matchesWhere(row, entry))
+    if (value && typeof value === "object" && "is" in value) return matchesWhere(row[key], value.is)
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not
     if (value && typeof value === "object" && "gt" in value) return row[key] > value.gt

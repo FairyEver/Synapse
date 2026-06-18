@@ -17,7 +17,7 @@ Input:
 
 - `filePath` required: absolute local image file path.
 - `name` optional: display name; defaults to the local file basename.
-- `mimeType` optional: image MIME type.
+- `mimeType` optional: image MIME type; inferred from filename extension when omitted.
 
 ### `drive_direct_link_list`
 
@@ -45,7 +45,7 @@ Input:
 - `assetId` required.
 - `filePath` required: absolute local replacement image file path.
 - `name` optional.
-- `mimeType` optional.
+- `mimeType` optional; inferred from filename extension when omitted.
 
 ### `drive_direct_link_delete`
 

@@ -309,7 +309,6 @@ describe("createDriveCapabilityDispatcher", () => {
 
     await expect(dispatcher.dispatch("drive.direct_link.upload", {
       filePath: "/tmp/logo.png",
-      mimeType: "image/png",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
@@ -356,7 +355,6 @@ describe("createDriveCapabilityDispatcher", () => {
       assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
       filePath: "/tmp/new-logo.png",
       name: "new-logo.png",
-      mimeType: "image/png",
     }, { source: "mcp-stdio" })).resolves.toEqual({ ok: true, data: asset })
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({

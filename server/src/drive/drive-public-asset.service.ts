@@ -559,6 +559,7 @@ export class DrivePublicAssetService {
       itemId: asset.itemId,
       actorId: userId,
       ipAddress: auditContext.ipAddress ?? "system",
+      allowPublicAsset: true,
     })
     return toDrivePublicAssetDto(await this.requireOwnedAsset(userId, assetId, { includeTrashed: true }), resolveDtoPublicAppUrl(auditContext))
   }
@@ -570,6 +571,7 @@ export class DrivePublicAssetService {
       itemId: asset.itemId,
       actorId: userId,
       ipAddress: auditContext.ipAddress ?? "system",
+      allowPublicAsset: true,
     })
     return toDrivePublicAssetDto(await this.requireOwnedAsset(userId, assetId), resolveDtoPublicAppUrl(auditContext))
   }
