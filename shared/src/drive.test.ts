@@ -102,7 +102,12 @@ describe("drive URL helpers", () => {
   })
 
   it("defines the default drive access settings", () => {
-    expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({ passwordEnabled: true, expiresIn: "3d" })
+    expect(DRIVE_DEFAULT_ACCESS_SETTINGS).toEqual({
+      passwordEnabled: true,
+      expiresIn: "3d",
+      accessMode: "link_read",
+      editorEmails: [],
+    })
   })
 
   it("defines office-oriented drive upload limits", () => {

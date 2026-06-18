@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { DriveFinder } from './finder/drive-finder'
 import { DriveRendererShell } from './renderers/drive-renderer-shell'
+import type { DriveRendererEditContext } from './renderers/drive-renderer-shell'
 import type { DriveRendererId } from './renderers/drive-renderer-registry'
 import { shouldRenderDriveBodyRenderer } from './shared/drive-view-model'
 import { useDriveBrowser } from './use-drive-browser'
@@ -52,7 +53,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
   const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
   const shouldCenterState = framed && state.status !== 'ready' && state.status !== 'loading'
   if (state.status === 'ready' && shouldRenderDriveBodyRenderer(state.snapshot)) {
-    return <DriveSingleFileReaderView snapshot={state.snapshot} />
+    return <DriveSingleFileReaderView snapshot={state.snapshot} editContext={state} />
   }
 
   const content = (
@@ -85,6 +86,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
           onLoadMoreChildren={state.loadMoreChildren}
           loadingMoreChildren={state.loadingMoreChildren}
           loadMoreChildrenError={state.loadMoreChildrenError}
+          editContext={state}
         />
       ) : null}
     </div>
@@ -116,6 +118,7 @@ export function DriveConsoleRootBrowser() {
       onLoadMoreChildren={state.loadMoreChildren}
       loadingMoreChildren={state.loadingMoreChildren}
       loadMoreChildrenError={state.loadMoreChildrenError}
+      editContext={state}
     />
   )
 }
@@ -126,12 +129,14 @@ export function DriveBrowserView({
   onLoadMoreChildren,
   loadingMoreChildren = false,
   loadMoreChildrenError = null,
+  editContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly layoutMode?: DriveBrowserLayoutMode
   readonly onLoadMoreChildren?: () => void
   readonly loadingMoreChildren?: boolean
   readonly loadMoreChildrenError?: string | null
+  readonly editContext?: DriveRendererEditContext
 }) {
   void layoutMode
   return (
@@ -141,6 +146,7 @@ export function DriveBrowserView({
       onLoadMoreChildren={onLoadMoreChildren}
       loadingMoreChildren={loadingMoreChildren}
       loadMoreChildrenError={loadMoreChildrenError}
+      editContext={editContext}
     />
   )
 }
@@ -149,15 +155,17 @@ export function DriveSingleFileReaderView({
   snapshot,
   embedded = false,
   initialRendererId = null,
+  editContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly embedded?: boolean
   readonly initialRendererId?: DriveRendererId | null
+  readonly editContext?: DriveRendererEditContext
 }) {
   void embedded
   return (
     <div className='h-svh min-h-0 overflow-hidden bg-background'>
-      <DriveRendererShell snapshot={snapshot} body initialRendererId={initialRendererId} />
+      <DriveRendererShell snapshot={snapshot} body initialRendererId={initialRendererId} editContext={editContext} />
     </div>
   )
 }

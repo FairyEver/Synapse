@@ -3,6 +3,7 @@ import {
   buildConsoleDriveBrowserUrl,
   buildConsoleDriveItemBrowserUrl,
   type DriveBrowserSnapshotDto,
+  type DriveFileContentUpdateResult,
 } from '@synapse/shared'
 import { Download, ExternalLink, History, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -57,6 +58,13 @@ type DriveFloatingMenuDragState = {
   moved: boolean
 }
 
+export type DriveRendererEditContext = {
+  readonly reload: () => Promise<DriveBrowserSnapshotDto>
+  readonly reloading: boolean
+  readonly saveText: (input: { readonly text: string; readonly baseVersionId: string }) => Promise<DriveFileContentUpdateResult>
+  readonly savingText: boolean
+}
+
 export function clampDriveFloatingMenuPosition(
   position: DriveFloatingMenuPoint,
   viewport: DriveFloatingMenuSize,
@@ -97,12 +105,14 @@ export function DriveRendererShell({
   initialRendererId = null,
   rendererId,
   onRendererChange,
+  editContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly body?: boolean
   readonly initialRendererId?: DriveRendererId | null
   readonly rendererId?: DriveRendererId | null
   readonly onRendererChange?: (id: DriveRendererId) => void
+  readonly editContext?: DriveRendererEditContext
 }) {
   const options = useMemo(() => getDriveRendererOptions(snapshot), [snapshot])
   const initialRenderer = findDriveRendererOption(snapshot, initialRendererId)
@@ -138,7 +148,7 @@ export function DriveRendererShell({
           onSelect={setRenderer}
         />
       ) : null}
-      <DriveRendererContent snapshot={snapshot} selected={selected} body={body} />
+      <DriveRendererContent snapshot={snapshot} selected={selected} body={body} editContext={editContext} />
     </section>
   )
 }
@@ -147,10 +157,12 @@ export function DriveRendererContent({
   snapshot,
   selected,
   body = false,
+  editContext,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly selected: DriveRendererOption
   readonly body?: boolean
+  readonly editContext?: DriveRendererEditContext
 }) {
   const preview = snapshot.preview
   const containerClassName = selected.container === 'media'
@@ -175,7 +187,7 @@ export function DriveRendererContent({
     return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} />)
   }
   if (selected.id === 'code') {
-    return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} />)
+    return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
   }
   if (selected.id === 'image') {
     return renderContent(<DriveImageRenderer current={snapshot.current} preview={preview} />)
@@ -183,7 +195,7 @@ export function DriveRendererContent({
   if (selected.id === 'iframe' && preview.visitUrl) {
     return renderContent(<DriveIframeRenderer current={snapshot.current} visitUrl={preview.visitUrl} />)
   }
-  return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} />)
+  return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
 }
 
 function DriveRendererFloatingMenu({

@@ -48,6 +48,8 @@ Do not use this skill for database records, content resources, scheduler tasks, 
 7. If the user wants to hand the file or folder to someone else for browse, render, or download access, call `drive_share_create` for the item and return the `/share/...` public URL.
    - Pass `passwordEnabled: false` only when the user asks for a no-password link. Omit it to keep the default password requirement.
    - Pass `expiresIn` when the user asks for a specific duration. Supported values are `3d`, `7d`, `30d`, `1y`, and `forever`; omitting it uses `3d`.
+   - Pass `accessMode: "link_read"` for the default read-only link, `accessMode: "link_edit"` when logged-in link holders may edit supported text files, or `accessMode: "specified_users_edit"` with `editorEmails` when only specific logged-in users may edit.
+   - Do not pass `editorEmails` for read-only or link-edit links. For `specified_users_edit`, provide one or more email addresses.
 8. If a folder needs to exist first, call `drive_folder_create`, then pass the returned folder id as `parentId`.
 9. To organize the user's Drive, call `drive_stats_get` and `drive_item_tree_list` first. Classify primarily from metadata such as name, path, extension, MIME type, size, and timestamps.
 10. Only read file content when it is necessary, and only for a small number of text-like candidates. Use `drive_file_content_read` one file at a time. Do not attempt bulk content reads; Drive MCP does not provide a batch file-content API.
@@ -62,7 +64,9 @@ Never reveal COS AK, SK, Authorization headers, local secrets, or presigned uplo
 
 Before deleting a file or folder, or disabling a share, make sure the user asked for that operation clearly.
 
-Shares use `/share/...` and let others browse files and folders, render previewable HTML, or download content. HTML shares are live links to the current Drive file, not static site snapshots.
+Shares use `/share/...` and let others browse files and folders, render previewable HTML, download content, and, when the owner chooses an editable mode, edit supported text files after login. HTML shares are live links to the current Drive file, not static site snapshots.
+
+Share editors cannot see version history through public share links. Editable shares update the owner's Drive file and create normal file versions owned by the file owner.
 
 Drive organization changes can move many user files. Always preview first, then apply by `planId` only after the user has confirmed. If apply reports that the Drive changed, refresh the tree and create a new preview.
 

@@ -123,6 +123,8 @@ const driveShareSchema = z.object({
   passwordEnabled: z.boolean(),
   password: z.string().nullable(),
   expiresAt: z.string().nullable(),
+  accessMode: z.enum(["link_read", "link_edit", "specified_users_edit"]),
+  editorEmails: z.array(z.string()),
   createdAt: z.string(),
 })
 
@@ -138,6 +140,8 @@ const driveShareListItemSchema = z.object({
   passwordEnabled: z.boolean(),
   password: z.string().nullable(),
   expiresAt: z.string().nullable(),
+  accessMode: z.enum(["link_read", "link_edit", "specified_users_edit"]),
+  editorEmails: z.array(z.string()),
   createdAt: z.string(),
 })
 
@@ -263,6 +267,8 @@ const drivePreviewUrlSchema = z.object({ url: z.string().url() })
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean(),
   expiresIn: z.enum(["3d", "7d", "30d", "1y", "forever"]),
+  accessMode: z.enum(["link_read", "link_edit", "specified_users_edit"]).optional(),
+  editorEmails: z.array(z.string()).optional(),
 })
 const driveAccessItemSchema = driveItemIdSchema.extend(driveAccessSettingsSchema.shape)
 const driveDeleteItemSchema = z.object({ itemId: z.string() })
@@ -631,6 +637,8 @@ export const accountIpcModule: IpcModule = {
         return accountService.shareDriveItem(parsed.itemId, {
           passwordEnabled: parsed.passwordEnabled,
           expiresIn: parsed.expiresIn,
+          accessMode: parsed.accessMode,
+          editorEmails: parsed.editorEmails,
         })
       },
     },

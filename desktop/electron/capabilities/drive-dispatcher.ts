@@ -20,6 +20,7 @@ import type {
   DriveReorganizationApplyResultDto,
   DriveReorganizationPreviewDto,
   DriveReorganizationPreviewInput,
+  DriveShareAccessMode,
   DriveShareDto,
   DriveShareListPageDto,
   DriveStatsDto,
@@ -806,14 +807,46 @@ function optionalDriveAccessExpiresIn(value: unknown): DriveAccessExpiresIn | un
   return value as DriveAccessExpiresIn
 }
 
+function optionalDriveShareAccessMode(value: unknown): DriveShareAccessMode | undefined {
+  if (value === undefined || value === null) return undefined
+  if (value === "link_read" || value === "link_edit" || value === "specified_users_edit") return value
+  throw new Error("Expected accessMode to be one of link_read, link_edit, or specified_users_edit.")
+}
+
 function parseDriveAccessSettings(
   params: Record<string, unknown>,
   defaults: DriveAccessSettingsInput,
 ): DriveAccessSettingsInput {
+  const accessMode = optionalDriveShareAccessMode(params.accessMode) ?? defaults.accessMode ?? "link_read"
+  const editorEmails = accessMode === "specified_users_edit"
+    ? optionalStringArray(params.editorEmails, "editorEmails") ?? []
+    : []
+  if (accessMode === "specified_users_edit" && editorEmails.length === 0) {
+    throw new Error("editorEmails is required when accessMode is specified_users_edit.")
+  }
   return {
     passwordEnabled: optionalBoolean(params.passwordEnabled) ?? defaults.passwordEnabled,
     expiresIn: optionalDriveAccessExpiresIn(params.expiresIn) ?? defaults.expiresIn,
+    accessMode,
+    editorEmails,
   }
+}
+
+function optionalStringArray(value: unknown, key: string): string[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) throw new Error(`Missing or invalid '${key}': expected string array`)
+  const normalized: string[] = []
+  const seen = new Set<string>()
+  value.forEach((entry, index) => {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      throw new Error(`Missing or invalid '${key}[${index}]': expected non-empty string`)
+    }
+    const next = entry.trim().toLowerCase()
+    if (seen.has(next)) return
+    seen.add(next)
+    normalized.push(next)
+  })
+  return normalized
 }
 
 function optionalNullableString(value: unknown): string | null {

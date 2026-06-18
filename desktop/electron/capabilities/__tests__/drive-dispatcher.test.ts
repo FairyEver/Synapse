@@ -15,6 +15,8 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(shareCreateTool?.inputSchema.properties).toMatchObject({
       passwordEnabled: { type: "boolean" },
       expiresIn: { type: "string", enum: ["3d", "7d", "30d", "1y", "forever"] },
+      accessMode: { type: "string", enum: ["link_read", "link_edit", "specified_users_edit"] },
+      editorEmails: { type: "array" },
     })
   })
 
@@ -649,6 +651,8 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
       passwordEnabled: true,
       expiresIn: "3d",
+      accessMode: "link_read",
+      editorEmails: [],
     })
   })
 
@@ -680,6 +684,8 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
       passwordEnabled: false,
       expiresIn: "forever",
+      accessMode: "link_read",
+      editorEmails: [],
     })
   })
 
@@ -697,6 +703,32 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
       passwordEnabled: true,
       expiresIn: "30d",
+      accessMode: "link_read",
+      editorEmails: [],
+    })
+  })
+
+  it("creates shares with specified editor emails", async () => {
+    const accountService = createAccountService({
+      shareDriveItem: vi.fn(async () => driveShare({
+        id: "share-1",
+        accessMode: "specified_users_edit",
+        editorEmails: ["writer@example.com"],
+      })),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("drive.share.create", {
+      itemId: "item-1",
+      accessMode: "specified_users_edit",
+      editorEmails: ["Writer@Example.com"],
+    }, { source: "mcp-stdio" })).resolves.toMatchObject({ ok: true })
+
+    expect(accountService.shareDriveItem).toHaveBeenCalledWith("item-1", {
+      passwordEnabled: true,
+      expiresIn: "3d",
+      accessMode: "specified_users_edit",
+      editorEmails: ["writer@example.com"],
     })
   })
 
@@ -857,6 +889,8 @@ function driveShare(overrides: Partial<DriveShare>): DriveShare {
     passwordEnabled: true,
     password: "secret",
     expiresAt: "2026-06-10T00:00:00.000Z",
+    accessMode: "link_read",
+    editorEmails: [],
     createdAt: "2026-06-07T00:00:00.000Z",
     ...overrides,
   }
@@ -877,6 +911,8 @@ function driveShareListItem(overrides: Partial<DriveShareListItem>): DriveShareL
     passwordEnabled: true,
     password: "secret",
     expiresAt: "2026-06-10T00:00:00.000Z",
+    accessMode: "link_read",
+    editorEmails: [],
     createdAt: "2026-06-07T00:00:00.000Z",
     ...overrides,
   }
@@ -933,6 +969,7 @@ function drivePreviewSnapshot(overrides: Partial<DrivePreviewSnapshot>): DrivePr
     children: [],
     childrenPage: drivePage(),
     preview: null,
+    edit: null,
     canDownload: true,
     canZip: false,
     ...overrides,

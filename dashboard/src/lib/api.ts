@@ -11,6 +11,8 @@ import type {
   DashboardWebhookSecretResult,
   DriveBrowserPasswordRequiredDto,
   DriveBrowserSnapshotDto,
+  DriveFileContentUpdateResult,
+  DriveFileTextUpdateInput,
   DriveFileVersionDto,
   DriveFileVersionListPageDto,
   DriveItemDto,
@@ -743,6 +745,14 @@ export const driveBrowserApi = {
     ),
   getConsoleRoot: (options: DriveBrowserChildrenOptions = {}) =>
     request<DriveBrowserSnapshotDto>(`${driveBrowserApiBasePath}/owner/root${driveBrowserQuerySuffix('standalone', options)}`),
+  updateOwnerText: (itemId: string, input: DriveFileTextUpdateInput) =>
+    request<DriveFileContentUpdateResult>(
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/content`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }
+    ),
   getShareRoot: (shareId: string, options: DriveBrowserShareOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
       `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`
@@ -759,6 +769,16 @@ export const driveBrowserApi = {
       {
         method: 'POST',
         body: JSON.stringify({ password }),
+      }
+    ),
+  updateShareText: (shareId: string, itemId: string | null | undefined, input: DriveFileTextUpdateInput) =>
+    request<DriveFileContentUpdateResult>(
+      itemId
+        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/content`
+        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/content`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
       }
     ),
 }

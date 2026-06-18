@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional } from "@nestjs/common"
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException, OnApplicationBootstrap, Optional, PayloadTooLargeException, UnauthorizedException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -17,6 +17,8 @@ import {
   type DriveFileVersionDto,
   type DriveFileVersionListInput,
   type DriveFileVersionListPageDto,
+  type DriveFileContentUpdateResult,
+  type DriveFileTextUpdateInput,
   type DriveItemDto,
   type DriveItemTreeEntryDto,
   type DriveItemTreeListInput,
@@ -30,6 +32,7 @@ import {
   type DriveShareDto,
   type DriveShareListPageDto,
   type DriveShareListItemDto,
+  type DriveShareAccessMode,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
 } from "@synapse/shared"
@@ -83,6 +86,14 @@ import {
   type DriveBrowserRouteContext,
   type DriveBrowserSourceItem,
 } from "./drive-browser"
+import { buildDriveBrowserEdit, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES, isDriveTextEditablePreviewKind } from "./drive-editable-preview"
+import {
+  canUserEditShare,
+  DRIVE_SHARE_ACCESS_MODE,
+  normalizeDriveAccessSettings,
+  normalizeDriveShareAccessMode,
+  normalizeDriveShareEditorEmail,
+} from "./drive-share-access"
 import {
   toDriveItemDto,
   type DriveAdminFilters,
@@ -107,10 +118,14 @@ type DrivePublicAccessResult<T> =
   | { readonly status: "password_required" }
 
 type DrivePublicShareValue = {
+  readonly id: string
+  readonly shareId: string
   readonly item: DriveItemDto
   readonly ownerId: string
   readonly storageKey: string | null
   readonly type: "file" | "folder"
+  readonly accessMode: DriveShareAccessMode
+  readonly editorEmails: readonly string[]
 }
 
 type DriveRenderedAssetValue = {
@@ -169,6 +184,13 @@ const driveItemWithShares = {
   shares: {
     where: { enabled: true },
     select: { id: true, enabled: true },
+  },
+} as const
+
+const driveShareWithEditors = {
+  editors: {
+    select: { email: true },
+    orderBy: { email: "asc" },
   },
 } as const
 
@@ -286,6 +308,69 @@ export class DriveService implements OnApplicationBootstrap {
     })
     await this.cleanupFileVersionsAfterChange(userId, restored.id)
     return toDriveItemDto(restored)
+  }
+
+  async updateOwnerFileText(
+    userId: string,
+    itemId: string,
+    input: DriveFileTextUpdateInput,
+    auditContext: DriveAuditContext = {},
+  ): Promise<DriveFileContentUpdateResult> {
+    const item = await this.requireOwnedFile(userId, itemId) as DriveItemRecordWithStorage
+    this.assertActiveBrowserItem(item)
+    return this.commitTextFileChange({
+      ownerId: userId,
+      actorUserId: userId,
+      item,
+      input,
+      auditContext,
+      auditAction: "drive.file.edit",
+    })
+  }
+
+  async updateShareFileText(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly accessCookie?: string
+    readonly body: DriveFileTextUpdateInput
+    readonly auditContext?: DriveAuditContext
+  }): Promise<DriveFileContentUpdateResult> {
+    const access = await this.resolvePublicShareAccess({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    if (access.status !== "ok") throw new UnauthorizedException("需要先解锁分享。")
+    const share = access.value
+    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    if (current.type !== DRIVE_ITEM_TYPE.file) throw new BadRequestException("目标不是文件。")
+    const actor = await this.prisma.user.findUnique({
+      where: { id: input.actorUserId },
+      select: { email: true },
+    })
+    if (!actor) throw new UnauthorizedException("未登录或登录已过期。")
+    if (!canUserEditShare({
+      accessMode: share.accessMode,
+      actorUserId: input.actorUserId,
+      actorEmail: actor.email,
+      ownerId: share.ownerId,
+      editorEmails: share.editorEmails,
+    })) {
+      throw new ForbiddenException("没有编辑权限。")
+    }
+    return this.commitTextFileChange({
+      ownerId: share.ownerId,
+      actorUserId: input.actorUserId,
+      item: current,
+      input: input.body,
+      auditContext: input.auditContext ?? {},
+      auditAction: "drive.share_file.edit",
+      shareRecordId: share.id,
+      shareId: share.shareId,
+    })
   }
 
   async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
@@ -827,20 +912,19 @@ export class DriveService implements OnApplicationBootstrap {
     settings: DriveAccessSettingsInput = DRIVE_DEFAULT_ACCESS_SETTINGS,
     auditContext: DriveAuditContext = {},
   ): Promise<DriveShareDto> {
+    const normalizedSettings = normalizeDriveAccessSettings(settings)
     const item = await this.requireOwnedItem(userId, itemId)
     if (item.storageStatus !== DRIVE_STORAGE_STATUS.active) {
       throw new BadRequestException("文件尚不可分享。")
     }
-    const material = await createDrivePasswordMaterial(settings, this.accessSecret)
+    const material = await createDrivePasswordMaterial(normalizedSettings, this.accessSecret)
     const existing = await this.prisma.driveShare.findFirst({
       where: { itemId: item.id, userId, enabled: true },
+      include: driveShareWithEditors,
     })
     const share = existing
-      ? await this.prisma.driveShare.update({
-        where: { id: existing.id },
-        data: toDrivePasswordUpdateData(material),
-      })
-      : await this.createUniqueShare(item.id, userId, item.type, material)
+      ? await this.updateShareAccessSettings(existing.id, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
+      : await this.createUniqueShare(item.id, userId, item.type, material, normalizedSettings.accessMode, normalizedSettings.editorEmails)
     const dto = toDriveShareDto(share, publicAppUrl, material.password)
     await this.recordDriveAudit({
       userId,
@@ -855,6 +939,8 @@ export class DriveService implements OnApplicationBootstrap {
         itemType: item.type,
         passwordEnabled: dto.passwordEnabled,
         expiresAt: dto.expiresAt,
+        accessMode: dto.accessMode,
+        editorCount: dto.editorEmails.length,
       },
       ipAddress: auditContext.ipAddress,
     })
@@ -882,7 +968,7 @@ export class DriveService implements OnApplicationBootstrap {
     const pageInput = normalizeDrivePublicLinksPage(page)
     const shares = await this.prisma.driveShare.findMany({
       where: { userId, enabled: true },
-      include: { item: { select: { id: true, name: true, type: true, deletedAt: true } } },
+      include: { item: { select: { id: true, name: true, type: true, deletedAt: true } }, ...driveShareWithEditors },
       orderBy: { createdAt: "desc" },
       skip: pageInput.offset,
       take: pageInput.limit + 1,
@@ -902,6 +988,8 @@ export class DriveService implements OnApplicationBootstrap {
         passwordEnabled: share.passwordEnabled,
         password,
         expiresAt: share.expiresAt?.toISOString() ?? null,
+        accessMode: normalizeDriveShareAccessMode(share.accessMode),
+        editorEmails: share.editors.map((editor) => editor.email),
         createdAt: share.createdAt.toISOString(),
       }
     })
@@ -1084,6 +1172,7 @@ export class DriveService implements OnApplicationBootstrap {
     const children = current.type === DRIVE_ITEM_TYPE.folder
       ? await this.listActiveChildrenPage(root.userId, current.id, input.childrenPage)
       : emptyDriveBrowserChildrenPage(input.childrenPage)
+    const preview = await this.buildBrowserPreview(current, route)
 
     return {
       context: "owner",
@@ -1092,7 +1181,13 @@ export class DriveService implements OnApplicationBootstrap {
       breadcrumbs: await this.buildOwnedBrowserBreadcrumbs(root.userId, root, current, route),
       children: children.items.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
       childrenPage: children.page,
-      preview: await this.buildBrowserPreview(current, route),
+      preview,
+      edit: buildDriveBrowserEdit({
+        canWrite: true,
+        item: current,
+        preview,
+        currentVersionId: await this.findCurrentDriveFileVersionId(current),
+      }),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
@@ -1121,6 +1216,7 @@ export class DriveService implements OnApplicationBootstrap {
       })),
       childrenPage: page,
       preview: null,
+      edit: null,
       canDownload: false,
       canZip: false,
     }
@@ -1170,6 +1266,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly password?: string
     readonly cookie?: string
     readonly accessCookie?: string
+    readonly actorUserId?: string | null
     readonly childrenPage?: DriveBrowserChildrenPageInput
   }): Promise<DriveBrowserSnapshotDto> {
     const share = await this.resolvePublicShare({
@@ -1187,6 +1284,8 @@ export class DriveService implements OnApplicationBootstrap {
     const children = current.type === DRIVE_ITEM_TYPE.folder
       ? await this.listActiveChildrenPage(share.ownerId, current.id, input.childrenPage)
       : emptyDriveBrowserChildrenPage(input.childrenPage)
+    const preview = await this.buildBrowserPreview(current, route)
+    const shareWrite = await this.resolveShareWriteSnapshotState(share, input.actorUserId ?? null)
 
     return {
       context: "share",
@@ -1195,7 +1294,14 @@ export class DriveService implements OnApplicationBootstrap {
       breadcrumbs: await this.buildShareBrowserBreadcrumbs(share.ownerId, root, current, route),
       children: children.items.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
       childrenPage: children.page,
-      preview: await this.buildBrowserPreview(current, route),
+      preview,
+      edit: buildDriveBrowserEdit({
+        canWrite: shareWrite.canWrite,
+        item: current,
+        preview,
+        currentVersionId: await this.findCurrentDriveFileVersionId(current),
+        unauthenticatedEditableShare: shareWrite.loginRequired,
+      }),
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
@@ -1271,7 +1377,7 @@ export class DriveService implements OnApplicationBootstrap {
     const now = input.now ?? new Date()
     const share = await this.prisma.driveShare.findFirst({
       where: { shareId: input.shareId, enabled: true, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
-      include: { item: { include: driveItemWithShares } },
+      include: { item: { include: driveItemWithShares }, ...driveShareWithEditors },
     })
     if (!share || share.item.deletedAt || share.item.storageStatus !== DRIVE_STORAGE_STATUS.active) {
       throw new NotFoundException("文件未找到")
@@ -1518,6 +1624,119 @@ export class DriveService implements OnApplicationBootstrap {
     return version
   }
 
+  private async commitTextFileChange(input: {
+    readonly ownerId: string
+    readonly actorUserId: string
+    readonly item: DriveItemRecordWithStorage
+    readonly input: DriveFileTextUpdateInput
+    readonly auditContext: DriveAuditContext
+    readonly auditAction: string
+    readonly shareRecordId?: string
+    readonly shareId?: string
+  }): Promise<DriveFileContentUpdateResult> {
+    if (input.input.contentType !== "text") throw new BadRequestException("编辑内容无效。")
+    this.assertEditableTextFile(input.item)
+    const body = Buffer.from(input.input.text, "utf8")
+    if (body.byteLength > DRIVE_INLINE_TEXT_EDIT_MAX_BYTES) throw new PayloadTooLargeException("文件内容过大。")
+    const currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
+    if (!currentVersionId || currentVersionId !== input.input.baseVersionId) {
+      throw new ConflictException("文件已有新内容。")
+    }
+    const usage = await ensureUsage(this.prisma, input.ownerId)
+    if (usage.usedBytes + usage.reservedBytes + BigInt(body.byteLength) > usage.quotaBytes) {
+      throw new BadRequestException("云盘空间不足。")
+    }
+
+    const nextVersionId = createDriveFileVersionId()
+    const nextStorageKey = driveVersionStorageKey(input.item.id, nextVersionId)
+    await this.storage.putObject({
+      key: nextStorageKey,
+      body,
+      contentType: input.item.mimeType,
+    })
+
+    let committed = false
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const currentItem = await tx.driveItem.findFirst({
+          where: { id: input.item.id, userId: input.ownerId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
+          include: driveItemWithShares,
+        }) as DriveItemRecordWithStorage | null
+        if (!currentItem || currentItem.type !== DRIVE_ITEM_TYPE.file) throw new NotFoundException("文件不存在。")
+        const transactionCurrentVersion = await tx.driveFileVersion.findFirst({
+          where: { itemId: currentItem.id, storageKey: currentItem.storageKey, deletedAt: null },
+          select: { id: true },
+        })
+        if (!transactionCurrentVersion || transactionCurrentVersion.id !== input.input.baseVersionId) {
+          throw new ConflictException("文件已有新内容。")
+        }
+        await updateDriveUsageAfterUploadCompletion(tx, input.ownerId, {
+          reservedBytes: 0n,
+          usedBytesDelta: BigInt(body.byteLength),
+        })
+        await createDriveFileVersion(tx, {
+          id: nextVersionId,
+          itemId: currentItem.id,
+          userId: input.ownerId,
+          storageKey: nextStorageKey,
+          size: BigInt(body.byteLength),
+          mimeType: currentItem.mimeType,
+          source: DRIVE_FILE_VERSION_SOURCE.onlineEdit,
+          createdBy: input.actorUserId,
+        })
+        const item = await tx.driveItem.update({
+          where: { id: currentItem.id },
+          data: {
+            storageKey: nextStorageKey,
+            size: BigInt(body.byteLength),
+            mimeType: currentItem.mimeType,
+            storageStatus: DRIVE_STORAGE_STATUS.active,
+            uploadStatus: DRIVE_UPLOAD_STATUS.completed,
+          },
+          include: driveItemWithShares,
+        })
+        const version = await tx.driveFileVersion.findUnique({
+          where: { id: nextVersionId },
+        })
+        if (!version) throw new NotFoundException("历史版本不存在。")
+        return { item, version }
+      })
+      committed = true
+      await this.recordDriveAudit({
+        userId: input.actorUserId,
+        action: input.auditAction,
+        targetType: "drive.item",
+        targetId: result.item.id,
+        detail: {
+          ownerId: input.ownerId,
+          actorUserId: input.actorUserId,
+          itemId: result.item.id,
+          versionId: result.version.id,
+          size: result.version.size.toString(),
+          ...(input.shareRecordId ? { shareRecordId: input.shareRecordId } : {}),
+          ...(input.shareId ? { shareId: input.shareId } : {}),
+        },
+        ipAddress: input.auditContext.ipAddress,
+      })
+      await this.cleanupFileVersionsAfterChange(input.ownerId, result.item.id)
+      return {
+        item: toDriveItemDto(result.item),
+        version: toDriveFileVersionDto(result.version, result.item.storageKey),
+      }
+    } catch (error) {
+      if (!committed) await this.deleteTemporaryUploadObject(nextStorageKey)
+      if (isUniqueConstraintError(error)) throw new ConflictException("文件已有新内容。")
+      throw error
+    }
+  }
+
+  private assertEditableTextFile(item: DriveItemRecordWithStorage): void {
+    if (item.type !== DRIVE_ITEM_TYPE.file || !item.storageKey) throw new BadRequestException("目标不是文件。")
+    const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item))
+    if (!isDriveTextEditablePreviewKind(previewKind)) throw new BadRequestException("文件类型暂不支持编辑。")
+    if (item.size > BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)) throw new PayloadTooLargeException("文件内容过大。")
+  }
+
   private async resolveOwnedBrowserCurrent(input: {
     readonly userId: string
     readonly itemId: string
@@ -1557,6 +1776,46 @@ export class DriveService implements OnApplicationBootstrap {
       where: { id: itemId, userId, deletedAt: null, storageStatus: DRIVE_STORAGE_STATUS.active },
       include: driveItemWithShares,
     }) as Promise<DriveItemRecordWithStorage | null>
+  }
+
+  private async findCurrentDriveFileVersionId(item: {
+    readonly id: string
+    readonly type: string
+    readonly storageKey: string | null
+  }): Promise<string | null> {
+    if (item.type !== DRIVE_ITEM_TYPE.file || !item.storageKey) return null
+    const version = await this.prisma.driveFileVersion.findFirst({
+      where: { itemId: item.id, storageKey: item.storageKey, deletedAt: null },
+      select: { id: true },
+    })
+    return version?.id ?? null
+  }
+
+  private async resolveShareWriteSnapshotState(
+    share: DrivePublicShareValue,
+    actorUserId: string | null,
+  ): Promise<{ readonly canWrite: boolean; readonly loginRequired: boolean }> {
+    if (!actorUserId) {
+      return {
+        canWrite: false,
+        loginRequired: share.accessMode !== DRIVE_SHARE_ACCESS_MODE.linkRead,
+      }
+    }
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { email: true },
+    })
+    if (!actor) return { canWrite: false, loginRequired: false }
+    return {
+      canWrite: canUserEditShare({
+        accessMode: share.accessMode,
+        actorUserId,
+        actorEmail: actor.email,
+        ownerId: share.ownerId,
+        editorEmails: share.editorEmails,
+      }),
+      loginRequired: false,
+    }
   }
 
   private async listActiveChildren(userId: string, parentId: string): Promise<DriveItemRecordWithStorage[]> {
@@ -1812,22 +2071,60 @@ export class DriveService implements OnApplicationBootstrap {
     return itemIds
   }
 
-  private async createUniqueShare(itemId: string, userId: string, type: string, material: DrivePasswordMaterial) {
+  private async updateShareAccessSettings(
+    shareId: string,
+    material: DrivePasswordMaterial,
+    accessMode: DriveShareAccessMode,
+    editorEmails: readonly string[],
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.driveShareEditor.deleteMany({ where: { driveShareId: shareId } })
+      return tx.driveShare.update({
+        where: { id: shareId },
+        data: {
+          ...toDrivePasswordUpdateData(material),
+          accessMode,
+          ...(editorEmails.length > 0
+            ? { editors: { create: editorEmails.map((email) => ({ email })) } }
+            : {}),
+        },
+        include: driveShareWithEditors,
+      })
+    })
+  }
+
+  private async createUniqueShare(
+    itemId: string,
+    userId: string,
+    type: string,
+    material: DrivePasswordMaterial,
+    accessMode: DriveShareAccessMode,
+    editorEmails: readonly string[],
+  ) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
         return await this.prisma.driveShare.create({
-          data: { itemId, userId, type, shareId: createDriveShareId(), ...toDrivePasswordUpdateData(material) },
+          data: {
+            itemId,
+            userId,
+            type,
+            shareId: createDriveShareId(),
+            ...toDrivePasswordUpdateData(material),
+            accessMode,
+            ...(editorEmails.length > 0
+              ? { editors: { create: editorEmails.map((email) => ({ email })) } }
+              : {}),
+          },
+          include: driveShareWithEditors,
         })
       } catch (error) {
         if (!isUniqueConstraintError(error)) throw error
         const racedShare = await this.prisma.driveShare.findFirst({
           where: { itemId, userId, enabled: true },
+          include: driveShareWithEditors,
         })
         if (racedShare) {
-          return this.prisma.driveShare.update({
-            where: { id: racedShare.id },
-            data: toDrivePasswordUpdateData(material),
-          })
+          return this.updateShareAccessSettings(racedShare.id, material, accessMode, editorEmails)
         }
       }
     }
@@ -2214,16 +2511,24 @@ function isMarkdownDriveItem(name: string, mimeType: string | null): boolean {
 }
 
 function toDrivePublicShareValue(share: {
+  readonly id: string
+  readonly shareId: string
+  readonly accessMode: string
+  readonly editors?: readonly { readonly email: string }[]
   readonly item: Parameters<typeof toDriveItemDto>[0] & {
     readonly userId: string
     readonly storageKey: string | null
   }
 }): DrivePublicShareValue {
   return {
+    id: share.id,
+    shareId: share.shareId,
     item: toDriveItemDto(share.item),
     ownerId: share.item.userId,
     storageKey: share.item.storageKey,
     type: share.item.type === DRIVE_ITEM_TYPE.folder ? "folder" : "file",
+    accessMode: normalizeDriveShareAccessMode(share.accessMode),
+    editorEmails: share.editors?.map((editor) => editor.email) ?? [],
   }
 }
 
@@ -2288,6 +2593,8 @@ function toDriveShareDto(
     enabled: boolean
     passwordEnabled?: boolean
     expiresAt?: Date | null
+    accessMode?: string
+    editors?: readonly { readonly email: string }[]
     createdAt: Date
   },
   publicAppUrl: string,
@@ -2305,6 +2612,8 @@ function toDriveShareDto(
     passwordEnabled,
     password: passwordEnabled ? password : null,
     expiresAt: share.expiresAt?.toISOString() ?? null,
+    accessMode: normalizeDriveShareAccessMode(share.accessMode),
+    editorEmails: share.editors?.map((editor) => editor.email) ?? [],
     createdAt: share.createdAt.toISOString(),
   }
 }

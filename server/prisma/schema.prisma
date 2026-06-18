@@ -294,17 +294,19 @@ model DriveItem {
 }
 
 model DriveShare {
-  id                String    @id @default(cuid())
-  shareId           String    @unique
-  itemId            String
-  item              DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  userId            String
-  type              String    @db.VarChar(16)
-  enabled           Boolean   @default(true)
-  passwordEnabled   Boolean   @default(false)
-  passwordHash      String?
-  passwordEncrypted String?
-  expiresAt         DateTime?
+  id                      String             @id @default(cuid())
+  shareId                 String             @unique
+  itemId                  String
+  item                    DriveItem          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  userId                  String
+  type                    String             @db.VarChar(16)
+  enabled                 Boolean            @default(true)
+  passwordEnabled         Boolean            @default(false)
+  passwordHash            String?
+  passwordEncrypted       String?
+  expiresAt               DateTime?
+  accessMode              String             @default("link_read") @db.VarChar(32)
+  editors                 DriveShareEditor[]
   accessSettingsAppliedAt DateTime?
   createdAt               DateTime  @default(now())
   disabledAt              DateTime?
@@ -312,6 +314,17 @@ model DriveShare {
   @@index([itemId, enabled])
   @@index([userId, createdAt])
   @@index([enabled, passwordEnabled])
+}
+
+model DriveShareEditor {
+  id           String     @id @default(cuid())
+  driveShareId String
+  share        DriveShare @relation(fields: [driveShareId], references: [id], onDelete: Cascade)
+  email        String     @db.VarChar(320)
+  createdAt    DateTime   @default(now())
+
+  @@unique([driveShareId, email])
+  @@index([email])
 }
 
 model DriveUsage {

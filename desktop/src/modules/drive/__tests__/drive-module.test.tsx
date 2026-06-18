@@ -158,6 +158,8 @@ beforeEach(() => {
     passwordEnabled: true,
     password: "AbC234xy",
     expiresAt: "2026-06-14T00:00:00.000Z",
+    accessMode: "link_read",
+    editorEmails: [],
     createdAt: "2026-06-07T00:00:00.000Z",
   })
   mocks.uploadDriveLocalItems.mockResolvedValue({ completed: 1, failed: 0, skipped: 0 })
@@ -1036,7 +1038,7 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("需要密码")
     expect(document.body.textContent).toContain("有效时长")
     expect(document.body.textContent).toContain("3 天")
-    expect(getDialogContent().className).toContain("sm:max-w-sm")
+    expect(getDialogContent().className).toContain("sm:max-w-lg")
 
     await clickButtonText("确定")
 
@@ -1044,6 +1046,8 @@ describe("DriveModule", () => {
       itemId: "file-1",
       passwordEnabled: true,
       expiresIn: "3d",
+      accessMode: "link_read",
+      editorEmails: [],
     })
     expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
@@ -1211,6 +1215,8 @@ describe("DriveModule", () => {
       passwordEnabled: true,
       password: "AbC234xy",
       expiresAt: "2026-06-14T00:00:00.000Z",
+      accessMode: "link_read",
+      editorEmails: [],
       createdAt: "2026-06-07T00:00:00.000Z",
     })
     await render(<DriveModule />)
@@ -1915,6 +1921,8 @@ function createDriveShare(overrides: Partial<DriveShareListItemDto> = {}): Drive
     passwordEnabled: true,
     password: "AbC234xy",
     expiresAt: "2026-06-14T00:00:00.000Z",
+    accessMode: "link_read",
+    editorEmails: [],
     ...overrides,
   }
 }

@@ -90,6 +90,7 @@ function createSnapshot(): DriveBrowserSnapshotDto {
     breadcrumbs: [],
     children: [],
     preview: null,
+    edit: null,
     canDownload: true,
     canZip: false,
   }
