@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
@@ -29,6 +29,49 @@ import {
   shouldRenderDriveSingleFileReader,
 } from './shared/drive-view-model'
 import { getDriveFinderBreadcrumbs } from './finder/drive-finder-breadcrumbs'
+
+vi.mock('@mdxeditor/editor', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+
+  return {
+    MDXEditor: React.forwardRef(({
+      markdown,
+      readOnly,
+    }: {
+      readonly markdown: string
+      readonly readOnly?: boolean
+    }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
+      const [value, setValue] = React.useState(markdown)
+      React.useImperativeHandle(ref, () => ({
+        setMarkdown: (nextValue: string) => setValue(nextValue),
+      }), [])
+
+      return React.createElement('textarea', {
+        'data-mdxeditor': 'true',
+        readOnly,
+        value,
+      })
+    }),
+    BlockTypeSelect: () => null,
+    BoldItalicUnderlineToggles: () => null,
+    CreateLink: () => null,
+    InsertTable: () => null,
+    InsertThematicBreak: () => null,
+    ListsToggle: () => null,
+    UndoRedo: () => null,
+    codeBlockPlugin: () => null,
+    codeMirrorPlugin: () => null,
+    headingsPlugin: () => null,
+    linkDialogPlugin: () => null,
+    linkPlugin: () => null,
+    listsPlugin: () => null,
+    markdownShortcutPlugin: () => null,
+    quotePlugin: () => null,
+    tablePlugin: () => null,
+    thematicBreakPlugin: () => null,
+    toolbarPlugin: () => null,
+  }
+})
 
 describe('drive browser view model', () => {
   it('formats drive file metadata from shared helpers', () => {
@@ -134,7 +177,7 @@ describe('drive browser view model', () => {
     }))).toBe(false)
   })
 
-  it('returns markdown preview and code renderer options with rendered preview as default', () => {
+  it('returns MDXeditor, markdown preview, and code renderer options with MDXeditor as default', () => {
     const snapshot = createSnapshot({
       current: { ...baseCurrent(), name: 'notes.md', previewKind: 'markdown' },
       preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
@@ -142,8 +185,23 @@ describe('drive browser view model', () => {
 
     const options = getDriveRendererOptions(snapshot)
 
-    expect(options.map((option) => option.id)).toEqual(['markdown', 'code'])
-    expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('markdown')
+    expect(options.map((option) => option.id)).toEqual(['mdxeditor', 'markdown', 'code'])
+    expect(options.map((option) => option.label)).toEqual(['MDXeditor', '预览', '代码'])
+    expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('mdxeditor')
+  })
+
+  it('does not offer MDXeditor for non-markdown previews', () => {
+    const text = createSnapshot({
+      current: { ...baseCurrent(), name: 'notes.txt', previewKind: 'text' },
+      preview: { ...basePreview(), kind: 'text', text: 'plain text' },
+    })
+    const image = createSnapshot({
+      current: { ...baseCurrent(), name: 'image.png', previewKind: 'image' },
+      preview: { ...basePreview(), kind: 'image', imageUrl: '/drive/items/file/download' },
+    })
+
+    expect(getDriveRendererOptions(text).map((option) => option.id)).toEqual(['code'])
+    expect(getDriveRendererOptions(image).map((option) => option.id)).toEqual(['image'])
   })
 
   it('uses iframe as the default renderer for html files with visit urls', () => {
@@ -180,6 +238,7 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-code-renderer="true"')
     expect(html).toContain('data-drive-code-language="html"')
+    expect(html).not.toContain('只读')
     expect(html).not.toContain('rounded-lg')
     expect(html).not.toContain('border')
     expect(html).not.toContain('bg-card')
@@ -341,7 +400,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
 
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
@@ -350,6 +411,57 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-finder="split"')
     expect(html).not.toContain('data-drive-renderer-region="true"')
     expect(html).not.toContain('暂无同级文件')
+  })
+
+  it('uses MDXeditor for markdown files when no initial renderer is provided', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+
+    expect(html).toContain('data-mdxeditor="true"')
+    expect(html).toContain('# Notes')
+    expect(html).not.toContain('data-drive-code-renderer="true"')
+  })
+
+  it('renders MDXeditor content without falling back to code renderer', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderToStaticMarkup(createElement(DriveRendererContent, {
+      snapshot,
+      selected: { id: 'mdxeditor', label: 'MDXeditor', container: 'full' },
+      body: true,
+    }))
+
+    expect(html).toContain('data-mdxeditor="true"')
+    expect(html).not.toContain('data-drive-code-renderer="true"')
   })
 
   it('renders markdown outline links when preview contains headings', () => {
@@ -384,7 +496,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
 
     expect(html).toContain('aria-label="目录"')
     expect(html).toContain('overflow-auto pl-4')
@@ -450,7 +564,6 @@ describe('drive browser view model', () => {
     expect(html).toContain('新窗口打开')
     expect(html).toContain('/drive/items/file?surface=standalone')
     expect(html).toContain('打开方式')
-    expect(html).toContain('<h1>Notes</h1>')
     expect(html).not.toContain('data-drive-finder="split"')
     expect(html).not.toContain('data-slot="table"')
     expect(html).not.toContain('<th')
@@ -508,7 +621,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
     const codeHtml = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
       snapshot,
       initialRendererId: 'code',
@@ -516,10 +631,14 @@ describe('drive browser view model', () => {
     const source = readFileSync(new URL('./renderers/drive-renderer-shell.tsx', import.meta.url), 'utf8')
 
     expect(html).toContain('文件操作')
-    expect(source).toContain("selected.id === 'code' ? 'top-14' : 'top-5'")
+    expect(source).toContain("selected.id === 'code' || selected.id === 'mdxeditor' ? 'top-14' : 'top-5'")
     expect(source).not.toContain("'fixed right-5 bottom-5 z-50'")
     expect(html).toContain('top-5')
     expect(codeHtml).toContain('top-14')
+    expect(renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
+      snapshot,
+      initialRendererId: 'mdxeditor',
+    }))).toContain('top-14')
     expect(source).toContain('FLOATING_MENU_IDLE_DIM_DELAY_MS = 3000')
     expect(source).toContain('setIdleDimmed(true)')
     expect(source).toContain("'opacity-50 hover:opacity-100 focus-visible:opacity-100'")
@@ -602,7 +721,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
 
     expect(html).toContain('文件操作')
     expect(html).not.toContain('在云盘中查看')

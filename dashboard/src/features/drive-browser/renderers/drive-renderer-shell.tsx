@@ -32,6 +32,7 @@ import { DriveDownloadRenderer } from './download-renderer'
 import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
 import { DriveMarkdownRenderer } from './markdown-renderer'
+import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 
 const READING_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
@@ -186,6 +187,9 @@ export function DriveRendererContent({
   if (selected.id === 'markdown') {
     return renderContent(<DriveMarkdownRenderer current={snapshot.current} preview={preview} />)
   }
+  if (selected.id === 'mdxeditor') {
+    return renderContent(<DriveMDXeditorRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
+  }
   if (selected.id === 'code') {
     return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} />)
   }
@@ -312,7 +316,7 @@ function DriveRendererFloatingMenu({
       ref={menuRef}
       className={cn(
         'fixed right-5 z-50',
-        selected.id === 'code' ? 'top-14' : 'top-5',
+        selected.id === 'code' || selected.id === 'mdxeditor' ? 'top-14' : 'top-5',
         menuPosition && 'top-auto right-auto'
       )}
       style={menuStyle}

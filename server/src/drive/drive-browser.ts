@@ -178,6 +178,7 @@ function isTextPreviewKind(kind: DriveBrowserPreviewKind): boolean {
 function isMarkdownDriveItem(lowerName: string, mimeType: string): boolean {
   return lowerName.endsWith(".md")
     || lowerName.endsWith(".markdown")
+    || lowerName.endsWith(".mdx")
     || mimeType === "text/markdown"
     || mimeType === "text/x-markdown"
 }
