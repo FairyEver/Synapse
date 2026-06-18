@@ -41,7 +41,28 @@ type Repository = {
   readonly lastOpenedAt: string | null
 }
 
-function summary(repository: Repository) {
+type RepositorySnapshot = {
+  readonly repositoryId: string
+  readonly pathExists: boolean
+  readonly isGitRepository: boolean
+  readonly currentBranch: string | null
+  readonly upstream: string | null
+  readonly ahead: number
+  readonly behind: number
+  readonly hasConflicts: boolean
+  readonly changes: readonly {
+    readonly path: string
+    readonly originalPath: string | null
+    readonly status: "added" | "modified" | "deleted" | "renamed" | "untracked" | "conflicted" | "unknown"
+    readonly staged: boolean
+    readonly conflicted: boolean
+  }[]
+}
+
+function summary(
+  repository: Repository,
+  snapshot: Partial<RepositorySnapshot> = {},
+) {
   return {
     repository,
     snapshot: {
@@ -54,6 +75,7 @@ function summary(repository: Repository) {
       behind: 0,
       hasConflicts: false,
       changes: [],
+      ...snapshot,
     },
     error: null,
   }
@@ -224,8 +246,8 @@ describe("GitModule repository list", () => {
   it("keeps repository sync loading scoped to the clicked repository", async () => {
     const sync = deferred<void>()
     bridge.git.listRepositorySummaries.mockResolvedValue([
-      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }),
-      summary({ id: "repo-2", name: "App", localPath: "/work/app", addedAt: "now", lastOpenedAt: null }),
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, { ahead: 1, behind: 1 }),
+      summary({ id: "repo-2", name: "App", localPath: "/work/app", addedAt: "now", lastOpenedAt: null }, { ahead: 1, behind: 1 }),
     ])
     bridge.git.sync.mockReturnValue(sync.promise)
     await renderGitModule(roots)
@@ -246,6 +268,40 @@ describe("GitModule repository list", () => {
     await flush()
   })
 
+  it("shows one primary next action for common repository states", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Dirty", localPath: "/work/dirty", addedAt: "now", lastOpenedAt: null }, {
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", staged: false, conflicted: false }],
+      }),
+      summary({ id: "repo-2", name: "Behind", localPath: "/work/behind", addedAt: "now", lastOpenedAt: null }, { behind: 2 }),
+      summary({ id: "repo-3", name: "Ahead", localPath: "/work/ahead", addedAt: "now", lastOpenedAt: null }, { ahead: 1 }),
+      summary({ id: "repo-4", name: "Diverged", localPath: "/work/diverged", addedAt: "now", lastOpenedAt: null }, { ahead: 1, behind: 1 }),
+      summary({ id: "repo-5", name: "Missing", localPath: "/work/missing", addedAt: "now", lastOpenedAt: null }, { pathExists: false }),
+    ])
+
+    await renderGitModule(roots)
+
+    expect(countButtons("提交改动")).toBe(1)
+    expect(countButtons("拉取远程更新")).toBe(1)
+    expect(countButtons("推送本地提交")).toBe(1)
+    expect(exactButtonsByLabel("同步")).toHaveLength(1)
+    expect(countButtons("查看状态")).toBe(1)
+  })
+
+  it("keeps secondary repository operations in the more menu", async () => {
+    bridge.git.listRepositorySummaries.mockResolvedValue([
+      summary({ id: "repo-1", name: "Docs", localPath: "/work/docs", addedAt: "now", lastOpenedAt: null }, { ahead: 1 }),
+    ])
+    await renderGitModule(roots)
+
+    await click(findButtonByName("Docs 更多操作"))
+
+    expect(findMenuItem("拉取")).toBeTruthy()
+    expect(findMenuItem("推送")).toBeTruthy()
+    expect(findMenuItem("同步")).toBeTruthy()
+    expect(findMenuItem("移除仓库")).toBeTruthy()
+  })
+
   it("removes repository records without trashing local files by default", async () => {
     bridge.git.listRepositorySummaries
       .mockResolvedValueOnce([
@@ -255,7 +311,8 @@ describe("GitModule repository list", () => {
     bridge.git.removeRepository.mockResolvedValue(undefined)
     await renderGitModule(roots)
 
-    await click(findButton("删除"))
+    await click(findButtonByName("Docs 更多操作"))
+    await click(findMenuItem("移除仓库"))
     const removalDialogText = document.body.textContent ?? ""
     expect(removalDialogText).toContain("删除 Git 仓库？")
     expect(removalDialogText).toContain("仅移除列表记录")
@@ -280,7 +337,8 @@ describe("GitModule repository list", () => {
     bridge.git.removeRepository.mockRejectedValue(new Error("移到废纸篓失败"))
     await renderGitModule(roots)
 
-    await click(findButton("删除"))
+    await click(findButtonByName("Docs 更多操作"))
+    await click(findMenuItem("移除仓库"))
     await click(labelByText("移到废纸篓并移除记录"))
     expect(document.body.textContent).toContain("/work/docs")
 
@@ -343,6 +401,31 @@ function findButton(label: string): HTMLButtonElement {
   }
 
   return button
+}
+
+function findButtonByName(label: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll("button"))
+    .find((item): item is HTMLButtonElement => (
+      item instanceof HTMLButtonElement
+      && (item.textContent?.includes(label) || item.getAttribute("aria-label") === label)
+    ))
+
+  if (!button) {
+    throw new Error(`Button not found: ${label}`)
+  }
+
+  return button
+}
+
+function findMenuItem(label: string): HTMLElement {
+  const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+    .find((element) => element.textContent?.includes(label))
+
+  if (!(item instanceof HTMLElement)) {
+    throw new Error(`Menu item not found: ${label}`)
+  }
+
+  return item
 }
 
 function countButtons(label: string): number {

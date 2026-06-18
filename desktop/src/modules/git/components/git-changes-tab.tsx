@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitFileChange, SynapseGitRepository } from "@/types/git"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
+import { getGitActionPlan } from "../lib/git-status-view"
 
 type GitChangesTabProps = {
   readonly repository: SynapseGitRepository
@@ -22,6 +23,11 @@ type GitChangesTabProps = {
   readonly onCommitted?: () => void | Promise<void>
   readonly onPush?: () => void
   readonly pushDisabled?: boolean
+}
+
+type CommitNotice = {
+  readonly text: string
+  readonly canPush: boolean
 }
 
 const statusLabels: Record<SynapseGitFileChange["status"], string> = {
@@ -38,13 +44,16 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [commitNotice, setCommitNotice] = useState(false)
+  const [commitNotice, setCommitNotice] = useState<CommitNotice | null>(null)
   const changes = status.snapshot?.changes ?? []
-  const commitDisabled = busy || status.selectedPaths.length === 0 || !message.trim()
+  const actionPlan = getGitActionPlan(status.snapshot, status.error)
+  const hasConflicts = Boolean(status.snapshot?.hasConflicts)
+  const commitDisabled = busy || hasConflicts || status.selectedPaths.length === 0 || !message.trim()
 
   const commit = async () => {
     setBusy(true)
     setError(null)
+    setCommitNotice(null)
     try {
       await requireSynapseBridge().git.commit({
         repositoryId: repository.id,
@@ -52,9 +61,17 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
         paths: [...status.selectedPaths],
       })
       setMessage("")
-      setCommitNotice(true)
-      await status.refresh()
+      const nextSnapshot = await status.refresh()
       await onCommitted?.()
+      if (nextSnapshot && nextSnapshot.changes.length > 0) {
+        setCommitNotice({ text: `还有 ${nextSnapshot.changes.length} 个改动。`, canPush: false })
+        return
+      }
+      if (nextSnapshot && nextSnapshot.ahead > 0) {
+        setCommitNotice({ text: "可以推送本地提交。", canPush: true })
+        return
+      }
+      setCommitNotice({ text: "已提交。", canPush: false })
     } catch (err) {
       setError(err instanceof Error ? err.message : "提交失败。")
     } finally {
@@ -150,12 +167,18 @@ export function GitChangesTab({ repository, status, onCommitted, onPush, pushDis
             <AlertDescription>{status.error ?? error}</AlertDescription>
           </Alert>
         ) : null}
+        {hasConflicts ? (
+          <Alert variant="destructive">
+            <AlertTitle>{actionPlan.blockerText ?? "发生冲突"}</AlertTitle>
+            <AlertDescription>{actionPlan.recoveryText ?? "处理冲突后再继续。"}</AlertDescription>
+          </Alert>
+        ) : null}
         {commitNotice ? (
           <Alert>
             <AlertTitle>已提交</AlertTitle>
             <AlertDescription className="flex flex-wrap items-center gap-2">
-              <span>可以推送本地提交。</span>
-              {onPush ? (
+              <span>{commitNotice.text}</span>
+              {commitNotice.canPush && onPush ? (
                 <Button type="button" variant="outline" size="sm" disabled={pushDisabled} onClick={onPush}>
                   推送
                 </Button>

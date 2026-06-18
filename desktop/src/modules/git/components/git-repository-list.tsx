@@ -1,5 +1,5 @@
 import { useMemo, useState, type MouseEvent } from "react"
-import { Download, RefreshCw, Trash2, Upload } from "lucide-react"
+import { Download, MoreHorizontal, RefreshCw, Trash2, Upload } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -22,8 +29,7 @@ import type { SynapseGitRepository, SynapseGitRepositoryRemoveInput, SynapseGitR
 import type { GitOperationBusyState, GitRepositoryOperation } from "../hooks/use-git-operations"
 import {
   getGitChangeCount,
-  getGitRecommendedAction,
-  getGitStatusText,
+  getGitActionPlan,
   isGitUnavailable,
   needsGitAttention,
 } from "../lib/git-status-view"
@@ -62,6 +68,13 @@ function isRepositoryOperationBusy(
   operation: GitRepositoryOperation,
 ): boolean {
   return busy.repositories[repositoryId] === operation
+}
+
+function operationLabel(operation: GitRepositoryOperation): string {
+  if (operation === "pull") return "拉取中"
+  if (operation === "push") return "推送中"
+  if (operation === "sync") return "同步中"
+  return "删除中"
 }
 
 export function GitRepositoryList({
@@ -216,11 +229,29 @@ export function GitRepositoryList({
                     {filteredSummaries.map((summary) => {
                       const { repository, snapshot } = summary
                       const repositoryActionDisabled = globalActionDisabled || isRepositoryBusy(busy, repository.id)
-                      const recommendedAction = getGitRecommendedAction(snapshot, summary.error)
-                      const statusText = getGitStatusText(snapshot, summary.error)
+                      const actionPlan = getGitActionPlan(snapshot, summary.error)
                       const changeCount = getGitChangeCount(snapshot)
                       const branch = snapshot?.currentBranch ?? "无分支"
                       const isClean = !needsGitAttention(snapshot, summary.error)
+                      const runningOperation = busy.repositories[repository.id]
+                      const runPrimaryAction = () => {
+                        if (actionPlan.primaryAction === "pull") {
+                          onPull(repository.id)
+                          return
+                        }
+                        if (actionPlan.primaryAction === "push") {
+                          onPush(repository.id)
+                          return
+                        }
+                        if (actionPlan.primaryAction === "sync") {
+                          onSync(repository.id)
+                          return
+                        }
+                        onOpenRepository(repository)
+                      }
+                      const primaryLabel = runningOperation && actionPlan.primaryAction === runningOperation
+                        ? operationLabel(runningOperation)
+                        : actionPlan.primaryLabel
 
                       return (
                         <div
@@ -236,7 +267,7 @@ export function GitRepositoryList({
                       <span className="min-w-0">
                         <span className="flex min-w-0 flex-wrap items-center gap-2">
                           <span className="truncate text-sm font-medium">{repository.name}</span>
-                          <Badge variant={isClean ? "secondary" : "outline"}>{statusText}</Badge>
+                          <Badge variant={isClean ? "secondary" : "outline"}>{actionPlan.statusText}</Badge>
                         </span>
                         <span className="mt-1 block truncate text-xs text-muted-foreground">{repository.localPath}</span>
                         <span className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -250,108 +281,69 @@ export function GitRepositoryList({
                         </span>
                       </span>
                       <span className="flex flex-wrap gap-2 md:justify-end">
-                        {recommendedAction === "open" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onOpenRepository(repository))}
-                          >
-                            进入
-                          </Button>
-                        ) : recommendedAction === "pull" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onPull(repository.id))}
-                          >
-                            <Download data-icon="inline-start" />
-                            拉取
-                          </Button>
-                        ) : recommendedAction === "push" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onPush(repository.id))}
-                          >
-                            <Upload data-icon="inline-start" />
-                            推送
-                          </Button>
-                        ) : recommendedAction === "sync" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onSync(repository.id))}
-                          >
-                            <RefreshCw
-                              data-icon="inline-start"
-                              className={isRepositoryOperationBusy(busy, repository.id, "sync") ? "animate-spin" : undefined}
-                            />
-                            同步
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onOpenRepository(repository))}
-                          >
-                            进入
-                          </Button>
-                        )}
-                        {recommendedAction !== "pull" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onPull(repository.id))}
-                          >
-                            <Download data-icon="inline-start" />
-                            拉取
-                          </Button>
-                        ) : null}
-                        {recommendedAction !== "push" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onPush(repository.id))}
-                          >
-                            <Upload data-icon="inline-start" />
-                            推送
-                          </Button>
-                        ) : null}
-                        {recommendedAction !== "sync" ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={repositoryActionDisabled}
-                            onClick={(event) => stopAction(event, () => onSync(repository.id))}
-                          >
-                            <RefreshCw
-                              data-icon="inline-start"
-                              className={isRepositoryOperationBusy(busy, repository.id, "sync") ? "animate-spin" : undefined}
-                            />
-                            同步
-                          </Button>
-                        ) : null}
                         <Button
                           type="button"
-                          variant="destructive"
                           size="sm"
-                          disabled={repositoryActionDisabled}
-                          onClick={(event) => stopAction(event, () => openRemovalDialog(repository))}
+                          disabled={repositoryActionDisabled || actionPlan.primaryAction === "none"}
+                          onClick={(event) => stopAction(event, runPrimaryAction)}
                         >
-                          <Trash2 data-icon="inline-start" />
-                          删除
+                          {actionPlan.primaryAction === "pull" ? <Download data-icon="inline-start" /> : null}
+                          {actionPlan.primaryAction === "push" ? <Upload data-icon="inline-start" /> : null}
+                          {actionPlan.primaryAction === "sync" ? (
+                            <RefreshCw
+                              data-icon="inline-start"
+                              className={isRepositoryOperationBusy(busy, repository.id, "sync") ? "animate-spin" : undefined}
+                            />
+                          ) : null}
+                          {primaryLabel}
                         </Button>
+                        {actionPlan.primaryAction !== "open" ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={repositoryActionDisabled}
+                            onClick={(event) => stopAction(event, () => onOpenRepository(repository))}
+                          >
+                            进入
+                          </Button>
+                        ) : null}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              disabled={repositoryActionDisabled}
+                              aria-label={`${repository.name} 更多操作`}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                            <DropdownMenuItem onSelect={() => onPull(repository.id)}>
+                              <Download data-icon="inline-start" />
+                              拉取
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => onPush(repository.id)}>
+                              <Upload data-icon="inline-start" />
+                              推送
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => onSync(repository.id)}>
+                              <RefreshCw data-icon="inline-start" />
+                              同步
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => openRemovalDialog(repository)}
+                            >
+                              <Trash2 data-icon="inline-start" />
+                              移除仓库
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </span>
                         </div>
                       )

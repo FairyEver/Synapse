@@ -38,8 +38,10 @@ export function useGitWorktreeStatus(repository: SynapseGitRepository) {
       setSnapshot(next)
       setSelectedPaths(next.changes.map((change) => change.path))
       await loadDiff(next.changes[0] ?? null)
+      return next
     } catch (err) {
       setError(err instanceof Error ? err.message : "读取仓库状态失败。")
+      return null
     } finally {
       setLoading(false)
     }

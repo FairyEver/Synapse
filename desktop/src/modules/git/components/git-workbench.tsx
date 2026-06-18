@@ -11,7 +11,7 @@ import { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { GitBranchSwitcher } from "./git-branch-switcher"
 import { GitChangesTab } from "./git-changes-tab"
 import { GitHistoryTab } from "./git-history-tab"
-import { getGitErrorAdvice, getGitRecommendedAction, getGitStatusText } from "../lib/git-status-view"
+import { getGitActionPlan, getGitErrorAdvice } from "../lib/git-status-view"
 
 type GitWorkbenchProps = {
   readonly repository: SynapseGitRepository
@@ -25,8 +25,8 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
   const status = useGitWorktreeStatus(repository)
   const history = useGitHistory(repository)
   const currentBranch = status.snapshot?.currentBranch ?? null
-  const recommendedAction = getGitRecommendedAction(status.snapshot, status.error)
-  const statusText = getGitStatusText(status.snapshot, status.error)
+  const actionPlan = getGitActionPlan(status.snapshot, status.error)
+  const recommendedAction = actionPlan.primaryAction
 
   const refreshAll = async () => {
     await status.refresh()
@@ -62,15 +62,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
     setView("changes")
   }
 
-  const recommendedLabel = recommendedAction === "pull"
-    ? "拉取远程更新"
-    : recommendedAction === "push"
-      ? "推送本地提交"
-      : recommendedAction === "sync"
-        ? "同步"
-        : recommendedAction === "open"
-          ? "提交改动"
-          : "已同步"
+  const recommendedLabel = busy === recommendedAction ? `${actionPlan.primaryLabel}中` : actionPlan.primaryLabel
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
@@ -88,7 +80,7 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
             <Badge variant="secondary">{currentBranch ?? "无分支"}</Badge>
             {status.snapshot?.upstream ? <Badge variant="outline">{status.snapshot.upstream}</Badge> : null}
-            <Badge variant="outline">{statusText}</Badge>
+            <Badge variant="outline">{actionPlan.statusText}</Badge>
             {status.snapshot ? (
               <Badge variant="outline">↑{status.snapshot.ahead} ↓{status.snapshot.behind}</Badge>
             ) : null}
@@ -101,14 +93,6 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
             disabled={busy !== null}
             onChanged={refreshAll}
           />
-          <Button
-            type="button"
-            size="sm"
-            disabled={busy !== null || recommendedAction === "none"}
-            onClick={runRecommendedAction}
-          >
-            {busy === recommendedAction ? `${recommendedLabel}中` : recommendedLabel}
-          </Button>
           <Button
             type="button"
             variant="outline"
@@ -139,6 +123,25 @@ export function GitWorkbench({ repository, onBack }: GitWorkbenchProps) {
             </Button>
           ) : null}
         </div>
+      </div>
+      <div className="grid shrink-0 gap-2 border-b bg-background px-4 py-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">下一步</span>
+            {actionPlan.blockerText ? <Badge variant="outline">{actionPlan.blockerText}</Badge> : null}
+          </div>
+          {actionPlan.recoveryText ? (
+            <div className="mt-1 truncate text-xs text-muted-foreground">{actionPlan.recoveryText}</div>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          disabled={busy !== null || recommendedAction === "none"}
+          onClick={runRecommendedAction}
+        >
+          {recommendedLabel}
+        </Button>
       </div>
       {operationError ? (
         <div className="shrink-0 px-4 py-3">
