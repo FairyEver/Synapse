@@ -488,11 +488,15 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("cui.md")
   })
 
-  it("keeps item names selectable without opening the folder row", async () => {
-    mocks.listDriveItems.mockResolvedValue([
-      createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
-      createDriveItem({ id: "file-1", name: "常用.md", type: "file" }),
-    ])
+  it("keeps item names selectable and opens folders from the folder name", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+        createDriveItem({ id: "file-1", name: "常用.md", type: "file" }),
+      ])
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-2", name: "cui.md", type: "file", parentId: "folder-1" }),
+      ])
 
     await render(<DriveModule />)
     await flushAct()
@@ -503,12 +507,14 @@ describe("DriveModule", () => {
     expect(fileName.className).toContain("select-text")
 
     await act(async () => {
+      folderName.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
       folderName.click()
       await flushPromises()
     })
+    await flushAct()
 
-    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
-    expect(document.body.textContent).not.toContain("cui.md")
+    expect(mocks.listDriveItems).toHaveBeenLastCalledWith({ parentId: "folder-1" })
+    expect(document.body.textContent).toContain("cui.md")
   })
 
   it("does not open a folder when releasing a row click after selecting its name", async () => {
@@ -529,6 +535,39 @@ describe("DriveModule", () => {
     })
 
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not open a folder from the name context menu", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "作业范文", type: "folder" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openDriveNameContextMenu("作业范文")
+
+    expect(menuItemTexts()).toEqual(["复制名称", "复制路径", "重命名"])
+    expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not preview a file when clicking its name", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    await act(async () => {
+      const fileName = driveItemNameElement("report.txt")
+      fileName.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      fileName.click()
+      await flushPromises()
+    })
+
+    expect(mocks.getDriveItemPreviewUrl).not.toHaveBeenCalled()
+    expect(mocks.openExternal).not.toHaveBeenCalled()
   })
 
   it("opens a folder from row whitespace after a previous name selection", async () => {
