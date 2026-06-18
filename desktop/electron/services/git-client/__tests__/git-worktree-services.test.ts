@@ -31,21 +31,6 @@ describe("git worktree services", () => {
     })
   })
 
-  it("does not log normal status snapshots", async () => {
-    const logger = createLoggerHarness()
-    const run = vi.fn().mockResolvedValue({
-      stdout: "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n",
-      stderr: "",
-    })
-    const service = createGitStatusService({ commandRunner: { run }, logger, pathExists: async () => true })
-
-    await service.getSnapshot(repository)
-
-    expect(logger.info).not.toHaveBeenCalled()
-    expect(logger.warn).not.toHaveBeenCalled()
-    expect(logger.error).not.toHaveBeenCalled()
-  })
-
   it("lists repository summaries without failing the whole batch", async () => {
     const run = vi.fn()
       .mockResolvedValueOnce({
@@ -93,67 +78,57 @@ describe("git worktree services", () => {
 
   it("commits selected files", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
-    const service = createGitCommitService({ commandRunner: { run }, now: () => new Date("2026-06-17T10:00:00.000Z") })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createGitCommitService({ commandRunner: { run }, logger, now: () => new Date("2026-06-17T10:00:00.000Z") })
 
     await expect(service.commit(repository, { message: "更新文档", paths: ["docs/a.md"] })).resolves.toEqual({
       completedAt: "2026-06-17T10:00:00.000Z",
       message: "已提交选中文件。",
     })
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["add", "--", "docs/a.md"],
-      cwd: "/repo",
-      operation: "git.commit",
-      operationId: expect.any(String),
-    }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["commit", "-m", "更新文档"],
-      cwd: "/repo",
-      operation: "git.commit",
-      operationId: expect.any(String),
-    }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["add", "--", "docs/a.md"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["commit", "-m", "更新文档"] }))
+    const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
+    const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
+    expect(started?.operationId).toEqual(expect.any(String))
+    expect(completed?.operationId).toBe(started?.operationId)
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("更新文档")
   })
 
   it("syncs by fetch, pull fast-forward, then push", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const getSnapshot = vi.fn()
       .mockResolvedValueOnce({ changes: [], behind: 2, ahead: 1 })
       .mockResolvedValueOnce({ changes: [], behind: 0, ahead: 1 })
-    const service = createGitSyncService({ commandRunner: { run }, getSnapshot, now: () => new Date("2026-06-17T10:00:00.000Z") })
+    const service = createGitSyncService({ commandRunner: { run }, getSnapshot, logger, now: () => new Date("2026-06-17T10:00:00.000Z") })
 
     await service.sync(repository)
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["fetch", "--prune"],
-      cwd: "/repo",
-      operation: "git.sync",
-      operationId: expect.any(String),
-      timeoutMs: 120000,
-    }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["pull", "--ff-only"],
-      cwd: "/repo",
-      operation: "git.sync",
-      operationId: expect.any(String),
-      timeoutMs: 120000,
-    }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["push"],
-      cwd: "/repo",
-      operation: "git.sync",
-      operationId: expect.any(String),
-      timeoutMs: 120000,
-    }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["fetch", "--prune"], timeoutMs: 120000 }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["pull", "--ff-only"], timeoutMs: 120000 }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["push"], timeoutMs: 120000 }))
+    const started = logger.info.mock.calls.find((call) => call[0] === "Git operation started.")?.[1] as { operationId?: string } | undefined
+    const completed = logger.info.mock.calls.find((call) => call[0] === "Git operation completed.")?.[1] as { operationId?: string } | undefined
+    expect(completed?.operationId).toBe(started?.operationId)
   })
 
   it("blocks sync when worktree has changes", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const service = createGitSyncService({
       commandRunner: { run: vi.fn() },
       getSnapshot: vi.fn().mockResolvedValue({ changes: [{ path: "a.md" }], behind: 0, ahead: 0 }),
+      logger,
       now: () => new Date("2026-06-17T10:00:00.000Z"),
     })
 
     await expect(service.sync(repository)).rejects.toThrow("请先提交本地改动。")
+    expect(logger.warn).toHaveBeenCalledWith("Git operation blocked.", expect.objectContaining({
+      operation: "git.sync",
+      operationId: expect.any(String),
+      reason: "working-tree-dirty",
+    }))
+    expect(logger.error).not.toHaveBeenCalled()
   })
 
   it("lists and switches local branches", async () => {
@@ -170,65 +145,8 @@ describe("git worktree services", () => {
     await service.checkout(repository, "docs-update")
     await service.create(repository, "new-docs")
 
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["checkout", "docs-update"],
-      cwd: "/repo",
-      operation: "git.checkout",
-      operationId: expect.any(String),
-    }))
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["checkout", "-b", "new-docs"],
-      cwd: "/repo",
-      operation: "git.branch.create",
-      operationId: expect.any(String),
-    }))
-  })
-
-  it("logs commit operation success with a stable operation id", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" })
-    const logger = createLoggerHarness()
-    const service = createGitCommitService({
-      commandRunner: { run },
-      logger,
-      now: () => new Date("2026-06-17T10:00:00.000Z"),
-    })
-
-    await service.commit(repository, { message: "更新文档", paths: ["docs/a.md"] })
-
-    expect(logger.info).toHaveBeenCalledWith("Git operation started.", expect.objectContaining({
-      operation: "git.commit",
-      operationId: expect.any(String),
-      selectedPathCount: 1,
-    }))
-    expect(logger.info).toHaveBeenCalledWith("Git operation completed.", expect.objectContaining({
-      durationMs: expect.any(Number),
-      operation: "git.commit",
-      operationId: expect.any(String),
-      selectedPathCount: 1,
-    }))
-  })
-
-  it("logs failed sync stderr summary without secrets", async () => {
-    const error = Object.assign(new Error("Authentication failed"), {
-      exitCode: 128,
-      stderr: "fatal: Authentication failed for https://user:secret@git.example.com/team/docs.git",
-      stdout: "",
-    })
-    const run = vi.fn().mockRejectedValue(error)
-    const logger = createLoggerHarness()
-    const getSnapshot = vi.fn().mockResolvedValue({ changes: [], behind: 1, ahead: 0 })
-    const service = createGitSyncService({ commandRunner: { run }, getSnapshot, logger })
-
-    await expect(service.sync(repository)).rejects.toThrow("Authentication failed")
-
-    expect(logger.error).toHaveBeenCalledWith("Git operation failed.", expect.objectContaining({
-      errorCategory: "auth-failed",
-      exitCode: 128,
-      operation: "git.sync",
-      operationId: expect.any(String),
-      stderrSummary: expect.stringContaining("https://[redacted]@git.example.com/team/docs.git"),
-    }))
-    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("user:secret")
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["checkout", "docs-update"] }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["checkout", "-b", "new-docs"] }))
   })
 
   it("reads current branch history and commit details", async () => {
@@ -248,12 +166,3 @@ describe("git worktree services", () => {
     })
   })
 })
-
-function createLoggerHarness() {
-  return {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  }
-}

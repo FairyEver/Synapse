@@ -5,6 +5,7 @@ import type {
   SynapseRepositoryProgressEvent,
 } from "../../src/types/repository"
 import { isGitRebaseInProgress, runGitCommand } from "./git-command"
+import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-client/git-logging"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage, isNonFastForwardError } from "./git-error-utils"
 import { repositoryLockManager } from "./repository-lock-manager"
@@ -147,23 +148,38 @@ async function runRepositoryGitCommand(
   options: {
     cwd: string
     onProgress: ProgressListener
+    operationId: string
   },
 ): Promise<void> {
-  await runGitCommand({
-    args,
-    cwd: options.cwd,
-    fallbackMessage: "仓库同步失败。请检查网络、访问权限、远程配置或当前分支状态后重试。",
-    formatFailureMessage: formatGitFailureMessage,
-    onLine: (line) => {
-      const progressEvent = parseGitProgressLine(repositoryUuid, operation, line)
+  const startedAt = performance.now()
+  try {
+    await runGitCommand({
+      args,
+      cwd: options.cwd,
+      fallbackMessage: "仓库同步失败。请检查网络、访问权限、远程配置或当前分支状态后重试。",
+      formatFailureMessage: formatGitFailureMessage,
+      onLine: (line) => {
+        const progressEvent = parseGitProgressLine(repositoryUuid, operation, line)
 
-      if (progressEvent) {
-        options.onProgress(progressEvent)
-      }
-    },
-    timeoutMessage: "仓库同步超时，请检查网络后重试。",
-    timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
-  })
+        if (progressEvent) {
+          options.onProgress(progressEvent)
+        }
+      },
+      timeoutMessage: "仓库同步超时，请检查网络后重试。",
+      timeoutMs: GIT_REMOTE_OPERATION_TIMEOUT_MS,
+    })
+  } catch (error) {
+    logger.error("Repository Git command failed.", {
+      operation: `repository.${operation}`,
+      operationId: options.operationId,
+      repositoryUuid,
+      localPath: options.cwd,
+      gitArgs: summarizeGitArgs(args),
+      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+      ...gitErrorMeta(error),
+    })
+    throw error
+  }
 }
 
 async function getAheadCount(cwd: string): Promise<number> {
@@ -196,7 +212,11 @@ class RepositoryGitService {
     onProgress: ProgressListener,
     options?: { skipLock?: boolean },
   ): Promise<SynapseRepositoryOperationResult> {
+    const operationId = createGitOperationId()
+    const startedAt = performance.now()
     logger.info("Starting repository sync.", {
+      operation: "repository.sync",
+      operationId,
       repositoryUuid: repository.uuid,
       localPath: repository.localPath,
     })
@@ -204,6 +224,8 @@ class RepositoryGitService {
 
     if (currentState.status !== "ready") {
       logger.warn("Repository sync aborted because local path is missing.", {
+        operation: "repository.sync",
+        operationId,
         repositoryUuid: repository.uuid,
         localPath: repository.localPath,
       })
@@ -212,6 +234,8 @@ class RepositoryGitService {
 
     if (!currentState.isGitRepository) {
       logger.info("Repository sync resolved as a local-only refresh.", {
+        operation: "repository.sync",
+        operationId,
         repositoryUuid: repository.uuid,
         localPath: repository.localPath,
       })
@@ -244,6 +268,7 @@ class RepositoryGitService {
         ], {
           cwd: repository.localPath,
           onProgress,
+          operationId,
         })
         pullSucceeded = true
       } catch (pullError) {
@@ -254,6 +279,8 @@ class RepositoryGitService {
         }
 
         logger.info("Pull --ff-only failed due to diverged state. Attempting pull --rebase.", {
+          operation: "repository.sync",
+          operationId,
           repositoryUuid: repository.uuid,
         })
 
@@ -273,6 +300,7 @@ class RepositoryGitService {
           ], {
             cwd: repository.localPath,
             onProgress,
+            operationId,
           })
         } catch (rebaseError) {
           await abortRebaseIfNeeded(repository.localPath)
@@ -292,6 +320,7 @@ class RepositoryGitService {
         ], {
           cwd: repository.localPath,
           onProgress,
+          operationId,
         })
       }
 
@@ -302,6 +331,8 @@ class RepositoryGitService {
           aheadCount = await getAheadCount(repository.localPath)
         } catch (error) {
           logger.warn("Failed to determine ahead count after pull.", {
+            operation: "repository.sync",
+            operationId,
             repositoryUuid: repository.uuid,
             error,
           })
@@ -309,6 +340,8 @@ class RepositoryGitService {
 
         if (aheadCount > 0) {
           logger.info("Local branch is ahead after pull. Pushing automatically.", {
+            operation: "repository.sync",
+            operationId,
             repositoryUuid: repository.uuid,
             aheadCount,
           })
@@ -326,6 +359,7 @@ class RepositoryGitService {
           ], {
             cwd: repository.localPath,
             onProgress,
+            operationId,
           })
         }
       }
@@ -341,8 +375,11 @@ class RepositoryGitService {
       })
 
       logger.info("Repository sync completed.", {
+        operation: "repository.sync",
+        operationId,
         repositoryUuid: repository.uuid,
         completedAt,
+        durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
       })
 
       return {
@@ -352,8 +389,11 @@ class RepositoryGitService {
       }
     } catch (error) {
       logger.error("Repository sync failed.", {
+        operation: "repository.sync",
+        operationId,
         repositoryUuid: repository.uuid,
-        error,
+        durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+        ...gitErrorMeta(error),
       })
       throw error
     } finally {

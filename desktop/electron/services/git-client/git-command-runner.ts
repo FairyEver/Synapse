@@ -1,12 +1,6 @@
 import type { SynapseGitErrorCategory } from "../../../src/types/git"
 import { runGitCommand, type GitCommandResult } from "../git-command"
-import {
-  createGitLogger,
-  gitFailureLogMeta,
-  sanitizeGitText,
-  summarizeGitArgs,
-  type GitLogger,
-} from "./git-log-utils"
+import { createGitOperationId, gitErrorMeta, summarizeGitArgs } from "./git-logging"
 
 type GitClientRunInput = {
   readonly cwd: string
@@ -15,11 +9,15 @@ type GitClientRunInput = {
   readonly logFailure?: boolean
   readonly operation?: string
   readonly operationId?: string
+  readonly repoPath?: string
+  readonly repositoryId?: string
   readonly timeoutMs?: number
 }
 
 type GitCommandFunction = typeof runGitCommand
-const defaultLogger = createGitLogger("git.command")
+type GitCommandRunnerLogger = {
+  error(message: string, meta?: unknown): void
+}
 
 export function categorizeGitError(error: unknown): SynapseGitErrorCategory {
   const message = error instanceof Error ? error.message : String(error)
@@ -34,14 +32,15 @@ export function categorizeGitError(error: unknown): SynapseGitErrorCategory {
 }
 
 export function createGitClientCommandRunner(deps: {
-  readonly logger?: GitLogger
+  readonly logger?: GitCommandRunnerLogger
   readonly runGitCommand?: GitCommandFunction
 } = {}) {
   const command = deps.runGitCommand ?? runGitCommand
-  const logger = deps.logger ?? defaultLogger
   return {
     async run(input: GitClientRunInput): Promise<GitCommandResult> {
-      const startedAt = Date.now()
+      const startedAt = performance.now()
+      const operation = input.operation ?? `git.${input.args[0] ?? "command"}`
+      const operationId = input.operationId ?? createGitOperationId()
       try {
         return await command({
           args: [...input.args],
@@ -52,17 +51,15 @@ export function createGitClientCommandRunner(deps: {
         })
       } catch (error) {
         if (input.logFailure !== false) {
-          logger.error("Git command failed.", {
-            args: summarizeGitArgs(input.args),
-            cwd: sanitizeGitText(input.cwd),
-            durationMs: Date.now() - startedAt,
-            operation: input.operation ?? "git.command",
-            operationId: input.operationId,
-            timeoutMs: input.timeoutMs ?? 60_000,
-            ...gitFailureLogMeta(error, {
-              category: categorizeGitError(error),
-              includeOutput: true,
-            }),
+          deps.logger?.error("Git command failed.", {
+            operation,
+            operationId,
+            ...(input.repositoryId ? { repositoryId: input.repositoryId } : {}),
+            repoPath: input.repoPath ?? input.cwd,
+            cwd: input.cwd,
+            gitArgs: summarizeGitArgs(input.args),
+            durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+            ...gitErrorMeta(error),
           })
         }
         throw error
@@ -72,3 +69,4 @@ export function createGitClientCommandRunner(deps: {
 }
 
 export type GitClientCommandRunner = ReturnType<typeof createGitClientCommandRunner>
+export type { GitClientRunInput }

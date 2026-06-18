@@ -1,34 +1,29 @@
 import path from "node:path"
 import { createHash } from "node:crypto"
-import type { ShellEnvironmentSnapshot } from "../../runtime/process"
 import type { SynapseGitEnvironmentState, SynapseGitSshPublicKey } from "../../../src/types/git"
-import { categorizeGitError } from "./git-command-runner"
+import type { ShellEnvironmentSnapshot } from "../../runtime/process"
+import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import {
-  createGitLogger,
-  createGitOperation,
-  gitFailureLogMeta,
-  logGitOperationFailure,
-  logGitOperationStart,
-  logGitOperationSuccess,
-  sanitizeGitText,
-  type GitLogger,
-} from "./git-log-utils"
+  createGitOperationId,
+  logGitOperationBlocked,
+  logGitOperationFailed,
+  logGitOperationStarted,
+  logGitOperationSucceeded,
+} from "./git-logging"
 
 type Platform = NodeJS.Platform
 
 type EnvironmentDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly homeDir: string
-  readonly logger?: GitLogger
+  readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
+  readonly now?: () => Date
   readonly pathExists: (filePath: string) => Promise<boolean>
   readonly readFile: (filePath: string) => Promise<string>
   readonly platform: Platform
   readonly shellEnvironment: ShellEnvironmentSnapshot
-  readonly now?: () => Date
 }
-
-const defaultLogger = createGitLogger("git.environment")
 
 function installHint(platform: Platform): string {
   if (platform === "win32") return "安装 Git for Windows 后重新检测。"
@@ -145,7 +140,6 @@ function parseSshPublicKeyDetails(key: SynapseGitSshPublicKey | null): SshPublic
 
 export function createGitEnvironmentService(deps: EnvironmentDeps) {
   const now = deps.now ?? (() => new Date())
-  const logger = deps.logger ?? defaultLogger
 
   async function getPublicKeyDetails(): Promise<SshPublicKeyDetails> {
     try {
@@ -182,12 +176,20 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
 
   return {
     async check(): Promise<SynapseGitEnvironmentState> {
+      const operation = "git.environment.check"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
       const publicKey = await getPublicKeyDetails()
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
+        platform: deps.platform,
+      })
       try {
         const gitVersionResult = await deps.commandRunner.run({
           cwd: deps.homeDir,
           args: ["--version"],
-          operation: "git.environment.check",
+          logFailure: false,
+          operation,
+          operationId,
         })
         let sshAvailable = false
         try {
@@ -195,15 +197,16 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
             cwd: deps.homeDir,
             args: ["-c", "core.sshCommand=ssh -V", "version"],
             logFailure: false,
-            operation: "git.environment.check",
+            operation,
+            operationId,
           })
           sshAvailable = true
         } catch {
           sshAvailable = false
         }
+
         const userName = await readConfig(deps.commandRunner, deps.homeDir, "user.name")
         const userEmail = await readConfig(deps.commandRunner, deps.homeDir, "user.email")
-
         const state = {
           ...baseState(),
           gitAvailable: true,
@@ -221,29 +224,19 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
           sshPublicKeyFingerprint: publicKey.fingerprint,
           installHint: null,
         }
-        logger.info("Git environment check completed.", {
-          operation: "git.environment.check",
-          commonSshKeyExists: state.commonSshKeyExists,
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+          platform: deps.platform,
           gitAvailable: state.gitAvailable,
-          gitPath: state.gitPath ? sanitizeGitText(state.gitPath) : null,
           gitVersion: state.gitVersion,
-          homeDir: sanitizeGitText(state.homeDir),
           sshAvailable: state.sshAvailable,
-          userEmailConfigured: state.userEmail !== null,
-          userNameConfigured: state.userName !== null,
+          userNameConfigured: Boolean(state.userName),
+          userEmailConfigured: Boolean(state.userEmail),
+          userEmailDomain: emailDomain(state.userEmail),
+          commonSshKeyExists: state.commonSshKeyExists,
         })
         return state
-      } catch (error) {
-        logger.warn("Git environment check failed.", {
-          operation: "git.environment.check",
-          commonSshKeyExists: publicKey.path !== null,
-          effectiveGitPath: deps.shellEnvironment.effectiveGitPath
-            ? sanitizeGitText(deps.shellEnvironment.effectiveGitPath)
-            : null,
-          homeDir: sanitizeGitText(deps.homeDir),
-          ...gitFailureLogMeta(error, { category: categorizeGitError(error) }),
-        })
-        return {
+      } catch {
+        const state = {
           ...baseState(),
           gitAvailable: false,
           gitVersion: null,
@@ -260,49 +253,98 @@ export function createGitEnvironmentService(deps: EnvironmentDeps) {
           sshPublicKeyFingerprint: publicKey.fingerprint,
           installHint: installHint(deps.platform),
         }
+        deps.logger?.warn("Git environment check completed without Git.", {
+          operation,
+          operationId,
+          platform: deps.platform,
+          gitAvailable: state.gitAvailable,
+          commonSshKeyExists: state.commonSshKeyExists,
+          installHint: state.installHint,
+          durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+        })
+        return state
       }
     },
 
     async configureIdentity(input: { readonly userName: string; readonly userEmail: string }): Promise<void> {
-      const operation = createGitOperation("git.environment.configureIdentity")
+      const operation = "git.environment.configureIdentity"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
       const userName = input.userName.trim()
       const userEmail = input.userEmail.trim()
-      if (!userName) throw new Error("请输入用户名。")
-      if (!userEmail) throw new Error("请输入邮箱。")
-      logGitOperationStart(logger, "Git operation started.", operation, undefined, {
-        homeDir: sanitizeGitText(deps.homeDir),
-        userEmailProvided: true,
-        userNameProvided: true,
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
+        userNameLength: userName.length,
+        userEmailDomain: emailDomain(userEmail),
       })
+      if (!userName) {
+        logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "empty-user-name", {
+          userEmailDomain: emailDomain(userEmail),
+        })
+        throw new Error("请输入用户名。")
+      }
+      if (!userEmail) {
+        logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "empty-user-email", {
+          userNameLength: userName.length,
+        })
+        throw new Error("请输入邮箱。")
+      }
       try {
         await deps.commandRunner.run({
           cwd: deps.homeDir,
           args: ["config", "--global", "user.name", userName],
-          operation: operation.operation,
-          operationId: operation.operationId,
+          logFailure: false,
+          operation,
+          operationId,
         })
         await deps.commandRunner.run({
           cwd: deps.homeDir,
           args: ["config", "--global", "user.email", userEmail],
-          operation: operation.operation,
-          operationId: operation.operationId,
+          logFailure: false,
+          operation,
+          operationId,
         })
-        logGitOperationSuccess(logger, "Git operation completed.", operation, undefined, {
-          homeDir: sanitizeGitText(deps.homeDir),
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+          userNameLength: userName.length,
+          userEmailDomain: emailDomain(userEmail),
         })
       } catch (error) {
-        logGitOperationFailure(logger, "Git operation failed.", operation, error, undefined, {
-          errorCategory: categorizeGitError(error),
-          homeDir: sanitizeGitText(deps.homeDir),
+        logGitOperationFailed(deps.logger ?? noopLogger, {
+          operation,
+          operationId,
+          startedAt,
+          error,
+          extra: {
+            userNameLength: userName.length,
+            userEmailDomain: emailDomain(userEmail),
+          },
         })
         throw error
       }
     },
 
     async getSshPublicKey(): Promise<SynapseGitSshPublicKey | null> {
-      return findCommonSshPublicKey(deps.homeDir, deps.pathExists, deps.readFile)
+      const key = await findCommonSshPublicKey(deps.homeDir, deps.pathExists, deps.readFile)
+      deps.logger?.info("Git SSH public key lookup completed.", {
+        operation: "git.environment.getSshPublicKey",
+        operationId: createGitOperationId(),
+        found: Boolean(key),
+        keyType: key?.content.split(/\s+/)[0] ?? null,
+      })
+      return key
     },
   }
+}
+
+function emailDomain(value: string | null): string | null {
+  if (!value) return null
+  const [, domain] = value.split("@")
+  return domain || null
+}
+
+const noopLogger = {
+  error: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
 }
 
 export type GitEnvironmentService = ReturnType<typeof createGitEnvironmentService>

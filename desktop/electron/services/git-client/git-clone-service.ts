@@ -1,16 +1,15 @@
 import path from "node:path"
 import type { SynapseGitRemoteKind, SynapseGitRepository } from "../../../src/types/git"
-import { categorizeGitError } from "./git-command-runner"
 import type { GitClientCommandRunner } from "./git-command-runner"
+import type { StructuredLogger } from "../../runtime/logging"
 import {
-  createGitLogger,
-  createGitOperation,
-  logGitOperationFailure,
-  logGitOperationStart,
-  logGitOperationSuccess,
-  sanitizeGitText,
-  type GitLogger,
-} from "./git-log-utils"
+  createGitOperationId,
+  logGitOperationBlocked,
+  logGitOperationFailed,
+  logGitOperationStarted,
+  logGitOperationSucceeded,
+  sanitizeRemoteUrl,
+} from "./git-logging"
 
 type CloneInput = {
   readonly remoteUrl: string
@@ -25,14 +24,12 @@ type CloneResult = {
 
 type CloneDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
-  readonly logger?: GitLogger
+  readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
   readonly registry: {
     addLocal(input: { readonly name: string; readonly localPath: string }): Promise<SynapseGitRepository>
   }
   readonly pathExists: (filePath: string) => Promise<boolean>
 }
-
-const defaultLogger = createGitLogger("git.clone")
 
 export function detectRemoteKind(remoteUrl: string): SynapseGitRemoteKind {
   if (/^https:\/\//i.test(remoteUrl)) return "https"
@@ -41,53 +38,71 @@ export function detectRemoteKind(remoteUrl: string): SynapseGitRemoteKind {
 }
 
 export function createGitCloneService(deps: CloneDeps) {
-  const logger = deps.logger ?? defaultLogger
   return {
     async clone(input: CloneInput): Promise<CloneResult> {
-      const operation = createGitOperation("git.clone")
+      const operation = "git.clone"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
       const remoteUrl = input.remoteUrl.trim()
       const targetPath = path.resolve(input.targetPath)
       const remoteKind = detectRemoteKind(remoteUrl)
-      if (!remoteUrl) throw new Error("请输入仓库地址。")
-      if (!targetPath) throw new Error("请选择保存位置。")
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, {
+        remoteKind,
+        remoteUrl: sanitizeRemoteUrl(remoteUrl),
+        targetPath,
+        nameLength: input.name.length,
+      })
+      if (!remoteUrl) {
+        logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "missing-remote-url", { targetPath })
+        throw new Error("请输入仓库地址。")
+      }
+      if (!targetPath) {
+        logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "missing-target-path")
+        throw new Error("请选择保存位置。")
+      }
       if (await deps.pathExists(targetPath)) {
-        logger.warn("Git operation blocked because clone target exists.", {
-          operation: operation.operation,
-          operationId: operation.operationId,
-          remoteKind,
-          targetPath: sanitizeGitText(targetPath),
-        })
+        logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "target-exists", { targetPath })
         throw new Error("目标目录已存在。请选择空目录。")
       }
-
-      logGitOperationStart(logger, "Git operation started.", operation, undefined, {
-        remoteKind,
-        targetPath: sanitizeGitText(targetPath),
-      })
 
       try {
         await deps.commandRunner.run({
           cwd: path.dirname(targetPath),
           args: ["clone", "--progress", remoteUrl, targetPath],
-          operation: operation.operation,
-          operationId: operation.operationId,
+          operation,
+          operationId,
+          repoPath: targetPath,
           timeoutMs: 300_000,
         })
         const repository = await deps.registry.addLocal({ name: input.name, localPath: targetPath })
-        logGitOperationSuccess(logger, "Git operation completed.", operation, repository, {
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+          repositoryId: repository.id,
+          repoPath: repository.localPath,
           remoteKind,
         })
         return { repository, remoteKind }
       } catch (error) {
-        logGitOperationFailure(logger, "Git operation failed.", operation, error, undefined, {
-          errorCategory: categorizeGitError(error),
-          remoteKind,
-          targetPath: sanitizeGitText(targetPath),
+        logGitOperationFailed(deps.logger ?? noopLogger, {
+          operation,
+          operationId,
+          repoPath: targetPath,
+          startedAt,
+          error,
+          extra: {
+            remoteKind,
+            remoteUrl: sanitizeRemoteUrl(remoteUrl),
+          },
         })
         throw error
       }
     },
   }
+}
+
+const noopLogger = {
+  error: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
 }
 
 export type GitCloneService = ReturnType<typeof createGitCloneService>

@@ -1530,9 +1530,9 @@ export const coreHttpTestDescriptor: ServiceDescriptor<{ initialized: true }> = 
 export const gitCommandRunnerDescriptor: ServiceDescriptor<GitClientCommandRunner> = {
   id: "git.command-runner",
   criticality: "degraded",
-  create() {
+  create(ctx) {
     return createGitClientCommandRunner({
-      logger: createMainLogger("git.command"),
+      logger: ctx.logger.child("git.command"),
     })
   },
 }
@@ -1540,9 +1540,9 @@ export const gitCommandRunnerDescriptor: ServiceDescriptor<GitClientCommandRunne
 export const gitRepositoryRegistryDescriptor: ServiceDescriptor<GitRepositoryRegistry> = {
   id: "git.repository-registry",
   criticality: "degraded",
-  create() {
+  create(ctx) {
     return createGitRepositoryRegistry({
-      logger: createMainLogger("git.repository"),
+      logger: ctx.logger.child("git.registry"),
       userDataPath: app.getPath("userData"),
       trashItem: (targetPath) => shell.trashItem(targetPath),
     })
@@ -1554,15 +1554,14 @@ export const gitEnvironmentServiceDescriptor: ServiceDescriptor<GitEnvironmentSe
   criticality: "degraded",
   dependsOn: ["git.command-runner", "core.process-environment"],
   create(ctx) {
-    const processEnvironment = ctx.registry.get<ProcessEnvironmentService>("core.process-environment")
     return createGitEnvironmentService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       homeDir: os.homedir(),
-      logger: createMainLogger("git.environment"),
+      logger: ctx.logger.child("git.environment"),
       pathExists,
       readFile: (filePath) => readFile(filePath, "utf8"),
       platform: process.platform,
-      shellEnvironment: processEnvironment.shell,
+      shellEnvironment: ctx.registry.get<ProcessEnvironmentService>("core.process-environment").shell,
     })
   },
 }
@@ -1574,7 +1573,7 @@ export const gitCloneServiceDescriptor: ServiceDescriptor<GitCloneService> = {
   create(ctx) {
     return createGitCloneService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
-      logger: createMainLogger("git.clone"),
+      logger: ctx.logger.child("git.clone"),
       registry: ctx.registry.get<GitRepositoryRegistry>("git.repository-registry"),
       pathExists,
     })
@@ -1588,7 +1587,7 @@ export const gitStatusServiceDescriptor: ServiceDescriptor<GitStatusService> = {
   create(ctx) {
     return createGitStatusService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
-      logger: createMainLogger("git.status"),
+      logger: ctx.logger.child("git.status"),
       pathExists,
     })
   },
@@ -1601,7 +1600,7 @@ export const gitCommitServiceDescriptor: ServiceDescriptor<GitCommitService> = {
   create(ctx) {
     return createGitCommitService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
-      logger: createMainLogger("git.commit"),
+      logger: ctx.logger.child("git.commit"),
     })
   },
 }
@@ -1615,7 +1614,7 @@ export const gitSyncServiceDescriptor: ServiceDescriptor<GitSyncService> = {
     return createGitSyncService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       getSnapshot: (repository) => statusService.getSnapshot(repository),
-      logger: createMainLogger("git.sync"),
+      logger: ctx.logger.child("git.sync"),
     })
   },
 }
@@ -1629,7 +1628,7 @@ export const gitBranchServiceDescriptor: ServiceDescriptor<GitBranchService> = {
     return createGitBranchService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
       getSnapshot: (repository) => statusService.getSnapshot(repository),
-      logger: createMainLogger("git.branch"),
+      logger: ctx.logger.child("git.branch"),
     })
   },
 }
@@ -1641,6 +1640,7 @@ export const gitHistoryServiceDescriptor: ServiceDescriptor<GitHistoryService> =
   create(ctx) {
     return createGitHistoryService({
       commandRunner: ctx.registry.get<GitClientCommandRunner>("git.command-runner"),
+      logger: ctx.logger.child("git.history"),
     })
   },
 }
@@ -1783,6 +1783,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     }
     const permissionGuard = registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = registry.get<AuditSink>("core.audit-sink")
+    // eslint-disable-next-line prefer-const -- Nested workflow runtime closes over this before assignment.
+    let workflowEngine: WorkflowEngine
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
@@ -1838,7 +1840,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         },
       },
     }
-    const workflowEngine = new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
+    workflowEngine = new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
     return workflowEngine
   },
 }

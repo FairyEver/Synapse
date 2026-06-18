@@ -1,107 +1,110 @@
 import type { SynapseGitOperationResult, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
-import { categorizeGitError } from "./git-command-runner"
+import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import {
-  createGitLogger,
-  createGitOperation,
-  gitOperationBaseMeta,
-  gitSnapshotLogMeta,
-  logGitOperationFailure,
-  logGitOperationStart,
-  logGitOperationSuccess,
-  type GitLogger,
-} from "./git-log-utils"
+  createGitOperationId,
+  logGitOperationBlocked,
+  logGitOperationFailed,
+  logGitOperationStarted,
+  logGitOperationSucceeded,
+  repositoryLogMeta,
+  summarizeSnapshot,
+} from "./git-logging"
 
 type SyncDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changes" | "ahead" | "behind">>
-  readonly logger?: GitLogger
+  readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
   readonly now?: () => Date
 }
 
-const defaultLogger = createGitLogger("git.sync")
-
 export function createGitSyncService(deps: SyncDeps) {
   const now = deps.now ?? (() => new Date())
-  const logger = deps.logger ?? defaultLogger
 
   function result(message: string): SynapseGitOperationResult {
     return { completedAt: now().toISOString(), message }
   }
 
-  async function runRemoteOperation(
-    operationName: "git.fetch" | "git.pull" | "git.push",
-    repository: SynapseGitRepository,
-    args: readonly string[],
-    message: string,
-  ): Promise<SynapseGitOperationResult> {
-    const operation = createGitOperation(operationName)
-    logGitOperationStart(logger, "Git operation started.", operation, repository)
-    try {
-      await deps.commandRunner.run({
-        cwd: repository.localPath,
-        args,
-        operation: operation.operation,
-        operationId: operation.operationId,
-        timeoutMs: 120_000,
-      })
-      const operationResult = result(message)
-      logGitOperationSuccess(logger, "Git operation completed.", operation, repository)
-      return operationResult
-    } catch (error) {
-      logGitOperationFailure(logger, "Git operation failed.", operation, error, repository, {
-        errorCategory: categorizeGitError(error),
-      })
-      throw error
-    }
-  }
-
   return {
     async fetch(repository: SynapseGitRepository): Promise<SynapseGitOperationResult> {
-      return runRemoteOperation("git.fetch", repository, ["fetch", "--prune"], "已获取远程更新。")
+      return runRemoteOperation("git.fetch", repository, async (operationId) => {
+        await deps.commandRunner.run({
+          cwd: repository.localPath,
+          args: ["fetch", "--prune"],
+          operation: "git.fetch",
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+          timeoutMs: 120_000,
+        })
+        return result("已获取远程更新。")
+      })
     },
 
     async pull(repository: SynapseGitRepository): Promise<SynapseGitOperationResult> {
-      return runRemoteOperation("git.pull", repository, ["pull", "--ff-only"], "已拉取远程更新。")
+      return runRemoteOperation("git.pull", repository, async (operationId) => {
+        await deps.commandRunner.run({
+          cwd: repository.localPath,
+          args: ["pull", "--ff-only"],
+          operation: "git.pull",
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+          timeoutMs: 120_000,
+        })
+        return result("已拉取远程更新。")
+      })
     },
 
     async push(repository: SynapseGitRepository): Promise<SynapseGitOperationResult> {
-      return runRemoteOperation("git.push", repository, ["push"], "已推送本地提交。")
+      return runRemoteOperation("git.push", repository, async (operationId) => {
+        await deps.commandRunner.run({
+          cwd: repository.localPath,
+          args: ["push"],
+          operation: "git.push",
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
+          timeoutMs: 120_000,
+        })
+        return result("已推送本地提交。")
+      })
     },
 
     async sync(repository: SynapseGitRepository): Promise<SynapseGitOperationResult> {
-      const operation = createGitOperation("git.sync")
-      logGitOperationStart(logger, "Git operation started.", operation, repository)
+      const operation = "git.sync"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
+      const baseMeta = repositoryLogMeta(repository)
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, baseMeta)
       try {
         const before = await deps.getSnapshot(repository)
+        const beforeMeta = {
+          ...baseMeta,
+          before: summarizeSyncSnapshot(before),
+        }
         if (before.changes.length > 0) {
-          logger.warn("Git operation blocked by dirty worktree.", {
-            ...gitOperationBaseMeta(operation, repository),
-            ...gitSnapshotLogMeta({
-              ...before,
-              currentBranch: null,
-              hasConflicts: before.changes.some((change) => change.conflicted),
-              isGitRepository: true,
-              pathExists: true,
-              upstream: null,
-            }),
-          })
+          logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "working-tree-dirty", beforeMeta)
           throw new Error("请先提交本地改动。")
         }
 
         await deps.commandRunner.run({
           cwd: repository.localPath,
           args: ["fetch", "--prune"],
-          operation: operation.operation,
-          operationId: operation.operationId,
+          operation,
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
           timeoutMs: 120_000,
         })
         if (before.behind > 0) {
           await deps.commandRunner.run({
             cwd: repository.localPath,
             args: ["pull", "--ff-only"],
-            operation: operation.operation,
-            operationId: operation.operationId,
+            operation,
+            operationId,
+            repoPath: repository.localPath,
+            repositoryId: repository.id,
             timeoutMs: 120_000,
           })
         }
@@ -110,33 +113,81 @@ export function createGitSyncService(deps: SyncDeps) {
           await deps.commandRunner.run({
             cwd: repository.localPath,
             args: ["push"],
-            operation: operation.operation,
-            operationId: operation.operationId,
+            operation,
+            operationId,
+            repoPath: repository.localPath,
+            repositoryId: repository.id,
             timeoutMs: 120_000,
           })
         }
-        const operationResult = result("已同步仓库。")
-        logGitOperationSuccess(logger, "Git operation completed.", operation, repository, {
-          before: {
-            ahead: before.ahead,
-            behind: before.behind,
-            changeCount: before.changes.length,
-          },
-          afterPull: {
-            ahead: afterPull.ahead,
-            behind: afterPull.behind,
-            changeCount: afterPull.changes.length,
-          },
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, {
+          ...baseMeta,
+          before: summarizeSyncSnapshot(before),
+          afterPull: summarizeSyncSnapshot(afterPull),
         })
-        return operationResult
+        return result("已同步仓库。")
       } catch (error) {
-        logGitOperationFailure(logger, "Git operation failed.", operation, error, repository, {
-          errorCategory: categorizeGitError(error),
-        })
+        if (!isWorkingTreeDirtyBlock(error)) {
+          logGitOperationFailed(deps.logger ?? noopLogger, {
+            operation,
+            operationId,
+            repositoryId: repository.id,
+            repoPath: repository.localPath,
+            startedAt,
+            error,
+            extra: baseMeta,
+          })
+        }
         throw error
       }
     },
   }
+
+  async function runRemoteOperation(
+    operation: "git.fetch" | "git.pull" | "git.push",
+    repository: SynapseGitRepository,
+    action: (operationId: string) => Promise<SynapseGitOperationResult>,
+  ): Promise<SynapseGitOperationResult> {
+    const operationId = createGitOperationId()
+    const startedAt = performance.now()
+    const meta = repositoryLogMeta(repository)
+    logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, meta)
+    try {
+      const operationResult = await action(operationId)
+      logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, meta)
+      return operationResult
+    } catch (error) {
+      logGitOperationFailed(deps.logger ?? noopLogger, {
+        operation,
+        operationId,
+        repositoryId: repository.id,
+        repoPath: repository.localPath,
+        startedAt,
+        error,
+        extra: meta,
+      })
+      throw error
+    }
+  }
+}
+
+function summarizeSyncSnapshot(snapshot: Pick<SynapseGitRepositorySnapshot, "changes" | "ahead" | "behind">): Record<string, unknown> {
+  return summarizeSnapshot({
+    currentBranch: null,
+    upstream: null,
+    hasConflicts: snapshot.changes.some((change) => change.conflicted),
+    ...snapshot,
+  })
+}
+
+const noopLogger = {
+  error: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+}
+
+function isWorkingTreeDirtyBlock(error: unknown): boolean {
+  return error instanceof Error && error.message === "请先提交本地改动。"
 }
 
 export type GitSyncService = ReturnType<typeof createGitSyncService>

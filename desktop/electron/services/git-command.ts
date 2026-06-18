@@ -11,23 +11,22 @@ type GitCommandResult = {
   stdout: string
 }
 
+type GitCommandFailureResult = GitCommandResult & {
+  readonly exitCode?: number | null
+  readonly output: string
+  readonly signal?: NodeJS.Signals | string | null
+  readonly timedOut?: boolean
+}
+
 class GitCommandError extends Error {
   declare readonly exitCode: number | null | undefined
   declare readonly output: string
-  declare readonly signal: NodeJS.Signals | null | undefined
+  declare readonly signal: NodeJS.Signals | string | null | undefined
   declare readonly stderr: string
   declare readonly stdout: string
   declare readonly timedOut: boolean | undefined
 
-  constructor(
-    message: string,
-    result: GitCommandResult & {
-      readonly exitCode?: number | null
-      readonly output: string
-      readonly signal?: NodeJS.Signals | null
-      readonly timedOut?: boolean
-    },
-  ) {
+  constructor(message: string, result: GitCommandFailureResult) {
     super(message)
     this.name = "GitCommandError"
     Object.defineProperties(this, {
@@ -259,10 +258,10 @@ async function runControlledGitCommand({
     if (result.timedOut) {
       throw new GitCommandError(timeoutMessage ?? fallbackMessage, {
         exitCode: result.exitCode,
-        output: `${stdout}${stderr}`,
+        output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
         signal: result.signal,
-        stderr,
-        stdout,
+        stderr: result.stderr ?? "",
+        stdout: result.stdout ?? "",
         timedOut: true,
       })
     }
@@ -279,6 +278,7 @@ async function runControlledGitCommand({
       signal: result.signal,
       stderr,
       stdout,
+      timedOut: false,
     })
   } catch (error) {
     if (error instanceof Error && error.message) {

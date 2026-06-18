@@ -61,10 +61,12 @@ describe("git repository registry", () => {
     const trashItem = vi.fn(async () => {
       throw new Error("trash failed")
     })
+    const logger = { error: vi.fn(), info: vi.fn() }
     tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-git-registry-"))
     const localPath = path.join(tempDir, "docs")
     await mkdir(localPath)
     const registry = createGitRepositoryRegistry({
+      logger,
       userDataPath: tempDir,
       now: () => new Date("2026-06-17T10:00:00.000Z"),
       trashItem,
@@ -74,6 +76,12 @@ describe("git repository registry", () => {
     await expect(registry.remove({ repositoryId: added.id, mode: "trash-local" })).rejects.toThrow("trash failed")
 
     expect(await registry.list()).toEqual([added])
+    expect(logger.error).toHaveBeenCalledWith("Git operation failed.", expect.objectContaining({
+      operation: "git.repository.remove",
+      operationId: expect.any(String),
+      repositoryId: added.id,
+      mode: "trash-local",
+    }))
   })
 
   it("deduplicates repositories by normalized path", async () => {

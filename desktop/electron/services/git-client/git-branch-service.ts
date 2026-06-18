@@ -1,23 +1,20 @@
 import type { SynapseGitBranch, SynapseGitRepository, SynapseGitRepositorySnapshot } from "../../../src/types/git"
-import { categorizeGitError } from "./git-command-runner"
+import type { StructuredLogger } from "../../runtime/logging"
 import type { GitClientCommandRunner } from "./git-command-runner"
 import {
-  createGitLogger,
-  createGitOperation,
-  gitOperationBaseMeta,
-  logGitOperationFailure,
-  logGitOperationStart,
-  logGitOperationSuccess,
-  type GitLogger,
-} from "./git-log-utils"
+  createGitOperationId,
+  logGitOperationBlocked,
+  logGitOperationFailed,
+  logGitOperationStarted,
+  logGitOperationSucceeded,
+  repositoryLogMeta,
+} from "./git-logging"
 
 type BranchDeps = {
   readonly commandRunner: Pick<GitClientCommandRunner, "run">
   readonly getSnapshot: (repository: SynapseGitRepository) => Promise<Pick<SynapseGitRepositorySnapshot, "changes">>
-  readonly logger?: GitLogger
+  readonly logger?: Pick<StructuredLogger, "error" | "info" | "warn">
 }
-
-const defaultLogger = createGitLogger("git.branch")
 
 function assertBranchName(name: string): string {
   const trimmed = name.trim()
@@ -29,15 +26,29 @@ function assertBranchName(name: string): string {
 }
 
 export function createGitBranchService(deps: BranchDeps) {
-  const logger = deps.logger ?? defaultLogger
-  async function assertClean(repository: SynapseGitRepository): Promise<void> {
+  async function assertClean(repository: SynapseGitRepository, operation: string, operationId: string): Promise<void> {
     const snapshot = await deps.getSnapshot(repository)
-    if (snapshot.changes.length > 0) throw new Error("请先提交本地改动。")
+    if (snapshot.changes.length > 0) {
+      logGitOperationBlocked(deps.logger ?? noopLogger, operation, operationId, "working-tree-dirty", {
+        ...repositoryLogMeta(repository),
+        changeCount: snapshot.changes.length,
+      })
+      throw new Error("请先提交本地改动。")
+    }
   }
 
   return {
     async list(repository: SynapseGitRepository): Promise<SynapseGitBranch[]> {
-      const result = await deps.commandRunner.run({ cwd: repository.localPath, args: ["branch", "--list"] })
+      const operation = "git.branch.list"
+      const operationId = createGitOperationId()
+      const result = await deps.commandRunner.run({
+        cwd: repository.localPath,
+        args: ["branch", "--list"],
+        operation,
+        operationId,
+        repoPath: repository.localPath,
+        repositoryId: repository.id,
+      })
       return result.stdout.split(/\r?\n/)
         .map((line) => line.trimEnd())
         .filter(Boolean)
@@ -48,61 +59,81 @@ export function createGitBranchService(deps: BranchDeps) {
     },
 
     async checkout(repository: SynapseGitRepository, branchName: string): Promise<void> {
-      const operation = createGitOperation("git.checkout")
-      const branch = assertBranchName(branchName)
-      logGitOperationStart(logger, "Git operation started.", operation, repository, { branch })
+      const operation = "git.checkout"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
+      const meta = { ...repositoryLogMeta(repository), branch: branchName }
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, meta)
       try {
-        await assertClean(repository)
+        await assertClean(repository, operation, operationId)
         await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["checkout", branch],
-          operation: operation.operation,
-          operationId: operation.operationId,
+          args: ["checkout", assertBranchName(branchName)],
+          operation,
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
         })
-        logGitOperationSuccess(logger, "Git operation completed.", operation, repository, { branch })
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, meta)
       } catch (error) {
-        if (error instanceof Error && /请先提交本地改动/.test(error.message)) {
-          logger.warn("Git operation blocked by dirty worktree.", {
-            ...gitOperationBaseMeta(operation, repository),
-            branch,
+        if (!isWorkingTreeDirtyBlock(error)) {
+          logGitOperationFailed(deps.logger ?? noopLogger, {
+            operation,
+            operationId,
+            repositoryId: repository.id,
+            repoPath: repository.localPath,
+            startedAt,
+            error,
+            extra: meta,
           })
         }
-        logGitOperationFailure(logger, "Git operation failed.", operation, error, repository, {
-          branch,
-          errorCategory: categorizeGitError(error),
-        })
         throw error
       }
     },
 
     async create(repository: SynapseGitRepository, branchName: string): Promise<void> {
-      const operation = createGitOperation("git.branch.create")
-      const branch = assertBranchName(branchName)
-      logGitOperationStart(logger, "Git operation started.", operation, repository, { branch })
+      const operation = "git.branch.create"
+      const operationId = createGitOperationId()
+      const startedAt = performance.now()
+      const meta = { ...repositoryLogMeta(repository), branch: branchName }
+      logGitOperationStarted(deps.logger ?? noopLogger, operation, operationId, meta)
       try {
-        await assertClean(repository)
+        await assertClean(repository, operation, operationId)
         await deps.commandRunner.run({
           cwd: repository.localPath,
-          args: ["checkout", "-b", branch],
-          operation: operation.operation,
-          operationId: operation.operationId,
+          args: ["checkout", "-b", assertBranchName(branchName)],
+          operation,
+          operationId,
+          repoPath: repository.localPath,
+          repositoryId: repository.id,
         })
-        logGitOperationSuccess(logger, "Git operation completed.", operation, repository, { branch })
+        logGitOperationSucceeded(deps.logger ?? noopLogger, operation, operationId, startedAt, meta)
       } catch (error) {
-        if (error instanceof Error && /请先提交本地改动/.test(error.message)) {
-          logger.warn("Git operation blocked by dirty worktree.", {
-            ...gitOperationBaseMeta(operation, repository),
-            branch,
+        if (!isWorkingTreeDirtyBlock(error)) {
+          logGitOperationFailed(deps.logger ?? noopLogger, {
+            operation,
+            operationId,
+            repositoryId: repository.id,
+            repoPath: repository.localPath,
+            startedAt,
+            error,
+            extra: meta,
           })
         }
-        logGitOperationFailure(logger, "Git operation failed.", operation, error, repository, {
-          branch,
-          errorCategory: categorizeGitError(error),
-        })
         throw error
       }
     },
   }
+}
+
+const noopLogger = {
+  error: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+}
+
+function isWorkingTreeDirtyBlock(error: unknown): boolean {
+  return error instanceof Error && error.message === "请先提交本地改动。"
 }
 
 export type GitBranchService = ReturnType<typeof createGitBranchService>
