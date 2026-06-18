@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { DRIVE_DOMAIN, DRIVE_MCP_TOOL_ACTIONS, buildDriveTools } from "./drive-domain"
 import { MCP_TOOL_ACTIONS, buildAllMcpTools, getActionDomainId } from "./registry"
 
 describe("Drive capability domain", () => {
@@ -32,10 +33,98 @@ describe("Drive capability domain", () => {
       "drive_folder_path_ensure",
       "drive_reorganization_preview",
       "drive_reorganization_apply",
+      "drive_direct_link_upload",
+      "drive_direct_link_list",
+      "drive_direct_link_get",
+      "drive_direct_link_update",
+      "drive_direct_link_delete",
+      "drive_direct_link_restore",
+      "drive_trash_list",
+      "drive_trash_delete",
+      "drive_item_restore",
     ])
     expect(MCP_TOOL_ACTIONS.drive_file_upload).toBe("drive.file.upload")
     expect(MCP_TOOL_ACTIONS.drive_file_version_restore).toBe("drive.file_version.restore")
     expect(MCP_TOOL_ACTIONS.drive_reorganization_apply).toBe("drive.reorganization.apply")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_upload).toBe("drive.direct_link.upload")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_list).toBe("drive.direct_link.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_get).toBe("drive.direct_link.get")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_update).toBe("drive.direct_link.update")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_delete).toBe("drive.direct_link.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_direct_link_restore).toBe("drive.direct_link.restore")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_list).toBe("drive.trash.list")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_trash_delete).toBe("drive.trash.delete")
+    expect(DRIVE_MCP_TOOL_ACTIONS.drive_item_restore).toBe("drive.item.restore")
     expect(getActionDomainId("drive.item.list")).toBe("drive")
+  })
+
+  it("builds public asset and trash tool schemas", () => {
+    const tools = new Map(buildDriveTools().map((tool) => [tool.name, tool]))
+
+    expect(tools.get("drive_direct_link_upload")?.inputSchema).toMatchObject({
+      properties: {
+        filePath: { type: "string" },
+        name: { type: "string" },
+        mimeType: { type: "string" },
+      },
+      required: ["filePath"],
+    })
+    expect(tools.get("drive_direct_link_list")?.inputSchema.properties).toMatchObject({
+      offset: { type: "number" },
+      limit: { type: "number" },
+    })
+    expect(tools.get("drive_direct_link_get")?.inputSchema).toMatchObject({
+      properties: { assetId: { type: "string" } },
+      required: ["assetId"],
+    })
+    expect(tools.get("drive_direct_link_update")?.inputSchema).toMatchObject({
+      properties: {
+        assetId: { type: "string" },
+        filePath: { type: "string" },
+        name: { type: "string" },
+        mimeType: { type: "string" },
+      },
+      required: ["assetId", "filePath"],
+    })
+    expect(tools.get("drive_direct_link_delete")?.inputSchema).toMatchObject({
+      properties: { assetId: { type: "string" } },
+      required: ["assetId"],
+    })
+    expect(tools.get("drive_direct_link_restore")?.inputSchema).toMatchObject({
+      properties: { assetId: { type: "string" } },
+      required: ["assetId"],
+    })
+    expect(tools.get("drive_trash_list")?.inputSchema.properties).toMatchObject({
+      offset: { type: "number" },
+      limit: { type: "number" },
+    })
+    expect(tools.get("drive_trash_delete")?.inputSchema).toMatchObject({
+      properties: { itemId: { type: "string" } },
+      required: ["itemId"],
+    })
+    expect(tools.get("drive_item_restore")?.inputSchema).toMatchObject({
+      properties: { itemId: { type: "string" } },
+      required: ["itemId"],
+    })
+  })
+
+  it("marks public asset and trash write capabilities correctly", () => {
+    const capabilities = new Map(DRIVE_DOMAIN.capabilities.map((capability) => [capability.id, capability]))
+
+    expect(capabilities.get("drive.direct_link.upload")).toMatchObject({ mutates: true })
+    expect(capabilities.get("drive.direct_link.update")).toMatchObject({ mutates: true })
+    expect(capabilities.get("drive.direct_link.delete")).toMatchObject({ mutates: true, risk: "high" })
+    expect(capabilities.get("drive.direct_link.restore")).toMatchObject({ mutates: true })
+    expect(capabilities.get("drive.trash.delete")).toMatchObject({ mutates: true, risk: "high" })
+    expect(capabilities.get("drive.item.restore")).toMatchObject({ mutates: true })
+    expect(capabilities.get("drive.direct_link.list")).toMatchObject({ mutates: false })
+    expect(capabilities.get("drive.direct_link.get")).toMatchObject({ mutates: false })
+    expect(capabilities.get("drive.trash.list")).toMatchObject({ mutates: false })
+  })
+
+  it("does not register public asset access-log tools", () => {
+    const toolNames = buildAllMcpTools().map((tool) => tool.name)
+
+    expect(toolNames.some((name) => /access.*log|log.*access/.test(name))).toBe(false)
   })
 })

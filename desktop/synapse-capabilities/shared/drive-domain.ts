@@ -10,7 +10,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
   { id: "drive.item.rename" as CapabilityId, title: "Rename item", description: "Rename a Synapse Drive file or folder.", mutates: true },
   { id: "drive.item.move" as CapabilityId, title: "Move item", description: "Move a Synapse Drive file or folder.", mutates: true },
-  { id: "drive.item.delete" as CapabilityId, title: "Delete item", description: "Delete a Synapse Drive file or folder.", mutates: true, risk: "high" },
+  { id: "drive.item.delete" as CapabilityId, title: "Delete item", description: "Move a Synapse Drive file or folder to Drive trash.", mutates: true, risk: "high" },
   { id: "drive.item_preview.get" as CapabilityId, title: "Get item preview", description: "Get the owner browser preview snapshot for a Synapse Drive item.", mutates: false },
   { id: "drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
   { id: "drive.file_download.create" as CapabilityId, title: "Create file download", description: "Download a Synapse Drive file to a local path.", mutates: true },
@@ -29,6 +29,15 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "drive.folder_path.ensure" as CapabilityId, title: "Ensure folder path", description: "Create or reuse a nested Synapse Drive folder path.", mutates: true },
   { id: "drive.reorganization.preview" as CapabilityId, title: "Preview reorganization", description: "Validate a Synapse Drive reorganization plan without moving items.", mutates: false },
   { id: "drive.reorganization.apply" as CapabilityId, title: "Apply reorganization", description: "Apply a previously previewed Synapse Drive reorganization plan.", mutates: true },
+  { id: "drive.direct_link.upload" as CapabilityId, title: "Upload public asset", description: "Upload an image to Drive 公开素材, also known as 图床, 外链, 直链, public asset, or direct link.", mutates: true },
+  { id: "drive.direct_link.list" as CapabilityId, title: "List public assets", description: "List current user's Drive 公开素材 public assets. Access logs are not returned.", mutates: false },
+  { id: "drive.direct_link.get" as CapabilityId, title: "Get public asset", description: "Get one public asset by assetId without access-log detail.", mutates: false },
+  { id: "drive.direct_link.update" as CapabilityId, title: "Replace public asset", description: "Replace a public asset file while preserving its /files/<assetId> URL.", mutates: true },
+  { id: "drive.direct_link.delete" as CapabilityId, title: "Delete public asset", description: "Move a public asset to Drive trash. Its public URL returns 404 until restored.", mutates: true, risk: "high" },
+  { id: "drive.direct_link.restore" as CapabilityId, title: "Restore public asset", description: "Restore a trashed public asset and make the same public URL available again.", mutates: true },
+  { id: "drive.trash.list" as CapabilityId, title: "List Drive trash", description: "List user-visible Drive trash, including normal Drive files and public assets.", mutates: false },
+  { id: "drive.trash.delete" as CapabilityId, title: "Delete from Drive trash", description: "Hide a trashed Drive item from the user. Admins can still see and restore it.", mutates: true, risk: "high" },
+  { id: "drive.item.restore" as CapabilityId, title: "Restore Drive item", description: "Restore a Drive item from trash.", mutates: true },
 ]
 
 export const DRIVE_DOMAIN: CapabilityDomainDefinition = {
@@ -143,7 +152,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_item_delete",
-      description: "Delete a Synapse Drive file or folder.",
+      description: "Move a Synapse Drive file or folder to Drive trash.",
       inputSchema: {
         type: "object",
         properties: {
@@ -370,6 +379,104 @@ export function buildDriveTools(): McpToolDefinition[] {
           planId: stringField("Plan id returned by drive_reorganization_preview."),
         },
         required: ["planId"],
+      },
+    },
+    {
+      name: "drive_direct_link_upload",
+      description: "Upload an image to Drive 公开素材 / 图床 and create a new 外链 / 直链 / public asset / direct link URL at /files/<assetId>. Duplicate names are allowed.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          filePath: stringField("Absolute local image file path to upload. Public assets are image-only."),
+          name: stringField("Optional public asset display name. Defaults to the local file basename."),
+          mimeType: stringField("Optional image MIME type."),
+        },
+        required: ["filePath"],
+      },
+    },
+    {
+      name: "drive_direct_link_list",
+      description: "List current user's Drive 公开素材 public assets. Access logs are not returned.",
+      inputSchema: {
+        type: "object",
+        properties: pageInputProperties,
+      },
+    },
+    {
+      name: "drive_direct_link_get",
+      description: "Get one Drive 公开素材 public asset by assetId without access-log detail.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          assetId: stringField("Public asset id from the /files/<assetId> URL."),
+        },
+        required: ["assetId"],
+      },
+    },
+    {
+      name: "drive_direct_link_update",
+      description: "Replace a public asset image while preserving its /files/<assetId> URL.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          assetId: stringField("Public asset id to replace."),
+          filePath: stringField("Absolute local replacement image file path. Public assets are image-only."),
+          name: stringField("Optional replacement display name. Defaults to the local file basename."),
+          mimeType: stringField("Optional image MIME type."),
+        },
+        required: ["assetId", "filePath"],
+      },
+    },
+    {
+      name: "drive_direct_link_delete",
+      description: "Move a public asset to Drive trash. Its public URL returns 404 until restored.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          assetId: stringField("Public asset id to move to trash."),
+        },
+        required: ["assetId"],
+      },
+    },
+    {
+      name: "drive_direct_link_restore",
+      description: "Restore a trashed public asset and make the same public URL available again.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          assetId: stringField("Public asset id to restore."),
+        },
+        required: ["assetId"],
+      },
+    },
+    {
+      name: "drive_trash_list",
+      description: "List user-visible Drive trash, including normal Drive files and public assets.",
+      inputSchema: {
+        type: "object",
+        properties: pageInputProperties,
+      },
+    },
+    {
+      name: "drive_trash_delete",
+      description: "Hide a trashed Drive item from the user. Admins can still see and restore it.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Trashed Drive item id to hide from the user."),
+        },
+        required: ["itemId"],
+      },
+    },
+    {
+      name: "drive_item_restore",
+      description: "Restore a Drive item from trash.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Trashed Drive item id to restore."),
+        },
+        required: ["itemId"],
       },
     },
   ]
