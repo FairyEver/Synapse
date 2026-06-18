@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Head, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Request, Response } from "express"
 import archiver from "archiver"
 import { Buffer } from "node:buffer"
@@ -19,6 +19,7 @@ import {
   type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
+import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveUploadTooLargeError, driveContentDisposition, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
@@ -66,6 +67,11 @@ const reorganizationApplySchema = z.object({
 }).strict()
 
 const renameSchema = z.object({ name: z.string().min(1).max(255) }).strict()
+const publicAssetPrepareUploadSchema = z.object({
+  name: z.string().min(1).max(255),
+  size: z.string().regex(/^\d+$/u),
+  mimeType: z.string().trim().max(255).nullable().optional(),
+}).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
 const versionPinSchema = z.object({ isPinned: z.boolean() }).strict()
 const driveFileTextUpdateSchema = z.object({
@@ -85,7 +91,106 @@ type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 @UseGuards(UserAuthGuard)
 @Controller("/api/drive")
 export class DriveUserController {
-  constructor(private readonly drive: DriveService) {}
+  constructor(
+    private readonly drive: DriveService,
+    @Optional() private readonly publicAssets?: DrivePublicAssetService,
+  ) {}
+
+  @Get("/public-assets")
+  listPublicAssets(
+    @Query("offset") offset: string | undefined,
+    @Query("limit") limit: string | undefined,
+    @Req() request: AuthenticatedUserRequest,
+  ) {
+    return requirePublicAssetService(this.publicAssets).listAssets(request.user!.id, resolveRequestPublicAppUrl(request), {
+      offset: parseOptionalNonNegativeInteger(offset, "offset"),
+      limit: parseOptionalNonNegativeInteger(limit, "limit"),
+    })
+  }
+
+  @Get("/public-assets/:assetId")
+  getPublicAsset(@Param("assetId") assetId: string, @Req() request: AuthenticatedUserRequest) {
+    return requirePublicAssetService(this.publicAssets).getAsset(request.user!.id, assetId, resolveRequestPublicAppUrl(request))
+  }
+
+  @Post("/public-assets/uploads/prepare")
+  preparePublicAssetUpload(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(publicAssetPrepareUploadSchema, body, "上传请求无效。")
+    return requirePublicAssetService(this.publicAssets).prepareUpload(request.user!.id, {
+      name: parsed.name,
+      size: parsed.size,
+      mimeType: parsed.mimeType ?? null,
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+    })
+  }
+
+  @Post("/public-assets/uploads/:sessionId/complete")
+  completePublicAssetUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requirePublicAssetService(this.publicAssets).completeUpload(request.user!.id, sessionId, {
+      ...driveAuditContext(request),
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+    })
+  }
+
+  @Post("/public-assets/uploads/:sessionId/cancel")
+  cancelPublicAssetUpload(@Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requirePublicAssetService(this.publicAssets).cancelUpload(request.user!.id, sessionId, driveAuditContext(request))
+  }
+
+  @Post("/public-assets/:assetId/replace/prepare")
+  preparePublicAssetReplace(@Param("assetId") assetId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(publicAssetPrepareUploadSchema, body, "上传请求无效。")
+    return requirePublicAssetService(this.publicAssets).prepareReplace(request.user!.id, assetId, {
+      name: parsed.name,
+      size: parsed.size,
+      mimeType: parsed.mimeType ?? null,
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+    })
+  }
+
+  @Post("/public-assets/:assetId/replace/:sessionId/complete")
+  completePublicAssetReplace(@Param("assetId") assetId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requirePublicAssetService(this.publicAssets).completeReplace(request.user!.id, assetId, sessionId, {
+      ...driveAuditContext(request),
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+    })
+  }
+
+  @Post("/public-assets/:assetId/replace/:sessionId/cancel")
+  cancelPublicAssetReplace(@Param("assetId") assetId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return requirePublicAssetService(this.publicAssets).cancelReplace(request.user!.id, assetId, sessionId, driveAuditContext(request))
+  }
+
+  @Patch("/public-assets/:assetId")
+  renamePublicAsset(@Param("assetId") assetId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(renameSchema, body, "重命名请求无效。")
+    return requirePublicAssetService(this.publicAssets).renameAsset(request.user!.id, assetId, parsed.name, {
+      ...driveAuditContext(request),
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+    })
+  }
+
+  @Delete("/public-assets/:assetId")
+  trashPublicAsset(@Param("assetId") assetId: string, @Req() request: AuthenticatedUserRequest) {
+    return requirePublicAssetService(this.publicAssets).trashAsset(request.user!.id, assetId, {
+      ...driveAuditContext(request),
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+    })
+  }
+
+  @Post("/public-assets/:assetId/restore")
+  restorePublicAsset(@Param("assetId") assetId: string, @Req() request: AuthenticatedUserRequest) {
+    return requirePublicAssetService(this.publicAssets).restoreAsset(request.user!.id, assetId, {
+      ...driveAuditContext(request),
+      publicAppUrl: resolveRequestPublicAppUrl(request),
+    })
+  }
+
+  @Get("/public-assets/:assetId/download")
+  async downloadPublicAsset(@Param("assetId") assetId: string, @Req() request: AuthenticatedUserRequest, @Res() response: Response) {
+    const download = await requirePublicAssetService(this.publicAssets).openAssetDownload(request.user!.id, assetId)
+    await sendDriveFileDownload(response, download)
+  }
 
   @Get("/items")
   listItems(@Query("parentId") parentId: string | undefined, @Req() request: AuthenticatedUserRequest) {
@@ -391,8 +496,86 @@ export class DrivePublicController {
   constructor(
     private readonly drive: DriveService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
+    @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly dashboardAuth?: AdminAuthService,
   ) {}
+
+  @Get("/files/:assetId")
+  @Head("/files/:assetId")
+  async sendPublicAsset(@Param("assetId") assetId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
+    const publicAssets = requirePublicAssetService(this.publicAssets)
+    const method = request.method.toUpperCase()
+    const accessBase = {
+      assetId,
+      ip: request.ip ?? null,
+      referer: readHeaderString(request.headers.referer),
+      userAgent: readHeaderString(request.headers["user-agent"]),
+      method,
+    }
+    const resolved = await publicAssets.resolvePublicAsset(assetId, request.headers)
+    if (resolved.status === "not_found") {
+      response.setHeader("Cache-Control", "no-store")
+      response.status(404).send("Not Found")
+      void publicAssets.recordAccessSafely({ ...accessBase, statusCode: 404, bytes: 0n })
+      return
+    }
+    if (resolved.status === "not_modified") {
+      response.setHeader("Cache-Control", "public, max-age=300")
+      response.setHeader("ETag", resolved.etag)
+      response.status(304).end()
+      void publicAssets.recordAccessSafely({
+        ...accessBase,
+        publicAssetId: resolved.publicAssetId,
+        userId: resolved.userId,
+        statusCode: 304,
+        bytes: 0n,
+      })
+      return
+    }
+
+    response.setHeader("Cache-Control", "public, max-age=300")
+    response.setHeader("Content-Type", resolved.mimeType)
+    response.setHeader("Content-Disposition", driveInlineContentDisposition(resolved.name))
+    response.setHeader("Content-Length", resolved.size.toString())
+    response.setHeader("X-Content-Type-Options", "nosniff")
+    if (resolved.etag) response.setHeader("ETag", resolved.etag)
+    if (method === "HEAD") {
+      response.status(200).end()
+      void publicAssets.recordAccessSafely({
+        ...accessBase,
+        publicAssetId: resolved.publicAssetId,
+        userId: resolved.userId,
+        statusCode: 200,
+        bytes: 0n,
+      })
+      return
+    }
+
+    try {
+      const object = await this.storage.getObjectStream({ key: resolved.storageKey })
+      await pipeline(object.stream as Readable, response)
+      void publicAssets.recordAccessSafely({
+        ...accessBase,
+        publicAssetId: resolved.publicAssetId,
+        userId: resolved.userId,
+        statusCode: 200,
+        bytes: object.size ?? resolved.size,
+      })
+    } catch (error) {
+      if (response.headersSent) {
+        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+        return
+      }
+      response.removeHeader("Cache-Control")
+      response.removeHeader("Content-Type")
+      response.removeHeader("Content-Disposition")
+      response.removeHeader("Content-Length")
+      response.removeHeader("ETag")
+      response.setHeader("Cache-Control", "no-store")
+      response.status(404).send("Not Found")
+      void publicAssets.recordAccessSafely({ ...accessBase, statusCode: 404, bytes: 0n })
+    }
+  }
 
   @Get("/api/drive/browser/shares/:shareId")
   async getShareRootSnapshot(
@@ -763,6 +946,11 @@ function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: strin
   return result.data
 }
 
+function requirePublicAssetService(publicAssets: DrivePublicAssetService | undefined): DrivePublicAssetService {
+  if (!publicAssets) throw new Error("DrivePublicAssetService is not available.")
+  return publicAssets
+}
+
 function parseAccessSettings(body: unknown): DriveAccessSettingsInput {
   if (body === undefined || body === null || (isRecord(body) && Object.keys(body).length === 0)) {
     return DRIVE_DEFAULT_ACCESS_SETTINGS
@@ -833,6 +1021,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readPasswordQuery(request: Request): string | undefined {
   const value = request.query.password
   return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function readHeaderString(value: string | readonly string[] | undefined): string | null {
+  if (typeof value === "string") return value
+  return value?.join(", ") ?? null
 }
 
 function readBodyPassword(request: Request): string | undefined {
@@ -938,6 +1131,16 @@ async function sendDriveFileDownload(response: Response, download: {
   response.setHeader("Content-Type", download.contentType || "application/octet-stream")
   if (download.size !== undefined) response.setHeader("Content-Length", download.size.toString())
   await pipeline(download.stream, response)
+}
+
+function driveInlineContentDisposition(filename: string): string {
+  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
+  return `inline; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
+}
+
+function encodeRFC5987ValueChars(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/['()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }
 
 async function sendDriveTransfer(

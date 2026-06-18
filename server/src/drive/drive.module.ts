@@ -5,6 +5,7 @@ import { AuditLogService } from "../common/audit-log.service"
 import { PrismaModule } from "../prisma/prisma.module"
 import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
+import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveService } from "./drive.service"
 import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
 
@@ -13,6 +14,7 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
   controllers: [DriveUserController, DriveAdminController, DrivePublicController, DriveLocalStorageController],
   providers: [
     DriveLifecycleService,
+    DrivePublicAssetService,
     DriveService,
     AuditLogService,
     CosDriveStorage,
@@ -23,6 +25,6 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: [DriveService, DriveLifecycleService],
+  exports: [DriveService, DriveLifecycleService, DrivePublicAssetService],
 })
 export class DriveModule {}
