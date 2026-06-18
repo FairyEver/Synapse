@@ -44,6 +44,8 @@ export function AppsModule({
   const openAppWindow = async (appId: SynapseSystemAppId) => {
     try {
       await requireAppsBridge().openSystemApp(appId)
+      setActiveAppId(null)
+      setResourceContentOpenRequest(null)
     } catch {
       toast.error("打开应用失败")
     }

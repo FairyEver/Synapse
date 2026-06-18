@@ -116,6 +116,8 @@ describe("AppsModule", () => {
     })
 
     expect(mocks.openSystemApp).toHaveBeenCalledWith("usage-monitor")
+    expect(document.body.textContent).toContain("资源仓库")
+    expect(document.body.textContent).not.toContain("usage-monitor 内容")
   })
 
   it("returns from an embedded app to the launcher", async () => {

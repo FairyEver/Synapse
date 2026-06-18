@@ -74,6 +74,7 @@ Visual behavior:
 - Hover and focus states use token-backed muted surfaces and focus rings.
 - Clicking an app opens it in the current main window, not a child window.
 - Embedded apps show a compact outer toolbar: a left-side back action plus the app name, and a right-side `新窗口打开` icon button.
+- After `新窗口打开` succeeds, the main window returns to the launcher list so the same app is not shown in both the main window and its child window.
 - The embedded toolbar sits outside the app content; the app content keeps its own existing tabs and actions.
 - There is no search box, category sidebar, explanatory copy, management menu, delete action, rename action, or icon edit action.
 
