@@ -6,7 +6,7 @@ import { KnowledgeBaseStorageMigrationDialog } from "@/app-shell/components/know
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useAppConfig } from "@/app-shell/config"
-import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
+import { subscribeContentOpenRequest, type ContentOpenRequest } from "@/app-shell/content-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { useKnowledgeBaseStorageMigration } from "@/app-shell/hooks/use-knowledge-base-storage-migration"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -64,6 +64,8 @@ function MainApp() {
   const [activeTab, setActiveTabRaw] = useState<AppTabId>(() => hasRepositories ? DEFAULT_APP_TAB : "agent")
   const [pendingAgentSession, setPendingAgentSession] =
     useState<OpenAgentSessionPayload | null>(null)
+  const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
+    useState<ContentOpenRequest | null>(null)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
@@ -212,17 +214,10 @@ function MainApp() {
   useEffect(() => {
     return subscribeContentOpenRequest((request) => {
       ensureBodyInteractable()
-      void getSynapseBridge()?.apps.openSystemApp("resource-repository", {
-        contentOpenRequest: request,
-      }).catch((error) => {
-        logger.error("Failed to open resource repository app from content request.", {
-          contentType: request.contentType,
-          kind: request.kind,
-          error,
-        })
-      })
+      setActiveTab("apps", "notification")
+      setPendingAppContentOpenRequest(request)
     })
-  }, [])
+  }, [setActiveTab])
 
   useEffect(() => {
     const bridge = getSynapseBridge()
@@ -275,7 +270,12 @@ function MainApp() {
           ) : null}
           {activeTab === "apps" ? (
             <ErrorBoundary fallbackTitle="应用模块出现问题">
-              <AppsModule />
+              <AppsModule
+                pendingContentOpenRequest={pendingAppContentOpenRequest}
+                onPendingContentOpenRequestConsumed={(requestId) => {
+                  setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+                }}
+              />
             </ErrorBoundary>
           ) : null}
           {activeTab === "workflow" && workflowEntryVisible ? (

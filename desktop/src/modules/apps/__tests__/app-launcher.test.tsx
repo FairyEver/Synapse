@@ -4,6 +4,8 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { ContentOpenRequest } from "@/app-shell/content-navigation"
+import type { SynapseSystemAppId } from "../types"
 import { AppsModule } from "../index"
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +18,31 @@ vi.mock("@/lib/electron-bridge", () => ({
       openSystemApp: mocks.openSystemApp,
     },
   }),
+}))
+
+vi.mock("../components/system-app-content", () => ({
+  SystemAppContent: ({
+    appId,
+    onContentOpenRequest,
+  }: {
+    appId: SynapseSystemAppId
+    onContentOpenRequest?: (request: ContentOpenRequest) => void
+  }) => (
+    <div>
+      <span data-testid="system-app-content">{appId} 内容</span>
+      <button
+        type="button"
+        onClick={() => onContentOpenRequest?.({
+          kind: "detail",
+          requestId: "request-1",
+          contentType: "skill",
+          contentId: "skill-1",
+        })}
+      >
+        触发内容请求
+      </button>
+    </div>
+  ),
 }))
 
 describe("AppsModule", () => {
@@ -55,14 +82,14 @@ describe("AppsModule", () => {
     expect(document.body.textContent).not.toContain("更换图标")
   })
 
-  it("uses an external-link icon for app launch actions", async () => {
+  it("uses an enter icon for app launch actions", async () => {
     await renderAppsModule(roots)
 
-    expect(document.querySelectorAll(".lucide-external-link")).toHaveLength(6)
-    expect(document.querySelector(".lucide-chevron-right")).toBeNull()
+    expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(6)
+    expect(document.querySelector(".lucide-external-link")).toBeNull()
   })
 
-  it("opens the clicked app through the bridge", async () => {
+  it("opens the clicked app in the current window", async () => {
     await renderAppsModule(roots)
 
     await act(async () => {
@@ -70,7 +97,59 @@ describe("AppsModule", () => {
       await Promise.resolve()
     })
 
+    expect(mocks.openSystemApp).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("用量监控")
+    expect(document.body.textContent).toContain("usage-monitor 内容")
+  })
+
+  it("opens the embedded app in a new window from the host toolbar", async () => {
+    await renderAppsModule(roots)
+
+    await act(async () => {
+      findButton("用量监控").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      findButtonByLabel("新窗口打开").click()
+      await Promise.resolve()
+    })
+
     expect(mocks.openSystemApp).toHaveBeenCalledWith("usage-monitor")
+  })
+
+  it("returns from an embedded app to the launcher", async () => {
+    await renderAppsModule(roots)
+
+    await act(async () => {
+      findButton("用量监控").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      findButtonByLabel("返回应用列表").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("资源仓库")
+    expect(document.body.textContent).not.toContain("usage-monitor 内容")
+  })
+
+  it("switches embedded non-resource apps to the resource repository for content requests", async () => {
+    await renderAppsModule(roots)
+
+    await act(async () => {
+      findButton("本地数据库").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      findButton("触发内容请求").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("资源仓库")
+    expect(document.body.textContent).toContain("resource-repository 内容")
   })
 })
 
@@ -89,6 +168,16 @@ async function renderAppsModule(roots: Root[]): Promise<void> {
 function findButton(label: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll("button"))
     .find((item) => item.textContent?.includes(label))
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Button not found: ${label}`)
+  }
+
+  return button
+}
+
+function findButtonByLabel(label: string): HTMLButtonElement {
+  const button = document.querySelector(`button[aria-label='${label}']`)
 
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`Button not found: ${label}`)

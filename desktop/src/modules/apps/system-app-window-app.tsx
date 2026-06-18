@@ -1,16 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  subscribeContentOpenRequest,
   type ContentOpenRequest,
 } from "@/app-shell/content-navigation"
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { getSynapseBridge } from "@/lib/electron-bridge"
-import { DatabaseModule } from "@/modules/database"
-import { EditorScanModule } from "@/modules/editor-scan"
-import { GitModule } from "@/modules/git"
-import { ModelPriceModule } from "@/modules/model-price"
-import { ResourceRepositoryModule } from "@/modules/resource-repository"
-import { UsageMonitorModule } from "@/modules/usage-analysis"
+import { SystemAppContent } from "./components/system-app-content"
 import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "./types"
 import { parseSystemAppId } from "./definitions"
 
@@ -50,36 +44,26 @@ export function SystemAppWindowApp() {
     })
   }, [])
 
-  useEffect(() => {
-    if (appId === "resource-repository") return undefined
-    return subscribeContentOpenRequest((request) => {
-      void getAppsBridge()?.openSystemApp("resource-repository", {
-        contentOpenRequest: request,
-      })
+  const forwardContentOpenRequest = useCallback((request: ContentOpenRequest) => {
+    void getAppsBridge()?.openSystemApp("resource-repository", {
+      contentOpenRequest: request,
     })
-  }, [appId])
+  }, [])
 
   if (!appId) {
     return <SystemAppWindowError />
   }
 
-  if (appId === "resource-repository") {
-    return (
-      <ResourceRepositoryModule
-        initialContentOpenRequest={pendingContentOpenRequest}
-        onInitialContentOpenRequestConsumed={(requestId) => {
-          setPendingContentOpenRequest((current) => current?.requestId === requestId ? null : current)
-        }}
-      />
-    )
-  }
-  if (appId === "database") return <DatabaseModule />
-  if (appId === "git") return <GitModule />
-  if (appId === "editor-scan") return <EditorScanModule />
-  if (appId === "usage-monitor") return <UsageMonitorModule />
-  if (appId === "model-price") return <ModelPriceModule />
-
-  return <SystemAppWindowError />
+  return (
+    <SystemAppContent
+      appId={appId}
+      resourceContentOpenRequest={pendingContentOpenRequest}
+      onResourceContentOpenRequestConsumed={(requestId) => {
+        setPendingContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+      }}
+      onContentOpenRequest={forwardContentOpenRequest}
+    />
+  )
 }
 
 function SystemAppWindowError() {

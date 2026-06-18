@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
 
 type AppLauncherGridProps = {
@@ -37,7 +37,7 @@ export function AppLauncherGrid({ apps, onOpenApp }: AppLauncherGridProps) {
               {appDescriptions[app.id]}
             </span>
           </span>
-          <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       ))}
     </div>

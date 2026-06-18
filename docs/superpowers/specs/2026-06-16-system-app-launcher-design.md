@@ -4,7 +4,7 @@ Date: 2026-06-16
 
 ## Summary
 
-Add a first-class `应用` top-level module to Synapse. It is a pure Launchpad-style launcher for low-frequency system modules. The moved modules remain normal Synapse modules, but their entry point moves from the main header into the launcher and each opens in its own single-instance child window.
+Add a first-class `应用` top-level module to Synapse. It is a Launchpad-style launcher for low-frequency system modules. The moved modules remain normal Synapse modules, but their entry point moves from the main header into the launcher. Clicking an app opens it inside the main window by default; the embedded app host keeps an explicit action for opening the same app in its existing single-instance child window mode.
 
 First version only supports fixed system apps. It reserves an app type model for future workflow apps and web apps, but does not implement custom app creation, editing, deletion, installation, or marketplace behavior.
 
@@ -13,8 +13,9 @@ First version only supports fixed system apps. It reserves an app type model for
 - Add a top-level `应用` tab between `自动化` and `设置`.
 - Remove low-frequency modules from the main header and expose them as system apps in the launcher.
 - Render a refined, responsive Launchpad-style icon grid with vertical scrolling.
-- Open every app in a separate `BrowserWindow`.
-- Keep one window per app id; opening an already-open app focuses the existing window.
+- Open every app in the current main window by default, replacing the launcher surface.
+- Keep an explicit embedded toolbar action for opening an app in a separate `BrowserWindow`.
+- Keep one child window per app id; opening an already-open app window focuses the existing window.
 - Store each system app's launcher metadata in the owning module directory using one shared manifest shape.
 - Use bitmap icon assets for app icons, not lucide icons or CSS-drawn temporary blocks.
 - Keep system apps fixed: not deletable, not renameable, and not icon-editable.
@@ -60,7 +61,7 @@ The launcher shows these as five system apps:
 
 ## Launcher UI
 
-`应用` is a pure launcher. It does not expose management controls.
+`应用` is a launcher plus embedded app host. It does not expose management controls.
 
 Visual behavior:
 
@@ -71,6 +72,9 @@ Visual behavior:
 - Each app item is one button-like target with a bitmap icon and a short name.
 - App names are centered below icons.
 - Hover and focus states use token-backed muted surfaces and focus rings.
+- Clicking an app opens it in the current main window, not a child window.
+- Embedded apps show a compact outer toolbar: a left-side back action plus the app name, and a right-side `新窗口打开` icon button.
+- The embedded toolbar sits outside the app content; the app content keeps its own existing tabs and actions.
 - There is no search box, category sidebar, explanatory copy, management menu, delete action, rename action, or icon edit action.
 
 Implementation should stay within the existing shadcn/Radix and Tailwind token baseline. It must not introduce custom colors, hex/rgb/hsl literals, decorative gradients, glow, nested cards, or marketing copy.
@@ -256,7 +260,9 @@ synapse.apps.onContentOpenRequest(listener)
 
 IPC validation should reject unknown app ids before calling the window service. Unknown ids should not create a window.
 
-The launcher uses `openSystemApp` when an app icon is clicked. System app windows use `onContentOpenRequest` to receive content-open requests delivered to an already-open Resource Repository window.
+The launcher does not use `openSystemApp` when an app icon is clicked; it switches local renderer state and embeds the selected app in the main window. The embedded toolbar's `新窗口打开` action uses `openSystemApp`. System app windows use `onContentOpenRequest` to receive content-open requests delivered to an already-open Resource Repository window.
+
+The main window content-open request path opens the `应用` tab and embeds the Resource Repository app, passing the request to the same Resource Repository module. It should not open a child window unless the user explicitly chooses `新窗口打开`.
 
 ## Renderer Window Entry
 

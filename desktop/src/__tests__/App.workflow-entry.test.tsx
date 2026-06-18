@@ -4,6 +4,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 
@@ -14,7 +15,9 @@ const mocks = vi.hoisted(() => ({
     warn: vi.fn(),
   },
   cheatCodeStateListener: null as null | ((state: { name: string; active: boolean }) => void),
+  contentOpenRequestListener: null as null | ((request: ContentOpenRequest) => void),
   getStates: vi.fn(),
+  openSystemApp: vi.fn(async () => undefined),
 }))
 
 vi.mock("@/app-shell/components/app-shell-actions", () => ({
@@ -91,7 +94,12 @@ vi.mock("@/app-shell/navigation", () => ({
 }))
 
 vi.mock("@/app-shell/content-navigation", () => ({
-  subscribeContentOpenRequest: () => () => undefined,
+  subscribeContentOpenRequest: (listener: (request: ContentOpenRequest) => void) => {
+    mocks.contentOpenRequestListener = listener
+    return () => {
+      mocks.contentOpenRequestListener = null
+    }
+  },
 }))
 
 vi.mock("@/app-shell/dialog-navigate", () => ({
@@ -116,7 +124,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       onOpenConversation: () => () => undefined,
     },
     apps: {
-      openSystemApp: vi.fn(async () => undefined),
+      openSystemApp: mocks.openSystemApp,
     },
     cheatCodes: {
       getStates: mocks.getStates,
@@ -133,10 +141,31 @@ vi.mock("@/lib/electron-bridge", () => ({
   }),
 }))
 
-vi.mock("@/modules/apps", () => ({ AppsModule: () => <div>应用模块</div> }))
+vi.mock("@/modules/apps", () => ({
+  AppsModule: ({
+    pendingContentOpenRequest,
+    onPendingContentOpenRequestConsumed,
+  }: {
+    pendingContentOpenRequest?: ContentOpenRequest | null
+    onPendingContentOpenRequestConsumed?: (requestId: string) => void
+  }) => (
+    <div>
+      应用模块
+      {pendingContentOpenRequest ? (
+        <button
+          type="button"
+          onClick={() => onPendingContentOpenRequestConsumed?.(pendingContentOpenRequest.requestId)}
+        >
+          {pendingContentOpenRequest.contentType}:{pendingContentOpenRequest.kind}
+        </button>
+      ) : null}
+    </div>
+  ),
+}))
 vi.mock("@/modules/settings", () => ({ SettingsModule: () => <div>设置模块</div> }))
 vi.mock("@/modules/agent", () => ({ AgentModule: () => <div>对话模块</div> }))
 vi.mock("@/modules/automation", () => ({ AutomationModule: () => <div>自动化模块</div> }))
+vi.mock("@/modules/drive", () => ({ DriveModule: () => <div>云盘模块</div> }))
 vi.mock("@/modules/workflow", () => ({ WorkflowModule: () => <div>工作流模块</div> }))
 vi.mock("@/modules/content/components/content-window-page", () => ({
   ContentWindowPage: () => <div>内容窗口</div>,
@@ -153,7 +182,9 @@ let roots: Root[] = []
 
 beforeEach(() => {
   mocks.cheatCodeStateListener = null
+  mocks.contentOpenRequestListener = null
   mocks.getStates.mockReset()
+  mocks.openSystemApp.mockClear()
   vi.clearAllMocks()
 })
 
@@ -208,6 +239,26 @@ describe("App workflow entry visibility", () => {
       "应用",
       "设置",
     ])
+  })
+
+  it("opens resource content requests inside the Apps module", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      mocks.contentOpenRequestListener?.({
+        kind: "detail",
+        requestId: "request-1",
+        contentType: "skill",
+        contentId: "skill-1",
+      })
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("应用模块")
+    expect(document.body.textContent).toContain("skill:detail")
+    expect(mocks.openSystemApp).not.toHaveBeenCalled()
   })
 
   it("hides the workflow entry when the initial cheat code state read fails after a visibility event", async () => {
