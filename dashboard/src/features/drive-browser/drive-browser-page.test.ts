@@ -134,7 +134,7 @@ describe('drive browser view model', () => {
     }))).toBe(false)
   })
 
-  it('returns markdown preview and code renderer options with rendered preview as default', () => {
+  it('returns MDXeditor, markdown preview, and code renderer options with MDXeditor as default', () => {
     const snapshot = createSnapshot({
       current: { ...baseCurrent(), name: 'notes.md', previewKind: 'markdown' },
       preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
@@ -142,8 +142,23 @@ describe('drive browser view model', () => {
 
     const options = getDriveRendererOptions(snapshot)
 
-    expect(options.map((option) => option.id)).toEqual(['markdown', 'code'])
-    expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('markdown')
+    expect(options.map((option) => option.id)).toEqual(['mdxeditor', 'markdown', 'code'])
+    expect(options.map((option) => option.label)).toEqual(['MDXeditor', '预览', '代码'])
+    expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('mdxeditor')
+  })
+
+  it('does not offer MDXeditor for non-markdown previews', () => {
+    const text = createSnapshot({
+      current: { ...baseCurrent(), name: 'notes.txt', previewKind: 'text' },
+      preview: { ...basePreview(), kind: 'text', text: 'plain text' },
+    })
+    const image = createSnapshot({
+      current: { ...baseCurrent(), name: 'image.png', previewKind: 'image' },
+      preview: { ...basePreview(), kind: 'image', imageUrl: '/drive/items/file/download' },
+    })
+
+    expect(getDriveRendererOptions(text).map((option) => option.id)).toEqual(['code'])
+    expect(getDriveRendererOptions(image).map((option) => option.id)).toEqual(['image'])
   })
 
   it('uses iframe as the default renderer for html files with visit urls', () => {
@@ -322,7 +337,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
 
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
@@ -365,7 +382,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
 
     expect(html).toContain('aria-label="目录"')
     expect(html).toContain('overflow-auto pl-4')
@@ -431,7 +450,6 @@ describe('drive browser view model', () => {
     expect(html).toContain('新窗口打开')
     expect(html).toContain('/drive/items/file?surface=standalone')
     expect(html).toContain('打开方式')
-    expect(html).toContain('<h1>Notes</h1>')
     expect(html).not.toContain('data-drive-finder="split"')
     expect(html).not.toContain('data-slot="table"')
     expect(html).not.toContain('<th')
@@ -489,7 +507,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
     const codeHtml = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
       snapshot,
       initialRendererId: 'code',
@@ -583,7 +603,9 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'markdown' })
+    )
 
     expect(html).toContain('文件操作')
     expect(html).not.toContain('在云盘中查看')

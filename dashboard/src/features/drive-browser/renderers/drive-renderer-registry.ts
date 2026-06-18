@@ -1,6 +1,6 @@
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 
-export type DriveRendererId = 'markdown' | 'code' | 'image' | 'iframe' | 'download'
+export type DriveRendererId = 'mdxeditor' | 'markdown' | 'code' | 'image' | 'iframe' | 'download'
 export type DriveRendererContainer = 'reading' | 'media' | 'full'
 
 export type DriveRendererOption = {
@@ -10,6 +10,7 @@ export type DriveRendererOption = {
 }
 
 const RENDERERS: Record<DriveRendererId, DriveRendererOption> = {
+  mdxeditor: { id: 'mdxeditor', label: 'MDXeditor', container: 'full' },
   markdown: { id: 'markdown', label: '预览', container: 'reading' },
   code: { id: 'code', label: '代码', container: 'full' },
   image: { id: 'image', label: '图片', container: 'media' },
@@ -21,7 +22,7 @@ export function getDriveRendererOptions(snapshot: DriveBrowserSnapshotDto): read
   if (snapshot.current.type === 'folder') return []
   const preview = snapshot.preview
   if (!preview || preview.kind === 'download-only') return [RENDERERS.download]
-  if (preview.kind === 'markdown') return [RENDERERS.markdown, RENDERERS.code]
+  if (preview.kind === 'markdown') return [RENDERERS.mdxeditor, RENDERERS.markdown, RENDERERS.code]
   if (preview.kind === 'image') return [RENDERERS.image]
   if (preview.kind === 'html-source') {
     return preview.visitUrl
